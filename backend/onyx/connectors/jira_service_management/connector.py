@@ -1,7 +1,6 @@
 import io
+import json
 from typing import Any, ClassVar
-
-from jira.resources import Issue
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
@@ -15,6 +14,7 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import (
     JiraConnector,
+    JiraIssue,
     _perform_jql_search,
     build_jira_url,
     process_jira_issue,
@@ -37,6 +37,20 @@ from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _issue_key(issue: JiraIssue | Any) -> str:
+    """Stable issue key for legacy Jira SDK fixtures and the raw API gateway."""
+    return str(issue["key"] if isinstance(issue, dict) else issue.key)
+
+
+def _attachment_field(attachment: Any, name: str, default: Any = "") -> Any:
+    """Attachment metadata may be a legacy SDK resource or a JSON mapping."""
+    return (
+        attachment.get(name, default)
+        if isinstance(attachment, dict)
+        else getattr(attachment, name, default)
+    )
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -98,7 +112,7 @@ class JiraServiceManagementConnector(JiraConnector):
     def jsm_field_map(self) -> JsmFieldMap:
         """JSM field IDs, discovered lazily and cached for the connector's lifetime."""
         if self._jsm_field_map is None:
-            self._jsm_field_map = discover_jsm_fields(self.jira_client)
+            self._jsm_field_map = discover_jsm_fields(self.source_operations)
         return self._jsm_field_map
 
     def _get_jql_query(
@@ -116,14 +130,14 @@ class JiraServiceManagementConnector(JiraConnector):
         https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
         """
         time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
-        base_jql = f"project = {self.quoted_jira_project}"
+        base_jql = f"project = {json.dumps(self.jira_project)}"
         if self.jql_query:
             return f"{base_jql} AND ({self.jql_query}) AND {time_jql}"
         return f"{base_jql} AND {time_jql}"
 
     def _process_issue(
         self,
-        issue: Issue,
+        issue: JiraIssue,
         parent_hierarchy_raw_node_id: str | None = None,
     ) -> Document | None:
         document = process_jira_issue(
@@ -149,7 +163,7 @@ class JiraServiceManagementConnector(JiraConnector):
         except Exception:
             logger.exception(
                 "Failed to extract JSM metadata for %s; continuing without it.",
-                issue.key,
+                _issue_key(issue),
             )
         return document
 
@@ -161,13 +175,11 @@ class JiraServiceManagementConnector(JiraConnector):
         reached when ``include_attachments`` is enabled, keeping the default
         path free of extra API traffic.
         """
-        fetched = self.jira_client.issue(issue_key, fields="attachment")
-        attachments = fetched.fields.attachment or []
-        return list(attachments)
+        return self.source_operations.list_issue_attachments(issue_key=issue_key)
 
     def _process_issue_attachments(
         self,
-        issue: Issue,
+        issue: JiraIssue,
         parent_hierarchy_raw_node_id: str | None,
         ticket_document_id: str,
     ) -> list[Document | ConnectorFailure]:
@@ -175,23 +187,23 @@ class JiraServiceManagementConnector(JiraConnector):
             return []
 
         try:
-            attachments = self._fetch_issue_attachments(issue.key)
+            attachments = self._fetch_issue_attachments(_issue_key(issue))
         except Exception as e:
             # Listing failed entirely: record one failure for the issue's
             # attachment set without losing the ticket itself. The slim pass
             # admits no attachment IDs when listing fails (it also records
             # the failure and emits nothing), so the two ID sets stay in
             # exact parity and pruning never acts on a partial enumeration.
-            logger.exception("Failed to list attachments for %s", issue.key)
+            logger.exception("Failed to list attachments for %s", _issue_key(issue))
             self._attachment_admission_failures.add(ticket_document_id)
             return [
                 ConnectorFailure(
                     failed_document=DocumentFailure(
                         document_id=f"{ticket_document_id}/attachments",
-                        document_link=build_jira_url(self.jira_base, issue.key),
+                        document_link=build_jira_url(self.jira_base, _issue_key(issue)),
                     ),
                     failure_message=(
-                        f"Failed to list attachments for JSM issue {issue.key}"
+                        f"Failed to list attachments for JSM issue {_issue_key(issue)}"
                     ),
                     exception=e,
                 )
@@ -206,7 +218,7 @@ class JiraServiceManagementConnector(JiraConnector):
         outputs: list[Document | ConnectorFailure] = []
         failed_doc_ids: set[str] = set()
         for attachment in attachments:
-            attachment_id = str(getattr(attachment, "id", "") or "")
+            attachment_id = str(_attachment_field(attachment, "id", "") or "")
             output = self._build_attachment_output(
                 issue=issue,
                 attachment=attachment,
@@ -214,9 +226,7 @@ class JiraServiceManagementConnector(JiraConnector):
                 ticket_document_id=ticket_document_id,
             )
             if isinstance(output, ConnectorFailure):
-                failed_doc_ids.add(
-                    f"{ticket_document_id}/attachment/{attachment_id}"
-                )
+                failed_doc_ids.add(f"{ticket_document_id}/attachment/{attachment_id}")
             outputs.append(output)
         if failed_doc_ids:
             self._failed_attachment_doc_ids[ticket_document_id] = failed_doc_ids
@@ -226,7 +236,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     def _build_attachment_output(
         self,
-        issue: Issue,
+        issue: JiraIssue,
         attachment: Any,
         parent_hierarchy_raw_node_id: str | None,
         ticket_document_id: str,
@@ -236,12 +246,14 @@ class JiraServiceManagementConnector(JiraConnector):
         Failures are isolated per attachment: they are reported as
         ConnectorFailure and never fail the ticket or sibling attachments.
         """
-        filename = str(getattr(attachment, "filename", "") or "")
-        attachment_id = str(getattr(attachment, "id", "") or "")
+        filename = str(_attachment_field(attachment, "filename", "") or "")
+        attachment_id = str(_attachment_field(attachment, "id", "") or "")
         doc_id = f"{ticket_document_id}/attachment/{attachment_id}"
 
         try:
-            file_bytes = attachment.get()
+            file_bytes = self.source_operations.download_attachment(
+                attachment_id=str(_attachment_field(attachment, "id"))
+            )
             text = (
                 extract_file_text(
                     io.BytesIO(file_bytes or b""),
@@ -255,16 +267,16 @@ class JiraServiceManagementConnector(JiraConnector):
                 "Failed to process attachment %s (%s) of %s",
                 filename,
                 attachment_id,
-                issue.key,
+                _issue_key(issue),
             )
             return ConnectorFailure(
                 failed_document=DocumentFailure(
                     document_id=doc_id,
-                    document_link=build_jira_url(self.jira_base, issue.key),
+                    document_link=build_jira_url(self.jira_base, _issue_key(issue)),
                 ),
                 failure_message=(
                     f"Failed to process attachment '{filename}' ({attachment_id}) "
-                    f"of JSM issue {issue.key}"
+                    f"of JSM issue {_issue_key(issue)}"
                 ),
                 exception=e,
             )
@@ -278,27 +290,29 @@ class JiraServiceManagementConnector(JiraConnector):
             return ConnectorFailure(
                 failed_document=DocumentFailure(
                     document_id=doc_id,
-                    document_link=build_jira_url(self.jira_base, issue.key),
+                    document_link=build_jira_url(self.jira_base, _issue_key(issue)),
                 ),
                 failure_message=(
                     f"Attachment '{filename}' ({attachment_id}) of JSM issue "
-                    f"{issue.key} is empty; skipping indexing"
+                    f"{_issue_key(issue)} is empty; skipping indexing"
                 ),
             )
 
         sections = [
-            TextSection(text=text, link=str(getattr(attachment, "content", "")))
+            TextSection(
+                text=text, link=str(_attachment_field(attachment, "content", ""))
+            )
         ]
         if not text:
             # Extraction produced nothing usable: same reasoning as above.
             return ConnectorFailure(
                 failed_document=DocumentFailure(
                     document_id=doc_id,
-                    document_link=build_jira_url(self.jira_base, issue.key),
+                    document_link=build_jira_url(self.jira_base, _issue_key(issue)),
                 ),
                 failure_message=(
                     f"No extractable content in attachment '{filename}' "
-                    f"({attachment_id}) of JSM issue {issue.key}"
+                    f"({attachment_id}) of JSM issue {_issue_key(issue)}"
                 ),
             )
 
@@ -306,12 +320,14 @@ class JiraServiceManagementConnector(JiraConnector):
             id=doc_id,
             source=self.document_source,
             semantic_identifier=(
-                f"{issue.key} attachment: {filename}" if filename else f"{issue.key} attachment {attachment_id}"
+                f"{_issue_key(issue)} attachment: {filename}"
+                if filename
+                else f"{_issue_key(issue)} attachment {attachment_id}"
             ),
             sections=sections,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
             metadata={
-                "jira_issue_key": issue.key,
+                "jira_issue_key": _issue_key(issue),
                 "attachment_filename": filename,
                 "attachment_id": attachment_id,
             },
@@ -319,7 +335,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     def _process_issue_attachments_slim(
         self,
-        issue: Issue,
+        issue: JiraIssue,
         parent_hierarchy_raw_node_id: str | None,
         ticket_document_id: str,
         include_permissions: bool = False,
@@ -339,19 +355,19 @@ class JiraServiceManagementConnector(JiraConnector):
             # Missing enumeration does not mean "no attachments": returning
             # an empty slim set would prune previously indexed documents.
             raise RuntimeError(
-                f"Cannot enumerate JSM attachments for {issue.key}: "
+                f"Cannot enumerate JSM attachments for {_issue_key(issue)}: "
                 "listing failed during the main pass"
             )
-        failed_ids = self._failed_attachment_doc_ids.get(
-            ticket_document_id, set()
-        )
+        failed_ids = self._failed_attachment_doc_ids.get(ticket_document_id, set())
 
         try:
-            attachments = self._fetch_issue_attachments(issue.key)
+            attachments = self._fetch_issue_attachments(_issue_key(issue))
         except Exception:
             # Do not turn a transient listing failure into an empty slim set:
             # downstream pruning would delete healthy indexed attachments.
-            logger.exception("Failed to list attachment slim docs for %s", issue.key)
+            logger.exception(
+                "Failed to list attachment slim docs for %s", _issue_key(issue)
+            )
             self._attachment_admission_failures.add(ticket_document_id)
             raise
 
@@ -363,13 +379,13 @@ class JiraServiceManagementConnector(JiraConnector):
 
         slim_docs: list[SlimDocument] = []
         for attachment in attachments:
-            attachment_id = str(getattr(attachment, "id", "") or "")
+            attachment_id = str(_attachment_field(attachment, "id", "") or "")
             doc_id = f"{ticket_document_id}/attachment/{attachment_id}"
             if doc_id in failed_ids:
                 # Failed in the main pass: no document exists for it, so
                 # admitting the ID would create a chunk_count IS NULL row.
                 continue
-            created = str(getattr(attachment, "created", "") or "")
+            created = str(_attachment_field(attachment, "created", "") or "")
             slim_docs.append(
                 SlimDocument(
                     # Must exactly match the main-pass attachment document ID
@@ -391,14 +407,18 @@ class JiraServiceManagementConnector(JiraConnector):
         # attributes are statically known on Jira project resources and the
         # caller handles the "not exposed by the instance" case.
         try:
-            project_type = project.projectTypeKey
+            project_type = (
+                project.get("projectTypeKey")
+                if isinstance(project, dict)
+                else project.projectTypeKey
+            )
         except AttributeError:
             project_type = None
         if isinstance(project_type, str) and project_type:
             return project_type
 
         try:
-            raw = project.raw
+            raw = project if isinstance(project, dict) else project.raw
         except AttributeError:
             return None
         if isinstance(raw, dict):
@@ -408,7 +428,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return None
 
     def validate_connector_settings(self) -> None:
-        if self._jira_client is None:
+        if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
 
         # A JSM project key is mandatory; the general-purpose Jira connector is
@@ -419,7 +439,7 @@ class JiraServiceManagementConnector(JiraConnector):
             )
 
         try:
-            project = self.jira_client.project(self.jira_project)
+            project = self.source_operations.get_project(project_key=self.jira_project)
         except Exception as e:
             self._handle_jira_connector_settings_error(e)
             raise  # _handle_jira_connector_settings_error always raises
@@ -441,8 +461,8 @@ class JiraServiceManagementConnector(JiraConnector):
                 next(
                     iter(
                         _perform_jql_search(
-                            jira_client=self.jira_client,
-                            jql=self.jql_query,
+                            source_operations=self.source_operations,
+                            jql=self._get_jql_query(0, 0),
                             start=0,
                             max_results=1,
                             all_issue_ids=[],

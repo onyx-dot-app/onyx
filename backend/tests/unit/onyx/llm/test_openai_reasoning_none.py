@@ -204,7 +204,8 @@ def test_bifrost_chat_tools_off_sends_only_reasoning_effort_none() -> None:
         custom_config={BIFROST_API_MODE_CONFIG_KEY: BIFROST_API_MODE_CHAT_COMPLETIONS},
     )
     kwargs = _sent_kwargs(bifrost, ReasoningEffort.OFF, tools=_TOOLS)
-    assert kwargs["reasoning_effort"] == "none"
+    # LiteLLM bridges this tool turn to the responses API.
+    assert kwargs["reasoning_effort"] == {"effort": "none"}
     assert "reasoning" not in kwargs
 
 

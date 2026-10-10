@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Popover, OpenButton } from "@opal/components";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   useLanguageModels,
   useLanguageModelsForAgent,
@@ -92,6 +93,10 @@ export default function ModelSelector({
     llmProviders: globalProviderOptions,
     defaultText: globalDefaultText,
   } = useLanguageModels();
+  const {
+    model_routing_enabled: modelRoutingEnabled,
+    model_routing_model_configuration_id: routingModelId,
+  } = useSettings();
   const llmProviders = providerOptions ?? fetchedProviderOptions ?? [];
   const isLoading = providerOptions === undefined && providersLoading;
   const [open, setOpen] = useState(false);
@@ -129,8 +134,13 @@ export default function ModelSelector({
   }, [defaultText, llmProviders]);
 
   const effectiveOption = currentOption ?? defaultModelOption;
-  const currentDisplayName =
-    effectiveOption?.displayName ?? t("trigger.noSelection.label");
+  const isAutoSelected: boolean =
+    (modelRoutingEnabled ?? false) &&
+    routingModelId != null &&
+    value === routingModelId;
+  const currentDisplayName: string = isAutoSelected
+    ? t("autoItem.label")
+    : (effectiveOption?.displayName ?? t("trigger.noSelection.label"));
   const globalDefaultDisplayName = useMemo(() => {
     if (!globalDefaultText || !globalProviderOptions) return null;
     const provider = globalProviderOptions.find(

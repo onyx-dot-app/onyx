@@ -63,14 +63,13 @@ class TestToolMetadata:
     def test_tool_definition_schema(self) -> None:
         tool = _make_tool()
         defn = tool.tool_definition()
-        assert defn["type"] == "function"
-        func = defn["function"]
-        assert func["name"] == "read_file"
-        props = func["parameters"]["properties"]
+        assert defn.name == "read_file"
+        props = defn.parameters["properties"]
+        assert isinstance(props, dict)
         assert FILE_ID_FIELD in props
         assert START_CHAR_FIELD in props
         assert NUM_CHARS_FIELD in props
-        assert func["parameters"]["required"] == [FILE_ID_FIELD]
+        assert defn.parameters["required"] == [FILE_ID_FIELD]
 
 
 # ------------------------------------------------------------------
@@ -108,14 +107,17 @@ class TestFileIdValidation:
 
 class TestRun:
     @patch(f"{TOOL_MODULE}.get_session_with_current_tenant")
-    @patch(f"{TOOL_MODULE}.load_user_file")
+    @patch(f"{TOOL_MODULE}.get_user_file_metadata")
+    @patch(f"{TOOL_MODULE}.load_user_file_content")
     def test_returns_full_content_by_default(
         self,
         mock_load_user_file: MagicMock,
+        mock_get_metadata: MagicMock,
         mock_get_session: MagicMock,
     ) -> None:
         uid = uuid4()
         content = "Hello, world!"
+        mock_get_metadata.return_value = MagicMock()
         mock_load_user_file.return_value = _text_file(content)
         mock_get_session.return_value.__enter__.return_value = MagicMock()
 
@@ -128,14 +130,17 @@ class TestRun:
         assert content in resp.llm_facing_response
 
     @patch(f"{TOOL_MODULE}.get_session_with_current_tenant")
-    @patch(f"{TOOL_MODULE}.load_user_file")
+    @patch(f"{TOOL_MODULE}.get_user_file_metadata")
+    @patch(f"{TOOL_MODULE}.load_user_file_content")
     def test_respects_start_char_and_num_chars(
         self,
         mock_load_user_file: MagicMock,
+        mock_get_metadata: MagicMock,
         mock_get_session: MagicMock,
     ) -> None:
         uid = uuid4()
         content = "abcdefghijklmnop"
+        mock_get_metadata.return_value = MagicMock()
         mock_load_user_file.return_value = _text_file(content)
         mock_get_session.return_value.__enter__.return_value = MagicMock()
 
@@ -148,14 +153,17 @@ class TestRun:
         assert "efghij" in resp.llm_facing_response
 
     @patch(f"{TOOL_MODULE}.get_session_with_current_tenant")
-    @patch(f"{TOOL_MODULE}.load_user_file")
+    @patch(f"{TOOL_MODULE}.get_user_file_metadata")
+    @patch(f"{TOOL_MODULE}.load_user_file_content")
     def test_clamps_num_chars_to_max(
         self,
         mock_load_user_file: MagicMock,
+        mock_get_metadata: MagicMock,
         mock_get_session: MagicMock,
     ) -> None:
         uid = uuid4()
         content = "x" * (MAX_NUM_CHARS + 500)
+        mock_get_metadata.return_value = MagicMock()
         mock_load_user_file.return_value = _text_file(content)
         mock_get_session.return_value.__enter__.return_value = MagicMock()
 
@@ -168,14 +176,17 @@ class TestRun:
         assert f"Characters 0-{MAX_NUM_CHARS}" in resp.llm_facing_response
 
     @patch(f"{TOOL_MODULE}.get_session_with_current_tenant")
-    @patch(f"{TOOL_MODULE}.load_user_file")
+    @patch(f"{TOOL_MODULE}.get_user_file_metadata")
+    @patch(f"{TOOL_MODULE}.load_user_file_content")
     def test_includes_continuation_hint(
         self,
         mock_load_user_file: MagicMock,
+        mock_get_metadata: MagicMock,
         mock_get_session: MagicMock,
     ) -> None:
         uid = uuid4()
         content = "x" * 100
+        mock_get_metadata.return_value = MagicMock()
         mock_load_user_file.return_value = _text_file(content)
         mock_get_session.return_value.__enter__.return_value = MagicMock()
 
@@ -196,13 +207,16 @@ class TestRun:
             )
 
     @patch(f"{TOOL_MODULE}.get_session_with_current_tenant")
-    @patch(f"{TOOL_MODULE}.load_user_file")
+    @patch(f"{TOOL_MODULE}.get_user_file_metadata")
+    @patch(f"{TOOL_MODULE}.load_user_file_content")
     def test_raises_on_non_text_file(
         self,
         mock_load_user_file: MagicMock,
+        mock_get_metadata: MagicMock,
         mock_get_session: MagicMock,
     ) -> None:
         uid = uuid4()
+        mock_get_metadata.return_value = MagicMock()
         mock_load_user_file.return_value = InMemoryChatFile(
             file_id="img",
             content=b"\x89PNG",

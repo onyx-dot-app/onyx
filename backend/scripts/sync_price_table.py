@@ -7,7 +7,7 @@ Sources, in precedence order:
 2. litellm model_prices_and_context_window.json — enriches existing entries
    with `mode`, per-image cost, and the 1h cache-write tier; also contributes
    non-chat models (embedding, image, audio, rerank) that models.dev does not
-   carry.
+   carry, and live first-party chat models models.dev has not indexed yet.
 3. OpenRouter /api/v1/models — fills missing prices on openrouter entries and
    adds models models.dev has not indexed yet (listed there = callable).
 
@@ -30,6 +30,7 @@ import json
 import re
 import sys
 import urllib.request
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -158,6 +159,16 @@ def _normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
     for field in _DICT_FIELDS:
         if entry.get(field) is not None:
             out[field] = entry[field]
+    cost: Any = out.get("cost")
+    if isinstance(cost, dict):
+        # Negative rates are upstream "unknown price" sentinels, not prices.
+        out["cost"] = {
+            k: v
+            for k, v in cost.items()
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or v >= 0
+        }
+        if not out["cost"]:
+            del out["cost"]
     return out
 
 
@@ -233,6 +244,9 @@ def _build_provider_section(
     models: dict[str, Any] = {}
     for slug in slugs:
         for model_id, entry in (api.get(slug, {}).get("models") or {}).items():
+            # Junk upstream keys with an empty model id (e.g. ".../models/").
+            if not model_id or model_id.endswith("/"):
+                continue
             models.setdefault(model_id, _normalize_model(entry))
     if not models:
         return None
@@ -291,8 +305,9 @@ def build_price_table(api: dict[str, Any]) -> dict[str, Any]:
 #
 # litellm covers modalities models.dev ignores (embedding, image, audio,
 # rerank) and is the only public source for Anthropic's 1h cache-write rate.
-# It enriches existing entries in place; chat-mode models it alone knows are
-# NOT added — models.dev stays canonical for chat coverage.
+# It enriches existing entries in place. Chat-mode models it alone knows are
+# added only for first-party providers, where litellm often lists a new
+# flagship before models.dev does.
 # ---------------------------------------------------------------------------
 
 # litellm_provider tag -> Onyx provider keys it should enrich. Vertex uses a
@@ -350,6 +365,21 @@ _LITELLM_UNIT_COST_FIELDS = {
 # litellm modes that are chat-shaped; models.dev stays canonical for these.
 _LITELLM_CHAT_MODES = {"chat", "responses", "completion"}
 
+# litellm_provider tags whose litellm-only chat models are added to the catalog.
+_LITELLM_CHAT_GAP_FILL_TAGS = frozenset(
+    {
+        "openai",
+        "anthropic",
+        "gemini",
+        "xai",
+        "mistral",
+        "deepseek",
+        "zai",
+        "moonshot",
+        "minimax",
+    }
+)
+
 
 def _litellm_onyx_providers(tag: str | None) -> tuple[str, ...]:
     if not tag:
@@ -365,16 +395,38 @@ def _litellm_cost(entry: dict[str, Any]) -> dict[str, float]:
     for src_key, dst_key in _LITELLM_TOKEN_COST_FIELDS.items():
         value = entry.get(src_key)
         if value is not None:
-            cost[dst_key] = float(value) * 1_000_000
+            # Negative rates are upstream "unknown price" sentinels.
+            amount: float = float(value)
+            if amount >= 0:
+                cost[dst_key] = amount * 1_000_000
     for src_key, dst_key in _LITELLM_UNIT_COST_FIELDS.items():
         value = entry.get(src_key)
         if value is not None:
-            cost[dst_key] = float(value)
+            amount = float(value)
+            if amount >= 0:
+                cost[dst_key] = amount
     return cost
 
 
+def _is_gap_fill_chat_model(model_id: str, entry: dict[str, Any], today: str) -> bool:
+    """Whether a litellm-only chat model is worth adding: a live, priced,
+    first-party id (no fine-tunes, commitment tiers or region-prefixed ids)."""
+    tag: str = entry.get("litellm_provider") or ""
+    if tag not in _LITELLM_CHAT_GAP_FILL_TAGS and not tag.startswith("vertex_ai"):
+        return False
+    if "/" in model_id or model_id.startswith("ft:"):
+        return False
+    deprecation_date: str | None = entry.get("deprecation_date")
+    if deprecation_date and deprecation_date <= today:
+        return False
+    return (
+        entry.get("input_cost_per_token") is not None
+        and entry.get("output_cost_per_token") is not None
+    )
+
+
 def _litellm_new_entry(model_key: str, entry: dict[str, Any]) -> dict[str, Any]:
-    """Minimal catalog entry for a non-chat model only litellm carries."""
+    """Minimal catalog entry for a model only litellm carries."""
     out: dict[str, Any] = {"name": model_key, "mode": entry["mode"]}
     cost = _litellm_cost(entry)
     if cost:
@@ -387,12 +439,29 @@ def _litellm_new_entry(model_key: str, entry: dict[str, Any]) -> dict[str, Any]:
         out["limit"] = {
             k: v for k, v in (("context", context), ("output", output)) if v is not None
         }
+    if entry["mode"] in _LITELLM_CHAT_MODES:
+        inputs: list[str] = ["text"]
+        if entry.get("supports_vision"):
+            inputs.append("image")
+        if entry.get("supports_pdf_input"):
+            inputs.append("pdf")
+        out["modalities"] = {"input": inputs, "output": ["text"]}
+        for src_key, dst_key in (
+            ("supports_reasoning", "reasoning"),
+            ("supports_function_calling", "tool_call"),
+            ("supports_response_schema", "structured_output"),
+        ):
+            if entry.get(src_key) is not None:
+                out[dst_key] = bool(entry[src_key])
     return out
 
 
 def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> None:
-    """Enrich catalog entries with litellm-only fields; add non-chat models."""
+    """Enrich catalog entries with litellm-only fields; add non-chat models and
+    gap-fill first-party chat models."""
     enriched = added = 0
+    added_chat: int = 0
+    today: str = date.today().isoformat()
     for model_key, entry in litellm_map.items():
         if not isinstance(entry, dict):
             continue
@@ -421,6 +490,9 @@ def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> Non
                 if mode and mode not in _LITELLM_CHAT_MODES:
                     models[model_id] = _litellm_new_entry(model_id, entry)
                     added += 1
+                elif mode and _is_gap_fill_chat_model(model_id, entry, today):
+                    models[model_id] = _litellm_new_entry(model_id, entry)
+                    added_chat += 1
                 continue
 
             mode = entry.get("mode")
@@ -436,7 +508,10 @@ def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> Non
                     cost.setdefault(key, value)
                 enriched += 1
 
-    print(f"litellm merge: enriched {enriched} entries, added {added} non-chat models")
+    print(
+        f"litellm merge: enriched {enriched} entries, added {added} non-chat "
+        f"and {added_chat} chat models"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +521,15 @@ def merge_litellm(providers: dict[str, Any], litellm_map: dict[str, Any]) -> Non
 # cost fields on models.dev entries and adds models not yet indexed upstream —
 # being listed on OpenRouter means the model is callable through it.
 # ---------------------------------------------------------------------------
+
+
+def _is_unbounded_router(raw: dict[str, Any]) -> bool:
+    """OpenRouter meta-model with no declared upstream endpoint: tokenizer
+    "Router" and a null top_provider context, so its advertised limits are
+    the pool maximum rather than a per-request guarantee."""
+    if (raw.get("architecture") or {}).get("tokenizer") != "Router":
+        return False
+    return (raw.get("top_provider") or {}).get("context_length") is None
 
 
 def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -458,9 +542,12 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
     if prompt == 0 and completion == 0:
         return None
 
+    # Negative rates are upstream "unknown price" sentinels — not real prices;
+    # skip those fields so they land as "unknown" rather than negative spend.
     cost: dict[str, float] = {
-        "input": prompt * 1_000_000,
-        "output": completion * 1_000_000,
+        k: v * 1_000_000
+        for k, v in (("input", prompt), ("output", completion))
+        if v >= 0
     }
     for src_key, dst_key in (
         ("input_cache_read", "cache_read"),
@@ -469,17 +556,23 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
         try:
             value = pricing.get(src_key)
             if value is not None:
-                cost[dst_key] = float(value) * 1_000_000
+                amount: float = float(value)
+                if amount >= 0:
+                    cost[dst_key] = amount * 1_000_000
         except (TypeError, ValueError):
             continue
     # pricing.image is USD per image, not per token.
     try:
         if pricing.get("image") is not None:
-            cost["image_input"] = float(pricing["image"])
+            amount = float(pricing["image"])
+            if amount >= 0:
+                cost["image_input"] = amount
     except (TypeError, ValueError):
         pass
 
-    entry: dict[str, Any] = {"name": raw.get("name") or raw["id"], "cost": cost}
+    entry: dict[str, Any] = {"name": raw.get("name") or raw["id"]}
+    if cost:
+        entry["cost"] = cost
     context = raw.get("context_length")
     max_out = (raw.get("top_provider") or {}).get("max_completion_tokens")
     if context or max_out:
@@ -502,6 +595,8 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
         "response_format" in params
     )
     entry["reasoning"] = "reasoning" in params
+    if _is_unbounded_router(raw):
+        entry["unbounded"] = True
     return entry
 
 
@@ -517,22 +612,58 @@ def merge_openrouter(
         model_id = raw.get("id")
         if not model_id:
             continue
-        merged = _openrouter_entry(raw)
-        if merged is None:
-            continue
         existing = models.get(model_id)
         if existing is None:
             existing = models.get(section["aliases"].get(model_id, ""))
+        # Router status is independent of pricing — a free router still has
+        # no declared endpoint.
+        if existing is not None:
+            if _is_unbounded_router(raw):
+                existing["unbounded"] = True
+            else:
+                existing.pop("unbounded", None)
+        merged = _openrouter_entry(raw)
+        if merged is None:
+            continue
         if existing is None:
             models[model_id] = merged
             added += 1
             continue
-        cost = existing.setdefault("cost", {})
-        for key, value in merged["cost"].items():
+        for key, value in (merged.get("cost") or {}).items():
+            cost = existing.setdefault("cost", {})
             if key not in cost:
                 cost[key] = value
                 filled += 1
     print(f"openrouter merge: filled {filled} missing rates, added {added} models")
+
+
+def _preserve_unbounded_flags(providers: dict[str, Any], output_dir: Path) -> None:
+    """Carry `unbounded` router flags over from the vendored openrouter.json
+    when the OpenRouter feed is unreachable and the merge cannot re-derive
+    them — a transient outage must not silently restore bogus output limits."""
+    section: dict[str, Any] | None = providers.get("openrouter")
+    if section is None:
+        return
+    try:
+        vendored_text: str = (output_dir / "openrouter.json").read_text()
+    except FileNotFoundError:
+        # First sync has no vendored file to carry flags over from.
+        return
+    # Anything else (unreadable or corrupt file) must surface, not silently
+    # drop the flags — the sync is about to rewrite this file.
+    vendored: dict[str, Any] = json.loads(vendored_text)
+    vendored_models: dict[str, Any] = vendored.get("models") or {}
+    restored: int = 0
+    for model_id, entry in section["models"].items():
+        if (vendored_models.get(model_id) or {}).get("unbounded"):
+            entry["unbounded"] = True
+            restored += 1
+    if restored:
+        print(
+            f"OpenRouter feed unavailable: preserved unbounded flags on "
+            f"{restored} vendored entries",
+            file=sys.stderr,
+        )
 
 
 def _check_litellm_schema(litellm_map: dict[str, Any]) -> None:
@@ -661,6 +792,8 @@ def main() -> int:
     if openrouter_models:
         _check_openrouter_schema(openrouter_models)
         merge_openrouter(providers, openrouter_models)
+    else:
+        _preserve_unbounded_flags(providers, args.output_dir)
 
     table = {
         "schema_version": 2,

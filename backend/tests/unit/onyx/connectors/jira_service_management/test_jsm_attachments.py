@@ -17,7 +17,6 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from jira import JIRA
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
@@ -30,6 +29,7 @@ from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.jira_service_management.conftest import (
     TEST_BASE_URL,
     TEST_PROJECT_KEY,
+    legacy_jira_client,
     make_mock_jsm_issue,
 )
 from tests.unit.onyx.connectors.utils import (
@@ -129,16 +129,22 @@ class TestIncludeAttachmentsDefault:
         ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
 
         # Both passes must admit nothing while the flag is off...
-        assert connector._process_issue_attachments(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
-        assert connector._process_issue_attachments_slim(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
+        assert (
+            connector._process_issue_attachments(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+            == []
+        )
+        assert (
+            connector._process_issue_attachments_slim(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+            == []
+        )
 
         # ...and without touching the attachment API at all.
         mock_jira_client.issue.assert_not_called()
@@ -177,7 +183,7 @@ class TestAttachmentIndexing:
         assert first.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
         assert first.semantic_identifier == "HELP-101 attachment: server-log.txt"
         # Attachment content is extracted into text sections
-        assert any("extracted:server-log.txt" in s.text for s in first.sections)
+        assert any("extracted:server-log.txt" in (s.text or "") for s in first.sections)
         # Attachments are children of their ticket in the hierarchy
         assert first.parent_hierarchy_raw_node_id == TEST_PROJECT_KEY
 
@@ -253,16 +259,22 @@ class TestAttachmentIndexing:
         ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
 
         assert connector.include_attachments is False
-        assert connector._process_issue_attachments(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
-        assert connector._process_issue_attachments_slim(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
+        assert (
+            connector._process_issue_attachments(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+            == []
+        )
+        assert (
+            connector._process_issue_attachments_slim(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+            == []
+        )
 
 
 class TestAttachmentFailureIsolation:
@@ -297,14 +309,13 @@ class TestAttachmentFailureIsolation:
 
         # The broken attachment surfaces as an isolated failure...
         assert len(failures) == 1
+        assert failures[0].failed_document is not None
         assert failures[0].failed_document.document_id == (
             f"{ticket_doc_id}/attachment/4001"
         )
         assert isinstance(failures[0].exception, RuntimeError)
         # ...the sibling is still indexed...
-        assert [doc.id for doc in documents] == [
-            f"{ticket_doc_id}/attachment/4002"
-        ]
+        assert [doc.id for doc in documents] == [f"{ticket_doc_id}/attachment/4002"]
         # ...and the ticket itself was never part of this output at all
         assert all(doc.id != ticket_doc_id for doc in documents)
 
@@ -329,9 +340,8 @@ class TestAttachmentFailureIsolation:
         assert len(outputs) == 1
         failure = outputs[0]
         assert isinstance(failure, ConnectorFailure)
-        assert failure.failed_document.document_id == (
-            f"{ticket_doc_id}/attachments"
-        )
+        assert failure.failed_document is not None
+        assert failure.failed_document.document_id == (f"{ticket_doc_id}/attachments")
 
     def test_slim_pass_aborts_after_main_listing_failure(
         self,
@@ -341,6 +351,7 @@ class TestAttachmentFailureIsolation:
         connector = _make_connector_with_attachments(
             make_jsm_connector, mock_jira_client, []
         )
+        mock_jira_client.issue.side_effect = RuntimeError("listing down")
         issue = make_mock_jsm_issue()
         ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
 
@@ -380,6 +391,7 @@ class TestAttachmentFailureIsolation:
             )
         assert ticket_doc_id in connector._attachment_admission_failures
 
+    @pytest.mark.usefixtures("mock_extract")
     def test_slim_pass_admits_only_attachments_that_produced_documents(
         self,
         make_jsm_connector: Callable[..., JiraServiceManagementConnector],
@@ -414,9 +426,7 @@ class TestAttachmentFailureIsolation:
             parent_hierarchy_raw_node_id=None,
             ticket_document_id=ticket_doc_id,
         )
-        assert [sd.id for sd in slim_docs] == [
-            f"{ticket_doc_id}/attachment/6002"
-        ]
+        assert [sd.id for sd in slim_docs] == [f"{ticket_doc_id}/attachment/6002"]
 
 
 class TestSlimPermissionPropagation:
@@ -490,12 +500,13 @@ class TestEmptyAttachmentContent:
         )
         failures = [out for out in outputs if isinstance(out, ConnectorFailure)]
         documents = [out for out in outputs if isinstance(out, Document)]
-        assert [f.failed_document.document_id for f in failures] == [
-            f"{ticket_doc_id}/attachment/8001"
-        ]
-        assert [d.id for d in documents] == [
-            f"{ticket_doc_id}/attachment/8002"
-        ]
+        assert all(f.failed_document is not None for f in failures)
+        assert [
+            f.failed_document.document_id
+            for f in failures
+            if f.failed_document is not None
+        ] == [f"{ticket_doc_id}/attachment/8001"]
+        assert [d.id for d in documents] == [f"{ticket_doc_id}/attachment/8002"]
 
         # Parity holds for the surviving attachment only.
         slim_docs = connector._process_issue_attachments_slim(
@@ -503,9 +514,7 @@ class TestEmptyAttachmentContent:
             parent_hierarchy_raw_node_id=None,
             ticket_document_id=ticket_doc_id,
         )
-        assert [sd.id for sd in slim_docs] == [
-            f"{ticket_doc_id}/attachment/8002"
-        ]
+        assert [sd.id for sd in slim_docs] == [f"{ticket_doc_id}/attachment/8002"]
 
 
 @pytest.fixture
@@ -516,7 +525,7 @@ def jsm_connector(
     """Connector with JSM field discovery short-circuited for determinism."""
     connector = make_jsm_connector()
     connector._jsm_field_map = jsm_field_map
-    jira_client = cast(JIRA, connector._jira_client)
+    jira_client = legacy_jira_client(connector)
     jira_client._options = MagicMock()
     with patch("onyx.connectors.jira.connector._JIRA_FULL_PAGE_SIZE", 2):
         yield connector
@@ -532,7 +541,7 @@ class TestAttachmentsThroughPipeline:
         connector.include_attachments = True
 
         issue = make_mock_jsm_issue(key="HELP-101")
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.side_effect = [[issue]]
 
@@ -543,9 +552,7 @@ class TestAttachmentsThroughPipeline:
         jira_client.issue = MagicMock(return_value=fetched_issue)
 
         end_time = time.time()
-        outputs = load_everything_from_checkpoint_connector(
-            connector, 0, end_time
-        )
+        outputs = load_everything_from_checkpoint_connector(connector, 0, end_time)
 
         # The ticket document and its attachment document both come through
         all_items = [item for output in outputs for item in output.items]
@@ -553,13 +560,9 @@ class TestAttachmentsThroughPipeline:
         doc_ids = [doc.id for doc in documents]
 
         assert f"{TEST_BASE_URL}/browse/HELP-101" in doc_ids
-        assert (
-            f"{TEST_BASE_URL}/browse/HELP-101/attachment/5001" in doc_ids
-        )
+        assert f"{TEST_BASE_URL}/browse/HELP-101/attachment/5001" in doc_ids
         # No unexpected failures
-        failures = [
-            item for item in all_items if isinstance(item, ConnectorFailure)
-        ]
+        failures = [item for item in all_items if isinstance(item, ConnectorFailure)]
         assert failures == []
 
         # The slim pass mirrors the attachment ID exactly

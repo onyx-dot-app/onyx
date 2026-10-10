@@ -29,6 +29,7 @@ from onyx.server.features.build.configs import (
     OPENCODE_SERVE_CONNECT_TIMEOUT,
     OPENCODE_SERVE_EVENT_READ_TIMEOUT,
     OPENCODE_SERVE_REQUEST_TIMEOUT,
+    OPENCODE_SERVE_SESSION_INIT_TIMEOUT,
     OPENCODE_SERVER_USERNAME,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
     SSE_KEEPALIVE_INTERVAL,
@@ -88,13 +89,14 @@ SandboxEvent = (
 class ClientTimeouts:
     """HTTP timeouts for one ``OpencodeServeClient`` instance.
 
-    Defaults pull from ``configs.py`` so deployment can tune via env without
-    touching the client.
+    Defaults come from ``configs.py``. Session initialization has a separate
+    budget for cold directory startup.
     """
 
     connect_timeout: float = OPENCODE_SERVE_CONNECT_TIMEOUT
     request_timeout: float = OPENCODE_SERVE_REQUEST_TIMEOUT
     event_read_timeout: float = OPENCODE_SERVE_EVENT_READ_TIMEOUT
+    session_init_timeout: float = OPENCODE_SERVE_SESSION_INIT_TIMEOUT
 
 
 # ---------------------------------------------------------------------------
@@ -1159,6 +1161,12 @@ class OpencodeServeClient:
         response") are retried with short backoff before bubbling up.
         """
         directory_params = {"directory": directory}
+        # Both lookup and creation can initialize a cold directory-scoped Instance.
+        initialization_timeout = httpx.Timeout(
+            self._timeouts.session_init_timeout,
+            connect=self._timeouts.connect_timeout,
+            pool=self._timeouts.connect_timeout,
+        )
         if opencode_session_id:
             # GET is idempotent — safe to retry on either ConnectError or
             # RemoteProtocolError.
@@ -1166,6 +1174,7 @@ class OpencodeServeClient:
                 "GET",
                 f"/session/{opencode_session_id}",
                 params=directory_params,
+                timeout=initialization_timeout,
                 idempotent=True,
             )
             if r.status_code == 200:
@@ -1201,6 +1210,7 @@ class OpencodeServeClient:
             "POST",
             "/session",
             params=directory_params,
+            timeout=initialization_timeout,
             json=body,
             idempotent=False,
         )

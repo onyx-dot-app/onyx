@@ -61,7 +61,12 @@ import { Button, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
-import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import {
+  motion,
+  AnimatePresence,
+  LayoutGroup,
+  useReducedMotion,
+} from "motion/react";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -250,20 +255,20 @@ export default function BuildChatPanel({
     setActiveSession(activeSession);
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
-  const maybeAutoOpenPanelForPreview = useBuildSessionStore(
-    (s) => s.maybeAutoOpenPanelForPreview
+  const maybeAutoOpenWebapp = useBuildSessionStore(
+    (s) => s.maybeAutoOpenWebapp
   );
 
-  // Auto-open the panel the first time webappUrl becomes non-null this session.
+  // A URL starts readiness checks; only a serving webapp can open Preview.
   const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const prev = prevWebappUrlRef.current;
     const current = session?.webappUrl ?? null;
     if (prev === null && current !== null && sessionId) {
-      maybeAutoOpenPanelForPreview(sessionId);
+      void maybeAutoOpenWebapp(sessionId);
     }
     prevWebappUrlRef.current = current;
-  }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
+  }, [session?.webappUrl, sessionId, maybeAutoOpenWebapp]);
 
   useEffect(() => {
     if (!scheduledSessionId || !shouldStreamScheduledRun) return;
@@ -651,7 +656,7 @@ export default function BuildChatPanel({
   ]);
 
   return (
-    <div className="h-full w-full">
+    <LayoutGroup id="craft-chat">
       {/* Content wrapper - shrinks when output panel opens. Wrapped in a
           dropzone so files can be dropped anywhere in the chat area. */}
       {/* noPaste: the input bar already uploads pasted files itself. */}
@@ -834,37 +839,47 @@ export default function BuildChatPanel({
                   )}
                   {/* The composer stays in view for subagents (layout consistency)
                   but is disabled — replying to subagents is not supported. */}
-                  <CraftInputBar
-                    ref={inputBarRef}
-                    onSubmit={handleSubmit}
-                    isRunning={displayIsRunning}
-                    isInterrupting={isInterrupting}
-                    onInterrupt={
-                      hasInterruptibleTurn && !scheduledRunInFlight
-                        ? handleInterrupt
-                        : undefined
-                    }
-                    disabled={
-                      isViewingSubagent || scheduledRunInFlight || !hasProvider
-                    }
-                    placeholder={
-                      isViewingSubagent
-                        ? t("input.subagentPlaceholder")
-                        : scheduledRunInFlight
-                          ? t("input.scheduledRunPlaceholder")
-                          : t("input.continuePlaceholder")
-                    }
-                    queuedMessages={queuedMessages}
-                    onQueueMessage={handleQueueMessage}
-                    onRemoveQueuedMessage={handleRemoveQueuedMessage}
-                    contextUsage={contextUsage}
-                  />
+                  <motion.div
+                    layoutId="craft-composer"
+                    transition={{
+                      duration: reduceMotion ? 0 : 0.25,
+                      ease: "easeOut",
+                    }}
+                  >
+                    <CraftInputBar
+                      ref={inputBarRef}
+                      onSubmit={handleSubmit}
+                      isRunning={displayIsRunning}
+                      isInterrupting={isInterrupting}
+                      onInterrupt={
+                        hasInterruptibleTurn && !scheduledRunInFlight
+                          ? handleInterrupt
+                          : undefined
+                      }
+                      disabled={
+                        isViewingSubagent ||
+                        scheduledRunInFlight ||
+                        !hasProvider
+                      }
+                      placeholder={
+                        isViewingSubagent
+                          ? t("input.subagentPlaceholder")
+                          : scheduledRunInFlight
+                            ? t("input.scheduledRunPlaceholder")
+                            : t("input.continuePlaceholder")
+                      }
+                      queuedMessages={queuedMessages}
+                      onQueueMessage={handleQueueMessage}
+                      onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                      contextUsage={contextUsage}
+                    />
+                  </motion.div>
                 </div>
               </div>
             )}
           </div>
         )}
       </Dropzone>
-    </div>
+    </LayoutGroup>
   );
 }

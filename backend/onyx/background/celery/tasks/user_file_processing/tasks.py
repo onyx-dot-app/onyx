@@ -19,6 +19,7 @@ from onyx.chat.incognito import (
     sweep_incognito_generated_files,
     sweep_stale_incognito_user_files,
 )
+from onyx.chat.incognito_context import retry_incognito_teardowns
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -1171,7 +1172,7 @@ def process_single_user_file_project_sync(
     ignore_result=True,
 )
 def check_for_incognito_file_cleanup(self: Task, *, tenant_id: str) -> None:  # noqa: ARG001
-    """Retry deletion of tool-generated blobs whose teardown pass failed.
+    """Retry pending context teardown and deletion of tool-generated blobs.
 
     A blob's own record carries the session that produced it, and deleting the
     blob deletes the record, so anything still stamped is what a store failure
@@ -1184,6 +1185,7 @@ def check_for_incognito_file_cleanup(self: Task, *, tenant_id: str) -> None:  # 
     if not lock.acquire(blocking=False):
         return
     try:
+        retry_incognito_teardowns()
         with get_session_with_current_tenant() as db_session:
             sweep_incognito_generated_files(db_session)
     finally:

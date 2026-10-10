@@ -12,7 +12,8 @@ from typing import Any
 
 import pytest
 
-from onyx.sandbox_proxy.mcp_jsonrpc import McpRpcKind, classify_mcp_request
+from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
+from onyx.sandbox_proxy.models import McpRpcKind
 
 
 def _body(payload: Any) -> bytes:

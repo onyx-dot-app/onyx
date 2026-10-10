@@ -6,8 +6,14 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings import api as settings_api
-from onyx.server.settings.models import CRAFT_INSTRUCTIONS_MAX_LENGTH, Settings
+from onyx.server.settings.models import (
+    CRAFT_INSTRUCTIONS_MAX_LENGTH,
+    Settings,
+    Tier,
+)
 
 
 @contextmanager
@@ -19,6 +25,10 @@ def _patch_settings(
     payload: dict[str, Any],
     existing: Settings,
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    ee: bool = False,
+    tier: Tier = Tier.COMMUNITY,
+    db_session: Any = None,
 ) -> Settings:
     stored: list[Settings] = []
     monkeypatch.setattr(
@@ -29,9 +39,15 @@ def _patch_settings(
     monkeypatch.setattr(settings_api, "store_settings", stored.append)
     monkeypatch.setattr(settings_api, "emit_audit_event", lambda *_a, **_k: None)
     monkeypatch.setattr(settings_api, "settings_write_lock", _noop_lock)
-    monkeypatch.setattr(settings_api.global_version, "is_ee_version", lambda: False)
+    monkeypatch.setattr(settings_api.global_version, "is_ee_version", lambda: ee)
+    if ee:
+        import ee.onyx.utils.tier as tier_module
+
+        monkeypatch.setattr(tier_module, "get_tier", lambda: tier)
     settings_api.admin_patch_settings(
-        Settings.model_validate(payload), current_user=MagicMock()
+        Settings.model_validate(payload),
+        current_user=MagicMock(),
+        db_session=db_session or MagicMock(),
     )
     assert len(stored) == 1
     return stored[0]
@@ -77,3 +93,79 @@ def test_over_length_craft_instructions_rejected() -> None:
         Settings.model_validate(
             {"craft_instructions": "x" * (CRAFT_INSTRUCTIONS_MAX_LENGTH + 1)}
         )
+
+
+def test_omitted_llm_gateway_enabled_is_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A disabled gateway must not flip back on when an admin patches an
+    unrelated field."""
+    existing = Settings(llm_gateway_enabled=False)
+    result = _patch_settings({"company_name": "x"}, existing, monkeypatch)
+    assert result.llm_gateway_enabled is False
+
+
+def test_llm_gateway_enabled_rejected_below_business_tier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        _patch_settings({"llm_gateway_enabled": False}, Settings(), monkeypatch)
+    assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
+
+
+def test_llm_gateway_enabled_updates_on_business_tier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _patch_settings(
+        {"llm_gateway_enabled": False},
+        Settings(),
+        monkeypatch,
+        ee=True,
+        tier=Tier.BUSINESS,
+    )
+    assert result.llm_gateway_enabled is False
+
+
+def test_routing_target_must_be_a_router(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "onyx.db.llm.fetch_model_configuration_by_id",
+        lambda *_a, **_k: MagicMock(is_router=False),
+    )
+    with pytest.raises(OnyxError) as exc_info:
+        _patch_settings(
+            {"model_routing_model_configuration_id": 3},
+            Settings(),
+            monkeypatch,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_routing_target_marks_hidden_router_visible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marked: list[MagicMock] = []
+    invalidated: list[bool] = []
+    monkeypatch.setattr(
+        "onyx.db.llm.fetch_model_configuration_by_id",
+        lambda *_a, **_k: MagicMock(is_router=True),
+    )
+    monkeypatch.setattr(
+        settings_api,
+        "mark_model_configuration_visible",
+        lambda _s, mc: marked.append(mc) or True,
+    )
+    monkeypatch.setattr(
+        settings_api,
+        "invalidate_provider_listing_cache",
+        lambda: invalidated.append(True),
+    )
+    result = _patch_settings(
+        {"model_routing_model_configuration_id": 3},
+        Settings(),
+        monkeypatch,
+    )
+    assert result.model_routing_model_configuration_id == 3
+    assert len(marked) == 1
+    assert invalidated == [True]

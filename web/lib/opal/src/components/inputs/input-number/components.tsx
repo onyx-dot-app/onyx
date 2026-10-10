@@ -93,8 +93,12 @@ export default function InputNumber({
     value === null ? "" : String(value)
   );
   const isDisabled = disabled || variant === "disabled";
-  const inputPattern =
-    decimalPlaces === 0 ? "[0-9]*" : `[0-9]*[.]?[0-9]{0,${decimalPlaces}}`;
+  // A negative lower bound lets the value start with a minus sign. A lone
+  // "-" is a value still being typed, so it never reaches onChange.
+  const allowsNegative: boolean = min !== undefined && min < 0;
+  const inputPattern: string =
+    (allowsNegative ? "-?" : "") +
+    (decimalPlaces === 0 ? "[0-9]*" : `[0-9]*[.]?[0-9]{0,${decimalPlaces}}`);
 
   // Sync input value when external value changes (e.g., from stepper buttons or reset)
   React.useEffect(() => {
@@ -177,7 +181,14 @@ export default function InputNumber({
         ref={inputRef}
         id={id}
         type="text"
-        inputMode={decimalPlaces === 0 ? "numeric" : "decimal"}
+        // Numeric soft keyboards have no minus key.
+        inputMode={
+          allowsNegative
+            ? undefined
+            : decimalPlaces === 0
+              ? "numeric"
+              : "decimal"
+        }
         pattern={inputPattern}
         disabled={isDisabled}
         value={inputValue}

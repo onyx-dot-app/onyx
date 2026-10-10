@@ -3,10 +3,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
-  createTableColumns,
   EmptyMessageCard,
   Pagination,
   Table,
+  type TableColumn,
   Text,
 } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -35,8 +35,6 @@ import type { ExternalGroupSyncAttemptSnapshot } from "@/lib/connectors/types";
  * `backend/onyx/db/permission_sync_attempt.py` for the resolution
  * rules and the multi-instance caveat.
  */
-
-const tc = createTableColumns<ExternalGroupSyncAttemptSnapshot>();
 
 /** Translated column headers threaded in from the calling component. */
 interface ColumnHeaders {
@@ -68,63 +66,75 @@ function buildColumns(
   onErrorClick: (errorMessage: string) => void,
   headers: ColumnHeaders,
   locale: string
-) {
+): TableColumn<ExternalGroupSyncAttemptSnapshot>[] {
   return [
-    tc.column("time_started", {
-      header: headers.timeStarted,
+    {
+      kind: "data",
+      field: "time_started",
+      title: headers.timeStarted,
       weight: 26,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
           {value ? localizeAndPrettify(value, locale) : "-"}
         </Text>
       ),
-    }),
-    tc.column("status", {
-      header: headers.status,
+    },
+    {
+      kind: "data",
+      field: "status",
+      title: headers.status,
       weight: 14,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <PermissionSyncStatusBadge
           status={value}
           errorMsg={row.error_message}
         />
       ),
-    }),
-    tc.column("total_users_processed", {
-      header: headers.users,
+    },
+    {
+      kind: "data",
+      field: "total_users_processed",
+      title: headers.users,
       weight: 10,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
           {String(value)}
         </Text>
       ),
-    }),
-    tc.column("total_groups_processed", {
-      header: headers.groups,
+    },
+    {
+      kind: "data",
+      field: "total_groups_processed",
+      title: headers.groups,
       weight: 10,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
           {String(value)}
         </Text>
       ),
-    }),
-    tc.column("total_group_memberships_synced", {
-      header: headers.memberships,
+    },
+    {
+      kind: "data",
+      field: "total_group_memberships_synced",
+      title: headers.memberships,
       weight: 12,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
           {String(value)}
         </Text>
       ),
-    }),
-    tc.column("error_message", {
-      header: headers.errorMessage,
+    },
+    {
+      kind: "data",
+      field: "error_message",
+      title: headers.errorMessage,
       weight: 28,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <ErrorMessageCell
           errorMessage={value}
@@ -132,7 +142,7 @@ function buildColumns(
           onErrorClick={onErrorClick}
         />
       ),
-    }),
+    },
   ];
 }
 
@@ -244,7 +254,7 @@ export function ExternalGroupSyncAttemptsTable({
 
       <Section gap={3} alignItems="stretch" height="auto">
         <Table
-          data={attempts}
+          items={attempts}
           columns={columns}
           getRowId={(row) => String(row.id)}
         />

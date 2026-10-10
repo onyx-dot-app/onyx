@@ -77,14 +77,17 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
+    document_preview_command,
+    parse_document_preview_response,
 )
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
     SIDECAR_SNAPSHOT_CREATE_PATH,
+    FilesystemEntry,
     OutputsManifestResponse,
     SnapshotCreateRequest,
     sidecar_snapshot_restore_path,
@@ -110,7 +113,6 @@ from onyx.server.features.build.sandbox.models import (
     CraftMCPServerConfig,
     FatalWriteError,
     FileSet,
-    FilesystemEntry,
     RetriableWriteError,
     SandboxInfo,
     SandboxProvisionContentionError,
@@ -124,8 +126,10 @@ from onyx.server.features.build.sandbox.nextjs_dev import (
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
+    SESSION_CONFIG_COMPLETE_SENTINEL,
     SESSIONS_ROOT,
     WORKSPACE_SETUP_COMPLETE_SENTINEL,
+    build_opencode_dependency_setup_command,
     build_session_workspace_setup_script,
     build_workspace_exists_check_script,
 )
@@ -1936,6 +1940,7 @@ echo "Session cleanup complete"
         config_script = f"""
 set -e
 mkdir -p {session_path}/.opencode
+{build_opencode_dependency_setup_command(session_path)}
 ln -sfn /workspace/managed/skills {session_path}/.opencode/skills
 ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' '{agent_instructions_escaped}' > {session_path}/AGENTS.md
@@ -1944,10 +1949,11 @@ if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 
     printf '\n\n' >> {session_path}/AGENTS.md
     echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md
 fi
+echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
 """
 
         logger.info("Regenerating session configuration files")
-        k8s_stream(
+        exec_response = k8s_stream(
             self._stream_core_api.connect_get_namespaced_pod_exec,
             name=pod_name,
             namespace=self._namespace,
@@ -1957,7 +1963,13 @@ fi
             stdin=False,
             stdout=True,
             tty=False,
+            _request_timeout=WORKSPACE_SETUP_DEADLINE_SECONDS,
         )
+        if SESSION_CONFIG_COMPLETE_SENTINEL not in exec_response.splitlines():
+            raise RuntimeError(
+                f"Session configuration regeneration for session {session_id} "
+                f"did not complete (output tail: {exec_response[-500:]!r})"
+            )
         logger.info("Session configuration files regenerated")
 
     def health_check(self, sandbox_id: UUID, timeout: float) -> bool:
@@ -2038,7 +2050,8 @@ fi
     ) -> OutputsManifestResponse:
         try:
             return self._sidecar_client.outputs_manifest(
-                sandbox_id=sandbox_id, session_id=session_id
+                sandbox_id=sandbox_id,
+                session_id=session_id,
             )
         except SidecarRequestError as e:
             raise RuntimeError(f"Failed to build outputs manifest: {e}") from e
@@ -2120,83 +2133,67 @@ fi
         """
         return self._get_nextjs_url(str(sandbox_id), port)
 
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
-        """Convert PPTX to slide images using soffice + pdftoppm in the pod.
+        """Convert PDF or PowerPoint to page images using soffice + pdftoppm in the pod.
 
         Runs preview.py in the sandbox container which:
-        1. Checks if cached slides exist and are newer than the PPTX
-        2. If not, converts PPTX -> PDF -> JPEG slides
+        1. Checks whether cached pages match the document revision
+        2. If not, converts PowerPoint to PDF and rasterizes PDF pages
         3. Returns list of slide image paths
         """
         pod_name = self._get_pod_name(str(sandbox_id))
 
         # Security: sanitize paths
-        pptx_path_obj = Path(pptx_path.lstrip("/"))
-        pptx_clean_parts = [p for p in pptx_path_obj.parts if p != ".."]
-        clean_pptx = str(Path(*pptx_clean_parts)) if pptx_clean_parts else "."
+        document_path_obj = Path(document_path.lstrip("/"))
+        document_clean_parts = [p for p in document_path_obj.parts if p != ".."]
+        clean_document = (
+            str(Path(*document_clean_parts)) if document_clean_parts else "."
+        )
 
         cache_path_obj = Path(cache_dir.lstrip("/"))
         cache_clean_parts = [p for p in cache_path_obj.parts if p != ".."]
         clean_cache = str(Path(*cache_clean_parts)) if cache_clean_parts else "."
 
         session_root = f"/workspace/sessions/{session_id}"
-        pptx_abs = f"{session_root}/{clean_pptx}"
+        document_abs = f"{session_root}/{clean_document}"
         cache_abs = f"{session_root}/{clean_cache}"
 
-        exec_command = [
-            "python",
-            "/workspace/managed/skills/pptx/scripts/preview.py",
-            pptx_abs,
+        exec_command = document_preview_command(
+            document_abs,
             cache_abs,
-        ]
+            session_root,
+            first_page_only=first_page_only,
+        )
 
-        try:
-            resp = k8s_stream(
+        def run_command(command: list[str]) -> str:
+            return k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container=_SANDBOX_CONTAINER_NAME,
-                command=exec_command,
+                command=command,
                 stderr=True,
                 stdin=False,
                 stdout=True,
                 tty=False,
             )
 
-            lines = [line.strip() for line in resp.strip().split("\n") if line.strip()]
-
-            if not lines:
-                raise ValueError("Empty response from PPTX conversion")
-
-            if lines[0] == "ERROR_NOT_FOUND":
-                raise ValueError(f"File not found: {pptx_path}")
-
-            if lines[0] == "ERROR_NO_PDF":
-                raise ValueError("soffice did not produce a PDF file")
-
-            cached = lines[0] == "CACHED"
-            # Skip the status line, rest are file paths
-            abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
-
-            # Convert absolute paths to session-relative paths
-            prefix = f"{session_root}/"
-            rel_paths = []
-            for p in abs_paths:
-                if p.startswith(prefix):
-                    rel_paths.append(p[len(prefix) :])
-                elif p.endswith(".jpg"):
-                    rel_paths.append(p)
-
-            return (rel_paths, cached)
+        try:
+            self._ensure_document_preview_bundle(sandbox_id, run_command)
+            return parse_document_preview_response(
+                run_command(exec_command), session_root
+            )
 
         except ApiException as e:
-            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
+            raise RuntimeError(f"Failed to generate document preview: {e}") from e
 
     def _ensure_agents_md_attachments_section(
         self, sandbox_id: UUID, session_id: UUID

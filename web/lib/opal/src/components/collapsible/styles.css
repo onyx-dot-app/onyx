@@ -21,30 +21,8 @@
   outline: none;
 }
 
-/* The body's grid row animates between 0fr and 1fr. The clipped box has no
-   padding of its own, so it can close all the way. */
-.opal-collapsible-body {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 200ms ease-out;
-}
-
-.opal-collapsible[data-state="open"] .opal-collapsible-body {
-  grid-template-rows: 1fr;
-}
-
-.opal-collapsible-body-inner {
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* The gap under the header lives one level in, so it closes with the body. */
+/* The gap under the header lives inside the fold, so it closes with the
+   body. */
 .opal-collapsible-body-content {
   @apply pt-3;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .opal-collapsible-body {
-    transition: none;
-  }
 }

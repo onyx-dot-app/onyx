@@ -63,6 +63,10 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
 - `web/src/i18n/messages/en.json` is the source of truth. When you add or change a key, add your
   best translation to every other locale file in that directory. Missing or extra keys fail
   `types:check`. ICU shape must match across locales (`src/i18n/__tests__/catalog.test.ts`).
+- The `i18n-copy-changes` pre-commit hook requires each changed English message to have a changed translation in every locale.
+  It uses the pre-commit range base when supplied. Otherwise, it checks working edits against HEAD or clean checkouts against HEAD^.
+  Main push checks use the push event’s previous commit. The hook does not assess translation quality.
+  Run `python3 tools/i18n/check_copy_changes.py --base origin/main` from the repository root to check a branch.
 - Keys are stable identifiers: `<namespace>.<section>.<element>.<role>` in camelCase, for example
   `settings.appearance.colorMode.title`. Rewording the English never changes the key.
 - Use ICU for arguments and plurals. Never concatenate translated fragments.

@@ -1,11 +1,11 @@
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
-from jira import JIRA
-from jira.resources import Issue
+from jira import JIRA, JIRAError
 
+from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -60,6 +60,18 @@ class MockComment:
         self.raw = {"body": body, "jsdPublic": is_public}
 
 
+class MockJiraIssue(dict[str, Any]):
+    """Raw Jira issue with a legacy key accessor for test call sites."""
+
+    @property
+    def key(self) -> str:
+        return str(self["key"])
+
+    @property
+    def raw(self) -> dict[str, Any]:
+        return self
+
+
 def make_mock_jsm_issue(
     key: str = "HELP-101",
     summary: str = "VPN not connecting",
@@ -75,41 +87,8 @@ def make_mock_jsm_issue(
     raw_overrides: dict[str, Any] | None = None,
     created: str = "2026-09-01T10:00:00.000+0000",
     updated: str = "2026-09-02T14:30:00.000+0000",
-) -> Issue:
-    """Build a mock Jira Issue carrying realistic JSM raw fields."""
-    issue = MagicMock(spec=Issue)
-    issue.key = key
-
-    fields = MagicMock()
-    fields.summary = summary
-    fields.description = description
-    fields.labels = labels or []
-    fields.created = created
-    fields.updated = updated
-
-    fields.reporter = MockUser("Alice Requester", "alice@example.com")
-    fields.assignee = MockUser("Bob Agent", "bob@example.com")
-
-    fields.priority = MagicMock()
-    fields.priority.name = "High"
-
-    fields.status = MagicMock()
-    fields.status.name = "Waiting for support"
-
-    fields.resolution = None
-    fields.duedate = None
-    fields.resolutiondate = None
-
-    fields.issuetype = MagicMock()
-    fields.issuetype.name = "Service Request"
-
-    project = MagicMock()
-    project.key = project_key
-    project.name = project_name
-    fields.project = project
-
-    fields.parent = None
-
+) -> MockJiraIssue:
+    """Build a raw REST issue matching JiraSourceOperations' dictionary contract."""
     if comments is None:
         comments = [
             MockComment(
@@ -123,18 +102,51 @@ def make_mock_jsm_issue(
                 is_public=False,
             ),
         ]
-    comment_container = MagicMock()
-    comment_container.comments = comments
-    fields.comment = comment_container
-
-    issue.fields = fields
-
-    raw_fields: dict[str, Any] = {"description": description}
     if field_map is None:
         field_map = JsmFieldMap(
             customer_request_type=REQUEST_TYPE_FIELD_ID,
             organizations=ORGANIZATIONS_FIELD_ID,
         )
+
+    raw_fields: dict[str, Any] = {
+        "summary": summary,
+        "description": description,
+        "labels": labels or [],
+        "created": created,
+        "updated": updated,
+        "reporter": {
+            "displayName": "Alice Requester",
+            "emailAddress": "alice@example.com",
+        },
+        "assignee": {"displayName": "Bob Agent", "emailAddress": "bob@example.com"},
+        "priority": {"name": "High"},
+        "status": {"name": "Waiting for support"},
+        "resolution": None,
+        "duedate": None,
+        "resolutiondate": None,
+        "issuetype": {"name": "Service Request"},
+        "project": {"key": project_key, "name": project_name},
+        "parent": None,
+        "comment": {
+            "comments": [
+                {
+                    "body": comment.body,
+                    "author": (
+                        {
+                            "displayName": comment.author.displayName,
+                            "emailAddress": getattr(
+                                comment.author, "emailAddress", None
+                            ),
+                        }
+                        if hasattr(comment, "author")
+                        else {}
+                    ),
+                    "jsdPublic": comment.raw.get("jsdPublic", True),
+                }
+                for comment in comments
+            ]
+        },
+    }
 
     if request_type is not None and field_map.customer_request_type:
         raw_fields[field_map.customer_request_type] = request_type
@@ -144,12 +156,10 @@ def make_mock_jsm_issue(
         ]
     if slas is not None:
         raw_fields.update(slas)
-
     if raw_overrides:
         raw_fields.update(raw_overrides)
 
-    issue.raw = {"fields": raw_fields}
-    return issue
+    return MockJiraIssue(key=key, fields=raw_fields)
 
 
 @pytest.fixture
@@ -178,7 +188,77 @@ def make_jsm_connector(
             comment_email_blacklist=kwargs.pop("comment_email_blacklist", []),
             **kwargs,
         )
-        connector._jira_client = mock_jira_client
+        # The production Jira connector uses a credential-scoped operations
+        # gateway; route the legacy test mock through the same public methods.
+        from onyx.connectors.jira.source_operations import JiraSourceOperations
+
+        gateway = MagicMock(spec=JiraSourceOperations)
+        gateway._is_cloud.return_value = False
+
+        def search_issues(
+            *, jql: str, start_at: int, max_results: int, fields: str | None = None
+        ) -> list[dict[str, Any]]:
+            issues = mock_jira_client.search_issues(
+                jql_str=jql,
+                startAt=start_at,
+                maxResults=max_results,
+                fields=fields,
+            )
+            return [issue.raw if hasattr(issue, "raw") else issue for issue in issues]
+
+        attachment_cache: dict[str, Any] = {}
+
+        def list_issue_attachments(*, issue_key: str) -> list[dict[str, Any]]:
+            result = mock_jira_client.issue(issue_key, fields="attachment")
+            attachments = result.fields.attachment or []
+            metadata = []
+            for attachment in attachments:
+                attachment_id = str(attachment.id)
+                attachment_cache[attachment_id] = attachment
+                metadata.append(
+                    {
+                        "id": attachment_id,
+                        "filename": attachment.filename,
+                        "size": attachment.size,
+                        "mimeType": attachment.mimeType,
+                        "created": attachment.created,
+                        "content": attachment.content,
+                    }
+                )
+            return metadata
+
+        def download_attachment(*, attachment_id: str) -> bytes:
+            return attachment_cache[attachment_id].get()
+
+        def get_project(*, project_key: str) -> dict[str, Any]:
+            try:
+                project = mock_jira_client.project(project_key)
+            except JIRAError as error:
+                raise JiraApiError(
+                    str(error), status_code=error.status_code, text=error.text
+                ) from error
+            if isinstance(project, dict):
+                return project
+            raw = getattr(project, "raw", None)
+            if isinstance(raw, dict) and "projectTypeKey" in raw:
+                return {"key": project_key, **raw}
+            return {
+                "key": project_key,
+                "projectTypeKey": getattr(project, "projectTypeKey", None),
+            }
+
+        gateway.search_issues.side_effect = search_issues
+        gateway.list_fields.side_effect = lambda: mock_jira_client.fields()
+        gateway.list_issue_attachments.side_effect = list_issue_attachments
+        gateway.download_attachment.side_effect = download_attachment
+        gateway.get_project.side_effect = get_project
+        connector._source_operations = gateway
+        connector.__dict__["_jira_client"] = mock_jira_client  # Test-only shim.
         return connector
 
     return _make
+
+
+def legacy_jira_client(connector: JiraServiceManagementConnector) -> JIRA:
+    """Retrieve the SDK stand-in installed only by the legacy test factory."""
+    return cast(JIRA, connector.__dict__["_jira_client"])

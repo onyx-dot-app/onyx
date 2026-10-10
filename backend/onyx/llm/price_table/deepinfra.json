@@ -459,6 +459,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-02-23",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -620,6 +621,7 @@
     "Qwen/Qwen3.6-35B-A3B": {
       "attachment": true,
       "cost": {
+        "cache_read": 0.1,
         "input": 0.1,
         "output": 0.95
       },
@@ -845,6 +847,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-22",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -875,6 +878,69 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-22",
+      "status": "deprecated",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "XiaomiMiMo/MiMo-V2.6-Flash": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0028,
+        "input": 0.14,
+        "output": 0.28
+      },
+      "family": "mimo",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiMo-V2.6-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-22",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "XiaomiMiMo/MiMo-V2.6-Pro": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.0036,
+        "input": 0.43,
+        "output": 0.87
+      },
+      "family": "mimo",
+      "limit": {
+        "context": 1048576,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "audio",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "MiMo-V2.6-Pro",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-22",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -960,6 +1026,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-03-24",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1314,8 +1381,8 @@
     "google/gemma-4-31B-it": {
       "attachment": true,
       "cost": {
-        "input": 0.13,
-        "output": 0.38
+        "input": 0.2,
+        "output": 0.4
       },
       "family": "gemma",
       "limit": {
@@ -1367,6 +1434,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-02",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -1423,6 +1491,7 @@
       "open_weights": true,
       "reasoning": false,
       "release_date": "2025-04-05",
+      "status": "deprecated",
       "structured_output": true,
       "tool_call": false
     },
@@ -1544,6 +1613,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-06-12",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": false,
       "tool_call": true
@@ -1748,6 +1818,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-05-29",
+      "status": "deprecated",
       "temperature": true,
       "tool_call": true
     },
@@ -1781,6 +1852,34 @@
       "temperature": true,
       "tool_call": true
     },
+    "tencent/Hy4-preview": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.042,
+        "input": 0.834,
+        "output": 2.501
+      },
+      "family": "Hy",
+      "limit": {
+        "context": 1048576,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Hy4 preview",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-28",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "thinkingmachines/Inkling": {
       "attachment": true,
       "cost": {
@@ -1808,6 +1907,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-07-15",
+      "structured_output": true,
       "temperature": true,
       "tool_call": true
     },
@@ -1985,6 +2085,7 @@
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-04-07",
+      "status": "deprecated",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -2022,7 +2123,7 @@
       "attachment": false,
       "cost": {
         "cache_read": 0.2,
-        "input": 1.2,
+        "input": 0.9,
         "output": 4
       },
       "family": "glm",

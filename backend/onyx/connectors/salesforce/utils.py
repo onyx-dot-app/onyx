@@ -17,6 +17,13 @@ USER_OBJECT_TYPE = "User"
 _SF_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 
+def resolve_parent_object_types(requested_objects: list[str] | None) -> list[str]:
+    """The parent object types to index when no custom query config is set."""
+    if not requested_objects:
+        return [ACCOUNT_OBJECT_TYPE]
+    return [obj.strip().capitalize() for obj in requested_objects]
+
+
 def is_valid_sf_identifier(name: str) -> bool:
     """True iff `name` is a syntactically valid Salesforce object/field name.
 

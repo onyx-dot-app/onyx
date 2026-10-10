@@ -20,6 +20,7 @@ export enum EmbeddingProviderName {
   GOOGLE = "google",
   LITELLM = "litellm",
   AZURE = "azure",
+  BIFROST = "bifrost",
 
   // Self-hosted
   NOMIC = "nomic",
@@ -62,13 +63,6 @@ export interface EmbeddingProvider {
   costslink?: string;
   apiLink?: string;
   embeddingModels: EmbeddingModel[];
-
-  /**
-   * When true, this provider is no longer recommended for new deployments.
-   * Existing usage is allowed, but selecting it as a new embedding model is
-   * blocked in the UI.
-   */
-  deprecated?: boolean;
 }
 
 export interface EmbeddingModel {
@@ -79,9 +73,18 @@ export interface EmbeddingModel {
   passagePrefix?: string | null;
   // Absent for custom models, which have no registry description.
   descriptionKey?: IndexSettingsMessageKey;
+
+  /**
+   * When true, existing usage is allowed, but selecting it as a new embedding
+   * model is blocked.
+   */
+  deprecated?: boolean;
 }
 
-export type EmbeddingModelSpec = Omit<EmbeddingModel, "descriptionKey">;
+export type EmbeddingModelSpec = Omit<
+  EmbeddingModel,
+  "descriptionKey" | "deprecated"
+>;
 
 /**
  * Always write all three fields together. A name without its spec and provider forces

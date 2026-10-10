@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "连接到 Onyx",
+      "request": "允许 {clientName} 搜索 Onyx 吗？",
+      "account": "当前登录账号：{email}",
+      "workspace": "工作区：{workspaceName}",
+      "appAddress": "应用地址：{origin}",
+      "access": "读取你有权访问的文档的搜索结果。使用网页搜索并打开网页。",
+      "allow": "允许访问",
+      "deny": "拒绝",
+      "pending": "正在保存你的选择...",
+      "loading": "正在加载授权请求...",
+      "unavailable": "此请求已过期或发生更改。请从应用重新开始。",
+      "failed": "未能完成授权。请从应用重新开始。",
+      "signInRequired": "请登录以授权此应用。",
+      "signIn": "登录",
+      "forbidden": "你无法授权此应用。请联系工作区管理员。",
+      "loadFailed": "Onyx 无法加载此请求。请重试。",
+      "retry": "重试"
+    },
+    "connections": {
+      "cancel": "取消",
+      "title": "已连接的应用",
+      "description": "你已允许搜索 Onyx 的应用。",
+      "empty": "没有已连接的应用。",
+      "loading": "正在加载已连接的应用...",
+      "expires": "到期日期：{date}",
+      "disconnect": "断开连接",
+      "disconnectAriaLabel": "断开与 {clientName} 的连接",
+      "pending": "正在断开连接...",
+      "failed": "无法断开应用连接。请重试。",
+      "loadFailed": "无法加载已连接的应用。",
+      "confirmTitle": "断开 {clientName} 的连接吗？",
+      "confirmDescription": "此应用将失去对 Onyx 的访问权限。你可以稍后重新连接。"
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "账户"
@@ -1385,6 +1421,43 @@
           "text": "在您的 1 个月免费试用结束后，我们将于 <value>{date}</value> 向您收费。"
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "降级失败"
+        },
+        "link": {
+          "label": "降级到 Community"
+        },
+        "modal": {
+          "changes": {
+            "text": "降级后："
+          },
+          "confirmButton": {
+            "label": "降级",
+            "loading": "正在降级..."
+          },
+          "deleted": {
+            "text": "**删除：** 用户组、服务账户 API 密钥、令牌速率限制和钩子；"
+          },
+          "description": "移除您的许可证和所有付费功能。",
+          "disabled": {
+            "text": "**停用：** 标准答案和 SCIM 令牌；"
+          },
+          "intro": {
+            "text": "访问控制将从此部署中移除。**这会启动重新索引**，使搜索结果反映此更改，大型索引可能需要一段时间。"
+          },
+          "madePublic": {
+            "text": "**公开：** 所有连接器，以及与用户组共享的代理、文档集、LLM 提供方、MCP 服务器和技能；"
+          },
+          "reset": {
+            "text": "**重置为默认：** 自定义品牌和聊天保留策略。"
+          },
+          "title": "降级到 Community Edition",
+          "warning": {
+            "text": "受同步权限或用户组限制的文档将**对所有用户可见**。此操作无法撤销。"
+          }
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "激活许可证密钥"
@@ -1963,25 +2036,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "我们将自动从数据源同步权限。只有当执行搜索的用户在数据源中有权访问该文档时，该文档才能在 {appName} 中被搜索到。",
-          "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
-          "name": "自动同步权限"
-        },
-        "heading": {
-          "description": "控制谁可以访问此连接器索引的文档。",
-          "title": "文档访问权限"
-        },
-        "privateOption": {
-          "description": "只有（通过用户组页面）被明确授予此连接器访问权限的用户才能访问此连接器导入的文档",
-          "name": "私有"
-        },
-        "publicOption": {
-          "description": "拥有 {appName} 账户的所有人都可以访问此连接器导入的文档",
-          "name": "公开"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# 天} other {# 天}}",
@@ -2157,6 +2211,7 @@
           "description": "所有人保留从源系统同步的访问权限。",
           "title": "添加群组前不设限制"
         },
+        "loadError": "无法加载群组。请重新加载页面后重试。",
         "memberCount": "{count, plural, other {# 名成员}}",
         "picker": {
           "placeholder": "添加群组以限制对此连接器的访问"
@@ -2164,26 +2219,12 @@
         "remove": {
           "tooltip": "移除 {name}"
         },
+        "table": {
+          "group": "群组"
+        },
         "toggle": {
           "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
           "title": "限制为群组访问"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "为此连接器分配组访问权限"
-        },
-        "assignToGroup": {
-          "title": "可以管理此连接器的群组"
-        },
-        "scopedManagerGroups": {
-          "description": "选择一个或多个您管理的组以授予对此连接器的访问权限"
-        },
-        "syncGroups": {
-          "description": "以下的组控制谁可以管理此连接器。其文档的访问权限继承自数据源本身的权限。"
-        },
-        "visibleToGroups": {
-          "description": "此连接器将对以下所选的组可见/可访问"
         }
       },
       "indexAttemptsTable": {
@@ -2562,7 +2603,7 @@
       "oneDrive": {
         "description": "配置 OneDrive 连接器",
         "indexingScope": {
-          "label": "Onyx 应为哪些用户的 OneDrive 文件建立索引？",
+          "label": "要索引的 OneDrive 文件",
           "general": {
             "label": "常规",
             "description": "为 Microsoft 应用程序可以访问的所有符合条件的用户建立索引。"
@@ -2578,7 +2619,7 @@
         },
         "excludedPaths": {
           "label": "排除的路径",
-          "description": "与每个文件路径和文件名匹配的 glob 模式，例如“*.tmp”或“Archive/*”。"
+          "description": "与每个文件路径和文件名匹配的 glob 模式，例如`*.tmp`或`Archive/*`。"
         },
         "organizationLinks": {
           "label": "将组织链接视为公开链接",
@@ -2670,10 +2711,6 @@
           "toast": "发生未知错误"
         }
       },
-      "connectorName": {
-        "label": "连接器名称",
-        "subtext": "用于描述该连接器的名称。"
-      },
       "credentialRequired": {
         "tooltip": "请先选择一个凭据。"
       },
@@ -2689,9 +2726,6 @@
         "title": "加载凭据失败。"
       },
       "field": {
-        "optional": {
-          "label": "（可选）"
-        },
         "optionalSuffix": {
           "label": "可选"
         }
@@ -2819,7 +2853,7 @@
           "label": "取消"
         },
         "connectButton": {
-          "label": "连接"
+          "label": "创建连接器"
         },
         "description": "连接到 {source} 并为 {appName} 设置连接器。{hasDocs, select, true {查看[文档]({url})} other {}}"
       },
@@ -2924,22 +2958,13 @@
           "title": "提交时出错。"
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "配置"
-        }
+      "content": {
+        "title": "连接器内容",
+        "description": "选择此连接器要索引的内容。"
       },
       "selectInput": {
         "emptyOption": {
           "label": "选择一个选项"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "新增"
-        },
-        "removeButton": {
-          "tooltip": "移除"
         }
       },
       "tabs": {
@@ -2951,8 +2976,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "粘贴你的站点 URL。{connectorName} 的 REST API 必须能在该地址访问。"
+      },
       "boundFields": {
-        "advancedOptions": "高级选项",
         "errors": {
           "missing": "请输入一个值。",
           "invalid": "此值无效：{detail}"
@@ -2978,6 +3005,57 @@
           "hours": "小时",
           "minutes": "分钟"
         }
+      },
+      "settings": {
+        "description": "连接器信息与访问权限。",
+        "displayName": {
+          "title": "连接器显示名称"
+        },
+        "documentAccess": {
+          "description": "控制谁可以访问此连接器索引的文档。",
+          "everyone": {
+            "description": "此连接器索引的文档将对组织中的所有人公开。",
+            "title": "组织中的所有人"
+          },
+          "specificGroups": {
+            "description": "指定可以访问此连接器文档的群组。",
+            "required": "请至少选择一个群组。",
+            "title": "特定群组"
+          },
+          "sync": {
+            "description": "{appName} 会与来源同步权限。用户只能搜索他们在来源中可见的内容。",
+            "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
+            "title": "与 {source} 同步"
+          },
+          "title": "文档访问"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "始终共享",
+            "title": "管理员"
+          },
+          "description": "控制谁可以运行（安排和监控索引）和/或编辑连接器配置。",
+          "note": "只有拥有“管理连接器”权限（群组管理员角色或群组权限）的用户才能运行和/或编辑连接器。",
+          "placeholder": "添加群组以共享此连接器",
+          "role": {
+            "editor": {
+              "description": "更新/删除配置。",
+              "label": "编辑者"
+            },
+            "menu": {
+              "ariaLabel": "{name} 的角色"
+            },
+            "operator": {
+              "description": "安排/监控索引。",
+              "label": "操作员"
+            },
+            "removeAccess": {
+              "label": "移除访问权限"
+            }
+          },
+          "title": "连接器管理权限"
+        },
+        "title": "连接器设置"
       }
     },
     "costOverrides": {
@@ -5043,6 +5121,16 @@
           "title": "目标 URL"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "Bifrost 网关的基础 URL。{appName} 会将嵌入请求发送到其 /v1/embeddings 端点。",
+          "title": "基础 URL"
+        },
+        "modelName": {
+          "description": "Bifrost 模型 ID，例如 openai/text-embedding-3-large。保存时，{appName} 会对一段测试文本进行嵌入，以确认这是嵌入模型并获取其维度。",
+          "editDescription": "{appName} 当前使用此模型。保存时会使用新的 URL 和密钥对其进行测试。要使用其他模型，请在模型列表中选择。"
+        }
+      },
       "cancelReindexModal": {
         "description": "取消后将还原为之前的 embedding 模型，并且所有重新索引的进度都会丢失。",
         "submit": {
@@ -5055,6 +5143,10 @@
         "title": "图像描述 LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "立即停止为新增和更新的文档生成上下文，或者重建所有文档以同时移除已生成的上下文。",
+          "title": "选择关闭上下文检索的方式"
+        },
         "contextualModelMissing": {
           "description": "上下文检索已启用，但尚未选择模型。请先在下方选择上下文检索 LLM，再重新索引——没有模型，重新索引无法运行。",
           "title": "选择上下文检索 LLM"
@@ -5171,6 +5263,10 @@
       "forwardOnlyModal": {
         "description": "现有文档将保留由之前的模型生成的上下文。新模型仅在文档新增或更新时生效。不同文档之间的上下文增强可能存在差异。",
         "title": "今后应用上下文检索 LLM"
+      },
+      "disableForwardModal": {
+        "description": "此后新增或更新的文档将不再使用上下文检索。现有文档会保留已生成的上下文，直到它们被更新或您重新索引。",
+        "title": "今后关闭上下文检索"
       },
       "header": {
         "description": "配置文档的索引方式、embedding 方式，以及为搜索和检索所做的准备。"
@@ -5309,9 +5405,6 @@
           },
           "title": "为您的 {provider} embedding 提供商添加配置。"
         },
-        "deprecated": {
-          "suffix": "（已弃用）"
-        },
         "disconnect": {
           "errorToast": "断开 {provider} 的连接失败",
           "successToast": "已断开 {provider} 的连接"
@@ -5390,6 +5483,8 @@
         "contextualModelRequired": "请在重新索引前选择上下文检索 LLM。",
         "contextualModelUpdateFailed": "更新上下文检索 LLM 失败",
         "contextualModelUpdated": "已更新上下文检索 LLM",
+        "contextualRetrievalDisableFailed": "关闭上下文检索失败",
+        "contextualRetrievalDisabled": "已关闭上下文检索",
         "modelNotFound": "找不到所选模型",
         "providerResolveFailed": "无法解析提供商",
         "reindexCanceled": "已取消重新索引",
@@ -5448,6 +5543,9 @@
         "googleGeminiEmbedding2": "Google 最新的多模态嵌入模型（GA）。3072 维输出，检索质量最高。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 的预览版。新部署已由 gemini-embedding-2 取代。",
         "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
+        "voyage4Large": "Voyage 4 系列中最大的嵌入模型。Voyage 最佳检索质量，支持多语言。",
+        "voyage4": "Voyage 4 系列通用嵌入模型。以适中成本提供高检索质量。",
+        "voyage4Lite": "Voyage 4 系列轻量级嵌入模型。成本最低，速率限制最高。",
         "voyageLight2Instruct": "Voyage 的轻量级嵌入模型。性能与效率平衡良好。",
         "nomicEmbedTextV1": "Nomic 的嵌入模型，专注于检索、相似度、聚类和分类。",
         "e5BaseV2": "比默认模型更小、更快的模型。速度约为默认模型的 2 倍，但搜索质量较低。",
@@ -6114,6 +6212,19 @@
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "自动模式",
+          "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。"
+        },
+        "target": {
+          "title": "路由器模型",
+          "description": "负责 Auto 模式的模型路由。",
+          "empty": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。",
+          "error": "无法加载路由器模型。",
+          "retry": "重试"
+        }
       }
     },
     "mcpActions": {
@@ -8444,6 +8555,9 @@
         "makeAdmin": {
           "label": "设为管理员"
         },
+        "menuButton": {
+          "ariaLabel": "用户操作"
+        },
         "removeAdmin": {
           "label": "移除管理员权限"
         },
@@ -8799,6 +8913,93 @@
           "label": "API 基础 URL",
           "description": "您的 Firecrawl API 基础 URL。"
         }
+      }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM 网关",
+        "description": "控制外部工具对工作区语言模型的直接 API 访问。"
+      },
+      "access": {
+        "title": "直接访问模型的 API",
+        "description": "允许工作区成员通过 Claude Code 或 Cursor 等外部工具，使用限定范围的访问令牌调用工作区的语言模型。调用将计入您配置的提供商。",
+        "toggle": {
+          "title": "启用 LLM 网关",
+          "description": "关闭后，所有网关端点都会拒绝请求，现有令牌将失效，令牌选择器中也会隐藏网关范围。Craft 沙箱流量由 Craft 设置单独控制。"
+        }
+      },
+      "businessPlanTag": {
+        "label": "商业版套餐"
+      },
+      "tierTooltip": "LLM 网关需要商业版或企业版套餐。",
+      "scopeNote": {
+        "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
+      },
+      "toasts": {
+        "settingsUpdated": "设置已更新",
+        "settingsUpdateFailed": "更新设置失败"
+      }
+    },
+    "connectorChecks": {
+      "lockReason": "请先运行上方的连接器检查，并解决所有失败项，然后继续。",
+      "prompt": {
+        "title": "测试连接",
+        "description": "{appName} 将在继续之前运行检查，以验证所需的权限范围。",
+        "startButton": {
+          "label": "开始检查"
+        }
+      },
+      "title": "连接器检查",
+      "groups": {
+        "failed": "{count} 项失败",
+        "indeterminate": "{count} 项未验证",
+        "passed": "{count} 项完成",
+        "skipped": "{count} 项跳过",
+        "running": "{count} 项运行中",
+        "expected": "{count} 项待运行"
+      },
+      "status": {
+        "passed": "通过",
+        "failed": "失败",
+        "indeterminate": "无法验证",
+        "skipped": "已跳过",
+        "running": "正在测试…",
+        "pending": "排队中",
+        "waiting": "正在等待设置"
+      },
+      "required": {
+        "label": "必需"
+      },
+      "running": {
+        "label": "正在运行检查…"
+      },
+      "empty": {
+        "label": "尚未运行任何检查。"
+      },
+      "docsLink": {
+        "label": "文档"
+      },
+      "rerunButton": {
+        "label": "重新运行检查"
+      },
+      "foldButton": {
+        "fold": "收起",
+        "expand": "展开"
+      },
+      "titleCount": "（{complete}/{total}）",
+      "summary": {
+        "failed": "{count} 项失败",
+        "unverified": "{count} 项未验证",
+        "inProgress": "{count} 项进行中",
+        "expected": "{count} 项待执行",
+        "skipped": "{count} 项跳过",
+        "successful": "{count} 项成功"
+      },
+      "failedToRun": "检查未能运行。请重试。",
+      "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
+      "state": {
+        "completed": "检查已完成",
+        "inProgress": "检查进行中…"
       }
     }
   },
@@ -11048,6 +11249,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "此模型不支持修改该设置。"
+      },
+      "autoItem": {
+        "label": "自动",
+        "description": "为每条消息选择最佳模型"
       }
     },
     "nrf": {
@@ -11234,6 +11439,9 @@
         "expand": {
           "ariaLabel": "展开项目"
         },
+        "options": {
+          "label": "项目选项"
+        },
         "rename": {
           "label": "重命名项目"
         }
@@ -11292,6 +11500,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {选择文件} other {选择文件}}"
+      },
+      "prompt": "{multiple, select, true {或将文件拖放到此处。} other {或将文件拖放到此处。}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "新增"
+      },
+      "removeButton": {
+        "tooltip": "移除"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "打开侧边栏"
@@ -11455,6 +11677,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "如果您是管理员，请访问<billingLink>管理员账单</billingLink>页面以{hadLicense, select, true {续订} other {激活}}您的许可证，通过 Stripe 注册，或联系 <supportLink>support@onyx.app</supportLink> 获取账单帮助。"
+        },
+        "downgradeButton": {
+          "label": "降级到 Community"
         },
         "heading": {
           "title": "访问受限"
@@ -11873,7 +12098,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "关联 {name}",
         "associateButton": "关联现有技能",
         "create": {
           "github": {
@@ -12112,6 +12336,11 @@
       },
       "toggleItem": {
         "ariaLabel": "展开或折叠 {name}"
+      },
+      "status": {
+        "loading": "正在加载输出…",
+        "incomplete": "部分输出无法列出。请打开“文件”浏览工作区。",
+        "error": "无法刷新输出。请重试。"
       }
     },
     "chatPanel": {
@@ -12250,6 +12479,10 @@
       },
       "noContent": {
         "label": "无内容"
+      },
+      "csv": {
+        "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
+        "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
       }
     },
     "filesTab": {
@@ -12257,17 +12490,11 @@
         "description": "构建过程中创建的文件将显示在这里",
         "title": "暂无文件"
       },
-      "emptyDirectory": {
-        "label": "此目录中没有文件"
-      },
       "error": {
         "title": "加载文件出错"
       },
       "loading": {
         "label": "正在加载文件..."
-      },
-      "loadingChildren": {
-        "label": "加载中..."
       },
       "preparing": {
         "description": "正在设置您的开发环境",
@@ -12284,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "{name} 的预览"
+      },
+      "background": {
+        "contrast": "对比背景"
       }
     },
     "inputBar": {
@@ -12427,6 +12657,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "关闭 {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "开始构建内容即可查看产物！"
       },
@@ -12450,6 +12683,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "幻灯片"
+      },
+      "previous": {
+        "label": "上一张幻灯片"
+      },
+      "next": {
+        "label": "下一张幻灯片"
+      },
       "converting": {
         "label": "正在转换演示文稿..."
       },
@@ -12464,6 +12706,9 @@
       },
       "slide": {
         "counter": "幻灯片 {current} / {total}"
+      },
+      "resize": {
+        "ariaLabel": "调整幻灯片缩略图宽度"
       }
     },
     "previewTab": {
@@ -12584,6 +12829,9 @@
       },
       "newSession": {
         "label": "开始创作"
+      },
+      "options": {
+        "label": "会话选项"
       },
       "rename": {
         "label": "重命名"
@@ -12852,9 +13100,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
-        },
-        "failed": {
-          "tag": "{count} 个失败"
         },
         "working": {
           "label": "处理中"
@@ -13292,6 +13537,9 @@
       "sevenDays": "7天",
       "threeMonths": "3个月"
     },
+    "iconTooltip": {
+      "label": "更多信息"
+    },
     "input": {
       "day": "日",
       "hidePassword": "隐藏密码",
@@ -13582,6 +13830,10 @@
       "title": "危险区域"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "管理员已为此工作区关闭 LLM 网关。请联系管理员重新开启。",
+        "title": "LLM 网关已关闭"
+      },
       "accessToken": {
         "button": "新建 token",
         "description": "在连接应用之前，请先创建一个限定范围的 token。",
@@ -13893,6 +14145,9 @@
         "languageModels": {
           "label": "语言模型"
         },
+        "llmGateway": {
+          "label": "LLM 网关"
+        },
         "mcpActions": {
           "label": "MCP 操作"
         },
@@ -14041,6 +14296,9 @@
       },
       "moveToProject": {
         "label": "移动到项目"
+      },
+      "options": {
+        "label": "聊天选项"
       },
       "projectSearchInput": {
         "placeholder": "搜索项目"
@@ -14603,5 +14861,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch 需要更多资源",
+    "disk": "OpenSearch 数据节点的磁盘使用率至少为 85%。磁盘空间耗尽时，索引可能停止。",
+    "jvmMemory": "多次检查显示 OpenSearch JVM 内存使用率持续超过 85%。搜索和索引可能失败。",
+    "vectorMemory": "OpenSearch 向量内存接近满载或已达到上限。搜索和索引可能失败。",
+    "contact": "请联系系统管理员或通过 [support@onyx.app](mailto:support@onyx.app) 联系 Onyx 团队。",
+    "stale": "最新检查不可用。此警告反映上次成功检查的结果，尚未确认恢复。",
+    "dismiss": "关闭",
+    "diskTitle": "磁盘空间",
+    "jvmMemoryTitle": "JVM 内存",
+    "vectorMemoryTitle": "向量内存",
+    "viewDetails": "查看详情"
   }
 }

@@ -27,20 +27,21 @@ from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SupportedLanguage
 from onyx.db.tools import get_tool_by_name
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.models import ResearchAgentCallFailure
+from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
     THINK_TOOL_RESPONSE_TOKEN_COUNT,
     get_clarification_tool_definitions,
     get_orchestrator_tools,
 )
-from onyx.deep_research.models import ResearchAgentCallFailure
 from onyx.deep_research.utils import (
     check_special_tool_calls,
     create_think_tool_token_processor,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import model_is_reasoning_model
+from onyx.llm.model_request import serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.deep_research.orchestration_layer import (
     CLARIFICATION_PROMPT,
@@ -204,7 +205,7 @@ def _get_research_agent_tool_id() -> int:
         ).id
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def run_deep_research_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -302,7 +303,9 @@ def run_deep_research_llm_loop(
                 llm_step_result, _ = run_llm_step(
                     emitter=emitter,
                     history=truncated_message_history,
-                    tool_definitions=get_clarification_tool_definitions(),
+                    tool_definitions=serialize_tools(
+                        get_clarification_tool_definitions()
+                    ),
                     tool_choice=ToolChoiceOptions.AUTO,
                     llm=llm,
                     reasoning_effort=reasoning_effort,
@@ -542,8 +545,10 @@ def run_deep_research_llm_loop(
                 llm_step_result, has_reasoned = run_llm_step(
                     emitter=emitter,
                     history=truncated_message_history,
-                    tool_definitions=get_orchestrator_tools(
-                        include_think_tool=not is_reasoning_model
+                    tool_definitions=serialize_tools(
+                        get_orchestrator_tools(
+                            include_think_tool=not is_reasoning_model
+                        )
                     ),
                     tool_choice=ToolChoiceOptions.REQUIRED,
                     llm=llm,

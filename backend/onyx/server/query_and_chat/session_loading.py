@@ -7,7 +7,10 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
-from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY, CODING_AGENT_REPO_KEY
+from onyx.coding_agent.tool_definitions import (
+    CODING_AGENT_QUERY_KEY,
+    CODING_AGENT_REPO_KEY,
+)
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.chat import (
@@ -16,7 +19,7 @@ from onyx.db.chat import (
 )
 from onyx.db.models import ChatMessage
 from onyx.db.tools import get_tool_by_id
-from onyx.deep_research.dr_mock_tools import (
+from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
     RESEARCH_AGENT_TASK_KEY,
 )

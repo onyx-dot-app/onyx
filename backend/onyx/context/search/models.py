@@ -61,7 +61,8 @@ class SavedSearchSettings(IndexingSetting):
 
 
 class ContextualRagModelUpdateResponse(BaseModel):
-    contextual_rag_model_configuration_id: int
+    # PRESENT's model after the update. Turning Contextual Retrieval off keeps it.
+    contextual_rag_model_configuration_id: int | None
 
 
 class Tag(BaseModel):
@@ -151,8 +152,9 @@ class AssistantKnowledgeFilters(BaseModel):
 
 
 class CCPairAccessMode(str, Enum):
-    # The cc-pair filter is off. It is built only to hide SYNC_RESTRICTED
-    # pairs from the old ACL filter.
+    # The cc-pair filter is off. It is built only to hide guarded pairs
+    # (SYNC_RESTRICTED, or awaiting a first permission sync) from the old ACL
+    # filter.
     OFF = "off"
     # Results use the old ACL filter; the cc-pair filter is only compared.
     SHADOW = "shadow"
@@ -171,9 +173,10 @@ class CCPairAccessFilter(BaseModel):
     # The user's user_email: and external_group: entries. No group: entries,
     # since group access comes from open_cc_pair_ids.
     user_acl: list[str]
-    # SYNC_RESTRICTED pairs that grant the user nothing. The old ACL filter
-    # cannot express the restriction, so it hides their chunks unless an open
-    # or ACL pair of the chunk grants access.
+    # Guarded pairs that grant the user nothing: SYNC_RESTRICTED pairs, and
+    # pairs awaiting a first permission sync, whose chunks can still be
+    # public. The old ACL filter cannot express this, so it hides their chunks
+    # unless an open or ACL pair of the chunk grants access.
     hidden_restricted_cc_pair_ids: list[int] = []
 
 
@@ -446,17 +449,8 @@ class SearchDocsResponse(BaseModel):
     # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
 
-    # For cases where the frontend only needs to display a subset of the search docs
-    # The whole list is typically still needed for later steps but this set should be saved separately
+    # None uses all retrieved documents; an empty list selects no documents.
     displayed_docs: list[SearchDoc] | None = None
-
-    @field_validator("displayed_docs", mode="before")
-    @classmethod
-    def normalize_empty_displayed_docs(
-        cls,
-        value: list[SearchDoc] | None,
-    ) -> list[SearchDoc] | None:
-        return value or None
 
 
 class SavedSearchDoc(SearchDoc):

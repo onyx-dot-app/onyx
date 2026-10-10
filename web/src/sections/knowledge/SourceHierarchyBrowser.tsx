@@ -15,23 +15,21 @@ import {
   InputCheckbox,
   CopyButton,
   Divider as OpalDivider,
+  Dropdown,
   InputTypeIn,
-  LineItemButton,
-  Popover,
   Spacer,
+  type DropdownItem,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
-import Divider from "@/refresh-components/Divider";
 import {
   SvgFolder,
   SvgChevronRight,
   SvgFileText,
   SvgEye,
   SvgXCircle,
-  SvgCheck,
   SvgArrowUpDown,
   SvgFilter,
 } from "@opal/icons";
@@ -216,6 +214,85 @@ export default function SourceHierarchyBrowser({
   const [folderPosition, setFolderPosition] =
     useState<FolderPosition>("on_top");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  // Three settings in one list: a row's value names its setting and choice,
+  // and the current choice of each setting reads as selected.
+  const sortValues = new Set([
+    `field:${sortField}`,
+    `direction:${sortDirection}`,
+    `folders:${folderPosition}`,
+  ]);
+  const applySortOption = (value: string) => {
+    switch (value) {
+      case "field:name":
+        return setSortField("name");
+      case "field:last_updated":
+        return setSortField("last_updated");
+      case "direction:asc":
+        return setSortDirection("asc");
+      case "direction:desc":
+        return setSortDirection("desc");
+      case "folders:on_top":
+        return setFolderPosition("on_top");
+      case "folders:mixed":
+        return setFolderPosition("mixed");
+    }
+  };
+  const sortItems: DropdownItem[] = [
+    {
+      kind: "group",
+      title: t("browser.sort.sortBy.title"),
+      items: [
+        {
+          kind: "option",
+          value: "field:name",
+          title: t("table.columns.name.header"),
+        },
+        {
+          kind: "option",
+          value: "field:last_updated",
+          title: t("table.columns.lastUpdated.header"),
+        },
+      ],
+    },
+    {
+      kind: "group",
+      title: t("browser.sort.sortingOrder.title"),
+      items: [
+        {
+          kind: "option",
+          value: "direction:desc",
+          title:
+            sortField === "name"
+              ? t("browser.sort.descending.name.label")
+              : t("browser.sort.descending.lastUpdated.label"),
+        },
+        {
+          kind: "option",
+          value: "direction:asc",
+          title:
+            sortField === "name"
+              ? t("browser.sort.ascending.name.label")
+              : t("browser.sort.ascending.lastUpdated.label"),
+        },
+      ],
+    },
+    {
+      kind: "group",
+      title: t("browser.sort.folders.title"),
+      items: [
+        {
+          kind: "option",
+          value: "folders:on_top",
+          title: t("browser.sort.foldersOnTop.label"),
+        },
+        {
+          kind: "option",
+          value: "folders:mixed",
+          title: t("browser.sort.foldersMixed.label"),
+        },
+      ],
+    },
+  ];
 
   // View selected only filter state
   const [viewSelectedOnly, setViewSelectedOnly] = useState(false);
@@ -816,119 +893,31 @@ export default function SourceHierarchyBrowser({
           </Text>
         </TableLayouts.TableCell>
         <TableLayouts.TableCell width={8}>
-          <Popover open={sortDropdownOpen} onOpenChange={setSortDropdownOpen}>
-            <Popover.Trigger asChild>
+          <Dropdown
+            width={80}
+            align="end"
+            open={sortDropdownOpen}
+            onOpenChange={setSortDropdownOpen}
+          >
+            <Dropdown.Trigger asChild>
               <div>
                 <SelectButton
                   rightIcon={SvgArrowUpDown}
                   transient={sortDropdownOpen}
-                  onClick={() => setSortDropdownOpen(true)}
                 >
                   {sortField === "name"
                     ? t("table.columns.name.header")
                     : t("table.columns.lastUpdated.header")}
                 </SelectButton>
               </div>
-            </Popover.Trigger>
-            <Popover.Content align="end" sideOffset={4} width="lg">
-              <Popover.Menu>
-                {/* Sort by section */}
-                <Divider
-                  showTitle
-                  text={t("browser.sort.sortBy.title")}
-                  dividerLine={false}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  state={sortField === "name" ? "selected" : "empty"}
-                  onClick={() => setSortField("name")}
-                  rightChildren={
-                    sortField === "name" ? <SvgCheck size={16} /> : undefined
-                  }
-                  title={t("table.columns.name.header")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  state={sortField === "last_updated" ? "selected" : "empty"}
-                  onClick={() => setSortField("last_updated")}
-                  rightChildren={
-                    sortField === "last_updated" ? (
-                      <SvgCheck size={16} />
-                    ) : undefined
-                  }
-                  title={t("table.columns.lastUpdated.header")}
-                />
-                {/* Sorting Order section */}
-                <Divider
-                  showTitle
-                  text={t("browser.sort.sortingOrder.title")}
-                  dividerLine={false}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  state={sortDirection === "desc" ? "selected" : "empty"}
-                  onClick={() => setSortDirection("desc")}
-                  rightChildren={
-                    sortDirection === "desc" ? (
-                      <SvgCheck size={16} />
-                    ) : undefined
-                  }
-                  title={
-                    sortField === "name"
-                      ? t("browser.sort.descending.name.label")
-                      : t("browser.sort.descending.lastUpdated.label")
-                  }
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  state={sortDirection === "asc" ? "selected" : "empty"}
-                  onClick={() => setSortDirection("asc")}
-                  rightChildren={
-                    sortDirection === "asc" ? <SvgCheck size={16} /> : undefined
-                  }
-                  title={
-                    sortField === "name"
-                      ? t("browser.sort.ascending.name.label")
-                      : t("browser.sort.ascending.lastUpdated.label")
-                  }
-                />
-                {/* Folders section */}
-                <Divider
-                  showTitle
-                  text={t("browser.sort.folders.title")}
-                  dividerLine={false}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  state={folderPosition === "on_top" ? "selected" : "empty"}
-                  onClick={() => setFolderPosition("on_top")}
-                  rightChildren={
-                    folderPosition === "on_top" ? (
-                      <SvgCheck size={16} />
-                    ) : undefined
-                  }
-                  title={t("browser.sort.foldersOnTop.label")}
-                />
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding={2}
-                  state={folderPosition === "mixed" ? "selected" : "empty"}
-                  onClick={() => setFolderPosition("mixed")}
-                  rightChildren={
-                    folderPosition === "mixed" ? (
-                      <SvgCheck size={16} />
-                    ) : undefined
-                  }
-                  title={t("browser.sort.foldersMixed.label")}
-                />
-              </Popover.Menu>
-            </Popover.Content>
-          </Popover>
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("browser.sort.sortBy.title")}
+              values={sortValues}
+              onSelect={(option) => applySortOption(option.value)}
+              items={sortItems}
+            />
+          </Dropdown>
         </TableLayouts.TableCell>
       </TableLayouts.TableRow>
 

@@ -310,6 +310,35 @@ async def test_cohere_embed_supports_v4_response_format(
 
 
 @pytest.mark.asyncio
+async def test_voyage_embed_splits_requests_under_per_request_token_cap() -> None:
+    """voyage-4-large accepts at most 120k tokens per request, so a full API
+    batch (512 chunks of up to 512 tokens) must go out as several requests."""
+    texts = [f"text-{i}" for i in range(300)]
+
+    async def fake_embed(texts: list[str], **_: Any) -> MagicMock:
+        response = MagicMock()
+        response.embeddings = [[float(t.split("-")[1])] for t in texts]
+        return response
+
+    with patch(
+        "onyx.natural_language_processing.search_nlp_models.voyageai.AsyncClient"
+    ) as mock_voyage:
+        mock_client = MagicMock()
+        mock_client.embed = AsyncMock(side_effect=fake_embed)
+        mock_voyage.return_value = mock_client
+
+        embedding = CloudEmbedding("fake-key", EmbeddingProvider.VOYAGE)
+        try:
+            result = await embedding._embed_voyage(texts, "voyage-4-large", "document")
+        finally:
+            await embedding.aclose()
+
+    batch_sizes = [len(c.kwargs["texts"]) for c in mock_client.embed.call_args_list]
+    assert batch_sizes == [128, 128, 44]
+    assert result == [[float(i)] for i in range(300)]
+
+
+@pytest.mark.asyncio
 async def test_rate_limit_handling() -> None:
     with patch(
         "onyx.natural_language_processing.search_nlp_models.CloudEmbedding.embed"

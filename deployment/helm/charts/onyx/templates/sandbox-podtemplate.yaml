@@ -21,7 +21,7 @@ kubelet evicts sandbox pods first under node disk pressure. */}}
 {{- $nextjsStart := (index $cm "SANDBOX_NEXTJS_PORT_START") | default "3010" | int }}
 {{- $nextjsEnd := (index $cm "SANDBOX_NEXTJS_PORT_END") | default "3100" | int }}
 {{- $opencodePort := (index $cm "OPENCODE_SERVE_PORT") | default "4096" | int }}
-{{/* Keep in sync with PUSH_DAEMON_PORT in sandbox_daemon/contract.py. */}}
+{{/* Keep in sync with PUSH_DAEMON_PORT in sandbox_daemon/models.py. */}}
 {{- $pushDaemonPort := include "onyx.sandboxPushDaemonPort" . }}
 {{- $proxyPort := include "onyx.sandboxProxyPort" . }}
 {{- $proxyHost := include "onyx.sandboxProxyHost" . }}
@@ -97,6 +97,7 @@ template:
         ports:
           - { name: push-daemon, containerPort: {{ $pushDaemonPort }} }
         env:
+          - { name: SANDBOX_LISTEN_HOST, value: {{ $sandboxPod.listenHost | default "0.0.0.0" | quote }} }
           {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
         volumeMounts:
           - { name: workspace, mountPath: /workspace/sessions }
@@ -139,6 +140,7 @@ template:
           - { name: "nextjs-{{ $p }}", containerPort: {{ $p }} }
           {{- end }}
         env:
+          - { name: SANDBOX_LISTEN_HOST, value: {{ $sandboxPod.listenHost | default "0.0.0.0" | quote }} }
           - { name: ONYX_PAT, value: "replaced_by_egress_proxy" }
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
           {{/* The deployment value is the exact API base; do not append the CLI default. */}}

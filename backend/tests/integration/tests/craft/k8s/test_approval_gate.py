@@ -752,10 +752,12 @@ def test_post_decision_after_proxy_claimed_expired_returns_conflict(
     )
 
 
+@pytest.mark.parametrize("scheme", ["http", "https"])
 def test_unidentified_sandbox_403_from_non_sandbox_pod(
     k8s_manager: object,  # noqa: ARG001
     k8s_client: client.CoreV1Api,
     gated_session: GatedSession,  # noqa: ARG001 — for fixture chain
+    scheme: str,
 ) -> None:
     """A pod in the sandbox namespace without the managed-by label → 403 ``unidentified_sandbox``.
 
@@ -783,8 +785,8 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
         "--max-time",
         "30",
         "-w",
-        "\nHTTP_STATUS:%{http_code}\n",
-        _SLACK_POST_MESSAGE_URL,
+        "\nHTTP_STATUS:%{http_code}\nCONNECT_STATUS:%{http_connect}\n",
+        _SLACK_POST_MESSAGE_URL.replace("https://", f"{scheme}://"),
     ]
 
     pod_spec = client.V1Pod(
@@ -808,7 +810,7 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
 
     k8s_client.create_namespaced_pod(namespace=SANDBOX_NAMESPACE, body=pod_spec)
     try:
-        # curl exits 0 even on HTTP errors.
+        # Rejected CONNECT exits nonzero; inspect its proxy response status.
         deadline = time.monotonic() + 90
         phase = ""
         while time.monotonic() < deadline:
@@ -826,10 +828,13 @@ def test_unidentified_sandbox_403_from_non_sandbox_pod(
         logs = k8s_client.read_namespaced_pod_log(
             name=rogue_pod_name, namespace=SANDBOX_NAMESPACE
         )
-        assert "HTTP_STATUS:403" in logs, (
-            f"Expected 403 from gate for unidentified sandbox, got logs: {logs!r}"
-        )
-        _assert_403_error_code(logs, "unidentified_sandbox")
+        if scheme == "https":
+            # The gate rejects CONNECT before curl can send the HTTPS request.
+            assert "CONNECT_STATUS:403" in logs, logs
+            assert "HTTP_STATUS:000" in logs, logs
+        else:
+            assert "HTTP_STATUS:403" in logs, logs
+            _assert_403_error_code(logs, "unidentified_sandbox")
     finally:
         try:
             k8s_client.delete_namespaced_pod(

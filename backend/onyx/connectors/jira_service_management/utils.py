@@ -10,9 +10,7 @@ is unavailable. Nothing here is instance-specific.
 from dataclasses import dataclass
 from typing import Any
 
-from jira import JIRA
-from jira.resources import Issue
-
+from onyx.connectors.jira.source_operations import JiraSourceOperations
 from onyx.connectors.jira.utils import extract_text_from_adf
 from onyx.utils.logger import setup_logger
 
@@ -40,14 +38,23 @@ class JsmFieldMap:
     organizations: str | None = None
 
 
-def discover_jsm_fields(jira_client: JIRA) -> JsmFieldMap:
+def discover_jsm_fields(jira_client: JiraSourceOperations | Any) -> JsmFieldMap:
     """Discover JSM custom field IDs by their display names.
 
     Best effort: if the fields endpoint is unavailable, an empty map is
     returned and the extractors fall back to structural value detection.
     """
     try:
-        all_fields = jira_client.fields()
+        # Production uses the credential-scoped gateway; legacy test fixtures
+        # may still expose the old SDK fields() method.
+        all_fields = (
+            jira_client.list_fields()
+            if (
+                isinstance(jira_client, JiraSourceOperations)
+                or hasattr(jira_client, "list_fields")
+            )
+            else jira_client.fields()
+        )
     except Exception:
         logger.warning(
             "Unable to list Jira fields for JSM field discovery; "
@@ -71,19 +78,21 @@ def discover_jsm_fields(jira_client: JIRA) -> JsmFieldMap:
     return field_map
 
 
-def _get_raw_field(issue: Issue, field_id: str) -> Any:
-    try:
-        return issue.raw["fields"][field_id]
-    except (AttributeError, KeyError, TypeError):
-        return None
+def _issue_raw_fields(issue: Any) -> dict[str, Any]:
+    """JSM accepts the current Jira raw-JSON gateway and legacy SDK fixtures."""
+    raw: Any = issue if isinstance(issue, dict) else getattr(issue, "raw", None)
+    if not isinstance(raw, dict):
+        return {}
+    fields = raw.get("fields")
+    return fields if isinstance(fields, dict) else {}
 
 
-def _raw_field_values(issue: Issue) -> list[Any]:
-    try:
-        raw_fields = issue.raw["fields"]
-    except (AttributeError, KeyError, TypeError):
-        return []
-    return list(raw_fields.values()) if isinstance(raw_fields, dict) else []
+def _get_raw_field(issue: Any, field_id: str) -> Any:
+    return _issue_raw_fields(issue).get(field_id)
+
+
+def _raw_field_values(issue: Any) -> list[Any]:
+    return list(_issue_raw_fields(issue).values())
 
 
 def _name_from_request_type_value(value: dict[str, Any]) -> str | None:
@@ -97,7 +106,7 @@ def _name_from_request_type_value(value: dict[str, Any]) -> str | None:
 
 
 def extract_customer_request_type(
-    issue: Issue, field_id: str | None = None
+    issue: Any, field_id: str | None = None
 ) -> str | None:
     """Extract the JSM customer request type, best effort.
 
@@ -147,7 +156,7 @@ def _looks_like_organizations(value: Any) -> bool:
     )
 
 
-def extract_organizations(issue: Issue, field_id: str | None = None) -> list[str]:
+def extract_organizations(issue: Any, field_id: str | None = None) -> list[str]:
     """Extract the names of the JSM organizations on the request, best effort."""
     candidates: list[Any] = []
     if field_id:
@@ -166,7 +175,7 @@ def extract_organizations(issue: Issue, field_id: str | None = None) -> list[str
     return []
 
 
-def extract_sla_info(issue: Issue) -> dict[str, str]:
+def extract_sla_info(issue: Any) -> dict[str, str]:
     """Extract SLA statuses keyed by the admin-defined SLA name, best effort.
 
     An ongoing cycle maps to "In Progress" (or "Breached"), the latest
@@ -200,7 +209,7 @@ def extract_sla_info(issue: Issue) -> dict[str, str]:
 
 
 def build_jsm_metadata(
-    issue: Issue, field_map: JsmFieldMap
+    issue: Any, field_map: JsmFieldMap
 ) -> dict[str, str | list[str]]:
     """Build the JSM specific metadata entries for a ticket document."""
     metadata: dict[str, str | list[str]] = {}
@@ -223,47 +232,58 @@ def build_jsm_metadata(
 
 
 def get_jsm_comment_strs(
-    issue: Issue,
+    issue: Any,
     comment_email_blacklist: tuple[str, ...] = (),
     include_internal_comments: bool = False,
 ) -> list[str]:
-    """Extract comment text with JSM internal-note awareness.
+    """Extract public JSM comments from raw Jira issues or SDK fixtures.
 
-    JSM comments carry a ``jsdPublic`` flag: ``False`` marks internal agent
-    notes that are not visible to customers. Internal notes are skipped unless
-    ``include_internal_comments`` is set; when included, they are tagged with
-    an ``[Internal Note]`` prefix so retrieval can distinguish them.
+    The raw JSON gateway returns comment dictionaries; legacy tests may still
+    supply Jira SDK resources. Missing or malformed comment data is skipped,
+    and internal agent notes are never exposed unless explicitly enabled.
     """
-    comment_strs: list[str] = []
-    try:
-        comments = issue.fields.comment.comments
-    except (AttributeError, TypeError):
-        return comment_strs
+    if isinstance(issue, dict):
+        comment_field = _issue_raw_fields(issue).get("comment")
+        comments = (
+            comment_field.get("comments", []) if isinstance(comment_field, dict) else []
+        )
+    else:
+        try:
+            comments = issue.fields.comment.comments
+        except (AttributeError, TypeError):
+            return []
 
+    if not isinstance(comments, list):
+        return []
+
+    comment_strs: list[str] = []
     for comment in comments:
         try:
-            if (
-                hasattr(comment, "author")
-                and hasattr(comment.author, "emailAddress")
-                and comment.author.emailAddress in comment_email_blacklist
-            ):
+            raw_comment: Any = comment if isinstance(comment, dict) else comment.raw
+            if not isinstance(raw_comment, dict):
                 continue
 
-            if isinstance(comment.body, str):
-                body_text = comment.body
-            else:
-                body_text = extract_text_from_adf(comment.raw["body"])
+            author = raw_comment.get("author")
+            author_email = (
+                author.get("emailAddress")
+                if isinstance(author, dict)
+                else getattr(getattr(comment, "author", None), "emailAddress", None)
+            )
+            if author_email in comment_email_blacklist:
+                continue
 
+            body = raw_comment.get("body")
+            if not isinstance(comment, dict):
+                body = getattr(comment, "body", body)
+            body_text = (
+                body
+                if isinstance(body, str)
+                else extract_text_from_adf(body if isinstance(body, dict) else None)
+            )
             if not body_text or not body_text.strip():
                 continue
 
-            # Accessed directly (repo convention: no getattr). Comment
-            # resources always expose ``raw``; any malformed comment is
-            # handled by the except clause below.
-            raw_comment = comment.raw
-            is_internal = (
-                isinstance(raw_comment, dict) and raw_comment.get("jsdPublic") is False
-            )
+            is_internal = raw_comment.get("jsdPublic") is False
             if is_internal:
                 if not include_internal_comments:
                     continue

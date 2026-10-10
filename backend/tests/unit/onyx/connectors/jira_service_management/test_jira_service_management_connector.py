@@ -4,7 +4,7 @@ from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from jira import JIRA, JIRAError
+from jira import JIRAError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
@@ -20,6 +20,7 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
+from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -44,6 +45,7 @@ from tests.unit.onyx.connectors.jira_service_management.conftest import (
     SLA_RESOLUTION_FIELD_ID,
     TEST_BASE_URL,
     TEST_PROJECT_KEY,
+    legacy_jira_client,
     make_mock_jsm_issue,
 )
 from tests.unit.onyx.connectors.utils import (
@@ -61,7 +63,7 @@ def jsm_connector(
     """Connector with JSM field discovery short-circuited for determinism."""
     connector = make_jsm_connector()
     connector._jsm_field_map = jsm_field_map
-    jira_client = cast(JIRA, connector._jira_client)
+    jira_client = legacy_jira_client(connector)
     jira_client._options = MagicMock()
     with patch("onyx.connectors.jira.connector._JIRA_FULL_PAGE_SIZE", 2):
         yield connector
@@ -249,7 +251,11 @@ class TestProcessIssue:
 
 
 class TestFieldDiscovery:
-    def test_discover_jsm_fields_by_name(self, mock_jira_client: MagicMock) -> None:
+    def test_discover_jsm_fields_by_name(
+        self,
+        mock_jira_client: MagicMock,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    ) -> None:
         mock_jira_client.fields.return_value = [
             {"id": "summary", "name": "Summary", "custom": False},
             {"id": REQUEST_TYPE_FIELD_ID, "name": "Customer Request Type"},
@@ -257,10 +263,7 @@ class TestFieldDiscovery:
             {"id": "customfield_10002", "name": "Satisfaction"},
         ]
 
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL, project_key=TEST_PROJECT_KEY
-        )
-        connector._jira_client = mock_jira_client
+        connector = make_jsm_connector()
 
         field_map = connector.jsm_field_map
         assert field_map.customer_request_type == REQUEST_TYPE_FIELD_ID
@@ -271,14 +274,13 @@ class TestFieldDiscovery:
         assert mock_jira_client.fields.call_count == 1
 
     def test_discover_jsm_fields_api_failure_falls_back(
-        self, mock_jira_client: MagicMock
+        self,
+        mock_jira_client: MagicMock,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
     ) -> None:
         mock_jira_client.fields.side_effect = RuntimeError("403")
 
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL, project_key=TEST_PROJECT_KEY
-        )
-        connector._jira_client = mock_jira_client
+        connector = make_jsm_connector()
 
         field_map = connector.jsm_field_map
         assert field_map.customer_request_type is None
@@ -327,7 +329,7 @@ class TestCheckpointing:
         mock_issue2 = make_mock_jsm_issue(key="HELP-2", summary="Issue 2")
         mock_issue3 = make_mock_jsm_issue(key="HELP-3", summary="Issue 3")
 
-        jira_client = cast(JIRA, jsm_connector._jira_client)
+        jira_client = legacy_jira_client(jsm_connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.side_effect = [
             [mock_issue1, mock_issue2],
@@ -379,7 +381,7 @@ class TestCheckpointing:
     ) -> None:
         mock_issue = make_mock_jsm_issue(key="HELP-1")
 
-        jira_client = cast(JIRA, jsm_connector._jira_client)
+        jira_client = legacy_jira_client(jsm_connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.side_effect = [[mock_issue]]
 
@@ -406,7 +408,7 @@ class TestCheckpointing:
         good_issue = make_mock_jsm_issue(key="HELP-1")
         bad_issue = make_mock_jsm_issue(key="HELP-2", updated="not-a-timestamp")
 
-        jira_client = cast(JIRA, jsm_connector._jira_client)
+        jira_client = legacy_jira_client(jsm_connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.side_effect = [[good_issue, bad_issue], []]
 
@@ -422,7 +424,9 @@ class TestCheckpointing:
         assert documents[0].id == f"{TEST_BASE_URL}/browse/HELP-1"
         assert len(failures) == 1
         assert failures[0].failed_document is not None
-        assert failures[0].failed_document.document_id == "HELP-2"
+        assert (
+            failures[0].failed_document.document_id == f"{TEST_BASE_URL}/browse/HELP-2"
+        )
 
     def test_retrieve_all_slim_docs(
         self, jsm_connector: JiraServiceManagementConnector
@@ -430,7 +434,7 @@ class TestCheckpointing:
         mock_issue1 = make_mock_jsm_issue(key="HELP-1")
         mock_issue2 = make_mock_jsm_issue(key="HELP-2")
 
-        jira_client = cast(JIRA, jsm_connector._jira_client)
+        jira_client = legacy_jira_client(jsm_connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.return_value = [mock_issue1, mock_issue2]
 
@@ -452,11 +456,10 @@ class TestValidateConnectorSettings:
         with pytest.raises(ConnectorMissingCredentialError):
             connector.validate_connector_settings()
 
-    def test_missing_project_key(self, mock_jira_client: MagicMock) -> None:
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL, project_key=""
-        )
-        connector._jira_client = mock_jira_client
+    def test_missing_project_key(
+        self, make_jsm_connector: Callable[..., JiraServiceManagementConnector]
+    ) -> None:
+        connector = make_jsm_connector(project_key="")
         with pytest.raises(ConnectorValidationError, match="project key is required"):
             connector.validate_connector_settings()
 
@@ -466,7 +469,7 @@ class TestValidateConnectorSettings:
         connector = make_jsm_connector()
         software_project = MagicMock()
         software_project.projectTypeKey = "software"
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         project_mock = cast(MagicMock, jira_client.project)
         project_mock.return_value = software_project
 
@@ -479,7 +482,7 @@ class TestValidateConnectorSettings:
         connector = make_jsm_connector()
         service_desk_project = MagicMock()
         service_desk_project.projectTypeKey = "service_desk"
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         project_mock = cast(MagicMock, jira_client.project)
         project_mock.return_value = service_desk_project
 
@@ -493,7 +496,7 @@ class TestValidateConnectorSettings:
         # projectTypeKey only available on the raw payload (e.g. server instances)
         project = MagicMock()
         project.raw = {"projectTypeKey": "service_desk"}
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         project_mock = cast(MagicMock, jira_client.project)
         project_mock.return_value = project
 
@@ -516,7 +519,7 @@ class TestValidateConnectorSettings:
         expected_message: str,
     ) -> None:
         connector = make_jsm_connector()
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         project_mock = cast(MagicMock, jira_client.project)
         project_mock.side_effect = JIRAError(status_code=status_code)
 
@@ -524,13 +527,12 @@ class TestValidateConnectorSettings:
             connector.validate_connector_settings()
         assert expected_message in str(excinfo.value)
 
-    def test_jql_query_validation_failure(self, mock_jira_client: MagicMock) -> None:
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL,
-            project_key=TEST_PROJECT_KEY,
-            jql_query="issuetype = Incident",
-        )
-        connector._jira_client = mock_jira_client
+    def test_jql_query_validation_failure(
+        self,
+        mock_jira_client: MagicMock,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    ) -> None:
+        connector = make_jsm_connector(jql_query="issuetype = Incident")
 
         service_desk_project = MagicMock()
         service_desk_project.projectTypeKey = "service_desk"
@@ -538,18 +540,17 @@ class TestValidateConnectorSettings:
 
         with patch(
             "onyx.connectors.jira_service_management.connector._perform_jql_search",
-            side_effect=JIRAError(status_code=400, text="Bad JQL"),
+            side_effect=JiraApiError("Bad JQL", status_code=400, text="Bad JQL"),
         ):
             with pytest.raises(ConnectorValidationError, match="Bad JQL"):
                 connector.validate_connector_settings()
 
-    def test_jql_query_validation_success(self, mock_jira_client: MagicMock) -> None:
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL,
-            project_key=TEST_PROJECT_KEY,
-            jql_query="issuetype = Incident",
-        )
-        connector._jira_client = mock_jira_client
+    def test_jql_query_validation_success(
+        self,
+        mock_jira_client: MagicMock,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    ) -> None:
+        connector = make_jsm_connector(jql_query="issuetype = Incident")
 
         service_desk_project = MagicMock()
         service_desk_project.projectTypeKey = "service_desk"

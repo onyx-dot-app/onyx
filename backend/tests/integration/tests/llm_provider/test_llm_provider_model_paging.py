@@ -85,6 +85,27 @@ def test_listing_marks_a_small_provider_complete(
     assert listed["next_model_configuration_offset"] is None
 
 
+def test_routers_always_land_on_the_first_page(
+    new_admin_user: DATestUser,
+) -> None:
+    """The picker only loads page one up front, so visible routers must sort
+    ahead of other visible models even when their names would sort last."""
+    model_names = [f"aaa-model-{i:05d}" for i in range(LLM_PROVIDER_MODEL_PAGE_SIZE)]
+    provider = LLMProviderManager.create(
+        user_performing_action=new_admin_user,
+        default_model_name="aaa-default",
+        model_names=model_names,
+        router_model_names=["zzz-router-auto"],
+        set_as_default=False,
+    )
+
+    listed = _listed_provider(new_admin_user, provider.id)
+    router = next(
+        mc for mc in listed["model_configurations"] if mc["name"] == "zzz-router-auto"
+    )
+    assert router["is_router"] is True
+
+
 def test_model_search_matches_unloaded_models(new_admin_user: DATestUser) -> None:
     model_names = [f"filler-{i:05d}" for i in range(LLM_PROVIDER_MODEL_PAGE_SIZE)] + [
         "zz-needle-alpha",

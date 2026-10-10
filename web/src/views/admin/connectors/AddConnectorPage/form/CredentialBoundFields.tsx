@@ -1,6 +1,6 @@
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
-import { Collapsible, Text } from "@opal/components";
+import { Text } from "@opal/components";
 import type { CredentialBindingFieldError } from "@/lib/connectors/bindingGate";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
@@ -12,9 +12,9 @@ type ConnectorField = ConnectionConfiguration["values"][number];
 export interface CredentialBoundFieldsProps {
   /** Bound fields shown at all times. */
   fields: ConnectorField[];
-  /** Bound fields shown behind the advanced options toggle. */
+  /** Advanced bound fields, shown after the others in the same list. */
   advancedFields: ConnectorField[];
-  /** Shows the advanced toggle, as `advancedValuesVisibleCondition` does. */
+  /** Shows the advanced fields, as `advancedValuesVisibleCondition` does. */
   showAdvancedFields: boolean;
   values: Record<string, unknown>;
   connector: ConfigurableSources;
@@ -80,13 +80,7 @@ export default function CredentialBoundFields({
       onBlur={onFieldBlur}
     >
       {visibleFields.map(renderField)}
-      {visibleAdvancedFields.length > 0 && (
-        <Collapsible defaultOpen={false} title={t("advancedOptions")}>
-          <Section gap={4} alignItems="start" width="full">
-            {visibleAdvancedFields.map(renderField)}
-          </Section>
-        </Collapsible>
-      )}
+      {visibleAdvancedFields.map(renderField)}
     </Section>
   );
 }

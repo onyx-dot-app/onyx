@@ -21,6 +21,7 @@ import {
   hasAnyAdminPermission,
   hasPermission,
 } from "@/lib/permissions";
+import { OpenSearchResourceBanner } from "@/sections/banners/OpenSearchResourceWarning";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 import { useTranslations } from "next-intl";
 
@@ -114,6 +115,7 @@ export default function AdminChrome({
             </div>
           </RootLayout.Header>
         )}
+        <OpenSearchResourceBanner />
         <RootLayout.MainContent>{content}</RootLayout.MainContent>
       </RootLayout.App>
     </RootLayout.Root>

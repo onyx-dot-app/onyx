@@ -1,6 +1,15 @@
 import os
 from enum import Enum
 
+# In-sandbox paths shared by every backend implementation. Kept in sync with
+# the SESSIONS_ROOT constants the individual managers define (those exist
+# separately because the K8s manager emits exec scripts and the Docker
+# manager mounts via the named volume — both happen to land at the same
+# in-container path). The daemon's sandbox_daemon/snapshot.py also has its
+# own copy because it can't import from this package at runtime.
+BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
+BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
+
 
 class SandboxBackend(str, Enum):
     KUBERNETES = "kubernetes"
@@ -100,6 +109,15 @@ ONYX_SERVER_URL = os.environ.get("ONYX_SERVER_URL", "")
 # Required when SANDBOX_BACKEND=kubernetes.
 SANDBOX_PROXY_HOST = os.environ.get("SANDBOX_PROXY_HOST", "")
 SANDBOX_PROXY_PORT = int(os.environ.get("SANDBOX_PROXY_PORT", "8080"))
+
+SANDBOX_PROXY_LISTEN_HOST = os.environ.get(
+    "SANDBOX_PROXY_LISTEN_HOST",
+    "0.0.0.0",  # noqa: S104 — pod network listener
+)
+SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS = (
+    os.environ.get("SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS", "false").lower() == "true"
+)
+SANDBOX_PROXY_INTERNAL_CIDRS: str = os.environ.get("SANDBOX_PROXY_INTERNAL_CIDRS", "")
 
 SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8080"))
 # Env-tunable on Helm only; compose's healthcheck.test hardcodes 8081 (can't
@@ -213,9 +231,12 @@ OPENCODE_SERVER_USERNAME = "opencode"
 OPENCODE_SERVE_CONNECT_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_CONNECT_TIMEOUT", "5.0")
 )
+# Ordinary requests default to 30 seconds. Session initialization gets 90 seconds
+# because session lookup and creation can initialize a cold directory.
 OPENCODE_SERVE_REQUEST_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
 )
+OPENCODE_SERVE_SESSION_INIT_TIMEOUT = 90.0
 # Idle timeout for the raw /event SSE connection to opencode-serve. The
 # reader reconnects (with backoff) if no bytes arrive for this long. Its
 # floor is opencode-serve's own emission cadence on /event — NOT our

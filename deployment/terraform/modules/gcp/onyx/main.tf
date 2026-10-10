@@ -269,15 +269,17 @@ module "cloud_armor" {
   deletion_protection = local.deletion_protection.cloud_armor
   labels              = local.merged_labels
 
-  preview                     = var.cloud_armor_preview
-  sensitivity                 = var.cloud_armor_sensitivity
-  allowed_ip_cidrs            = var.cloud_armor_allowed_ip_cidrs
-  blocked_ip_cidrs            = var.cloud_armor_blocked_ip_cidrs
-  rate_limit_exempt_ip_cidrs  = var.cloud_armor_rate_limit_exempt_ip_cidrs
-  geo_restriction_countries   = var.cloud_armor_geo_restriction_countries
-  rate_limit_threshold        = var.cloud_armor_rate_limit_threshold
-  api_rate_limit_threshold    = var.cloud_armor_api_rate_limit_threshold
-  adaptive_protection_enabled = var.cloud_armor_adaptive_protection_enabled
+  preview                          = var.cloud_armor_preview
+  extra_uninspected_fields         = var.cloud_armor_extra_uninspected_fields
+  extra_uninspected_field_prefixes = var.cloud_armor_extra_uninspected_field_prefixes
+  sensitivity                      = var.cloud_armor_sensitivity
+  allowed_ip_cidrs                 = var.cloud_armor_allowed_ip_cidrs
+  blocked_ip_cidrs                 = var.cloud_armor_blocked_ip_cidrs
+  rate_limit_exempt_ip_cidrs       = var.cloud_armor_rate_limit_exempt_ip_cidrs
+  geo_restriction_countries        = var.cloud_armor_geo_restriction_countries
+  rate_limit_threshold             = var.cloud_armor_rate_limit_threshold
+  api_rate_limit_threshold         = var.cloud_armor_api_rate_limit_threshold
+  adaptive_protection_enabled      = var.cloud_armor_adaptive_protection_enabled
 }
 
 module "l7_ingress" {

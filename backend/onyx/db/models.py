@@ -65,6 +65,7 @@ from onyx.configs.constants import (
     TokenRateLimitScope,
 )
 from onyx.connectors.models import InputType
+from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
@@ -641,6 +642,60 @@ class PersonalAccessToken(Base):
     )
 
 
+class OAuthProviderGrant(Base):
+    __tablename__ = "oauth_provider_grant"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[str] = mapped_column(String(2048), nullable=False)
+    client_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    resource: Mapped[str] = mapped_column(String(2048), nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(postgresql.JSONB(), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    revoked_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    __table_args__ = (
+        Index("ix_oauth_provider_grant_user_created", "user_id", "created_at"),
+    )
+
+
+class OAuthProviderToken(Base):
+    __tablename__ = "oauth_provider_token"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    grant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("oauth_provider_grant.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    kind: Mapped[Literal["access", "refresh"]] = mapped_column(
+        String(7), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    consumed_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('access', 'refresh')", name="ck_oauth_provider_token_kind"
+        ),
+    )
+
+
 class Notification(Base):
     __tablename__ = "notification"
 
@@ -980,6 +1035,37 @@ class ConnectorCredentialPair(Base):
 
     indexing_trigger: Mapped[IndexingMode | None] = mapped_column(
         Enum(IndexingMode, native_enum=False), nullable=True
+    )
+
+    # A pending prune the pruning beat runs once, even without prune_freq.
+    # Cleared only by a prune dispatched after this time was set.
+    prune_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # A pending prune to request once a full re-index on the current search
+    # settings succeeds. While set, every new attempt there is a full re-index.
+    prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # A full re-index an edit requested. While set, every new attempt on the
+    # current search settings is a full re-index. Cleared when one succeeds.
+    full_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Set when the pair enters a perm-synced access type. While set, the pair
+    # grants no access at query time and the restricted guard hides its
+    # documents. Cleared once its permissions are in the document index.
+    perm_sync_pending_since: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Backfills an applied edit requested, oldest first. The indexing beat
+    # creates one at a time while the pair is ACTIVE and has no active attempt,
+    # and keeps each request until an attempt of it succeeds.
+    pending_backfills: Mapped[list[PendingBackfill]] = mapped_column(
+        PydanticListType(PendingBackfill),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
     )
 
     # Determines how documents are processed after fetching:
@@ -1987,6 +2073,12 @@ class Credential(Base):
     )
 
     curator_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    # A new account in a connector form, not yet saved with a connector. Only
+    # its owner sees it; creating the connector clears the flag, and a
+    # periodic task deletes drafts that were left behind.
+    is_draft: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
 
     connectors: Mapped[list["ConnectorCredentialPair"]] = relationship(
         "ConnectorCredentialPair",
@@ -2002,6 +2094,14 @@ class Credential(Base):
     )
 
     user: Mapped[User | None] = relationship("User", back_populates="credentials")
+
+    __table_args__ = (
+        Index(
+            "ix_credential_draft_time_updated",
+            "time_updated",
+            postgresql_where=text("is_draft"),
+        ),
+    )
 
 
 class CredentialCapabilityReportRow(Base):
@@ -2478,6 +2578,27 @@ class IndexAttempt(Base):
     is_synthetic_seed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    # A one-off run over the fixed window poll_range_start..poll_range_end,
+    # set at creation. It is a full run for concurrency, but stays out of the
+    # incremental cursor, checkpoint reuse, and the pair's status and schedule.
+    is_backfill: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # The config a backfill runs with in place of the connector's saved config
+    # (e.g. a config limited to newly included items). NULL runs the saved config.
+    connector_config_override: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    # The pair's prune_after_reindex_requested_at this full re-index serves,
+    # copied at creation. Success turns it into a prune request.
+    prune_after_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # The pair's full_reindex_requested_at this full re-index serves, copied at
+    # creation. Success clears it on the pair.
+    full_reindex_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     status: Mapped[IndexingStatus] = mapped_column(
         Enum(IndexingStatus, native_enum=False, index=True)
     )
@@ -2507,6 +2628,11 @@ class IndexAttempt(Base):
     # Points to the last checkpoint that was saved for this run. The pointer here
     # can be taken to the FileStore to grab the actual checkpoint value
     checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
+    # sha256 of the connector config this attempt ran with (see
+    # compute_connector_config_hash). A later attempt does not reuse this
+    # attempt's checkpoint or poll window if the hashes differ. NULL on attempts
+    # created before this column existed; a NULL hash never blocks reuse.
+    connector_config_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Database-based coordination fields (replacing Redis fencing)
     celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -3205,11 +3331,10 @@ class ChatMessage(Base):
         ForeignKey("chat_message.id"), nullable=True
     )
 
-    # Only set on summary messages - the ID of the last message included in this summary
-    # Used for chat history compression
-    last_summarized_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="SET NULL"),
-        nullable=True,
+    # Set on summary messages: the ID of the last covered message. `chat:<id>`
+    # covers the whole chat message with that row ID.
+    last_summarized_message_id: Mapped[str | None] = mapped_column(
+        String, nullable=True
     )
 
     # For multi-model turns: the user message points to which assistant response
@@ -3616,6 +3741,11 @@ class ModelConfiguration(Base):
         nullable=True,
     )
     temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Virtual entry delegating model selection to a routing layer.
+    is_router: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
@@ -4778,6 +4908,12 @@ class FileRecord(Base):
     # The legacy copy looks records up by object, once per copied file.
     __table_args__ = (
         Index("ix_file_record_bucket_name_object_key", "bucket_name", "object_key"),
+        # Staged connector uploads (see STAGED_FOR_CC_PAIR_METADATA_KEY).
+        Index(
+            "ix_file_record_staged_connector_files",
+            "created_at",
+            postgresql_where=text("file_metadata ? 'staged_for_cc_pair_id'"),
+        ),
     )
 
 
@@ -5604,6 +5740,22 @@ class PublicBase(DeclarativeBase):
     """
 
     __abstract__ = True
+
+
+class OAuthProviderClient(PublicBase):
+    __tablename__ = "oauth_provider_client"
+    __table_args__ = ({"schema": "public"},)
+
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_metadata: Mapped[dict[str, Any]] = mapped_column(
+        postgresql.JSONB(), nullable=False
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_used_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
 
 
 # Strictly keeps track of the tenant that a given user will authenticate to.

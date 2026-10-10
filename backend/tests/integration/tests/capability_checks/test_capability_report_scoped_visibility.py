@@ -113,7 +113,7 @@ def _check_url(credential_id: int) -> str:
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Scoped group managers are enterprise only",
 )
 def test_scoped_manager_sees_only_their_groups_pairings(
@@ -244,7 +244,7 @@ def test_scoped_manager_sees_only_their_groups_pairings(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Scoped group managers are enterprise only",
 )
 def test_managed_pairing_is_readable_without_credential_visibility(
@@ -304,7 +304,7 @@ def test_managed_pairing_is_readable_without_credential_visibility(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Scoped group managers are enterprise only",
 )
 def test_scoped_manager_cannot_trigger_foreign_pairings(
@@ -391,7 +391,7 @@ def test_scoped_manager_cannot_trigger_foreign_pairings(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Scoped group managers are enterprise only",
 )
 def test_managed_pairing_is_triggerable_without_credential_visibility(

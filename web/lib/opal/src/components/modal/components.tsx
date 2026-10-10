@@ -5,6 +5,7 @@ import "@opal/components/modal/styles.css";
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import type {
+  ColorTypes,
   IconFunctionComponent,
   RichStr,
   SizeVariants,
@@ -319,6 +320,8 @@ interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
   icon?: IconFunctionComponent;
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
+  /** Colour mode of the icon and title, as on `Content`. */
+  color?: ColorTypes;
   title: string | RichStr;
   description?: string | RichStr;
   onClose?: () => void;
@@ -329,6 +332,7 @@ function ModalHeader({
   icon,
   moreIcon1,
   moreIcon2,
+  color,
   title,
   description,
   onClose,
@@ -392,6 +396,7 @@ function ModalHeader({
                 icon={icon}
                 moreIcon1={moreIcon1}
                 moreIcon2={moreIcon2}
+                color={color}
                 title={title}
                 description={description}
                 sizePreset="section"

@@ -21,6 +21,17 @@ tests. Additive to the root `AGENTS.md`.
   plain attribute access when the name is statically known. A genuinely dynamic
   lookup needs an `# ods: ignore[getattr]` comment with a brief justification
   (checked by `ods check-getattr`).
+- Use `CacheBackend` (`get_cache_backend()` / `get_shared_cache_backend()` in
+  `backend/onyx/cache/factory.py`) for cache and short-lived state: one-time codes, counters,
+  rate limits, locks. Do not call Redis directly or write Lua scripts. Onyx can run with
+  PostgreSQL as its cache (`CACHE_BACKEND=postgres`, for example Onyx Lite), so direct Redis
+  code breaks those deployments. If `CacheBackend` does not have an operation you need, add it
+  to the interface with both the Redis and PostgreSQL implementations.
+- Do not use functions as constants. A value that depends only on startup configuration (env
+  vars, `app_configs`) is a module-level constant computed once, not a zero-argument function
+  that recomputes it on every call. If the configuration can be invalid, the loader returns
+  `None` and logs instead of raising, so a bad value disables the feature rather than breaking
+  imports. Tests patch the module constant.
 
 ## Background Workers (Celery)
 

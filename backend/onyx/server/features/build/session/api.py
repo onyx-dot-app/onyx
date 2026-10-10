@@ -51,6 +51,7 @@ from onyx.server.features.build.session.models import (
     ArtifactResponse,
     DetailedSessionResponse,
     OpencodeHistorySnapshotResponse,
+    OutputInventoryResponse,
     PptxPreviewResponse,
     PreProvisionedCheckResponse,
     SandboxStatusResponse,
@@ -518,6 +519,16 @@ def list_artifacts(
     return artifacts
 
 
+@router.get("/{session_id}/outputs")
+def get_output_inventory(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> OutputInventoryResponse:
+    """Return output metadata without storing a persistent file index."""
+    return SessionManager(db_session).get_output_inventory(session_id, user.id)
+
+
 @router.get("/{session_id}/files", response_model=DirectoryListing)
 def list_directory(
     session_id: UUID,
@@ -654,6 +665,37 @@ def get_pptx_preview(
         raise HTTPException(status_code=404, detail="Session not found")
 
     return PptxPreviewResponse(**result)
+
+
+@router.get("/{session_id}/output-thumbnail/{path:path}")
+def get_output_thumbnail(
+    session_id: UUID,
+    path: str,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Return the first page of a PDF or presentation as a JPEG."""
+    try:
+        content = SessionManager(db_session).get_output_thumbnail(
+            session_id, user.id, path
+        )
+    except ValueError as error:
+        error_code = (
+            OnyxErrorCode.UNAUTHORIZED
+            if any(
+                term in str(error).lower()
+                for term in ("path traversal", "access denied")
+            )
+            else OnyxErrorCode.BAD_REQUEST
+        )
+        raise OnyxError(error_code, str(error)) from error
+    if content is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+    return Response(
+        content=content,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.get("/{session_id}/webapp-info", response_model=WebappInfo)

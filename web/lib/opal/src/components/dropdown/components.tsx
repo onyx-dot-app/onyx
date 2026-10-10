@@ -41,11 +41,15 @@ import {
 } from "@opal/components/dropdown/model";
 import { DropdownList } from "@opal/components/dropdown/list";
 import type {
+  DropdownAlign,
+  DropdownSide,
+  DropdownWidth,
   DropdownItem,
   DropdownMenuItem,
   DropdownMode,
   DropdownOption,
   DropdownRow,
+  DropdownSizePreset,
   DropdownSearch,
   DropdownView,
   DropdownViews,
@@ -76,6 +80,26 @@ interface DropdownProps {
   /** Where the list portals to, for a dropdown inside a modal. */
   container?: HTMLElement | null;
   /**
+   * A fixed width on the Tailwind scale, one of the contextual-menu steps
+   * in sizes.css (60 is 15rem), punch-out included. Left out, the list
+   * matches its anchor's width and reaches 6px past it on each side, never
+   * narrower than 17.5rem.
+   */
+  width?: DropdownWidth;
+  /**
+   * The anchor edge the list lines up with. Below the anchor it reaches 6px
+   * past that edge; beside it, it lines up exactly.
+   * @default "start"
+   */
+  align?: DropdownAlign;
+  /**
+   * Below the anchor, above it, or a flyout to its right (the opposite
+   * side when there is no room). A flyout lines up its `align` edge with
+   * the anchor's.
+   * @default "bottom"
+   */
+  side?: DropdownSide;
+  /**
    * What Tab does while the list is open. By default a type-in trigger
    * walks the rows and any other trigger closes the list and lets focus
    * move on; set it to make every trigger behave one way.
@@ -105,16 +129,27 @@ function Dropdown({
   id: idProp,
   virtualAnchor,
   container,
+  width,
+  align = "start",
+  side = "bottom",
   tabKey,
   children,
 }: DropdownProps) {
   const autoId = useId();
   const id = idProp ?? `dropdown-${autoId}`;
+  const [mode, setMode] = useState<DropdownMode>("picker");
+  // A view on top may ask for a width of its own.
+  const [viewWidth, setViewWidth] = useState<DropdownWidth | undefined>(
+    undefined
+  );
   const overlay = useDropdownOverlay({
     open,
     onOpenChange,
     disabled,
     virtualAnchor,
+    width: viewWidth ?? width,
+    align,
+    side,
   });
   const {
     isOpen,
@@ -125,7 +160,6 @@ function Dropdown({
   } = overlay;
 
   const listRef = useRef<ListModel>(EMPTY_LIST);
-  const [mode, setMode] = useState<DropdownMode>("picker");
   const [activeId, setActiveId] = useState<string | undefined>(undefined);
 
   const { handleKeyDown } = useDropdownKeyboard({
@@ -135,12 +169,23 @@ function Dropdown({
     setHighlightedIndex,
     setIsKeyboardNav,
     listRef,
+    floatingRef: overlay.floatingRef,
+    focusTrigger: overlay.focusTrigger,
     tabKey,
   });
 
   const getTriggerProps = useCallback(
-    ({ typeIn }: { typeIn: boolean }): DropdownTriggerProps => ({
-      role: mode === "picker" ? "combobox" : undefined,
+    ({
+      typeIn,
+      nativeButton = false,
+    }: {
+      typeIn: boolean;
+      nativeButton?: boolean;
+    }): DropdownTriggerProps => ({
+      // A picker's trigger is the combobox, unless it is a <button>: a
+      // combobox takes no name from its content, so a button would lose
+      // its name. A button keeps its role, with the popup it owns.
+      role: mode === "picker" && !nativeButton ? "combobox" : undefined,
       "aria-expanded": isOpen,
       "aria-haspopup": mode === "picker" ? "listbox" : "menu",
       "aria-controls": `${id}-listbox`,
@@ -174,9 +219,11 @@ function Dropdown({
       setFloatingRef: overlay.setFloatingRef,
       floatingStyles: overlay.floatingStyles,
       isPositioned: overlay.isPositioned,
+      anchoredEdge: overlay.anchoredEdge,
       listRef,
       mode,
       setMode,
+      setViewWidth,
       activeId,
       setActiveId,
       handleKeyDown,
@@ -202,6 +249,7 @@ function Dropdown({
       overlay.setFloatingRef,
       overlay.floatingStyles,
       overlay.isPositioned,
+      overlay.anchoredEdge,
       mode,
       activeId,
       handleKeyDown,
@@ -286,10 +334,14 @@ function DropdownTrigger({
     getTriggerProps,
   } = useDropdownContext();
   const nodeRef = useRef<HTMLElement | null>(null);
+  // Whether the element is a <button>: known once it mounts, and it decides
+  // the role the trigger carries.
+  const [nativeButton, setNativeButton] = useState(false);
   const ref = useCallback(
     (node: HTMLElement | null) => {
       if (node) {
         nodeRef.current = node;
+        setNativeButton(node.tagName === "BUTTON");
         registerTrigger(node);
         setTriggerRef(node);
       } else {
@@ -303,7 +355,7 @@ function DropdownTrigger({
   // This trigger is the one in use: it anchors the list and takes focus back.
   const claim = () => setTriggerRef(nodeRef.current);
 
-  const triggerProps = getTriggerProps({ typeIn });
+  const triggerProps = getTriggerProps({ typeIn, nativeButton });
   const onKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     if (disabled) return;
     claim();
@@ -341,6 +393,8 @@ function DropdownTrigger({
 // ---------------------------------------------------------------------------
 
 interface DropdownDataBaseProps {
+  /** Typography and spacing for built-in rows. Defaults to `"main-ui"`. */
+  sizePreset?: DropdownSizePreset;
   /** Names the list for assistive technology. */
   label?: string;
   /**
@@ -377,6 +431,8 @@ interface DropdownDataBaseProps {
   otherOptionsTitle?: string;
   /** Max height of the list in CSS units. Defaults to 15rem. */
   maxHeight?: string;
+  /** What the list says when a search matches nothing. Opal's own text when left out. */
+  noMatchText?: string;
   /**
    * The rows scrolled near their end. `shown` is the options on show, a
    * folded group's rows left out, so a caller pages in only what is being
@@ -471,6 +527,7 @@ type PendingHighlight =
 function DropdownData(props: DropdownDataProps) {
   const {
     items: rootItems,
+    sizePreset = "main-ui",
     label,
     query,
     search: rootSearch,
@@ -479,6 +536,7 @@ function DropdownData(props: DropdownDataProps) {
     create: rootCreate,
     otherOptionsTitle: rootOtherOptionsTitle,
     maxHeight,
+    noMatchText,
     onReachEnd,
     views: viewRegistry,
     value,
@@ -502,9 +560,11 @@ function DropdownData(props: DropdownDataProps) {
     setFloatingRef,
     floatingStyles,
     isPositioned,
+    anchoredEdge,
     listRef,
     mode,
     setMode,
+    setViewWidth,
     setActiveId,
     handleKeyDown,
   } = useDropdownContext();
@@ -535,6 +595,13 @@ function DropdownData(props: DropdownDataProps) {
       ? viewKey({ ...topView, key: top.key }, stack.length)
       : "root";
   const items = topView ? topView.items : rootItems;
+  // The view on top may size the list; the root takes it back. Not while
+  // closing: the stack resets under the exit fade, and the width must not
+  // snap with it. The next open starts at the root and sets it then.
+  const topWidth = topView?.width;
+  useLayoutEffect(() => {
+    if (isOpen) setViewWidth(topWidth);
+  }, [isOpen, topWidth, setViewWidth]);
   const search = topView ? topView.search : rootSearch;
   const create = top ? undefined : rootCreate;
   const otherOptionsTitle = top ? undefined : rootOtherOptionsTitle;
@@ -707,7 +774,7 @@ function DropdownData(props: DropdownDataProps) {
         case "action": {
           // A link action's row is an anchor: the click itself navigates.
           const moved = runHandler(() => row.onSelect?.(views));
-          if (!row.keepOpen && !row.opensView && !moved) setIsOpen(false);
+          if (!row.keepOpen && !moved) setIsOpen(false);
           break;
         }
         case "toggle":
@@ -715,7 +782,7 @@ function DropdownData(props: DropdownDataProps) {
           break;
         case "custom": {
           const moved = runHandler(() => row.onActivate?.(views));
-          if (!row.keepOpen && !row.opensView && !moved) setIsOpen(false);
+          if (!row.keepOpen && !moved) setIsOpen(false);
           break;
         }
       }
@@ -738,24 +805,17 @@ function DropdownData(props: DropdownDataProps) {
     },
     [id, activateRow, onCreate, toggleGroup]
   );
-  // ArrowRight: a custom row's secondary control, else a row that leads
-  // to a view is activated, as the chevron promises.
+  // ArrowRight: a custom row's secondary control.
   const secondary = useCallback(
     (item: NavItem) => {
       if (item.kind !== "row" || item.row.disabled) return false;
       const { row } = item;
-      if (row.kind === "custom" && row.onSecondary) {
-        activatingRef.current = rowElementId(id, row);
-        row.onSecondary(views);
-        return true;
-      }
-      if ((row.kind === "action" || row.kind === "custom") && row.opensView) {
-        activateRow(row);
-        return true;
-      }
-      return false;
+      if (row.kind !== "custom" || !row.onSecondary) return false;
+      activatingRef.current = rowElementId(id, row);
+      row.onSecondary(views);
+      return true;
     },
-    [id, views, activateRow]
+    [id, views]
   );
   // Escape is the keyboard, whatever typing in the search field left the
   // flag at: the highlight returns to the row that led in.
@@ -875,10 +935,12 @@ function DropdownData(props: DropdownDataProps) {
         label={label ?? ""}
         floatingStyles={floatingStyles}
         isPositioned={isPositioned}
+        anchoredEdge={anchoredEdge}
         setFloatingRef={setFloatingRef}
         viewKey={currentViewKey}
         viewDirection={viewDirection}
         groups={foldedGroups}
+        sizePreset={sizePreset}
         emptySet={allRows.length === 0}
         isSelected={isSelected}
         exactValue={exactValue}
@@ -888,6 +950,7 @@ function DropdownData(props: DropdownDataProps) {
         onToggleGroup={handleGroupToggle}
         create={create}
         maxHeight={maxHeight}
+        noMatchText={noMatchText}
         onReachEnd={onReachEnd && (() => onReachEnd(shownOptions))}
         // The pointer took over: the keyboard highlight yields to the row's
         // own hover on whatever the pointer is on.
@@ -900,6 +963,7 @@ function DropdownData(props: DropdownDataProps) {
         searchField={
           search
             ? {
+                ...search,
                 value: searchText,
                 placeholder:
                   search.placeholder || strings.selectSearchPlaceholder,

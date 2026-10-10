@@ -248,7 +248,7 @@ describe("ExternalAppsPage", () => {
 
     render(<ExternalAppsPage />);
     await user.click(screen.getByRole("button", { name: "Slack actions" }));
-    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
 
     expect(
       screen.getByText(

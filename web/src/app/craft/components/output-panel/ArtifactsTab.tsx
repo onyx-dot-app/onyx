@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import useSWR from "swr";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import { Text, Button } from "@opal/components";
 import {
   SvgGlobe,
@@ -12,30 +10,31 @@ import {
   SvgFiles,
   SvgChevronDown,
   SvgChevronRight,
+  SvgLoader,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { Artifact } from "@/app/craft/hooks/useBuildSessionStore";
 import {
-  useFilesNeedsRefresh,
+  type Artifact,
   useBuildSessionStore,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import {
-  fetchDirectoryListing,
   downloadArtifactFile,
   downloadDirectory,
 } from "@/app/craft/services/apiServices";
-import { FileSystemEntry } from "@/app/craft/types/streamingTypes";
-import { getFileIcon } from "@/lib/utils";
+import type { OutputFile } from "@/app/craft/types/streamingTypes";
+import { formatBytes, getFileIcon } from "@/lib/utils";
 import { clickOnKeyDown } from "@opal/utils";
 
 interface ArtifactsTabProps {
   artifacts: Artifact[];
   sessionId: string | null;
+  isActive?: boolean;
 }
 
 export default function ArtifactsTab({
   artifacts,
   sessionId,
+  isActive = true,
 }: ArtifactsTabProps) {
   const t = useTranslations("craft.artifactsTab");
   const webappArtifacts = artifacts.filter(
@@ -60,60 +59,34 @@ export default function ArtifactsTab({
     [sessionId, openFilePreview]
   );
 
-  const filesNeedsRefresh = useFilesNeedsRefresh();
-  const { data: outputsListing } = useSWR(
-    sessionId
-      ? [SWR_KEYS.buildSessionOutputFiles(sessionId), filesNeedsRefresh]
-      : null,
-    () => (sessionId ? fetchDirectoryListing(sessionId, "outputs") : null),
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 2000,
-    }
+  const inventory = useBuildSessionStore((state) =>
+    sessionId ? state.sessions.get(sessionId)?.outputInventory : null
   );
-
-  // Filter out "web" directory (shown as webapp artifact)
-  const rawEntries = (outputsListing?.entries ?? []).filter(
-    (entry) => entry.name !== "web"
+  const inventoryStatus = useBuildSessionStore((state) =>
+    sessionId ? state.sessions.get(sessionId)?.outputInventoryStatus : undefined
   );
-
-  // Filter out empty directories
-  const [outputEntries, setOutputEntries] = useState<FileSystemEntry[]>([]);
-
+  const refreshInventory = useBuildSessionStore(
+    (state) => state.refreshOutputInventory
+  );
   useEffect(() => {
-    if (!sessionId || rawEntries.length === 0) {
-      setOutputEntries([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function filterEmptyDirs() {
-      const results = await Promise.all(
-        rawEntries.map(async (entry) => {
-          if (!entry.is_directory) return entry;
-          try {
-            const listing = await fetchDirectoryListing(sessionId!, entry.path);
-            if (listing && listing.entries.length > 0) return entry;
-          } catch {
-            return entry;
-          }
-          return null;
-        })
-      );
-      if (!cancelled) {
-        setOutputEntries(
-          results.filter((e): e is FileSystemEntry => e !== null)
-        );
-      }
-    }
-
-    filterEmptyDirs();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, JSON.stringify(rawEntries.map((e) => e.path))]);
+    if (!sessionId || !isActive) return;
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    void refreshInventory(sessionId, {
+      silent: !session?.activeTurnId && session?.status !== "running",
+    });
+  }, [sessionId, isActive, refreshInventory]);
+  const outputEntries = useMemo(
+    () => buildOutputTree(inventory ?? {}),
+    [inventory]
+  );
+  const statusMessage =
+    inventoryStatus === "error"
+      ? t("status.error")
+      : inventoryStatus === "partial"
+        ? t("status.incomplete")
+        : inventoryStatus === "loading"
+          ? t("status.loading")
+          : null;
 
   const handleWebappDownload = () => {
     if (!sessionId) return;
@@ -140,7 +113,7 @@ export default function ArtifactsTab({
   const hasWebapps = webappArtifacts.length > 0;
   const hasOutputFiles = outputEntries.length > 0;
 
-  if (!sessionId || (!hasWebapps && !hasOutputFiles)) {
+  if (!sessionId || (!hasWebapps && !hasOutputFiles && !statusMessage)) {
     return (
       <Section
         height="full"
@@ -161,6 +134,16 @@ export default function ArtifactsTab({
 
   return (
     <div className="flex flex-col h-full">
+      {statusMessage && (
+        <div role="status" className="flex items-center gap-2 p-3">
+          {inventoryStatus === "loading" && (
+            <SvgLoader size={16} className="animate-spin stroke-text-03" />
+          )}
+          <Text font="secondary-body" color="text-02">
+            {statusMessage}
+          </Text>
+        </div>
+      )}
       <div className="flex-1 overflow-auto overlay-scrollbar">
         <div className="divide-y divide-border-01">
           {/* Webapp Artifacts */}
@@ -170,7 +153,7 @@ export default function ArtifactsTab({
             <div
               key={artifact.id}
               className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
-              style={{ paddingLeft: 12 }}
+              style={{ paddingInlineStart: 12 }}
               role="button"
               tabIndex={0}
               aria-label={t("openItem.ariaLabel", { name: artifact.name })}
@@ -211,7 +194,6 @@ export default function ArtifactsTab({
             <OutputEntryRow
               key={entry.path}
               entry={entry}
-              sessionId={sessionId!}
               depth={0}
               onDownload={handleOutputDownload}
               onFileOpen={handleFileOpen}
@@ -224,8 +206,7 @@ export default function ArtifactsTab({
 }
 
 interface OutputEntryRowProps {
-  entry: FileSystemEntry;
-  sessionId: string;
+  entry: OutputEntry;
   depth: number;
   onDownload: (path: string, isDirectory: boolean) => void;
   onFileOpen: (path: string, fileName: string) => void;
@@ -233,35 +214,22 @@ interface OutputEntryRowProps {
 
 function OutputEntryRow({
   entry,
-  sessionId,
   depth,
   onDownload,
   onFileOpen,
 }: OutputEntryRowProps) {
   const t = useTranslations("craft.artifactsTab");
   const [expanded, setExpanded] = useState(false);
-  const [children, setChildren] = useState<FileSystemEntry[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  const toggleExpand = useCallback(async () => {
-    if (!entry.is_directory) return;
-
-    if (!loaded) {
-      const listing = await fetchDirectoryListing(sessionId, entry.path);
-      if (listing) {
-        setChildren(listing.entries);
-      }
-      setLoaded(true);
-    }
+  const toggleExpand = useCallback(() => {
     setExpanded((prev) => !prev);
-  }, [entry.is_directory, entry.path, sessionId, loaded]);
+  }, []);
 
   const openEntry = entry.is_directory
     ? toggleExpand
     : () => onFileOpen(entry.path, entry.name);
 
   const FileIcon = entry.is_directory ? SvgFolder : getFileIcon(entry.name);
-  const paddingLeft = depth * 20;
+  const paddingStart = depth * 20;
 
   return (
     <>
@@ -269,7 +237,7 @@ function OutputEntryRow({
       semantics rather than a <button> wrapping a <button>. */}
       <div
         className="flex items-center gap-3 p-3 hover:bg-background-tint-01 transition-colors cursor-pointer"
-        style={{ paddingLeft: 12 + paddingLeft }}
+        style={{ paddingInlineStart: 12 + paddingStart }}
         role="button"
         tabIndex={0}
         aria-label={
@@ -298,7 +266,7 @@ function OutputEntryRow({
           </Text>
           {!entry.is_directory && entry.size !== null ? (
             <Text font="secondary-body" color="text-02">
-              {formatFileSize(entry.size)}
+              {formatBytes(entry.size, 1)}
             </Text>
           ) : null}
         </div>
@@ -319,11 +287,10 @@ function OutputEntryRow({
       </div>
 
       {expanded &&
-        children.map((child) => (
+        entry.children.map((child) => (
           <OutputEntryRow
             key={child.path}
             entry={child}
-            sessionId={sessionId}
             depth={depth + 1}
             onDownload={onDownload}
             onFileOpen={onFileOpen}
@@ -333,8 +300,43 @@ function OutputEntryRow({
   );
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+interface OutputEntry {
+  name: string;
+  path: string;
+  is_directory: boolean;
+  size: number | null;
+  children: OutputEntry[];
+}
+
+function buildOutputTree(files: Record<string, OutputFile>): OutputEntry[] {
+  const root: OutputEntry[] = [];
+  const entries = new Map<string, OutputEntry>();
+  for (const file of Object.values(files)) {
+    const segments = file.path.split("/").slice(1);
+    let path = "outputs";
+    let children = root;
+    segments.forEach((name, index) => {
+      path += `/${name}`;
+      let entry = entries.get(path);
+      if (!entry) {
+        const isDirectory = index < segments.length - 1;
+        entry = {
+          path,
+          name,
+          is_directory: isDirectory,
+          size: isDirectory ? null : file.size,
+          children: [],
+        };
+        entries.set(path, entry);
+        children.push(entry);
+      }
+      children = entry.children;
+    });
+  }
+  const compare = (a: OutputEntry, b: OutputEntry): number =>
+    Number(b.is_directory) - Number(a.is_directory) ||
+    a.name.localeCompare(b.name);
+  root.sort(compare);
+  for (const entry of entries.values()) entry.children.sort(compare);
+  return root;
 }

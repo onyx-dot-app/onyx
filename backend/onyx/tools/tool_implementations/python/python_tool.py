@@ -26,6 +26,7 @@ from onyx.file_store.utils import (
     chat_image_gen_metadata,
     get_default_file_store,
 )
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
@@ -277,24 +278,21 @@ class PythonTool(Tool[PythonToolOverrideKwargs]):
         with CodeInterpreterClient() as client:
             return client.health(use_cache=True).healthy
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        CODE_FIELD: {
-                            "type": "string",
-                            "description": "Python source code to execute",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    CODE_FIELD: {
+                        "type": "string",
+                        "description": "Python source code to execute",
                     },
-                    "required": [CODE_FIELD],
                 },
+                "required": [CODE_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         """Emit start packet for this tool. Code will be emitted in run() method."""

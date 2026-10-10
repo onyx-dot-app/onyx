@@ -274,6 +274,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
     supports_reasoning: bool | None = None
     display_name: str | None = None  # For dynamic providers, from source API
     custom_display_name: str | None = None  # Admin-specified override
+    is_router: bool = False
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
@@ -337,6 +338,7 @@ class ModelConfigurationUpsertRequest(BaseModel):
             ),
             display_name=model_configuration_model.display_name,
             custom_display_name=model_configuration_model.custom_display_name,
+            is_router=model_configuration_model.is_router,
             reasoning_effort_max=model_configuration_model.reasoning_effort_max,
             reasoning_effort_default=model_configuration_model.reasoning_effort_default,
             temperature_default=model_configuration_model.temperature_default,
@@ -363,6 +365,8 @@ class ModelConfigurationView(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
+    # Virtual entry delegating model selection to a routing layer.
+    is_router: bool = False
     # True when this is the provider's recommended default model.
     is_recommended_default: bool = False
     display_name: str | None = None
@@ -443,6 +447,7 @@ class ModelConfigurationView(BaseModel):
                 reasoning_effort_max=model_configuration_model.reasoning_effort_max,
                 reasoning_effort_default=model_configuration_model.reasoning_effort_default,
                 temperature_default=model_configuration_model.temperature_default,
+                is_router=model_configuration_model.is_router,
                 display_name=model_configuration_model.display_name,
                 custom_display_name=model_configuration_model.custom_display_name,
                 provider_display_name=None,  # Not needed for dynamic providers
@@ -507,6 +512,7 @@ class ModelConfigurationView(BaseModel):
             reasoning_effort_max=model_configuration_model.reasoning_effort_max,
             reasoning_effort_default=model_configuration_model.reasoning_effort_default,
             temperature_default=model_configuration_model.temperature_default,
+            is_router=model_configuration_model.is_router,
             # Populate display fields from parsed model name
             display_name=display_name,
             custom_display_name=model_configuration_model.custom_display_name,
@@ -615,6 +621,8 @@ class OpenRouterModelDetails(BaseModel):
     # context_length may be missing or 0 for some models
     context_length: int | None = None
     architecture: dict[str, Any] = {}  # Contains 'input_modalities' key
+    # Router entries bill at the routed upstream's rate, reported as "-1".
+    pricing: dict[str, Any] | None = None
 
     @property
     def supports_image_input(self) -> bool:
@@ -626,6 +634,15 @@ class OpenRouterModelDetails(BaseModel):
         output_modalities = self.architecture.get("output_modalities", [])
         return isinstance(output_modalities, list) and "embeddings" in output_modalities
 
+    @property
+    def is_router(self) -> bool:
+        """Virtual models that delegate to an upstream (openrouter/auto, fusion, ...).
+        OpenRouter marks them with tokenizer "Router" and prices them at -1."""
+        if self.architecture.get("tokenizer") == "Router":
+            return True
+        pricing: dict[str, Any] = self.pricing or {}
+        return pricing.get("prompt") == "-1" or pricing.get("completion") == "-1"
+
 
 class OpenRouterFinalModelResponse(BaseModel):
     name: str  # Model ID (e.g., "openai/gpt-5-pro")
@@ -634,6 +651,7 @@ class OpenRouterFinalModelResponse(BaseModel):
         int | None
     )  # From OpenRouter API context_length (may be missing for some models)
     supports_image_input: bool
+    is_router: bool = False
 
 
 # LM Studio dynamic models fetch
@@ -725,6 +743,7 @@ class SyncModelEntry(BaseModel):
     max_input_tokens: int | None = None
     supports_image_input: bool = False
     supports_reasoning: bool = False
+    is_router: bool = False
 
 
 class LitellmModelsRequest(BaseModel):
@@ -894,3 +913,8 @@ class PortkeyFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+
+
+class ModelRoutingUpdateRequest(BaseModel):
+    model_routing_enabled: bool | None = None
+    model_routing_model_configuration_id: int | None = None

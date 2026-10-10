@@ -10,7 +10,14 @@ next restore. This is the Docker analog of the K8s PIPESTATUS fix.
 
 from __future__ import annotations
 
+import io
+import subprocess
+import tarfile
 from collections.abc import Generator
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 
@@ -56,3 +63,62 @@ def test_generator_reader_propagates_tar_failure_read_all() -> None:
     reader = dsm._GeneratorReader(_failing_stream())
     with pytest.raises(ExecError):
         reader.read(-1)
+
+
+def test_docker_archive_excludes_output_thumbnail_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sandbox_id, session_id = uuid4(), uuid4()
+    session_path: Path = tmp_path / str(session_id)
+    (session_path / "outputs/.document-thumbnails/report").mkdir(parents=True)
+    (session_path / "attachments/.document-thumbnails").mkdir(parents=True)
+    (session_path / "outputs/report.pdf").write_bytes(b"source")
+    (session_path / "outputs/user/.document-thumbnails").mkdir(parents=True)
+    (session_path / "outputs/user/.document-thumbnails/owned.txt").write_bytes(b"keep")
+    (session_path / "outputs/.document-thumbnails/report/slide-1.jpg").write_bytes(
+        b"generated"
+    )
+    (session_path / "outputs/.document-thumbnails/report/.conversion.lock").touch()
+    (session_path / "attachments/.document-thumbnails/user-file.txt").write_text("keep")
+    monkeypatch.setattr(dsm, "SESSIONS_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        dsm.DockerSandboxManager, "_get_container", MagicMock(return_value=object())
+    )
+    monkeypatch.setattr(
+        dsm,
+        "_run_in_container_as_sandbox_user",
+        MagicMock(return_value=SimpleNamespace(stdout_text="OK")),
+    )
+    archives: list[bytes] = []
+
+    def stream_archive(
+        _container: object, command: list[str]
+    ) -> Generator[bytes, None, int]:
+        result: subprocess.CompletedProcess[bytes] = subprocess.run(
+            command, check=True, capture_output=True
+        )
+        yield result.stdout
+        return 0
+
+    def persist(
+        *, stream: dsm._GeneratorReader, **_kwargs: object
+    ) -> tuple[str, str, int]:
+        archive: bytes = stream.read()
+        archives.append(archive)
+        return "snapshot", "storage", len(archive)
+
+    monkeypatch.setattr(
+        dsm, "_stream_stdout_from_container_as_sandbox_user", stream_archive
+    )
+    manager: dsm.DockerSandboxManager = dsm.DockerSandboxManager.__new__(
+        dsm.DockerSandboxManager
+    )
+    manager._snapshot_manager = MagicMock()
+    manager._snapshot_manager.persist_snapshot_from_stream.side_effect = persist
+    assert manager.create_snapshot(sandbox_id, session_id, "public") is not None
+    with tarfile.open(fileobj=io.BytesIO(archives[0]), mode="r:gz") as archive:
+        names: list[str] = archive.getnames()
+    assert "outputs/report.pdf" in names
+    assert "outputs/user/.document-thumbnails/owned.txt" in names
+    assert "attachments/.document-thumbnails/user-file.txt" in names
+    assert not any(name.startswith("outputs/.document-thumbnails") for name in names)

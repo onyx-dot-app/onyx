@@ -126,6 +126,12 @@
   pointer-events: none;
 }
 
+/* A line between groups takes no inset across the rows: the scroller's own
+   gap already keeps it clear of them. The side inset stays. */
+.opal-dropdown-scroll .opal-divider {
+  padding-block: 0;
+}
+
 /* A foldable group wraps its title and its fold. The row gap lives inside
    the fold, so a closed group collapses to its title with no stray gap. */
 .opal-dropdown-group {
@@ -147,8 +153,7 @@
   @apply ms-2 flex shrink-0 items-center;
 }
 
-.opal-dropdown-create-icon,
-.opal-dropdown-chevron {
+.opal-dropdown-create-icon {
   @apply ms-2 h-4 w-4 shrink-0 text-text-03;
 }
 
@@ -163,6 +168,12 @@
    gap apart, so they travel as a pair and never overlap. */
 .opal-dropdown-card[data-exit] {
   @apply absolute inset-x-0 top-0 pointer-events-none;
+}
+/* A list anchored by its bottom grows upward: the leaving card stays on
+   the bottom edge, where it was. */
+.opal-dropdown-card[data-exit][data-pin="bottom"] {
+  top: auto;
+  bottom: 0;
 }
 .opal-dropdown-card[data-enter="forward"] {
   animation: opal-dropdown-card-in-forward 200ms ease-in-out;

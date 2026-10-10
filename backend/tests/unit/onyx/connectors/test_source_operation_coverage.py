@@ -18,6 +18,7 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
+from onyx.connectors.jira.models import JiraGroupPage, JiraIssueIdPage
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -45,8 +46,54 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
     spy.get_space_permissions.side_effect = get_space_permissions
 
 
-_SPY_CONFIGURATIONS: dict[DocumentSource, Callable[[MagicMock], None]] = {
-    DocumentSource.CONFLUENCE: _configure_confluence_spy,
+def _configure_jira_site(spy: MagicMock) -> None:
+    """A project that grants Browse Projects to a role with one user, and a
+    group with one member, so the permission checks reach every read."""
+    spy.list_projects.return_value = [{"key": "AS"}]
+    spy.get_project_permission_scheme.return_value = {
+        "permissions": [
+            {
+                "permission": "BROWSE_PROJECTS",
+                "holder": {"type": "projectRole", "value": "10003"},
+            }
+        ]
+    }
+    spy.get_project_role.return_value = {
+        "actors": [{"actorUser": {"accountId": "a1", "name": "a1"}}]
+    }
+    spy.list_groups.return_value = JiraGroupPage(group_names=["devs"], total=1)
+    spy.get_group_members_page.return_value = {"values": [{"name": "a1"}]}
+    # A safe tiny attachment exercises the optional JSM read probe without
+    # changing the pass criteria for ordinary Jira indexing.
+    issue = {"key": "AS-1", "fields": {"summary": "Issue"}}
+    spy.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1"], next_page_token=None
+    )
+    spy.bulk_fetch_issues.return_value = [issue]
+    spy.search_issues.return_value = [issue]
+    spy.list_fields.return_value = [{"id": "summary", "name": "Summary"}]
+    spy.list_issue_attachments.return_value = [{"id": "att-1", "size": 1}]
+    spy.download_attachment.return_value = b"x"
+
+
+def _configure_jira_cloud_spy(spy: MagicMock) -> None:
+    """A Cloud credential: the checks search with enhanced search and bulk
+    fetch."""
+    _configure_jira_site(spy)
+    spy._is_cloud.return_value = True
+
+
+def _configure_jira_server_spy(spy: MagicMock) -> None:
+    """A Data Center credential: the checks search with the v2 search."""
+    _configure_jira_site(spy)
+    spy._is_cloud.return_value = False
+
+
+# A unit is covered when the checks exercise it under any one configuration:
+# a source whose credential picks the API family needs one per family.
+_SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
+    DocumentSource.CONFLUENCE: [_configure_confluence_spy],
+    DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
 }
 
 
@@ -68,8 +115,12 @@ def test_every_operation_unit_is_exercised_by_a_check(
     checks = get_capability_checks(gateway_class.source)
 
     # Under test.
-    uncovered = compute_uncovered_units(
-        gateway_class, checks, _SPY_CONFIGURATIONS.get(gateway_class.source)
+    configurations = _SPY_CONFIGURATIONS.get(gateway_class.source) or [None]
+    uncovered = set.intersection(
+        *(
+            set(compute_uncovered_units(gateway_class, checks, configure_spy))
+            for configure_spy in configurations
+        )
     )
 
     # Postcondition.
