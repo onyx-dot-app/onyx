@@ -31,6 +31,7 @@ from tests.unit.onyx.connectors.jira_service_management.conftest import (
     TEST_BASE_URL,
     TEST_PROJECT_KEY,
     make_mock_jsm_issue,
+    legacy_jira_client,
 )
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
@@ -520,7 +521,7 @@ def jsm_connector(
     """Connector with JSM field discovery short-circuited for determinism."""
     connector = make_jsm_connector()
     connector._jsm_field_map = jsm_field_map
-    jira_client = cast(JIRA, connector._jira_client)
+    jira_client = legacy_jira_client(connector)
     jira_client._options = MagicMock()
     with patch("onyx.connectors.jira.connector._JIRA_FULL_PAGE_SIZE", 2):
         yield connector
@@ -536,7 +537,7 @@ class TestAttachmentsThroughPipeline:
         connector.include_attachments = True
 
         issue = make_mock_jsm_issue(key="HELP-101")
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.side_effect = [[issue]]
 
