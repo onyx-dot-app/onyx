@@ -20,6 +20,7 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.jira.connector import JiraConnector, JiraConnectorCheckpoint
+from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -249,7 +250,11 @@ class TestProcessIssue:
 
 
 class TestFieldDiscovery:
-    def test_discover_jsm_fields_by_name(self, mock_jira_client: MagicMock) -> None:
+    def test_discover_jsm_fields_by_name(
+        self,
+        mock_jira_client: MagicMock,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    ) -> None:
         mock_jira_client.fields.return_value = [
             {"id": "summary", "name": "Summary", "custom": False},
             {"id": REQUEST_TYPE_FIELD_ID, "name": "Customer Request Type"},
@@ -257,10 +262,7 @@ class TestFieldDiscovery:
             {"id": "customfield_10002", "name": "Satisfaction"},
         ]
 
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL, project_key=TEST_PROJECT_KEY
-        )
-        connector._jira_client = mock_jira_client
+        connector = make_jsm_connector()
 
         field_map = connector.jsm_field_map
         assert field_map.customer_request_type == REQUEST_TYPE_FIELD_ID
@@ -271,14 +273,13 @@ class TestFieldDiscovery:
         assert mock_jira_client.fields.call_count == 1
 
     def test_discover_jsm_fields_api_failure_falls_back(
-        self, mock_jira_client: MagicMock
+        self,
+        mock_jira_client: MagicMock,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
     ) -> None:
         mock_jira_client.fields.side_effect = RuntimeError("403")
 
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL, project_key=TEST_PROJECT_KEY
-        )
-        connector._jira_client = mock_jira_client
+        connector = make_jsm_connector()
 
         field_map = connector.jsm_field_map
         assert field_map.customer_request_type is None
@@ -452,11 +453,10 @@ class TestValidateConnectorSettings:
         with pytest.raises(ConnectorMissingCredentialError):
             connector.validate_connector_settings()
 
-    def test_missing_project_key(self, mock_jira_client: MagicMock) -> None:
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL, project_key=""
-        )
-        connector._jira_client = mock_jira_client
+    def test_missing_project_key(
+        self, make_jsm_connector: Callable[..., JiraServiceManagementConnector]
+    ) -> None:
+        connector = make_jsm_connector(project_key="")
         with pytest.raises(ConnectorValidationError, match="project key is required"):
             connector.validate_connector_settings()
 
@@ -524,13 +524,12 @@ class TestValidateConnectorSettings:
             connector.validate_connector_settings()
         assert expected_message in str(excinfo.value)
 
-    def test_jql_query_validation_failure(self, mock_jira_client: MagicMock) -> None:
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL,
-            project_key=TEST_PROJECT_KEY,
-            jql_query="issuetype = Incident",
-        )
-        connector._jira_client = mock_jira_client
+    def test_jql_query_validation_failure(
+        self,
+        mock_jira_client: MagicMock,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    ) -> None:
+        connector = make_jsm_connector(jql_query="issuetype = Incident")
 
         service_desk_project = MagicMock()
         service_desk_project.projectTypeKey = "service_desk"
@@ -538,18 +537,17 @@ class TestValidateConnectorSettings:
 
         with patch(
             "onyx.connectors.jira_service_management.connector._perform_jql_search",
-            side_effect=JIRAError(status_code=400, text="Bad JQL"),
+            side_effect=JiraApiError("Bad JQL", status_code=400, text="Bad JQL"),
         ):
             with pytest.raises(ConnectorValidationError, match="Bad JQL"):
                 connector.validate_connector_settings()
 
-    def test_jql_query_validation_success(self, mock_jira_client: MagicMock) -> None:
-        connector = JiraServiceManagementConnector(
-            jira_base_url=TEST_BASE_URL,
-            project_key=TEST_PROJECT_KEY,
-            jql_query="issuetype = Incident",
-        )
-        connector._jira_client = mock_jira_client
+    def test_jql_query_validation_success(
+        self,
+        mock_jira_client: MagicMock,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+    ) -> None:
+        connector = make_jsm_connector(jql_query="issuetype = Incident")
 
         service_desk_project = MagicMock()
         service_desk_project.projectTypeKey = "service_desk"
