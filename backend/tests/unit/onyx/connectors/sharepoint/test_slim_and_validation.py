@@ -1,5 +1,5 @@
-"""Unit tests for SharepointConnector site-page slim resilience and
-validate_connector_settings RoleAssignments permission probe."""
+"""Unit tests for SharepointConnector site-page slim resilience and the
+perm-sync Graph group-members probe."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import pytest
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.entra import EntraGroup, EntraPage
-from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.models import ExternalAccess, SlimDocument
 from onyx.connectors.sharepoint.connector import (
@@ -34,28 +33,6 @@ def _make_connector() -> SharepointConnector:
     connector = SharepointConnector(sites=[SITE_URL])
     connector_with_gateway(connector)
     return connector
-
-
-def _stub_auth_method(
-    connector: SharepointConnector, method: MicrosoftAuthMethod
-) -> None:
-    stub_operation(connector.ops, "get_auth_method", lambda: method)
-
-
-def _stub_rest_probe(
-    connector: SharepointConnector, refused_sites: dict[str, bool] | None = None
-) -> list[str]:
-    """Answers the REST probe per site and records which sites were asked.
-    Sites absent from ``refused_sites`` pass."""
-    probed: list[str] = []
-    refused = refused_sites or {}
-
-    def probe_rest_access(*, site_url: str) -> bool:
-        probed.append(site_url)
-        return not refused.get(site_url, False)
-
-    stub_operation(connector.ops, "probe_rest_access", probe_rest_access)
-    return probed
 
 
 @patch("onyx.connectors.sharepoint.connector.get_sharepoint_external_access")
@@ -354,92 +331,6 @@ def test_retrieve_all_slim_docs_does_not_fetch_permissions(
 
 
 # ---------------------------------------------------------------------------
-# probe_role_assignments_permission — perm-sync RoleAssignments REST probe
-# ---------------------------------------------------------------------------
-
-
-def test_probe_role_assignments_raises_on_401_or_403() -> None:
-    """A refused probe raises ConnectorValidationError naming the rejecting site."""
-    connector = _make_connector()
-    _stub_auth_method(connector, MicrosoftAuthMethod.CERTIFICATE)
-    _stub_rest_probe(connector, {SITE_URL: True})
-
-    with pytest.raises(ConnectorValidationError) as exc_info:
-        connector.probe_role_assignments_permission()
-    assert "Sites.FullControl.All" in str(exc_info.value)
-    assert SITE_URL in str(exc_info.value)
-
-
-def test_probe_role_assignments_passes_on_200() -> None:
-    """An accepted probe means the app has the required permission."""
-    connector = _make_connector()
-    _stub_auth_method(connector, MicrosoftAuthMethod.CERTIFICATE)
-    probed = _stub_rest_probe(connector)
-
-    connector.probe_role_assignments_permission()  # should not raise
-    assert probed == [SITE_URL]
-
-
-def test_probe_role_assignments_skips_on_network_error() -> None:
-    """A probe that raises is not a refusal, so it does not block validation."""
-    connector = _make_connector()
-    _stub_auth_method(connector, MicrosoftAuthMethod.CERTIFICATE)
-
-    def probe_rest_access(*, site_url: str) -> bool:  # noqa: ARG001
-        raise RuntimeError("timeout")
-
-    stub_operation(connector.ops, "probe_rest_access", probe_rest_access)
-
-    connector.probe_role_assignments_permission()  # should not raise
-
-
-def test_probe_role_assignments_skips_without_credentials() -> None:
-    """Probe is a no-op when credentials have not been loaded."""
-    connector = SharepointConnector(sites=[SITE_URL])
-    # No gateway is attached, so there is nothing to probe with.
-    connector.probe_role_assignments_permission()  # should not raise
-
-
-def test_probe_role_assignments_aggregates_unauthorized_sites() -> None:
-    """When some sites refuse and others accept, the error names every failing site."""
-    site_ok = "https://tenant.sharepoint.com/sites/Allowed"
-    site_bad_1 = "https://tenant.sharepoint.com/teams/Forbidden1"
-    site_bad_2 = "https://tenant.sharepoint.com/teams/Forbidden2"
-
-    connector = _make_connector()
-    # _make_connector seeds a single site; override with a mixed list.
-    connector.sites = [site_ok, site_bad_1, site_bad_2]
-    _stub_auth_method(connector, MicrosoftAuthMethod.CERTIFICATE)
-    probed = _stub_rest_probe(connector, {site_bad_1: True, site_bad_2: True})
-
-    with pytest.raises(ConnectorValidationError) as exc_info:
-        connector.probe_role_assignments_permission()
-
-    message = str(exc_info.value)
-    assert site_bad_1 in message
-    assert site_bad_2 in message
-    assert site_ok not in message
-    # All three sites should have been probed (in parallel).
-    assert sorted(probed) == sorted([site_ok, site_bad_1, site_bad_2])
-
-
-def test_probe_role_assignments_caps_probed_sites() -> None:
-    """Only the first ROLE_ASSIGNMENTS_PROBE_MAX_SITES sites are probed."""
-    from onyx.connectors.sharepoint.connector import ROLE_ASSIGNMENTS_PROBE_MAX_SITES
-
-    connector = _make_connector()
-    connector.sites = [
-        f"https://tenant.sharepoint.com/sites/Site{i}"
-        for i in range(ROLE_ASSIGNMENTS_PROBE_MAX_SITES + 2)
-    ]
-    _stub_auth_method(connector, MicrosoftAuthMethod.CERTIFICATE)
-    probed = _stub_rest_probe(connector)
-
-    connector.probe_role_assignments_permission()
-    assert len(probed) == ROLE_ASSIGNMENTS_PROBE_MAX_SITES
-
-
-# ---------------------------------------------------------------------------
 # probe_group_members_permission — perm-sync Graph group-members probe
 # ---------------------------------------------------------------------------
 
@@ -468,33 +359,3 @@ def test_probe_group_members_passes_on_200() -> None:
     stub_operation(connector.ops, "list_entra_groups", list_entra_groups)
 
     connector.probe_group_members_permission()  # should not raise
-
-
-def test_probe_role_assignments_rejects_client_secret_auth() -> None:
-    """A client secret can never reach the REST surface, so say that instead of
-    sending the admin to grant more permissions."""
-    connector = _make_connector()
-    _stub_auth_method(connector, MicrosoftAuthMethod.CLIENT_SECRET)
-    probed = _stub_rest_probe(connector)
-
-    with pytest.raises(ConnectorValidationError) as exc_info:
-        connector.probe_role_assignments_permission()
-
-    message = str(exc_info.value)
-    assert "certificate" in message.lower()
-    assert "Sites.FullControl.All" not in message
-    assert probed == []
-
-
-def test_probe_role_assignments_rejects_client_secret_in_all_sites_mode() -> None:
-    """With no configured sites there is nothing to probe, but the credential
-    type is still wrong and permission sync would still fail later."""
-    connector = SharepointConnector(sites=[])
-    connector_with_gateway(connector)
-    _stub_auth_method(connector, MicrosoftAuthMethod.CLIENT_SECRET)
-    probed = _stub_rest_probe(connector)
-
-    with pytest.raises(ConnectorValidationError):
-        connector.probe_role_assignments_permission()
-
-    assert probed == []

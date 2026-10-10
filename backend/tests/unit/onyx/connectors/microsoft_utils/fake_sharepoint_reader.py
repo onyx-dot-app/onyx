@@ -62,7 +62,11 @@ class FakeSharepointReader(SharepointPermissionReader):
         self.calls: list[ReaderCall] = []
 
     def list_role_assignments(
-        self, *, site_url: str, securable: SharepointSecurable
+        self,
+        *,
+        site_url: str,
+        securable: SharepointSecurable,
+        max_rows: int | None = None,
     ) -> list[SharepointRoleAssignment]:
         self.calls.append(
             ReaderCall(
@@ -71,10 +75,11 @@ class FakeSharepointReader(SharepointPermissionReader):
                 securable=securable,
             )
         )
-        return self.role_assignments.get(site_url, [])
+        assignments = self.role_assignments.get(site_url, [])
+        return assignments if max_rows is None else assignments[:max_rows]
 
     def list_site_group_users(
-        self, *, site_url: str, group_name: str
+        self, *, site_url: str, group_name: str, max_rows: int | None = None
     ) -> list[SharepointPrincipal]:
         self.calls.append(
             ReaderCall(
@@ -84,7 +89,7 @@ class FakeSharepointReader(SharepointPermissionReader):
         users = self.site_group_users.get(group_name, [])
         if isinstance(users, Exception):
             raise users
-        return users
+        return users if max_rows is None else users[:max_rows]
 
     def get_folder_unique_id(self, *, site_url: str, server_relative_path: str) -> str:
         self.calls.append(
@@ -120,14 +125,16 @@ class FakeSharepointReader(SharepointPermissionReader):
             raise members
         return members
 
-    def list_nested_entra_groups(self, *, group_id: str) -> list[EntraGroup]:
+    def list_nested_entra_groups(
+        self, *, group_id: str, max_rows: int | None = None
+    ) -> list[EntraGroup]:
         self.calls.append(
             ReaderCall(operation="list_nested_entra_groups", key=group_id)
         )
         groups = self.nested_entra_groups.get(group_id, [])
         if isinstance(groups, Exception):
             raise groups
-        return groups
+        return groups if max_rows is None else groups[:max_rows]
 
     def list_entra_groups(
         self, *, next_link: str | None = None

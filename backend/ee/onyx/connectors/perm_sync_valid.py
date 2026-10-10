@@ -4,8 +4,18 @@ from typing import Any
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
-from onyx.connectors.capability_checks.models import CapabilityCheckContext
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheck,
+    CapabilityCheckContext,
+    CapabilityCheckResult,
+    CapabilityCheckStatus,
+)
+from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    UnexpectedValidationError,
+)
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
@@ -14,6 +24,9 @@ from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_group_sync_checks,
 )
 from onyx.connectors.onedrive.connector import OneDriveConnector
+from onyx.connectors.sharepoint.capability_checks import (
+    build_sharepoint_doc_permission_sync_checks,
+)
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.zoom.connector import ZoomConnector
 
@@ -59,18 +72,35 @@ def validate_box_perm_sync(connector: BoxConnector) -> None:
 
 
 def validate_sharepoint_perm_sync(connector: SharepointConnector) -> None:
-    """
-    Validate that the connector is configured correctly for permissions syncing.
-
-    Two distinct permission surfaces are needed for SharePoint perm sync,
-    neither of which the non-perm-sync indexing path requires:
-      1. SharePoint REST 'Sites.FullControl.All' to enumerate RoleAssignments.
-      2. Microsoft Graph 'GroupMember.Read.All' (or equivalent) to expand
-         Azure AD groups attached to those RoleAssignments.
-    Probe both here so misconfigured apps fail fast at connector creation
-    instead of mid-index.
-    """
-    connector.probe_role_assignments_permission()
+    """Runs the named document-sync checks the way the runner does, so a
+    check whose setting is off stays skipped, and the Graph group probe. A
+    failed or inconclusive required check raises, the way the probes do."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.SHAREPOINT,
+        credential_json={},
+        connector=connector,
+        connector_specific_config={
+            "sites": connector.sites,
+            "excluded_sites": connector.excluded_sites,
+            "excluded_paths": connector.excluded_paths,
+            "include_site_pages": connector.include_site_pages,
+            "include_site_documents": connector.include_site_documents,
+            "treat_sharing_link_as_public": connector.treat_sharing_link_as_public,
+            "exhaustive_ad_enumeration": connector.exhaustive_ad_enumeration,
+            "authority_host": connector.authority_host,
+            "graph_api_host": connector.graph_api_host,
+        },
+        source_operations=connector.ops,
+    )
+    checks: list[CapabilityCheck] = build_sharepoint_doc_permission_sync_checks()
+    results: list[CapabilityCheckResult] = run_capability_checks(checks, context)
+    for result in results:
+        if not result.required:
+            continue
+        if result.status is CapabilityCheckStatus.FAILED:
+            raise ConnectorValidationError(result.message)
+        if result.status is CapabilityCheckStatus.INDETERMINATE:
+            raise UnexpectedValidationError(result.message)
     connector.probe_group_members_permission()
 
 

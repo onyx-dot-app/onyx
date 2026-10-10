@@ -20,7 +20,6 @@ from office365.onedrive.drives.drive import Drive
 from office365.onedrive.lists.list import List as GraphList
 from office365.onedrive.sites.site import Site
 from office365.onedrive.sites.sites_with_root import SitesWithRoot
-from office365.runtime.auth.token_response import TokenResponse
 from office365.sharepoint.client_context import ClientContext
 
 from onyx.configs.app_configs import (
@@ -113,13 +112,10 @@ DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType"]
 DRIVE_EXPAND_FIELDS = [f"{DRIVE_LIST_PROPERTY}($select=id)"]
 SITE_PAGE_TYPE = "microsoft.graph.sitePage"
 CANVAS_EXPAND_PARAMS = {"$expand": "canvasLayout"}
-REST_PROBE_TIMEOUT_S = 10
 
 # The SDK's ClientContext caches its first token and never calls back for a
 # new one, so the context is rebuilt well inside the token's 60-75 minute life.
 REST_CTX_MAX_AGE_S = 30 * 60
-
-_UNTESTED = "The permission-sync checks land in the next PR of the stack."
 
 
 def _drive(drive: Drive) -> SharepointDrive:
@@ -311,7 +307,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_auth_method(self) -> MicrosoftAuthMethod:
         """Which credential type signed in. SharePoint REST accepts an app-only
@@ -554,67 +549,32 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
-    )
-    def probe_rest_access(self, *, site_url: str) -> bool:
-        """Whether SharePoint REST accepts a role-assignments read on the
-        site. A transport failure counts as accepted, so a blip does not fail
-        validation: the sync surfaces a real failure."""
-        token: TokenResponse = acquire_token_for_rest(
-            self._auth().app,
-            self._tenant_domain(),
-            self._env().sharepoint_domain_suffix,
-        )
-        probe_url: str = f"{site_url.rstrip('/')}/_api/web/roleassignments?$top=1"
-        try:
-            response: requests.Response = requests.get(
-                probe_url,
-                headers={"Authorization": f"Bearer {token.accessToken}"},
-                timeout=REST_PROBE_TIMEOUT_S,
-            )
-        except requests.RequestException as error:
-            logger.warning(
-                "RoleAssignments permission probe failed for %s (non-blocking): %s",
-                site_url,
-                error,
-            )
-            return True
-        return response.status_code not in (401, 403)
-
-    @source_operation(
-        capabilities={
-            CredentialCapability.DOC_PERMISSION_SYNC,
-            CredentialCapability.EXTERNAL_GROUP_SYNC,
-        },
-        consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def list_role_assignments(
-        self, *, site_url: str, securable: SharepointSecurable
+        self,
+        *,
+        site_url: str,
+        securable: SharepointSecurable,
+        max_rows: int | None = None,
     ) -> list[SharepointRoleAssignment]:
         return self._reads().list_role_assignments(
-            site_url=site_url, securable=securable
-        )
-
-    @source_operation(
-        capabilities={
-            CredentialCapability.DOC_PERMISSION_SYNC,
-            CredentialCapability.EXTERNAL_GROUP_SYNC,
-        },
-        consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
-    )
-    def list_site_group_users(
-        self, *, site_url: str, group_name: str
-    ) -> list[SharepointPrincipal]:
-        return self._reads().list_site_group_users(
-            site_url=site_url, group_name=group_name
+            site_url=site_url, securable=securable, max_rows=max_rows
         )
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+    )
+    def list_site_group_users(
+        self, *, site_url: str, group_name: str, max_rows: int | None = None
+    ) -> list[SharepointPrincipal]:
+        return self._reads().list_site_group_users(
+            site_url=site_url, group_name=group_name, max_rows=max_rows
+        )
+
+    @source_operation(
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
+        consumes=OperationConsumes.CREDENTIAL,
     )
     def get_folder_unique_id(self, *, site_url: str, server_relative_path: str) -> str:
         return self._reads().get_folder_unique_id(
@@ -624,7 +584,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_list_item_id(self, *, item: DriveItemData) -> int | None:
         return self._reads().get_list_item_id(item=item)
@@ -632,18 +591,17 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=(
+            "Read only when treat_sharing_link_as_public is on. The document "
+            "permissions check reads it under that setting."
+        ),
     )
     def list_sharing_link_scopes(self, *, item: DriveItemData) -> list[str]:
         return self._reads().list_sharing_link_scopes(item=item)
 
     @source_operation(
-        capabilities={
-            CredentialCapability.DOC_PERMISSION_SYNC,
-            CredentialCapability.EXTERNAL_GROUP_SYNC,
-        },
+        capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def find_entra_group_id(self, *, display_name: str) -> str | None:
         return self._reads().find_entra_group_id(display_name=display_name)
@@ -651,7 +609,7 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested="The group-sync checks land in the next PR of the stack.",
     )
     def list_entra_group_members(self, *, group_id: str) -> list[EntraMember]:
         return self._reads().list_entra_group_members(group_id=group_id)
@@ -659,24 +617,23 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
-    def list_nested_entra_groups(self, *, group_id: str) -> list[EntraGroup]:
-        return self._reads().list_nested_entra_groups(group_id=group_id)
+    def list_nested_entra_groups(
+        self, *, group_id: str, max_rows: int | None = None
+    ) -> list[EntraGroup]:
+        return self._reads().list_nested_entra_groups(
+            group_id=group_id, max_rows=max_rows
+        )
 
     @source_operation(
-        capabilities={
-            CredentialCapability.DOC_PERMISSION_SYNC,
-            CredentialCapability.EXTERNAL_GROUP_SYNC,
-        },
+        capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested="The group-sync checks land in the next PR of the stack.",
     )
     def list_entra_groups(
         self, *, next_link: str | None = None, page_size: int = ENTRA_PAGE_SIZE
     ) -> EntraPage[EntraGroup]:
-        """Named groups, a page at a time. A page of one is the permission
-        probe for group expansion, which reads under the same grant."""
+        """Named groups, a page at a time, for the exhaustive enumeration."""
         with raise_microsoft_errors():
             return fetch_entra_page(
                 self._graph_api().get_json,
@@ -690,7 +647,7 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested="The group-sync checks land in the next PR of the stack.",
     )
     def list_entra_group_member_page(
         self, *, group_id: str, next_link: str | None = None

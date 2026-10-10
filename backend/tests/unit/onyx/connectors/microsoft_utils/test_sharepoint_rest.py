@@ -196,6 +196,45 @@ def test_role_assignments_come_back_as_plain_data(_mock_sleep: MagicMock) -> Non
 
 
 @patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+def test_role_assignments_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
+    context = MagicMock()
+    expanded = context.web.role_assignments.expand.return_value
+    page = MagicMock()
+    page.current_page = []
+    expanded.top.return_value.get.return_value = page
+
+    assignments = read_role_assignments(
+        context, SharepointSecurable(kind=SharepointSecurableKind.SITE), max_rows=100
+    )
+
+    expanded.top.assert_called_once_with(100)
+    expanded.get_all.assert_not_called()
+    assert assignments == []
+
+
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+def test_site_group_users_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
+    context = MagicMock()
+    users = context.web.site_groups.get_by_name.return_value.users
+    page = MagicMock()
+    page.current_page = [
+        MagicMock(
+            principal_type=1,
+            login_name="i:0#.f|membership|a@x.com",
+            title="A",
+            user_principal_name="a@x.com",
+        )
+    ]
+    users.top.return_value.get.return_value = page
+
+    principals = read_site_group_users(context, "Members", max_rows=50)
+
+    users.top.assert_called_once_with(50)
+    users.get_all.assert_not_called()
+    assert [principal.title for principal in principals] == ["A"]
+
+
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
 def test_incomplete_principals_are_skipped(_mock_sleep: MagicMock) -> None:
     complete = MagicMock(
         principal_type=8,

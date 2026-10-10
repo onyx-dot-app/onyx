@@ -84,7 +84,6 @@ from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
@@ -122,7 +121,6 @@ def is_site_excluded(site_url: str, excluded_site_patterns: list[str]) -> bool:
 # validation time. Each probe is one HTTP round-trip, so we trade exhaustive
 # coverage for keeping connector creation responsive on tenants with many
 # configured sites.
-ROLE_ASSIGNMENTS_PROBE_MAX_SITES = 5
 
 
 class SiteDescriptor(BaseModel):
@@ -175,6 +173,16 @@ def _site_page_in_time_window(
     if last_modified is None:
         return True
     return timestamp_in_window(last_modified, start, end)
+
+
+def build_folder_server_relative_path(drive_web_url: str, folder_path: str) -> str:
+    """The decoded server-relative path SharePoint uses to find a folder.
+
+    Uses the library's web URL, not its display name: SharePoint strips
+    characters like "&" from the library URL, and renames keep the old URL.
+    """
+    library_path = unquote(urlsplit(drive_web_url).path).rstrip("/")
+    return f"{library_path}/{unquote(folder_path)}"
 
 
 def _drive_url_name(drive_web_url: str | None) -> str | None:
@@ -273,11 +281,6 @@ def _validate_credential_fields(credentials: dict[str, Any]) -> None:
         raise ConnectorValidationError(
             "Private key and certificate password are required for certificate authentication"
         )
-
-
-def _probe_rest_access(ops: SharepointSourceOperations, site_url: str) -> bool:
-    # The parallel runner passes positionals and the operation is keyword-only.
-    return ops.probe_rest_access(site_url=site_url)
 
 
 def _create_document_failure(
@@ -775,61 +778,6 @@ class SharepointConnector(
             self._ops.resolve_tenant_domain() if self._ops is not None else None
         )
         validate_site_url(site_url, self.sharepoint_domain_suffix, tenant_domain)
-
-    def probe_role_assignments_permission(self) -> None:
-        """Verify the Azure AD app can read SharePoint RoleAssignments.
-
-        Required for permission sync (RoleAssignments enumeration uses the
-        SharePoint REST surface, which is granted separately from Graph and
-        can be granted unevenly across sites under the Sites.Selected model).
-        Probes up to the first ROLE_ASSIGNMENTS_PROBE_MAX_SITES configured
-        sites in parallel and fails if any of them rejects the request, so
-        per-site permission gaps surface at validation time rather than
-        mid-index. Both checks need loaded credentials. The site probe also
-        needs configured sites.
-        """
-        if self._ops is None:
-            return
-
-        # No permission grant can make a credential work that SharePoint REST
-        # will not accept a token from.
-        if not self.ops.get_auth_method().supports_sharepoint_rest:
-            raise ConnectorValidationError(
-                "Permission sync needs the SharePoint REST API, which only accepts "
-                "app-only tokens from certificate authentication. This credential "
-                "uses a client secret, so SharePoint denies the request no matter "
-                "which permissions are granted. Recreate the credential with "
-                "Certificate Authentication, or turn permission sync off."
-            )
-
-        if not self.sites:
-            return
-
-        sites_to_probe = self.sites[:ROLE_ASSIGNMENTS_PROBE_MAX_SITES]
-        # A probe that raised (a token Azure AD would not issue) answers None,
-        # which is not a refusal: the sync surfaces a real failure.
-        results = run_functions_tuples_in_parallel(
-            [(_probe_rest_access, (self.ops, site_url)) for site_url in sites_to_probe],
-            allow_failures=True,
-        )
-        unauthorized_sites: list[str] = [
-            site_url
-            for site_url, authorized in zip(sites_to_probe, results, strict=True)
-            if authorized is False
-        ]
-
-        if not unauthorized_sites:
-            return
-
-        sites_summary = ", ".join(unauthorized_sites)
-        raise ConnectorValidationError(
-            "The Azure AD app registration is missing the required SharePoint permission "
-            "to read role assignments on the following site(s): "
-            f"{sites_summary}. Please grant 'Sites.FullControl.All' "
-            "(application permission) in the Azure portal and re-run admin consent. "
-            "If using the 'Sites.Selected' model, ensure the app has been explicitly "
-            "granted full-control on each affected site collection."
-        )
 
     def probe_group_members_permission(self) -> None:
         """Verify the Azure AD app can enumerate Azure AD group members via Graph.
@@ -1459,17 +1407,6 @@ class SharepointConnector(
         encoded_path = quote(unquote(folder_path), safe="/")
         return f"{drive.web_url.rstrip('/')}/{encoded_path}"
 
-    def _build_folder_server_relative_path(
-        self, drive_web_url: str, folder_path: str
-    ) -> str:
-        """Build the decoded server-relative path SharePoint uses to find a folder.
-
-        Uses the library's web URL, not its display name: SharePoint strips
-        characters like "&" from the library URL, and renames keep the old URL.
-        """
-        library_path = unquote(urlsplit(drive_web_url).path).rstrip("/")
-        return f"{library_path}/{unquote(folder_path)}"
-
     def _yield_site_hierarchy_node(
         self,
         site_descriptor: SiteDescriptor,
@@ -1563,7 +1500,7 @@ class SharepointConnector(
             checkpoint.seen_hierarchy_node_raw_ids.add(folder_url)
             external_access = None
             if include_permissions:
-                folder_server_relative_path = self._build_folder_server_relative_path(
+                folder_server_relative_path = build_folder_server_relative_path(
                     drive.web_url, current_path
                 )
                 # One folder must not fail the whole sync. A node without

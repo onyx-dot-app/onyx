@@ -72,7 +72,9 @@ class EntraGroupReader(Protocol):
 
     def list_entra_group_members(self, *, group_id: str) -> list[EntraMember]: ...
 
-    def list_nested_entra_groups(self, *, group_id: str) -> list[EntraGroup]: ...
+    def list_nested_entra_groups(
+        self, *, group_id: str, max_rows: int | None = None
+    ) -> list[EntraGroup]: ...
 
     def list_entra_groups(
         self, *, next_link: str | None = None
@@ -87,11 +89,15 @@ class SharepointPermissionReader(EntraGroupReader, Protocol):
     """The reads behind SharePoint permission sync."""
 
     def list_role_assignments(
-        self, *, site_url: str, securable: SharepointSecurable
+        self,
+        *,
+        site_url: str,
+        securable: SharepointSecurable,
+        max_rows: int | None = None,
     ) -> list[SharepointRoleAssignment]: ...
 
     def list_site_group_users(
-        self, *, site_url: str, group_name: str
+        self, *, site_url: str, group_name: str, max_rows: int | None = None
     ) -> list[SharepointPrincipal]: ...
 
     def get_folder_unique_id(
@@ -152,8 +158,12 @@ def _check_read_size(rows: list[Any], label: str) -> None:
 
 
 def read_role_assignments(
-    context: ClientContext, securable: SharepointSecurable
+    context: ClientContext,
+    securable: SharepointSecurable,
+    max_rows: int | None = None,
 ) -> list[SharepointRoleAssignment]:
+    """Every assignment, or with ``max_rows`` one page of at most that many,
+    for a probe that must not walk a large permission list."""
     assignments: list[SharepointRoleAssignment] = []
 
     def collect(page: RoleAssignmentCollection) -> None:
@@ -174,18 +184,29 @@ def read_role_assignments(
             )
         _check_read_size(assignments, "Role assignments")
 
+    role_assignments = _securable_object(context, securable).role_assignments.expand(
+        _ROLE_ASSIGNMENT_EXPAND
+    )
+    if max_rows is not None:
+        page: RoleAssignmentCollection = sleep_and_retry(
+            role_assignments.top(max_rows).get(), "list_role_assignments"
+        )
+        collect(page)
+        return assignments
     sleep_and_retry(
-        _securable_object(context, securable)
-        .role_assignments.expand(_ROLE_ASSIGNMENT_EXPAND)
-        .get_all(page_size=ROLE_ASSIGNMENTS_PAGE_SIZE, page_loaded=collect),
+        role_assignments.get_all(
+            page_size=ROLE_ASSIGNMENTS_PAGE_SIZE, page_loaded=collect
+        ),
         "list_role_assignments",
     )
     return assignments
 
 
 def read_site_group_users(
-    context: ClientContext, group_name: str
+    context: ClientContext, group_name: str, max_rows: int | None = None
 ) -> list[SharepointPrincipal]:
+    """Every member, or with ``max_rows`` one page of at most that many, for
+    a probe that must not walk a large group."""
     users: list[SharepointPrincipal] = []
 
     def collect(page: UserCollection) -> None:
@@ -197,6 +218,12 @@ def read_site_group_users(
         _check_read_size(users, f"Site group `{group_name}`")
 
     group = context.web.site_groups.get_by_name(group_name)
+    if max_rows is not None:
+        page: UserCollection = sleep_and_retry(
+            group.users.top(max_rows).get(), "list_site_group_users"
+        )
+        collect(page)
+        return users
     sleep_and_retry(group.users.get_all(page_loaded=collect), "list_site_group_users")
     return users
 
@@ -331,10 +358,11 @@ def read_entra_group_members(
 
 
 def read_nested_entra_groups(
-    graph_client: GraphClient, group_id: str
+    graph_client: GraphClient, group_id: str, max_rows: int | None = None
 ) -> list[EntraGroup]:
-    """One group's direct member groups. Graph filters to groups server side,
-    so a group of thousands of users costs one page instead of every member."""
+    """One group's direct member groups, or with ``max_rows`` one page of at
+    most that many. Graph filters to groups server side, so a group of
+    thousands of users costs one page instead of every member."""
     groups: list[EntraGroup] = []
 
     def collect(page: DirectoryObjectCollection) -> None:
@@ -353,10 +381,14 @@ def read_nested_entra_groups(
             "microsoft.graph.group", graph_client.groups[group_id].members.resource_path
         ),
     )
-    sleep_and_retry(
-        member_groups.select(["id", "displayName"]).get_all(page_loaded=collect),
-        "list_nested_entra_groups",
-    )
+    selected = member_groups.select(["id", "displayName"])
+    if max_rows is not None:
+        page: DirectoryObjectCollection = sleep_and_retry(
+            selected.top(max_rows).get(), "list_nested_entra_groups"
+        )
+        collect(page)
+        return groups
+    sleep_and_retry(selected.get_all(page_loaded=collect), "list_nested_entra_groups")
     return groups
 
 
@@ -375,16 +407,24 @@ class SharepointRestReads(SharepointPermissionReader):
         self._graph_api = graph_api
 
     def list_role_assignments(
-        self, *, site_url: str, securable: SharepointSecurable
+        self,
+        *,
+        site_url: str,
+        securable: SharepointSecurable,
+        max_rows: int | None = None,
     ) -> list[SharepointRoleAssignment]:
         with raise_microsoft_errors():
-            return read_role_assignments(self._rest_context(site_url), securable)
+            return read_role_assignments(
+                self._rest_context(site_url), securable, max_rows
+            )
 
     def list_site_group_users(
-        self, *, site_url: str, group_name: str
+        self, *, site_url: str, group_name: str, max_rows: int | None = None
     ) -> list[SharepointPrincipal]:
         with raise_microsoft_errors():
-            return read_site_group_users(self._rest_context(site_url), group_name)
+            return read_site_group_users(
+                self._rest_context(site_url), group_name, max_rows
+            )
 
     def get_folder_unique_id(self, *, site_url: str, server_relative_path: str) -> str:
         with raise_microsoft_errors():
@@ -408,9 +448,11 @@ class SharepointRestReads(SharepointPermissionReader):
         with raise_microsoft_errors():
             return read_entra_group_members(self._graph_client, group_id)
 
-    def list_nested_entra_groups(self, *, group_id: str) -> list[EntraGroup]:
+    def list_nested_entra_groups(
+        self, *, group_id: str, max_rows: int | None = None
+    ) -> list[EntraGroup]:
         with raise_microsoft_errors():
-            return read_nested_entra_groups(self._graph_client, group_id)
+            return read_nested_entra_groups(self._graph_client, group_id, max_rows)
 
     def list_entra_groups(
         self, *, next_link: str | None = None
