@@ -183,7 +183,62 @@ def make_jsm_connector(
             comment_email_blacklist=kwargs.pop("comment_email_blacklist", []),
             **kwargs,
         )
-        connector._jira_client = mock_jira_client
+        # The production Jira connector uses a credential-scoped operations
+        # gateway; route the legacy test mock through the same public methods.
+        from onyx.connectors.jira.source_operations import JiraSourceOperations
+
+        gateway = MagicMock(spec=JiraSourceOperations)
+        gateway._is_cloud.return_value = False
+
+        def search_issues(
+            *, jql: str, start_at: int, max_results: int, fields: str | None = None
+        ) -> list[dict[str, Any]]:
+            issues = mock_jira_client.search_issues(
+                jql_str=jql,
+                startAt=start_at,
+                maxResults=max_results,
+                fields=fields,
+            )
+            return [issue.raw if hasattr(issue, "raw") else issue for issue in issues]
+
+        attachment_cache: dict[str, Any] = {}
+
+        def list_issue_attachments(*, issue_key: str) -> list[dict[str, Any]]:
+            result = mock_jira_client.issue(issue_key, fields="attachment")
+            attachments = result.fields.attachment or []
+            metadata = []
+            for attachment in attachments:
+                attachment_id = str(attachment.id)
+                attachment_cache[attachment_id] = attachment
+                metadata.append({
+                    "id": attachment_id,
+                    "filename": attachment.filename,
+                    "size": attachment.size,
+                    "mimeType": attachment.mimeType,
+                    "created": attachment.created,
+                    "content": attachment.content,
+                })
+            return metadata
+
+        def download_attachment(*, attachment_id: str) -> bytes:
+            return attachment_cache[attachment_id].get()
+
+        def get_project(*, project_key: str) -> dict[str, Any]:
+            project = mock_jira_client.project(project_key)
+            if isinstance(project, dict):
+                return project
+            return {
+                "key": project_key,
+                "projectTypeKey": getattr(project, "projectTypeKey", None),
+            }
+
+        gateway.search_issues.side_effect = search_issues
+        gateway.list_fields.side_effect = lambda: mock_jira_client.fields()
+        gateway.list_issue_attachments.side_effect = list_issue_attachments
+        gateway.download_attachment.side_effect = download_attachment
+        gateway.get_project.side_effect = get_project
+        connector._source_operations = gateway
+        connector._jira_client = mock_jira_client  # Legacy assertions only.
         return connector
 
     return _make
