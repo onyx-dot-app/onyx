@@ -1,0 +1,26 @@
+name: Furox JSM compatibility smoke test
+
+on:
+  push:
+    branches:
+      - fix/jsm-upstream-compat-v2
+    paths:
+      - "backend/onyx/connectors/jira/**"
+      - "backend/onyx/connectors/jira_service_management/**"
+      - "backend/tests/unit/onyx/connectors/jira_service_management/**"
+      - ".github/workflows/furox-jsm-compat.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  python-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile Python modules and tests
+        run: |
+          python -m compileall -q backend/onyx/connectors/jira backend/onyx/connectors/jira_service_management backend/tests/unit/onyx/connectors/jira_service_management
