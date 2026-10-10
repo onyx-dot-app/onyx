@@ -2172,6 +2172,81 @@ class CredentialCapabilityReportRow(Base):
     )
 
 
+class CapabilityCheckRunRow(Base):
+    """One capability-check run attempt; the table is append-only history.
+
+    Each attempt owns its row for life, so there is no upsert, no fencing, and
+    no shared-row clobber rule (contrast ``CredentialCapabilityReportRow``).
+    ``run_started_at`` doubles as the row's creation time by construction; a
+    time-based retention sweep bounds the table. ``connector_config`` records
+    the run's inputs; credential inputs stay ``credential_id``-only -- never
+    store credential material here.
+    """
+
+    __tablename__ = "capability_check_run"
+
+    run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    credential_id: Mapped[int] = mapped_column(
+        ForeignKey("credential.id", ondelete="CASCADE"), nullable=False
+    )
+    connector_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector.id", ondelete="CASCADE"), nullable=True
+    )
+    # Denormalized for support queries by source.
+    source: Mapped[DocumentSource] = mapped_column(
+        Enum(DocumentSource, native_enum=False), nullable=False
+    )
+    # Groups the runs of one connector-creation form session.
+    creation_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True
+    )
+    trigger: Mapped[CapabilityCheckTrigger] = mapped_column(
+        Enum(CapabilityCheckTrigger, native_enum=False), nullable=False
+    )
+    # The check-id subset this run was asked to execute, canonically sorted;
+    # None is a full-registry run. ``none_as_null``: the dedup lookup matches
+    # absent inputs with IS NULL, which a default-rendered JSON 'null' evades.
+    check_ids_requested: Mapped[list[str] | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    # Snapshot of the connector config the run executed against; None for
+    # config-less credential-time runs. Paired with ``connector_config_hash``.
+    connector_config: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+    # sha256 of the canonical config JSON; the idempotency/dedup key.
+    connector_config_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    run_status: Mapped[CapabilityReportRunStatus] = mapped_column(
+        Enum(CapabilityReportRunStatus, native_enum=False), nullable=False
+    )
+    run_started_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    run_finished_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Serialized ``CapabilityCheckResult`` rows, written as each check
+    # completes; the list is final once the run reaches a terminal status.
+    results: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        postgresql.JSONB(none_as_null=True), nullable=True
+    )
+
+    __table_args__ = (
+        # Serves the input-hash dedup lookup and, by prefix, every
+        # per-credential query.
+        Index(
+            "ix_capability_check_run_dedup",
+            "credential_id",
+            "connector_config_hash",
+            "run_started_at",
+        ),
+        # Serves the retention sweep's delete-by-age.
+        Index("ix_capability_check_run_run_started_at", "run_started_at"),
+    )
+
+
 class FederatedConnector(Base):
     __tablename__ = "federated_connector"
 
