@@ -94,6 +94,7 @@ only added to `beat_task_templates` when the build ships the EE code
 | Gmail | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY` (5 min) | no group sync |
 | Zoom | `DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY`, but `doc_sync_func=mock_doc_sync` (a no-op; see §4.3) | no group sync |
 | Salesforce | none (`doc_sync_config=None`) | none; `censoring_config` only (§4.5) |
+| Notion | none (`doc_sync_config=None`) | none; `censoring_config` only (§4.6) |
 
 Every value is env-overridable and is additionally multiplied by
 `OnyxRuntime.get_doc_permission_sync_multiplier()` in
@@ -203,8 +204,8 @@ three independent, optional pieces:
   source level, not per cc_pair, `sync_params.py:_SOURCE_TO_SYNC_CONFIG`
   entries for `CONFLUENCE`/`JIRA`).
 - `censoring_config: CensoringConfig | None`. A `chunk_censoring_func`
-  (`CensoringFuncType`). Salesforce is the only current user (§4.5); it has
-  `censoring_config` set and `doc_sync_config=None`.
+  (`CensoringFuncType`). Salesforce (§4.5) and Notion (§4.6) are the current
+  users; both have `censoring_config` set and `doc_sync_config=None`.
 
 A source with none of the three is not in the dict at all;
 `get_source_perm_sync_config` returns `None` and
@@ -422,6 +423,27 @@ This means Salesforce has **no doc-sync `PermissionSyncAttempt` history at
 all** for admins to inspect; "is Salesforce permission sync working" is a
 question about `censor_salesforce_chunks` behaving correctly per query, not
 about a background job's status.
+
+### 4.6 Notion: censoring through the user's own MCP connection
+
+Notion's API exposes no page permissions, so Notion is registered like
+Salesforce with `censoring_config` only, but with
+`censors_private_connectors=False`: only documents under a perm-synced Notion
+cc_pair are open at retrieval and censored afterwards, while private Notion
+connectors keep their group ACLs untouched.
+`ee/onyx/external_permissions/notion/censoring.py:censor_notion_chunks` fetches
+each retrieved page through Notion MCP (`notion-fetch`) with the searching
+user's own OAuth token, resolved from the per-user `MCPConnectionConfig` of the
+MCP server whose URL host is `mcp.notion.com`
+(`server/features/mcp/credentials.py:resolve_mcp_credentials`). A fetch that
+succeeds allows the page, a Notion `object_not_found` or `validation_error`
+denies it, and anything else (rate limit, transport failure, no connection)
+drops the page for that query without caching. Answers are cached per user
+and page in the `CacheBackend` for ten minutes, and at most fifty uncached
+pages are checked per query over one MCP session
+(`server/features/mcp/client.py:call_mcp_tools_in_one_session`). A user who
+has not connected Notion MCP sees no results from a perm-synced Notion
+connector.
 
 ---
 

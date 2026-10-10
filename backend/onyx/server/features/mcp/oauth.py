@@ -30,7 +30,7 @@ from onyx.auth.oauth_token_manager import ensure_offline_access_auth_params
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.cache.locks import async_cache_shared_lock, cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode, MCPTransport
 from onyx.db.mcp import (
     get_connection_config_by_id,
     update_connection_config,
@@ -45,6 +45,7 @@ from onyx.server.features.mcp.client_metadata import (
     validated_mcp_oauth_client_metadata_url,
 )
 from onyx.server.features.mcp.credentials import (
+    ResolvedMCPCredentials,
     extract_connection_data,
     mcp_oauth_client_information_fingerprint,
     mcp_oauth_connection_headers_fingerprint,
@@ -1096,6 +1097,38 @@ def make_oauth_provider(
     if known_metadata is not None:
         provider.context.oauth_metadata = known_metadata
     return provider
+
+
+def mcp_call_auth(
+    mcp_server: MCPServer | MCPServerConnection,
+    credentials: ResolvedMCPCredentials,
+    headers: dict[str, str],
+) -> OAuthClientProvider | None:
+    """Auth for one call to an OAuth server with a stored grant: a provider
+    that refreshes an expired token mid-call over streamable HTTP, or, over
+    SSE where httpx auth cannot run, a proactive refresh written into
+    `headers`. None otherwise, and a failed proactive refresh keeps the
+    existing header."""
+    if (
+        mcp_server.auth_type != MCPAuthenticationType.OAUTH
+        or credentials.connection_config_id is None
+    ):
+        return None
+    if mcp_server.transport != MCPTransport.SSE:
+        return make_oauth_provider(mcp_server, credentials.connection_config_id, None)
+    try:
+        refreshed_header = refresh_mcp_oauth_token_if_expired(
+            mcp_server, credentials.connection_config_id
+        )
+    except Exception:
+        logger.exception(
+            "Proactive SSE OAuth token refresh failed for MCP server %s; using existing token",
+            mcp_server.name,
+        )
+        return None
+    if refreshed_header:
+        headers["Authorization"] = refreshed_header
+    return None
 
 
 async def complete_mcp_oauth_authorization(

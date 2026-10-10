@@ -3025,7 +3025,10 @@
           "sync": {
             "description": "{appName} synchronisiert Berechtigungen mit der Quelle. Nutzer können nur durchsuchen, was sie in der Quelle sehen können.",
             "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechsle zu einer unterstützten Authentifizierungsmethode.",
-            "title": "Mit {source} synchronisieren"
+            "title": "Mit {source} synchronisieren",
+            "sourceNotice": {
+              "notion": "Notion gibt keine Seitenberechtigungen weiter. Jedes Ergebnis wird bei der Suche über die eigene Notion-MCP-Verbindung des Nutzers geprüft. Registriere Notion MCP (https://mcp.notion.com/mcp) als MCP-Server mit OAuth pro Nutzer und bitte alle Nutzer, die Verbindung herzustellen. Wer nicht verbunden ist, sieht keine Ergebnisse aus diesem Connector."
+            }
           },
           "title": "Dokumentzugriff"
         },

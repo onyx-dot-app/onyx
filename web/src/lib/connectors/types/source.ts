@@ -99,6 +99,7 @@ export const validAutoSyncSources = [
   ValidSources.Box,
   ValidSources.OneDrive,
   ValidSources.Zoom,
+  ValidSources.Notion,
 ] as const;
 
 // Create a type from the array elements

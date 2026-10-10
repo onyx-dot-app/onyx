@@ -3025,7 +3025,10 @@
           "sync": {
             "description": "{appName}이(가) 소스와 권한을 동기화합니다. 사용자는 소스에서 볼 수 있는 항목만 검색할 수 있습니다.",
             "disabledReason": "현재 자격 증명의 인증 방식은 권한 자동 동기화를 지원하지 않습니다. 지원되는 인증 방식으로 변경해 주세요.",
-            "title": "{source}와(과) 동기화"
+            "title": "{source}와(과) 동기화",
+            "sourceNotice": {
+              "notion": "Notion은 페이지 권한을 공유하지 않습니다. 각 결과는 검색 시 사용자 본인의 Notion MCP 연결을 통해 확인됩니다. Notion MCP (https://mcp.notion.com/mcp)를 사용자별 OAuth MCP 서버로 등록하고 각 사용자에게 연결을 요청하세요. 연결하지 않은 사용자에게는 이 커넥터의 결과가 표시되지 않습니다."
+            }
           },
           "title": "문서 액세스"
         },
