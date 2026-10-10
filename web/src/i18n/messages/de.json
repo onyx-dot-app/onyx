@@ -12366,6 +12366,10 @@
         "operationWait": "Bitte warte, bis der aktuelle Vorgang abgeschlossen ist.",
         "sandboxWait": "Bitte warte, bis die Sandbox initialisiert ist",
         "scheduledRunWait": "Bitte warte, bis die geplante Ausführung abgeschlossen ist."
+      },
+      "loadError": {
+        "title": "Die Sitzung konnte nicht geladen werden",
+        "retry": "Erneut versuchen"
       }
     },
     "compaction": {

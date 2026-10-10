@@ -670,6 +670,8 @@ export interface BuildSessionData {
   turnGeneration: number;
   loadGeneration: number;
   error: string | null;
+  /** History/runtime requests fail independently of the current turn. */
+  loadError: string | null;
   webappUrl: string | null;
   /** Backend sandbox state plus transient client-owned lifecycle states. */
   sandbox: SandboxRuntimeState | null;
@@ -682,6 +684,7 @@ export interface BuildSessionData {
   origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
+  /** Session metadata, including the saved model, is available. */
   isLoaded: boolean;
   contextUsage: ContextUsage | null;
   outputPanelOpen: boolean;
@@ -1045,7 +1048,7 @@ export function canReuseSession(
 ): boolean {
   return (
     session?.isLoaded === true &&
-    session.error === null &&
+    session.loadError === null &&
     session.pendingCompletedTurnId === null &&
     session.sandbox?.status !== "sleeping" &&
     session.sandbox?.status !== "terminated" &&
@@ -1126,6 +1129,7 @@ const createInitialSessionData = (
   turnGeneration: 0,
   loadGeneration: 0,
   error: null,
+  loadError: null,
   webappUrl: null,
   sandbox: null,
   agentProvider: null,
@@ -1715,7 +1719,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       get().sessions.get(sessionId);
     if (!loadingSession) return;
     const loadGeneration: number = loadingSession.loadGeneration + 1;
-    updateSessionData(sessionId, { loadGeneration });
+    updateSessionData(sessionId, { loadGeneration, loadError: null });
     const isCurrentRuntimeLoad: () => boolean = () => {
       const current: BuildSessionData | undefined =
         get().sessions.get(sessionId);
@@ -1833,8 +1837,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         contextUsage: useDbMessages
           ? deriveContextUsage(messages)
           : currentSession!.contextUsage,
-        error: null,
-        isLoaded: true,
       });
 
       if (keepCompletedTranscript) {
@@ -1877,6 +1879,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             : sessionData.sandbox,
         agentProvider: sessionData.agent_provider,
         agentModel: sessionData.agent_model,
+        isLoaded: true,
         ...(canApplySkillsStale() && { skillsStale: sessionData.skills_stale }),
         origin: sessionData.origin,
       });
@@ -1967,7 +1970,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       if (!isCurrentLoad()) return;
       console.error("Failed to load session:", err);
       updateSessionData(sessionId, {
-        error: (err as Error).message,
+        loadError: err instanceof Error ? err.message : String(err),
       });
     } finally {
       const completedSession: BuildSessionData | undefined =

@@ -612,7 +612,7 @@ describe("loadSession restore status", () => {
 
     await waitFor(() => {
       const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
-      expect(session?.isLoaded).toBe(true);
+      expect(session?.isLoaded).toBe(false);
       expect(session?.messages[0]?.content).toBe("Saved conversation");
     });
     expect(mockedApi.restoreSession).not.toHaveBeenCalled();
@@ -621,16 +621,51 @@ describe("loadSession restore status", () => {
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.sandbox
     ).toBeNull();
 
-    runtime.resolve(sleepingSession() as never);
+    runtime.resolve({
+      ...sleepingSession(),
+      agent_provider: "saved-provider",
+      agent_model: "saved-model",
+    } as never);
     await loading;
     expect(mockedApi.restoreSession).toHaveBeenCalledWith(SESSION_ID);
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)
     ).toMatchObject({
       isLoaded: true,
+      agentProvider: "saved-provider",
+      agentModel: "saved-model",
       sandbox: { status: "running" },
       filesNeedsRefresh: 1,
     });
+  });
+
+  it("keeps a rejected prompt and turn error when revisiting a loaded session", async () => {
+    mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      status: "active",
+      error: "Token budget exceeded",
+      messages: [
+        {
+          id: "rejected",
+          type: "user",
+          content: "Keep this prompt",
+          timestamp: new Date(),
+        },
+      ],
+      streamItems: [
+        { type: "error", id: "budget-error", content: "Token budget exceeded" },
+      ],
+    });
+    const rejected = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    useBuildSessionStore.getState().setCurrentSession("another-session");
+    await useBuildSessionStore.getState().loadSession(SESSION_ID);
+    expect(mockedApi.fetchSession).toHaveBeenCalledTimes(1);
+    expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1);
+    const revisited = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(revisited?.messages).toBe(rejected?.messages);
+    expect(revisited?.streamItems).toBe(rejected?.streamItems);
+    expect(revisited?.error).toBe("Token budget exceeded");
   });
 
   it("retains loaded history after runtime discovery fails and retries on revisit", async () => {
@@ -649,8 +684,9 @@ describe("loadSession restore status", () => {
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)
     ).toMatchObject({
-      isLoaded: true,
-      error: "Runtime unavailable",
+      isLoaded: false,
+      error: null,
+      loadError: "Runtime unavailable",
     });
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.messages[0]
@@ -665,6 +701,7 @@ describe("loadSession restore status", () => {
     ).toMatchObject({
       isLoaded: true,
       error: null,
+      loadError: null,
       sandbox: { status: "running" },
     });
   });
@@ -745,9 +782,7 @@ describe("loadSession restore status", () => {
     mockedApi.fetchSession.mockReturnValueOnce(runtime.promise);
     const loading = useBuildSessionStore.getState().loadSession(SESSION_ID);
     await waitFor(() => {
-      expect(
-        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.isLoaded
-      ).toBe(true);
+      expect(mockedApi.fetchMessages).toHaveBeenCalled();
     });
     const oldInstance = useBuildSessionStore
       .getState()

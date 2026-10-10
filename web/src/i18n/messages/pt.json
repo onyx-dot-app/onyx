@@ -12366,6 +12366,10 @@
         "operationWait": "Aguarde a conclusão da operação atual.",
         "sandboxWait": "Aguarde a inicialização do sandbox",
         "scheduledRunWait": "Aguarde a conclusão da execução agendada."
+      },
+      "loadError": {
+        "title": "Não foi possível carregar a sessão",
+        "retry": "Tentar novamente"
       }
     },
     "compaction": {

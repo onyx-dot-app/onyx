@@ -57,7 +57,7 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
-import { Button, Tooltip } from "@opal/components";
+import { Button, MessageCard, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
@@ -197,6 +197,7 @@ export default function BuildChatPanel({
     (state) => state.consumePreProvisionedSession
   );
   const createSession = useBuildSessionStore((state) => state.createSession);
+  const loadSession = useBuildSessionStore((state) => state.loadSession);
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
   );
@@ -485,8 +486,13 @@ export default function BuildChatPanel({
           timestamp: new Date(),
           attachments,
         });
-        // Stream the response
-        await streamMessage(sessionId, message, chosen, attachments);
+        // Only explicit choices override the saved model.
+        await streamMessage(
+          sessionId,
+          message,
+          modelOverride ?? modelBySession[sessionId] ?? null,
+          attachments
+        );
       } else {
         // New session flow - ALWAYS use pre-provisioned session
         const newSessionId = await consumePreProvisionedSession();
@@ -584,6 +590,7 @@ export default function BuildChatPanel({
       router,
       hasUploadingFiles,
       selectedModel,
+      modelBySession,
       t,
     ]
   );
@@ -809,6 +816,26 @@ export default function BuildChatPanel({
                           />
                         </button>
                       </Tooltip>
+                    </div>
+                  )}
+                  {session?.loadError && scheduledSessionId && (
+                    <div className="pb-2" role="alert">
+                      <MessageCard
+                        variant="error"
+                        title={t("loadError.title")}
+                        description={session.loadError}
+                        rightChildren={
+                          <Button
+                            onClick={() =>
+                              void loadSession(scheduledSessionId, {
+                                force: true,
+                              })
+                            }
+                          >
+                            {t("loadError.retry")}
+                          </Button>
+                        }
+                      />
                     </div>
                   )}
                   {sessionId && session?.skillsStale && (

@@ -45,6 +45,28 @@ describe("useBuildSessionController", () => {
     useBuildSessionStore.getState().setCurrentSession(SESSION_ID);
   });
 
+  it("stops the loading indicator after history fails to load", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      isLoaded: false,
+    });
+    useBuildSessionStore.getState().setControllerLoaded(null);
+    jest.mocked(api.fetchSession).mockResolvedValue({} as never);
+    jest.mocked(api.fetchActiveTurn).mockResolvedValue(null);
+    jest
+      .mocked(api.fetchMessages)
+      .mockRejectedValueOnce(new Error("History unavailable"));
+
+    const { result } = renderHook(() =>
+      useBuildSessionController({ existingSessionId: SESSION_ID })
+    );
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.loadError
+      ).toBe("History unavailable");
+    });
+  });
+
   it("retries a failed restore only after leaving and revisiting the session", async () => {
     const store = () => useBuildSessionStore.getState();
     store().updateSessionData(SESSION_ID, {

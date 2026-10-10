@@ -385,12 +385,16 @@ resending does not scrap the interrupted turn's rendered output today.
 
 Session loading reads persisted messages before waiting for runtime discovery or sandbox restoration.
 Runtime failures keep the loaded transcript and permit another load when the user revisits.
+History renders before session metadata is ready; the model picker waits for the saved model.
+Existing-session sends omit the model unless the user explicitly selects one, preserving the server-owned session model.
+Load failures use `loadError` and show a retry action without erasing history.
+Turn errors do not invalidate cached sessions or discard rejected prompts.
 Sleeping, terminated, and failed cached sandboxes also load again on entry, including return from New build.
 Load responses must match the session instance, turn generation, and latest load generation.
 Restoration refreshes files and output inventory when the sandbox is running, even if a newer turn has started.
 App readiness runs separately and controls only the iframe remount.
 Readiness polling survives a successor load for the same session instance and sandbox.
-Readiness updates preserve the newer turn and require the same session instance, load, and sandbox.
+Readiness updates preserve the newer turn and require the same session instance and sandbox.
 Cached skill notices accept server state only if no newer turn or skill reload intervened.
 
 

@@ -12366,6 +12366,10 @@
         "operationWait": "Please wait for the current operation to complete.",
         "sandboxWait": "Please wait for sandbox to initialize",
         "scheduledRunWait": "Please wait for the scheduled run to finish."
+      },
+      "loadError": {
+        "title": "Could not load the session",
+        "retry": "Try again"
       }
     },
     "compaction": {

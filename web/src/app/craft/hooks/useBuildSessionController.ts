@@ -87,7 +87,7 @@ export function useBuildSessionController({
   const isLoading = useBuildSessionStore((state) => {
     if (!state.currentSessionId) return false;
     const session = state.sessions.get(state.currentSessionId);
-    return session ? !session.isLoaded : false;
+    return session ? !session.isLoaded && session.loadError === null : false;
   });
 
   const isStreaming = useBuildSessionStore((state) => {

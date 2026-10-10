@@ -12366,6 +12366,10 @@
         "operationWait": "현재 작업이 완료될 때까지 기다려 주세요.",
         "sandboxWait": "샌드박스가 초기화될 때까지 기다려 주세요",
         "scheduledRunWait": "예약된 실행이 완료될 때까지 기다려 주세요."
+      },
+      "loadError": {
+        "title": "세션을 불러올 수 없습니다",
+        "retry": "다시 시도"
       }
     },
     "compaction": {

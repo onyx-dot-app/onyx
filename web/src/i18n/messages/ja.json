@@ -12366,6 +12366,10 @@
         "operationWait": "現在の操作が完了するまでお待ちください。",
         "sandboxWait": "サンドボックスの初期化をお待ちください",
         "scheduledRunWait": "スケジュール実行が完了するまでお待ちください。"
+      },
+      "loadError": {
+        "title": "セッションを読み込めませんでした",
+        "retry": "再試行"
       }
     },
     "compaction": {

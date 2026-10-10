@@ -12366,6 +12366,10 @@
         "operationWait": "请等待当前操作完成。",
         "sandboxWait": "请等待沙箱初始化",
         "scheduledRunWait": "请等待计划运行结束。"
+      },
+      "loadError": {
+        "title": "无法加载会话",
+        "retry": "重试"
       }
     },
     "compaction": {
