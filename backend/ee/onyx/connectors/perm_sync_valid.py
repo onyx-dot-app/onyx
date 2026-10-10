@@ -8,6 +8,9 @@ from onyx.connectors.capability_checks.models import CapabilityCheckContext
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.hubspot.capability_checks import (
+    build_hubspot_doc_permission_sync_checks,
+)
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.onedrive.capability_checks import (
@@ -102,7 +105,17 @@ def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
 
 
 def validate_hubspot_perm_sync(connector: HubSpotConnector) -> None:
-    connector.probe_permission_sync_scopes()
+    """A missing scope fails the attempt with the refused call named, instead of
+    a sync that leaves every record hidden."""
+    context: CapabilityCheckContext = CapabilityCheckContext(
+        source=DocumentSource.HUBSPOT,
+        credential_json={},
+        connector=connector,
+        connector_specific_config=connector.settings.model_dump(),
+        source_operations=connector.ops,
+    )
+    for check in build_hubspot_doc_permission_sync_checks():
+        check.run(context)
 
 
 # The single source of truth for which connectors carry a real perm-sync probe:
