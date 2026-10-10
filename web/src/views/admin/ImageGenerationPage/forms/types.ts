@@ -33,7 +33,8 @@ export interface ImageGenFormWrapperProps<
   transformValues?: (values: T) => ImageGenSubmitPayload;
   getInitialValuesFromCredentials?: (
     credentials: ImageGenerationCredentials,
-    imageProvider: ImageProvider
+    imageProvider: ImageProvider,
+    existingConfig?: ImageGenerationConfigView
   ) => Partial<T>;
 }
 

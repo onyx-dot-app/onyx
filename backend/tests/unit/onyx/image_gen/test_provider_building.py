@@ -50,15 +50,28 @@ def test_build_openai_provider_from_api_key_and_base() -> None:
     assert image_gen_provider.max_reference_images == 16
 
 
-def test_build_openai_provider_fails_no_api_key() -> None:
+def test_build_openai_provider_from_api_base_only() -> None:
     credentials = _get_default_image_gen_creds()
 
     credentials.api_base = "test"
 
     provider = OPENAI_PROVIDER
 
+    image_gen_provider = get_image_generation_provider(provider, credentials)
+
+    assert isinstance(image_gen_provider, OpenAIImageGenerationProvider)
+    assert image_gen_provider._api_key == ""
+    assert image_gen_provider._api_base == "test"
+
+
+def test_build_openai_provider_fails_no_credentials() -> None:
+    credentials = _get_default_image_gen_creds()
+
+    provider = OPENAI_PROVIDER
+
     with pytest.raises(ImageProviderCredentialsError):
         get_image_generation_provider(provider, credentials)
+
 
 
 def test_build_azure_provider_from_api_key_and_base_and_version() -> None:
@@ -303,6 +316,52 @@ def test_openai_provider_rejects_reference_images_for_unsupported_model() -> Non
             n=1,
             reference_images=[ReferenceImage(data=b"image-1", mime_type="image/png")],
         )
+
+
+def test_openai_provider_unauthenticated_fallback_api_key() -> None:
+    provider = OpenAIImageGenerationProvider(
+        api_key="",
+        api_base="http://localhost:7860/v1",
+    )
+    expected_response = object()
+
+    with patch("litellm.image_generation", return_value=expected_response) as mock_gen:
+        response = provider.generate_image(
+            prompt="draw a sunset",
+            model="custom-flux-model",
+            size="1024x1024",
+            n=1,
+        )
+
+    assert response is expected_response
+    mock_gen.assert_called_once()
+    assert mock_gen.call_args.kwargs["api_key"] == "not-needed"
+    assert mock_gen.call_args.kwargs["api_base"] == "http://localhost:7860/v1"
+
+
+def test_openai_provider_custom_api_base_allows_edits() -> None:
+    provider = OpenAIImageGenerationProvider(
+        api_key="",
+        api_base="http://localhost:7860/v1",
+    )
+    reference_images = [
+        ReferenceImage(data=b"image-1-bytes", mime_type="image/png"),
+    ]
+    expected_response = object()
+
+    with patch("litellm.image_edit", return_value=expected_response) as mock_edit:
+        response = provider.generate_image(
+            prompt="edit this custom image",
+            model="custom-flux-model",
+            size="1024x1024",
+            n=1,
+            reference_images=reference_images,
+        )
+
+    assert response is expected_response
+    mock_edit.assert_called_once()
+    assert mock_edit.call_args.kwargs["api_key"] == "not-needed"
+    assert mock_edit.call_args.kwargs["api_base"] == "http://localhost:7860/v1"
 
 
 def test_azure_provider_uses_image_generation_without_reference_images() -> None:
