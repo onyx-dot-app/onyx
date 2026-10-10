@@ -42,17 +42,15 @@ def sharepoint_group_sync(
 
     logger.info("Processing %s sites for group sync", len(site_descriptors))
 
+    # The reader opens each site through the connector, so the site host is
+    # checked against the tenant the REST token is minted for.
+    reader = connector.permission_reader()
     for site_descriptor in site_descriptors:
         logger.debug("Processing site: %s", site_descriptor.url)
 
-        # Goes through the connector so the site host is checked against the
-        # tenant the REST token is minted for.
-        ctx = connector._create_rest_client_context(site_descriptor.url)
-
         external_groups = get_sharepoint_external_groups(
-            ctx,
-            connector.graph_client,
-            graph_api=connector.graph_api,
+            reader,
+            site_descriptor.url,
             enumerate_all_ad_groups=connector.exhaustive_ad_enumeration,
         )
 
