@@ -579,3 +579,42 @@ def test_nonregular_conversion_lock_does_not_block(
     )
     assert result.stdout.strip() == "ERROR_CONVERSION"
     assert not list(cache.glob(".render-*"))
+
+
+@pytest.mark.parametrize("record_kind", ["fifo", "symlink"])
+def test_untrusted_cache_metadata_regenerates_without_blocking(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    record_kind: str,
+) -> None:
+    source: Path = tmp_path / "report.pdf"
+    source.write_bytes(b"source")
+    cache: Path = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "slide-1.jpg").write_bytes(b"old")
+    record: Path = cache / ".source-revision.json"
+    target: Path = tmp_path / "external"
+    target.write_bytes(b"keep")
+    if record_kind == "fifo":
+        os.mkfifo(record)
+    else:
+        record.symlink_to(target)
+    binaries: Path = tmp_path / "bin"
+    binaries.mkdir()
+    renderer: Path = binaries / "pdftoppm"
+    renderer.write_text(
+        '#!/bin/sh\nfor argument do prefix="$argument"; done\nprintf JPEG > "$prefix-1.jpg"\n'
+    )
+    renderer.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{binaries}:{os.environ['PATH']}")
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(source), str(cache), "--first-page"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=3,
+    )
+    assert result.stdout.splitlines()[0] == "GENERATED"
+    assert (cache / "slide-1.jpg").read_bytes() == b"JPEG"
+    assert record.is_file() and not record.is_symlink()
+    assert target.read_bytes() == b"keep"

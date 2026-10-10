@@ -744,7 +744,7 @@ and conversion time. The lock opens without blocking and must be a regular file.
 
 Finished JPEGs replace cached files atomically. Failed conversion retains the last
 complete image. Source revision checks reject changed input; cache metadata records
-the rendered revision. Missing or invalid metadata causes regeneration.
+the rendered revision. Missing, invalid, or non-regular metadata causes regeneration. Metadata opens do not block on special files or follow symlinks.
 Both providers validate conversion status and session-relative JPEG paths with one parser.
 
 Thumbnails live under `outputs/.document-thumbnails`, which inventory rules hide.

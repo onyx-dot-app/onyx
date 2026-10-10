@@ -151,8 +151,13 @@ def _generate_preview(
     if cached_slides:
         cache_current: bool = False
         try:
-            cached_revision: object = json.loads(revision_path.read_text())
-            cache_current = cached_revision == list(revision)
+            with os.fdopen(
+                os.open(revision_path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW),
+                "r",
+            ) as record:
+                if stat.S_ISREG(os.fstat(record.fileno()).st_mode):
+                    cached_revision: object = json.load(record)
+                    cache_current = cached_revision == list(revision)
         except (OSError, ValueError):
             pass
         if cache_current:
