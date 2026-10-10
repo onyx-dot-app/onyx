@@ -1755,10 +1755,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       } catch (err) {
         console.warn("Failed to fetch active turn:", err);
       }
-      if (!isCurrentLoad()) return;
+      if (!isCurrentRuntimeLoad()) return;
       // Server completion follows the final transcript commit. Observe it before reading messages.
       const messages: BuildMessage[] = await fetchMessages(sessionId);
-      if (!isCurrentLoad()) return;
+      if (!isCurrentRuntimeLoad()) return;
 
       // Preserve optimistic messages if actively streaming (pre-provisioned flow).
       const currentSession: BuildSessionData | undefined =
@@ -1821,25 +1821,26 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const subagents: Map<string, SubagentState> = useDbMessages
         ? buildSubagentsFromMessages(messages)
         : currentSession!.subagents;
-      updateSessionData(sessionId, {
-        status,
-        messages: resolvedMessages,
-        streamItems,
-        subagents,
-        activeTurnId: resolvedActiveTurnId,
-        pendingCompletedTurnId: useDbMessages
-          ? null
-          : currentSession!.pendingCompletedTurnId,
-        activeTurnIndex: resolvedActiveTurnIndex,
-        activeTurnLocalOwner: useDbMessages
-          ? false
-          : currentSession!.activeTurnLocalOwner,
-        contextUsage: useDbMessages
-          ? deriveContextUsage(messages)
-          : currentSession!.contextUsage,
-      });
+      if (isCurrentLoad())
+        updateSessionData(sessionId, {
+          status,
+          messages: resolvedMessages,
+          streamItems,
+          subagents,
+          activeTurnId: resolvedActiveTurnId,
+          pendingCompletedTurnId: useDbMessages
+            ? null
+            : currentSession!.pendingCompletedTurnId,
+          activeTurnIndex: resolvedActiveTurnIndex,
+          activeTurnLocalOwner: useDbMessages
+            ? false
+            : currentSession!.activeTurnLocalOwner,
+          contextUsage: useDbMessages
+            ? deriveContextUsage(messages)
+            : currentSession!.contextUsage,
+        });
 
-      if (keepCompletedTranscript) {
+      if (isCurrentLoad() && keepCompletedTranscript) {
         const completedSession: BuildSessionData | undefined =
           get().sessions.get(sessionId);
         if (completedSession)
@@ -1847,7 +1848,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
 
       const [runtimeResult] = await runtimeRequest;
-      if (!isCurrentLoad()) return;
+      if (!isCurrentRuntimeLoad()) return;
       if (runtimeResult.status === "rejected") throw runtimeResult.reason;
       let sessionData = runtimeResult.value;
       const runtimeSession: BuildSessionData | undefined =
@@ -1861,6 +1862,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           !sessionData.session_loaded_in_sandbox);
       updateSessionData(sessionId, {
         status:
+          !isCurrentLoad() ||
           isStreaming ||
           keepCompletedTranscript ||
           runtimeSession.status !== status ||
@@ -1885,7 +1887,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       });
       if (!needsRestore) {
         const artifacts: Artifact[] = await fetchArtifacts(sessionId);
-        if (!isCurrentLoad()) return;
+        if (!isCurrentRuntimeLoad()) return;
         const hasWebapp: boolean = artifacts.some(
           (artifact) =>
             artifact.type === "nextjs_app" || artifact.type === "web_app"
@@ -1955,9 +1957,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
         // An artifact-fetch failure must NOT flip the sandbox to "failed".
         try {
-          if (!isCurrentLoad()) return;
+          if (!isCurrentRuntimeLoad()) return;
           const restoredArtifacts: Artifact[] = await fetchArtifacts(sessionId);
-          if (!isCurrentLoad()) return;
+          if (!isCurrentRuntimeLoad()) return;
           updateSessionData(sessionId, { artifacts: restoredArtifacts });
         } catch (artifactsErr) {
           console.warn(
@@ -1967,7 +1969,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         }
       }
     } catch (err) {
-      if (!isCurrentLoad()) return;
+      if (!isCurrentRuntimeLoad()) return;
       console.error("Failed to load session:", err);
       updateSessionData(sessionId, {
         loadError: err instanceof Error ? err.message : String(err),

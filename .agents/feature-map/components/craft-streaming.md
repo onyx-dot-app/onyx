@@ -251,7 +251,10 @@ Held responses retry completion every second, for at most 30 attempts.
 Revisiting a session with a pending completion starts another load.
 Once completion is confirmed, persisted history replaces the local transcript and clears the pending turn marker.
 Interrupt reconciliation explicitly requests persisted history and bypasses this completion hold.
-Responses from earlier session instances, loads, or turns cannot replace current session data.
+Earlier session instances and loads cannot replace current data. Earlier turns cannot replace the current transcript or turn status.
+Session metadata and artifacts can finish loading after a new turn starts.
+A new turn clears the prior completion marker, including when its prompt is rejected.
+Queued prompts remain queued when interruption ends with a session load error.
 
 ### Output inventory and panel navigation
 

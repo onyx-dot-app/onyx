@@ -630,7 +630,7 @@ export default function BuildChatPanel({
   // that a failed run never sends, silently dropping it. The sessionId guard
   // avoids mistaking a session switch for a run completion.
   const sessionStatus = session?.status;
-  const sessionError = session?.error;
+  const sessionError = session?.error ?? session?.loadError;
   const prevIsRunningRef = useRef(isRunning);
   const prevSessionIdRef = useRef(sessionId);
   useEffect(() => {

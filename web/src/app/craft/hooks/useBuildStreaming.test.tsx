@@ -1884,6 +1884,40 @@ describe("useBuildStreaming thinking packets", () => {
     expect(session?.streamItems).toEqual([]);
   });
 
+  it("ends prior completion ownership when a new prompt is rejected", async () => {
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      pendingCompletedTurnId: "completed-turn",
+      messages: [
+        {
+          id: "rejected-prompt",
+          type: "user",
+          content: "Keep this prompt",
+          timestamp: new Date(),
+        },
+      ],
+    });
+    jest.mocked(createTurn).mockRejectedValueOnce(new Error("Send rejected"));
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.streamMessage(sessionId, "Keep this prompt");
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      pendingCompletedTurnId: null,
+      error: "Send rejected",
+    });
+    useBuildSessionStore.setState({ loadSession: originalLoadSession });
+    useBuildSessionStore.getState().setCurrentSession("another-session");
+    await act(async () =>
+      useBuildSessionStore.getState().loadSession(sessionId)
+    );
+    expect(fetchMessages).not.toHaveBeenCalled();
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.messages
+    ).toEqual([expect.objectContaining({ content: "Keep this prompt" })]);
+  });
+
   it("clears local interrupt state when the backend active turn is gone", async () => {
     jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
     jest.mocked(fetchActiveTurn).mockResolvedValueOnce(null as never);

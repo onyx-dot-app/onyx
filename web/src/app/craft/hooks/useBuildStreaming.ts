@@ -1059,6 +1059,7 @@ export function useBuildStreaming() {
         wasInterrupted: false,
         outputSelectionLocked: false,
         turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
+        pendingCompletedTurnId: null,
         activeTurnId: null,
         activeTurnIndex: null,
         activeTurnLocalOwner: true,

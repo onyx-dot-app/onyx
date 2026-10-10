@@ -220,6 +220,28 @@ it("dispatches a completed run's queued prompt without replacing its saved model
   ).toHaveLength(0);
 });
 
+it("keeps queued prompts when interrupted history fails to reload", async () => {
+  const store = useBuildSessionStore.getState();
+  store.updateSessionData(SESSION_ID, {
+    status: "running",
+    isInterrupting: true,
+  });
+  store.enqueueMessage(SESSION_ID, "queued prompt", []);
+  render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  await act(async () =>
+    store.updateSessionData(SESSION_ID, {
+      status: "active",
+      isInterrupting: false,
+      loadError: "History unavailable",
+    })
+  );
+  expect(streamMessage).not.toHaveBeenCalled();
+  expect(
+    useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages
+  ).toHaveLength(1);
+  expect(screen.getByRole("alert")).toHaveTextContent("History unavailable");
+});
+
 it("sends a model override when the user explicitly changes the picker", async () => {
   useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
     isLoaded: true,

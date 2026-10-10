@@ -639,6 +639,58 @@ describe("loadSession restore status", () => {
     });
   });
 
+  it.each([
+    ["running", "history"],
+    ["failed", "history"],
+    ["running", "runtime"],
+    ["failed", "runtime"],
+  ] as const)(
+    "finishes metadata loading without replacing a newer %s turn started during %s loading",
+    async (status, stage) => {
+      const runtime = deferred<Awaited<ReturnType<typeof api.fetchSession>>>();
+      const history = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+      mockedApi.fetchSession.mockReturnValueOnce(runtime.promise);
+      mockedApi.fetchMessages.mockReturnValueOnce(history.promise);
+      const loading = useBuildSessionStore.getState().loadSession(SESSION_ID);
+      await waitFor(() => expect(mockedApi.fetchMessages).toHaveBeenCalled());
+      if (stage === "runtime") await act(async () => history.resolve([]));
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        turnGeneration: 1,
+        status,
+        error: status === "failed" ? "Send rejected" : null,
+        activeTurnId: status === "running" ? "new-turn" : null,
+        messages: [
+          {
+            id: "local",
+            type: "user",
+            content: "New prompt",
+            timestamp: new Date(),
+          },
+        ],
+      });
+      history.resolve([]);
+      runtime.resolve({
+        ...runningSession(),
+        agent_provider: "saved-provider",
+        agent_model: "saved-model",
+      } as never);
+      await loading;
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+      ).toMatchObject({
+        isLoaded: true,
+        loadError: null,
+        agentModel: "saved-model",
+        status,
+        error: status === "failed" ? "Send rejected" : null,
+        activeTurnId: status === "running" ? "new-turn" : null,
+        messages: [{ content: "New prompt" }],
+        sandbox: { status: "running" },
+      });
+      expect(mockedApi.fetchArtifacts).toHaveBeenCalled();
+    }
+  );
+
   it("keeps a rejected prompt and turn error when revisiting a loaded session", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     await useBuildSessionStore.getState().loadSession(SESSION_ID);
@@ -917,9 +969,7 @@ describe("loadSession restore status", () => {
         filesNeedsRefresh: 1,
         webappNeedsRemount: 1,
       });
-      expect(mockedApi.fetchArtifacts).toHaveBeenCalledTimes(
-        stage === "readiness" ? 1 : 0
-      );
+      expect(mockedApi.fetchArtifacts).toHaveBeenCalledTimes(1);
     }
   );
 
