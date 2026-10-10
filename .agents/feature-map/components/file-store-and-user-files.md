@@ -50,7 +50,7 @@ that a background sweep deletes the file's blob and its row after the session en
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| POST | `/user/projects/file/upload` | `api.py:upload_user_files` | The upload endpoint. Accepts a project id, an incognito session id, and a temp-id map for optimistic UI. |
+| POST | `/user/projects/file/upload` | `api.py:upload_user_files` | The upload endpoint. Accepts a project id, an incognito session id, a temp-id map for optimistic UI, and `skip_indexing` (stores every accepted file as `SKIPPED` and enqueues no processing, e.g. images uploaded only as Ingestion API image references). |
 | GET | `/user/files/recent` | | Files not attached to any project (`server/manage/users.py`). |
 | GET | `/user/projects/files/{project_id}` | `api.py:get_files_in_project` | |
 | DELETE | `/user/projects/file/{file_id}` | `api.py:delete_user_file` | Refuses when the file has project or persona associations. |
@@ -183,7 +183,8 @@ Synchronous, inside the request:
   `file_id`s.
 - `db/projects.py:create_user_files` creates the `UserFile` row per accepted
   file with `status=UserFileStatus.PROCESSING` (or `SKIPPED` for files
-  exempted from indexing, e.g. spreadsheets over the token threshold) and
+  exempted from indexing: spreadsheets over the token threshold, or every
+  file of an upload sent with `skip_indexing`) and
   links it to `project_id` if one was given (never for incognito uploads,
   `create_user_files`'s `if project_id and incognito_session_id is None`
   branch).
@@ -266,7 +267,8 @@ and the model must retrieve them via the internal search tool
 ceiling, though: **indexable project files are vectorized at upload time**,
 independent of whether a given turn's context would fit them
 (`chat/README.md`, "Projects"). Files marked `UserFileStatus.SKIPPED`
-(`db/projects.py`, over-threshold tabular files in `skip_indexing`) are not indexed. The indexing side is
+(`db/projects.py`, over-threshold tabular files and uploads sent with the
+`skip_indexing` flag) are not indexed. The indexing side is
 `indexing/adapters/user_file_indexing_adapter.py:UserFileIndexingAdapter`,
 driven by `background/celery/tasks/user_file_processing/tasks.py:_process_user_file_with_indexing`,
 which runs the same `run_indexing_pipeline` used for connector documents
