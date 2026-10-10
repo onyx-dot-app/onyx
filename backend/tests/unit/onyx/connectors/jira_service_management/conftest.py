@@ -3,7 +3,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from jira import JIRA
+from jira import JIRA, JIRAError
+from onyx.connectors.jira.source_operations import JiraApiError
 
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
@@ -224,9 +225,17 @@ def make_jsm_connector(
             return attachment_cache[attachment_id].get()
 
         def get_project(*, project_key: str) -> dict[str, Any]:
-            project = mock_jira_client.project(project_key)
+            try:
+                project = mock_jira_client.project(project_key)
+            except JIRAError as error:
+                raise JiraApiError(
+                    str(error), status_code=error.status_code, text=error.text
+                ) from error
             if isinstance(project, dict):
                 return project
+            raw = getattr(project, "raw", None)
+            if isinstance(raw, dict) and "projectTypeKey" in raw:
+                return {"key": project_key, **raw}
             return {
                 "key": project_key,
                 "projectTypeKey": getattr(project, "projectTypeKey", None),
