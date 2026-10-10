@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.db.models import Tool
 from onyx.server.features.tool.tool_visibility import get_tool_visibility_config
@@ -22,6 +22,12 @@ def mask_custom_headers(headers: list[Any] | None) -> list[Any] | None:
         else:
             masked.append(header)
     return masked
+
+
+class CustomToolDestination(BaseModel):
+    url_template: str
+    method: str
+    path_parameters: dict[str, JsonValue]
 
 
 class ToolSnapshot(BaseModel):
