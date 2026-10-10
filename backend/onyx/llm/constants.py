@@ -23,6 +23,7 @@ class LlmProviderNames(str, Enum):
     AZURE = "azure"
     OLLAMA = "ollama"
     OLLAMA_CHAT = "ollama_chat"
+    LLMMAN = "llmman"
     LM_STUDIO = "lm_studio"
     MISTRAL = "mistral"
     LITELLM_PROXY = "litellm_proxy"
@@ -53,6 +54,7 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENROUTER,
     LlmProviderNames.AZURE,
     LlmProviderNames.OLLAMA_CHAT,
+    LlmProviderNames.LLMMAN,
     LlmProviderNames.LM_STUDIO,
     LlmProviderNames.LITELLM_PROXY,
     LlmProviderNames.BIFROST,
@@ -75,6 +77,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.AZURE: "Azure",
     LlmProviderNames.OLLAMA: "Ollama",
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
+    LlmProviderNames.LLMMAN: "llmman",
     LlmProviderNames.LM_STUDIO: "LM Studio",
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
     LlmProviderNames.BIFROST: "Bifrost",
@@ -167,6 +170,7 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.BEDROCK_CONVERSE,
     LlmProviderNames.OPENROUTER,
     LlmProviderNames.OLLAMA_CHAT,
+    LlmProviderNames.LLMMAN,
     LlmProviderNames.LM_STUDIO,
     LlmProviderNames.VERTEX_AI,
     LlmProviderNames.AZURE,
