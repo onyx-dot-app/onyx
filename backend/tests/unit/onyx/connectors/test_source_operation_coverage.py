@@ -24,6 +24,15 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaPage,
 )
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
+from onyx.connectors.microsoft_utils.entra import EntraGroup, EntraPage
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
+from onyx.connectors.microsoft_utils.models import (
+    SharepointPrincipal,
+    SharepointRoleAssignment,
+)
+from onyx.connectors.microsoft_utils.sharepoint_principals import (
+    SharepointPrincipalType,
+)
 from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
 from onyx.connectors.source_operations import (
     SourceOperations,
@@ -85,29 +94,60 @@ def _configure_jira_server_spy(spy: MagicMock) -> None:
 
 
 def _configure_sharepoint_spy(spy: MagicMock) -> None:
-    """A tenant with one site holding one library, one small file and one
-    page, so the read checks reach the item-level operations."""
+    """A tenant with one site holding one library, one small file in a folder
+    and one page, whose permissions name a site group and an Entra group, so
+    the read checks reach the item-level and group-level operations."""
     site_url: str = "https://contoso.sharepoint.com/sites/eng"
+    spy.get_auth_method.return_value = MicrosoftAuthMethod.CERTIFICATE
     spy.list_site_urls.return_value = [site_url]
     spy.get_site_id.return_value = "site-id"
     spy.list_drives.return_value = [
         SharepointDrive(
-            id="drive-id", name="Documents", web_url=f"{site_url}/Documents"
+            id="drive-id",
+            name="Documents",
+            web_url=f"{site_url}/Documents",
+            list_id="list-id",
         )
     ]
     item = {
         "id": "item-id",
         "name": "a.pdf",
-        "webUrl": f"{site_url}/Documents/a.pdf",
+        "webUrl": f"{site_url}/Documents/Plans/a.pdf",
         "size": 10,
         "file": {"mimeType": "application/pdf"},
-        "parentReference": {"driveId": "drive-id"},
+        "parentReference": {"driveId": "drive-id", "path": "/drives/d/root:/Plans"},
     }
     spy.get_delta_page.return_value = DriveDeltaFetchResult(
         page=DriveDeltaPage.model_validate({"value": [item]})
     )
     spy.get_drive_item.return_value = DriveItemData.from_graph_json(item)
-    spy.list_site_pages.return_value = SitePagesPage(pages=[{"id": "page-id"}])
+    spy.list_site_pages.return_value = SitePagesPage(
+        pages=[{"id": "page-id", "webUrl": f"{site_url}/SitePages/Home.aspx"}]
+    )
+    spy.list_role_assignments.return_value = [
+        SharepointRoleAssignment(
+            member=SharepointPrincipal(
+                principal_type=SharepointPrincipalType.SHAREPOINT_GROUP,
+                login_name="Eng Members",
+                title="Eng Members",
+            ),
+            role_type_kinds=[3],
+        ),
+        SharepointRoleAssignment(
+            member=SharepointPrincipal(
+                principal_type=SharepointPrincipalType.ENTRA_GROUP,
+                login_name="Engineering",
+                title="Engineering",
+            ),
+            role_type_kinds=[3],
+        ),
+    ]
+    spy.find_entra_group_id.return_value = "group-id"
+    spy.get_folder_unique_id.return_value = "folder-id"
+    spy.get_list_item_id.return_value = 1
+    spy.list_entra_groups.return_value = EntraPage(
+        items=[EntraGroup(id="group-id", displayName="Engineering")]
+    )
 
 
 # A unit is covered when the checks exercise it under any one configuration:

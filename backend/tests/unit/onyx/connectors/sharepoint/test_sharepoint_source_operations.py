@@ -416,7 +416,13 @@ class _ContextRecorder:
     def __init__(self, rest_context: Callable[[str], Any], _graph: Any, _api: Any):
         self._rest_context = rest_context
 
-    def list_role_assignments(self, *, site_url: str, securable: Any) -> Any:  # noqa: ARG002
+    def list_role_assignments(
+        self,
+        *,
+        site_url: str,
+        securable: Any,  # noqa: ARG002
+        max_rows: int | None = None,  # noqa: ARG002
+    ) -> Any:
         return self._rest_context(site_url)
 
 
@@ -504,42 +510,6 @@ class TestRestContext:
             self._context_for(gateway, "https://victim.sharepoint.com/sites/Payroll")
 
         context_class.assert_not_called()
-
-
-class TestRestProbe:
-    @pytest.mark.parametrize(
-        ("status", "authorized"), [(200, True), (401, False), (403, False)]
-    )
-    @patch(AUTH_BUILDER, return_value=_auth_context(MicrosoftAuthMethod.CERTIFICATE))
-    @patch.object(gateway_module, "acquire_token_for_rest")
-    @patch.object(gateway_module.requests, "get")
-    def test_the_status_decides(
-        self,
-        get: MagicMock,
-        acquire: MagicMock,
-        _build: MagicMock,
-        status: int,
-        authorized: bool,
-    ) -> None:
-        acquire.return_value = MagicMock(accessToken="tok")
-        get.return_value = MagicMock(status_code=status)
-
-        assert fake_gateway(sites=[SITE_URL]).probe_rest_access(site_url=SITE_URL) is (
-            authorized
-        )
-        assert get.call_args.args[0] == f"{SITE_URL}/_api/web/roleassignments?$top=1"
-        assert get.call_args.kwargs["headers"] == {"Authorization": "Bearer tok"}
-
-    @patch(AUTH_BUILDER, return_value=_auth_context(MicrosoftAuthMethod.CERTIFICATE))
-    @patch.object(gateway_module, "acquire_token_for_rest")
-    @patch.object(gateway_module.requests, "get")
-    def test_a_transport_failure_counts_as_authorized(
-        self, get: MagicMock, acquire: MagicMock, _build: MagicMock
-    ) -> None:
-        acquire.return_value = MagicMock(accessToken="tok")
-        get.side_effect = requests.ConnectionError("timeout")
-
-        assert fake_gateway(sites=[SITE_URL]).probe_rest_access(site_url=SITE_URL)
 
 
 @patch.object(gateway_module, "download_via_graph_api", return_value=b"abc")
