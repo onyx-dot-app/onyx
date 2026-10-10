@@ -1042,117 +1042,52 @@ describe("loadSession restore status", () => {
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
     ).toBe(false);
   });
-});
-
-describe("loadSession preferPersisted (interrupt reconciliation)", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    useBuildSessionStore.setState({
-      sessions: new Map(),
-      currentSessionId: null,
-    } as never);
-    mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
-    mockedApi.fetchArtifacts.mockResolvedValue([] as never);
-    mockedApi.fetchOutputInventory.mockResolvedValue({
-      files: [],
-      complete: true,
-    });
-    mockedApi.fetchWebappInfo.mockResolvedValue(
-      webappInfo(true, true) as never
-    );
+  it("does not let an older history read overwrite a settled transcript", async () => {
+    const staleHistory =
+      deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
-  });
-
-  function seedInterruptedSession(): void {
-    useBuildSessionStore.getState().createSession(SESSION_ID, {
+    mockedApi.fetchMessages.mockReturnValueOnce(staleHistory.promise);
+    const store = useBuildSessionStore.getState();
+    store.createSession(SESSION_ID, {
       status: "running",
-      messages: [
-        {
-          id: "local-user",
-          type: "user",
-          content: "Write an essay",
-          timestamp: new Date(),
-        },
-      ],
-      activeTurnId: "turn-interrupted",
-      activeTurnIndex: 0,
-      activeTurnLocalOwner: true,
-      isLoaded: false,
+      isLoaded: true,
+      turnGeneration: 1,
     });
+    const loading = store.loadSession(SESSION_ID, { force: true });
+    await waitFor(() =>
+      expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1)
+    );
     mockedApi.fetchMessages.mockResolvedValue([
       {
-        id: "user-1",
-        type: "user",
-        content: "Write an essay",
-        timestamp: new Date(),
-        message_metadata: {
-          type: "user_message",
-          content: { type: "text", text: "Write an essay" },
-        },
-      },
-      {
-        id: "thought-1",
+        id: "confirmed",
         type: "assistant",
-        content: "",
-        timestamp: new Date(),
+        content: "Final answer",
         message_metadata: {
-          type: "agent_thought",
-          content: { type: "text", text: "Planning the essay structure." },
+          streamItems: [
+            {
+              type: "text",
+              id: "confirmed-text",
+              content: "Final answer",
+              isStreaming: false,
+            },
+          ],
         },
-      },
-    ] as never);
-  }
-
-  it("rehydrates the persisted interrupted transcript while keeping status running", async () => {
-    seedInterruptedSession();
-
-    await useBuildSessionStore
-      .getState()
-      .loadSession(SESSION_ID, { force: true, preferPersisted: true });
-
-    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
-    expect(session?.status).toBe("running");
-    const assistant = session?.messages.find((m) => m.type === "assistant");
-    expect(assistant?.message_metadata?.streamItems).toEqual([
-      {
-        type: "thinking",
-        id: "thought-1",
-        content: "Planning the essay structure.",
-        isStreaming: false,
+        timestamp: new Date(),
+        turn_index: 0,
       },
     ]);
-    expect(session?.streamItems).toEqual([]);
-    expect(session?.activeTurnId).toBeNull();
-    expect(session?.activeTurnLocalOwner).toBe(false);
-  });
-
-  it("reconciles stale skills when an interrupted turn settles", async () => {
-    seedInterruptedSession();
-    mockedApi.fetchSession.mockResolvedValue({
-      ...runningSession(),
-      skills_stale: true,
-    } as never);
-
-    await useBuildSessionStore
-      .getState()
-      .loadSession(SESSION_ID, { force: true, preferPersisted: true });
-
+    await store.beginTurnSettlement(SESSION_ID, "completed-turn", 1);
+    staleHistory.resolve([]);
+    await loading;
     expect(
-      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
-    ).toBe(true);
-  });
-
-  it("keeps the stale local transcript without preferPersisted (the bug)", async () => {
-    seedInterruptedSession();
-
-    await useBuildSessionStore
-      .getState()
-      .loadSession(SESSION_ID, { force: true });
-
-    const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
-    expect(session?.messages).toEqual([
-      expect.objectContaining({ id: "local-user", type: "user" }),
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.messages
+    ).toEqual([
+      expect.objectContaining({ id: "confirmed", content: "Final answer" }),
     ]);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.turnSettlement
+        ?.phase
+    ).toBe("ready");
   });
 });
 
@@ -1228,7 +1163,7 @@ describe("waitForWebappReady", () => {
   });
 });
 
-describe("loadSession completed transcript handoff", () => {
+describe("completed transcript handoff", () => {
   const user = {
     id: "user-db",
     type: "user" as const,
@@ -1237,44 +1172,51 @@ describe("loadSession completed transcript handoff", () => {
     turn_index: 0,
   };
   const answer = {
-    id: "agent-msg-local",
+    id: "answer-local",
     type: "assistant" as const,
-    content: "The complete answer.",
-    timestamp: new Date(),
-    turn_index: 0,
+    content: "Complete answer",
     message_metadata: {
       streamItems: [
         {
           type: "text",
-          id: "text-local",
-          content: "The complete answer.",
+          id: "answer-text",
+          content: "Complete answer",
           isStreaming: false,
         },
       ],
     },
+    timestamp: new Date(),
+    turn_index: 0,
+  };
+  const receipt = {
+    turnId: "completed-turn",
+    turnGeneration: 0,
+    phase: "ready" as const,
   };
 
   beforeEach(() => {
+    jest.clearAllMocks();
     useBuildSessionStore.setState({
       sessions: new Map(),
       currentSessionId: null,
     });
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null);
+    mockedApi.fetchMessages.mockResolvedValue([user, answer]);
     mockedApi.fetchArtifacts.mockResolvedValue([]);
     mockedApi.fetchOutputInventory.mockResolvedValue({
       files: [],
       complete: true,
     });
     useBuildSessionStore.getState().createSession(SESSION_ID, {
-      status: "active",
+      status: "running",
       isLoaded: true,
       messages: [user, answer],
-      pendingCompletedTurnId: "completed-turn",
+      activeTurnId: "completed-turn",
     });
   });
 
-  it("automatically replaces the held response after server completion", async () => {
+  it("holds the streamed response until the server turn completes", async () => {
     jest.useFakeTimers();
     try {
       mockedApi.fetchActiveTurn.mockResolvedValue({
@@ -1282,67 +1224,55 @@ describe("loadSession completed transcript handoff", () => {
         turn_index: 0,
       } as never);
       mockedApi.fetchMessages.mockResolvedValue([user]);
-      await useBuildSessionStore
+      const settling = useBuildSessionStore
         .getState()
-        .loadSession(SESSION_ID, { force: true });
+        .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+      await jest.advanceTimersByTimeAsync(0);
       expect(
         useBuildSessionStore.getState().sessions.get(SESSION_ID)?.messages
       ).toEqual([user, answer]);
+      expect(mockedApi.fetchMessages).not.toHaveBeenCalled();
+      const persisted = {
+        ...answer,
+        id: "canonical-answer",
+        content: "Saved answer",
+        message_metadata: {
+          streamItems: [
+            {
+              type: "text",
+              id: "saved-text",
+              content: "Saved answer",
+              isStreaming: false,
+            },
+          ],
+        },
+      };
       mockedApi.fetchActiveTurn.mockResolvedValue(null);
-      mockedApi.fetchMessages.mockResolvedValue([
-        { ...answer, id: "canonical-answer", content: "Saved answer" },
-      ]);
+      mockedApi.fetchMessages.mockResolvedValue([user, persisted]);
       await jest.advanceTimersByTimeAsync(1000);
+      await settling;
       expect(
         useBuildSessionStore.getState().sessions.get(SESSION_ID)
       ).toMatchObject({
-        pendingCompletedTurnId: null,
-        messages: [
-          expect.objectContaining({
-            id: "canonical-answer",
-            content: "Saved answer",
-          }),
-        ],
+        messages: [user, persisted],
+        status: "active",
+        turnSettlement: receipt,
       });
     } finally {
       jest.useRealTimers();
     }
   });
 
-  it("resumes completion polling after a delayed restoration", async () => {
-    jest.useFakeTimers();
-    try {
-      mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
-      mockedApi.fetchActiveTurn.mockResolvedValue({
-        turn_id: "completed-turn",
-        turn_index: 0,
-      } as never);
-      mockedApi.fetchMessages.mockResolvedValue([user]);
-      mockedApi.fetchWebappInfo.mockResolvedValue(
-        webappInfo(true, true) as never
-      );
-      const restore =
-        deferred<Awaited<ReturnType<typeof api.restoreSession>>>();
-      mockedApi.restoreSession.mockReturnValueOnce(restore.promise);
-      const loading: Promise<void> = useBuildSessionStore
-        .getState()
-        .loadSession(SESSION_ID, { force: true });
-      await jest.advanceTimersByTimeAsync(1000);
-      expect(mockedApi.restoreSession).toHaveBeenCalled();
-      restore.resolve(runningSession() as never);
-      await loading;
-      mockedApi.fetchActiveTurn.mockResolvedValue(null);
-      mockedApi.fetchMessages.mockResolvedValue([
-        { ...answer, id: "canonical-answer" },
-      ]);
-      await jest.advanceTimersByTimeAsync(1000);
-      expect(
-        useBuildSessionStore.getState().sessions.get(SESSION_ID)
-          ?.pendingCompletedTurnId
-      ).toBeNull();
-    } finally {
-      jest.useRealTimers();
-    }
+  it("settles without waiting for runtime restoration", async () => {
+    mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
+    await useBuildSessionStore
+      .getState()
+      .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+    expect(mockedApi.fetchSession).not.toHaveBeenCalled();
+    expect(mockedApi.restoreSession).not.toHaveBeenCalled();
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.turnSettlement
+    ).toEqual(receipt);
   });
 
   it("does not replace a newer turn during completion polling", async () => {
@@ -1352,135 +1282,130 @@ describe("loadSession completed transcript handoff", () => {
         turn_id: "completed-turn",
         turn_index: 0,
       } as never);
-      mockedApi.fetchMessages.mockResolvedValue([user]);
-      await useBuildSessionStore
+      const settling = useBuildSessionStore
         .getState()
-        .loadSession(SESSION_ID, { force: true });
+        .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+      await jest.advanceTimersByTimeAsync(0);
       useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
         turnGeneration: 1,
         status: "running",
         activeTurnId: "newer-turn",
+        turnSettlement: null,
       });
       const current = useBuildSessionStore.getState().sessions.get(SESSION_ID);
-      mockedApi.fetchActiveTurn.mockResolvedValue(null);
       await jest.advanceTimersByTimeAsync(1000);
+      await settling;
       expect(useBuildSessionStore.getState().sessions.get(SESSION_ID)).toBe(
         current
       );
-      expect(mockedApi.fetchActiveTurn).toHaveBeenCalledTimes(1);
+      expect(mockedApi.fetchMessages).not.toHaveBeenCalled();
     } finally {
       jest.useRealTimers();
     }
   });
 
-  it("keeps the completed response until its server turn completes, then uses the canonical transcript once", async () => {
-    mockedApi.fetchActiveTurn.mockResolvedValue({
-      turn_id: "completed-turn",
-      turn_index: 0,
-    } as never);
-    mockedApi.fetchMessages.mockResolvedValue([user]);
-    await useBuildSessionStore
-      .getState()
-      .loadSession(SESSION_ID, { force: true });
-    expect(
-      useBuildSessionStore.getState().sessions.get(SESSION_ID)
-    ).toMatchObject({
-      messages: [user, answer],
-      status: "active",
-      activeTurnId: null,
-      pendingCompletedTurnId: "completed-turn",
+  it("uses the canonical transcript after completion even when its text differs", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      streamItems: [
+        {
+          type: "text",
+          id: "live-answer",
+          content: "Complete answer",
+          isStreaming: false,
+        },
+      ],
     });
-    // Canonical content can differ from the streamed response; completion, not text equality, releases ownership.
     const persisted = {
       ...answer,
       id: "answer-db",
-      content: "Canonical answer.",
+      content: "Canonical answer",
       message_metadata: {
         streamItems: [
           {
             type: "text",
-            id: "text-db",
-            content: "Canonical answer.",
+            id: "canonical-text",
+            content: "Canonical answer",
             isStreaming: false,
           },
         ],
       },
     };
-    mockedApi.fetchActiveTurn.mockResolvedValue(null);
     mockedApi.fetchMessages.mockResolvedValue([user, persisted]);
     await useBuildSessionStore
       .getState()
-      .loadSession(SESSION_ID, { force: true });
+      .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)
     ).toMatchObject({
       messages: [user, persisted],
-      pendingCompletedTurnId: null,
+      streamItems: [],
+      turnSettlement: receipt,
     });
-    expect(mockedApi.fetchActiveTurn.mock.invocationCallOrder[1]).toBeLessThan(
-      mockedApi.fetchMessages.mock.invocationCallOrder[1] ?? Infinity
+    expect(mockedApi.fetchActiveTurn.mock.invocationCallOrder[0]).toBeLessThan(
+      mockedApi.fetchMessages.mock.invocationCallOrder[0] ?? Infinity
     );
   });
 
-  it("keeps a completed response when server completion cannot be checked", async () => {
-    mockedApi.fetchActiveTurn.mockRejectedValue(
+  it("retains the response on a completion lookup failure and allows retry", async () => {
+    mockedApi.fetchActiveTurn.mockRejectedValueOnce(
       new Error("turn endpoint unavailable")
     );
-    mockedApi.fetchMessages.mockResolvedValue([user]);
     await useBuildSessionStore
       .getState()
-      .loadSession(SESSION_ID, { force: true });
+      .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)
     ).toMatchObject({
       messages: [user, answer],
-      pendingCompletedTurnId: "completed-turn",
+      turnSettlement: { phase: "failed", error: "turn endpoint unavailable" },
     });
-  });
-
-  it("honors preferPersisted instead of retaining a completed local response", async () => {
-    mockedApi.fetchMessages.mockResolvedValue([user]);
-    await useBuildSessionStore
-      .getState()
-      .loadSession(SESSION_ID, { force: true, preferPersisted: true });
+    await useBuildSessionStore.getState().retryTurnSettlement(SESSION_ID);
     expect(
-      useBuildSessionStore.getState().sessions.get(SESSION_ID)
-    ).toMatchObject({ messages: [user], pendingCompletedTurnId: null });
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.turnSettlement
+    ).toEqual(receipt);
   });
 
-  it("preserves a response completed after the load started, even when its earlier lookup reported no turn", async () => {
+  it("does not release held completion through a forced history load", async () => {
+    const settlement = {
+      ...receipt,
+      phase: "failed" as const,
+      error: "history unavailable",
+    };
     useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
-      status: "running",
-      activeTurnId: "completed-turn",
-      pendingCompletedTurnId: null,
-    });
-    const messages = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
-    mockedApi.fetchMessages.mockReturnValue(messages.promise);
-    const load = useBuildSessionStore
-      .getState()
-      .loadSession(SESSION_ID, { force: true });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(mockedApi.fetchMessages).toHaveBeenCalled();
-    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
-      status: "active",
+      status: "idle",
       activeTurnId: null,
-      pendingCompletedTurnId: "completed-turn",
+      turnSettlement: settlement,
     });
-    messages.resolve([user]);
-    await load;
+    mockedApi.fetchMessages.mockResolvedValue([user]);
+    await useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)
-    ).toMatchObject({
-      messages: [user, answer],
-      pendingCompletedTurnId: "completed-turn",
-      status: "active",
-    });
+    ).toMatchObject({ messages: [user, answer], turnSettlement: settlement });
+  });
+
+  it("preserves completion learned after a history load started", async () => {
+    const messages = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+    mockedApi.fetchMessages.mockReturnValueOnce(messages.promise);
+    const loading = useBuildSessionStore
+      .getState()
+      .loadSession(SESSION_ID, { force: true });
+    await waitFor(() =>
+      expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1)
+    );
+    await useBuildSessionStore
+      .getState()
+      .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+    messages.resolve([user]);
+    await loading;
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({ messages: [user, answer], turnSettlement: receipt });
   });
 
   it("keeps a newer live turn's identity when completion lookup fails", async () => {
     useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
-      status: "running",
       activeTurnId: "next-turn",
       activeTurnIndex: 1,
       activeTurnLocalOwner: true,
@@ -1503,21 +1428,20 @@ describe("loadSession completed transcript handoff", () => {
     });
   });
 
-  it("rejects a load response from an older turn", async () => {
+  it("rejects a history response from an older turn", async () => {
     const messages = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
-    mockedApi.fetchMessages.mockReturnValue(messages.promise);
-    const load = useBuildSessionStore
+    mockedApi.fetchMessages.mockReturnValueOnce(messages.promise);
+    const loading = useBuildSessionStore
       .getState()
       .loadSession(SESSION_ID, { force: true });
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitFor(() => expect(mockedApi.fetchMessages).toHaveBeenCalled());
     useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
       turnGeneration: 1,
       status: "running",
       activeTurnId: "next-turn",
     });
     messages.resolve([user]);
-    await load;
+    await loading;
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)
     ).toMatchObject({

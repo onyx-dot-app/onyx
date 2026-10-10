@@ -12370,6 +12370,13 @@
       "loadError": {
         "title": "无法加载会话",
         "retry": "重试"
+      },
+      "queuedSendError": {
+        "title": "无法发送排队中的消息"
+      },
+      "settlementError": {
+        "title": "无法确认任务是否完成",
+        "description": "请重试以检查任务并加载已保存的回复。"
       }
     },
     "compaction": {

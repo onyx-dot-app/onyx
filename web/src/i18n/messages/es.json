@@ -12370,6 +12370,13 @@
       "loadError": {
         "title": "No se pudo cargar la sesión",
         "retry": "Volver a intentar"
+      },
+      "queuedSendError": {
+        "title": "No se pudo enviar el mensaje en cola"
+      },
+      "settlementError": {
+        "title": "No se pudo confirmar que la tarea terminó",
+        "description": "Vuelve a intentarlo para comprobar la tarea y cargar su respuesta guardada."
       }
     },
     "compaction": {

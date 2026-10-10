@@ -34,13 +34,18 @@ describe("Craft queued messages", () => {
     useBuildSessionStore
       .getState()
       .enqueueMessage(sessionId, "Summarize this brief", documentAttachments);
-    useBuildSessionStore.getState().removeQueuedMessage(sessionId, 0);
+    const first = useBuildSessionStore.getState().sessions.get(sessionId)
+      ?.queuedMessages[0];
+    if (!first) throw new Error("Queue head missing");
+    useBuildSessionStore.getState().removeQueuedMessage(sessionId, first.id);
 
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)?.queuedMessages
     ).toEqual([
       {
         id: expect.any(Number),
+        phase: "waiting",
+        model: undefined,
         text: "Summarize this brief",
         attachments: documentAttachments,
       },

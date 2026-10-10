@@ -12370,6 +12370,13 @@
       "loadError": {
         "title": "Could not load the session",
         "retry": "Try again"
+      },
+      "queuedSendError": {
+        "title": "Could not send the queued message"
+      },
+      "settlementError": {
+        "title": "Could not confirm task completion",
+        "description": "Try again to check the task and load its saved response."
       }
     },
     "compaction": {

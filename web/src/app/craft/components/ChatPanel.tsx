@@ -198,6 +198,9 @@ export default function BuildChatPanel({
   );
   const createSession = useBuildSessionStore((state) => state.createSession);
   const loadSession = useBuildSessionStore((state) => state.loadSession);
+  const retryTurnSettlement = useBuildSessionStore(
+    (state) => state.retryTurnSettlement
+  );
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
   );
@@ -209,9 +212,24 @@ export default function BuildChatPanel({
     interruptStreaming,
     streamScheduledRunEvents,
     streamTurnEvents,
+    retryQueuedMessage,
   } = useBuildStreaming();
   const isInterrupting = useIsInterrupting();
-  const queuedMessages = useQueuedMessages();
+  const sessionQueue = useQueuedMessages();
+  const queuedMessages = useMemo(
+    () => sessionQueue.filter((message) => message.phase === "waiting"),
+    [sessionQueue]
+  );
+  const queuedSendError =
+    !isRunning && !session?.activeTurnId && queuedMessages.length > 0
+      ? session?.error
+      : null;
+  const settlementError =
+    session?.turnSettlement?.phase === "failed"
+      ? (session.turnSettlement.error ?? t("settlementError.description"))
+      : null;
+  const recoverableError =
+    settlementError ?? queuedSendError ?? session?.loadError;
   const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
@@ -610,57 +628,26 @@ export default function BuildChatPanel({
 
   const handleQueueMessage = useCallback(
     (text: string, files: BuildFile[]) => {
-      if (sessionId) {
-        enqueueMessage(sessionId, text, toMessageAttachments(files));
-      }
+      return (
+        !!sessionId &&
+        enqueueMessage(
+          sessionId,
+          text,
+          toMessageAttachments(files),
+          modelBySession[sessionId] ?? null
+        )
+      );
     },
-    [sessionId, enqueueMessage]
+    [sessionId, enqueueMessage, modelBySession]
   );
 
   const handleRemoveQueuedMessage = useCallback(
     (index: number) => {
-      if (sessionId) removeQueuedMessage(sessionId, index);
+      const message = queuedMessages[index];
+      if (sessionId && message) removeQueuedMessage(sessionId, message.id);
     },
-    [sessionId, removeQueuedMessage]
+    [sessionId, queuedMessages, removeQueuedMessage]
   );
-
-  // Auto-send the next queued message FIFO after a run cleanly succeeds (each
-  // send re-arms this for the message after). Only fire on a clean completion
-  // and when the send is actually eligible — otherwise we'd dequeue a message
-  // that a failed run never sends, silently dropping it. The sessionId guard
-  // avoids mistaking a session switch for a run completion.
-  const sessionStatus = session?.status;
-  const sessionError = session?.error ?? session?.loadError;
-  const prevIsRunningRef = useRef(isRunning);
-  const prevSessionIdRef = useRef(sessionId);
-  useEffect(() => {
-    const wasRunning = prevIsRunningRef.current;
-    const prevSessionId = prevSessionIdRef.current;
-    prevIsRunningRef.current = isRunning;
-    prevSessionIdRef.current = sessionId;
-
-    const runSucceeded =
-      wasRunning &&
-      !isRunning &&
-      sessionId === prevSessionId &&
-      sessionStatus === "active" &&
-      !sessionError;
-    if (runSucceeded && sessionId && queuedMessages.length > 0) {
-      const next = queuedMessages[0];
-      if (next) {
-        removeQueuedMessage(sessionId, 0);
-        void sendMessage(next.text, next.attachments);
-      }
-    }
-  }, [
-    isRunning,
-    sessionId,
-    sessionStatus,
-    sessionError,
-    queuedMessages,
-    sendMessage,
-    removeQueuedMessage,
-  ]);
 
   return (
     <LayoutGroup id="craft-chat">
@@ -818,19 +805,30 @@ export default function BuildChatPanel({
                       </Tooltip>
                     </div>
                   )}
-                  {session?.loadError && scheduledSessionId && (
+                  {recoverableError && scheduledSessionId && (
                     <div className="pb-2" role="alert">
                       <MessageCard
                         variant="error"
-                        title={t("loadError.title")}
-                        description={session.loadError}
+                        title={t(
+                          settlementError
+                            ? "settlementError.title"
+                            : queuedSendError
+                              ? "queuedSendError.title"
+                              : "loadError.title"
+                        )}
+                        description={recoverableError}
                         rightChildren={
                           <Button
-                            onClick={() =>
-                              void loadSession(scheduledSessionId, {
-                                force: true,
-                              })
-                            }
+                            onClick={() => {
+                              if (settlementError)
+                                void retryTurnSettlement(scheduledSessionId);
+                              else if (queuedSendError)
+                                void retryQueuedMessage(scheduledSessionId);
+                              else
+                                void loadSession(scheduledSessionId, {
+                                  force: true,
+                                });
+                            }}
                           >
                             {t("loadError.retry")}
                           </Button>

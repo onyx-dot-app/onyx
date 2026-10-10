@@ -1,5 +1,7 @@
 "use client";
 
+import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+
 import { create } from "zustand";
 
 import {
@@ -600,8 +602,10 @@ const outputInventoryRequests = new Map<string, Promise<void>>();
 // Monotonic id for queued messages (kept out of Zustand state for simplicity).
 let nextQueuedMessageId = 1;
 
-interface CraftQueuedMessage {
+export interface CraftQueuedMessage {
   id: number;
+  phase: "waiting" | "starting";
+  model?: BuildLlmSelection | null;
   text: string;
   attachments: BuildMessageAttachment[];
 }
@@ -628,6 +632,14 @@ export interface TabNavigationHistory {
 /** Output panel tab types */
 export type OutputTabType = "preview" | "files" | "artifacts";
 
+export type TurnSettlement = {
+  turnId: string | null;
+  turnGeneration: number;
+} & (
+  | { phase: "reconciling" | "ready" }
+  | { phase: "failed"; error: string | null }
+);
+
 export interface BuildSessionData {
   id: string;
   instanceId: string;
@@ -636,7 +648,7 @@ export interface BuildSessionData {
   artifacts: Artifact[];
   /** Active backend turn, if this session is currently running. */
   activeTurnId: string | null;
-  pendingCompletedTurnId: string | null;
+  turnSettlement: TurnSettlement | null;
   /** The user-message turn index for the active backend turn. */
   activeTurnIndex: number | null;
   /** True when this tab created the active turn and already owns its stream. */
@@ -930,9 +942,17 @@ interface BuildSessionStore {
   enqueueMessage: (
     sessionId: string,
     text: string,
-    attachments: BuildMessageAttachment[]
-  ) => void;
-  removeQueuedMessage: (sessionId: string, index: number) => void;
+    attachments: BuildMessageAttachment[],
+    model?: BuildLlmSelection | null
+  ) => boolean;
+  removeQueuedMessage: (sessionId: string, messageId: number) => void;
+  claimQueuedMessage: (sessionId: string) => CraftQueuedMessage | null;
+  beginTurnSettlement: (
+    sessionId: string,
+    turnId: string | null,
+    generation: number
+  ) => Promise<void>;
+  retryTurnSettlement: (sessionId: string) => Promise<void>;
 
   // Actions - Abort Control
   setAbortController: (sessionId: string, controller: AbortController) => void;
@@ -941,7 +961,7 @@ interface BuildSessionStore {
   // Actions - Session Lifecycle
   loadSession: (
     sessionId: string,
-    options?: { force?: boolean; preferPersisted?: boolean }
+    options?: { force?: boolean }
   ) => Promise<void>;
 
   // Actions - Session History
@@ -1049,7 +1069,7 @@ export function canReuseSession(
   return (
     session?.isLoaded === true &&
     session.loadError === null &&
-    session.pendingCompletedTurnId === null &&
+    session.turnSettlement?.phase !== "reconciling" &&
     session.sandbox?.status !== "sleeping" &&
     session.sandbox?.status !== "terminated" &&
     session.sandbox?.status !== "failed"
@@ -1061,49 +1081,72 @@ const completedTranscriptReads: Map<string, Promise<void>> = new Map();
 function reconcileCompletedTranscript(
   sessionId: string,
   started: BuildSessionData
-): void {
-  const requestKey: string = `${sessionId}:${started.instanceId}:${started.loadGeneration}:${started.turnGeneration}:${started.pendingCompletedTurnId}`;
-  if (completedTranscriptReads.has(requestKey)) return;
-  const ownsCompletion: () => boolean = () => {
-    const current: BuildSessionData | undefined = useBuildSessionStore
-      .getState()
-      .sessions.get(sessionId);
+): Promise<void> {
+  const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${started.turnSettlement?.turnId}`;
+  const existing = completedTranscriptReads.get(requestKey);
+  if (existing) return existing;
+  const ownsCompletion = () => {
+    const current = useBuildSessionStore.getState().sessions.get(sessionId);
     return (
       current?.instanceId === started.instanceId &&
       current.turnGeneration === started.turnGeneration &&
-      current.loadGeneration === started.loadGeneration &&
-      current.pendingCompletedTurnId === started.pendingCompletedTurnId &&
-      current.pendingCompletedTurnId !== null &&
-      current.status !== "running" &&
-      current.status !== "creating"
+      current.turnSettlement?.turnId === started.turnSettlement?.turnId &&
+      current.turnSettlement?.phase === "reconciling"
     );
   };
-  const request: Promise<void> = (async () => {
-    for (let attempt: number = 0; attempt < 30; attempt++) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 1000));
-      if (!ownsCompletion()) return;
-      try {
-        const activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> =
-          await fetchActiveTurn(sessionId);
+  const fail = (error: unknown) => {
+    const current = useBuildSessionStore.getState().sessions.get(sessionId);
+    if (!ownsCompletion() || !current?.turnSettlement) return;
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "idle",
+      isInterrupting: false,
+      turnSettlement: {
+        ...current.turnSettlement,
+        phase: "failed",
+        error:
+          error === null
+            ? null
+            : error instanceof Error
+              ? error.message
+              : String(error),
+      },
+    });
+  };
+  const request = (async () => {
+    try {
+      for (let attempt = 0; attempt < 30; attempt++) {
         if (!ownsCompletion()) return;
-        if (activeTurn?.turn_id === started.pendingCompletedTurnId) continue;
-        if (activeTurn !== null) return;
-        const messages: BuildMessage[] = await fetchMessages(sessionId);
+        const activeTurn = await fetchActiveTurn(sessionId);
         if (!ownsCompletion()) return;
+        if (activeTurn !== null) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        const messages = await fetchMessages(sessionId);
+        if (!ownsCompletion()) return;
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (!current?.turnSettlement) return;
         useBuildSessionStore.getState().updateSessionData(sessionId, {
           messages: consolidateMessagesIntoTurns(messages),
           streamItems: [],
           subagents: buildSubagentsFromMessages(messages),
           contextUsage: deriveContextUsage(messages),
-          pendingCompletedTurnId: null,
+          status: "active",
+          isInterrupting: false,
+          activeTurnId: null,
+          activeTurnIndex: null,
+          activeTurnLocalOwner: false,
+          turnSettlement: { ...current.turnSettlement, phase: "ready" },
         });
         return;
-      } catch (error) {
-        console.warn("Failed to reconcile completed transcript:", error);
       }
+      fail(null);
+    } catch (error) {
+      fail(error);
     }
   })().finally(() => completedTranscriptReads.delete(requestKey));
   completedTranscriptReads.set(requestKey, request);
+  return request;
 }
 
 // =============================================================================
@@ -1119,7 +1162,7 @@ const createInitialSessionData = (
   messages: [],
   artifacts: [],
   activeTurnId: null,
-  pendingCompletedTurnId: null,
+  turnSettlement: null,
   activeTurnIndex: null,
   activeTurnLocalOwner: false,
   streamItems: [],
@@ -1642,18 +1685,27 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   enqueueMessage: (
     sessionId: string,
     text: string,
-    attachments: BuildMessageAttachment[]
+    attachments: BuildMessageAttachment[],
+    model?: BuildLlmSelection | null
   ) => {
+    let accepted = false;
     set((state) => {
       const session = state.sessions.get(sessionId);
       if (!session || session.queuedMessages.length >= MAX_QUEUED_MESSAGES) {
         return state;
       }
+      accepted = true;
       const updatedSession: BuildSessionData = {
         ...session,
         queuedMessages: [
           ...session.queuedMessages,
-          { id: nextQueuedMessageId++, text, attachments },
+          {
+            id: nextQueuedMessageId++,
+            phase: "waiting",
+            text,
+            attachments,
+            model,
+          },
         ],
         lastAccessed: new Date(),
       };
@@ -1661,15 +1713,92 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       newSessions.set(sessionId, updatedSession);
       return { sessions: newSessions };
     });
+    return accepted;
   },
 
-  removeQueuedMessage: (sessionId: string, index: number) => {
+  claimQueuedMessage: (sessionId) => {
+    let claimed: CraftQueuedMessage | null = null;
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (
+        !session ||
+        session.status !== "active" ||
+        session.activeTurnId !== null ||
+        session.error ||
+        session.turnSettlement?.phase !== "ready" ||
+        session.turnSettlement.turnGeneration !== session.turnGeneration
+      )
+        return state;
+      const head = session.queuedMessages[0];
+      if (!head || head.phase !== "waiting") return state;
+      claimed = head;
+      const sessions = new Map(state.sessions);
+      sessions.set(sessionId, {
+        ...session,
+        queuedMessages: session.queuedMessages.map((message) =>
+          message.id === head.id ? { ...message, phase: "starting" } : message
+        ),
+      });
+      return { sessions };
+    });
+    return claimed;
+  },
+
+  beginTurnSettlement: async (sessionId, turnId, generation) => {
+    const session = get().sessions.get(sessionId);
+    if (
+      !session ||
+      session.turnGeneration !== generation ||
+      session.error ||
+      session.turnSettlement ||
+      (session.status !== "running" && session.status !== "creating")
+    )
+      return;
+    get().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: null,
+      activeTurnIndex: null,
+      activeTurnLocalOwner: false,
+      turnSettlement: {
+        turnId,
+        turnGeneration: generation,
+        phase: "reconciling",
+      },
+    });
+    const started = get().sessions.get(sessionId);
+    if (started) await reconcileCompletedTranscript(sessionId, started);
+  },
+
+  retryTurnSettlement: async (sessionId) => {
+    const session = get().sessions.get(sessionId);
+    if (
+      !session?.turnSettlement ||
+      session.turnSettlement.phase !== "failed" ||
+      session.turnSettlement.turnGeneration !== session.turnGeneration ||
+      session.activeTurnId !== null
+    )
+      return;
+    get().updateSessionData(sessionId, {
+      status: "running",
+      turnSettlement: {
+        turnId: session.turnSettlement.turnId,
+        turnGeneration: session.turnGeneration,
+        phase: "reconciling",
+      },
+    });
+    const started = get().sessions.get(sessionId);
+    if (started) await reconcileCompletedTranscript(sessionId, started);
+  },
+
+  removeQueuedMessage: (sessionId: string, messageId: number) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
       if (!session) return state;
       const updatedSession: BuildSessionData = {
         ...session,
-        queuedMessages: session.queuedMessages.filter((_, i) => i !== index),
+        queuedMessages: session.queuedMessages.filter(
+          (message) => message.id !== messageId || message.phase === "starting"
+        ),
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -1700,21 +1829,17 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   // Session Lifecycle
   // ===========================================================================
 
-  loadSession: async (
-    sessionId: string,
-    options?: { force?: boolean; preferPersisted?: boolean }
-  ) => {
-    const { setCurrentSession, updateSessionData, sessions } = get();
+  loadSession: async (sessionId: string, options?: { force?: boolean }) => {
+    const { updateSessionData, sessions } = get();
 
     // Check if already loaded in cache
     const existingSession = sessions.get(sessionId);
     if (canReuseSession(existingSession) && options?.force !== true) {
-      setCurrentSession(sessionId);
       return;
     }
 
-    // Set as current and mark as loading
-    setCurrentSession(sessionId);
+    // Load metadata without changing the active session.
+    if (!get().sessions.has(sessionId)) get().createSession(sessionId);
     const loadingSession: BuildSessionData | undefined =
       get().sessions.get(sessionId);
     if (!loadingSession) return;
@@ -1734,6 +1859,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return (
         current?.instanceId === loadingSession.instanceId &&
         current.turnGeneration === loadingSession.turnGeneration &&
+        current.turnSettlement === loadingSession.turnSettlement &&
         current.loadGeneration === loadGeneration
       );
     };
@@ -1751,7 +1877,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       let activeTurnLookupSucceeded: boolean = false;
       try {
         activeTurn = await fetchActiveTurn(sessionId);
-        activeTurnLookupSucceeded = true;
       } catch (err) {
         console.warn("Failed to fetch active turn:", err);
       }
@@ -1768,29 +1893,17 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         currentSession?.status === "creating";
       const isStreaming: boolean =
         currentSessionIsLive && (currentSession?.messages.length ?? 0) > 0;
-      // settle() (the only preferPersisted caller) runs on a live "running"
-      // session, so the isStreaming status branch below already keeps status live,
-      // leaving settle the sole owner of the flip to "active" (else auto-send races).
-      const pendingCompletedTurnId: string | null | undefined =
-        currentSession?.pendingCompletedTurnId;
-      // A completion learned during this load requires a later transcript read.
-      const keepCompletedTranscript: boolean =
-        !currentSessionIsLive &&
-        options?.preferPersisted !== true &&
-        pendingCompletedTurnId != null &&
-        (loadingSession.pendingCompletedTurnId !== pendingCompletedTurnId ||
-          !activeTurnLookupSucceeded ||
-          activeTurn?.turn_id === pendingCompletedTurnId);
-      const useDbMessages: boolean =
-        (!isStreaming && !keepCompletedTranscript) ||
-        options?.preferPersisted === true;
+      const keepCompletedTranscript =
+        currentSession?.turnSettlement != null &&
+        currentSession.turnSettlement.phase !== "ready";
+      const useDbMessages = !keepCompletedTranscript && !isStreaming;
 
       const resolvedActiveTurnId: string | null = keepCompletedTranscript
-        ? null
+        ? currentSession!.activeTurnId
         : (activeTurn?.turn_id ??
           (useDbMessages ? null : currentSession!.activeTurnId));
       const resolvedActiveTurnIndex: number | null = keepCompletedTranscript
-        ? null
+        ? currentSession!.activeTurnIndex
         : (activeTurn?.turn_index ??
           (useDbMessages ? null : currentSession!.activeTurnIndex));
 
@@ -1828,9 +1941,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           streamItems,
           subagents,
           activeTurnId: resolvedActiveTurnId,
-          pendingCompletedTurnId: useDbMessages
-            ? null
-            : currentSession!.pendingCompletedTurnId,
+          turnSettlement: currentSession!.turnSettlement,
           activeTurnIndex: resolvedActiveTurnIndex,
           activeTurnLocalOwner: useDbMessages
             ? false
@@ -1839,13 +1950,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             ? deriveContextUsage(messages)
             : currentSession!.contextUsage,
         });
-
-      if (isCurrentLoad() && keepCompletedTranscript) {
-        const completedSession: BuildSessionData | undefined =
-          get().sessions.get(sessionId);
-        if (completedSession)
-          reconcileCompletedTranscript(sessionId, completedSession);
-      }
 
       const [runtimeResult] = await runtimeRequest;
       if (!isCurrentRuntimeLoad()) return;
@@ -1867,8 +1971,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           keepCompletedTranscript ||
           runtimeSession.status !== status ||
           runtimeSession.activeTurnId !== resolvedActiveTurnId ||
-          runtimeSession.pendingCompletedTurnId !==
-            (useDbMessages ? null : currentSession!.pendingCompletedTurnId)
+          runtimeSession.turnSettlement !== currentSession!.turnSettlement
             ? runtimeSession.status
             : activeTurn
               ? "running"
@@ -1974,17 +2077,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       updateSessionData(sessionId, {
         loadError: err instanceof Error ? err.message : String(err),
       });
-    } finally {
-      const completedSession: BuildSessionData | undefined =
-        get().sessions.get(sessionId);
-      if (
-        isCurrentRuntimeLoad() &&
-        completedSession?.pendingCompletedTurnId != null &&
-        completedSession.status !== "running" &&
-        completedSession.status !== "creating"
-      ) {
-        reconcileCompletedTranscript(sessionId, completedSession);
-      }
     }
   },
 

@@ -202,7 +202,8 @@ export function useBuildSessionController({
         return;
       }
 
-      // Need to load from API
+      // Navigation belongs to the controller, not background loads.
+      setCurrentSession(existingSessionId);
       await loadSession(existingSessionId);
     }
 

@@ -55,7 +55,7 @@ export interface BaseInputBarProps {
   submitBlocked?: boolean;
 
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string) => void;
+  onQueueMessage?: (text: string) => boolean | void;
   onRemoveQueuedMessage?: (index: number) => void;
 
   onInterrupt?: () => void;
@@ -211,8 +211,7 @@ const BaseInputBar = memo(
         const text = message.trim();
         if (isRunning) {
           if (onQueueMessage && text && queue.length < MAX_QUEUED_MESSAGES) {
-            onQueueMessage(text);
-            clearMessage();
+            if (onQueueMessage(text) !== false) clearMessage();
           }
           return;
         }

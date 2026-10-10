@@ -245,16 +245,16 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 ---
 
-A completed local transcript stays visible while its server turn remains active or cannot be checked.
-Session loading checks turn completion before reading persisted messages.
-Held responses retry completion every second, for at most 30 attempts.
-Revisiting a session with a pending completion starts another load.
-Once completion is confirmed, persisted history replaces the local transcript and clears the pending turn marker.
-Interrupt reconciliation explicitly requests persisted history and bypasses this completion hold.
-Earlier session instances and loads cannot replace current data. Earlier turns cannot replace the current transcript or turn status.
-Session metadata and artifacts can finish loading after a new turn starts.
-A new turn clears the prior completion marker, including when its prompt is rejected.
-Queued prompts remain queued when interruption ends with a session load error.
+The streamed response remains visible until the server confirms completion and persisted history is available.
+`turnSettlement` owns this handoff with reconciling, failed, and ready states.
+Normal completion and interruption use the same settlement path.
+Settlement reads turn status and messages independently of runtime discovery, artifacts, and navigation.
+Failures retain the transcript and expose a retry for that same settlement.
+The streaming hook claims ready queue work atomically, so repeated events or multiple mounted hooks cannot duplicate a send.
+A queued prompt remains in the queue until the server accepts its turn.
+Rejected starts remain available for explicit retry with the same request identity.
+Earlier session instances and turns cannot publish settlement results.
+Session metadata and artifacts may finish after a newer turn starts without replacing its transcript or status.
 
 ### Output inventory and panel navigation
 

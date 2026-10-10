@@ -12370,6 +12370,13 @@
       "loadError": {
         "title": "Não foi possível carregar a sessão",
         "retry": "Tentar novamente"
+      },
+      "queuedSendError": {
+        "title": "Não foi possível enviar a mensagem na fila"
+      },
+      "settlementError": {
+        "title": "Não foi possível confirmar a conclusão da tarefa",
+        "description": "Tente novamente para verificar a tarefa e carregar a resposta salva."
       }
     },
     "compaction": {

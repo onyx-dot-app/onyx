@@ -370,16 +370,14 @@ turn's already-streamed content is durable; nothing rolls it back.
 On the frontend, `useBuildStreaming.ts:interruptStreaming` sets an
 `isInterrupting` flag and calls `reconcileInterruptedTurn` **after** posting
 the interrupt (`web/src/app/craft/hooks/useBuildStreaming.ts`).
-`reconcileInterruptedTurn` still exists and is the load-bearing fix for the
-historical bug: it polls `fetchActiveTurn` until the backend turn is gone,
-then, in `settle()`, reloads the session (`loadSession(..., { force: true,
-preferPersisted: true })`) **before** flipping session status back to
-`"active"` (`useBuildStreaming.ts`, comment: "Reload BEFORE the flip
-to active: the flip triggers the queued auto-send, so reloading after would
-race the freshly-started next turn"). A queued resend cannot fire until the
-reload has repopulated the interrupted turn's persisted output. This is
-current, verified behaviour, not the historical bug: interrupting and
-resending does not scrap the interrupted turn's rendered output today.
+After the backend turn ends, the store owns transcript settlement for both interrupted and normally completed turns.
+Settlement checks the active turn and reads persisted messages; it does not load runtime metadata or change navigation.
+A failed read preserves the local transcript and settlement identity. The retry action resumes that same settlement.
+Only confirmed completion with persisted history permits the next queued prompt.
+The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
+The queue retains each prompt, its attachments, and its explicit model choice until the server accepts it.
+Rejected sends require an explicit retry.
+Retries reuse the queued prompt's request identity, so a lost response does not create another turn.
 
 ### 4.5 History durability
 
@@ -390,7 +388,9 @@ Existing-session sends omit the model unless the user explicitly selects one, pr
 Load failures use `loadError` and show a retry action without erasing history.
 Turn errors do not invalidate cached sessions or discard rejected prompts.
 Sleeping, terminated, and failed cached sandboxes also load again on entry, including return from New build.
-Load responses must match the session instance, turn generation, and latest load generation.
+Transcript and turn-status writes require the same session instance, turn generation, settlement identity, and latest load generation.
+Metadata and artifact responses require the same session instance and latest load generation.
+Settlement owns its transcript until completion; metadata failures do not block confirmed queue continuation.
 Restoration refreshes files and output inventory when the sandbox is running, even if a newer turn has started.
 App readiness runs separately and controls only the iframe remount.
 Readiness polling survives a successor load for the same session instance and sandbox.

@@ -12370,6 +12370,13 @@
       "loadError": {
         "title": "Die Sitzung konnte nicht geladen werden",
         "retry": "Erneut versuchen"
+      },
+      "queuedSendError": {
+        "title": "Die Nachricht in der Warteschlange konnte nicht gesendet werden"
+      },
+      "settlementError": {
+        "title": "Aufgabenabschluss konnte nicht bestätigt werden",
+        "description": "Versuche es erneut, um die Aufgabe zu prüfen und ihre gespeicherte Antwort zu laden."
       }
     },
     "compaction": {
