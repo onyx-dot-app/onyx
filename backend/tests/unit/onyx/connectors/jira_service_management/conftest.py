@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from jira import JIRA
-from jira.resources import Issue
 
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
@@ -60,6 +59,18 @@ class MockComment:
         self.raw = {"body": body, "jsdPublic": is_public}
 
 
+class MockJiraIssue(dict[str, Any]):
+    """Raw Jira issue with a legacy key accessor for test call sites."""
+
+    @property
+    def key(self) -> str:
+        return str(self["key"])
+
+    @property
+    def raw(self) -> dict[str, Any]:
+        return self
+
+
 def make_mock_jsm_issue(
     key: str = "HELP-101",
     summary: str = "VPN not connecting",
@@ -75,41 +86,8 @@ def make_mock_jsm_issue(
     raw_overrides: dict[str, Any] | None = None,
     created: str = "2026-09-01T10:00:00.000+0000",
     updated: str = "2026-09-02T14:30:00.000+0000",
-) -> Issue:
-    """Build a mock Jira Issue carrying realistic JSM raw fields."""
-    issue = MagicMock(spec=Issue)
-    issue.key = key
-
-    fields = MagicMock()
-    fields.summary = summary
-    fields.description = description
-    fields.labels = labels or []
-    fields.created = created
-    fields.updated = updated
-
-    fields.reporter = MockUser("Alice Requester", "alice@example.com")
-    fields.assignee = MockUser("Bob Agent", "bob@example.com")
-
-    fields.priority = MagicMock()
-    fields.priority.name = "High"
-
-    fields.status = MagicMock()
-    fields.status.name = "Waiting for support"
-
-    fields.resolution = None
-    fields.duedate = None
-    fields.resolutiondate = None
-
-    fields.issuetype = MagicMock()
-    fields.issuetype.name = "Service Request"
-
-    project = MagicMock()
-    project.key = project_key
-    project.name = project_name
-    fields.project = project
-
-    fields.parent = None
-
+) -> MockJiraIssue:
+    """Build a raw REST issue matching JiraSourceOperations' dictionary contract."""
     if comments is None:
         comments = [
             MockComment(
@@ -123,33 +101,60 @@ def make_mock_jsm_issue(
                 is_public=False,
             ),
         ]
-    comment_container = MagicMock()
-    comment_container.comments = comments
-    fields.comment = comment_container
-
-    issue.fields = fields
-
-    raw_fields: dict[str, Any] = {"description": description}
     if field_map is None:
         field_map = JsmFieldMap(
             customer_request_type=REQUEST_TYPE_FIELD_ID,
             organizations=ORGANIZATIONS_FIELD_ID,
         )
 
+    raw_fields: dict[str, Any] = {
+        "summary": summary,
+        "description": description,
+        "labels": labels or [],
+        "created": created,
+        "updated": updated,
+        "reporter": {"displayName": "Alice Requester", "emailAddress": "alice@example.com"},
+        "assignee": {"displayName": "Bob Agent", "emailAddress": "bob@example.com"},
+        "priority": {"name": "High"},
+        "status": {"name": "Waiting for support"},
+        "resolution": None,
+        "duedate": None,
+        "resolutiondate": None,
+        "issuetype": {"name": "Service Request"},
+        "project": {"key": project_key, "name": project_name},
+        "parent": None,
+        "comment": {
+            "comments": [
+                {
+                    "body": comment.body,
+                    "author": (
+                        {
+                            "displayName": comment.author.displayName,
+                            "emailAddress": getattr(comment.author, "emailAddress", None),
+                        }
+                        if hasattr(comment, "author")
+                        else {}
+                    ),
+                    "jsdPublic": comment.raw.get("jsdPublic", True),
+                }
+                for comment in comments
+            ]
+        },
+    }
+
     if request_type is not None and field_map.customer_request_type:
         raw_fields[field_map.customer_request_type] = request_type
     if organizations is not None and field_map.organizations:
         raw_fields[field_map.organizations] = [
-            {"id": str(i + 1), "name": org} for i, org in enumerate(organizations)
+            {"id": str(i + 1), "name": org}
+            for i, org in enumerate(organizations)
         ]
     if slas is not None:
         raw_fields.update(slas)
-
     if raw_overrides:
         raw_fields.update(raw_overrides)
 
-    issue.raw = {"fields": raw_fields}
-    return issue
+    return MockJiraIssue(key=key, fields=raw_fields)
 
 
 @pytest.fixture
