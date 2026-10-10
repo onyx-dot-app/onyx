@@ -7,10 +7,6 @@ from datetime import datetime
 from typing import Any, Protocol, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
 
-from google.auth.exceptions import RefreshError
-from google.oauth2.credentials import Credentials as OAuthCredentials
-from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-from googleapiclient.errors import HttpError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -19,6 +15,7 @@ from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -34,11 +31,9 @@ from onyx.connectors.google_drive.doc_conversion import (
     onyx_document_id_from_drive_file,
 )
 from onyx.connectors.google_drive.drive_access import (
-    can_list_drive,
     internal_principals_of,
     list_drive_members,
     list_group_member_emails,
-    probe_target,
     select_drive_organizer,
 )
 from onyx.connectors.google_drive.file_retrieval import (
@@ -51,8 +46,6 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_files_by_web_view_links_batch,
     get_files_in_shared_drive,
     get_folder_metadata,
-    get_root_folder_id,
-    get_shared_drive_name,
     has_link_only_permission,
 )
 from onyx.connectors.google_drive.models import (
@@ -60,33 +53,31 @@ from onyx.connectors.google_drive.models import (
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
+    ImpersonationError,
     PhaseProgress,
     RetrievedDriveFile,
     StageCompletion,
+    make_user_removal_checker,
     next_phase,
     split_target_partition_key,
     target_partition_key,
 )
-from onyx.connectors.google_utils.google_auth import get_google_creds
+from onyx.connectors.google_drive.source_operations import (
+    DriveCorpus,
+    GoogleDriveHttpError,
+    GoogleDriveRefreshError,
+    GoogleDriveSourceOperations,
+)
 from onyx.connectors.google_utils.google_utils import (
     GoogleFields,
-    execute_paginated_retrieval,
     get_file_owners,
-    is_access_denied,
-)
-from onyx.connectors.google_utils.resources import (
-    GoogleDriveService,
-    ImpersonationError,
-    get_admin_service,
-    get_drive_service,
-    make_user_removal_checker,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
     MISSING_SCOPES_ERROR_STR,
     ONYX_SCOPE_INSTRUCTIONS,
     SLIM_BATCH_SIZE,
-    USER_FIELDS,
+    GoogleCredentialKind,
 )
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -140,13 +131,13 @@ PARTITIONS_PER_CHECKPOINT = 4
 MAX_DEDUP_DRIVE_FILE_IDS = 800_000
 
 
-def _extract_str_list_from_comma_str(string: str | None) -> list[str]:
+def extract_str_list_from_comma_str(string: str | None) -> list[str]:
     if not string:
         return []
     return [s.strip() for s in string.split(",") if s.strip()]
 
 
-def _extract_ids_from_urls(urls: list[str]) -> list[str]:
+def extract_ids_from_urls(urls: list[str]) -> list[str]:
     return [urlparse(url).path.strip("/").split("/")[-1] for url in urls]
 
 
@@ -382,26 +373,26 @@ class GoogleDriveConnector(
             False if specific_requests_made else include_shared_drives
         )
 
-        shared_drive_url_list = _extract_str_list_from_comma_str(shared_drive_urls)
+        shared_drive_url_list = extract_str_list_from_comma_str(shared_drive_urls)
         self._requested_shared_drive_ids = set(
-            _extract_ids_from_urls(shared_drive_url_list)
+            extract_ids_from_urls(shared_drive_url_list)
         )
 
         self._requested_my_drive_emails = set(
-            _extract_str_list_from_comma_str(my_drive_emails)
+            extract_str_list_from_comma_str(my_drive_emails)
         )
 
-        shared_folder_url_list = _extract_str_list_from_comma_str(shared_folder_urls)
-        self._requested_folder_ids = set(_extract_ids_from_urls(shared_folder_url_list))
-        self._specific_user_emails = _extract_str_list_from_comma_str(
+        shared_folder_url_list = extract_str_list_from_comma_str(shared_folder_urls)
+        self._requested_folder_ids = set(extract_ids_from_urls(shared_folder_url_list))
+        self._specific_user_emails = extract_str_list_from_comma_str(
             specific_user_emails
         )
         self.exclude_domain_link_only = exclude_domain_link_only
 
         self._primary_admin_email: str | None = None
 
-        self._creds: OAuthCredentials | ServiceAccountCredentials | None = None
-        self._creds_dict: dict[str, Any] | None = None
+        self._ops: GoogleDriveSourceOperations | None = None
+        self._is_service_account = False
 
         # ids of folders and shared drives that have been traversed
         self._retrieved_folder_and_drive_ids: set[str] = set()
@@ -435,12 +426,16 @@ class GoogleDriveConnector(
         return self._primary_admin_email.split("@")[-1]
 
     @property
-    def creds(self) -> OAuthCredentials | ServiceAccountCredentials:
-        if self._creds is None:
+    def ops(self) -> GoogleDriveSourceOperations:
+        if self._ops is None:
             raise RuntimeError(
-                "Creds missing, should not call this property before calling load_credentials"
+                "Source operations missing, should not call this property before calling load_credentials"
             )
-        return self._creds
+        return self._ops
+
+    @property
+    def is_service_account(self) -> bool:
+        return self._is_service_account
 
     @classmethod
     @override
@@ -487,24 +482,22 @@ class GoogleDriveConnector(
         except KeyError:
             raise ValueError("Credentials json missing primary admin key")
 
-        self._creds, new_creds_dict = get_google_creds(
-            credentials=credentials,
-            source=DocumentSource.GOOGLE_DRIVE,
+        self._ops = GoogleDriveSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.GOOGLE_DRIVE.value, credentials
+            )
         )
+        auth = self._ops.authenticate()
+        self._is_service_account = auth.kind == GoogleCredentialKind.SERVICE_ACCOUNT
 
         # Service account connectors don't have a specific setting determining whether
         # to include "shared with me" for each user, so we default to true unless the connector
         # is in specific folders/drives mode. Note that shared files are only picked up during
         # the My Drive stage, so this does nothing if the connector is set to only index shared drives.
-        if (
-            isinstance(self._creds, ServiceAccountCredentials)
-            and not self.specific_requests_made
-        ):
+        if self._is_service_account and not self.specific_requests_made:
             self.include_files_shared_with_me = True
 
-        self._creds_dict = new_creds_dict
-
-        return new_creds_dict
+        return auth.refreshed_credential_json
 
     def _update_traversed_parent_ids(self, folder_id: str) -> None:
         self._retrieved_folder_and_drive_ids.add(folder_id)
@@ -517,27 +510,15 @@ class GoogleDriveConnector(
         user_emails = [self.primary_admin_email]
 
         # Only fetch additional users if using service account
-        if isinstance(self.creds, OAuthCredentials):
+        if not self._is_service_account:
             return user_emails
-
-        admin_service = get_admin_service(
-            creds=self.creds,
-            user_email=self.primary_admin_email,
-        )
 
         # Get admins first since they're more likely to have access to most files
         for is_admin in [True, False]:
             query = "isAdmin=true" if is_admin else "isAdmin=false"
-            for user in execute_paginated_retrieval(
-                retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
-                list_key="users",
-                fields=USER_FIELDS,
-                domain=self.google_domain,
-                query=query,
-            ):
-                if email := user.get("primaryEmail"):
-                    if email not in user_emails:
-                        user_emails.append(email)
+            for email in self.ops.list_user_emails(query=query):
+                if email not in user_emails:
+                    user_emails.append(email)
         return user_emails
 
     def _get_my_drive_root_id(self, user_email: str) -> str | None:
@@ -551,8 +532,7 @@ class GoogleDriveConnector(
             return self._my_drive_root_id_cache[user_email]
 
         try:
-            drive_service = get_drive_service(self.creds, user_email)
-            root_id = get_root_folder_id(drive_service)
+            root_id = self.ops.get_root_folder_id(user_email=user_email)
             self._my_drive_root_id_cache[user_email] = root_id
             return root_id
         except Exception:
@@ -643,7 +623,6 @@ class GoogleDriveConnector(
         Returns:
             List of HierarchyNode objects for new ancestors (ordered parent-first)
         """
-        service = get_drive_service(self.creds, self.primary_admin_email)
         field_type = (
             DriveFileFieldType.WITH_PERMISSIONS
             if permission_sync_context
@@ -715,7 +694,8 @@ class GoogleDriveConnector(
                     external_access = get_external_access_for_folder(
                         folder,
                         permission_sync_context.google_domain,
-                        service,
+                        self.ops,
+                        self.primary_admin_email,
                         add_prefix,
                     )
                 else:
@@ -820,8 +800,7 @@ class GoogleDriveConnector(
                 )
                 continue
 
-            service = get_drive_service(self.creds, email)
-            folder = get_folder_metadata(service, folder_id, field_type)
+            folder = get_folder_metadata(self.ops, email, folder_id, field_type)
 
             if not folder:
                 logger.debug("Failed to fetch folder %s using %s", folder_id, email)
@@ -864,8 +843,7 @@ class GoogleDriveConnector(
     def _get_shared_drive_name(self, drive_id: str, retriever_email: str) -> str | None:
         """Fetch the name of a shared drive, trying both the retriever and admin."""
         for email in {retriever_email, self.primary_admin_email}:
-            svc = get_drive_service(self.creds, email)
-            name = get_shared_drive_name(svc, drive_id)
+            name = self.ops.get_shared_drive_name(user_email=email, drive_id=drive_id)
             if name:
                 return name
         return None
@@ -874,21 +852,17 @@ class GoogleDriveConnector(
         return self._get_all_drives_for_user(self.primary_admin_email)
 
     def _get_all_drives_for_user(self, user_email: str) -> set[str]:
-        drive_service = get_drive_service(self.creds, user_email)
-        is_service_account = isinstance(self.creds, ServiceAccountCredentials)
         logger.info(
             "Getting all drives for user %s with service account: %s",
             user_email,
-            is_service_account,
+            self._is_service_account,
         )
-        all_drive_ids: set[str] = set()
-        for drive in execute_paginated_retrieval(
-            retrieval_function=drive_service.drives().list,  # ty: ignore[unresolved-attribute]
-            list_key="drives",
-            useDomainAdminAccess=is_service_account,
-            fields="drives(id),nextPageToken",
-        ):
-            all_drive_ids.add(drive["id"])
+        all_drive_ids = set(
+            self.ops.list_drives(
+                user_email=user_email,
+                use_domain_admin_access=self._is_service_account,
+            )
+        )
 
         if not all_drive_ids:
             logger.warning(
@@ -1086,7 +1060,8 @@ class GoogleDriveConnector(
         logger.info("Listing shared drive %s as %s", drive_id, email)
         try:
             for item in get_files_in_shared_drive(
-                service=get_drive_service(self.creds, email),
+                ops=self.ops,
+                user_email=email,
                 drive_id=drive_id,
                 field_type=field_type,
                 max_num_pages=SHARED_DRIVE_PAGES_PER_CHECKPOINT,
@@ -1118,7 +1093,7 @@ class GoogleDriveConnector(
                     user_email=email,
                     parent_id=drive_id,
                 )
-        except RefreshError as error:
+        except GoogleDriveRefreshError as error:
             # Relist the drive from the start with another principal; the
             # failed email is excluded from the next selection.
             yield from self._impersonation_failed(email, error, checkpoint)
@@ -1131,13 +1106,12 @@ class GoogleDriveConnector(
         self, drive_id: str, checkpoint: GoogleDriveCheckpoint
     ) -> tuple[str | None, bool]:
         """The email to list a drive as, and whether its listing is complete."""
-        admin_drive_service = get_drive_service(self.creds, self.primary_admin_email)
         try:
-            members = list_drive_members(admin_drive_service, drive_id)
-        except HttpError as error:
+            members = list_drive_members(self.ops, drive_id)
+        except GoogleDriveHttpError as error:
             # Only a denial means "fall back"; a server error must fail the
             # run, or a prune would delete the drive's documents.
-            if not is_access_denied(error):
+            if not error.access_denied:
                 raise
             logger.warning("Cannot read members of drive %s: %s", drive_id, error)
             members = []
@@ -1145,7 +1119,7 @@ class GoogleDriveConnector(
         def _can_list(email: str) -> bool:
             if not self._may_impersonate(email, checkpoint):
                 return False
-            return can_list_drive(get_drive_service(self.creds, email), drive_id)
+            return self.ops.can_list_drive(user_email=email, drive_id=drive_id)
 
         choice = select_drive_organizer(
             drive_id=drive_id,
@@ -1170,10 +1144,7 @@ class GoogleDriveConnector(
         return None, False
 
     def _expand_group(self, group_email: str) -> list[str]:
-        admin_service = get_admin_service(
-            creds=self.creds, user_email=self.primary_admin_email
-        )
-        return list_group_member_emails(admin_service, group_email)
+        return list_group_member_emails(self.ops, group_email)
 
     def _list_my_drive(
         self,
@@ -1200,7 +1171,8 @@ class GoogleDriveConnector(
         logger.info("Listing My Drive of %s", email)
         try:
             for item in get_all_files_in_my_drive_and_shared(
-                service=get_drive_service(self.creds, email),
+                ops=self.ops,
+                user_email=email,
                 update_traversed_ids_func=_ignore_traversed_id,
                 field_type=field_type,
                 include_shared_with_me=False,
@@ -1233,7 +1205,7 @@ class GoogleDriveConnector(
                     drive_file=item,
                     user_email=email,
                 )
-        except RefreshError as error:
+        except GoogleDriveRefreshError as error:
             # The rest of this owner's files are no longer covered, so the
             # shared-file phase will keep them when other users see them.
             yield from self._impersonation_failed(email, error, checkpoint)
@@ -1265,7 +1237,8 @@ class GoogleDriveConnector(
         suppressed: int = 0
         try:
             for item in get_all_files_in_my_drive_and_shared(
-                service=get_drive_service(self.creds, email),
+                ops=self.ops,
+                user_email=email,
                 update_traversed_ids_func=_ignore_traversed_id,
                 field_type=field_type,
                 include_shared_with_me=True,
@@ -1292,7 +1265,7 @@ class GoogleDriveConnector(
                     drive_file=item,
                     user_email=email,
                 )
-        except RefreshError as error:
+        except GoogleDriveRefreshError as error:
             yield from self._impersonation_failed(email, error, checkpoint)
         finally:
             logger.info(
@@ -1346,7 +1319,7 @@ class GoogleDriveConnector(
             if email in seen or not self._may_impersonate(email, checkpoint):
                 continue
             seen.add(email)
-            metadata = probe_target(get_drive_service(self.creds, email), target_id)
+            metadata = self.ops.probe_target(user_email=email, target_id=target_id)
             if metadata is not None:
                 return email, metadata
         return None
@@ -1378,7 +1351,8 @@ class GoogleDriveConnector(
             target_id,
         )
         principals = internal_principals_of(
-            get_drive_service(self.creds, viewer),
+            self.ops,
+            viewer,
             target_id,
             self.google_domain,
             self._expand_group,
@@ -1409,7 +1383,7 @@ class GoogleDriveConnector(
             # A fresh traversed set per principal: a folder another principal
             # crawled may hold limited-access children only this one can see.
             for retrieved in crawl_folders_for_files(
-                service=get_drive_service(self.creds, email),
+                ops=self.ops,
                 parent_id=target_id,
                 field_type=field_type,
                 user_email=email,
@@ -1425,7 +1399,7 @@ class GoogleDriveConnector(
                 ):
                     continue
                 yield retrieved
-        except RefreshError as error:
+        except GoogleDriveRefreshError as error:
             yield from self._impersonation_failed(email, error, checkpoint)
             return
         checkpoint.crawled_target_ids.add(target_id)
@@ -1442,22 +1416,25 @@ class GoogleDriveConnector(
         try:
             # The default retry runs ~17 minutes; a user without Drive access
             # should not cost that on every run.
-            retry_builder(tries=3, delay=1)(get_root_folder_id)(
-                get_drive_service(self.creds, email)
+            retry_builder(tries=3, delay=1)(self.ops.get_root_folder_id)(
+                user_email=email
             )
-        except HttpError as error:
+        except GoogleDriveHttpError as error:
             if error.status_code != 401:
                 raise
             logger.warning("User '%s' does not have access to the drive APIs.", email)
             checkpoint.failed_impersonation_emails.add(email)
             return False
-        except RefreshError as error:
+        except GoogleDriveRefreshError as error:
             yield from self._impersonation_failed(email, error, checkpoint)
             return False
         return True
 
     def _impersonation_failed(
-        self, email: str, error: RefreshError, checkpoint: GoogleDriveCheckpoint
+        self,
+        email: str,
+        error: GoogleDriveRefreshError,
+        checkpoint: GoogleDriveCheckpoint,
     ) -> Iterator[RetrievedDriveFile]:
         checkpoint.failed_impersonation_emails.add(email)
         is_user_removed = make_user_removal_checker(email, self._get_all_user_emails)
@@ -1581,7 +1558,6 @@ class GoogleDriveConnector(
     def _oauth_retrieval_all_files(
         self,
         field_type: DriveFileFieldType,
-        drive_service: GoogleDriveService,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         page_token: str | None = None,
@@ -1598,7 +1574,8 @@ class GoogleDriveConnector(
         )
         yield from add_retrieval_info(
             get_all_files_for_oauth(
-                service=drive_service,
+                ops=self.ops,
+                user_email=self.primary_admin_email,
                 include_files_shared_with_me=self.include_files_shared_with_me,
                 include_my_drives=self.include_my_drives,
                 include_shared_drives=self.include_shared_drives,
@@ -1615,7 +1592,6 @@ class GoogleDriveConnector(
     def _oauth_retrieval_drives(
         self,
         field_type: DriveFileFieldType,
-        drive_service: GoogleDriveService,
         drive_ids_to_retrieve: list[str],
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
@@ -1626,7 +1602,8 @@ class GoogleDriveConnector(
         ) -> Iterator[RetrievedDriveFile | str]:
             yield from add_retrieval_info(
                 get_files_in_shared_drive(
-                    service=drive_service,
+                    ops=self.ops,
+                    user_email=self.primary_admin_email,
                     drive_id=drive_id,
                     field_type=field_type,
                     max_num_pages=SHARED_DRIVE_PAGES_PER_CHECKPOINT,
@@ -1701,7 +1678,6 @@ class GoogleDriveConnector(
     def _oauth_retrieval_folders(
         self,
         field_type: DriveFileFieldType,
-        drive_service: GoogleDriveService,
         drive_ids_to_retrieve: set[str],
         folder_ids_to_retrieve: set[str],
         checkpoint: GoogleDriveCheckpoint,
@@ -1723,7 +1699,7 @@ class GoogleDriveConnector(
             folder_id: str, folder_start: SecondsSinceUnixEpoch | None
         ) -> Iterator[RetrievedDriveFile]:
             yield from crawl_folders_for_files(
-                service=drive_service,
+                ops=self.ops,
                 parent_id=folder_id,
                 field_type=field_type,
                 user_email=self.primary_admin_email,
@@ -1857,8 +1833,6 @@ class GoogleDriveConnector(
                 current_folder_or_drive_id=None,
             )
 
-        drive_service = get_drive_service(self.creds, self.primary_admin_email)
-
         if checkpoint.completion_stage == DriveRetrievalStage.OAUTH_FILES:
             completion = checkpoint.completion_map[self.primary_admin_email]
             all_files_start = start
@@ -1868,7 +1842,6 @@ class GoogleDriveConnector(
 
             for file_or_token in self._oauth_retrieval_all_files(
                 field_type=field_type,
-                drive_service=drive_service,
                 start=all_files_start,
                 end=end,
                 page_token=checkpoint.completion_map[
@@ -1902,7 +1875,6 @@ class GoogleDriveConnector(
         if checkpoint.completion_stage == DriveRetrievalStage.SHARED_DRIVE_FILES:
             for file_or_token in self._oauth_retrieval_drives(
                 field_type=field_type,
-                drive_service=drive_service,
                 drive_ids_to_retrieve=sorted_drive_ids,
                 checkpoint=checkpoint,
                 start=start,
@@ -1921,7 +1893,6 @@ class GoogleDriveConnector(
         if checkpoint.completion_stage == DriveRetrievalStage.FOLDER_FILES:
             yield from self._oauth_retrieval_folders(
                 field_type=field_type,
-                drive_service=drive_service,
                 drive_ids_to_retrieve=set(sorted_drive_ids),
                 folder_ids_to_retrieve=set(sorted_folder_ids),
                 checkpoint=checkpoint,
@@ -1938,7 +1909,7 @@ class GoogleDriveConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
-        if isinstance(self.creds, ServiceAccountCredentials):
+        if self._is_service_account:
             return self._phased_retrieval(
                 field_type=field_type,
                 checkpoint=checkpoint,
@@ -2117,7 +2088,7 @@ class GoogleDriveConnector(
         """
         try:
             return convert_drive_item_to_document(
-                self.creds,
+                self.ops,
                 self.allow_images,
                 self.size_threshold,
                 permission_sync_context,
@@ -2152,7 +2123,7 @@ class GoogleDriveConnector(
         """
         Entrypoint for the connector; first run is with an empty checkpoint.
         """
-        if self._creds is None or self._primary_admin_email is None:
+        if self._ops is None or self._primary_admin_email is None:
             raise RuntimeError(
                 "Credentials missing, should not call this method before calling load_credentials"
             )
@@ -2220,7 +2191,7 @@ class GoogleDriveConnector(
         errors: list[ConnectorFailure],
         include_permissions: bool = False,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
-        if self._creds is None or self._primary_admin_email is None:
+        if self._ops is None or self._primary_admin_email is None:
             raise RuntimeError(
                 "Credentials missing, should not call this method before calling load_credentials"
             )
@@ -2231,13 +2202,14 @@ class GoogleDriveConnector(
             for failure in errors
             if failure.failed_document
         ]
-        service = get_drive_service(self.creds, self.primary_admin_email)
         field_type = (
             DriveFileFieldType.WITH_PERMISSIONS
             if include_permissions or self.exclude_domain_link_only
             else DriveFileFieldType.STANDARD
         )
-        batch_result = get_files_by_web_view_links_batch(service, doc_ids, field_type)
+        batch_result = get_files_by_web_view_links_batch(
+            self.ops, self.primary_admin_email, doc_ids, field_type
+        )
 
         for doc_id, error in batch_result.errors.items():
             yield ConnectorFailure(
@@ -2328,7 +2300,7 @@ class GoogleDriveConnector(
                 for file in files_batch
                 if (
                     doc := build_slim_document(
-                        self.creds,
+                        self.ops,
                         file.drive_file,
                         permission_sync_context,
                         retriever_email=file.user_email,
@@ -2429,7 +2401,7 @@ class GoogleDriveConnector(
         )
 
     def validate_connector_settings(self) -> None:
-        if self._creds is None:
+        if self._ops is None:
             raise ConnectorMissingCredentialError(
                 "Google Drive credentials not loaded."
             )
@@ -2440,18 +2412,26 @@ class GoogleDriveConnector(
             )
 
         try:
-            drive_service = get_drive_service(self._creds, self._primary_admin_email)
-            drive_service.files().list(  # ty: ignore[unresolved-attribute]
-                pageSize=1, fields="files(id)"
-            ).execute()
+            next(
+                self.ops.list_files(
+                    variant=DriveCorpus.USER,
+                    user_email=self._primary_admin_email,
+                    fields="nextPageToken, files(id)",
+                    page_size=1,
+                    max_num_pages=1,
+                ),
+                None,
+            )
 
-            if isinstance(self._creds, ServiceAccountCredentials):
+            if self._is_service_account:
                 # default is ~17mins of retries, don't do that here since this is called from
                 # the UI
-                retry_builder(tries=3, delay=0.1)(get_root_folder_id)(drive_service)
+                retry_builder(tries=3, delay=0.1)(self.ops.get_root_folder_id)(
+                    user_email=self._primary_admin_email
+                )
 
-        except HttpError as e:
-            status_code = e.resp.status if e.resp else None
+        except GoogleDriveHttpError as e:
+            status_code = e.status_code
             if status_code == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Google Drive credentials (401)."
@@ -2486,16 +2466,10 @@ class GoogleDriveConnector(
         misconfigured connectors fail at creation time instead of generating a
         steady stream of `PermissionError` log lines on every group-sync tick.
         """
-        admin_service = get_admin_service(
-            creds=self.creds,
-            user_email=self.primary_admin_email,
-        )
         try:
-            admin_service.users().get(  # ty: ignore[unresolved-attribute]
-                userKey=self.primary_admin_email
-            ).execute()
-        except HttpError as e:
-            status_code = e.resp.status if e.resp else None
+            self.ops.get_admin_user()
+        except GoogleDriveHttpError as e:
+            status_code = e.status_code
             if status_code == 403:
                 raise InsufficientPermissionsError(
                     f"Primary admin {self.primary_admin_email} is not authorized "

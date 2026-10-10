@@ -26,6 +26,9 @@ import onyx.connectors.google_drive.connector as connector_module
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import DriveRetrievalStage
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveSourceOperations,
+)
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 
 _USER = "user@example.com"
@@ -56,7 +59,8 @@ def _make_fake_get_files_in_shared_drive(
     """
 
     def _fake(
-        service: Any,  # noqa: ARG001
+        ops: GoogleDriveSourceOperations,  # noqa: ARG001
+        user_email: str,  # noqa: ARG001
         drive_id: str,
         field_type: DriveFileFieldType,  # noqa: ARG001
         max_num_pages: int,
@@ -93,11 +97,11 @@ def _build_oauth_connector(
         f"https://drive.google.com/drive/folders/{drive_id}" for drive_id in drive_ids
     )
     connector = GoogleDriveConnector(shared_drive_urls=urls)
-    # Any non-service-account creds select the OAuth retrieval path.
-    connector._creds = MagicMock()
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
+    # A non-service-account credential selects the OAuth retrieval path.
+    connector._is_service_account = False
     connector._primary_admin_email = _USER
     monkeypatch.setattr(connector, "get_all_drive_ids", lambda: set(drive_ids))
-    monkeypatch.setattr(connector_module, "get_drive_service", MagicMock())
     monkeypatch.setattr(connector_module, "get_files_in_shared_drive", fake_retrieval)
     return connector
 

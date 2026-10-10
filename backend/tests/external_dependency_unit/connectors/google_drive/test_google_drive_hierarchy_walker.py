@@ -31,7 +31,7 @@ After the planned fixes both tests should pass.
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from sqlalchemy import delete
@@ -47,6 +47,9 @@ from onyx.connectors.google_drive.models import (
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
     RetrievedDriveFile,
+)
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveSourceOperations,
 )
 from onyx.connectors.interfaces import (
     CheckpointedConnector,
@@ -74,12 +77,12 @@ def _make_connector() -> GoogleDriveConnector:
     """Build a `GoogleDriveConnector` with the minimum surface needed to
     invoke `_get_new_ancestors_for_files`.
 
-    `get_drive_service` is module-level patched by callers; here we just set
-    the credential sentinel and admin email that the function reads.
+    Callers stub `_get_folder_metadata` and `_get_shared_drive_name`; here we
+    set a gateway sentinel and the admin email that the function reads.
     """
     connector = GoogleDriveConnector(include_shared_drives=True)
     connector._primary_admin_email = ADMIN_EMAIL
-    connector._creds = Mock(name="creds")
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
     return connector
 
 
@@ -341,10 +344,6 @@ def test_off_by_one_batch_split_misparents_child(db_session: Session) -> None:
         connector = _make_connector()
 
         with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=Mock(name="drive_service"),
-            ),
             patch.object(
                 connector,
                 "_get_folder_metadata",
@@ -473,10 +472,6 @@ def test_cross_yield_walk_heals_misparented_child_via_stub(
         connector = _make_connector()
 
         with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_drive_service",
-                return_value=Mock(name="drive_service"),
-            ),
             patch.object(
                 connector,
                 "_get_shared_drive_name",

@@ -1,11 +1,9 @@
 import io
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urlparse, urlunparse
 
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaIoBaseDownload
 from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
@@ -18,21 +16,18 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
 )
 from onyx.connectors.google_drive.constants import (
     DRIVE_FOLDER_TYPE,
-    DRIVE_SHORTCUT_TYPE,
-)
-from onyx.connectors.google_drive.file_retrieval import (
     DRIVE_RESOURCE_KEY_FIELD,
-    add_drive_resource_key_header,
+    DRIVE_SHORTCUT_TYPE,
 )
 from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import (
     HEADING_DELIMITER,
     get_document_sections,
 )
-from onyx.connectors.google_utils.resources import (
-    GoogleDriveService,
-    get_drive_service,
-    get_google_authorized_session,
+from onyx.connectors.google_drive.source_operations import (
+    ExportSizeThresholdExceeded,
+    GoogleDriveHttpError,
+    GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -81,59 +76,52 @@ _folder_cache: dict[str, tuple[str, str | None]] = {}
 
 
 def _get_folder_info(
-    service: GoogleDriveService, folder_id: str
+    ops: GoogleDriveSourceOperations, user_email: str, folder_id: str
 ) -> tuple[str, str | None]:
     """Fetch folder name and parent ID, with caching."""
     if folder_id in _folder_cache:
         return _folder_cache[folder_id]
 
     try:
-        folder = (
-            service.files()  # ty: ignore[unresolved-attribute]
-            .get(
-                fileId=folder_id,
-                fields="name, parents",
-                supportsAllDrives=True,
-            )
-            .execute()
+        folder = ops.get_file(
+            user_email=user_email, file_id=folder_id, fields="name, parents"
         )
-        folder_name = folder.get("name", "Unknown")
-        parents = folder.get("parents", [])
-        parent_id = parents[0] if parents else None
-        _folder_cache[folder_id] = (folder_name, parent_id)
-        return folder_name, parent_id
-    except HttpError as e:
+    except GoogleDriveHttpError as e:
         logger.warning("Failed to get folder info for %s: %s", folder_id, e)
+        folder = None
+    if folder is None:
         _folder_cache[folder_id] = ("Unknown", None)
         return "Unknown", None
+    folder_name = folder.get("name", "Unknown")
+    parents = folder.get("parents", [])
+    parent_id = parents[0] if parents else None
+    _folder_cache[folder_id] = (folder_name, parent_id)
+    return folder_name, parent_id
 
 
-def _get_drive_name(service: GoogleDriveService, drive_id: str) -> str:
+def _get_drive_name(
+    ops: GoogleDriveSourceOperations, user_email: str, drive_id: str
+) -> str:
     """Fetch shared drive name."""
     cache_key = f"drive_{drive_id}"
     if cache_key in _folder_cache:
         return _folder_cache[cache_key][0]
 
     try:
-        drive = (
-            service.drives()  # ty: ignore[unresolved-attribute]
-            .get(driveId=drive_id)
-            .execute()
-        )
-        drive_name = drive.get("name", f"Shared Drive {drive_id}")
-        _folder_cache[cache_key] = (drive_name, None)
-        return drive_name
-    except HttpError as e:
+        drive_name = ops.get_shared_drive_name(user_email=user_email, drive_id=drive_id)
+    except GoogleDriveHttpError as e:
         logger.warning("Failed to get drive name for %s: %s", drive_id, e)
-        _folder_cache[cache_key] = (f"Shared Drive {drive_id}", None)
-        return f"Shared Drive {drive_id}"
+        drive_name = None
+    drive_name = drive_name or f"Shared Drive {drive_id}"
+    _folder_cache[cache_key] = (drive_name, None)
+    return drive_name
 
 
 def build_folder_path(
     file: GoogleDriveFileType,
-    service: GoogleDriveService,
+    ops: GoogleDriveSourceOperations,
+    user_email: str,
     drive_id: str | None = None,
-    user_email: str | None = None,
 ) -> list[str]:
     """
     Build the full folder path for a file by walking up the parent chain.
@@ -141,9 +129,10 @@ def build_folder_path(
 
     Args:
         file: The Google Drive file object
-        service: Google Drive service instance
+        ops: The gateway that reads the folders
+        user_email: The user to read the folders as. Also decides "My Drive"
+            vs "Shared with me" by ownership.
         drive_id: Optional drive ID (will be extracted from file if not provided)
-        user_email: Optional user email to check ownership for "My Drive" vs "Shared with me"
     """
     path_parts: list[str] = []
 
@@ -152,20 +141,17 @@ def build_folder_path(
         drive_id = file.get("driveId")
 
     # Check if file is owned by the user (for distinguishing "My Drive" vs "Shared with me")
-    is_owned_by_user = False
-    if user_email:
-        owners = file.get("owners", [])
-        is_owned_by_user = any(
-            owner.get("emailAddress", "").lower() == user_email.lower()
-            for owner in owners
-        )
+    owners = file.get("owners", [])
+    is_owned_by_user = any(
+        owner.get("emailAddress", "").lower() == user_email.lower() for owner in owners
+    )
 
     # Get the file's parent folder ID
     parents = file.get("parents", [])
     if not parents:
         # File is at root level
         if drive_id:
-            return [_get_drive_name(service, drive_id)]
+            return [_get_drive_name(ops, user_email, drive_id)]
         # If not in a shared drive, check if it's owned by the user
         if is_owned_by_user:
             return ["My Drive"]
@@ -181,13 +167,13 @@ def build_folder_path(
             break
         visited.add(parent_id)
 
-        folder_name, next_parent = _get_folder_info(service, parent_id)
+        folder_name, next_parent = _get_folder_info(ops, user_email, parent_id)
 
         # Check if we've reached the root (parent is the drive itself or no parent)
         if next_parent is None:
             # This folder's name is either the drive root, My Drive, or Shared with me
             if drive_id:
-                path_parts.insert(0, _get_drive_name(service, drive_id))
+                path_parts.insert(0, _get_drive_name(ops, user_email, drive_id))
             else:
                 # Not in a shared drive - determine if it's "My Drive" or "Shared with me"
                 if is_owned_by_user:
@@ -202,7 +188,7 @@ def build_folder_path(
     # If we didn't find a root, determine the root based on ownership and drive
     if not path_parts:
         if drive_id:
-            return [_get_drive_name(service, drive_id)]
+            return [_get_drive_name(ops, user_email, drive_id)]
         elif is_owned_by_user:
             return ["My Drive"]
         else:
@@ -225,7 +211,6 @@ _FALLBACK_WEB_VIEW_LINK_TEMPLATES = {
 _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE = "https://drive.google.com/file/d/{}/view"
 
 MAX_RETRIEVER_EMAILS = 20
-CHUNK_SIZE_BUFFER = 64  # extra bytes past the limit to read
 # Above this many advanced sections, skip align_basic_advanced (its heading
 # matching is ~O(headings x doc length)) and index the unaligned sections.
 ADVANCED_PARSE_MAX_SECTIONS = 2000
@@ -276,57 +261,10 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
     return urlunparse(parsed_url)
 
 
-class ExportSizeThresholdExceeded(Exception):
-    """A Drive download/export was aborted because it passed size_threshold."""
-
-
-def download_request(
-    service: GoogleDriveService,
-    file_id: str,
-    size_threshold: int,
-    resource_key: str | None = None,
-) -> bytes:
-    """
-    Download the file from Google Drive.
-    """
-    # For other file types, download the file
-    # Use the correct API call for downloading files
-    request = service.files().get_media(  # ty: ignore[unresolved-attribute]
-        fileId=file_id
-    )
-    add_drive_resource_key_header(request, file_id, resource_key)
-    return _download_request(request, file_id, size_threshold)
-
-
-_DOWNLOAD_NUM_RETRIES = 3
-
-
-def _download_request(request: Any, file_id: str, size_threshold: int) -> bytes:
-    response_bytes = io.BytesIO()
-    downloader = MediaIoBaseDownload(
-        response_bytes, request, chunksize=size_threshold + CHUNK_SIZE_BUFFER
-    )
-    done = False
-    while not done:
-        # num_retries enables automatic retry with exponential backoff for transient errors
-        download_progress, done = downloader.next_chunk(
-            num_retries=_DOWNLOAD_NUM_RETRIES
-        )
-        if download_progress.resumable_progress > size_threshold:
-            raise ExportSizeThresholdExceeded(
-                f"File {file_id} exceeds size threshold of {size_threshold}"
-            )
-
-    response = response_bytes.getvalue()
-    if not response:
-        logger.warning("Failed to download %s", file_id)
-        return bytes()
-    return response
-
-
 def _download_and_extract_sections_basic(
     file: dict[str, str],
-    service: GoogleDriveService,
+    ops: GoogleDriveSourceOperations,
+    retriever_email: str,
     allow_images: bool,
     size_threshold: int,
     raw_file_callback: RawFileCallback | None = None,
@@ -342,7 +280,12 @@ def _download_and_extract_sections_basic(
     # Use the correct API call for downloading files
     # lazy evaluation to only download the file if necessary
     def response_call() -> bytes:
-        return download_request(service, file_id, size_threshold, resource_key)
+        return ops.download_file(
+            user_email=retriever_email,
+            file_id=file_id,
+            size_threshold=size_threshold,
+            resource_key=resource_key,
+        )
 
     def _extract_tabular(
         raw_bytes: bytes, name: str, content_type: str
@@ -393,11 +336,13 @@ def _download_and_extract_sections_basic(
     # For Google Docs, Sheets, and Slides, export via the Drive API
     if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
         export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
-        request = service.files().export_media(  # ty: ignore[unresolved-attribute]
-            fileId=file_id, mimeType=export_mime_type
+        response = ops.export_file(
+            user_email=retriever_email,
+            file_id=file_id,
+            mime_type=export_mime_type,
+            size_threshold=size_threshold,
+            resource_key=resource_key,
         )
-        add_drive_resource_key_header(request, file_id, resource_key)
-        response = _download_request(request, file_id, size_threshold)
         if not response:
             logger.warning("Failed to export %s as %s", file_name, export_mime_type)
             return FileExtractionResult(sections=[])
@@ -586,16 +531,18 @@ def align_basic_advanced(
 def _get_external_access_for_raw_gdrive_file(
     file: GoogleDriveFileType,
     company_domain: str,
-    retriever_drive_service: GoogleDriveService | None,
-    admin_drive_service: GoogleDriveService,
+    ops: GoogleDriveSourceOperations,
+    retriever_email: str | None,
+    admin_email: str,
     fallback_user_email: str,
     add_prefix: bool = False,
-    fallback_drive_service_factory: (
-        Callable[[], GoogleDriveService | None] | None
-    ) = None,
+    fallback_retriever_email: str | None = None,
 ) -> ExternalAccess:
     """
     Get the external access for a raw Google Drive file.
+
+    Permissions are read as ``retriever_email``, then as
+    ``fallback_retriever_email``, then as ``admin_email``, until all are found.
 
     add_prefix: When True, prefix group IDs with source type (for indexing path).
                When False (default), leave unprefixed (for permission sync path
@@ -608,11 +555,12 @@ def _get_external_access_for_raw_gdrive_file(
             [
                 GoogleDriveFileType,
                 str,
-                GoogleDriveService | None,
-                GoogleDriveService,
+                GoogleDriveSourceOperations,
+                str | None,
+                str,
                 str,
                 bool,
-                Callable[[], GoogleDriveService | None] | None,
+                str | None,
             ],
             ExternalAccess,
         ],
@@ -625,16 +573,17 @@ def _get_external_access_for_raw_gdrive_file(
     return external_access_fn(
         file,
         company_domain,
-        retriever_drive_service,
-        admin_drive_service,
+        ops,
+        retriever_email,
+        admin_email,
         fallback_user_email,
         add_prefix,
-        fallback_drive_service_factory,
+        fallback_retriever_email,
     )
 
 
 def convert_drive_item_to_document(
-    creds: Any,
+    ops: GoogleDriveSourceOperations,
     allow_images: bool,
     size_threshold: int,
     # if not specified, we will not sync permissions
@@ -663,7 +612,7 @@ def convert_drive_item_to_document(
             continue
         seen.add(retriever_email)
         doc_or_failure = _convert_drive_item_to_document(
-            creds,
+            ops,
             allow_images,
             size_threshold,
             retriever_email,
@@ -679,7 +628,7 @@ def convert_drive_item_to_document(
             doc_or_failure is None
             or isinstance(doc_or_failure, Document)
             or not (
-                isinstance(doc_or_failure.exception, HttpError)
+                isinstance(doc_or_failure.exception, GoogleDriveHttpError)
                 and doc_or_failure.exception.status_code in [401, 403, 404]
             )
         ):
@@ -692,7 +641,7 @@ def convert_drive_item_to_document(
 
     if (
         first_error
-        and isinstance(first_error.exception, HttpError)
+        and isinstance(first_error.exception, GoogleDriveHttpError)
         and first_error.exception.status_code == 403
     ):
         # This SHOULD happen very rarely, and we don't want to break the indexing process when
@@ -709,7 +658,7 @@ def convert_drive_item_to_document(
 
 
 def _convert_drive_item_to_document(
-    creds: Any,
+    ops: GoogleDriveSourceOperations,
     allow_images: bool,
     size_threshold: int,
     retriever_email: str,
@@ -725,17 +674,14 @@ def _convert_drive_item_to_document(
     sections: list[TextSection | ImageSection | TabularSection] = []
     staged_file_id: str | None = None
 
-    # Only construct these services when needed
-    def _get_drive_service() -> GoogleDriveService:
-        return get_drive_service(creds, user_email=retriever_email)
-
     def _basic_extraction(
         raise_on_size_threshold: bool = False,
     ) -> FileExtractionResult:
         try:
             return _download_and_extract_sections_basic(
                 file,
-                _get_drive_service(),
+                ops,
+                retriever_email,
                 allow_images,
                 size_threshold,
                 raw_file_callback,
@@ -796,14 +742,16 @@ def _convert_drive_item_to_document(
             # the size cap). Falls back to the basic sections on any failure.
             try:
                 logger.debug("starting advanced parsing for %s", file.get("name"))
-                with get_google_authorized_session(
-                    creds, retriever_email
-                ) as authorized_session:
-                    doc_sections = get_document_sections(
-                        authorized_session=authorized_session,
-                        doc_id=file.get("id", ""),
-                        max_response_bytes=GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
-                    )
+                google_doc = ops.fetch_google_doc(
+                    user_email=retriever_email,
+                    doc_id=file.get("id", ""),
+                    max_response_bytes=GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
+                )
+                doc_sections = (
+                    None
+                    if google_doc is None
+                    else get_document_sections(google_doc, file.get("id", ""))
+                )
                 if doc_sections is None:
                     logger.info(
                         "Advanced parse of %s exceeds %s bytes; keeping basic text.",
@@ -858,11 +806,10 @@ def _convert_drive_item_to_document(
             _get_external_access_for_raw_gdrive_file(
                 file=file,
                 company_domain=permission_sync_context.google_domain,
+                ops=ops,
                 # try both retriever_email and primary_admin_email if necessary
-                retriever_drive_service=_get_drive_service(),
-                admin_drive_service=get_drive_service(
-                    creds, user_email=permission_sync_context.primary_admin_email
-                ),
+                retriever_email=retriever_email,
+                admin_email=permission_sync_context.primary_admin_email,
                 add_prefix=True,  # Indexing path - prefix here
                 fallback_user_email=retriever_email,
             )
@@ -877,9 +824,7 @@ def _convert_drive_item_to_document(
 
         # Build full folder path by walking up the parent chain
         # Pass retriever_email to determine if file is in "My Drive" vs "Shared with me"
-        source_path = build_folder_path(
-            file, _get_drive_service(), drive_id, retriever_email
-        )
+        source_path = build_folder_path(file, ops, retriever_email, drive_id)
 
         doc_metadata = {
             "hierarchy": {
@@ -923,7 +868,7 @@ def _convert_drive_item_to_document(
         error_str = (
             f"Error converting file '{file_name}' to Document as {retriever_email}: {e}"
         )
-        if isinstance(e, HttpError) and e.status_code == 403:
+        if isinstance(e, GoogleDriveHttpError) and e.status_code == 403:
             logger.warning(
                 "Uncommon permissions error while downloading file. User %s was able to see file %s but cannot download it.",
                 retriever_email,
@@ -945,7 +890,7 @@ def _convert_drive_item_to_document(
 
 
 def build_slim_document(
-    creds: Any,
+    ops: GoogleDriveSourceOperations,
     file: GoogleDriveFileType,
     # if not specified, we will not sync permissions
     # will also be a no-op if EE is not enabled
@@ -960,26 +905,12 @@ def build_slim_document(
         _get_external_access_for_raw_gdrive_file(
             file=file,
             company_domain=permission_sync_context.google_domain,
-            retriever_drive_service=(
-                get_drive_service(
-                    creds,
-                    user_email=owner_email,
-                )
-                if owner_email
-                else None
-            ),
-            admin_drive_service=get_drive_service(
-                creds,
-                user_email=permission_sync_context.primary_admin_email,
-            ),
+            ops=ops,
+            retriever_email=owner_email,
+            admin_email=permission_sync_context.primary_admin_email,
             fallback_user_email=retriever_email,
-            fallback_drive_service_factory=lambda: (
-                None
-                if retriever_email == owner_email
-                else get_drive_service(
-                    creds,
-                    user_email=retriever_email,
-                )
+            fallback_retriever_email=(
+                None if retriever_email == owner_email else retriever_email
             ),
         )
         if permission_sync_context

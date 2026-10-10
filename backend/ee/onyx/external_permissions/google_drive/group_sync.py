@@ -1,7 +1,6 @@
 import time
 from collections.abc import Generator
 
-from googleapiclient.errors import HttpError
 from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
@@ -18,11 +17,9 @@ from onyx.access.utils import build_domain_group_id
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from onyx.connectors.google_utils.resources import (
-    AdminService,
-    get_admin_service,
-    get_drive_service,
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveSourceOperations,
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -91,14 +88,8 @@ def _get_all_folders(
         """Helper to get folders for a specific user + update shared seen_folder_ids"""
         nonlocal skipped_already_seen, skipped_no_permissions
 
-        drive_service = get_drive_service(
-            google_drive_connector.creds,
-            user_email,
-        )
-
-        for folder in get_modified_folders(
-            service=drive_service,
-        ):
+        ops = google_drive_connector.ops
+        for folder in get_modified_folders(ops=ops, user_email=user_email):
             _check_sync_deadline(crawl_deadline)
             folder_id = folder["id"]
             if folder_id in seen_folder_ids:
@@ -118,7 +109,7 @@ def _get_all_folders(
             if not raw_permissions and permission_ids:
                 # Fetch permissions using the IDs
                 permissions = get_folder_permissions_by_ids(
-                    drive_service, folder_id, permission_ids
+                    ops, user_email, folder_id, permission_ids
                 )
             else:
                 permissions = [
@@ -162,7 +153,7 @@ def _get_all_folders(
         except Exception as e:
             # 401 indicates a customer-side credential issue (token revoked /
             # expired), not a bug — surface as a warning instead of an error.
-            if isinstance(e, HttpError) and e.status_code == 401:
+            if isinstance(e, GoogleDriveHttpError) and e.status_code == 401:
                 logger.warning(
                     "Google Drive returned 401 for user %s; credentials may need to be reconnected. %s",
                     user_email,
@@ -230,7 +221,6 @@ def _drive_folder_to_onyx_group(
 
 def _get_drive_members(
     google_drive_connector: GoogleDriveConnector,
-    admin_service: AdminService,
     deadline: float,
 ) -> dict[str, tuple[set[str], set[str]]]:
     """
@@ -245,18 +235,11 @@ def _get_drive_members(
     drive_ids = google_drive_connector.get_all_drive_ids()
 
     drive_id_to_members_map: dict[str, tuple[set[str], set[str]]] = {}
-    drive_service = get_drive_service(
-        google_drive_connector.creds,
-        google_drive_connector.primary_admin_email,
-    )
+    ops = google_drive_connector.ops
 
     try:
-        admin_user_info = (
-            admin_service.users()  # ty: ignore[unresolved-attribute]
-            .get(userKey=google_drive_connector.primary_admin_email)
-            .execute()
-        )
-    except HttpError as e:
+        admin_user = ops.get_admin_user()
+    except GoogleDriveHttpError as e:
         # A 403 here means the configured primary admin lacks authority on
         # the Google Workspace directory — the connector is misconfigured
         # (primary admin is not an admin, or delegation isn't granted).
@@ -270,9 +253,7 @@ def _get_drive_members(
                 "directory access."
             ) from e
         raise
-    is_admin = admin_user_info.get("isAdmin", False) or admin_user_info.get(
-        "isDelegatedAdmin", False
-    )
+    is_admin = admin_user.is_admin or admin_user.is_delegated_admin
 
     for drive_id in drive_ids:
         _check_sync_deadline(deadline)
@@ -280,15 +261,11 @@ def _get_drive_members(
         user_emails: set[str] = set()
 
         try:
-            for permission in execute_paginated_retrieval(
-                drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
-                list_key="permissions",
-                fileId=drive_id,
-                fields="permissions(emailAddress, type),nextPageToken",
-                supportsAllDrives=True,
+            for permission in ops.list_drive_members(
+                drive_id=drive_id,
                 # can only set `useDomainAdminAccess` to true if the user
                 # is an admin
-                useDomainAdminAccess=is_admin,
+                use_domain_admin_access=is_admin,
             ):
                 _check_sync_deadline(deadline)
                 # NOTE: don't need to check for PermissionType.ANYONE since
@@ -297,7 +274,7 @@ def _get_drive_members(
                     group_emails.add(permission["emailAddress"])
                 elif permission["type"] == PermissionType.USER:
                     user_emails.add(permission["emailAddress"])
-        except HttpError as e:
+        except GoogleDriveHttpError as e:
             if e.status_code in (403, 404):
                 logger.warning(
                     "Error getting permissions for drive id %s. User '%s' likely does not have access to this drive (status=%s). Exception: %s",
@@ -337,8 +314,7 @@ def _drive_member_map_to_onyx_groups(
 
 
 def _get_all_domain_users(
-    admin_service: AdminService,
-    google_domain: str,
+    ops: GoogleDriveSourceOperations,
     deadline: float,
 ) -> list[str]:
     """Every user Google lists in the Workspace domain. This is the real
@@ -346,40 +322,28 @@ def _get_all_domain_users(
     the domain group if Google actually places them in the Workspace, not because
     their email string ends in the domain."""
     user_emails: set[str] = set()
-    for user in execute_paginated_retrieval(
-        admin_service.users().list,  # ty: ignore[unresolved-attribute]
-        list_key="users",
-        domain=google_domain,
-        fields="users(primaryEmail),nextPageToken",
-    ):
+    for email in ops.list_user_emails():
         _check_sync_deadline(deadline)
-        if email := user.get("primaryEmail"):
-            user_emails.add(email)
+        user_emails.add(email)
     return list(user_emails)
 
 
 def _get_all_google_groups(
-    admin_service: AdminService,
-    google_domain: str,
+    ops: GoogleDriveSourceOperations,
     deadline: float,
 ) -> set[str]:
     """
     This gets all the group emails.
     """
     group_emails: set[str] = set()
-    for group in execute_paginated_retrieval(
-        admin_service.groups().list,  # ty: ignore[unresolved-attribute]
-        list_key="groups",
-        domain=google_domain,
-        fields="groups(email),nextPageToken",
-    ):
+    for group_email in ops.list_groups():
         _check_sync_deadline(deadline)
-        group_emails.add(group["email"])
+        group_emails.add(group_email)
     return group_emails
 
 
 def _google_group_to_onyx_group(
-    admin_service: AdminService,
+    ops: GoogleDriveSourceOperations,
     group_email: str,
     deadline: float,
 ) -> ExternalUserGroup:
@@ -387,117 +351,15 @@ def _google_group_to_onyx_group(
     This maps google group emails to their member emails.
     """
     group_member_emails: set[str] = set()
-    for member in execute_paginated_retrieval(
-        admin_service.members().list,  # ty: ignore[unresolved-attribute]
-        list_key="members",
-        groupKey=group_email,
-        fields="members(email),nextPageToken",
-    ):
+    for member in ops.list_group_members(group_email=group_email):
         _check_sync_deadline(deadline)
-        group_member_emails.add(member["email"])
+        if member.email:
+            group_member_emails.add(member.email)
 
     return ExternalUserGroup(
         id=group_email,
         user_emails=list(group_member_emails),
     )
-
-
-def _map_group_email_to_member_emails(
-    admin_service: AdminService,
-    group_emails: set[str],
-) -> dict[str, set[str]]:
-    """
-    This maps group emails to their member emails.
-    """
-    group_to_member_map: dict[str, set[str]] = {}
-    for group_email in group_emails:
-        group_member_emails: set[str] = set()
-        for member in execute_paginated_retrieval(
-            admin_service.members().list,  # ty: ignore[unresolved-attribute]
-            list_key="members",
-            groupKey=group_email,
-            fields="members(email),nextPageToken",
-        ):
-            group_member_emails.add(member["email"])
-
-        group_to_member_map[group_email] = group_member_emails
-    return group_to_member_map
-
-
-def _build_onyx_groups(
-    drive_id_to_members_map: dict[str, tuple[set[str], set[str]]],
-    group_email_to_member_emails_map: dict[str, set[str]],
-    folder_info: list[FolderInfo],
-) -> list[ExternalUserGroup]:
-    onyx_groups: list[ExternalUserGroup] = []
-
-    # Convert all drive member definitions to onyx groups
-    # This is because having drive level access means you have
-    # irrevocable access to all the files in the drive.
-    for drive_id, (group_emails, user_emails) in drive_id_to_members_map.items():
-        drive_member_emails: set[str] = user_emails
-        for group_email in group_emails:
-            if group_email not in group_email_to_member_emails_map:
-                logger.warning(
-                    "Group email %s for drive %s not found in group_email_to_member_emails_map",
-                    group_email,
-                    drive_id,
-                )
-                continue
-            drive_member_emails.update(group_email_to_member_emails_map[group_email])
-        onyx_groups.append(
-            ExternalUserGroup(
-                id=drive_id,
-                user_emails=list(drive_member_emails),
-            )
-        )
-
-    # Convert all folder permissions to onyx groups
-    for folder in folder_info:
-        anyone_can_access = False
-        folder_member_emails: set[str] = set()
-        for permission in folder.permissions:
-            if permission.type == PermissionType.USER:
-                if permission.email_address is None:
-                    logger.warning(
-                        "User email is None for folder %s permission %s",
-                        folder.id,
-                        permission,
-                    )
-                    continue
-                folder_member_emails.add(permission.email_address)
-            elif permission.type == PermissionType.GROUP:
-                if permission.email_address not in group_email_to_member_emails_map:
-                    logger.warning(
-                        "Group email %s for folder %s not found in group_email_to_member_emails_map",
-                        permission.email_address,
-                        folder.id,
-                    )
-                    continue
-                folder_member_emails.update(
-                    group_email_to_member_emails_map[permission.email_address]
-                )
-            elif permission.type == PermissionType.ANYONE:
-                anyone_can_access = True
-
-        onyx_groups.append(
-            ExternalUserGroup(
-                id=folder.id,
-                user_emails=list(folder_member_emails),
-                gives_anyone_access=anyone_can_access,
-            )
-        )
-
-    # Convert all group member definitions to onyx groups
-    for group_email, member_emails in group_email_to_member_emails_map.items():
-        onyx_groups.append(
-            ExternalUserGroup(
-                id=group_email,
-                user_emails=list(member_emails),
-            )
-        )
-
-    return onyx_groups
 
 
 def gdrive_group_sync(
@@ -511,31 +373,23 @@ def gdrive_group_sync(
         )
     )
     google_drive_connector.load_credentials(credential_json(cc_pair))
-    admin_service = get_admin_service(
-        google_drive_connector.creds, google_drive_connector.primary_admin_email
-    )
+    ops = google_drive_connector.ops
 
     # One budget for the whole sync: every long enumeration phase below checks
     # this deadline, since none of them yield often (or at all) on big domains.
     sync_deadline = time.monotonic() + JOB_TIMEOUT
 
     # Get all drive members
-    drive_id_to_members_map = _get_drive_members(
-        google_drive_connector, admin_service, sync_deadline
-    )
+    drive_id_to_members_map = _get_drive_members(google_drive_connector, sync_deadline)
 
     # Get all group emails
-    all_group_emails = _get_all_google_groups(
-        admin_service, google_drive_connector.google_domain, sync_deadline
-    )
+    all_group_emails = _get_all_google_groups(ops, sync_deadline)
 
     # Each google group is an Onyx group, yield those
     group_email_to_member_emails_map: dict[str, list[str]] = {}
     for group_email in all_group_emails:
         _check_sync_deadline(sync_deadline)
-        onyx_group = _google_group_to_onyx_group(
-            admin_service, group_email, sync_deadline
-        )
+        onyx_group = _google_group_to_onyx_group(ops, group_email, sync_deadline)
         group_email_to_member_emails_map[group_email] = onyx_group.user_emails
         yield onyx_group
 
@@ -557,9 +411,7 @@ def gdrive_group_sync(
     # "Everyone at <domain>" Drive shares resolve to this group. Only this
     # connector's own domain is enumerable here; a share to a partner domain is
     # populated by that domain's own connector sync.
-    domain_users = _get_all_domain_users(
-        admin_service, google_drive_connector.google_domain, sync_deadline
-    )
+    domain_users = _get_all_domain_users(ops, sync_deadline)
     if domain_users:
         yield ExternalUserGroup(
             id=build_domain_group_id(google_drive_connector.google_domain),
