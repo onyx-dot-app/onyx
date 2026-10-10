@@ -184,7 +184,7 @@ class TestAttachmentIndexing:
         assert first.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
         assert first.semantic_identifier == "HELP-101 attachment: server-log.txt"
         # Attachment content is extracted into text sections
-        assert any("extracted:server-log.txt" in s.text for s in first.sections)
+        assert any("extracted:server-log.txt" in (s.text or "") for s in first.sections)
         # Attachments are children of their ticket in the hierarchy
         assert first.parent_hierarchy_raw_node_id == TEST_PROJECT_KEY
 
@@ -310,6 +310,7 @@ class TestAttachmentFailureIsolation:
 
         # The broken attachment surfaces as an isolated failure...
         assert len(failures) == 1
+        assert failures[0].failed_document is not None
         assert failures[0].failed_document.document_id == (
             f"{ticket_doc_id}/attachment/4001"
         )
@@ -340,6 +341,7 @@ class TestAttachmentFailureIsolation:
         assert len(outputs) == 1
         failure = outputs[0]
         assert isinstance(failure, ConnectorFailure)
+        assert failure.failed_document is not None
         assert failure.failed_document.document_id == (f"{ticket_doc_id}/attachments")
 
     def test_slim_pass_aborts_after_main_listing_failure(
@@ -499,7 +501,12 @@ class TestEmptyAttachmentContent:
         )
         failures = [out for out in outputs if isinstance(out, ConnectorFailure)]
         documents = [out for out in outputs if isinstance(out, Document)]
-        assert [f.failed_document.document_id for f in failures] == [
+        assert all(f.failed_document is not None for f in failures)
+        assert [
+            f.failed_document.document_id
+            for f in failures
+            if f.failed_document is not None
+        ] == [
             f"{ticket_doc_id}/attachment/8001"
         ]
         assert [d.id for d in documents] == [f"{ticket_doc_id}/attachment/8002"]
