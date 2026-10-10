@@ -15,6 +15,7 @@ from onyx.connectors.notion.connector import (
     NotionConnector,
     NotionPage,
 )
+from onyx.connectors.notion.source_operations import NotionApiError
 from onyx.db.enums import HierarchyNodeType
 
 
@@ -101,8 +102,6 @@ class TestDatabaseParentPageTracking:
 
     def test_failed_fetch_does_not_record(self) -> None:
         """A database whose fetch fails (exception path) is not recorded."""
-        import requests
-
         connector = _make_connector()
 
         search_response = MagicMock()
@@ -116,7 +115,7 @@ class TestDatabaseParentPageTracking:
             patch.object(
                 connector,
                 "_fetch_database_as_page",
-                side_effect=requests.exceptions.HTTPError("404"),
+                side_effect=NotionApiError(404, {"object": "error"}, "databases/db-1"),
             ),
         ):
             list(connector._yield_database_hierarchy_nodes())

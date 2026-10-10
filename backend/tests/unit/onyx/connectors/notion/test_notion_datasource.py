@@ -6,13 +6,14 @@ data_source_id -> database_id parent resolution.
 
 from unittest.mock import MagicMock, patch
 
-from requests.exceptions import HTTPError
+import pytest
 
 from onyx.connectors.notion.connector import (
     NotionConnector,
     NotionDataSource,
     NotionPage,
 )
+from onyx.connectors.notion.source_operations import NotionApiError
 
 
 def _make_connector() -> NotionConnector:
@@ -25,12 +26,7 @@ def _mock_response(json_data: dict, status_code: int = 200) -> MagicMock:
     resp = MagicMock()
     resp.json.return_value = json_data
     resp.status_code = status_code
-    if status_code >= 400:
-        resp.raise_for_status.side_effect = HTTPError(
-            f"HTTP {status_code}", response=resp
-        )
-    else:
-        resp.raise_for_status.return_value = None
+    resp.ok = status_code < 400
     return resp
 
 
@@ -48,7 +44,8 @@ class TestFetchDataSourcesForDatabase:
             }
         )
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.get", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
         ):
             result = connector._fetch_data_sources_for_database("db-1")
 
@@ -67,7 +64,8 @@ class TestFetchDataSourcesForDatabase:
             }
         )
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.get", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
         ):
             result = connector._fetch_data_sources_for_database("db-1")
 
@@ -77,11 +75,62 @@ class TestFetchDataSourcesForDatabase:
         connector = _make_connector()
         resp = _mock_response({"object": "error"}, status_code=404)
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.get", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
         ):
             result = connector._fetch_data_sources_for_database("db-missing")
 
         assert result == []
+
+
+class TestGetBotUser:
+    def test_null_workspace_fields_fall_back(self) -> None:
+        connector = _make_connector()
+        resp = _mock_response(
+            {
+                "object": "user",
+                "id": "bot-user-1",
+                "bot": {"workspace_id": None, "workspace_name": None},
+            }
+        )
+        with patch(
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
+        ):
+            bot_user = connector.ops.get_bot_user()
+
+        assert bot_user.workspace_id == "bot-user-1"
+        assert bot_user.workspace_name == "Notion Workspace"
+
+
+class TestFetchChildBlocks:
+    def test_404_drops_the_block(self) -> None:
+        connector = _make_connector()
+        resp = _mock_response({"object": "error"}, status_code=404)
+        with patch(
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
+        ):
+            assert connector._fetch_child_blocks("block-1") is None
+
+    def test_5xx_with_non_json_body_is_raised_for_retry(self) -> None:
+        connector = _make_connector()
+        resp = _mock_response({}, status_code=502)
+        resp.json.side_effect = ValueError("not json")
+        resp.text = "<html>bad gateway</html>"
+        with (
+            patch(
+                "onyx.connectors.notion.source_operations.rl_requests.get",
+                return_value=resp,
+            ) as mock_get,
+            patch("tenacity.nap.time.sleep"),
+            pytest.raises(NotionApiError) as raised,
+        ):
+            connector._fetch_child_blocks("block-1")
+
+        assert raised.value.status_code == 502
+        assert raised.value.body == "<html>bad gateway</html>"
+        assert mock_get.call_count == 3
 
 
 class TestFetchDataSource:
@@ -100,7 +149,8 @@ class TestFetchDataSource:
             }
         )
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.post", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.post",
+            return_value=resp,
         ):
             result = connector._fetch_data_source("ds-1")
 
@@ -112,7 +162,8 @@ class TestFetchDataSource:
         connector = _make_connector()
         resp = _mock_response({"object": "error"}, status_code=404)
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.post", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.post",
+            return_value=resp,
         ):
             result = connector._fetch_data_source("ds-missing")
 
@@ -313,7 +364,8 @@ class TestFetchDatabaseAsPage:
             }
         )
         with patch(
-            "onyx.connectors.notion.connector.rl_requests.get", return_value=resp
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
         ):
             page = connector._fetch_database_as_page("db-1")
 
