@@ -499,15 +499,15 @@ Drive file), inserted `PENDING` before the action executes
 like a silently-still-in-progress send.
 
 Frontend attachments in `web/src/app/craft/contexts/UploadFilesContext.tsx` use a separate scope for each session visit.
-Late upload, listing, and deletion responses cannot change another visit.
+The composer owns draft selections, not the persisted session directory.
+Opening a session starts an empty draft; directory listings never select attachments.
+Removing a chip or clearing a sent draft leaves stored files available to earlier messages.
+URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
+Replacing that destination preserves selected source files and uploads them into the replacement.
+New Build, another session, or visit end clears the previous draft.
+Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
+Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
 ChatPanel ends the attachment visit on unmount, including pending welcome files and navigation to Craft apps.
-Pending deletions use session and path guards across visits; listings omit those paths until deletion finishes.
-Clearing sent attachments blocks stale deletion recovery and invalidates pending attachment listings for that visit.
-New deletions after a clear still roll back on failure. Listings that predate completed deletions retry against current files.
-Welcome drafts own their source files until send or visit end. URL session identity owns the draft; its provisional sandbox is a replaceable destination. New Build ends the previous session draft.
-Replacing a provisional sandbox preserves those sources, clears old paths, and uploads into the replacement.
-Session activation starts listing and pending uploads directly; list-length effects do not infer attachment actions.
-Visit scopes own listing and dismissal state. Matching listings preserve local draft sources. Deletion requests have a ten-second bound so failed requests release pending path guards. Mutation errors retain HTTP status; subscription failures keep their backend detail.
 
 ### 4.8 User library
 

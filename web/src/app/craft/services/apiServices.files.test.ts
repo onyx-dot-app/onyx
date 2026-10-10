@@ -102,17 +102,3 @@ it("preserves the HTTP status of attachment deletion failures", async () => {
     deleteFile("session", "attachments/notes.txt")
   ).rejects.toMatchObject({ status: 404, message: "No such file" });
 });
-
-it("bounds a stalled attachment deletion so it can be retried", async () => {
-  const deletion = deleteFile("session", "attachments/notes.txt").catch(
-    (error: unknown) => error
-  );
-  await jest.advanceTimersByTimeAsync(10_000);
-  expect(jest.mocked(fetch).mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
-  await expect(deletion).resolves.toMatchObject({ name: "TimeoutError" });
-  jest.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
-  await expect(
-    deleteFile("session", "attachments/notes.txt")
-  ).resolves.toBeUndefined();
-  expect(jest.getTimerCount()).toBe(0);
-});

@@ -11,11 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { useTranslations } from "next-intl";
-import {
-  uploadFile as uploadFileApi,
-  deleteFile as deleteFileApi,
-  fetchDirectoryListing,
-} from "@/app/craft/services/apiServices";
+import { uploadFile as uploadFileApi } from "@/app/craft/services/apiServices";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { FetchError, isNotFoundError } from "@/lib/fetcher";
 
@@ -166,22 +162,13 @@ interface AttachmentScope {
   sessionId: string | null;
   // URL session owns a draft; null identifies the mounted welcome draft.
   draftId: string | null;
-  fetching: boolean;
-  dismissed: boolean;
-  clearRevision: number;
 }
 
 function createAttachmentScope(
   sessionId: string | null,
   draftId: string | null = sessionId
 ): AttachmentScope {
-  return {
-    sessionId,
-    draftId,
-    fetching: false,
-    dismissed: false,
-    clearRevision: 0,
-  };
+  return { sessionId, draftId };
 }
 
 function attachmentErrorMessage(error: unknown, t: UploadTranslate): string {
@@ -197,15 +184,6 @@ function attachmentErrorMessage(error: unknown, t: UploadTranslate): string {
   return error instanceof Error ? error.message : t("errors.uploadFailed");
 }
 
-function isLocalAttachment(file: BuildFile): boolean {
-  return (
-    file.status === UploadFileStatus.UPLOADING ||
-    file.status === UploadFileStatus.PENDING ||
-    file.status === UploadFileStatus.PROCESSING ||
-    file.id.startsWith("temp_")
-  );
-}
-
 /**
  * UploadFilesContext - Centralized file upload state management
  *
@@ -213,7 +191,6 @@ function isLocalAttachment(file: BuildFile): boolean {
  * - File attachment state (current files attached to input)
  * - Active session binding (which session files are associated with)
  * - Automatic upload of pending files when session becomes available
- * - Automatic fetch of existing attachments when session changes
  * - File upload, removal, and clearing operations
  *
  * Components should:
@@ -232,8 +209,7 @@ interface UploadFilesContextValue {
 
   /**
    * Set the active session ID. This triggers:
-   * - Fetching existing attachments from the new session (if different)
-   * - Clearing files if navigating to no session
+   * - Clearing files when leaving the draft
    * - Auto-uploading any pending files
    *
    * Call this when:
@@ -258,18 +234,15 @@ interface UploadFilesContextValue {
 
   /**
    * Remove a file from the input bar.
-   * If the file was uploaded, also deletes from the sandbox.
+   * Keeps uploaded files in the sandbox for message history.
    */
   removeFile: (fileId: string) => void;
 
   /**
    * Clear all attached files from the input bar.
    * Does NOT delete from sandbox (use for form reset).
-   * @param options.suppressRefetch - When true, skips the refetch that would
-   *   normally restore session attachments (e.g. when user hits Enter to dismiss
-   *   a file from the input bar).
    */
-  clearFiles: (options?: { suppressRefetch?: boolean }) => void;
+  clearFiles: () => void;
 
   // Check if any files are uploading
   hasUploadingFiles: boolean;
@@ -323,9 +296,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   // =========================================================================
 
   const activeScopeRef = useRef(activeScope);
-  const attachmentMutationRevisionRef = useRef<number>(0);
-  // Track active deletions to prevent refetch race condition
-  const activeDeletionsRef = useRef<Set<string>>(new Set());
 
   // =========================================================================
   // Derived state
@@ -420,111 +390,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     [uploadAttachedFiles, setCurrentMessageFiles]
   );
 
-  /**
-   * Fetch existing attachments from the backend.
-   * Session activation and attachment actions call this function.
-   */
-  const fetchExistingAttachmentsInternal = useCallback(
-    async function fetchAttachments(
-      sessionId: string,
-      replace: boolean
-    ): Promise<void> {
-      const scope: AttachmentScope = activeScopeRef.current;
-      if (scope.sessionId !== sessionId) return;
-      const clearRevision = scope.clearRevision;
-      const mutationRevision: number = attachmentMutationRevisionRef.current;
-      let retryAfterMutation: boolean = false;
-      // Request deduplication
-      if (scope.fetching) return;
-
-      scope.fetching = true;
-
-      try {
-        const listing = await fetchDirectoryListing(sessionId, "attachments");
-        if (
-          activeScopeRef.current !== scope ||
-          scope.clearRevision !== clearRevision
-        )
-          return;
-        if (attachmentMutationRevisionRef.current !== mutationRevision) {
-          retryAfterMutation = true;
-          return;
-        }
-
-        // Use deterministic IDs based on session and path for stable React keys
-        const attachments: BuildFile[] = listing.entries
-          .filter(
-            (entry) =>
-              !entry.is_directory &&
-              !activeDeletionsRef.current.has(`${sessionId}:${entry.path}`)
-          )
-          .map((entry) => ({
-            id: `existing_${sessionId}_${entry.path}`,
-            name: entry.name,
-            status: UploadFileStatus.COMPLETED,
-            file_type: entry.mime_type || "application/octet-stream",
-            size: entry.size || 0,
-            created_at: new Date().toISOString(),
-            path: entry.path,
-          }));
-
-        if (replace) {
-          // When replacing, preserve any files that are still being processed locally
-          // (uploading, pending, or recently completed uploads that might not be in
-          // backend listing yet due to race conditions)
-          setCurrentMessageFiles((prev) => {
-            // Keep files that are still in-flight or don't have a path yet
-            const localOnlyFiles = prev.filter(isLocalAttachment);
-
-            // Local records own draft sources, including when the server lists their path.
-            const localPaths = new Set(localOnlyFiles.map((file) => file.path));
-            return [
-              ...attachments.filter((file) => !localPaths.has(file.path)),
-              ...localOnlyFiles,
-            ];
-          });
-        } else if (attachments.length > 0) {
-          setCurrentMessageFiles((prev) => {
-            const existingPaths = new Set(prev.map((f) => f.path));
-            const newFiles = attachments.filter(
-              (f) => !existingPaths.has(f.path)
-            );
-            return [...prev, ...newFiles];
-          });
-        }
-      } catch (error) {
-        if (
-          activeScopeRef.current !== scope ||
-          scope.clearRevision !== clearRevision
-        )
-          return;
-        if (!isNotFoundError(error)) {
-          console.error(
-            "[UploadFilesContext] fetchExistingAttachments error:",
-            error
-          );
-        }
-        if (replace) {
-          // On error, only clear files that aren't being processed locally
-          setCurrentMessageFiles((prev) => prev.filter(isLocalAttachment));
-        }
-      } finally {
-        if (activeScopeRef.current === scope) {
-          scope.fetching = false;
-          if (retryAfterMutation && scope.clearRevision === clearRevision)
-            await fetchAttachments(sessionId, replace);
-        }
-      }
-    },
-    [t, setCurrentMessageFiles]
-  );
-
   // =========================================================================
   // Public API
   // =========================================================================
 
   /**
-   * Set the active session. Triggers fetching/clearing as needed.
+   * Bind the upload destination and clear selections when their draft ends.
    */
   const resetActiveScope = useCallback(
     (
@@ -541,15 +412,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       if (sessionId)
         queueMicrotask(() => {
           if (activeScopeRef.current !== nextScope) return;
-          void fetchExistingAttachmentsInternal(sessionId, true);
           void uploadPendingFilesInternal(sessionId);
         });
     },
-    [
-      fetchExistingAttachmentsInternal,
-      uploadPendingFilesInternal,
-      setCurrentMessageFiles,
-    ]
+    [uploadPendingFilesInternal, setCurrentMessageFiles]
   );
 
   const setActiveSession = useCallback(
@@ -670,89 +536,18 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
 
   const removeFile = useCallback(
     (fileId: string) => {
-      const scope: AttachmentScope = activeScopeRef.current;
-      if (scope !== activeScope) return;
-      const currentFiles = currentMessageFilesRef.current;
-      const removedIndex = currentFiles.findIndex((file) => file.id === fileId);
-      const removedFile = currentFiles[removedIndex];
-      if (!removedFile) return;
-      const deletionKey: string = `${activeSessionId}:${removedFile.path}`;
-      if (activeDeletionsRef.current.has(deletionKey)) return;
-
+      if (activeScopeRef.current !== activeScope) return;
       setCurrentMessageFiles((files) =>
         files.filter((file) => file.id !== fileId)
       );
-      if (!removedFile.path || !activeSessionId) return;
-
-      const deletionClearRevision = scope.clearRevision;
-      activeDeletionsRef.current.add(deletionKey);
-      deleteFileApi(activeSessionId, removedFile.path)
-        .then(() => {
-          attachmentMutationRevisionRef.current += 1;
-          triggerFilesRefresh(activeSessionId);
-          activeDeletionsRef.current.delete(deletionKey);
-          if (activeScopeRef.current !== scope) return;
-        })
-        .catch((error) => {
-          activeDeletionsRef.current.delete(deletionKey);
-          if (
-            activeScopeRef.current.dismissed &&
-            (activeScopeRef.current !== scope ||
-              scope.clearRevision !== deletionClearRevision)
-          )
-            return;
-          if (activeScopeRef.current !== scope) {
-            if (activeScopeRef.current.sessionId === activeSessionId)
-              void fetchExistingAttachmentsInternal(activeSessionId, false);
-            return;
-          }
-          console.error(
-            "[UploadFilesContext] Failed to delete file from sandbox:",
-            error
-          );
-          setCurrentMessageFiles((files) => {
-            if (files.some((file) => file.id === removedFile.id)) return files;
-            const restoredFiles = [...files];
-            restoredFiles.splice(
-              Math.min(removedIndex, files.length),
-              0,
-              removedFile
-            );
-            return restoredFiles;
-          });
-        });
     },
-    [
-      activeScope,
-      activeSessionId,
-      triggerFilesRefresh,
-      fetchExistingAttachmentsInternal,
-      setCurrentMessageFiles,
-    ]
+    [activeScope, setCurrentMessageFiles]
   );
 
-  /**
-   * Clear all files from the input bar.
-   */
-  const clearFiles = useCallback(
-    (options?: { suppressRefetch?: boolean }) => {
-      if (activeScopeRef.current !== activeScope) return;
-      if (options?.suppressRefetch) {
-        activeScope.dismissed = true;
-        activeScope.clearRevision += 1;
-      }
-      const hadFiles = currentMessageFilesRef.current.length > 0;
-      setCurrentMessageFiles([]);
-      if (hadFiles && activeSessionId && !options?.suppressRefetch)
-        void fetchExistingAttachmentsInternal(activeSessionId, false);
-    },
-    [
-      activeScope,
-      activeSessionId,
-      fetchExistingAttachmentsInternal,
-      setCurrentMessageFiles,
-    ]
-  );
+  const clearFiles = useCallback(() => {
+    if (activeScopeRef.current !== activeScope) return;
+    setCurrentMessageFiles([]);
+  }, [activeScope, setCurrentMessageFiles]);
 
   // =========================================================================
   // Context value
