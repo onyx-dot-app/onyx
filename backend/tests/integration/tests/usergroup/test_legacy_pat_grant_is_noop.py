@@ -4,49 +4,47 @@ send it, so the request must succeed without storing a grant."""
 
 import os
 
+import httpx
 import pytest
 
 from onyx.db.enums import Permission
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 
 
 @pytest.mark.skipif(
     os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
-def test_legacy_pat_grant_is_noop(reset: None) -> None:  # noqa: ARG001
-    admin_user: DATestUser = UserManager.create(name="admin_for_legacy_pat")
-
-    user_group = UserGroupManager.create(
+def test_legacy_pat_grant_is_noop(new_admin_user: DATestUser) -> None:
+    user_group: DATestUserGroup = UserGroupManager.create(
         name="legacy-pat-grant-group",
-        user_ids=[admin_user.id],
-        user_performing_action=admin_user,
+        user_ids=[new_admin_user.id],
+        user_performing_action=new_admin_user,
     )
 
-    response = UserGroupManager.set_permissions(
+    response: httpx.Response = UserGroupManager.set_permissions(
         user_group=user_group,
         permissions=[
             Permission.CREATE_USER_API_KEYS.value,
             Permission.READ_QUERY_HISTORY.value,
         ],
-        user_performing_action=admin_user,
+        user_performing_action=new_admin_user,
     )
     response.raise_for_status()
 
-    permissions = UserGroupManager.get_permissions(
+    permissions: list[str] = UserGroupManager.get_permissions(
         user_group=user_group,
-        user_performing_action=admin_user,
+        user_performing_action=new_admin_user,
         include_non_toggleable=True,
     )
     assert Permission.READ_QUERY_HISTORY.value in permissions
     assert Permission.CREATE_USER_API_KEYS.value not in permissions
 
     # A truly non-toggleable value is still rejected.
-    rejected = UserGroupManager.set_permissions(
+    rejected: httpx.Response = UserGroupManager.set_permissions(
         user_group=user_group,
         permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
-        user_performing_action=admin_user,
+        user_performing_action=new_admin_user,
     )
     assert rejected.status_code == 400

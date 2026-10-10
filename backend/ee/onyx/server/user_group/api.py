@@ -247,7 +247,7 @@ def set_user_group_permissions(
         db_session, user_group_id, "change the permissions of"
     )
 
-    requested = set(request.permissions) - LEGACY_NOOP_PERMISSIONS
+    requested: set[Permission] = set(request.permissions) - LEGACY_NOOP_PERMISSIONS
     non_toggleable = [p for p in requested if p in NON_TOGGLEABLE_PERMISSIONS]
     if non_toggleable:
         raise OnyxError(
