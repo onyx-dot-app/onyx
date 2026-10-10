@@ -352,15 +352,33 @@ class TestAttachmentFailureIsolation:
         )
         assert [out for out in main_outputs if isinstance(out, Document)] == []
 
-        # Slim pass must mirror that emptiness instead of re-listing: a
-        # fresh enumeration could succeed here and admit IDs the main pass
-        # never indexed (chunk_count IS NULL rows), or — on a later full
-        # sync whose listing fails again — prune healthy attachments.
-        assert connector._process_issue_attachments_slim(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
+        # A missing enumeration must abort slim sync. Treating it as an
+        # empty result would prune attachments indexed by earlier runs.
+        with pytest.raises(RuntimeError, match="listing failed during the main pass"):
+            connector._process_issue_attachments_slim(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+
+    def test_slim_listing_error_propagates_instead_of_pruning(
+        self,
+        make_jsm_connector: Callable[..., JiraServiceManagementConnector],
+        mock_jira_client: MagicMock,
+    ) -> None:
+        connector = _make_connector_with_attachments(
+            make_jsm_connector, mock_jira_client, []
+        )
+        issue = make_mock_jsm_issue()
+        ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
+        mock_jira_client.issue.side_effect = RuntimeError("Jira API unavailable")
+        with pytest.raises(RuntimeError, match="Jira API unavailable"):
+            connector._process_issue_attachments_slim(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+        assert ticket_doc_id in connector._attachment_admission_failures
 
     def test_slim_pass_admits_only_attachments_that_produced_documents(
         self,
