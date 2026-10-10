@@ -36,6 +36,7 @@ from onyx.connectors.hubspot.source_operations import (
     HubSpotApiError,
     HubSpotSourceOperations,
 )
+from onyx.connectors.source_operations import SourceOperations
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -51,7 +52,7 @@ _INDEXED_TYPES_REMEDIATION = (
 
 
 def _gateway(context: CapabilityCheckContext) -> HubSpotSourceOperations:
-    gateway = context.source_operations
+    gateway: SourceOperations | None = context.source_operations
     if not isinstance(gateway, HubSpotSourceOperations):
         raise TypeError(f"HubSpot checks need the HubSpot gateway, got {gateway!r}")
     return gateway

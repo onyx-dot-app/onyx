@@ -14,6 +14,7 @@ import pytest
 from ee.onyx.connectors.perm_sync_valid import validate_perm_sync
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
+    CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CapabilityVerdict,
@@ -41,7 +42,7 @@ from onyx.connectors.hubspot.source_operations import (
 from onyx.db.enums import AccessType
 
 MOMENT = datetime(2024, 6, 6, tzinfo=timezone.utc)
-_CHECKS_BY_ID = {
+_CHECKS_BY_ID: dict[str, CapabilityCheck] = {
     check.check_id: check
     for check in build_hubspot_indexing_checks()
     + build_hubspot_doc_permission_sync_checks()
@@ -58,7 +59,7 @@ def _refusal(operation: str, status: int) -> HubSpotApiError:
 
 def _gateway() -> MagicMock:
     """A healthy portal with one record of each type, one note and one user."""
-    gateway = create_autospec(HubSpotSourceOperations, instance=True)
+    gateway: MagicMock = create_autospec(HubSpotSourceOperations, instance=True)
     gateway.get_portal_id.return_value = "46399533"
     gateway.list_records.return_value = HubSpotPage(items=[_record("1")])
     gateway.search_records.return_value = HubSpotPage(items=[_record("1")])
@@ -119,7 +120,7 @@ def test_a_healthy_portal_passes_every_capability() -> None:
 
 
 def test_a_rejected_token_is_an_invalid_credential() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_portal_id.side_effect = _refusal("portal info", 401)
 
     with pytest.raises(CredentialInvalidError):
@@ -136,7 +137,7 @@ def test_a_rejected_token_is_an_invalid_credential() -> None:
 def test_a_missing_read_scope_names_the_scope(
     object_type: HubSpotObjectType, scope: str
 ) -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_records.side_effect = _refusal(f"{object_type} listing", 403)
 
     with pytest.raises(InsufficientPermissionsError, match=scope):
@@ -168,7 +169,7 @@ def test_a_read_check_applies_only_to_configured_types(
 def test_an_optional_check_reports_a_refused_listing_as_indeterminate() -> None:
     """The read check already fails for the refused type, so the associations
     check adds no second failed row."""
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_records.side_effect = _refusal("tickets listing", 403)
 
     with pytest.raises(UnexpectedValidationError, match="No record to probe"):
@@ -176,7 +177,7 @@ def test_an_optional_check_reports_a_refused_listing_as_indeterminate() -> None:
 
 
 def test_a_missing_users_scope_names_it() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_users.side_effect = _refusal("user listing", 403)
 
     with pytest.raises(InsufficientPermissionsError, match="settings.users.read"):
@@ -184,7 +185,7 @@ def test_a_missing_users_scope_names_it() -> None:
 
 
 def test_an_outage_is_not_a_missing_scope() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_record_viewers.side_effect = _refusal("record viewers", 503)
 
     with pytest.raises(UnexpectedValidationError):
@@ -192,7 +193,7 @@ def test_an_outage_is_not_a_missing_scope() -> None:
 
 
 def test_viewers_are_probed_on_a_record_of_a_configured_type() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     _run("hubspot_record_viewers", _context(gateway, object_types=["companies"]))
 
@@ -208,7 +209,7 @@ def test_viewers_are_probed_on_a_record_of_a_configured_type() -> None:
     ["hubspot_associations", "hubspot_notes", "hubspot_record_viewers"],
 )
 def test_an_empty_portal_has_nothing_to_probe(check_id: str) -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_records.return_value = HubSpotPage(items=[])
 
     _run(check_id, _context(gateway))
@@ -219,7 +220,7 @@ def test_an_empty_portal_has_nothing_to_probe(check_id: str) -> None:
 
 
 def test_a_record_without_notes_reads_none() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_associations.return_value = HubSpotPage(items=[])
 
     _run("hubspot_notes", _context(gateway))
@@ -240,7 +241,7 @@ def _connector(gateway: MagicMock) -> HubSpotConnector:
 
 
 def test_perm_sync_validation_probes_viewers_on_the_configured_types() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     validate_perm_sync(_connector(gateway))
 
@@ -253,7 +254,7 @@ def test_perm_sync_validation_probes_viewers_on_the_configured_types() -> None:
 
 
 def test_perm_sync_validation_fails_on_a_missing_users_scope() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_users.side_effect = _refusal("user listing", 403)
 
     with pytest.raises(InsufficientPermissionsError, match="settings.users.read"):
