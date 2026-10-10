@@ -20,17 +20,21 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 )
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    IndexingHeartbeatInterface,
     LoadConnector,
     NormalizationResult,
     OAuthConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
+    SlimConnector,
 )
 from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
     ImageSection,
+    SlimDocument,
     TextSection,
 )
 from onyx.utils.logger import setup_logger
@@ -78,7 +82,7 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
     )
 
 
-class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
+class LinearConnector(LoadConnector, PollConnector, SlimConnector, OAuthConnector):
     supports_manual_credentials = True
 
     def __init__(
@@ -398,6 +402,106 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         end_time = datetime.fromtimestamp(end, tz=timezone.utc)
 
         yield from self._process_issues(start_str=start_time, end_str=end_time)
+
+    def _process_slim_issues(
+        self,
+        start_str: datetime | None = None,
+        end_str: datetime | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Same pagination/filter shape as _process_issues, but only requests
+        the `id` field. Used by pruning to cheaply enumerate which documents
+        still exist in Linear, without paying for description/comment bodies
+        on every issue just to throw them away.
+        """
+        if self.linear_api_key is None:
+            raise ConnectorMissingCredentialError("Linear")
+
+        lte_filter = f'lte: "{end_str}"' if end_str else ""
+        gte_filter = f'gte: "{start_str}"' if start_str else ""
+        updatedAtFilter = f"""
+            {lte_filter}
+            {gte_filter}
+        """
+
+        query = (
+            """
+            query IterateIssueBatches($first: Int, $after: String) {
+                issues(
+                    orderBy: updatedAt,
+                    first: $first,
+                    after: $after,
+                    filter: {
+                        updatedAt: {
+        """
+            + updatedAtFilter
+            + """
+                        },
+
+                    }
+                ) {
+                    edges {
+                        node {
+                            id
+                        }
+                    }
+                    pageInfo {
+                        hasNextPage
+                        endCursor
+                    }
+                }
+            }
+        """
+        )
+
+        has_more = True
+        endCursor = None
+        while has_more:
+            if callback and callback.should_stop():
+                return
+
+            graphql_query = {
+                "query": query,
+                "variables": {
+                    "first": self.batch_size,
+                    "after": endCursor,
+                },
+            }
+            logger.debug(
+                "Requesting slim issues from Linear with query: %s", graphql_query
+            )
+
+            response = _make_query(graphql_query, self.linear_api_key)
+            response_json = response.json()
+            edges = response_json["data"]["issues"]["edges"]
+
+            batch = [SlimDocument(id=edge["node"]["id"]) for edge in edges]
+            yield batch
+
+            if callback:
+                callback.progress("LinearConnector", len(batch))
+
+            endCursor = response_json["data"]["issues"]["pageInfo"]["endCursor"]
+            has_more = response_json["data"]["issues"]["pageInfo"]["hasNextPage"]
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        start_time = (
+            datetime.fromtimestamp(start, tz=timezone.utc)
+            if start is not None
+            else None
+        )
+        end_time = (
+            datetime.fromtimestamp(end, tz=timezone.utc) if end is not None else None
+        )
+
+        yield from self._process_slim_issues(
+            start_str=start_time, end_str=end_time, callback=callback
+        )
 
     @classmethod
     @override
