@@ -239,7 +239,7 @@ describe("IndexSettingsPage embedding model picker", () => {
       EmbeddingProviderName.NVIDIA,
       "nvidia/Nemotron-3-Embed-1B-BF16"
     );
-    expect(within(nemotron).getByText("GPU recommended")).toBeInTheDocument();
+    expect(within(nemotron).getByText("GPU only")).toBeInTheDocument();
     expect(
       modelCard(
         EmbeddingProviderName.VOYAGE_SELF_HOSTED,

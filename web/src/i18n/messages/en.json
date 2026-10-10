@@ -5067,8 +5067,8 @@
           "label": "Current Model"
         },
         "gpuRecommended": {
-          "tag": "GPU recommended",
-          "tooltip": "Indexing with this model on a CPU is very slow. Run the model server on a GPU."
+          "tag": "GPU only",
+          "tooltip": "Indexing with this model on a CPU is too slow to be practical. Run the model server on a GPU."
         },
         "legacy": {
           "tag": "Legacy",
@@ -5283,24 +5283,24 @@
         "restoreHint": "To keep a connector, cancel here, resume or fix it, then re-index — it will be carried over. Otherwise, add it back once the re-index finishes."
       },
       "modelDescriptions": {
-        "cohereEmbedV5Pro": "Cohere's highest-quality embedding model, with a 2048-dim output.",
-        "cohereEmbedV5Fast": "Faster, lower-cost version of Cohere's Embed 5 model, with a 2048-dim output.",
+        "cohereEmbedV5Pro": "Cohere's top embedding model. The best balance of quality and cost. 2048-dim output.",
+        "cohereEmbedV5Fast": "A lower-cost version of Cohere's Embed 5. Still an excellent option. 2048-dim output.",
         "cohereEmbedEnglishV3": "Cohere's English embedding model. Good performance for English-language tasks.",
         "cohereEmbedEnglishLightV3": "Cohere's lightweight English embedding model. Faster and more efficient for simpler tasks.",
         "cohereEmbedV4": "Cohere's multilingual embedding model, with a 1536-dim output.",
-        "openaiTextEmbedding3Large": "OpenAI's large embedding model. Best performance, but more expensive.",
-        "openaiTextEmbedding3Small": "OpenAI's newer, more efficient embedding model. Good balance of performance and cost.",
+        "openaiTextEmbedding3Large": "OpenAI's large embedding model. A good choice if you already use OpenAI. 3072-dim output.",
+        "openaiTextEmbedding3Small": "OpenAI's small embedding model. By far the most economical cloud-based option. 1536-dim output.",
         "googleGeminiEmbedding001": "Google's Gemini embedding model. Powerful and efficient.",
         "googleTextEmbedding005": "Smaller, lighter-weight embedding model from Google.",
-        "googleGeminiEmbedding2": "Google's latest multimodal embedding model (GA). Highest-quality retrieval with a 3072-dim output.",
+        "googleGeminiEmbedding2": "Google's top embedding model. Very powerful, but expensive and slower. Its 3072-dim output builds a large index. A solid choice for teams that already use Google.",
         "googleGeminiEmbedding2Preview": "Preview version of Gemini Embedding 2. Superseded by gemini-embedding-2 for new setups.",
         "googleTextEmbedding004": "Earlier Google text embedding model. Newer Google models replace it.",
         "googleTextEmbeddingGecko003": "Earlier Google Gecko text embedding model. Newer Google models replace it.",
         "voyageLarge2Instruct": "Voyage's large embedding model. High performance with instruction fine-tuning.",
         "voyageLight2Instruct": "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
-        "graniteEmbedding97mMultilingualR2": "IBM's small multilingual embedding model (97M parameters). Fast on CPU, and it ships with {appName}, so no download is needed.",
-        "voyage4Nano": "Voyage AI's open-weights embedding model, with a 2048-dim output. Higher search quality than smaller models. A GPU makes indexing much faster.",
-        "nemotron3Embed1b": "NVIDIA's 1B-parameter multilingual embedding model, with a 2048-dim output. High search quality, but indexing on CPU is very slow.",
+        "graniteEmbedding97mMultilingualR2": "IBM's small multilingual model. Fast on CPU, and it ships with {appName}, so no download is needed. 97M parameters, 384-dim output. About 6 chunks per second on 4 CPU cores.",
+        "voyage4Nano": "Voyage AI's open-weights model. Higher search quality than smaller models, but slower on CPU. 346M parameters, 2048-dim output. About 1 chunk per second on 4 CPU cores.",
+        "nemotron3Embed1b": "NVIDIA's multilingual model, with high search quality. 1.1B parameters, 2048-dim output. GPU only: indexing on CPU is too slow.",
         "nomicEmbedTextV1": "Nomic's embedding model specialized for retrieval, similarity, clustering and classification.",
         "e5BaseV2": "English embedding model from Microsoft's E5 family. A balance of speed and search quality.",
         "e5SmallV2": "The smallest and fastest version of the E5 line of models. If you're running {appName} on a resource constrained system, then this may be a good choice.",

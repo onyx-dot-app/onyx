@@ -5067,8 +5067,8 @@
           "label": "現在のモデル"
         },
         "gpuRecommended": {
-          "tag": "GPU 推奨",
-          "tooltip": "CPU でこのモデルを使ったインデックス作成は非常に遅くなります。モデルサーバーは GPU で実行してください。"
+          "tag": "GPU 専用",
+          "tooltip": "CPU でこのモデルを使ったインデックス作成は遅すぎて実用的ではありません。モデルサーバーは GPU で実行してください。"
         },
         "legacy": {
           "tag": "レガシー",
@@ -5283,24 +5283,24 @@
         "restoreHint": "コネクタを残したい場合は、ここでキャンセルし、再開または修正してから再インデックスを実行してください。そうすれば新しいインデックスに引き継がれます。そうしない場合は、再インデックスの完了後に追加し直してください。"
       },
       "modelDescriptions": {
-        "cohereEmbedV5Pro": "Cohere の最高品質の埋め込みモデル。2048 次元出力。",
-        "cohereEmbedV5Fast": "Cohere の Embed 5 モデルの高速・低コスト版。2048 次元出力。",
+        "cohereEmbedV5Pro": "Cohere の主力埋め込みモデル。品質とコストのバランスが最も優れています。2048 次元出力。",
+        "cohereEmbedV5Fast": "Cohere の Embed 5 の低コスト版。それでも非常に優れた選択肢です。2048 次元出力。",
         "cohereEmbedEnglishV3": "Cohere の英語向け埋め込みモデル。英語タスクで良好な性能。",
         "cohereEmbedEnglishLightV3": "Cohere の軽量な英語向け埋め込みモデル。単純なタスクではより高速で効率的。",
         "cohereEmbedV4": "Cohere の多言語埋め込みモデル。1536 次元出力。",
-        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。最高の性能だが高コスト。",
-        "openaiTextEmbedding3Small": "OpenAI の新しく効率的な埋め込みモデル。性能とコストのバランスが良い。",
+        "openaiTextEmbedding3Large": "OpenAI の大規模埋め込みモデル。すでに OpenAI を利用している場合に適しています。3072 次元出力。",
+        "openaiTextEmbedding3Small": "OpenAI の小型埋め込みモデル。クラウド型の選択肢の中で群を抜いて経済的です。1536 次元出力。",
         "googleGeminiEmbedding001": "Google の Gemini 埋め込みモデル。強力で効率的。",
         "googleTextEmbedding005": "Google のより小型で軽量な埋め込みモデル。",
-        "googleGeminiEmbedding2": "Google の最新のマルチモーダル埋め込みモデル（GA）。3072 次元出力で最高品質の検索。",
+        "googleGeminiEmbedding2": "Google の主力埋め込みモデル。非常に高性能ですが、コストが高く低速です。3072 次元出力のためインデックスが大きくなります。すでに Google を利用しているチームには堅実な選択肢です。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 のプレビュー版。新規セットアップでは gemini-embedding-2 に置き換えられました。",
         "googleTextEmbedding004": "Google の以前のテキスト埋め込みモデル。より新しい Google モデルに置き換えられました。",
         "googleTextEmbeddingGecko003": "Google の以前の Gecko テキスト埋め込みモデル。より新しい Google モデルに置き換えられました。",
         "voyageLarge2Instruct": "Voyage の大規模埋め込みモデル。指示によるファインチューニングで高性能。",
         "voyageLight2Instruct": "Voyage の軽量な埋め込みモデル。性能と効率のバランスが良い。",
-        "graniteEmbedding97mMultilingualR2": "IBM の小型多言語埋め込みモデル（9,700 万パラメータ）。CPU でも高速で、{appName} に同梱されているためダウンロード不要です。",
-        "voyage4Nano": "Voyage AI のオープンウェイト埋め込みモデル。2048 次元出力。小型モデルより検索品質が高く、GPU を使うとインデックス作成が大幅に速くなります。",
-        "nemotron3Embed1b": "NVIDIA の 10 億パラメータの多言語埋め込みモデル。2048 次元出力。検索品質は高いものの、CPU でのインデックス作成は非常に遅くなります。",
+        "graniteEmbedding97mMultilingualR2": "IBM の小型多言語モデル。CPU でも高速で、{appName} に同梱されているためダウンロード不要です。9,700 万パラメータ、384 次元出力。4 コアの CPU で毎秒約 6 チャンク。",
+        "voyage4Nano": "Voyage AI のオープンウェイトモデル。小型モデルより検索品質が高い一方、CPU では低速です。3 億 4,600 万パラメータ、2048 次元出力。4 コアの CPU で毎秒約 1 チャンク。",
+        "nemotron3Embed1b": "検索品質が高い NVIDIA の多言語モデル。11 億パラメータ、2048 次元出力。GPU 専用：CPU でのインデックス作成は遅すぎます。",
         "nomicEmbedTextV1": "検索、類似度、クラスタリング、分類に特化した Nomic の埋め込みモデル。",
         "e5BaseV2": "Microsoft の E5 ファミリーの英語埋め込みモデル。速度と検索品質のバランスが取れています。",
         "e5SmallV2": "E5 系モデルの中で最小かつ最速のバージョン。リソースが限られた環境で {appName} を実行している場合に適しています。",

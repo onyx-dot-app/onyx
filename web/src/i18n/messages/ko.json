@@ -5067,8 +5067,8 @@
           "label": "현재 모델"
         },
         "gpuRecommended": {
-          "tag": "GPU 권장",
-          "tooltip": "CPU에서 이 모델로 인덱싱하면 매우 느립니다. 모델 서버를 GPU에서 실행하세요."
+          "tag": "GPU 전용",
+          "tooltip": "CPU에서 이 모델로 인덱싱하면 너무 느려서 실용적이지 않습니다. 모델 서버를 GPU에서 실행하세요."
         },
         "legacy": {
           "tag": "레거시",
@@ -5283,24 +5283,24 @@
         "restoreHint": "커넥터를 유지하려면 여기서 취소하고 재개하거나 문제를 해결한 뒤 다시 재인덱싱하세요. 그러면 새 인덱스로 이전됩니다. 그렇지 않으면 재인덱싱이 끝난 뒤 다시 추가하세요."
       },
       "modelDescriptions": {
-        "cohereEmbedV5Pro": "Cohere의 최고 품질 임베딩 모델로, 2048차원 출력을 제공합니다.",
-        "cohereEmbedV5Fast": "Cohere Embed 5 모델의 더 빠르고 저렴한 버전으로, 2048차원 출력을 제공합니다.",
+        "cohereEmbedV5Pro": "Cohere의 대표 임베딩 모델입니다. 품질과 비용의 균형이 가장 좋습니다. 2048차원 출력.",
+        "cohereEmbedV5Fast": "Cohere Embed 5의 저비용 버전입니다. 그래도 매우 훌륭한 선택입니다. 2048차원 출력.",
         "cohereEmbedEnglishV3": "Cohere의 영어 임베딩 모델입니다. 영어 작업에 좋은 성능을 보입니다.",
         "cohereEmbedEnglishLightV3": "Cohere의 경량 영어 임베딩 모델입니다. 단순한 작업에 더 빠르고 효율적입니다.",
         "cohereEmbedV4": "Cohere의 다국어 임베딩 모델로, 1536차원 출력을 제공합니다.",
-        "openaiTextEmbedding3Large": "OpenAI의 대형 임베딩 모델입니다. 성능은 가장 좋지만 비용이 더 높습니다.",
-        "openaiTextEmbedding3Small": "OpenAI의 더 새롭고 효율적인 임베딩 모델입니다. 성능과 비용의 균형이 좋습니다.",
+        "openaiTextEmbedding3Large": "OpenAI의 대형 임베딩 모델입니다. 이미 OpenAI를 사용 중이라면 좋은 선택입니다. 3072차원 출력.",
+        "openaiTextEmbedding3Small": "OpenAI의 소형 임베딩 모델입니다. 클라우드 기반 옵션 중 단연 가장 경제적입니다. 1536차원 출력.",
         "googleGeminiEmbedding001": "Google의 Gemini 임베딩 모델입니다. 강력하고 효율적입니다.",
         "googleTextEmbedding005": "Google의 더 작고 가벼운 임베딩 모델입니다.",
-        "googleGeminiEmbedding2": "Google의 최신 멀티모달 임베딩 모델(GA)입니다. 3072차원 출력으로 최고 품질의 검색을 제공합니다.",
+        "googleGeminiEmbedding2": "Google의 대표 임베딩 모델입니다. 매우 강력하지만 비용이 높고 더 느립니다. 3072차원 출력으로 인덱스가 커집니다. 이미 Google을 사용하는 팀에게 탄탄한 선택입니다.",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2의 프리뷰 버전입니다. 새 설정에서는 gemini-embedding-2로 대체되었습니다.",
         "googleTextEmbedding004": "Google의 이전 텍스트 임베딩 모델입니다. 최신 Google 모델로 대체되었습니다.",
         "googleTextEmbeddingGecko003": "Google의 이전 Gecko 텍스트 임베딩 모델입니다. 최신 Google 모델로 대체되었습니다.",
         "voyageLarge2Instruct": "Voyage의 대형 임베딩 모델입니다. 지시 미세 조정으로 높은 성능을 제공합니다.",
         "voyageLight2Instruct": "Voyage의 경량 임베딩 모델입니다. 성능과 효율의 균형이 좋습니다.",
-        "graniteEmbedding97mMultilingualR2": "IBM의 소형 다국어 임베딩 모델입니다(파라미터 9,700만 개). CPU에서도 빠르며, {appName}에 포함되어 있어 다운로드가 필요 없습니다.",
-        "voyage4Nano": "Voyage AI의 오픈 웨이트 임베딩 모델로, 2048차원 출력을 제공합니다. 더 작은 모델보다 검색 품질이 높으며, GPU를 사용하면 인덱싱이 훨씬 빨라집니다.",
-        "nemotron3Embed1b": "NVIDIA의 10억 파라미터 다국어 임베딩 모델로, 2048차원 출력을 제공합니다. 검색 품질은 높지만 CPU에서는 인덱싱이 매우 느립니다.",
+        "graniteEmbedding97mMultilingualR2": "IBM의 소형 다국어 모델입니다. CPU에서도 빠르며, {appName}에 포함되어 있어 다운로드가 필요 없습니다. 파라미터 9,700만 개, 384차원 출력. 4코어 CPU에서 초당 약 6개 청크.",
+        "voyage4Nano": "Voyage AI의 오픈 웨이트 모델입니다. 더 작은 모델보다 검색 품질이 높지만 CPU에서는 더 느립니다. 파라미터 3억 4,600만 개, 2048차원 출력. 4코어 CPU에서 초당 약 1개 청크.",
+        "nemotron3Embed1b": "검색 품질이 높은 NVIDIA의 다국어 모델입니다. 파라미터 11억 개, 2048차원 출력. GPU 전용: CPU에서는 인덱싱이 너무 느립니다.",
         "nomicEmbedTextV1": "검색, 유사도, 클러스터링, 분류에 특화된 Nomic의 임베딩 모델입니다.",
         "e5BaseV2": "Microsoft E5 계열의 영어 임베딩 모델입니다. 속도와 검색 품질의 균형을 갖추었습니다.",
         "e5SmallV2": "E5 모델 계열 중 가장 작고 빠른 버전입니다. 리소스가 제한된 시스템에서 {appName}를 실행한다면 좋은 선택입니다.",

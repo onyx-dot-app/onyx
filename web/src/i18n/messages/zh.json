@@ -5067,8 +5067,8 @@
           "label": "当前模型"
         },
         "gpuRecommended": {
-          "tag": "建议使用 GPU",
-          "tooltip": "在 CPU 上使用此模型进行索引非常慢。请在 GPU 上运行模型服务器。"
+          "tag": "仅限 GPU",
+          "tooltip": "在 CPU 上使用此模型进行索引太慢，无法实际使用。请在 GPU 上运行模型服务器。"
         },
         "legacy": {
           "tag": "旧版",
@@ -5283,24 +5283,24 @@
         "restoreHint": "如需保留某个连接器，请在此取消，先恢复或修复它，然后重新索引，它就会被迁移过去。否则请在重新索引完成后重新添加。"
       },
       "modelDescriptions": {
-        "cohereEmbedV5Pro": "Cohere 质量最高的嵌入模型，2048 维输出。",
-        "cohereEmbedV5Fast": "Cohere Embed 5 模型的更快、更低成本版本，2048 维输出。",
+        "cohereEmbedV5Pro": "Cohere 的旗舰嵌入模型。质量与成本的最佳平衡。2048 维输出。",
+        "cohereEmbedV5Fast": "Cohere Embed 5 的低成本版本。依然是非常出色的选择。2048 维输出。",
         "cohereEmbedEnglishV3": "Cohere 的英语嵌入模型。在英语任务上表现良好。",
         "cohereEmbedEnglishLightV3": "Cohere 的轻量级英语嵌入模型。处理简单任务更快、更高效。",
         "cohereEmbedV4": "Cohere 的多语言嵌入模型，1536 维输出。",
-        "openaiTextEmbedding3Large": "OpenAI 的大型嵌入模型。性能最佳，但成本更高。",
-        "openaiTextEmbedding3Small": "OpenAI 更新、更高效的嵌入模型。性能与成本平衡良好。",
+        "openaiTextEmbedding3Large": "OpenAI 的大型嵌入模型。适合已在使用 OpenAI 的团队。3072 维输出。",
+        "openaiTextEmbedding3Small": "OpenAI 的小型嵌入模型。在云端选项中最经济，优势明显。1536 维输出。",
         "googleGeminiEmbedding001": "Google 的 Gemini 嵌入模型。强大且高效。",
         "googleTextEmbedding005": "Google 更小、更轻量的嵌入模型。",
-        "googleGeminiEmbedding2": "Google 最新的多模态嵌入模型（GA）。3072 维输出，检索质量最高。",
+        "googleGeminiEmbedding2": "Google 的旗舰嵌入模型。功能非常强大，但成本高、速度较慢。3072 维输出会生成较大的索引。对已在使用 Google 的团队来说是稳妥的选择。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 的预览版。新部署已由 gemini-embedding-2 取代。",
         "googleTextEmbedding004": "Google 早期的文本嵌入模型。已被更新的 Google 模型取代。",
         "googleTextEmbeddingGecko003": "Google 早期的 Gecko 文本嵌入模型。已被更新的 Google 模型取代。",
         "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
         "voyageLight2Instruct": "Voyage 的轻量级嵌入模型。性能与效率平衡良好。",
-        "graniteEmbedding97mMultilingualR2": "IBM 的小型多语言嵌入模型（9700 万参数）。在 CPU 上运行很快，且已随 {appName} 提供，无需下载。",
-        "voyage4Nano": "Voyage AI 的开放权重嵌入模型，2048 维输出。搜索质量高于更小的模型。使用 GPU 可大幅加快索引速度。",
-        "nemotron3Embed1b": "NVIDIA 的 10 亿参数多语言嵌入模型，2048 维输出。搜索质量高，但在 CPU 上索引非常慢。",
+        "graniteEmbedding97mMultilingualR2": "IBM 的小型多语言模型。在 CPU 上运行很快，且已随 {appName} 提供，无需下载。9700 万参数，384 维输出。在 4 核 CPU 上每秒约 6 个分块。",
+        "voyage4Nano": "Voyage AI 的开放权重模型。搜索质量高于更小的模型，但在 CPU 上较慢。3.46 亿参数，2048 维输出。在 4 核 CPU 上每秒约 1 个分块。",
+        "nemotron3Embed1b": "NVIDIA 的多语言模型，搜索质量高。11 亿参数，2048 维输出。仅限 GPU：在 CPU 上索引太慢。",
         "nomicEmbedTextV1": "Nomic 的嵌入模型，专注于检索、相似度、聚类和分类。",
         "e5BaseV2": "Microsoft E5 系列的英文嵌入模型。在速度与搜索质量之间取得平衡。",
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",

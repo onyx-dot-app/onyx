@@ -5067,8 +5067,8 @@
           "label": "Modelo atual"
         },
         "gpuRecommended": {
-          "tag": "GPU recomendada",
-          "tooltip": "Indexar com este modelo em uma CPU é muito lento. Execute o servidor de modelos em uma GPU."
+          "tag": "Somente GPU",
+          "tooltip": "Indexar com este modelo em uma CPU é lento demais para ser prático. Execute o servidor de modelos em uma GPU."
         },
         "legacy": {
           "tag": "Legado",
@@ -5283,24 +5283,24 @@
         "restoreHint": "Para manter um conector, cancele aqui, retome-o ou corrija-o e reindexe novamente — assim ele será levado adiante. Caso contrário, adicione-o de volta quando a reindexação terminar."
       },
       "modelDescriptions": {
-        "cohereEmbedV5Pro": "O modelo de embeddings de maior qualidade da Cohere, com saída de 2048 dimensões.",
-        "cohereEmbedV5Fast": "Versão mais rápida e de menor custo do modelo Embed 5 da Cohere, com saída de 2048 dimensões.",
+        "cohereEmbedV5Pro": "O principal modelo de embeddings da Cohere. O melhor equilíbrio entre qualidade e custo. Saída de 2048 dimensões.",
+        "cohereEmbedV5Fast": "Versão de menor custo do Embed 5 da Cohere. Ainda assim, uma excelente opção. Saída de 2048 dimensões.",
         "cohereEmbedEnglishV3": "Modelo de embeddings em inglês da Cohere. Bom desempenho em tarefas em inglês.",
         "cohereEmbedEnglishLightV3": "Modelo leve de embeddings em inglês da Cohere. Mais rápido e eficiente para tarefas simples.",
         "cohereEmbedV4": "O modelo de embeddings multilíngue da Cohere, com saída de 1536 dimensões.",
-        "openaiTextEmbedding3Large": "Modelo de embeddings grande da OpenAI. Melhor desempenho, porém mais caro.",
-        "openaiTextEmbedding3Small": "Modelo de embeddings mais novo e eficiente da OpenAI. Bom equilíbrio entre desempenho e custo.",
+        "openaiTextEmbedding3Large": "Modelo de embeddings grande da OpenAI. Uma boa escolha se você já usa a OpenAI. Saída de 3072 dimensões.",
+        "openaiTextEmbedding3Small": "Modelo de embeddings pequeno da OpenAI. De longe a opção na nuvem mais econômica. Saída de 1536 dimensões.",
         "googleGeminiEmbedding001": "Modelo de embeddings Gemini do Google. Poderoso e eficiente.",
         "googleTextEmbedding005": "Modelo de embeddings menor e mais leve do Google.",
-        "googleGeminiEmbedding2": "O modelo de embeddings multimodal mais recente do Google (GA). Recuperação da mais alta qualidade com saída de 3072 dimensões.",
+        "googleGeminiEmbedding2": "O principal modelo de embeddings do Google. Muito poderoso, mas caro e mais lento. Sua saída de 3072 dimensões gera um índice grande. Uma escolha sólida para equipes que já usam o Google.",
         "googleGeminiEmbedding2Preview": "Versão prévia do Gemini Embedding 2. Substituída pelo gemini-embedding-2 em novas configurações.",
         "googleTextEmbedding004": "Modelo anterior de embeddings de texto do Google. Substituído por modelos mais recentes do Google.",
         "googleTextEmbeddingGecko003": "Modelo anterior de embeddings de texto Gecko do Google. Substituído por modelos mais recentes do Google.",
         "voyageLarge2Instruct": "Modelo de embeddings grande da Voyage. Alto desempenho com ajuste fino por instruções.",
         "voyageLight2Instruct": "Modelo leve de embeddings da Voyage. Bom equilíbrio entre desempenho e eficiência.",
-        "graniteEmbedding97mMultilingualR2": "O pequeno modelo de embeddings multilíngue da IBM (97 M de parâmetros). Rápido em CPU e incluído no {appName}, sem necessidade de download.",
-        "voyage4Nano": "O modelo de embeddings de pesos abertos da Voyage AI, com saída de 2048 dimensões. Qualidade de busca maior que a de modelos menores. Uma GPU torna a indexação muito mais rápida.",
-        "nemotron3Embed1b": "O modelo de embeddings multilíngue da NVIDIA com 1 bilhão de parâmetros, com saída de 2048 dimensões. Alta qualidade de busca, mas a indexação em CPU é muito lenta.",
+        "graniteEmbedding97mMultilingualR2": "O pequeno modelo multilíngue da IBM. Rápido em CPU e incluído no {appName}, sem necessidade de download. 97 M de parâmetros, saída de 384 dimensões. Cerca de 6 chunks por segundo em 4 núcleos de CPU.",
+        "voyage4Nano": "O modelo de pesos abertos da Voyage AI. Qualidade de busca maior que a de modelos menores, mas mais lento em CPU. 346 M de parâmetros, saída de 2048 dimensões. Cerca de 1 chunk por segundo em 4 núcleos de CPU.",
+        "nemotron3Embed1b": "O modelo multilíngue da NVIDIA, com alta qualidade de busca. 1,1 bilhão de parâmetros, saída de 2048 dimensões. Somente GPU: a indexação em CPU é lenta demais.",
         "nomicEmbedTextV1": "Modelo de embeddings da Nomic especializado em recuperação, similaridade, agrupamento e classificação.",
         "e5BaseV2": "Modelo de embeddings em inglês da família E5 da Microsoft. Equilibra velocidade e qualidade de busca.",
         "e5SmallV2": "A versão menor e mais rápida da linha de modelos E5. Se você executa o {appName} em um sistema com recursos limitados, pode ser uma boa escolha.",
