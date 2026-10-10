@@ -1,4 +1,5 @@
 import io
+import json
 from typing import Any, ClassVar
 
 from onyx.configs.app_configs import (
@@ -38,7 +39,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _issue_key(issue: JiraIssue | dict[str, Any]) -> str:
+def _issue_key(issue: JiraIssue | Any) -> str:
     """Stable issue key for legacy Jira SDK fixtures and the raw API gateway."""
     return str(issue["key"] if isinstance(issue, dict) else issue.key)
 
@@ -129,7 +130,7 @@ class JiraServiceManagementConnector(JiraConnector):
         https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
         """
         time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
-        base_jql = f'project = "{self.jira_project}"'
+        base_jql = f"project = {json.dumps(self.jira_project)}"
         if self.jql_query:
             return f"{base_jql} AND ({self.jql_query}) AND {time_jql}"
         return f"{base_jql} AND {time_jql}"
