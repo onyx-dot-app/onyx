@@ -77,6 +77,8 @@ from onyx.server.features.build.configs import (
 )
 from onyx.server.features.build.sandbox.base import (
     SandboxManager,
+    document_preview_command,
+    parse_document_preview_response,
 )
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
@@ -2131,83 +2133,67 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
         """
         return self._get_nextjs_url(str(sandbox_id), port)
 
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
-        """Convert PPTX to slide images using soffice + pdftoppm in the pod.
+        """Convert PDF or PowerPoint to page images using soffice + pdftoppm in the pod.
 
         Runs preview.py in the sandbox container which:
-        1. Checks if cached slides exist and are newer than the PPTX
-        2. If not, converts PPTX -> PDF -> JPEG slides
+        1. Checks whether cached pages match the document revision
+        2. If not, converts PowerPoint to PDF and rasterizes PDF pages
         3. Returns list of slide image paths
         """
         pod_name = self._get_pod_name(str(sandbox_id))
 
         # Security: sanitize paths
-        pptx_path_obj = Path(pptx_path.lstrip("/"))
-        pptx_clean_parts = [p for p in pptx_path_obj.parts if p != ".."]
-        clean_pptx = str(Path(*pptx_clean_parts)) if pptx_clean_parts else "."
+        document_path_obj = Path(document_path.lstrip("/"))
+        document_clean_parts = [p for p in document_path_obj.parts if p != ".."]
+        clean_document = (
+            str(Path(*document_clean_parts)) if document_clean_parts else "."
+        )
 
         cache_path_obj = Path(cache_dir.lstrip("/"))
         cache_clean_parts = [p for p in cache_path_obj.parts if p != ".."]
         clean_cache = str(Path(*cache_clean_parts)) if cache_clean_parts else "."
 
         session_root = f"/workspace/sessions/{session_id}"
-        pptx_abs = f"{session_root}/{clean_pptx}"
+        document_abs = f"{session_root}/{clean_document}"
         cache_abs = f"{session_root}/{clean_cache}"
 
-        exec_command = [
-            "python",
-            "/workspace/managed/skills/pptx/scripts/preview.py",
-            pptx_abs,
+        exec_command = document_preview_command(
+            document_abs,
             cache_abs,
-        ]
+            session_root,
+            first_page_only=first_page_only,
+        )
 
-        try:
-            resp = k8s_stream(
+        def run_command(command: list[str]) -> str:
+            return k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container=_SANDBOX_CONTAINER_NAME,
-                command=exec_command,
+                command=command,
                 stderr=True,
                 stdin=False,
                 stdout=True,
                 tty=False,
             )
 
-            lines = [line.strip() for line in resp.strip().split("\n") if line.strip()]
-
-            if not lines:
-                raise ValueError("Empty response from PPTX conversion")
-
-            if lines[0] == "ERROR_NOT_FOUND":
-                raise ValueError(f"File not found: {pptx_path}")
-
-            if lines[0] == "ERROR_NO_PDF":
-                raise ValueError("soffice did not produce a PDF file")
-
-            cached = lines[0] == "CACHED"
-            # Skip the status line, rest are file paths
-            abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
-
-            # Convert absolute paths to session-relative paths
-            prefix = f"{session_root}/"
-            rel_paths = []
-            for p in abs_paths:
-                if p.startswith(prefix):
-                    rel_paths.append(p[len(prefix) :])
-                elif p.endswith(".jpg"):
-                    rel_paths.append(p)
-
-            return (rel_paths, cached)
+        try:
+            self._ensure_document_preview_bundle(sandbox_id, run_command)
+            return parse_document_preview_response(
+                run_command(exec_command), session_root
+            )
 
         except ApiException as e:
-            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
+            raise RuntimeError(f"Failed to generate document preview: {e}") from e
 
     def _ensure_agents_md_attachments_section(
         self, sandbox_id: UUID, session_id: UUID
