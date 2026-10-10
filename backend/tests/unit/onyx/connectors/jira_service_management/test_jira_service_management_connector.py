@@ -46,6 +46,7 @@ from tests.unit.onyx.connectors.jira_service_management.conftest import (
     TEST_BASE_URL,
     TEST_PROJECT_KEY,
     make_mock_jsm_issue,
+    legacy_jira_client,
 )
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
@@ -62,7 +63,7 @@ def jsm_connector(
     """Connector with JSM field discovery short-circuited for determinism."""
     connector = make_jsm_connector()
     connector._jsm_field_map = jsm_field_map
-    jira_client = cast(JIRA, connector._jira_client)
+    jira_client = legacy_jira_client(connector)
     jira_client._options = MagicMock()
     with patch("onyx.connectors.jira.connector._JIRA_FULL_PAGE_SIZE", 2):
         yield connector
@@ -328,7 +329,7 @@ class TestCheckpointing:
         mock_issue2 = make_mock_jsm_issue(key="HELP-2", summary="Issue 2")
         mock_issue3 = make_mock_jsm_issue(key="HELP-3", summary="Issue 3")
 
-        jira_client = cast(JIRA, jsm_connector._jira_client)
+        jira_client = legacy_jira_client(jsm_connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.side_effect = [
             [mock_issue1, mock_issue2],
@@ -380,7 +381,7 @@ class TestCheckpointing:
     ) -> None:
         mock_issue = make_mock_jsm_issue(key="HELP-1")
 
-        jira_client = cast(JIRA, jsm_connector._jira_client)
+        jira_client = legacy_jira_client(jsm_connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.side_effect = [[mock_issue]]
 
@@ -407,7 +408,7 @@ class TestCheckpointing:
         good_issue = make_mock_jsm_issue(key="HELP-1")
         bad_issue = make_mock_jsm_issue(key="HELP-2", updated="not-a-timestamp")
 
-        jira_client = cast(JIRA, jsm_connector._jira_client)
+        jira_client = legacy_jira_client(jsm_connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.side_effect = [[good_issue, bad_issue], []]
 
@@ -433,7 +434,7 @@ class TestCheckpointing:
         mock_issue1 = make_mock_jsm_issue(key="HELP-1")
         mock_issue2 = make_mock_jsm_issue(key="HELP-2")
 
-        jira_client = cast(JIRA, jsm_connector._jira_client)
+        jira_client = legacy_jira_client(jsm_connector)
         search_issues_mock = cast(MagicMock, jira_client.search_issues)
         search_issues_mock.return_value = [mock_issue1, mock_issue2]
 
@@ -468,7 +469,7 @@ class TestValidateConnectorSettings:
         connector = make_jsm_connector()
         software_project = MagicMock()
         software_project.projectTypeKey = "software"
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         project_mock = cast(MagicMock, jira_client.project)
         project_mock.return_value = software_project
 
@@ -481,7 +482,7 @@ class TestValidateConnectorSettings:
         connector = make_jsm_connector()
         service_desk_project = MagicMock()
         service_desk_project.projectTypeKey = "service_desk"
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         project_mock = cast(MagicMock, jira_client.project)
         project_mock.return_value = service_desk_project
 
@@ -495,7 +496,7 @@ class TestValidateConnectorSettings:
         # projectTypeKey only available on the raw payload (e.g. server instances)
         project = MagicMock()
         project.raw = {"projectTypeKey": "service_desk"}
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         project_mock = cast(MagicMock, jira_client.project)
         project_mock.return_value = project
 
@@ -518,7 +519,7 @@ class TestValidateConnectorSettings:
         expected_message: str,
     ) -> None:
         connector = make_jsm_connector()
-        jira_client = cast(JIRA, connector._jira_client)
+        jira_client = legacy_jira_client(connector)
         project_mock = cast(MagicMock, jira_client.project)
         project_mock.side_effect = JIRAError(status_code=status_code)
 
