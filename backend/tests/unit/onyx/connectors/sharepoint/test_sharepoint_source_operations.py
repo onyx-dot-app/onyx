@@ -13,12 +13,13 @@ from office365.onedrive.drives.drive import Drive
 from office365.runtime.client_request_exception import ClientRequestException
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_auth import (
     MicrosoftAuthContext,
     MicrosoftAuthMethod,
 )
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
-from onyx.connectors.microsoft_utils.sharepoint_rest import (
+from onyx.connectors.microsoft_utils.models import (
     SharepointSecurable,
     SharepointSecurableKind,
 )
@@ -249,6 +250,20 @@ def test_list_site_urls_reads_every_page() -> None:
     sdk = _sdk_client(pages=pages)
 
     assert fake_gateway(sdk_client=sdk).list_site_urls() == [SITE_URL, OTHER_SITE_URL]
+
+
+def test_list_site_urls_stops_at_the_page_cap() -> None:
+    pages = _SitePage([SITE_URL], _SitePage([OTHER_SITE_URL], None))
+    sdk = _sdk_client(pages=pages)
+
+    assert fake_gateway(sdk_client=sdk).list_site_urls(max_pages=1) == [SITE_URL]
+
+
+def test_check_token_reports_the_lifetime() -> None:
+    def get_json(url: str, params: dict[str, str] | None) -> dict[str, Any]:  # noqa: ARG001
+        raise AssertionError("no Graph call")
+
+    assert fake_gateway(get_json=get_json).check_token().expires_in == 3600
 
 
 def test_get_site_id_needs_an_id() -> None:
@@ -525,3 +540,36 @@ class TestRestProbe:
         get.side_effect = requests.ConnectionError("timeout")
 
         assert fake_gateway(sites=[SITE_URL]).probe_rest_access(site_url=SITE_URL)
+
+
+@patch.object(gateway_module, "download_via_graph_api", return_value=b"abc")
+@patch.object(gateway_module, "download_with_cap")
+def test_item_bytes_fall_back_to_graph_when_the_link_is_refused(
+    download: MagicMock, graph_download: MagicMock
+) -> None:
+    download.side_effect = _json_error(403, "accessDenied")
+    item = _drive_item_with_link()
+
+    def get_json(url: str, params: dict[str, str] | None) -> dict[str, Any]:  # noqa: ARG001
+        raise AssertionError("no Graph call")
+
+    with patch.object(gateway_module.logger, "warning") as warning:
+        size = fake_gateway(get_json=get_json).read_item_bytes(
+            drive_id="d1", item=item, max_bytes=100
+        )
+
+    assert size == 3
+    assert "tempauth" not in str(warning.call_args)
+    assert graph_download.call_args.args[1:3] == ("d1", "item-1")
+
+
+def _drive_item_with_link() -> DriveItemData:
+    return DriveItemData.from_graph_json(
+        {
+            "id": "item-1",
+            "name": "a.pdf",
+            "webUrl": f"{SITE_URL}/a.pdf",
+            "@microsoft.graph.downloadUrl": "https://download.example/a?tempauth=secret",
+            "parentReference": {"driveId": "d1"},
+        }
+    )
