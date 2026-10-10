@@ -74,6 +74,7 @@ from onyx.llm.well_known_providers.auto_update_service import (
     fetch_llm_recommendations_from_github,
 )
 from onyx.llm.well_known_providers.constants import (
+    ATLASCLOUD_DEFAULT_API_BASE,
     LM_STUDIO_API_KEY_CONFIG_KEY,
     VERCEL_AI_GATEWAY_DEFAULT_API_BASE,
     VERTEX_AUTH_METHOD_KWARG,
@@ -117,6 +118,8 @@ from onyx.server.manage.llm.models import (
     OpenRouterModelDetails,
     OpenRouterModelsRequest,
     PortkeyFinalModelResponse,
+    AtlasCloudFinalModelResponse,
+    AtlasCloudModelsRequest,
     PortkeyModelsRequest,
     SyncModelEntry,
     TestLLMRequest,
@@ -2565,6 +2568,99 @@ def get_vercel_ai_gateway_available_models(
                 for r in sorted_results
             ],
             source_label="Vercel AI Gateway",
+        )
+
+    return sorted_results
+
+
+@admin_router.post("/atlascloud/available-models")
+def get_atlascloud_available_models(
+    request: AtlasCloudModelsRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> list[AtlasCloudFinalModelResponse]:
+    """Fetch available models from the Atlas Cloud catalog.
+
+    The catalog needs no credentials and carries richer metadata than LiteLLM's
+    static map, so it drives every field here.
+    """
+    api_base = (request.api_base or ATLASCLOUD_DEFAULT_API_BASE).strip().rstrip("/")
+    url = f"{api_base}/models" if api_base.endswith("/v1") else f"{api_base}/v1/models"
+
+    # On edit the form sends a masked key, so resolve the stored one.
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, api_base, db_session
+    )
+
+    response_json = _get_openai_compatible_models_response(
+        url=url,
+        source_name="Atlas Cloud",
+        api_key=api_key,
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found in the Atlas Cloud catalog",
+        )
+
+    results: list[AtlasCloudFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            if not model_id:
+                continue
+
+            # The OpenAI-compatible catalog lists language models only today
+            # (image and video models live on a separate endpoint), but the
+            # entries declare their output modalities, so honour them rather
+            # than assuming every future entry emits text.
+            output_modalities = model.get("output_modalities") or []
+            if output_modalities and "text" not in output_modalities:
+                continue
+
+            input_modalities = model.get("input_modalities") or []
+            supported_features = model.get("supported_features") or []
+
+            results.append(
+                AtlasCloudFinalModelResponse(
+                    name=model_id,
+                    display_name=model.get("name") or model_id,
+                    max_input_tokens=model.get("context_length"),
+                    supports_image_input="image" in input_modalities,
+                    supports_reasoning="reasoning" in supported_features,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse Atlas Cloud model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found in the Atlas Cloud catalog",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="Atlas Cloud",
         )
 
     return sorted_results
