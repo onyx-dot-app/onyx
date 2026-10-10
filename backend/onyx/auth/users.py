@@ -858,7 +858,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     )
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
-                    self.user_db.session.expire(user)
+                    if user in self.user_db.session:
+                        self.user_db.session.expire(user)
                     user = await self.user_db.get(  # ty: ignore[invalid-assignment]
                         user_id
                     )
@@ -890,7 +891,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     )
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
-                    self.user_db.session.expire(user)
+                    if user in self.user_db.session:
+                        self.user_db.session.expire(user)
                     user = await self.user_db.get(  # ty: ignore[invalid-assignment]
                         user_id
                     )
@@ -928,7 +930,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
             if sync_user:
                 if _upgrade_will_add_seat(
-                    sync_user, will_become_active=bool(sync_user.is_active)
+                    sync_user, will_become_active=True
                 ):
                     enforce_seat_limit_locked(sync_db, seats_needed=1)
                     seat_added = True
@@ -940,6 +942,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     False if safe else (user_create.is_verified or False)
                 )
                 sync_user.account_type = AccountType.STANDARD
+                sync_user.is_active = True
                 assign_user_to_default_groups__no_commit(
                     sync_db,
                     sync_user,

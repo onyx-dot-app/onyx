@@ -404,7 +404,9 @@ def _get_accepted_user_where_clause(
         email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
     ]
 
-    if not include_external:
+    if not include_external and (
+        not account_type_filter or AccountType.EXT_PERM_USER not in account_type_filter
+    ):
         where_clause.append(User.account_type != AccountType.EXT_PERM_USER)
 
     if email_filter_string is not None:
