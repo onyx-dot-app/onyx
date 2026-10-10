@@ -12,7 +12,7 @@ ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256
 
 # bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
 # not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc node images.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS bun_source
 
 # Build stage. Needs a root user plus a shell and npm/npx, which both the default slim image
 # and the DHI "-dev" variant provide.
