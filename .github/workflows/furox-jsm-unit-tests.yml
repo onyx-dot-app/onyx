@@ -1,0 +1,45 @@
+name: Furox JSM targeted unit tests
+
+on:
+  push:
+    branches:
+      - fix/jsm-upstream-compat-v2
+    paths:
+      - "backend/**"
+      - ".github/workflows/furox-jsm-unit-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  jsm-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONPATH: ./backend
+      DISABLE_TELEMETRY: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.25"
+          enable-cache: true
+      - name: Use Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Prepare Python environment
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python --no-config --no-deps --require-hashes \
+            -r backend/requirements/default.txt \
+            -r backend/requirements/dev.txt \
+            -r backend/requirements/ee.txt
+      - name: Run targeted JSM unit tests
+        run: |
+          .venv/bin/python -m pytest -q backend/tests/unit/onyx/connectors/jira_service_management
