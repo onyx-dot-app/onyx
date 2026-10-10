@@ -98,6 +98,13 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     | Permission.IMPLIED
 )
 
+# Former group toggles that basic now implies. Terraform configs and scripts
+# written against the old registry still send them, so the group-permission
+# API drops them instead of rejecting the request.
+LEGACY_NOOP_PERMISSIONS: frozenset[Permission] = frozenset(
+    {Permission.CREATE_USER_API_KEYS}
+)
+
 # Permissions auto-granted to all users in Community Edition.
 # In CE there is no group-permission UI, so these capabilities must be
 # available without explicit grants.  In EE they are controlled normally

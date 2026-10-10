@@ -76,7 +76,7 @@ resource "onyx_cc_pair" "sales_drive" {
 
 - `incognito_enabled` (Boolean) Whether members may start incognito chats. Only takes effect while the deployment restricts incognito access to groups, but it is always storable so a roster can be staged before the mode is flipped. Writing it needs full admin access, so the provider only calls the endpoint when it changes.
 - `manager_ids` (Set of String) User ids that manage the group. Every manager must also appear in `user_ids` — Onyx stores the flag on the membership row, so a manager is always a member.
-- `permissions` (Set of String) Permission grants, written as Onyx's own tokens: `manage:connectors`, `manage:document_sets`, `manage:llms`, `manage:actions`, `manage:agents`, `add:agents`, `manage:user_groups`, `manage:bots`, `manage:service_account_api_keys`, `create:user_api_keys`, `read:agent_analytics`, `read:query_history`. Note these are the wire values, not the enum names.
+- `permissions` (Set of String) Permission grants, written as Onyx's own tokens: `manage:connectors`, `manage:document_sets`, `manage:llms`, `manage:actions`, `manage:agents`, `add:agents`, `manage:user_groups`, `manage:bots`, `manage:service_account_api_keys`, `read:agent_analytics`, `read:query_history`. Note these are the wire values, not the enum names.
 
 The configuration owns the list, so leaving it out revokes every grant the group has.
 
