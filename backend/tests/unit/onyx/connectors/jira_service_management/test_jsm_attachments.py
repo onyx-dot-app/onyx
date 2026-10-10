@@ -341,6 +341,7 @@ class TestAttachmentFailureIsolation:
         connector = _make_connector_with_attachments(
             make_jsm_connector, mock_jira_client, []
         )
+        mock_jira_client.issue.side_effect = RuntimeError("listing down")
         issue = make_mock_jsm_issue()
         ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
 
