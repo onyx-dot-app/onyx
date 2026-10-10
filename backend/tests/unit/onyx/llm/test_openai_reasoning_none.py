@@ -1,3 +1,4 @@
+import json
 from typing import Any
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ from litellm.types.utils import Delta
 
 from onyx.configs.constants import MessageType
 from onyx.llm.constants import LlmProviderNames
+from onyx.llm.custom_config_mapping import OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS
 from onyx.llm.model_capabilities import openai_model_supports_reasoning_none
 from onyx.llm.model_request import UserMessage
 from onyx.llm.models import ReasoningEffort
@@ -194,6 +196,86 @@ def test_off_sends_explicit_none_on_openai_compatible() -> None:
     )
     kwargs = _sent_kwargs(compatible, ReasoningEffort.OFF)
     assert kwargs["reasoning"] == {"effort": "none"}
+
+
+# Self-hosted hybrid-reasoning models (vLLM / SGLang): the chat template
+# defaults them to thinking-on, so ReasoningEffort.OFF needs an explicit
+# signal. The per-provider custom config carries it; only OFF calls send it.
+_OPENAI_COMPATIBLE_HYBRID_MODELS = ["Qwen/Qwen3-32B", "zai-org/GLM-4.6"]
+
+
+def _off_signal_llm(model_name: str, **kwargs: Any) -> LitellmLLM:
+    return _llm(
+        model_name,
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        api_base="https://llm.example/v1",
+        custom_config={
+            OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS: json.dumps(
+                {"chat_template_kwargs": {"enable_thinking": False}}
+            )
+        },
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize("model_name", _OPENAI_COMPATIBLE_HYBRID_MODELS)
+def test_off_signal_sent_at_off(model_name: str) -> None:
+    kwargs = _sent_kwargs(_off_signal_llm(model_name), ReasoningEffort.OFF)
+    assert kwargs["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+    assert "reasoning_effort" not in kwargs
+
+
+@pytest.mark.parametrize("model_name", _OPENAI_COMPATIBLE_HYBRID_MODELS)
+def test_off_signal_kept_out_of_high_and_auto(model_name: str) -> None:
+    llm = _off_signal_llm(model_name, supports_reasoning=True)
+    high = _sent_kwargs(llm, ReasoningEffort.HIGH)
+    assert high["reasoning_effort"] == "high"
+    assert "extra_body" not in high
+    auto = _sent_kwargs(llm, ReasoningEffort.AUTO)
+    assert "extra_body" not in auto
+
+
+def test_off_signal_without_reasoning_flag_still_sent_at_off() -> None:
+    """The signal is honored even when the model is not flagged as a reasoning
+    model: an admin who configured it wants thinking off on every OFF flow."""
+    llm = _off_signal_llm("Qwen/Qwen3-32B", supports_reasoning=False)
+    kwargs = _sent_kwargs(llm, ReasoningEffort.OFF)
+    assert kwargs["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def test_malformed_off_signal_dropped_without_raising() -> None:
+    llm = _llm(
+        "Qwen/Qwen3-32B",
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        api_base="https://llm.example/v1",
+        custom_config={OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS: "{not json"},
+    )
+    kwargs = _sent_kwargs(llm, ReasoningEffort.OFF)
+    assert "extra_body" not in kwargs
+
+
+def test_off_signal_deep_merges_with_existing_extra_body() -> None:
+    """Global LITELLM_EXTRA_BODY-style siblings survive; the OFF signal wins
+    on overlapping keys."""
+    llm = _llm(
+        "Qwen/Qwen3-32B",
+        model_provider=LlmProviderNames.OPENAI_COMPATIBLE,
+        api_base="https://llm.example/v1",
+        custom_config={
+            OPENAI_COMPATIBLE_OFF_SIGNAL_KWARGS: json.dumps(
+                {"chat_template_kwargs": {"enable_thinking": False}}
+            )
+        },
+        extra_body={
+            "provider_logging": True,
+            "chat_template_kwargs": {"num_threads": 4},
+        },
+    )
+    kwargs = _sent_kwargs(llm, ReasoningEffort.OFF)
+    assert kwargs["extra_body"] == {
+        "provider_logging": True,
+        "chat_template_kwargs": {"num_threads": 4, "enable_thinking": False},
+    }
 
 
 def test_bifrost_chat_tools_off_sends_only_reasoning_effort_none() -> None:

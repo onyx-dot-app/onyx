@@ -615,7 +615,14 @@ class LitellmLLM(LLM):
             api_key=api_key,
             api_base=api_base,
         )
-        model_kwargs.update(custom_config_mapping.model_kwargs)
+        # The openai_compatible OFF signal must be applied per call, only when
+        # the effective reasoning effort is OFF; merging it into _model_kwargs
+        # would also disable thinking on the main chat answer (HIGH/AUTO).
+        # No other custom_config source produces an "extra_body" kwarg
+        # (custom_config_mapping.py), so this pop only removes that signal.
+        cc_kwargs = dict(custom_config_mapping.model_kwargs)
+        self._off_signal_extra_body = cc_kwargs.pop("extra_body", None)
+        model_kwargs.update(cc_kwargs)
         # Keys with no LiteLLM kwarg equivalent. Injected into os.environ during
         # the call on deployments that allow it; dropped (with a warning at call
         # time) otherwise. UI-only form-state keys are neither injected nor
@@ -1160,6 +1167,25 @@ class LitellmLLM(LLM):
                         "skipping session_id/user injection",
                         type(existing_extra_body).__name__,
                     )
+
+        # openai_compatible OFF signal: on self-hosted hybrid-reasoning engines
+        # (vLLM / SGLang) the chat template defaults models like Qwen3 / GLM-4.x
+        # to thinking-on, so not sending a reasoning parameter does not mean OFF
+        # there. Apply the admin-provided signal only when this call runs at
+        # OFF, deep-merged beneath the request's existing extra_body (global
+        # LITELLM_EXTRA_BODY siblings survive; on overlap the OFF signal wins).
+        # Deliberately outside the is_reasoning gate: an admin who configured
+        # the signal wants it sent at OFF regardless of model flags.
+        if reasoning_effort is ReasoningEffort.OFF and self._off_signal_extra_body:
+            base_extra_body = passthrough_kwargs.get("extra_body")
+            if not isinstance(base_extra_body, dict):
+                base_extra_body = {}
+            if passthrough_kwargs is self._model_kwargs:
+                passthrough_kwargs = copy.deepcopy(self._model_kwargs)
+            passthrough_kwargs["extra_body"] = _merge_under(
+                base_extra_body,
+                self._off_signal_extra_body,
+            )
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm
