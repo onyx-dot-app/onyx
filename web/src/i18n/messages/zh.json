@@ -12479,6 +12479,10 @@
       },
       "noContent": {
         "label": "无内容"
+      },
+      "csv": {
+        "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
+        "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
       }
     },
     "filesTab": {
@@ -12507,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "{name} 的预览"
+      },
+      "background": {
+        "contrast": "对比背景"
       }
     },
     "inputBar": {
@@ -12699,6 +12706,9 @@
       },
       "slide": {
         "counter": "幻灯片 {current} / {total}"
+      },
+      "resize": {
+        "ariaLabel": "调整幻灯片缩略图宽度"
       }
     },
     "previewTab": {

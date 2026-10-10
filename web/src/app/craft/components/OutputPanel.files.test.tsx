@@ -2,12 +2,14 @@ import { act, fireEvent, render, screen } from "@tests/setup/test-utils";
 import BuildOutputPanel from "@/app/craft/components/OutputPanel";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import {
+  downloadArtifactFile,
   fetchDirectoryListing,
   fetchFileContent,
 } from "@/app/craft/services/apiServices";
 
 jest.mock("@/app/craft/services/apiServices", () => ({
   ...jest.requireActual("@/app/craft/services/apiServices"),
+  downloadArtifactFile: jest.fn(),
   fetchDirectoryListing: jest.fn(),
   fetchFileContent: jest.fn(),
   fetchWebappInfo: jest
@@ -63,3 +65,28 @@ it.each([false, true])(
     expect(refresh).toHaveAttribute("aria-busy", "false");
   }
 );
+
+it("offers a raw download when a CSV opens from an output link", async () => {
+  const sessionId = "csv-download";
+  useBuildSessionStore.setState({
+    currentSessionId: null,
+    sessions: new Map(),
+    preProvisioning: { status: "idle" },
+  });
+  const store = () => useBuildSessionStore.getState();
+  store().createSession(sessionId);
+  store().setCurrentSession(sessionId);
+  store().openFilePreview(sessionId, "outputs/data.csv", "data.csv");
+  jest.mocked(fetchFileContent).mockResolvedValue({
+    content: "name,value\nAlice,42",
+    isImage: false,
+    mimeType: "text/csv",
+  });
+  render(<BuildOutputPanel isOpen />);
+  const download = await screen.findByRole("button", { name: "Download file" });
+  fireEvent.click(download);
+  expect(downloadArtifactFile).toHaveBeenCalledWith(
+    sessionId,
+    "outputs/data.csv"
+  );
+});

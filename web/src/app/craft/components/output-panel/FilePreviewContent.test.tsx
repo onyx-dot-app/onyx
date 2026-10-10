@@ -264,3 +264,18 @@ it("revalidates retained source files on activation without resetting their scro
   expect(screen.getByText("updated source")).toBe(source);
   expect(scroller.scrollTop).toBe(120);
 });
+
+it("renders CSV content as a table through the file preview", async () => {
+  jest.mocked(fetchFileContent).mockResolvedValue({
+    content: "name,value\nAlice,42",
+    mimeType: "text/csv",
+    isImage: false,
+  });
+  render(
+    <FilePreviewContent sessionId="csv-session" filePath="outputs/data.csv" />
+  );
+  expect(
+    await screen.findByRole("columnheader", { name: "name" })
+  ).toBeInTheDocument();
+  expect(screen.getByRole("cell", { name: "Alice" })).toBeInTheDocument();
+});

@@ -14,3 +14,9 @@ export function getWebappState(
   if (hasWebapp == null) return "unknown";
   return hasWebapp ? "starting" : "none";
 }
+
+export interface FilePreviewScrollPosition {
+  initialScrollTop?: number;
+  onScrollTopChange?: (scrollTop: number) => void;
+  isActive?: boolean;
+}

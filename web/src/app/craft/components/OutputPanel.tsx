@@ -108,6 +108,7 @@ function useJointMasks(): {
 
 const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   const t = useTranslations("craft.outputPanel");
+  const toolbarTranslations = useTranslations("craft.urlBar");
   const jointMasks = useJointMasks();
   const session = useSession();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -659,16 +660,23 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
             : null
         }
         onDownloadRaw={
-          isMarkdownPreview || isPowerPointPreview || isPdfPreview
+          isMarkdownPreview ||
+          isPowerPointPreview ||
+          isPdfPreview ||
+          (isFilePreviewActive &&
+            activeFilePath &&
+            /\.csv$/i.test(activeFilePath))
             ? handleRawFileDownload
             : undefined
         }
         downloadRawTooltip={
-          isPdfPreview
-            ? "Download PDF"
-            : isPowerPointPreview
-              ? "Download PowerPoint"
-              : "Download MD file"
+          activeFilePath && /\.csv$/i.test(activeFilePath)
+            ? toolbarTranslations("downloadFile.tooltip")
+            : isPdfPreview
+              ? "Download PDF"
+              : isPowerPointPreview
+                ? "Download PowerPoint"
+                : "Download MD file"
         }
         onDownload={isMarkdownPreview ? handleDocxDownload : undefined}
         isDownloading={isExportingDocx}

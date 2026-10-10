@@ -12479,6 +12479,10 @@
       },
       "noContent": {
         "label": "Aucun contenu"
+      },
+      "csv": {
+        "truncated": "Aperçu limité à {rows, number} lignes, {columns, number} colonnes et {cells, number} cellules. Téléchargez le fichier original pour toutes les données.",
+        "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier."
       }
     },
     "filesTab": {
@@ -12507,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "Aperçu de {name}"
+      },
+      "background": {
+        "contrast": "Fond contrasté"
       }
     },
     "inputBar": {
@@ -12699,6 +12706,9 @@
       },
       "slide": {
         "counter": "Diapositive {current} sur {total}"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionner les miniatures des diapositives"
       }
     },
     "previewTab": {
