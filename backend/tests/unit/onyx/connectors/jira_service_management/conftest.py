@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 from jira import JIRA, JIRAError
-from onyx.connectors.jira.source_operations import JiraApiError
 
+from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
