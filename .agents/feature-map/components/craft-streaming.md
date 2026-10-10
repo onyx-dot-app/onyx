@@ -520,3 +520,5 @@ work against the default Kubernetes backend, follow
   you don't know the constant.
 
 Access-loss results stay in the file cache across remounts. Transient failures cannot restore revoked bytes.
+
+Preview retries stop when a viewer unmounts or its requested revision changes. Development effect replay reuses the pending request.

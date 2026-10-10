@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef } from "react";
 import useSWR from "swr";
 import type { FilePreviewResult } from "@/lib/build/types";
 import {
@@ -29,8 +29,14 @@ export function useFilePreview<T>(
   { revision, refreshKey = 0, isActive = true }: FilePreviewOptions = {}
 ) {
   const identity = JSON.stringify([key, revision, refreshKey]);
-  const active = useRef(isActive);
-  active.current = isActive;
+  const lifecycle = useRef({ identity, isActive });
+  const pendingValidation = useRef<{ identity: string } | null>(null);
+  useLayoutEffect(() => {
+    lifecycle.current = { identity, isActive };
+    return () => {
+      lifecycle.current.isActive = false;
+    };
+  }, [identity, isActive]);
   const {
     data: result,
     error,
@@ -58,13 +64,21 @@ export function useFilePreview<T>(
         Object.is(previous?.data, next?.data) &&
         previous?.error === next?.error,
       onErrorRetry: (error, key, config, revalidate, options) => {
-        if (!active.current) return;
+        if (
+          !lifecycle.current.isActive ||
+          lifecycle.current.identity !== error.identity
+        )
+          return;
         skipRetryOnAuthError(
           error.failure,
           key,
           config,
           (retryOptions) => {
-            if (active.current) revalidate(retryOptions);
+            if (
+              lifecycle.current.isActive &&
+              lifecycle.current.identity === error.identity
+            )
+              revalidate(retryOptions);
           },
           options
         );
@@ -82,7 +96,16 @@ export function useFilePreview<T>(
       result?.identity === identity &&
       !result.error &&
       !error;
-    if (!reusable) void mutate().catch(() => undefined);
+    if (reusable || pendingValidation.current?.identity === identity) return;
+    // SWR mutate forces revalidation; reuse StrictMode's replay of this request.
+    const pending = { identity };
+    pendingValidation.current = pending;
+    void mutate()
+      .catch(() => undefined)
+      .finally(() => {
+        if (pendingValidation.current === pending)
+          pendingValidation.current = null;
+      });
   });
   useEffect(() => {
     if (isActive) validate();

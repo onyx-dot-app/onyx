@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { SWRConfig } from "swr";
 import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";

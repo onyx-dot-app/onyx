@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, deferred, renderHook, waitFor } from "@tests/setup/test-utils";
 import { SWRConfig, type State } from "swr";
 import { useFilePreview } from "@/lib/build/hooks";
@@ -441,4 +442,98 @@ it("does not mutate loader errors when associating failures with requests", asyn
   rerender({ revision: "second" });
   await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(result.current.error).toBe(failure));
+});
+
+// React development replay must not duplicate expensive preview conversion requests.
+it("coalesces StrictMode replay while still superseding a pending preview revision", async () => {
+  const old = deferred<Blob>();
+  const current = deferred<Blob>();
+  const load = jest
+    .fn<Promise<Blob>, []>()
+    .mockReturnValueOnce(old.promise)
+    .mockReturnValueOnce(current.promise);
+  const { rerender, result } = renderHook(
+    ({ revision }) => useFilePreview("strict-preview", load, { revision }),
+    {
+      initialProps: { revision: "old" },
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => new Map() }}>
+          <StrictMode>{children}</StrictMode>
+        </SWRConfig>
+      ),
+    }
+  );
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+  rerender({ revision: "current" });
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  const accepted = new Blob(["current"]);
+  await act(async () => current.resolve(accepted));
+  expect(result.current.data).toBe(accepted);
+  await act(async () => old.resolve(new Blob(["old"])));
+  expect(result.current.data).toBe(accepted);
+});
+
+it("does not retry a superseded preview after its new revision succeeds", async () => {
+  jest.useFakeTimers();
+  const accepted = new Blob(["current"]);
+  const load = jest
+    .fn<Promise<Blob>, []>()
+    .mockRejectedValueOnce(new FetchError("temporary", 503, null))
+    .mockResolvedValue(accepted);
+  try {
+    const { rerender, result } = renderHook(
+      ({ revision }) => useFilePreview("obsolete-retry", load, { revision }),
+      {
+        initialProps: { revision: "old" },
+        wrapper: ({ children }) => (
+          <SWRConfig
+            value={{ provider: () => new Map(), shouldRetryOnError: true }}
+          >
+            {children}
+          </SWRConfig>
+        ),
+      }
+    );
+    await act(async () => {});
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBeDefined();
+    rerender({ revision: "current" });
+    await act(async () => {});
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toBe(accepted);
+    await act(async () => jest.advanceTimersByTime(4000));
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toBe(accepted);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+it("does not retry a preview after its viewer unmounts", async () => {
+  jest.useFakeTimers();
+  const load = jest
+    .fn()
+    .mockRejectedValue(new FetchError("temporary", 503, null));
+  try {
+    const { unmount, result } = renderHook(
+      () => useFilePreview("retired-preview", load),
+      {
+        wrapper: ({ children }) => (
+          <SWRConfig
+            value={{ provider: () => new Map(), shouldRetryOnError: true }}
+          >
+            {children}
+          </SWRConfig>
+        ),
+      }
+    );
+    await act(async () => {});
+    expect(result.current.error).toBeDefined();
+    expect(load).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => jest.advanceTimersByTime(4000));
+    expect(load).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
 });
