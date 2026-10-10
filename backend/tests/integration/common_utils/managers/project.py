@@ -106,9 +106,10 @@ class ProjectManager:
 
     @staticmethod
     def upload_files(
-        project_id: int,
+        project_id: int | None,
         files: List[tuple[str, bytes]],  # List of (filename, content) tuples
         user_performing_action: DATestUser,
+        skip_indexing: bool = False,
     ) -> CategorizedFilesSnapshot:
         """Upload files to a project via API."""
         # Build multipart form-data
@@ -121,6 +122,8 @@ class ProjectManager:
         ]
 
         data = {"project_id": str(project_id)} if project_id is not None else {}
+        if skip_indexing:
+            data["skip_indexing"] = "true"
 
         # Let requests set Content-Type boundary by not overriding header
         headers = dict(user_performing_action.headers or {})
