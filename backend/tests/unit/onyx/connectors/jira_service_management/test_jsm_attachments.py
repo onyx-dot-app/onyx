@@ -505,9 +505,7 @@ class TestEmptyAttachmentContent:
             f.failed_document.document_id
             for f in failures
             if f.failed_document is not None
-        ] == [
-            f"{ticket_doc_id}/attachment/8001"
-        ]
+        ] == [f"{ticket_doc_id}/attachment/8001"]
         assert [d.id for d in documents] == [f"{ticket_doc_id}/attachment/8002"]
 
         # Parity holds for the surviving attachment only.
