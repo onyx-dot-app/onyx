@@ -114,7 +114,10 @@ def make_mock_jsm_issue(
         "labels": labels or [],
         "created": created,
         "updated": updated,
-        "reporter": {"displayName": "Alice Requester", "emailAddress": "alice@example.com"},
+        "reporter": {
+            "displayName": "Alice Requester",
+            "emailAddress": "alice@example.com",
+        },
         "assignee": {"displayName": "Bob Agent", "emailAddress": "bob@example.com"},
         "priority": {"name": "High"},
         "status": {"name": "Waiting for support"},
@@ -131,7 +134,9 @@ def make_mock_jsm_issue(
                     "author": (
                         {
                             "displayName": comment.author.displayName,
-                            "emailAddress": getattr(comment.author, "emailAddress", None),
+                            "emailAddress": getattr(
+                                comment.author, "emailAddress", None
+                            ),
                         }
                         if hasattr(comment, "author")
                         else {}
@@ -147,8 +152,7 @@ def make_mock_jsm_issue(
         raw_fields[field_map.customer_request_type] = request_type
     if organizations is not None and field_map.organizations:
         raw_fields[field_map.organizations] = [
-            {"id": str(i + 1), "name": org}
-            for i, org in enumerate(organizations)
+            {"id": str(i + 1), "name": org} for i, org in enumerate(organizations)
         ]
     if slas is not None:
         raw_fields.update(slas)
@@ -211,14 +215,16 @@ def make_jsm_connector(
             for attachment in attachments:
                 attachment_id = str(attachment.id)
                 attachment_cache[attachment_id] = attachment
-                metadata.append({
-                    "id": attachment_id,
-                    "filename": attachment.filename,
-                    "size": attachment.size,
-                    "mimeType": attachment.mimeType,
-                    "created": attachment.created,
-                    "content": attachment.content,
-                })
+                metadata.append(
+                    {
+                        "id": attachment_id,
+                        "filename": attachment.filename,
+                        "size": attachment.size,
+                        "mimeType": attachment.mimeType,
+                        "created": attachment.created,
+                        "content": attachment.content,
+                    }
+                )
             return metadata
 
         def download_attachment(*, attachment_id: str) -> bytes:

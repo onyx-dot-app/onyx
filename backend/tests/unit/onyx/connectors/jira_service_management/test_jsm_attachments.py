@@ -129,16 +129,22 @@ class TestIncludeAttachmentsDefault:
         ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
 
         # Both passes must admit nothing while the flag is off...
-        assert connector._process_issue_attachments(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
-        assert connector._process_issue_attachments_slim(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
+        assert (
+            connector._process_issue_attachments(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+            == []
+        )
+        assert (
+            connector._process_issue_attachments_slim(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+            == []
+        )
 
         # ...and without touching the attachment API at all.
         mock_jira_client.issue.assert_not_called()
@@ -253,16 +259,22 @@ class TestAttachmentIndexing:
         ticket_doc_id = f"{TEST_BASE_URL}/browse/{issue.key}"
 
         assert connector.include_attachments is False
-        assert connector._process_issue_attachments(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
-        assert connector._process_issue_attachments_slim(
-            issue=issue,
-            parent_hierarchy_raw_node_id=None,
-            ticket_document_id=ticket_doc_id,
-        ) == []
+        assert (
+            connector._process_issue_attachments(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+            == []
+        )
+        assert (
+            connector._process_issue_attachments_slim(
+                issue=issue,
+                parent_hierarchy_raw_node_id=None,
+                ticket_document_id=ticket_doc_id,
+            )
+            == []
+        )
 
 
 class TestAttachmentFailureIsolation:
@@ -302,9 +314,7 @@ class TestAttachmentFailureIsolation:
         )
         assert isinstance(failures[0].exception, RuntimeError)
         # ...the sibling is still indexed...
-        assert [doc.id for doc in documents] == [
-            f"{ticket_doc_id}/attachment/4002"
-        ]
+        assert [doc.id for doc in documents] == [f"{ticket_doc_id}/attachment/4002"]
         # ...and the ticket itself was never part of this output at all
         assert all(doc.id != ticket_doc_id for doc in documents)
 
@@ -329,9 +339,7 @@ class TestAttachmentFailureIsolation:
         assert len(outputs) == 1
         failure = outputs[0]
         assert isinstance(failure, ConnectorFailure)
-        assert failure.failed_document.document_id == (
-            f"{ticket_doc_id}/attachments"
-        )
+        assert failure.failed_document.document_id == (f"{ticket_doc_id}/attachments")
 
     def test_slim_pass_aborts_after_main_listing_failure(
         self,
@@ -416,9 +424,7 @@ class TestAttachmentFailureIsolation:
             parent_hierarchy_raw_node_id=None,
             ticket_document_id=ticket_doc_id,
         )
-        assert [sd.id for sd in slim_docs] == [
-            f"{ticket_doc_id}/attachment/6002"
-        ]
+        assert [sd.id for sd in slim_docs] == [f"{ticket_doc_id}/attachment/6002"]
 
 
 class TestSlimPermissionPropagation:
@@ -495,9 +501,7 @@ class TestEmptyAttachmentContent:
         assert [f.failed_document.document_id for f in failures] == [
             f"{ticket_doc_id}/attachment/8001"
         ]
-        assert [d.id for d in documents] == [
-            f"{ticket_doc_id}/attachment/8002"
-        ]
+        assert [d.id for d in documents] == [f"{ticket_doc_id}/attachment/8002"]
 
         # Parity holds for the surviving attachment only.
         slim_docs = connector._process_issue_attachments_slim(
@@ -505,9 +509,7 @@ class TestEmptyAttachmentContent:
             parent_hierarchy_raw_node_id=None,
             ticket_document_id=ticket_doc_id,
         )
-        assert [sd.id for sd in slim_docs] == [
-            f"{ticket_doc_id}/attachment/8002"
-        ]
+        assert [sd.id for sd in slim_docs] == [f"{ticket_doc_id}/attachment/8002"]
 
 
 @pytest.fixture
@@ -545,9 +547,7 @@ class TestAttachmentsThroughPipeline:
         jira_client.issue = MagicMock(return_value=fetched_issue)
 
         end_time = time.time()
-        outputs = load_everything_from_checkpoint_connector(
-            connector, 0, end_time
-        )
+        outputs = load_everything_from_checkpoint_connector(connector, 0, end_time)
 
         # The ticket document and its attachment document both come through
         all_items = [item for output in outputs for item in output.items]
@@ -555,13 +555,9 @@ class TestAttachmentsThroughPipeline:
         doc_ids = [doc.id for doc in documents]
 
         assert f"{TEST_BASE_URL}/browse/HELP-101" in doc_ids
-        assert (
-            f"{TEST_BASE_URL}/browse/HELP-101/attachment/5001" in doc_ids
-        )
+        assert f"{TEST_BASE_URL}/browse/HELP-101/attachment/5001" in doc_ids
         # No unexpected failures
-        failures = [
-            item for item in all_items if isinstance(item, ConnectorFailure)
-        ]
+        failures = [item for item in all_items if isinstance(item, ConnectorFailure)]
         assert failures == []
 
         # The slim pass mirrors the attachment ID exactly

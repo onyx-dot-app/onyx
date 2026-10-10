@@ -226,9 +226,7 @@ class JiraServiceManagementConnector(JiraConnector):
                 ticket_document_id=ticket_document_id,
             )
             if isinstance(output, ConnectorFailure):
-                failed_doc_ids.add(
-                    f"{ticket_document_id}/attachment/{attachment_id}"
-                )
+                failed_doc_ids.add(f"{ticket_document_id}/attachment/{attachment_id}")
             outputs.append(output)
         if failed_doc_ids:
             self._failed_attachment_doc_ids[ticket_document_id] = failed_doc_ids
@@ -301,7 +299,9 @@ class JiraServiceManagementConnector(JiraConnector):
             )
 
         sections = [
-            TextSection(text=text, link=str(_attachment_field(attachment, "content", "")))
+            TextSection(
+                text=text, link=str(_attachment_field(attachment, "content", ""))
+            )
         ]
         if not text:
             # Extraction produced nothing usable: same reasoning as above.
@@ -320,7 +320,9 @@ class JiraServiceManagementConnector(JiraConnector):
             id=doc_id,
             source=self.document_source,
             semantic_identifier=(
-                f"{_issue_key(issue)} attachment: {filename}" if filename else f"{_issue_key(issue)} attachment {attachment_id}"
+                f"{_issue_key(issue)} attachment: {filename}"
+                if filename
+                else f"{_issue_key(issue)} attachment {attachment_id}"
             ),
             sections=sections,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
@@ -356,16 +358,16 @@ class JiraServiceManagementConnector(JiraConnector):
                 f"Cannot enumerate JSM attachments for {_issue_key(issue)}: "
                 "listing failed during the main pass"
             )
-        failed_ids = self._failed_attachment_doc_ids.get(
-            ticket_document_id, set()
-        )
+        failed_ids = self._failed_attachment_doc_ids.get(ticket_document_id, set())
 
         try:
             attachments = self._fetch_issue_attachments(_issue_key(issue))
         except Exception:
             # Do not turn a transient listing failure into an empty slim set:
             # downstream pruning would delete healthy indexed attachments.
-            logger.exception("Failed to list attachment slim docs for %s", _issue_key(issue))
+            logger.exception(
+                "Failed to list attachment slim docs for %s", _issue_key(issue)
+            )
             self._attachment_admission_failures.add(ticket_document_id)
             raise
 
@@ -405,7 +407,11 @@ class JiraServiceManagementConnector(JiraConnector):
         # attributes are statically known on Jira project resources and the
         # caller handles the "not exposed by the instance" case.
         try:
-            project_type = project.get("projectTypeKey") if isinstance(project, dict) else project.projectTypeKey
+            project_type = (
+                project.get("projectTypeKey")
+                if isinstance(project, dict)
+                else project.projectTypeKey
+            )
         except AttributeError:
             project_type = None
         if isinstance(project_type, str) and project_type:
@@ -433,9 +439,7 @@ class JiraServiceManagementConnector(JiraConnector):
             )
 
         try:
-            project = self.source_operations.get_project(
-                project_key=self.jira_project
-            )
+            project = self.source_operations.get_project(project_key=self.jira_project)
         except Exception as e:
             self._handle_jira_connector_settings_error(e)
             raise  # _handle_jira_connector_settings_error always raises

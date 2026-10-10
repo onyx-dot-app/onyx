@@ -245,9 +245,7 @@ def get_jsm_comment_strs(
     if isinstance(issue, dict):
         comment_field = _issue_raw_fields(issue).get("comment")
         comments = (
-            comment_field.get("comments", [])
-            if isinstance(comment_field, dict)
-            else []
+            comment_field.get("comments", []) if isinstance(comment_field, dict) else []
         )
     else:
         try:
@@ -261,9 +259,7 @@ def get_jsm_comment_strs(
     comment_strs: list[str] = []
     for comment in comments:
         try:
-            raw_comment: Any = (
-                comment if isinstance(comment, dict) else comment.raw
-            )
+            raw_comment: Any = comment if isinstance(comment, dict) else comment.raw
             if not isinstance(raw_comment, dict):
                 continue
 

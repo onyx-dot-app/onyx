@@ -798,9 +798,7 @@ class JiraConnector(
                             yield attachment_output
                             continue
                         if include_permissions:
-                            attachment_output.external_access = (
-                                document.external_access
-                            )
+                            attachment_output.external_access = document.external_access
                         yield attachment_output
 
             except Exception as e:

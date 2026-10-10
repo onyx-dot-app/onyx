@@ -548,9 +548,7 @@ class _OptionalAttachmentApiCheck(_JiraCheck):
                 raise UnexpectedValidationError(
                     "No issue is available to verify optional attachment access."
                 )
-            attachments = gateway.list_issue_attachments(
-                issue_key=str(issue["key"])
-            )
+            attachments = gateway.list_issue_attachments(issue_key=str(issue["key"]))
             if not attachments:
                 raise UnexpectedValidationError(
                     "No attachment is available for the optional access probe."
