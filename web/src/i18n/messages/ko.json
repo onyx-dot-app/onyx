@@ -6087,6 +6087,12 @@
             "placeholder": "Vercel AI Gateway 기본 URL"
           }
         },
+        "requesty": {
+          "apiBaseField": {
+            "description": "Requesty 라우터 또는 EU 라우터(https://router.eu.requesty.ai/v1)를 사용하세요.",
+            "placeholder": "Requesty 기본 URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "{appName}가 컨테이너에서 실행 중이면 호스트의 서비스에 연결할 때 `localhost` 대신 `host.docker.internal`을 사용하세요.",

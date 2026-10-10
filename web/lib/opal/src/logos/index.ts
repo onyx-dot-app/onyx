@@ -78,6 +78,7 @@ export { default as SvgPortkey } from "@opal/logos/portkey";
 export { default as SvgVercel } from "@opal/logos/vercel";
 export { default as SvgProductboard } from "@opal/logos/productboard";
 export { default as SvgQwen } from "@opal/logos/qwen";
+export { default as SvgRequesty } from "@opal/logos/requesty";
 export { default as SvgSalesforce } from "@opal/logos/salesforce";
 export { default as SvgSearXNG } from "@opal/logos/searxng";
 export { default as SvgSerper } from "@opal/logos/serper";

@@ -6087,6 +6087,12 @@
             "placeholder": "عنوان URL الأساسي لـ Vercel AI Gateway"
           }
         },
+        "requesty": {
+          "apiBaseField": {
+            "description": "استخدم موجّه Requesty، أو موجّه الاتحاد الأوروبي على https://router.eu.requesty.ai/v1.",
+            "placeholder": "عنوان URL الأساسي لـ Requesty"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "مع تشغيل {appName} في حاوية، استخدم `host.docker.internal` بدلًا من `localhost` للوصول إلى خدمة على مضيفك.",

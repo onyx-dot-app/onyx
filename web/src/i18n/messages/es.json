@@ -6087,6 +6087,12 @@
             "placeholder": "Su URL base de Vercel AI Gateway"
           }
         },
+        "requesty": {
+          "apiBaseField": {
+            "description": "Use el router de Requesty o el router de la UE en https://router.eu.requesty.ai/v1.",
+            "placeholder": "Su URL base de Requesty"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "Si {appName} se ejecuta en un contenedor, usa `host.docker.internal` en lugar de `localhost` para llegar a un servicio de tu host.",

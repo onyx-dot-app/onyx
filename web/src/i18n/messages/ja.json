@@ -6087,6 +6087,12 @@
             "placeholder": "Vercel AI Gateway のベース URL"
           }
         },
+        "requesty": {
+          "apiBaseField": {
+            "description": "Requesty ルーター、または EU ルーター (https://router.eu.requesty.ai/v1) を使用してください。",
+            "placeholder": "Requesty のベース URL"
+          }
+        },
         "setup": {
           "apiBaseField": {
             "containerizedNote": "{appName} をコンテナで実行している場合、ホスト上のサービスに接続するには `localhost` の代わりに `host.docker.internal` を使用してください。",
