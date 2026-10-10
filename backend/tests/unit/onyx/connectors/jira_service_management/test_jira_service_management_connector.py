@@ -4,7 +4,7 @@ from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from jira import JIRA, JIRAError
+from jira import JIRAError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
@@ -45,8 +45,8 @@ from tests.unit.onyx.connectors.jira_service_management.conftest import (
     SLA_RESOLUTION_FIELD_ID,
     TEST_BASE_URL,
     TEST_PROJECT_KEY,
-    make_mock_jsm_issue,
     legacy_jira_client,
+    make_mock_jsm_issue,
 )
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
