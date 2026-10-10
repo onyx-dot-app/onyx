@@ -235,3 +235,56 @@ def test_credential_selects_the_api_family(
 ) -> None:
     assert is_cloud_credential(credentials) is expected_cloud
     assert is_cloud_gateway(_gateway(credentials=credentials)) is expected_cloud
+
+
+def test_list_fields_uses_credential_scoped_jira_client() -> None:
+    client = _mock_jira_client()
+    client.fields.return_value = [{"id": "customfield_123", "name": "Organizations"}]
+
+    assert _gateway(client).list_fields() == [
+        {"id": "customfield_123", "name": "Organizations"}
+    ]
+    client.fields.assert_called_once_with()
+
+
+def test_attachment_listing_returns_plain_metadata_not_sdk_resources() -> None:
+    client = _mock_jira_client()
+    item = MagicMock()
+    item.raw = {
+        "id": "22",
+        "filename": "example.txt",
+        "created": "2026-09-01T10:00:00.000+0000",
+        "content": "https://jira.example.com/secure/attachment/22/example.txt",
+    }
+    issue = MagicMock()
+    issue.fields.attachment = [item]
+    client.issue.return_value = issue
+
+    metadata = _gateway(client).list_issue_attachments(issue_key="HELP-1")
+
+    assert metadata == [item.raw]
+    assert isinstance(metadata[0], dict)
+    client.issue.assert_called_once_with("HELP-1", fields="attachment")
+
+
+def test_download_attachment_uses_gateway_and_returns_bytes() -> None:
+    client = _mock_jira_client()
+    client.attachment.return_value.get.return_value = b"some file content"
+
+    assert _gateway(client).download_attachment(attachment_id="22") == (
+        b"some file content"
+    )
+    client.attachment.assert_called_once_with("22")
+
+
+def test_attachment_download_errors_do_not_become_empty_content() -> None:
+    client = _mock_jira_client()
+    client.attachment.side_effect = JIRAError(
+        status_code=403, text="Attachment access denied"
+    )
+
+    with pytest.raises(JiraApiError) as exc:
+        _gateway(client).download_attachment(attachment_id="22")
+
+    assert exc.value.status_code == 403
+    assert "Attachment access denied" in (exc.value.text or "")

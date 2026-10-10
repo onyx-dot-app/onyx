@@ -519,6 +519,54 @@ class _IssueReadCheck(_JiraCheck):
             )
 
 
+class _OptionalAttachmentApiCheck(_JiraCheck):
+    """Non-gating read probe for JSM field discovery and attachment access.
+
+    Basic Jira indexing does not need attachments, so failure is advisory.
+    The download probe is bounded: never fetch an arbitrary large attachment
+    simply to verify capabilities.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            check_id="jira_optional_jsm_attachment_access",
+            display_name="Optional JSM attachment API access",
+            required=False,
+            remediation=(
+                "For Jira Service Management attachments, grant read access "
+                "to issue attachments and custom Jira fields."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        gateway = _gateway(context)
+        config = self.config(context)
+        try:
+            gateway.list_fields()
+            issue = _search_one_issue(gateway, _scope_jql(config))
+            if not issue:
+                raise UnexpectedValidationError(
+                    "No issue is available to verify optional attachment access."
+                )
+            attachments = gateway.list_issue_attachments(issue_key=str(issue["key"]))
+            if not attachments:
+                raise UnexpectedValidationError(
+                    "No attachment is available for the optional access probe."
+                )
+            first = attachments[0]
+            size = first.get("size")
+            if not isinstance(size, int) or size > 16384 or size < 0:
+                raise UnexpectedValidationError(
+                    "Attachment is too large or of unknown size for a safe probe."
+                )
+            gateway.download_attachment(attachment_id=str(first["id"]))
+        except JiraApiError as e:
+            _raise_for_api_error(
+                e,
+                denied="Jira does not allow reading optional JSM attachment data",
+            )
+
+
 def build_jira_indexing_checks() -> list[CapabilityCheck]:
     return [
         _SiteAuthCheck(scoped=False),
@@ -527,6 +575,7 @@ def build_jira_indexing_checks() -> list[CapabilityCheck]:
         _ConfiguredProjectCheck(),
         _JqlQueryCheck(),
         _IssueReadCheck(),
+        _OptionalAttachmentApiCheck(),
     ]
 
 
