@@ -879,43 +879,14 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
 });
 
 test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
-  test("Access Tokens section and New Access Token button are gated behind CREATE_USER_API_KEYS", async ({
+  test("A basic user can see the Access Tokens section and mint a token without a group grant", async ({
     page,
-    adminClient,
     testUserContext,
   }) => {
-    const registryResponse = await page.request.get(
-      "/api/manage/admin/permissions/registry"
-    );
-    test.skip(
-      registryResponse.status() === 404,
-      "Permission registry unavailable (CE environment)"
-    );
-
-    const { groupId, email, password } = testUserContext;
+    const { email, password } = testUserContext;
     let createdPatId: number | undefined;
 
     try {
-      // Phase 1: Without permission and no tokens — section should be hidden entirely
-      await page.context().clearCookies();
-      await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).not.toBeVisible();
-      await expect(
-        page.getByRole("button", { name: "New Access Token" })
-      ).not.toBeVisible();
-
-      // Phase 2: Grant CREATE_USER_API_KEYS — section visible, button enabled
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      await adminClient.setUserGroupPermissions(groupId, [
-        Permission.CREATE_USER_API_KEYS,
-      ]);
-
       await page.context().clearCookies();
       await apiLogin(page, email, password);
       await page.goto("/app/settings/accounts-access");
@@ -931,7 +902,6 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       await expect(newTokenButton).toBeVisible({ timeout: 10000 });
       await expect(newTokenButton).toBeEnabled();
 
-      // Create a PAT via API so Phase 3 can test "token exists but no permission"
       const createResponse = await page.request.post("/api/user/pats", {
         data: {
           name: `E2E PAT ${Date.now()}`,
@@ -941,26 +911,8 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       expect(createResponse.ok()).toBeTruthy();
       const patData = await createResponse.json();
       createdPatId = patData.id;
-
-      // Phase 3: Revoke permission — section stays (token exists) but button disabled
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      await adminClient.setUserGroupPermissions(groupId, []);
-
-      await page.context().clearCookies();
-      await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).toBeVisible({ timeout: 10000 });
-
-      await expect(newTokenButton).toBeVisible({ timeout: 10000 });
-      await expect(newTokenButton).toBeDisabled();
     } finally {
       await cleanup(async () => {
-        // Delete the PAT (only requires BASIC_ACCESS)
         if (createdPatId !== undefined) {
           await page.context().clearCookies();
           await apiLogin(page, email, password);

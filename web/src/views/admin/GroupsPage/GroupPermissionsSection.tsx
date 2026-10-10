@@ -16,7 +16,6 @@ import {
   SvgUserManage,
   SvgBarChart,
   SvgHistory,
-  SvgKey,
   SvgShield,
   SvgCpu,
   SvgFiles,
@@ -44,7 +43,6 @@ const ICON_MAP: Record<string, IconFunctionComponent> = {
   manage_agents: SvgManageAgent,
   view_agent_analytics: SvgBarChart,
   view_query_history: SvgHistory,
-  create_user_access_token: SvgKey,
 };
 
 interface GroupPermissionsSectionProps {

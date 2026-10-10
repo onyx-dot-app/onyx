@@ -13,9 +13,8 @@ permission test files to materialize a 7th user type per test module:
 a STANDARD user whose only non-BASIC permission is the one under test,
 granted via a fresh user group.
 
-All fixtures are module-scoped because permission tests are read-only
-(GET requests checking status codes) and don't mutate state between tests.
-This avoids a costly full reset per test.
+All fixtures are module-scoped: the tests only check status codes and never
+read back what they create, so one reset per module is enough.
 """
 
 from collections.abc import Callable
