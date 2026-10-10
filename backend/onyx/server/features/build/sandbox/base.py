@@ -19,7 +19,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from functools import cache
+from hashlib import sha256
 from pathlib import PurePosixPath
 from uuid import UUID
 
@@ -78,20 +78,21 @@ SandboxEvent = (
 )
 
 
-@cache
-def _document_preview_source() -> str:
-    helper: str = (BUILTIN_SKILLS_PATH / "pptx/scripts/office/soffice.py").read_text()
-    bootstrap: str = (
-        "import sys, types\n"
-        "office = types.ModuleType('office')\n"
-        "office.__path__ = []\n"
-        "soffice = types.ModuleType('office.soffice')\n"
-        f"exec({helper!r}, soffice.__dict__)\n"
-        "office.soffice = soffice\n"
-        "sys.modules['office'] = office\n"
-        "sys.modules['office.soffice'] = soffice\n"
+_DOCUMENT_PREVIEW_FILES: FileSet = {
+    "preview.py": (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_bytes(),
+    "office/soffice.py": (
+        BUILTIN_SKILLS_PATH / "pptx/scripts/office/soffice.py"
+    ).read_bytes(),
+}
+_DOCUMENT_PREVIEW_VERSION: str = sha256(
+    b"".join(
+        name.encode() + b"\0" + sha256(content).digest()
+        for name, content in sorted(_DOCUMENT_PREVIEW_FILES.items())
     )
-    return bootstrap + (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_text()
+).hexdigest()
+_DOCUMENT_PREVIEW_MOUNT: str = (
+    f"/workspace/managed/document-preview/{_DOCUMENT_PREVIEW_VERSION}"
+)
 
 
 def document_preview_command(
@@ -99,15 +100,13 @@ def document_preview_command(
     cache_dir: str,
     session_root: str,
     *,
-    script_path: str,
+    script_path: str = f"{_DOCUMENT_PREVIEW_MOUNT}/preview.py",
     first_page_only: bool = False,
 ) -> list[str]:
     """Run the packaged converter without replacing the agent's managed skills."""
-    source: str = f"__file__ = {json.dumps(script_path)}\n" + _document_preview_source()
     return [
         "python",
-        "-c",
-        source,
+        script_path,
         document_path,
         cache_dir,
         *(["--first-page"] if first_page_only else []),
@@ -193,6 +192,30 @@ class SandboxManager(_ServeMixin, ABC):
     """
 
     supports_opencode_history_persistence: bool = False
+
+    def _ensure_document_preview_bundle(
+        self, sandbox_id: UUID, run_command: Callable[[list[str]], str]
+    ) -> None:
+        """Deploy a complete converter bundle without touching managed skills."""
+        probe: list[str] = [
+            "sh",
+            "-c",
+            'if test -r "$1/preview.py" && test -r "$1/office/soffice.py"; '
+            "then printf READY; else printf MISSING; fi",
+            "sh",
+            _DOCUMENT_PREVIEW_MOUNT,
+        ]
+        if run_command(probe).strip() == "READY":
+            return
+        result = self.push_to_sandbox(
+            sandbox_id=sandbox_id,
+            mount_path=_DOCUMENT_PREVIEW_MOUNT,
+            files=_DOCUMENT_PREVIEW_FILES,
+        )
+        if result.succeeded != result.targets:
+            raise RuntimeError("Document preview bundle deployment failed")
+        if run_command(probe).strip() != "READY":
+            raise RuntimeError("Document preview bundle deployment is incomplete")
 
     @abstractmethod
     def provision(

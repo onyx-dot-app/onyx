@@ -732,24 +732,21 @@ set.
 
 ### Document thumbnail conversion
 
-Both sandbox providers use `SandboxManager.generate_document_preview` for full
-PowerPoint slides and first-page PDF or PowerPoint thumbnails. The shared
-`backend/onyx/skills/builtin/pptx/scripts/preview.py` script checks session workspace
-confinement. Thumbnail conversion is limited to 20 MB source files. It caches
-JPEGs in the hidden .document-thumbnails directory under outputs. Inventory rules exclude hidden directories.
+Both providers use `SandboxManager.generate_document_preview` for PowerPoint slides
+and first-page PDF or PowerPoint thumbnails. They deploy the shared converter and
+LibreOffice helper as real files in a versioned bundle through the existing sandbox
+push API. This bundle is independent of enabled agent skills.
 
-Thumbnail conversion has a 30-second deadline, including lock waiting.
-Finished JPEGs replace cached files atomically. Failed conversions retain the last complete image.
-Thumbnail caches are excluded from session snapshots.
+The converter checks session workspace confinement. The 20 MiB thumbnail size
+check is advisory preflight. Concurrent edits can change input during rendering.
+A 30-second thumbnail deadline and 120-second full-slide deadline bound lock waiting
+and conversion time. The lock opens without blocking and must be a regular file.
 
-Both Docker and Kubernetes exclude thumbnail caches from new session snapshots.
-The converter discards renders whose source changed and records the published source revision.
+Finished JPEGs replace cached files atomically. Failed conversion retains the last
+complete image. Source revision checks reject changed input; cache metadata records
+the rendered revision. Missing or invalid metadata causes regeneration.
+Both providers validate conversion status and session-relative JPEG paths with one parser.
 
-The snapshot exclusion applies only to the cache at outputs/.document-thumbnails.
-Nested user directories with this name stay in snapshots.
-Both providers validate converter status and session-relative JPEG paths through one response parser.
-Thumbnail size checks use the source revision captured after acquiring the conversion lock.
-
-The converter bundles its LibreOffice helper so disabled presentation skills do not affect previews.
-Full-slide previews share a 120-second lock and conversion deadline.
-Conversion failures return a protocol error handled as a client error.
+Thumbnails live under `outputs/.document-thumbnails`, which inventory rules hide.
+Both providers exclude this root cache from snapshots. Nested user directories
+with the same name remain in snapshots.

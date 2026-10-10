@@ -536,13 +536,13 @@ See `backend/AGENTS.md` for authoritative test commands and required env.
 ### Shared document preview script
 
 The built-in PowerPoint preview script also renders first-page PDF and PowerPoint
-thumbnails for Outputs. Sandbox providers execute the backend’s current script
-without updating managed skills or the running agent’s context. PDF rendering
-uses Poppler directly; PowerPoint rendering also uses the existing LibreOffice helper.
+thumbnails for Outputs. Both sandbox providers deploy this script and its LibreOffice
+helper in a versioned bundle. Preview requests do not update managed skills or the
+running agent's context. PDF rendering uses Poppler directly.
 
-Thumbnail conversion has a 30-second deadline, including lock waiting.
-Finished JPEGs replace cached files atomically. Failed conversions retain the last complete image.
-Thumbnail caches are excluded from session snapshots.
+Thumbnail conversion has a 30-second deadline; full-slide conversion has a
+120-second deadline. Both include lock waiting. Finished JPEGs replace cached files
+atomically, and failed conversion retains the last complete image. The converter
+checks source revisions before publication and cache reuse.
 
-Both Docker and Kubernetes exclude thumbnail caches from new session snapshots.
-The converter discards renders whose source changed and records the published source revision.
+See [[craft-sandboxes]] for advisory size checks, bundle deployment, and snapshot exclusions.

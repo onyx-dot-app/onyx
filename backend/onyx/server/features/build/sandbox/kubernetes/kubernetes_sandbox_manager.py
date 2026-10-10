@@ -126,7 +126,6 @@ from onyx.server.features.build.sandbox.nextjs_dev import (
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
-    MANAGED_SKILLS_PATH,
     SESSION_CONFIG_COMPLETE_SENTINEL,
     SESSIONS_ROOT,
     WORKSPACE_SETUP_COMPLETE_SENTINEL,
@@ -2171,24 +2170,27 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
             document_abs,
             cache_abs,
             session_root,
-            script_path=f"{MANAGED_SKILLS_PATH}/pptx/scripts/preview.py",
             first_page_only=first_page_only,
         )
 
-        try:
-            resp = k8s_stream(
+        def run_command(command: list[str]) -> str:
+            return k8s_stream(
                 self._stream_core_api.connect_get_namespaced_pod_exec,
                 name=pod_name,
                 namespace=self._namespace,
                 container=_SANDBOX_CONTAINER_NAME,
-                command=exec_command,
+                command=command,
                 stderr=True,
                 stdin=False,
                 stdout=True,
                 tty=False,
             )
 
-            return parse_document_preview_response(resp, session_root)
+        try:
+            self._ensure_document_preview_bundle(sandbox_id, run_command)
+            return parse_document_preview_response(
+                run_command(exec_command), session_root
+            )
 
         except ApiException as e:
             raise RuntimeError(f"Failed to generate document preview: {e}") from e

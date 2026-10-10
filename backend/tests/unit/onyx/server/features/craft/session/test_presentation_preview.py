@@ -111,27 +111,3 @@ def test_unowned_thumbnail_does_not_run_converter() -> None:
     manager._sandbox_manager = MagicMock()
     assert manager.get_output_thumbnail(uuid4(), uuid4(), "outputs/report.pdf") is None
     manager._sandbox_manager.generate_document_preview.assert_not_called()
-
-
-def test_provider_command_uses_current_packaged_converter_without_skill_push() -> None:
-    from onyx.server.features.build.sandbox.base import document_preview_command
-    from onyx.skills.built_in import BUILTIN_SKILLS_PATH
-
-    command = document_preview_command(
-        "/session/annual report.pdf",
-        "/session/cache",
-        "/session",
-        script_path="/managed/pptx/scripts/preview.py",
-        first_page_only=True,
-    )
-    assert command[:2] == ["python", "-c"]
-    assert command[2].endswith(
-        (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_text()
-    )
-    assert command[3:] == [
-        "/session/annual report.pdf",
-        "/session/cache",
-        "--first-page",
-        "--session-root",
-        "/session",
-    ]

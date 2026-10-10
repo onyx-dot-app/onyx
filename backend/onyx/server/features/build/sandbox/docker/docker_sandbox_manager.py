@@ -2067,21 +2067,23 @@ echo WRITE_OK"""
         document_abs = f"{session_root}/{clean_document}"
         cache_abs = f"{session_root}/{clean_cache}"
 
+        def run_command(command: list[str]) -> str:
+            return _run_in_container_as_sandbox_user(container, command).stdout_text
+
         try:
-            result = _run_in_container_as_sandbox_user(
-                container,
+            self._ensure_document_preview_bundle(sandbox_id, run_command)
+            output = run_command(
                 document_preview_command(
                     document_abs,
                     cache_abs,
                     session_root,
-                    script_path=f"{MANAGED_SKILLS_PATH}/pptx/scripts/preview.py",
                     first_page_only=first_page_only,
                 ),
             )
         except ExecError as e:
             raise RuntimeError(f"Failed to generate document preview: {e}") from e
 
-        return parse_document_preview_response(result.stdout_text, session_root)
+        return parse_document_preview_response(output, session_root)
 
 
 class _GeneratorReader:

@@ -803,5 +803,5 @@ processing and blocking sandbox egress during OpenCode startup.
 
 `GET /build/sessions/{id}/output-thumbnail/{path}` returns a cached JPEG first page
 for an owned session’s PDF or PowerPoint file. The shared document converter
-checks workspace confinement and file size before rendering. Full PowerPoint
+checks workspace confinement and applies advisory size preflight before bounded rendering. Full PowerPoint
 previews still use the existing slide endpoint.

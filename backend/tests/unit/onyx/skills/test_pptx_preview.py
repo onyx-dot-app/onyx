@@ -1,6 +1,7 @@
 """Preview cache invalidation without LibreOffice or Poppler dependencies."""
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -82,6 +83,9 @@ def test_preserved_mtime_edit_replaces_cached_slides(
 
     monkeypatch.setattr(preview, "_run_conversion", bounded_conversion)
 
+    (cache / ".source-revision.json").write_text(
+        json.dumps(preview._source_revision(source))
+    )
     preview.main()
     assert capsys.readouterr().out.splitlines()[0] == "CACHED"
     convert_mock.assert_not_called()
@@ -256,7 +260,8 @@ def test_failed_conversion_keeps_last_published_thumbnail(
         "_run_conversion",
         MagicMock(return_value=subprocess.CompletedProcess([], 1)),
     )
-    preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    with pytest.raises(preview.PreviewError, match="PDF renderer exited"):
+        preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
     assert published.read_bytes() == b"last good thumbnail"
     assert not list(cache.glob(".render-*"))
 
@@ -348,8 +353,10 @@ def test_source_change_during_render_is_discarded(
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(preview, "_run_conversion", render)
-    preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
-    assert capsys.readouterr().out.strip() == "ERROR_SOURCE_CHANGED"
+    with pytest.raises(preview.PreviewError) as failure:
+        preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    assert failure.value.code == "ERROR_SOURCE_CHANGED"
+    assert capsys.readouterr().out == ""
     assert published.read_bytes() == b"previous complete thumbnail"
     assert not (cache / ".source-revision.json").exists()
 
@@ -441,10 +448,16 @@ def test_malformed_pdf_reports_protocol_error(
     monkeypatch.setattr(
         preview,
         "_run_conversion",
-        MagicMock(return_value=subprocess.CompletedProcess([], 1, "", "invalid PDF")),
+        MagicMock(
+            return_value=subprocess.CompletedProcess(
+                [], 1, "", "invalid PDF with confidential content"
+            )
+        ),
     )
     preview.main()
-    assert capsys.readouterr().out.strip() == "ERROR_CONVERSION"
+    output = capsys.readouterr()
+    assert output.out.strip() == "ERROR_CONVERSION"
+    assert output.err.strip() == "PDF renderer exited with code 1"
 
 
 def test_full_preview_lock_wait_has_a_deadline(
@@ -462,3 +475,107 @@ def test_full_preview_lock_wait_has_a_deadline(
     monkeypatch.setattr(preview.fcntl, "flock", MagicMock(side_effect=BlockingIOError))
     preview.main()
     assert capsys.readouterr().out.strip() == "ERROR_TIMEOUT"
+
+
+def test_successful_renderer_without_pages_preserves_published_preview(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    preview = _load_preview()
+    source = tmp_path / "report.pdf"
+    source.write_bytes(b"source")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    published = cache / "slide-1.jpg"
+    published.write_bytes(b"previous")
+    os.utime(published, ns=(1, 1))
+    monkeypatch.setattr(
+        preview,
+        "_run_conversion",
+        MagicMock(return_value=subprocess.CompletedProcess([], 0)),
+    )
+    with pytest.raises(preview.PreviewError, match="produced no pages"):
+        preview._generate_preview(source, cache, True, preview.time.monotonic() + 1)
+    assert published.read_bytes() == b"previous"
+    assert not (cache / ".source-revision.json").exists()
+
+
+def test_missing_renderer_reports_safe_cli_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    preview = _load_preview()
+    source = tmp_path / "report.pdf"
+    source.write_bytes(b"source")
+    monkeypatch.setattr(
+        sys, "argv", [str(_SCRIPT), str(source), str(tmp_path / "cache")]
+    )
+    monkeypatch.setattr(
+        preview,
+        "_run_conversion",
+        MagicMock(side_effect=FileNotFoundError("private path")),
+    )
+    preview.main()
+    output = capsys.readouterr()
+    assert output.out.strip() == "ERROR_CONVERSION"
+    assert output.err.strip() == "Document conversion could not access required files"
+
+
+@pytest.mark.parametrize("record", [None, "invalid JSON", "[]"])
+def test_unverified_cache_is_regenerated_even_when_slides_are_newer(
+    record: str | None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    preview: ModuleType = _load_preview()
+    source: Path = tmp_path / "report.pdf"
+    source.write_bytes(b"source")
+    cache: Path = tmp_path / "cache"
+    cache.mkdir()
+    published: Path = cache / "slide-1.jpg"
+    published.write_bytes(b"unverified thumbnail")
+    future: int = source.stat().st_ctime_ns + 1_000_000_000
+    os.utime(published, ns=(future, future))
+    if record is not None:
+        (cache / ".source-revision.json").write_text(record)
+
+    def render(
+        command: list[str], _deadline: float
+    ) -> subprocess.CompletedProcess[str]:
+        (Path(command[-1]).parent / "slide-1.jpg").write_bytes(b"verified thumbnail")
+        return subprocess.CompletedProcess(command, 0)
+
+    converter: MagicMock = MagicMock(side_effect=render)
+    monkeypatch.setattr(preview, "_run_conversion", converter)
+    preview._generate_preview(source, cache, False, preview.time.monotonic() + 1)
+    assert capsys.readouterr().out.splitlines()[0] == "GENERATED"
+    assert published.read_bytes() == b"verified thumbnail"
+    preview._generate_preview(source, cache, False, preview.time.monotonic() + 1)
+    assert capsys.readouterr().out.splitlines()[0] == "CACHED"
+    converter.assert_called_once()
+
+
+@pytest.mark.parametrize("lock_kind", ["fifo", "symlink"])
+def test_nonregular_conversion_lock_does_not_block(
+    tmp_path: Path,
+    lock_kind: str,
+) -> None:
+    source: Path = tmp_path / "report.pdf"
+    source.write_bytes(b"source")
+    cache: Path = tmp_path / "cache"
+    cache.mkdir()
+    lock: Path = cache / ".conversion.lock"
+    if lock_kind == "fifo":
+        os.mkfifo(lock)
+    else:
+        target: Path = tmp_path / "target"
+        target.write_bytes(b"keep")
+        lock.symlink_to(target)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        [sys.executable, str(_SCRIPT), str(source), str(cache), "--first-page"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=3,
+    )
+    assert result.stdout.strip() == "ERROR_CONVERSION"
+    assert not list(cache.glob(".render-*"))
