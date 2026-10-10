@@ -20,7 +20,7 @@ from onyx.configs.constants import (
     DocumentSource,
     FileOrigin,
 )
-from onyx.context.search.models import CCPairAccessMode
+from onyx.context.search.models import CCPairAccessMode, InferenceChunk
 from onyx.db.connector_credential_pair import (
     get_cc_pair_access_sets_for_user,
     has_guarded_cc_pairs,
@@ -160,6 +160,19 @@ def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:
         "onyx.access.access", "_get_acl_for_user"
     )
     return versioned_acl_for_user_fn(user, db_session)
+
+
+def censor_chunks_for_user(
+    chunks: list[InferenceChunk], user: User
+) -> list[InferenceChunk]:
+    """EE post-query censoring for sources whose access is decided per user at
+    read time. Every path that hands chunk content to a user runs it, not only
+    search, since the index ACL alone lets those chunks through."""
+    return fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.post_query_censoring",
+        "_post_query_chunk_censoring",
+        chunks,
+    )(chunks=chunks, user=user)
 
 
 def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> bool:

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from onyx.access.access import censor_chunks_for_user
 from onyx.auth.permissions import require_permission
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.preprocessing.access_filters import (
@@ -32,12 +33,15 @@ def get_document_info(
     document_index = get_default_document_index(search_settings, None)
 
     user_access_filters = build_access_filters_for_user(user, db_session)
-    inference_chunks = document_index.id_based_retrieval(
-        chunk_requests=[DocumentSectionRequest(document_id=document_id)],
-        filters=IndexFilters(
-            access_control_list=user_access_filters.access_control_list,
-            cc_pair_access=user_access_filters.cc_pair_access,
+    inference_chunks = censor_chunks_for_user(
+        document_index.id_based_retrieval(
+            chunk_requests=[DocumentSectionRequest(document_id=document_id)],
+            filters=IndexFilters(
+                access_control_list=user_access_filters.access_control_list,
+                cc_pair_access=user_access_filters.cc_pair_access,
+            ),
         ),
+        user,
     )
 
     if not inference_chunks:
@@ -85,13 +89,16 @@ def get_chunk_info(
         max_chunk_ind=chunk_id,
     )
 
-    inference_chunks = document_index.id_based_retrieval(
-        chunk_requests=[chunk_request],
-        filters=IndexFilters(
-            access_control_list=user_access_filters.access_control_list,
-            cc_pair_access=user_access_filters.cc_pair_access,
+    inference_chunks = censor_chunks_for_user(
+        document_index.id_based_retrieval(
+            chunk_requests=[chunk_request],
+            filters=IndexFilters(
+                access_control_list=user_access_filters.access_control_list,
+                cc_pair_access=user_access_filters.cc_pair_access,
+            ),
+            batch_retrieval=True,
         ),
-        batch_retrieval=True,
+        user,
     )
 
     if not inference_chunks:

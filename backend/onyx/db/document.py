@@ -1817,6 +1817,35 @@ def get_document_sources(
     return {doc_id: source for doc_id, source in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
+def get_document_access_types(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, set[AccessType]]:
+    """Access types of every cc_pair each document is indexed under, except
+    ones being deleted."""
+    stmt: Select[tuple[str, AccessType]] = (
+        select(
+            DocumentByConnectorCredentialPair.id,
+            ConnectorCredentialPair.access_type,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+        .where(ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING)
+    )
+    access_types: dict[str, set[AccessType]] = defaultdict(set)
+    for doc_id, access_type in db_session.execute(stmt).all():
+        access_types[doc_id].add(access_type)
+    return dict(access_types)
+
+
 def fetch_chunk_counts_for_documents(
     document_ids: list[str],
     db_session: Session,
