@@ -333,7 +333,7 @@ class TestAttachmentFailureIsolation:
             f"{ticket_doc_id}/attachments"
         )
 
-    def test_slim_pass_stays_empty_after_listing_failure_parity(
+    def test_slim_pass_aborts_after_main_listing_failure(
         self,
         make_jsm_connector: Callable[..., JiraServiceManagementConnector],
         mock_jira_client: MagicMock,
