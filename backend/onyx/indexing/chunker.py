@@ -13,7 +13,7 @@ from onyx.configs.constants import RETURN_SEPARATOR, SECTION_SEPARATOR, Document
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )
-from onyx.connectors.models import IndexingDocument
+from onyx.connectors.models import ConnectorStopSignal, IndexingDocument
 from onyx.indexing.chunking import DocumentChunker, extract_blurb
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
@@ -298,7 +298,10 @@ class Chunker:
         final_chunks: list[DocAwareChunk] = []
         for document in documents:
             if self.callback and self.callback.should_stop():
-                raise RuntimeError("Chunker.chunk: Stop signal detected")
+                # ConnectorStopSignal (not RuntimeError) so the pipeline handler
+                # re-raises it instead of converting the batch into per-document
+                # indexing failures — matches the embedder stage's contract.
+                raise ConnectorStopSignal("Chunker.chunk: Stop signal detected")
 
             chunks = self._handle_single_document(document)
             final_chunks.extend(chunks)
