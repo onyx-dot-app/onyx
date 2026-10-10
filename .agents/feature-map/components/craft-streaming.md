@@ -522,3 +522,5 @@ work against the default Kubernetes backend, follow
 Access-loss results stay in the file cache across remounts. Transient failures cannot restore revoked bytes.
 
 Preview retries stop when a viewer unmounts or its requested revision changes. Development effect replay reuses the pending request.
+
+A scheduled preview retry runs only while its failure remains current. Activation recovery makes the old retry obsolete.

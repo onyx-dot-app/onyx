@@ -537,3 +537,45 @@ it("does not retry a preview after its viewer unmounts", async () => {
     jest.useRealTimers();
   }
 });
+
+it("skips the old scheduled retry after same-revision activation recovery", async () => {
+  jest.useFakeTimers();
+  const obsolete = deferred<string>();
+  const load = jest
+    .fn<Promise<string>, []>()
+    .mockRejectedValueOnce(new FetchError("temporary", 503, null))
+    .mockResolvedValueOnce("recovered")
+    .mockReturnValue(obsolete.promise);
+  try {
+    const { rerender, result } = renderHook(
+      ({ isActive }) =>
+        useFilePreview("recovered-retry", load, {
+          revision: "known",
+          isActive,
+        }),
+      {
+        initialProps: { isActive: true },
+        wrapper: ({ children }) => (
+          <SWRConfig
+            value={{ provider: () => new Map(), shouldRetryOnError: true }}
+          >
+            {children}
+          </SWRConfig>
+        ),
+      }
+    );
+    await act(async () => {});
+    expect(result.current.error).toBeDefined();
+    rerender({ isActive: false });
+    rerender({ isActive: true });
+    await act(async () => {});
+    expect(result.current.data).toBe("recovered");
+    expect(load).toHaveBeenCalledTimes(2);
+    await act(async () => jest.advanceTimersByTime(4000));
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBe("recovered");
+    expect(load).toHaveBeenCalledTimes(2);
+  } finally {
+    jest.useRealTimers();
+  }
+});

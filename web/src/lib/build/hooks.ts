@@ -29,14 +29,12 @@ export function useFilePreview<T>(
   { revision, refreshKey = 0, isActive = true }: FilePreviewOptions = {}
 ) {
   const identity = JSON.stringify([key, revision, refreshKey]);
-  const lifecycle = useRef({ identity, isActive });
+  const lifecycle = useRef<{
+    identity: string;
+    isActive: boolean;
+    error?: FilePreviewError;
+  }>({ identity, isActive });
   const pendingValidation = useRef<{ identity: string } | null>(null);
-  useLayoutEffect(() => {
-    lifecycle.current = { identity, isActive };
-    return () => {
-      lifecycle.current.isActive = false;
-    };
-  }, [identity, isActive]);
   const {
     data: result,
     error,
@@ -76,7 +74,8 @@ export function useFilePreview<T>(
           (retryOptions) => {
             if (
               lifecycle.current.isActive &&
-              lifecycle.current.identity === error.identity
+              lifecycle.current.identity === error.identity &&
+              lifecycle.current.error === error
             )
               revalidate(retryOptions);
           },
@@ -89,6 +88,13 @@ export function useFilePreview<T>(
       revalidateIfStale: false,
     }
   );
+
+  useLayoutEffect(() => {
+    lifecycle.current = { identity, isActive, error };
+    return () => {
+      lifecycle.current.isActive = false;
+    };
+  }, [identity, isActive, error]);
 
   const validate = useEffectEvent(() => {
     const reusable =
