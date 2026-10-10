@@ -7,20 +7,18 @@ failure, no connection) drops the page for this query without caching."""
 import hashlib
 import json
 from enum import Enum
-from urllib.parse import urlparse
 
 from mcp.client.auth import OAuthClientProvider
 from mcp.types import CallToolResult
 
+from ee.onyx.external_permissions.notion.mcp_server import (
+    is_per_user_notion_mcp_server,
+)
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.context.search.models import InferenceChunk
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import (
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
-)
+from onyx.db.enums import MCPTransport
 from onyx.db.mcp import get_all_mcp_servers
 from onyx.db.models import User
 from onyx.db.users import get_user_by_email
@@ -38,7 +36,6 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-NOTION_MCP_HOST = "mcp.notion.com"
 NOTION_FETCH_TOOL = "notion-fetch"
 # Notion answers object_not_found for pages the user cannot see, the same as
 # for missing ones, and validation_error for ids it cannot parse. Both deny.
@@ -139,19 +136,14 @@ def _usable_notion_connection(
     user_email: str,
 ) -> tuple[MCPServerConnection, ResolvedMCPCredentials] | None:
     """The first per-user OAuth Notion MCP server this user has a working
-    grant for, copied out of the session. An admin-level server would act as
-    the admin, so it never qualifies."""
+    grant for, copied out of the session."""
     with get_session_with_current_tenant() as db_session:
         user: User | None = get_user_by_email(user_email, db_session)
         if user is None:
             logger.warning("Notion censor found no user for %s", user_email)
             return None
         for mcp_server in get_all_mcp_servers(db_session):
-            if (
-                urlparse(mcp_server.server_url).hostname != NOTION_MCP_HOST
-                or mcp_server.auth_type != MCPAuthenticationType.OAUTH
-                or mcp_server.auth_performer != MCPAuthenticationPerformer.PER_USER
-            ):
+            if not is_per_user_notion_mcp_server(mcp_server):
                 continue
             credentials = resolve_mcp_credentials(mcp_server, user, db_session)
             if credentials.can_authenticate() and credentials.connection_config_id:

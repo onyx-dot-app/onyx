@@ -1,14 +1,19 @@
 from collections.abc import Callable
 from typing import Any
 
+from ee.onyx.external_permissions.notion.mcp_server import (
+    is_per_user_notion_mcp_server,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.capability_checks.models import CapabilityCheckContext
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.notion.connector import NotionConnector
 from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_doc_permission_sync_checks,
     build_onedrive_group_sync_checks,
@@ -16,6 +21,8 @@ from onyx.connectors.onedrive.capability_checks import (
 from onyx.connectors.onedrive.connector import OneDriveConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.zoom.connector import ZoomConnector
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.mcp import get_all_mcp_servers
 
 
 def validate_canvas_perm_sync(connector: CanvasConnector) -> None:
@@ -100,6 +107,26 @@ def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
     connector.probe_recording_access_permissions()
 
 
+def validate_notion_perm_sync(connector: NotionConnector) -> None:  # noqa: ARG001
+    """
+    Notion's query-time censor fetches each result page through Notion MCP
+    with the searching user's own grant, so a perm-synced Notion connector is
+    useless until a per-user OAuth Notion MCP server exists: every user would
+    see nothing from it. Fail at connector creation instead.
+    """
+    with get_session_with_current_tenant() as db_session:
+        if any(
+            is_per_user_notion_mcp_server(mcp_server)
+            for mcp_server in get_all_mcp_servers(db_session)
+        ):
+            return
+    raise ConnectorValidationError(
+        "Permission sync for Notion checks each result through the user's own "
+        "Notion MCP connection. Add https://mcp.notion.com/mcp under MCP Actions "
+        "as an OAuth server that each user authenticates, then try again."
+    )
+
+
 # The single source of truth for which connectors carry a real perm-sync probe:
 # ``validate_perm_sync`` dispatches through it, and the capability check
 # framework derives probe-bearing sources from it via
@@ -110,6 +137,7 @@ _VALIDATOR_BY_CONNECTOR_CLASS: dict[type[BaseConnector], Callable[[Any], None]] 
     CanvasConnector: validate_canvas_perm_sync,
     ConfluenceConnector: validate_confluence_perm_sync,
     GoogleDriveConnector: validate_drive_perm_sync,
+    NotionConnector: validate_notion_perm_sync,
     OneDriveConnector: validate_onedrive_perm_sync,
     SharepointConnector: validate_sharepoint_perm_sync,
     ZoomConnector: validate_zoom_perm_sync,

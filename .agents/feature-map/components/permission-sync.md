@@ -443,7 +443,11 @@ and page in the `CacheBackend` for ten minutes, and at most fifty uncached
 pages are checked per query over one MCP session
 (`server/features/mcp/client.py:call_mcp_tools_in_one_session`). A user who
 has not connected Notion MCP sees no results from a perm-synced Notion
-connector.
+connector, so `ee/onyx/connectors/perm_sync_valid.py:validate_notion_perm_sync`
+refuses to create a perm-synced Notion connector until a per-user OAuth
+Notion MCP server is registered. Notion registers no doc or group sync, so
+the capability-checks UI shows no perm-sync check for it; the validator runs
+at pairing creation and in the docfetching task.
 
 ---
 
