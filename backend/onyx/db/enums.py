@@ -361,6 +361,7 @@ class SupportedLanguage(str, PyEnum):
     ZH = "zh"
     KO = "ko"
     AR = "ar"
+    AZ = "az"
 
 
 # Prompts name the language in English so the model gets a word, not a code.
@@ -374,6 +375,7 @@ SUPPORTED_LANGUAGE_ENGLISH_NAMES: dict[SupportedLanguage, str] = {
     SupportedLanguage.ZH: "Simplified Chinese",
     SupportedLanguage.KO: "Korean",
     SupportedLanguage.AR: "Arabic",
+    SupportedLanguage.AZ: "Azerbaijani",
 }
 
 
