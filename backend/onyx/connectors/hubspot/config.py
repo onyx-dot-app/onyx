@@ -4,6 +4,7 @@ from typing import Annotated
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import FieldClass, FieldPolicy, ScopeInclude
+from onyx.connectors.hubspot.models import HubSpotObjectSpec
 
 
 class HubSpotObjectType(StrEnum):
@@ -11,6 +12,30 @@ class HubSpotObjectType(StrEnum):
     COMPANIES = "companies"
     DEALS = "deals"
     CONTACTS = "contacts"
+
+
+HUBSPOT_OBJECT_SPECS: dict[HubSpotObjectType, HubSpotObjectSpec] = {
+    HubSpotObjectType.TICKETS: HubSpotObjectSpec(
+        type_id="0-5",
+        document_noun="ticket",
+        modified_date_property="hs_lastmodifieddate",
+    ),
+    HubSpotObjectType.COMPANIES: HubSpotObjectSpec(
+        type_id="0-2",
+        document_noun="company",
+        modified_date_property="hs_lastmodifieddate",
+    ),
+    HubSpotObjectType.DEALS: HubSpotObjectSpec(
+        type_id="0-3",
+        document_noun="deal",
+        modified_date_property="hs_lastmodifieddate",
+    ),
+    HubSpotObjectType.CONTACTS: HubSpotObjectSpec(
+        type_id="0-1",
+        document_noun="contact",
+        modified_date_property="lastmodifieddate",
+    ),
+}
 
 
 class HubSpotConnectorConfig(ConnectorConfig):
