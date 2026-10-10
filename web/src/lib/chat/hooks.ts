@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { OnSubmitProps } from "@/hooks/useChatController";
-import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import {
+  SEARCH_PARAM_NAMES,
+  shouldSendOnLoad,
+} from "@/app/app/services/searchParams";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
@@ -84,7 +87,7 @@ export function useSendChatMessageFromURL({
   // window and queues the same prompt twice.
   const sentForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD)) return;
+    if (!shouldSendOnLoad(searchParams)) return;
     const query = searchParams.toString();
     if (sentForRef.current === query) return;
     sentForRef.current = query;
