@@ -83,6 +83,26 @@ class TestFetchDataSourcesForDatabase:
         assert result == []
 
 
+class TestGetBotUser:
+    def test_null_workspace_fields_fall_back(self) -> None:
+        connector = _make_connector()
+        resp = _mock_response(
+            {
+                "object": "user",
+                "id": "bot-user-1",
+                "bot": {"workspace_id": None, "workspace_name": None},
+            }
+        )
+        with patch(
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            return_value=resp,
+        ):
+            bot_user = connector.ops.get_bot_user()
+
+        assert bot_user.workspace_id == "bot-user-1"
+        assert bot_user.workspace_name == "Notion Workspace"
+
+
 class TestFetchChildBlocks:
     def test_404_drops_the_block(self) -> None:
         connector = _make_connector()

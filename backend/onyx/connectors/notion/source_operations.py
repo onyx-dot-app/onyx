@@ -99,8 +99,8 @@ class NotionSourceOperations(SourceOperations):
         bot: dict[str, Any] = data.get("bot", {})
         # Bot users without a workspace_id key the workspace by the user id.
         return NotionBotUser(
-            workspace_id=bot.get("workspace_id", data.get("id")),
-            workspace_name=bot.get("workspace_name", _DEFAULT_WORKSPACE_NAME),
+            workspace_id=bot.get("workspace_id") or data["id"],
+            workspace_name=bot.get("workspace_name") or _DEFAULT_WORKSPACE_NAME,
         )
 
     @source_operation(
