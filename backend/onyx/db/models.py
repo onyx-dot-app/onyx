@@ -2290,9 +2290,10 @@ class SearchSettings(Base):
 
     # Old-index reclamation (see reclaim helpers in db/search_settings.py).
     # NULL = not reclaim-tracked; set to PENDING at reindex submit on the current
-    # PRESENT (the future PAST).
+    # PRESENT (the future PAST). The explicit length keeps fresh and upgraded
+    # databases the same; a change needs a migration (see 8e870f2a7a29).
     reclaim_status: Mapped[IndexReclaimStatus | None] = mapped_column(
-        Enum(IndexReclaimStatus, native_enum=False), nullable=True
+        Enum(IndexReclaimStatus, native_enum=False, length=16), nullable=True
     )
     # Soak anchor: when the index stopped being read (port drained), NOT swap time —
     # so INSTANT backfills (which read PAST post-swap) anchor correctly.
