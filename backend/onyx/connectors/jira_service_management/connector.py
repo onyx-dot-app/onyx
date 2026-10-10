@@ -1,8 +1,6 @@
 import io
 from typing import Any, ClassVar
 
-from jira.resources import Issue
-
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     JIRA_CONNECTOR_LABELS_TO_SKIP,
@@ -15,6 +13,7 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.jira.connector import (
     JiraConnector,
+    JiraIssue,
     _perform_jql_search,
     build_jira_url,
     process_jira_issue,
@@ -39,7 +38,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _issue_key(issue: Issue | dict[str, Any]) -> str:
+def _issue_key(issue: JiraIssue | dict[str, Any]) -> str:
     """Stable issue key for legacy Jira SDK fixtures and the raw API gateway."""
     return str(issue["key"] if isinstance(issue, dict) else issue.key)
 
@@ -112,7 +111,7 @@ class JiraServiceManagementConnector(JiraConnector):
     def jsm_field_map(self) -> JsmFieldMap:
         """JSM field IDs, discovered lazily and cached for the connector's lifetime."""
         if self._jsm_field_map is None:
-            self._jsm_field_map = discover_jsm_fields(self.jira_client)
+            self._jsm_field_map = discover_jsm_fields(self.source_operations)
         return self._jsm_field_map
 
     def _get_jql_query(
@@ -130,14 +129,14 @@ class JiraServiceManagementConnector(JiraConnector):
         https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
         """
         time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
-        base_jql = f"project = {self.quoted_jira_project}"
+        base_jql = f'project = "{self.jira_project}"'
         if self.jql_query:
             return f"{base_jql} AND ({self.jql_query}) AND {time_jql}"
         return f"{base_jql} AND {time_jql}"
 
     def _process_issue(
         self,
-        issue: Issue,
+        issue: JiraIssue,
         parent_hierarchy_raw_node_id: str | None = None,
     ) -> Document | None:
         document = process_jira_issue(
@@ -175,17 +174,11 @@ class JiraServiceManagementConnector(JiraConnector):
         reached when ``include_attachments`` is enabled, keeping the default
         path free of extra API traffic.
         """
-        # The modern Jira connector delegates all network access to the
-        # credential-scoped source-operations gateway; SDK fixtures are retained
-        # for legacy unit tests until the test harness is fully migrated.
-        if hasattr(type(self), "source_operations"):
-            return self.source_operations.list_issue_attachments(issue_key=issue_key)
-        fetched = self.jira_client.issue(issue_key, fields="attachment")
-        return list(fetched.fields.attachment or [])
+        return self.source_operations.list_issue_attachments(issue_key=issue_key)
 
     def _process_issue_attachments(
         self,
-        issue: Issue,
+        issue: JiraIssue,
         parent_hierarchy_raw_node_id: str | None,
         ticket_document_id: str,
     ) -> list[Document | ConnectorFailure]:
@@ -244,7 +237,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     def _build_attachment_output(
         self,
-        issue: Issue,
+        issue: JiraIssue,
         attachment: Any,
         parent_hierarchy_raw_node_id: str | None,
         ticket_document_id: str,
@@ -259,12 +252,8 @@ class JiraServiceManagementConnector(JiraConnector):
         doc_id = f"{ticket_document_id}/attachment/{attachment_id}"
 
         try:
-            file_bytes = (
-                self.source_operations.download_attachment(
-                    attachment_id=str(_attachment_field(attachment, "id"))
-                )
-                if isinstance(attachment, dict)
-                else attachment.get()
+            file_bytes = self.source_operations.download_attachment(
+                attachment_id=str(_attachment_field(attachment, "id"))
             )
             text = (
                 extract_file_text(
@@ -343,7 +332,7 @@ class JiraServiceManagementConnector(JiraConnector):
 
     def _process_issue_attachments_slim(
         self,
-        issue: Issue,
+        issue: JiraIssue,
         parent_hierarchy_raw_node_id: str | None,
         ticket_document_id: str,
         include_permissions: bool = False,
@@ -415,14 +404,14 @@ class JiraServiceManagementConnector(JiraConnector):
         # attributes are statically known on Jira project resources and the
         # caller handles the "not exposed by the instance" case.
         try:
-            project_type = project.projectTypeKey
+            project_type = project.get("projectTypeKey") if isinstance(project, dict) else project.projectTypeKey
         except AttributeError:
             project_type = None
         if isinstance(project_type, str) and project_type:
             return project_type
 
         try:
-            raw = project.raw
+            raw = project if isinstance(project, dict) else project.raw
         except AttributeError:
             return None
         if isinstance(raw, dict):
@@ -432,7 +421,7 @@ class JiraServiceManagementConnector(JiraConnector):
         return None
 
     def validate_connector_settings(self) -> None:
-        if self._jira_client is None:
+        if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
 
         # A JSM project key is mandatory; the general-purpose Jira connector is
@@ -443,7 +432,9 @@ class JiraServiceManagementConnector(JiraConnector):
             )
 
         try:
-            project = self.jira_client.project(self.jira_project)
+            project = self.source_operations.get_project(
+                project_key=self.jira_project
+            )
         except Exception as e:
             self._handle_jira_connector_settings_error(e)
             raise  # _handle_jira_connector_settings_error always raises
@@ -465,8 +456,8 @@ class JiraServiceManagementConnector(JiraConnector):
                 next(
                     iter(
                         _perform_jql_search(
-                            jira_client=self.jira_client,
-                            jql=self.jql_query,
+                            source_operations=self.source_operations,
+                            jql=self._get_jql_query(0, 0),
                             start=0,
                             max_results=1,
                             all_issue_ids=[],
