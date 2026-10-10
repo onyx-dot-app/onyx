@@ -1,0 +1,103 @@
+---
+name: jira
+description: Search, read, and write Jira issues, projects, comments, and transitions on the connected user's behalf via a light REST wrapper.
+---
+
+# Jira
+
+Call the Jira (Atlassian Cloud) REST API as the connected user via the bundled
+helper. The Atlassian cloud id is resolved automatically from the connected
+authorization; pass `--cloud-id` or `--site` to target a specific site when the
+authorization can reach more than one.
+
+{{ACTION_AVAILABILITY_SECTION}}
+
+## Usage
+
+    python .opencode/skills/jira/jira_api.py <command> [args]
+
+Read commands prune empty fields; `search` auto-paginates. The writes are
+`create-issue`, `comment`, and `transition`. Use `--raw` to skip empty-field
+pruning; `python jira_api.py <command> -h` shows its flags. Global flags
+`--cloud-id CLOUD_ID` and `--site "name-or-url"` select the target site.
+
+### List the accessible sites
+
+```
+python jira_api.py sites
+```
+
+Each site carries an `id` (the cloud id), `name`, and `url`. Use one with
+`--cloud-id` or `--site` when the authorization reaches multiple sites.
+
+### The connected user
+
+```
+python jira_api.py myself
+```
+
+### Projects
+
+```
+python jira_api.py projects
+```
+
+### Search issues with JQL
+
+```
+python jira_api.py search "project = ENG AND status != Done ORDER BY created DESC" [--limit N]
+```
+
+### Read an issue
+
+```
+python jira_api.py issue ENG-4287
+```
+
+### Create an issue (write)
+
+```
+python jira_api.py create-issue --project ENG --type "Task" --summary "Title" [--description "Details"]
+```
+
+### Comment on an issue (write)
+
+```
+python jira_api.py comment ENG-4287 "Looking into this"
+```
+
+### List an issue's transitions
+
+```
+python jira_api.py transitions ENG-4287
+```
+
+Returns the workflow transitions available on the issue, each with an `id` and
+`name`. Feed an `id` to `transition` below.
+
+### Transition an issue (write)
+
+```
+python jira_api.py transition ENG-4287 31
+```
+
+Moves the issue through a workflow transition (get the id from `transitions`).
+
+## Output
+
+JSON on stdout. `search` returns `{"ok": true, "issues": [...], "count": N,
+"truncated": bool}` (`truncated` means more results existed past `--limit`).
+Other reads return `{"ok": true, "<key>": {...}}`. Failures return
+`{"ok": false, "status": <code>, "error": "<message>"}` and exit non-zero —
+surface the error rather than retrying blindly.
+
+## Notes
+
+- Issue references are ids or keys (e.g. `ENG-4287`). Get keys from `search` or
+  `projects` output.
+- The connected user's token is injected by the egress gateway — send no
+  credentials yourself.
+- Descriptions and comment bodies are sent as Atlassian Document Format (ADF);
+  the helper wraps your plain text for you.
+- A 401 / 403 usually means the connected app lacks the needed scope or the user
+  can't act on that project — tell the user rather than retrying.
