@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -253,7 +253,12 @@ def make_jsm_connector(
         gateway.download_attachment.side_effect = download_attachment
         gateway.get_project.side_effect = get_project
         connector._source_operations = gateway
-        connector._jira_client = mock_jira_client  # Legacy assertions only.
+        setattr(connector, "_jira_client", mock_jira_client)  # Test-only shim.
         return connector
 
     return _make
+
+
+def legacy_jira_client(connector: JiraServiceManagementConnector) -> JIRA:
+    """Retrieve the SDK stand-in installed only by the legacy test factory."""
+    return cast(JIRA, getattr(connector, "_jira_client"))
