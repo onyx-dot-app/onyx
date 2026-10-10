@@ -22,7 +22,6 @@ _API_VERSION = "2026-03-11"
 _TOKEN_KEY = "notion_integration_token"
 _CALL_TIMEOUT_S = 30
 _DEFAULT_WORKSPACE_NAME = "Notion Workspace"
-_UNTESTED = "not yet tested during incremental migration"
 
 
 class NotionGatewayError(Exception):
@@ -92,7 +91,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_bot_user(self) -> NotionBotUser:
         data: dict[str, Any] = self._request(rl_requests.get, "users/me")
@@ -106,7 +104,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def search(self, *, query: dict[str, Any]) -> dict[str, Any]:
         return self._request(rl_requests.post, "search", json=query)
@@ -114,7 +111,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_page(self, *, page_id: str) -> dict[str, Any]:
         return self._request(rl_requests.get, f"pages/{page_id}")
@@ -122,7 +118,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_database(self, *, database_id: str) -> dict[str, Any]:
         return self._request(rl_requests.get, f"databases/{database_id}")
@@ -130,7 +125,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def query_data_source(
         self, *, data_source_id: str, cursor: str | None = None
@@ -144,7 +138,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def list_block_children(
         self, *, block_id: str, cursor: str | None = None
