@@ -964,14 +964,15 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       // Basic is shared with every other spec, so restore it from a context
       // that outlives this test's page if the test timed out.
       await cleanup(async () => {
-        const restoreContext = await browser.newContext();
+        const restoreContext = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
         try {
-          const restorePage = await restoreContext.newPage();
-          await loginAs(restorePage, "admin");
-          await new OnyxApiClient(restorePage.request).setUserGroupPermissions(
-            basicGroupId,
-            [Permission.CREATE_USER_API_KEYS]
-          );
+          await new OnyxApiClient(
+            restoreContext.request
+          ).setUserGroupPermissions(basicGroupId, [
+            Permission.CREATE_USER_API_KEYS,
+          ]);
         } finally {
           await restoreContext.close();
         }
