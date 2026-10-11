@@ -347,12 +347,16 @@ def test_an_id_walk_lists_and_names_readers_as_indexing_did(
     sync makes it private. The id path resolves the number to its host before
     it can list anything, so it is the half most likely to come back empty."""
     connector: ZoomConnector = request.getfixturevalue(discovery)
-    indexed = _walk(connector, include_permissions=True)
+    indexed: list[Document] = _walk(connector, include_permissions=True)
     assert indexed
 
     with _no_transcript_downloads(connector):
-        pruned = _slim(connector.retrieve_all_slim_docs())
-        synced = _slim(connector.retrieve_all_slim_docs_perm_sync())
+        pruned: dict[str, ExternalAccess | None] = _slim(
+            connector.retrieve_all_slim_docs()
+        )
+        synced: dict[str, ExternalAccess | None] = _slim(
+            connector.retrieve_all_slim_docs_perm_sync()
+        )
 
     assert set(pruned) == {doc.id for doc in indexed}
     assert all(access is None for access in pruned.values())
