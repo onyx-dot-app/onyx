@@ -29,7 +29,7 @@ import Card from "@/refresh-components/cards/Card";
 import { Collapsible } from "@opal/components";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { PermissionRegistryEntry } from "@/views/admin/GroupsPage/interfaces";
+import type { PermissionRegistryEntry } from "@/views/admin/GroupsPage/types";
 
 // Icon mapping — the only permission metadata kept in the frontend.
 // `id` keys must match the backend PERMISSION_REGISTRY entries.

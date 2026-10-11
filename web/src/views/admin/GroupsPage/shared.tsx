@@ -6,7 +6,7 @@ import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import { AccountType, UserStatus } from "@/lib/types";
-import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
+import type { ApiKeyDescriptor, MemberRow } from "./types";
 
 // ---------------------------------------------------------------------------
 // Constants

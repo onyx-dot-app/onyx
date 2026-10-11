@@ -881,6 +881,7 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
 test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
   test("The Basic group grants Access Tokens by default and an admin can switch it off", async ({
     page,
+    browser,
     adminClient,
     testUserContext,
   }) => {
@@ -960,13 +961,22 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       await expect(newTokenButton).toBeVisible({ timeout: 10000 });
       await expect(newTokenButton).toBeEnabled();
     } finally {
+      // Basic is shared with every other spec, so restore it from a context
+      // that outlives this test's page if the test timed out.
       await cleanup(async () => {
-        // Leave Basic as seeded for the other specs, then drop the PAT.
-        await page.context().clearCookies();
-        await loginAs(page, "admin");
-        await adminClient.setUserGroupPermissions(basicGroupId, [
-          Permission.CREATE_USER_API_KEYS,
-        ]);
+        const restoreContext = await browser.newContext();
+        try {
+          const restorePage = await restoreContext.newPage();
+          await loginAs(restorePage, "admin");
+          await new OnyxApiClient(restorePage.request).setUserGroupPermissions(
+            basicGroupId,
+            [Permission.CREATE_USER_API_KEYS]
+          );
+        } finally {
+          await restoreContext.close();
+        }
+      });
+      await cleanup(async () => {
         if (createdPatId !== undefined) {
           await page.context().clearCookies();
           await apiLogin(page, email, password);

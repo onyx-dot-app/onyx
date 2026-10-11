@@ -4,6 +4,7 @@ head, so the test runs downgrade then upgrade inside its transaction and
 rolls back."""
 
 import importlib.util
+from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
 from uuid import uuid4
@@ -26,11 +27,11 @@ BASIC_PERMISSION = Permission.BASIC_ACCESS.value
 
 
 def _load_migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(
         "pat_grant_migration", _MIGRATION_PATH
     )
     assert spec is not None and spec.loader is not None
-    migration = importlib.util.module_from_spec(spec)
+    migration: ModuleType = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     return migration
 
@@ -50,7 +51,7 @@ def _stored_permissions(db_session: Session, user: User) -> set[str]:
 
 
 def _make_user(db_session: Session, permissions: list[str]) -> User:
-    user = User(
+    user: User = User(
         id=uuid4(),
         email=f"pat-migration-{uuid4().hex[:8]}@example.com",
         hashed_password="unused",
@@ -73,7 +74,7 @@ def test_basic_members_lose_and_regain_the_grant(
         )
         assert basic is not None
 
-        other_group = UserGroup(name=f"pat-migration-{uuid4().hex[:8]}")
+        other_group: UserGroup = UserGroup(name=f"pat-migration-{uuid4().hex[:8]}")
         db_session.add(other_group)
         db_session.flush()
         db_session.add(

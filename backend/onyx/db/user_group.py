@@ -94,7 +94,7 @@ def assert_group_permissions_editable(
             OnyxErrorCode.CONFLICT,
             "Cannot change the permissions of a default system group.",
         )
-    refused = sorted(
+    refused: list[str] = sorted(
         p.value for p in permissions if p not in DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS
     )
     if refused:
