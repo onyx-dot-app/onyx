@@ -77,6 +77,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Egnyte]: "sources.egnyte.description",
   [ValidSources.Airtable]: "sources.airtable.description",
   [ValidSources.Gitbook]: "sources.gitbook.description",
+  [ValidSources.JiraServiceManagement]: "sources.jiraServiceManagement.description",
   [ValidSources.Highspot]: "sources.highspot.description",
   [ValidSources.DrupalWiki]: "sources.drupalWiki.description",
   [ValidSources.Imap]: "sources.imap.description",
