@@ -3,7 +3,7 @@ for a public team, the private parent's members too for a restricted
 sub-team, and the people the issue is shared with. Sharing covers the whole
 sub-issue tree, so a sub-issue that inherits takes its ancestors' people."""
 
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -36,15 +36,6 @@ def workspace_members_group_id(organization_id: str) -> str:
     workspaces in one tenant do not read each other's public teams. A guest
     only sees the teams they were added to, which the team groups cover."""
     return f"workspace_members:{organization_id}"
-
-
-def member_emails(users: Iterable[LinearUser]) -> set[str]:
-    """Deactivated users keep their membership rows and an app user is nobody
-    to grant, so both are left out."""
-    emails: Iterator[str] = (
-        user.email.strip().lower() for user in users if user.active and not user.app
-    )
-    return {email for email in emails if email}
 
 
 def issue_access(

@@ -1,6 +1,10 @@
 from collections.abc import Callable
 from typing import Any
 
+from ee.onyx.external_permissions.linear.capability_checks import (
+    build_linear_doc_permission_sync_checks,
+    build_linear_group_sync_checks,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
@@ -9,10 +13,6 @@ from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.linear.capability_checks import (
-    build_linear_doc_permission_sync_checks,
-    build_linear_group_sync_checks,
-)
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_doc_permission_sync_checks,

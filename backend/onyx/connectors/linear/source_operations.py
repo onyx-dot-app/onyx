@@ -16,7 +16,6 @@ import requests
 from onyx.configs.app_configs import LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
-from onyx.connectors.linear.access import member_emails
 from onyx.connectors.linear.models import (
     IssueAccess,
     IssueAccessPage,
@@ -26,6 +25,7 @@ from onyx.connectors.linear.models import (
     LinearUser,
     LinearViewer,
     WorkspaceUsers,
+    member_emails,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import (

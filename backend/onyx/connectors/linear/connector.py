@@ -21,16 +21,12 @@ from onyx.connectors.interfaces import (
     CredentialsConnector,
     CredentialsProviderInterface,
     GenerateDocumentsOutput,
-    GenerateSlimDocumentOutput,
     LoadConnector,
     NormalizationResult,
     OAuthConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
-    SlimConnectorWithPermSync,
 )
-from onyx.connectors.linear.access import SharedAccessIndex, issue_access
-from onyx.connectors.linear.models import IssueAccess
 from onyx.connectors.linear.scope import (
     issue_filter,
     missing_projects,
@@ -41,7 +37,6 @@ from onyx.connectors.linear.scope import (
     scope_error,
 )
 from onyx.connectors.linear.source_operations import (
-    ACCESS_PAGE_SIZE,
     ACCESS_TOKEN,
     EXPIRE_AT,
     EXPIRES_IN,
@@ -55,26 +50,16 @@ from onyx.connectors.models import (
     Document,
     HierarchyNode,
     ImageSection,
-    SlimDocument,
     TextSection,
 )
-from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 
 logger = setup_logger()
 
-# Every walked issue id stays in memory until the walk ends, with the shares
-# that name anyone. Past this many the workspace is worth a look.
-_RETAINED_ISSUES_WARNING: int = 250_000
-
 
 class LinearConnector(
-    LoadConnector,
-    PollConnector,
-    OAuthConnector,
-    SlimConnectorWithPermSync,
-    CredentialsConnector,
+    LoadConnector, PollConnector, OAuthConnector, CredentialsConnector
 ):
     supports_manual_credentials = True
 
@@ -139,58 +124,6 @@ class LinearConnector(
             start,
             end,
         )
-
-    def retrieve_all_slim_docs_perm_sync(
-        self,
-        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
-    ) -> GenerateSlimDocumentOutput:
-        """Every issue the token can read, with who may read it. The doc sync
-        makes any indexed issue this does not list private, so the window is
-        ignored. A sub-issue that inherits sharing waits for the walk to end,
-        since its parent can page after it."""
-        ops = self.ops
-        shares: SharedAccessIndex = SharedAccessIndex(
-            lambda issue_id: ops.get_issue_share(issue_id=issue_id)
-        )
-        warned: bool = False
-        inheriting: list[IssueAccess] = []
-        organization_id: str = ""
-        for page in ops.iterate_issue_access(issue_filter=self._issue_filter()):
-            organization_id = page.organization_id
-            docs: list[SlimDocument | HierarchyNode] = []
-            for issue in page.issues:
-                shares.record(issue.id, issue.share)
-                if issue.share.inherits:
-                    inheriting.append(issue)
-                    continue
-                docs.append(
-                    SlimDocument(
-                        id=issue.id,
-                        external_access=issue_access(
-                            issue.team, organization_id, issue.share.emails
-                        ),
-                    )
-                )
-            yield docs
-            if not warned and len(shares) > _RETAINED_ISSUES_WARNING:
-                warned = True
-                logger.warning(
-                    "Linear permission sync is keeping %s walked issues in memory "
-                    "until the walk ends",
-                    len(shares),
-                )
-        for start_index in range(0, len(inheriting), ACCESS_PAGE_SIZE):
-            yield [
-                SlimDocument(
-                    id=issue.id,
-                    external_access=issue_access(
-                        issue.team, organization_id, shares.emails_for(issue.id)
-                    ),
-                )
-                for issue in inheriting[start_index : start_index + ACCESS_PAGE_SIZE]
-            ]
 
     @classmethod
     def oauth_id(cls) -> DocumentSource:

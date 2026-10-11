@@ -6,13 +6,12 @@ well, so its own group holds only the people added to it, guests included."""
 from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.external_permissions.linear.connector import linear_connector
-from onyx.connectors.linear.access import (
+from ee.onyx.external_permissions.linear.access import (
     complete_workspace_users,
-    member_emails,
     workspace_members_group_id,
 )
-from onyx.connectors.linear.models import LinearUser, WorkspaceUsers
+from ee.onyx.external_permissions.linear.connector import linear_connector
+from onyx.connectors.linear.models import LinearUser, WorkspaceUsers, member_emails
 from onyx.connectors.linear.source_operations import LinearSourceOperations
 from onyx.db.models import ConnectorCredentialPair
 

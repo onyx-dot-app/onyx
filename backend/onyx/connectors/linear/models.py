@@ -1,3 +1,4 @@
+from collections.abc import Iterable, Iterator
 from enum import Enum
 
 from pydantic import BaseModel
@@ -75,3 +76,12 @@ class WorkspaceMembers(BaseModel):
 
     organization_id: str
     emails: set[str]
+
+
+def member_emails(users: Iterable[LinearUser]) -> set[str]:
+    """Deactivated users keep their membership rows and an app user is nobody
+    to grant, so both are left out."""
+    emails: Iterator[str] = (
+        user.email.strip().lower() for user in users if user.active and not user.app
+    )
+    return {email for email in emails if email}
