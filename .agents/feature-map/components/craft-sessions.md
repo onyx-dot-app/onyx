@@ -371,12 +371,13 @@ On the frontend, `useBuildStreaming.ts:interruptStreaming` sets an
 `isInterrupting` flag and calls `reconcileInterruptedTurn` **after** posting
 the interrupt (`web/src/app/craft/hooks/useBuildStreaming.ts`).
 After the backend turn ends, the store owns transcript settlement for both interrupted and normally completed turns.
-Settlement checks the active turn and reads persisted messages; it does not load runtime metadata or change navigation.
+Interactive settlement checks the active turn. Scheduled settlement checks the expected run and its saved status.
+Only confirmed persistence permits canonical history replacement. Neither path loads runtime metadata or changes navigation.
 A failed read preserves the local transcript and settlement identity. The retry action resumes that same settlement.
 Only confirmed completion with persisted history permits the next queued prompt.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
 The queue retains each prompt, its attachments, and its explicit model choice until the server accepts it.
-Rejected sends require an explicit retry.
+Rejected queued starts require an explicit retry of that failed queue entry. An unrelated prompt error cannot authorize that retry.
 Retries reuse the queued prompt's request identity, so a lost response does not create another turn.
 
 ### 4.5 History durability

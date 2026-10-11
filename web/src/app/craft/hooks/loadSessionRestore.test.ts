@@ -656,6 +656,8 @@ describe("loadSession restore status", () => {
       if (stage === "runtime") await act(async () => history.resolve([]));
       useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
         turnGeneration: 1,
+        agentProvider: "new-provider",
+        agentModel: "new-model",
         status,
         error: status === "failed" ? "Send rejected" : null,
         activeTurnId: status === "running" ? "new-turn" : null,
@@ -680,7 +682,8 @@ describe("loadSession restore status", () => {
       ).toMatchObject({
         isLoaded: true,
         loadError: null,
-        agentModel: "saved-model",
+        agentProvider: "new-provider",
+        agentModel: "new-model",
         status,
         error: status === "failed" ? "Send rejected" : null,
         activeTurnId: status === "running" ? "new-turn" : null,
@@ -1076,7 +1079,11 @@ describe("loadSession restore status", () => {
         turn_index: 0,
       },
     ]);
-    await store.beginTurnSettlement(SESSION_ID, "completed-turn", 1);
+    await store.beginTurnSettlement(
+      SESSION_ID,
+      { kind: "interactive", turnId: "completed-turn" },
+      1
+    );
     staleHistory.resolve([]);
     await loading;
     expect(
@@ -1189,7 +1196,7 @@ describe("completed transcript handoff", () => {
     turn_index: 0,
   };
   const receipt = {
-    turnId: "completed-turn",
+    owner: { kind: "interactive" as const, turnId: "completed-turn" },
     turnGeneration: 0,
     phase: "ready" as const,
   };
@@ -1226,7 +1233,11 @@ describe("completed transcript handoff", () => {
       mockedApi.fetchMessages.mockResolvedValue([user]);
       const settling = useBuildSessionStore
         .getState()
-        .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+        .beginTurnSettlement(
+          SESSION_ID,
+          { kind: "interactive", turnId: "completed-turn" },
+          0
+        );
       await jest.advanceTimersByTimeAsync(0);
       expect(
         useBuildSessionStore.getState().sessions.get(SESSION_ID)?.messages
@@ -1263,11 +1274,58 @@ describe("completed transcript handoff", () => {
     }
   });
 
+  it("waits for the scheduled worker to commit completion before reading history", async () => {
+    jest.useFakeTimers();
+    try {
+      const run = {
+        run_id: "scheduled-run",
+        task_id: "task",
+        task_name: "Daily report",
+        status: "RUNNING" as const,
+        started_at: "2026-10-10T00:00:00Z",
+        finished_at: null,
+      };
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        activeTurnId: null,
+        activeTurnLocalOwner: false,
+      });
+      const owner = { kind: "scheduled" as const, runId: run.run_id };
+      mockedApi.fetchScheduledRunContext.mockResolvedValue(run);
+      const settling = useBuildSessionStore
+        .getState()
+        .beginTurnSettlement(SESSION_ID, owner, 0);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(mockedApi.fetchActiveTurn).not.toHaveBeenCalled();
+      expect(mockedApi.fetchMessages).not.toHaveBeenCalled();
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.messages
+      ).toEqual([user, answer]);
+      mockedApi.fetchScheduledRunContext.mockResolvedValue({
+        ...run,
+        status: "SUCCEEDED",
+        finished_at: "2026-10-10T00:01:00Z",
+      });
+      await jest.advanceTimersByTimeAsync(1000);
+      await settling;
+      expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1);
+      expect(mockedApi.fetchActiveTurn).not.toHaveBeenCalled();
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)?.turnSettlement
+      ).toEqual({ owner, turnGeneration: 0, phase: "ready" });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("settles without waiting for runtime restoration", async () => {
     mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
     await useBuildSessionStore
       .getState()
-      .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+      .beginTurnSettlement(
+        SESSION_ID,
+        { kind: "interactive", turnId: "completed-turn" },
+        0
+      );
     expect(mockedApi.fetchSession).not.toHaveBeenCalled();
     expect(mockedApi.restoreSession).not.toHaveBeenCalled();
     expect(
@@ -1284,7 +1342,11 @@ describe("completed transcript handoff", () => {
       } as never);
       const settling = useBuildSessionStore
         .getState()
-        .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+        .beginTurnSettlement(
+          SESSION_ID,
+          { kind: "interactive", turnId: "completed-turn" },
+          0
+        );
       await jest.advanceTimersByTimeAsync(0);
       useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
         turnGeneration: 1,
@@ -1333,7 +1395,11 @@ describe("completed transcript handoff", () => {
     mockedApi.fetchMessages.mockResolvedValue([user, persisted]);
     await useBuildSessionStore
       .getState()
-      .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+      .beginTurnSettlement(
+        SESSION_ID,
+        { kind: "interactive", turnId: "completed-turn" },
+        0
+      );
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)
     ).toMatchObject({
@@ -1352,7 +1418,11 @@ describe("completed transcript handoff", () => {
     );
     await useBuildSessionStore
       .getState()
-      .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+      .beginTurnSettlement(
+        SESSION_ID,
+        { kind: "interactive", turnId: "completed-turn" },
+        0
+      );
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)
     ).toMatchObject({
@@ -1396,7 +1466,11 @@ describe("completed transcript handoff", () => {
     );
     await useBuildSessionStore
       .getState()
-      .beginTurnSettlement(SESSION_ID, "completed-turn", 0);
+      .beginTurnSettlement(
+        SESSION_ID,
+        { kind: "interactive", turnId: "completed-turn" },
+        0
+      );
     messages.resolve([user]);
     await loading;
     expect(

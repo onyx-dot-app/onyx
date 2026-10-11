@@ -113,6 +113,7 @@ export default function BuildChatPanel({
   const scheduledRunInFlight =
     isScheduledRunContextInFlight(scheduledRunContext);
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
+  const scheduledRunId = scheduledRunContext?.run_id;
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
@@ -188,10 +189,6 @@ export default function BuildChatPanel({
   const isViewingSubagent = viewedSubagentSessionId !== null;
   const reduceMotion = useReducedMotion();
 
-  const updateSessionData = useBuildSessionStore(
-    (state) => state.updateSessionData
-  );
-
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
     (state) => state.consumePreProvisionedSession
@@ -217,11 +214,11 @@ export default function BuildChatPanel({
   const isInterrupting = useIsInterrupting();
   const sessionQueue = useQueuedMessages();
   const queuedMessages = useMemo(
-    () => sessionQueue.filter((message) => message.phase === "waiting"),
+    () => sessionQueue.filter((message) => message.phase !== "starting"),
     [sessionQueue]
   );
   const queuedSendError =
-    !isRunning && !session?.activeTurnId && queuedMessages.length > 0
+    !isRunning && !session?.activeTurnId && sessionQueue[0]?.phase === "failed"
       ? session?.error
       : null;
   const settlementError =
@@ -290,16 +287,23 @@ export default function BuildChatPanel({
   }, [session?.webappUrl, sessionId, maybeAutoOpenWebapp]);
 
   useEffect(() => {
-    if (!scheduledSessionId || !shouldStreamScheduledRun) return;
+    if (!scheduledSessionId || !scheduledRunId || !shouldStreamScheduledRun)
+      return;
 
     const controller = new AbortController();
-    void streamScheduledRunEvents(scheduledSessionId, controller.signal, () => {
-      void mutateScheduledRunContext();
-    });
+    void streamScheduledRunEvents(
+      scheduledSessionId,
+      scheduledRunId,
+      controller.signal,
+      () => {
+        void mutateScheduledRunContext();
+      }
+    );
 
     return () => controller.abort();
   }, [
     scheduledSessionId,
+    scheduledRunId,
     shouldStreamScheduledRun,
     streamScheduledRunEvents,
     mutateScheduledRunContext,
@@ -379,13 +383,19 @@ export default function BuildChatPanel({
     ) {
       return;
     }
-    updateSessionData(scheduledSessionId, { status: "active" });
+    const store = useBuildSessionStore.getState();
+    const current = store.sessions.get(scheduledSessionId);
+    if (current)
+      void store.beginTurnSettlement(
+        scheduledSessionId,
+        { kind: "scheduled", runId: scheduledRunContext.run_id },
+        current.turnGeneration
+      );
   }, [
     scheduledSessionId,
     scheduledRunContext,
     scheduledRunInFlight,
     activeTurnId,
-    updateSessionData,
   ]);
 
   // Ref to access InputBar methods

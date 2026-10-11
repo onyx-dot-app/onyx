@@ -242,6 +242,10 @@ it("offers explicit retry for a rejected queued prompt without reloading history
   store.updateSessionData(SESSION_ID, {
     status: "failed",
     error: "Send rejected",
+    queuedMessages: (
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+        ?.queuedMessages ?? []
+    ).map((message) => ({ ...message, phase: "failed" })),
   });
   render(<BuildChatPanel existingSessionId={SESSION_ID} />);
   expect(screen.getByRole("alert")).toHaveTextContent("Send rejected");
@@ -258,7 +262,7 @@ it("retries failed settlement through its owner without replacing it with a sess
   useBuildSessionStore.setState({ retryTurnSettlement });
   useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
     turnSettlement: {
-      turnId: "completed",
+      owner: { kind: "interactive", turnId: "completed" },
       turnGeneration: 0,
       phase: "failed",
       error: "History unavailable",
@@ -341,7 +345,11 @@ it("removes the displayed waiting prompt without removing a starting head", () =
   store.enqueueMessage(SESSION_ID, "waiting", []);
   store.enqueueMessage(SESSION_ID, "last", []);
   store.updateSessionData(SESSION_ID, {
-    turnSettlement: { turnId: "completed", turnGeneration: 0, phase: "ready" },
+    turnSettlement: {
+      owner: { kind: "interactive", turnId: "completed" },
+      turnGeneration: 0,
+      phase: "ready",
+    },
   });
   store.claimQueuedMessage(SESSION_ID);
   render(<BuildChatPanel existingSessionId={SESSION_ID} />);
@@ -355,4 +363,21 @@ it("removes the displayed waiting prompt without removing a starting head", () =
       .sessions.get(SESSION_ID)
       ?.queuedMessages.map((message) => message.text)
   ).toEqual(["starting", "last"]);
+});
+
+it("does not offer queue retry for a different prompt's failure", () => {
+  const store = useBuildSessionStore.getState();
+  store.enqueueMessage(SESSION_ID, "waiting prompt", []);
+  store.updateSessionData(SESSION_ID, {
+    status: "failed",
+    error: "Original prompt rejected",
+  });
+  render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  expect(
+    screen.queryByRole("button", { name: "Try again" })
+  ).not.toBeInTheDocument();
+  expect(retryQueuedMessage).not.toHaveBeenCalled();
+  expect(
+    useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages[0]
+  ).toMatchObject({ text: "waiting prompt", phase: "waiting" });
 });

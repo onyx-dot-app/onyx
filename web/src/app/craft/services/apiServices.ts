@@ -1,3 +1,4 @@
+import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
 import { FetchError } from "@/lib/fetcher";
 import {
   ApiSessionResponse,
@@ -517,6 +518,17 @@ export async function interruptMessageStream(sessionId: string): Promise<void> {
   if (!res.ok) {
     throw new Error(`Failed to interrupt message: ${res.status}`);
   }
+}
+
+export async function fetchScheduledRunContext(
+  sessionId: string
+): Promise<ScheduledRunContextResponse> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-context`
+  );
+  if (!res.ok)
+    throw new Error(await errorDetail(res, "Failed to fetch scheduled run"));
+  return res.json();
 }
 
 export async function fetchScheduledRunEventStream(

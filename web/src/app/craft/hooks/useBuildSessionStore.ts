@@ -41,6 +41,7 @@ import {
   deleteSession as apiDeleteSession,
   fetchMessages,
   fetchActiveTurn,
+  fetchScheduledRunContext,
   fetchArtifacts,
   fetchOutputInventory,
   fetchWebappInfo,
@@ -604,7 +605,7 @@ let nextQueuedMessageId = 1;
 
 export interface CraftQueuedMessage {
   id: number;
-  phase: "waiting" | "starting";
+  phase: "waiting" | "starting" | "failed";
   model?: BuildLlmSelection | null;
   text: string;
   attachments: BuildMessageAttachment[];
@@ -632,8 +633,12 @@ export interface TabNavigationHistory {
 /** Output panel tab types */
 export type OutputTabType = "preview" | "files" | "artifacts";
 
+export type CompletionOwner =
+  | { kind: "interactive"; turnId: string | null }
+  | { kind: "scheduled"; runId: string };
+
 export type TurnSettlement = {
-  turnId: string | null;
+  owner: CompletionOwner;
   turnGeneration: number;
 } & (
   | { phase: "reconciling" | "ready" }
@@ -651,7 +656,7 @@ export interface BuildSessionData {
   turnSettlement: TurnSettlement | null;
   /** The user-message turn index for the active backend turn. */
   activeTurnIndex: number | null;
-  /** True when this tab created the active turn and already owns its stream. */
+  /** True while this tab owns a pending start or its accepted turn stream. */
   activeTurnLocalOwner: boolean;
   /**
    * FIFO stream items for the current agent turn.
@@ -661,7 +666,7 @@ export interface BuildSessionData {
   streamItems: StreamItem[];
   /**
    * Messages typed while a response is streaming. Auto-sent FIFO once the
-   * current run finishes (see the auto-send effect in BuildChatPanel).
+   * session confirms completion and its stream owner claims the queue head.
    */
   queuedMessages: CraftQueuedMessage[];
   /**
@@ -949,7 +954,7 @@ interface BuildSessionStore {
   claimQueuedMessage: (sessionId: string) => CraftQueuedMessage | null;
   beginTurnSettlement: (
     sessionId: string,
-    turnId: string | null,
+    owner: CompletionOwner,
     generation: number
   ) => Promise<void>;
   retryTurnSettlement: (sessionId: string) => Promise<void>;
@@ -1082,7 +1087,8 @@ function reconcileCompletedTranscript(
   sessionId: string,
   started: BuildSessionData
 ): Promise<void> {
-  const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${started.turnSettlement?.turnId}`;
+  const owner = started.turnSettlement?.owner;
+  const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${owner?.kind}:${owner?.kind === "interactive" ? owner.turnId : owner?.runId}`;
   const existing = completedTranscriptReads.get(requestKey);
   if (existing) return existing;
   const ownsCompletion = () => {
@@ -1090,7 +1096,7 @@ function reconcileCompletedTranscript(
     return (
       current?.instanceId === started.instanceId &&
       current.turnGeneration === started.turnGeneration &&
-      current.turnSettlement?.turnId === started.turnSettlement?.turnId &&
+      current.turnSettlement?.owner === owner &&
       current.turnSettlement?.phase === "reconciling"
     );
   };
@@ -1116,9 +1122,37 @@ function reconcileCompletedTranscript(
     try {
       for (let attempt = 0; attempt < 30; attempt++) {
         if (!ownsCompletion()) return;
-        const activeTurn = await fetchActiveTurn(sessionId);
+        if (!owner) return;
+        let waiting: boolean;
+        let approvalPause = false;
+        let successor: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
+        if (owner.kind === "scheduled") {
+          const run = await fetchScheduledRunContext(sessionId);
+          if (!ownsCompletion()) return;
+          if (run.run_id !== owner.runId) return;
+          if (run.status === "FAILED" || run.status === "SKIPPED") {
+            useBuildSessionStore.getState().updateSessionData(sessionId, {
+              status: "failed",
+              isInterrupting: false,
+              turnSettlement: null,
+            });
+            return;
+          }
+          waiting = run.status === "RUNNING" || run.status === "QUEUED";
+          approvalPause = run.status === "AWAITING_APPROVAL";
+        } else {
+          const activeTurn = await fetchActiveTurn(sessionId);
+          if (!ownsCompletion()) return;
+          successor =
+            activeTurn &&
+            owner.turnId !== null &&
+            activeTurn.turn_id !== owner.turnId
+              ? activeTurn
+              : null;
+          waiting = activeTurn !== null && !successor;
+        }
         if (!ownsCompletion()) return;
-        if (activeTurn !== null) {
+        if (waiting) {
           await new Promise<void>((resolve) => setTimeout(resolve, 1000));
           continue;
         }
@@ -1131,12 +1165,16 @@ function reconcileCompletedTranscript(
           streamItems: [],
           subagents: buildSubagentsFromMessages(messages),
           contextUsage: deriveContextUsage(messages),
-          status: "active",
+          status: successor ? "running" : "active",
           isInterrupting: false,
-          activeTurnId: null,
-          activeTurnIndex: null,
+          activeTurnId: successor?.turn_id ?? null,
+          activeTurnIndex: successor?.turn_index ?? null,
           activeTurnLocalOwner: false,
-          turnSettlement: { ...current.turnSettlement, phase: "ready" },
+          ...(successor && { turnGeneration: current.turnGeneration + 1 }),
+          turnSettlement:
+            successor || approvalPause
+              ? null
+              : { ...current.turnSettlement, phase: "ready" },
         });
         return;
       }
@@ -1744,15 +1782,18 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     return claimed;
   },
 
-  beginTurnSettlement: async (sessionId, turnId, generation) => {
+  beginTurnSettlement: async (sessionId, owner, generation) => {
     const session = get().sessions.get(sessionId);
     if (
       !session ||
       session.turnGeneration !== generation ||
       session.error ||
-      session.turnSettlement ||
-      (session.status !== "running" && session.status !== "creating")
+      session.turnSettlement
     )
+      return;
+    if (owner.kind === "scheduled") {
+      if (session.activeTurnLocalOwner || session.activeTurnId !== null) return;
+    } else if (session.status !== "running" && session.status !== "creating")
       return;
     get().updateSessionData(sessionId, {
       status: "running",
@@ -1760,7 +1801,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       activeTurnIndex: null,
       activeTurnLocalOwner: false,
       turnSettlement: {
-        turnId,
+        owner,
         turnGeneration: generation,
         phase: "reconciling",
       },
@@ -1781,7 +1822,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, {
       status: "running",
       turnSettlement: {
-        turnId: session.turnSettlement.turnId,
+        owner: session.turnSettlement.owner,
         turnGeneration: session.turnGeneration,
         phase: "reconciling",
       },
@@ -1874,7 +1915,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         [PromiseSettledResult<Awaited<ReturnType<typeof fetchSession>>>]
       > = Promise.allSettled([fetchSession(sessionId)]);
       let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
-      let activeTurnLookupSucceeded: boolean = false;
       try {
         activeTurn = await fetchActiveTurn(sessionId);
       } catch (err) {
@@ -1982,8 +2022,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           needsRestore && sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
-        agentProvider: sessionData.agent_provider,
-        agentModel: sessionData.agent_model,
+        ...(runtimeSession.turnGeneration === loadingSession.turnGeneration &&
+          runtimeSession.agentProvider === loadingSession.agentProvider &&
+          runtimeSession.agentModel === loadingSession.agentModel && {
+            agentProvider: sessionData.agent_provider,
+            agentModel: sessionData.agent_model,
+          }),
         isLoaded: true,
         ...(canApplySkillsStale() && { skillsStale: sessionData.skills_stale }),
         origin: sessionData.origin,

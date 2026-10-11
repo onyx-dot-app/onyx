@@ -247,12 +247,15 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 The streamed response remains visible until the server confirms completion and persisted history is available.
 `turnSettlement` owns this handoff with reconciling, failed, and ready states.
-Normal completion and interruption use the same settlement path.
+Interactive completion and interruption use the same settlement path. Scheduled runs use their own saved run status as the completion boundary.
+Approval pauses and failed scheduled runs never release queued interactive work.
 Settlement reads turn status and messages independently of runtime discovery, artifacts, and navigation.
 Failures retain the transcript and expose a retry for that same settlement.
 The streaming hook claims ready queue work atomically, so repeated events or multiple mounted hooks cannot duplicate a send.
 A queued prompt remains in the queue until the server accepts its turn.
-Rejected starts remain available for explicit retry with the same request identity.
+Rejected queued starts remain available for explicit retry with the same request identity. Unrelated prompt failures do not authorize queue retries.
+A clean stream close reconnects while the backend turn remains active. A successor turn replaces the old completion owner.
+Stopping a pending start keeps cancellation intent until the accepted turn can be interrupted.
 Earlier session instances and turns cannot publish settlement results.
 Session metadata and artifacts may finish after a newer turn starts without replacing its transcript or status.
 
