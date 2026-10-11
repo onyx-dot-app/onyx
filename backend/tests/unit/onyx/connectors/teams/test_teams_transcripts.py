@@ -15,7 +15,13 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
-from onyx.connectors.models import ConnectorFailure, Document, SlimDocument
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    SlimDocument,
+)
 from onyx.connectors.teams import listing as listing_module
 from onyx.connectors.teams import organizers as organizers_module
 from onyx.connectors.teams.connector import TeamsCheckpoint, TeamsConnector
@@ -1095,3 +1101,179 @@ class TestValidation:
             UnexpectedValidationError, match="Could not list organizers"
         ):
             _validate_organizers(self._connector({}, refused={ALL_USERS_URL: 503}))
+
+
+# ---------------------------------------------------------------------------
+# reindex: failed transcripts read again from the errors list
+# ---------------------------------------------------------------------------
+
+ORGANIZER_URL = f"users/user-1?{SELECT_USERS}"
+
+
+def _reindex_routes(*transcripts: dict[str, Any]) -> dict[str, Any]:
+    """The organizer's lookback listing and the organizer's own record."""
+    routes = _routes(*transcripts, window=LOOKBACK_WINDOW)
+    routes[ORGANIZER_URL] = ADA
+    return routes
+
+
+def _reindex(
+    teams_connector: TeamsConnector, *document_ids: str
+) -> list[Document | ConnectorFailure | HierarchyNode]:
+    errors: list[ConnectorFailure] = [
+        ConnectorFailure(
+            failed_document=DocumentFailure(document_id=document_id),
+            failure_message="refused",
+        )
+        for document_id in document_ids
+    ]
+    return list(teams_connector.reindex(errors=errors))
+
+
+def test_reindex_reads_a_failed_transcript_again() -> None:
+    client = graph_client(
+        _reindex_routes(_transcript()),
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT},
+    )
+
+    items = _reindex(
+        connector(client, include_meeting_transcripts=True),
+        transcript_document_id("user-1", "t1"),
+    )
+
+    assert len(items) == 1 and isinstance(items[0], Document)
+    assert items[0].id == transcript_document_id("user-1", "t1")
+    assert "hello" in (items[0].sections[0].text or "")
+
+
+def test_reindex_stops_listing_once_every_wanted_transcript_is_found() -> None:
+    first_page = _transcripts_url("user-1", LOOKBACK_WINDOW)
+    second_page = "users/user-1/onlineMeetings/getAllTranscripts?skipToken=p2"
+    routes = _reindex_routes()
+    routes[first_page] = {
+        "value": [_transcript()],
+        "@odata.nextLink": f"{SERVICE_ROOT}/{second_page}",
+    }
+    client = graph_client(
+        routes,
+        refused={second_page: 503},
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT},
+    )
+
+    items = _reindex(
+        connector(client, include_meeting_transcripts=True),
+        transcript_document_id("user-1", "t1"),
+    )
+
+    # The second page is never requested, so its outage does not matter.
+    assert len(items) == 1 and isinstance(items[0], Document)
+
+
+def test_reindex_reads_what_it_found_before_a_later_page_is_refused() -> None:
+    first_page = _transcripts_url("user-1", LOOKBACK_WINDOW)
+    second_page = "users/user-1/onlineMeetings/getAllTranscripts?skipToken=p2"
+    routes = _reindex_routes()
+    routes[first_page] = {
+        "value": [_transcript()],
+        "@odata.nextLink": f"{SERVICE_ROOT}/{second_page}",
+    }
+    client = graph_client(
+        routes,
+        refused={second_page: UNNAMED_403},
+        contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): ATTRIBUTED_VTT},
+    )
+
+    items = _reindex(
+        connector(client, include_meeting_transcripts=True),
+        transcript_document_id("user-1", "t1"),
+        transcript_document_id("user-1", "t2"),
+    )
+
+    by_id: dict[str, Document | ConnectorFailure | HierarchyNode] = {}
+    for item in items:
+        if isinstance(item, Document):
+            by_id[item.id] = item
+        elif isinstance(item, ConnectorFailure) and item.failed_document:
+            by_id[item.failed_document.document_id] = item
+    found = by_id[transcript_document_id("user-1", "t1")]
+    missing = by_id[transcript_document_id("user-1", "t2")]
+    assert isinstance(found, Document)
+    assert isinstance(missing, ConnectorFailure)
+    assert "Could not list the meeting transcripts" in missing.failure_message
+
+
+def test_reindex_reports_a_transcript_graph_no_longer_lists() -> None:
+    items = _reindex(
+        connector(
+            graph_client(_reindex_routes(_transcript())),
+            include_meeting_transcripts=True,
+        ),
+        transcript_document_id("user-1", "t9"),
+    )
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert items[0].failed_document is not None
+    assert items[0].failed_document.document_id == transcript_document_id(
+        "user-1", "t9"
+    )
+    assert "no longer lists" in items[0].failure_message
+
+
+def test_reindex_reports_a_refused_listing_for_every_transcript_of_the_organizer() -> (
+    None
+):
+    routes = {ORGANIZER_URL: ADA}
+    refused = {_transcripts_url("user-1", LOOKBACK_WINDOW): UNNAMED_403}
+
+    items = _reindex(
+        connector(
+            graph_client(routes, refused=refused), include_meeting_transcripts=True
+        ),
+        transcript_document_id("user-1", "t1"),
+        transcript_document_id("user-1", "t2"),
+    )
+
+    assert len(items) == 2
+    for item in items:
+        assert isinstance(item, ConnectorFailure)
+        assert "Microsoft's side" in item.failure_message
+
+
+def test_reindex_reads_only_transcripts() -> None:
+    items = _reindex(
+        connector(graph_client({}), include_meeting_transcripts=True),
+        "teams-file:abc",
+    )
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert "Only meeting transcripts" in items[0].failure_message
+
+
+def test_reindex_with_transcripts_off_says_so() -> None:
+    items = _reindex(
+        connector(graph_client({})), transcript_document_id("user-1", "t1")
+    )
+
+    assert len(items) == 1 and isinstance(items[0], ConnectorFailure)
+    assert "is off" in items[0].failure_message
+
+
+@pytest.mark.parametrize(
+    ("refusal", "offers_retry"),
+    [
+        # Microsoft's refusal clears on its own, a missing grant does not.
+        (UNNAMED_403, True),
+        (MISSING_ROLE, False),
+    ],
+)
+def test_only_an_unnamed_content_refusal_points_at_the_errors_list(
+    refusal: Refusal, offers_retry: bool
+) -> None:
+    client = graph_client(
+        _routes(_transcript()), contents={(CONTENT_ROUTE, ATTRIBUTED_FORMAT): refusal}
+    )
+
+    items, _ = _walk_transcripts(connector(client, include_meeting_transcripts=True))
+
+    assert isinstance(items[0], ConnectorFailure)
+    assert ("errors list" in items[0].failure_message) is offers_retry
