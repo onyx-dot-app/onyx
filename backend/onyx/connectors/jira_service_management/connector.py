@@ -32,11 +32,28 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-JSM_SEARCH_ENDPOINT = "/rest/api/3/search"
+JSM_SEARCH_ENDPOINT = "/rest/api/3/search/jql"
 PAGE_SIZE = 100
-# Jira Service Management stores the "Customer Request Type" in a custom
-# field; 10010 is the conventional id on most instances.
+# Fields requested from the enhanced JQL search. The JSM "Customer Request
+# Type" lives in a custom field, conventionally 10010 on most instances; the
+# endpoint ignores it silently on instances where the field does not exist.
 REQUEST_TYPE_FIELD = "customfield_10010"
+SEARCH_FIELDS = ",".join(
+    [
+        "key",
+        "summary",
+        "description",
+        "comment",
+        "status",
+        "priority",
+        "issuetype",
+        "reporter",
+        "assignee",
+        "created",
+        "updated",
+        REQUEST_TYPE_FIELD,
+    ]
+)
 
 
 def _jql_timestamp(epoch: SecondsSinceUnixEpoch) -> str:
@@ -78,6 +95,14 @@ def _display_name(fields: dict[str, Any], field: str) -> str | None:
 
 def _request_type(issue: dict[str, Any]) -> str | None:
     value = get_issue_field(issue, REQUEST_TYPE_FIELD)
+    if isinstance(value, dict):
+        # JSM Cloud: {"requestType": {"name": ...}, "currentStatus": {...}}
+        request_type = value.get("requestType")
+        if isinstance(request_type, dict):
+            name = request_type.get("name")
+            if isinstance(name, str) and name:
+                return name
+        return None
     if isinstance(value, str) and value:
         return value
     return None
@@ -173,14 +198,19 @@ class JiraServiceManagementApiClient:
                 "Authorization": f"Bearer {jira_api_token}",
             }
 
-    def search(self, jql: str, start_at: int) -> dict[str, Any]:
+    def search(
+        self, jql: str, next_page_token: str | None = None
+    ) -> dict[str, Any]:
         url = self.jira_base_url + JSM_SEARCH_ENDPOINT
-        params = {
+        # The classic /rest/api/3/search endpoint returns 410 Gone; Cloud uses
+        # the enhanced JQL search with nextPageToken pagination.
+        params: dict[str, str | int] = {
             "jql": jql,
-            "startAt": start_at,
             "maxResults": PAGE_SIZE,
-            "validateQuery": "warn",
+            "fields": SEARCH_FIELDS,
         }
+        if next_page_token:
+            params["nextPageToken"] = next_page_token
         # rl_requests waits and retries on 429 (honoring Retry-After)
         response = rl_requests.get(
             url,
@@ -245,14 +275,12 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
 
         jql = _build_jsm_jql(self.project_name, start=start, end=end)
         current_batch: list[Document] = []
-        start_at = 0
-        total: int | None = None
+        next_page_token: str | None = None
 
         try:
-            while total is None or start_at < total:
-                page = self.client.search(jql, start_at)
+            while True:
+                page = self.client.search(jql, next_page_token)
                 issues = page.get("issues", [])
-                total = int(page.get("total", len(issues) + start_at))
 
                 for issue in issues:
                     current_batch.append(
@@ -262,9 +290,9 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                         yield current_batch
                         current_batch = []
 
-                if not issues:
+                next_page_token = page.get("nextPageToken")
+                if not next_page_token or not issues:
                     break
-                start_at += len(issues)
 
             if current_batch:
                 yield current_batch
