@@ -23,15 +23,18 @@ class SharepointPrincipalType(IntEnum):
     SHAREPOINT_GROUP = 8
 
 
-GROUP_PRINCIPAL_TYPES = frozenset(
+GROUP_PRINCIPAL_TYPES: frozenset[SharepointPrincipalType] = frozenset(
     {SharepointPrincipalType.ENTRA_GROUP, SharepointPrincipalType.SHAREPOINT_GROUP}
 )
 # PnP RoleType defines Guest=1 and RestrictedGuest=9:
 # https://github.com/pnp/pnpcore/blob/4e4f58fcac797f2957bfcd14fedcecd690dfe7ee/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
-LIMITED_ACCESS_ROLE_TYPES = frozenset({1, 9})
-GUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+LIMITED_ACCESS_ROLE_TYPES: frozenset[int] = frozenset({1, 9})
+GUID_RE: str = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 # https://learn.microsoft.com/en-us/answers/questions/2085339/guid-in-the-loginname-of-site-user-everyone-except
-_PUBLIC_LOGIN_PATTERNS = ("c:0-.f|rolemanager|spo-grid-all-users/", "c:0(.s|true")
+_PUBLIC_LOGIN_PATTERNS: tuple[str, ...] = (
+    "c:0-.f|rolemanager|spo-grid-all-users/",
+    "c:0(.s|true",
+)
 
 
 def has_only_limited_access(assignment: SharepointRoleAssignment) -> bool:
