@@ -380,6 +380,8 @@ class GmailCheckpoint(ConnectorCheckpoint):
 class GmailConnector(
     SlimConnectorWithPermSync, CheckpointedConnectorWithPermSync[GmailCheckpoint]
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(self, batch_size: int = INDEX_BATCH_SIZE) -> None:
         self.batch_size = batch_size
 

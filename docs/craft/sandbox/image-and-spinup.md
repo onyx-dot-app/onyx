@@ -14,6 +14,32 @@ Related files:
 - `backend/onyx/server/features/build/sandbox/kubernetes/scripts/bench-sandbox-spinup.sh`
 - `deployment/helm/charts/onyx/templates/sandbox-namespace.yaml`
 
+## OpenCode plugin SDK during cold startup
+
+OpenCode 1.18.19 installs `@opencode-ai/plugin` in each configuration directory.
+Session initialization waits for these installs before it returns.
+The SDK includes about 63 MiB of dependencies. An observed cold setup took
+three minutes and exceeded the API's 90-second session initialization timeout.
+With a warm download cache, a new directory still took 74 seconds.
+The same configuration with installed dependencies took 0.58 seconds.
+
+The sandbox image installs the matching SDK version during its build.
+Both global configuration directories hardlink the template dependencies within the same image layer.
+Their package manifests remain separate files. This avoids two extra copies of SDK data.
+In-place dependency edits in either global directory also affect the template.
+The image keeps the SDK in
+`/workspace/templates/opencode`. Session workspace setup copies these dependencies
+into a new `.opencode` directory. It preserves existing dependencies and manifests.
+Each session has its own copy, so sessions cannot modify each other's SDK files.
+Older images without the template retain OpenCode's runtime install fallback.
+
+The image-owned `seed-opencode-dependencies.sh` seeds new and restored sessions.
+Python invokes the script under a session seed lock.
+The script copies dependencies into a temporary directory and publishes them by rename.
+A failed copy leaves no visible dependency directory, so the next attempt can retry.
+Kubernetes verifies a completion sentinel after configuration regeneration.
+The SDK stays outside snapshots, which contain outputs and attachments.
+
 ## SHA-pinned base + helper images
 
 `python:3.13-slim`, `node:24-trixie-slim`, and `oven/bun:1.3.14` are

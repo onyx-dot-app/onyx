@@ -69,7 +69,10 @@ Release notes have no dedicated endpoint. `ensure_release_notes_fresh_and_notify
 
 ### Env / config
 
-None. Release-note fetch cadence is Redis-cached
+`ONYX_AIRGAPPED` (shared_configs): when true, release-note fetching is
+skipped entirely — no GitHub fetch, no new release-note `Notification` rows.
+
+Release-note fetch cadence is otherwise Redis-cached
 (`release_notes/constants.py:AUTO_REFRESH_THRESHOLD_SECONDS`, 1 hour), not env-driven.
 
 ---

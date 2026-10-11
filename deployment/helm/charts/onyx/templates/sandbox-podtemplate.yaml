@@ -97,6 +97,7 @@ template:
         ports:
           - { name: push-daemon, containerPort: {{ $pushDaemonPort }} }
         env:
+          - { name: SANDBOX_LISTEN_HOST, value: {{ $sandboxPod.listenHost | default "0.0.0.0" | quote }} }
           {{- include "onyx.sandboxProxyEnv" (dict "proxyPort" $proxyPort "caBundleFile" $caBundleFile) | nindent 10 }}
         volumeMounts:
           - { name: workspace, mountPath: /workspace/sessions }
@@ -139,6 +140,7 @@ template:
           - { name: "nextjs-{{ $p }}", containerPort: {{ $p }} }
           {{- end }}
         env:
+          - { name: SANDBOX_LISTEN_HOST, value: {{ $sandboxPod.listenHost | default "0.0.0.0" | quote }} }
           - { name: ONYX_PAT, value: "replaced_by_egress_proxy" }
           - { name: ONYX_SERVER_URL, value: "{{ $serverUrl }}" }
           {{/* The deployment value is the exact API base; do not append the CLI default. */}}

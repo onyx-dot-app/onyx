@@ -105,6 +105,49 @@
       "temperature": true,
       "tool_call": true
     },
+    "claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": false,
+      "tool_call": true
+    },
     "claude-mythos-5": {
       "attachment": true,
       "cost": {
@@ -2284,7 +2327,8 @@
     "gpt-image-1.5-2025-12-16": {
       "cost": {
         "cache_read": 1.25,
-        "input": 5.0
+        "input": 5.0,
+        "output": 10.0
       },
       "mode": "image_generation",
       "name": "gpt-image-1.5-2025-12-16"
@@ -2664,7 +2708,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.5,
-        "input": 1.25,
+        "input": 2,
         "output": 6
       },
       "family": "grok",
@@ -2685,6 +2729,32 @@
       "open_weights": false,
       "reasoning": true,
       "release_date": "2026-08-12",
+      "status": "beta",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "grok-4.7": {
+      "attachment": true,
+      "family": "grok",
+      "limit": {
+        "context": 500000,
+        "output": 500000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Grok 4.7",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-09-21",
       "status": "beta",
       "structured_output": true,
       "temperature": true,

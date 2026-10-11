@@ -307,3 +307,9 @@ variable "iam_role_path" {
   description = "IAM path for every role this module creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
   default     = null
 }
+
+variable "cluster_admin_principal_arn" {
+  type        = string
+  description = "IAM principal that gets cluster-admin (EKS access entry) and administers the cluster's KMS key. Null keeps the upstream default: whoever runs Terraform, which changes both when a different principal applies. For an SSO role, use the full path ARN (arn:aws:iam::<account>:role/aws-reserved/sso.amazonaws.com/<region>/AWSReservedSSO_...)."
+  default     = null
+}

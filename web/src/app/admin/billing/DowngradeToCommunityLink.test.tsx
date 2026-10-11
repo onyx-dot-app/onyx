@@ -64,7 +64,7 @@ describe("DowngradeToCommunityLink", () => {
     render(<DowngradeToCommunityLink />);
     await user.click(screen.getByText("Downgrade to Community"));
 
-    expect(screen.getByText(/Every connector becomes public/)).toBeVisible();
+    expect(screen.getByText(/visible to all users/)).toBeVisible();
     expect(mockDowngradeToCommunity).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Downgrade" }));

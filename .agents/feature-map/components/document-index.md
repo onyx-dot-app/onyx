@@ -40,8 +40,9 @@ in the banner, but cannot trigger a popup. See `backend/onyx/document_index/open
 for thresholds, timeouts, and recovery behavior.
 
 An admin experiences it directly on the embedding-model page. They pick a new
-embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, and
-more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. From that point,
+embedding model (self-hosted, Cohere, OpenAI, Azure, Bedrock, Vertex, LiteLLM, Bifrost,
+and more), optionally run a sample embedding test (a fixed test string, not a document), and start a re-index. Bifrost
+always runs the test, because its model ID is free text. From that point,
 Onyx builds a second, parallel index in the background using the new model while the
 old index keeps serving live search. A progress view shows re-index status and errors.
 When indexing catches up (the exact criterion depends on the switchover type chosen),
@@ -63,7 +64,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 |---|---|---|---|
 | GET | `/manage/admin/opensearch-health` | `read_resource_health` | Cached resource pressure; requires `FULL_ADMIN_PANEL_ACCESS`. |
 | POST | `/manage/admin/opensearch-health/popup` | `claim_resource_popup` | Claims a tenant-scoped, per-admin 24-hour popup allowance in Redis. |
-| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. |
+| POST | `/search-settings/set-new-search-settings` | `set_new_search_settings` | Creates a FUTURE `SearchSettings` row, starts a re-index. Requires `FULL_ADMIN_PANEL_ACCESS`. For Bifrost it first embeds a test string and rejects a failed call or a dimension mismatch. |
 | POST | `/search-settings/cancel-new-embedding` | `cancel_new_embedding` | Cancels the in-flight FUTURE re-index. |
 | DELETE | `/search-settings/delete-search-settings` | | |
 | GET | `/search-settings/get-current-search-settings` | | The PRESENT row. |
@@ -74,7 +75,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 | POST | `/search-settings/reindex/port/resume` | | Resumes a stalled reindex-port backfill. |
 | POST | `/search-settings/update-inference-settings` | | |
 | GET/PUT/DELETE | `/search-settings/unstructured-api-key-set`, `/upsert-unstructured-api-key`, `/delete-unstructured-api-key` | | Unrelated document-parsing key, colocated in this router. |
-| POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. |
+| POST | `/admin/embedding/test-embedding` | `test_embedding_configuration` (`server/manage/embedding/api.py`) | Dry-run an embedding call against a candidate config. Returns the vector length as `dimension`. |
 | GET | `/admin/embedding` | `list_embedding_models` | |
 | GET/PUT/DELETE | `/admin/embedding/embedding-provider[/{provider_type}]` | | Cloud embedding provider credentials. |
 
@@ -89,7 +90,6 @@ Per the frontend rule in `CLAUDE.md`, always call these through the web server
 | `USING_AWS_MANAGED_OPENSEARCH` | false | Changes shard/replica counts (`schema.py:DocumentSchema.get_index_settings_based_on_environment`) and gates IAM auth. |
 | `OPENSEARCH_TEXT_ANALYZER` | `"english"` | Stemming/tokenization analyzer for `title`/`content`. Changing it needs a reindex of existing indices. |
 | `OPENSEARCH_INDEX_NUM_SHARDS` / `OPENSEARCH_INDEX_NUM_REPLICAS` | environment-dependent | Override shard/replica counts. |
-| `HYBRID_SEARCH_SUBQUERY_CONFIGURATION` | `2` (`CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD`) | Integer enum value. `1` is the title-vector variant. Chooses which subqueries and weight set hybrid search uses (`opensearch/constants.py`). An invalid value blocks app start. |
 | `HYBRID_SEARCH_NORMALIZATION_PIPELINE` | `1` (`MIN_MAX`) | Integer enum value. `2` is `ZSCORE`. Chooses the OpenSearch normalization technique (`opensearch/constants.py`). |
 | `ENABLE_CC_PAIR_ACCESS_FILTER` | false | Fallback for the `cc_pair_access_filter` `enabled` runtime flag. True turns on shadow mode (see §4.3). The `enforce` flag has no env var and defaults to false. |
 | `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES` | 500 | Candidates fetched per hybrid subquery before fusion. |
@@ -138,9 +138,11 @@ used for query responses that exclude vectors.
 Field-name constants (all in `opensearch/schema.py`), grouped by role:
 
 - Content and vectors: `TITLE_FIELD_NAME`, `CONTENT_FIELD_NAME` (`text`, stemmed by
-  `OPENSEARCH_TEXT_ANALYZER`), `TITLE_VECTOR_FIELD_NAME`, `CONTENT_VECTOR_FIELD_NAME`
-  (`knn_vector`, HNSW/`cosinesimil`/`lucene` engine, `EF_CONSTRUCTION`/`M` from
-  `opensearch/constants.py`).
+  `OPENSEARCH_TEXT_ANALYZER`), `CONTENT_VECTOR_FIELD_NAME` (`knn_vector`,
+  HNSW/`cosinesimil`/`lucene` engine, `EF_CONSTRUCTION`/`M` from
+  `opensearch/constants.py`). `TITLE_VECTOR_FIELD_NAME` is no longer mapped or
+  written; indices created before its removal still store it until reindexed, so
+  searches keep excluding it from `_source`.
 - Access control: `PUBLIC_FIELD_NAME`, `ACCESS_CONTROL_LIST_FIELD_NAME`,
   `HIDDEN_FIELD_NAME`.
 - Identity and chunking: `DOCUMENT_ID_FIELD_NAME`, `CHUNK_INDEX_FIELD_NAME`,
@@ -230,6 +232,12 @@ mid-port, when a metadata update lands on the primary before the reindex port ha
 copied that document into the FUTURE index; callers use this to defer the secondary
 sync instead of failing outright.
 
+After a bulk write, `bulk_index_documents` sends the written and failed chunk
+counts as fleet `write` counters (`opensearch/client.py:_report_written_chunks`)
+when an index attempt is in context (`INDEX_ATTEMPT_INFO_CONTEXTVAR`). A benign
+create-only conflict counts as neither. A bulk call that raises sends no counters.
+See [[observability]] §4.11.
+
 `SchemaVerifiable.verify_and_create_index_if_necessary(embedding_dim)` is called on backend construction paths and at swap time
 (`swap_index.py:_perform_index_swap`) to make sure the physical index exists before
 anything writes to it.
@@ -242,8 +250,8 @@ contiguous chunk range, assuming non-overlapping chunking).
 
 For OpenSearch, one hybrid call is built by
 `search.py:DocumentQuery.get_hybrid_search_query`. It assembles keyword and vector
-subqueries (`_get_hybrid_search_subqueries`, shape controlled by
-`HYBRID_SEARCH_SUBQUERY_CONFIGURATION`), wraps them in an OpenSearch `hybrid` compound
+subqueries (`_get_hybrid_search_subqueries`: a `content_vector` k-NN query and a
+combined title/content keyword query), wraps them in an OpenSearch `hybrid` compound
 query with a shared `pagination_depth` and a single AND-ed `filter.bool.filter` list,
 and excludes the vector fields from `_source` on the way back out.
 
@@ -251,13 +259,8 @@ Score combination happens in an OpenSearch **search pipeline**, not in applicati
 code: `get_normalization_pipeline_name_and_config` selects `min_max` or `z_score`
 normalization (`HYBRID_SEARCH_NORMALIZATION_PIPELINE`), and both build a
 `normalization-processor` with `combination.technique = "arithmetic_mean"` and
-`_get_hybrid_search_normalization_weights()` as the per-subquery weights. Two weight
-sets exist, one per subquery configuration:
-
-- `CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD` (default): content-vector 0.5,
-  combined keyword 0.5.
-- `TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD`: title-vector 0.1,
-  content-vector 0.45, combined keyword 0.45.
+`_get_hybrid_search_normalization_weights()` as the per-subquery weights:
+content-vector 0.5, combined keyword 0.5.
 
 `_get_hybrid_search_normalization_weights` asserts the weights it returns sum to
 `1.0`, and a code comment states the weight order must match the subquery order
@@ -296,7 +299,8 @@ where the old and new filters disagree. In `ENFORCE` mode,
 `_get_enforced_cc_pair_access` swaps in the cc-pair filter, which tests
 `cc_pair_ids` against the user's open and ACL cc-pairs. Chunks with no cc-pair (user
 files) fall back to the old ACL filter. Even in `OFF` mode, the filter exists to hide
-`SYNC_RESTRICTED` cc-pairs (`hidden_restricted_cc_pair_ids`). See [[permission-sync]].
+`SYNC_RESTRICTED` cc-pairs and cc-pairs awaiting their first permission sync
+(`hidden_restricted_cc_pair_ids`). See [[access-control]] §4.3a.
 Chunks get `cc_pair_ids` at index time. The beat task
 `cc_pair_ids_backfill` fills older chunks without re-embedding, with progress in the
 KV store (`KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY`), restarted per `SearchSettings`
@@ -389,8 +393,8 @@ comment reads `# No longer used`. See §9.
    `_get_acl_visibility_filter`; that is the only place ACL and public-doc visibility
    is enforced at the index layer. See [[access-control]].
 3. **Hybrid normalization weights must sum to 1.0.** Enforced by an `assert` in
-   `_get_hybrid_search_normalization_weights`; a new subquery configuration that
-   forgets this crashes on the first call, not silently.
+   `_get_hybrid_search_normalization_weights`; a weight change that forgets this
+   crashes on the first call, not silently.
 4. **Weight order must match subquery order.** The normalization pipeline associates
    weights with clauses positionally, with no other binding.
 5. **A schema change needs a migration path for existing indices**, because
@@ -437,6 +441,10 @@ comment reads `# No longer used`. See §9.
   and drive document-set/ACL updates through `Updatable.update`.
 - [[core-chat-loop]]: search tools ultimately bottom out in this component's retrieval
   methods.
+- [[observability]]: after each resource check,
+  `opensearch/resource_health.py:refresh_resource_health` also reads cluster health
+  and sends a fleet `resource` event (`_report_to_fleet`). Only status, counts,
+  pressure flags, and check times leave the process.
 
 ---
 
@@ -445,7 +453,7 @@ comment reads `# No longer used`. See §9.
 | If your change… | Also check |
 |---|---|
 | adds a chunk field | `opensearch/schema.py` mapping, `DocumentChunk`/`DocumentChunkWithoutVectors`, the writer in [[indexing-pipeline]], any query/filter that should read it, and a migration path for indices created before the change |
-| changes hybrid weights or the subquery configuration | run a retrieval-quality eval before shipping; the weights-sum-to-1.0 assert catches arithmetic mistakes but not quality regressions |
+| changes hybrid weights or subqueries | run a retrieval-quality eval before shipping; the weights-sum-to-1.0 assert catches arithmetic mistakes but not quality regressions |
 | adds a filter | `_get_search_filters` and every one of its private helper functions that builds one clause; the hybrid, keyword, semantic, and random query builders all call the same function, so a filter added there applies everywhere automatically, but a filter added ad hoc to just one query builder will not |
 | changes `SearchSettings` | `create_search_settings`, `update_search_settings`, the reindex request models in `server/manage/search_settings.py`, and `EmbeddingModel.from_db_model` if the field feeds the embedder |
 | touches the swap state machine (`IndexModelStatus` or `IndexReclaimStatus`) | `swap_index.py:_perform_index_swap`, every `advance_to_*` helper's prior-state guard, and the reclaim beat task; a broken guard can double-delete or skip the soak window |

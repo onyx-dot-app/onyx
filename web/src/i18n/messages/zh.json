@@ -1429,24 +1429,33 @@
           "label": "降级到 Community"
         },
         "modal": {
+          "changes": {
+            "text": "降级后："
+          },
           "confirmButton": {
             "label": "降级",
             "loading": "正在降级..."
           },
-          "connectors": {
-            "text": "所有连接器都将变为公开。原先因同步权限或用户组而保持私有的文档将对所有用户可见。索引重写完成后搜索结果才会更新，大型索引可能需要一些时间。"
+          "deleted": {
+            "text": "**删除：** 用户组、服务账户 API 密钥、令牌速率限制和钩子；"
           },
-          "description": "此操作会移除您的许可证和所有付费功能，且无法撤销。",
-          "features": {
-            "text": "服务账号 API 密钥、Token 速率限制和钩子将被删除。标准回答和 SCIM 令牌将被停用。自定义品牌和聊天保留期限将被重置。"
+          "description": "移除您的许可证和所有付费功能。",
+          "disabled": {
+            "text": "**停用：** 标准答案和 SCIM 令牌；"
           },
-          "groups": {
-            "text": "用户组将被移除。与用户组共享的智能体、文档集、LLM 提供商、MCP 服务器和技能将变为公开。"
+          "intro": {
+            "text": "访问控制将从此部署中移除。**这会启动重新索引**，使搜索结果反映此更改，大型索引可能需要一段时间。"
           },
-          "license": {
-            "text": "许可证将从此部署中移除。"
+          "madePublic": {
+            "text": "**公开：** 所有连接器，以及与用户组共享的代理、文档集、LLM 提供方、MCP 服务器和技能；"
           },
-          "title": "降级到 Community Edition"
+          "reset": {
+            "text": "**重置为默认：** 自定义品牌和聊天保留策略。"
+          },
+          "title": "降级到 Community Edition",
+          "warning": {
+            "text": "受同步权限或用户组限制的文档将**对所有用户可见**。此操作无法撤销。"
+          }
         }
       },
       "footer": {
@@ -5112,6 +5121,16 @@
           "title": "目标 URL"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "Bifrost 网关的基础 URL。{appName} 会将嵌入请求发送到其 /v1/embeddings 端点。",
+          "title": "基础 URL"
+        },
+        "modelName": {
+          "description": "Bifrost 模型 ID，例如 openai/text-embedding-3-large。保存时，{appName} 会对一段测试文本进行嵌入，以确认这是嵌入模型并获取其维度。",
+          "editDescription": "{appName} 当前使用此模型。保存时会使用新的 URL 和密钥对其进行测试。要使用其他模型，请在模型列表中选择。"
+        }
+      },
       "cancelReindexModal": {
         "description": "取消后将还原为之前的 embedding 模型，并且所有重新索引的进度都会丢失。",
         "submit": {
@@ -6193,6 +6212,19 @@
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "自动模式",
+          "description": "在模型选择器中添加 Auto 项，为每条消息选择最合适的模型。"
+        },
+        "target": {
+          "title": "路由器模型",
+          "description": "负责 Auto 模式的模型路由。",
+          "empty": "未找到路由器模型。请先在网关提供商上启用一个路由器模型。",
+          "error": "无法加载路由器模型。",
+          "retry": "重试"
+        }
       }
     },
     "mcpActions": {
@@ -11217,6 +11249,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "此模型不支持修改该设置。"
+      },
+      "autoItem": {
+        "label": "自动",
+        "description": "为每条消息选择最佳模型"
       }
     },
     "nrf": {
@@ -12300,6 +12336,11 @@
       },
       "toggleItem": {
         "ariaLabel": "展开或折叠 {name}"
+      },
+      "status": {
+        "loading": "正在加载输出…",
+        "incomplete": "部分输出无法列出。请打开“文件”浏览工作区。",
+        "error": "无法刷新输出。请重试。"
       }
     },
     "chatPanel": {
@@ -12438,6 +12479,10 @@
       },
       "noContent": {
         "label": "无内容"
+      },
+      "csv": {
+        "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
+        "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
       }
     },
     "filesTab": {
@@ -12445,17 +12490,11 @@
         "description": "构建过程中创建的文件将显示在这里",
         "title": "暂无文件"
       },
-      "emptyDirectory": {
-        "label": "此目录中没有文件"
-      },
       "error": {
         "title": "加载文件出错"
       },
       "loading": {
         "label": "正在加载文件..."
-      },
-      "loadingChildren": {
-        "label": "加载中..."
       },
       "preparing": {
         "description": "正在设置您的开发环境",
@@ -12472,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "{name} 的预览"
+      },
+      "background": {
+        "contrast": "对比背景"
       }
     },
     "inputBar": {
@@ -12615,6 +12657,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "关闭 {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "开始构建内容即可查看产物！"
       },
@@ -12638,6 +12683,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "幻灯片"
+      },
+      "previous": {
+        "label": "上一张幻灯片"
+      },
+      "next": {
+        "label": "下一张幻灯片"
+      },
       "converting": {
         "label": "正在转换演示文稿..."
       },
@@ -12652,6 +12706,9 @@
       },
       "slide": {
         "counter": "幻灯片 {current} / {total}"
+      },
+      "resize": {
+        "ariaLabel": "调整幻灯片缩略图宽度"
       }
     },
     "previewTab": {
@@ -13043,9 +13100,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
-        },
-        "failed": {
-          "tag": "{count} 个失败"
         },
         "working": {
           "label": "处理中"

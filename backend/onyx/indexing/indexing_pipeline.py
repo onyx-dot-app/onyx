@@ -114,6 +114,7 @@ from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
 from onyx.utils.batching import batch_generator
+from onyx.utils.fleet_telemetry import emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_documents_for_postgres
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -361,6 +362,16 @@ def embed_and_stream(
             store=store,
         )
         embed_duration_ms = max(0, int((time.monotonic() - embed_start) * 1000))
+        emit_stage_counter(
+            attempt_id,
+            "embed",
+            {
+                "embed_chunks": len(result.successful_chunk_ids),
+                "embed_errors": len(result.connector_failures),
+            },
+            duration_ms=embed_duration_ms,
+            tenant_id=tenant_id,
+        )
         safe_record_single_event_if_set(
             IndexAttemptStage.EMBEDDING, attempt_id, embed_duration_ms
         )

@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("api_host", ["web.example.com", "api.example.com"])
@@ -83,7 +83,7 @@ def test_rendered_mcp_routes_match_the_web_domain_resource(
     web_api: dict[str, Any] = next(
         rule for rule in api["spec"]["rules"] if rule["host"] == "web.example.com"
     )
-    path = web_api["http"]["paths"][0]
+    path: dict[str, Any] = web_api["http"]["paths"][0]
     assert path["backend"]["service"]["name"] == "onyx-api-service"
     assert (
         api["metadata"]["annotations"]["nginx.ingress.kubernetes.io/rewrite-target"]
@@ -105,56 +105,49 @@ def _read(relative_path: str) -> str:
 
 
 def test_mcp_oauth_discovery_routes_use_generic_oauth_provider() -> None:
-    nginx = _read("deployment/data/nginx/mcp.conf.inc.template")
-    helm_nginx = _read("deployment/helm/charts/onyx/templates/nginx-conf.yaml")
-    next_config = _read("web/next.config.js")
-    ingress = _read("deployment/helm/charts/onyx/templates/ingress-api.yaml")
+    nginx: str = _read("deployment/data/nginx/mcp.conf.inc.template")
+    helm_nginx: str = _read("deployment/helm/charts/onyx/templates/nginx-conf.yaml")
+    ingress: str = _read("deployment/helm/charts/onyx/templates/ingress-api.yaml")
 
-    for content in (nginx, helm_nginx, next_config, ingress):
+    for content in (nginx, helm_nginx, ingress):
         assert "/oauth-provider/metadata" in content
         assert "/mcp-oauth/metadata" not in content
 
-    assert (
-        r"^/\.well-known/oauth-authorization-server(/.*)?/api/oauth-provider/?$"
-        in nginx
-    )
-    assert 'source: "/.well-known/oauth-authorization-server/:path*"' in next_config
+    assert r"^/\.well-known/oauth-authorization-server(/.*)?$" in nginx
     assert r"path: /\.well-known/oauth-authorization-server(/|$)(.*)" in ingress
     assert ingress.count("pathType: ImplementationSpecific") == 3
     assert ingress.count('nginx.ingress.kubernetes.io/use-regex: "true"') == 2
     assert "proxy_pass http://mcp_server;" in nginx
-    assert (
-        "destination: `${\n"
-        '          process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090"\n'
-        "        }/.well-known/oauth-protected-resource/:path*`"
-    ) in next_config
 
 
 def test_deployment_restarts_nginx() -> None:
-    values = _read("deployment/helm/charts/onyx/values.yaml")
+    values: str = _read("deployment/helm/charts/onyx/values.yaml")
 
-    chart_version = re.search(
+    chart_version: re.Match[str] | None = re.search(
         r"^version: (\d+)\.(\d+)\.(\d+)$",
         _read("deployment/helm/charts/onyx/Chart.yaml"),
         re.MULTILINE,
     )
     assert chart_version is not None
     assert tuple(int(part) for part in chart_version.groups()) >= (0, 9, 4)
-    restart_version = re.search(r'onyx.app/nginx-config-version: "(\d+)"', values)
+    restart_version: re.Match[str] | None = re.search(
+        r'onyx.app/nginx-config-version: "(\d+)"', values
+    )
     assert restart_version is not None
     assert int(restart_version.group(1)) >= 8
 
 
 def test_ingress_discovery_patterns_match_only_literal_well_known_paths() -> None:
-    template = _read("deployment/helm/charts/onyx/templates/ingress-api.yaml") + _read(
-        "deployment/helm/charts/onyx/templates/ingress-mcp.yaml"
-    )
-    paths = re.findall(r"- path: (.+well-known.+)", template)
+    template: str = _read(
+        "deployment/helm/charts/onyx/templates/ingress-api.yaml"
+    ) + _read("deployment/helm/charts/onyx/templates/ingress-mcp.yaml")
+    paths: list[str] = re.findall(r"- path: (.+well-known.+)", template)
     assert len(paths) == 2
     for path in paths:
-        pattern = re.compile("^" + path)
-        literal = path.removesuffix("(/|$)(.*)").replace(r"\.", ".")
+        pattern: re.Pattern[str] = re.compile("^" + path)
+        literal: str = path.removesuffix("(/|$)(.*)").replace(r"\.", ".")
         assert pattern.fullmatch(literal)
         assert pattern.fullmatch(literal + "/api/oauth-provider")
+        assert pattern.fullmatch(literal + "/mcp")
         assert not pattern.match(literal.replace("/.well-known", "/xwell-known"))
         assert not pattern.match(literal + "-unrelated")

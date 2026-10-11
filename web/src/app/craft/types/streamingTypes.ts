@@ -202,6 +202,17 @@ export interface ApiWebappInfoResponse {
   sharing_scope: SharingScope;
 }
 
+export interface OutputFile {
+  path: string;
+  revision: string;
+  size: number;
+}
+
+export interface OutputInventory {
+  files: OutputFile[];
+  complete: boolean;
+}
+
 export interface FileSystemEntry {
   name: string;
   path: string;

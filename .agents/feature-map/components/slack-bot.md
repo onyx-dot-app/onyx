@@ -85,6 +85,10 @@ tenants via a Redis lock (`OnyxRedisLocks.SLACK_BOT_LOCK`,
 `config.py:TENANT_LOCK_EXPIRATION` = 1800s) so exactly one pod owns a tenant's
 Slack bots at a time, up to `MAX_TENANTS_PER_POD` (default 50).
 
+The `__main__` block starts the process's fleet telemetry sender
+(`utils/fleet_telemetry.py:start_telemetry`) before it creates the
+`SlackbotHandler` and its message-processing threads.
+
 ### Environment configuration (`backend/onyx/configs/onyxbot_configs.py`)
 
 | Variable | Default | Effect |
@@ -245,6 +249,10 @@ message.
 never issues an HTTP request to `POST /chat/send-chat-message`
 (`chat_backend.py:handle_send_chat_message`), so it never goes through that
 endpoint's FastAPI `Depends` chain. See §5 and §9 for what that skips.
+Because `handle_stream_message_objects` carries
+`utils/fleet_query_telemetry.py:telemetry_chat`, each Slack answer also queues a
+fleet `query` event with the channel `slack` (from `MessageOrigin.SLACKBOT`) on the
+listener's sender.
 
 It passes
 `slack_context=message_info.slack_context` (drives federated Slack search,
@@ -356,6 +364,8 @@ that point is not the message's original asker.
   `ChatSession`/`ChatMessage` rows via the same tables `save_chat_turn` writes.
 - [[rate-and-usage-limits]]: `check_token_rate_limits(usage_user)` runs
   before each answer; see §9 for why it must be called inline.
+- [[observability]]: the fleet telemetry sender that `listener.py` starts (§2),
+  which carries the Slack answers' query events.
 
 **Depended on by**
 - [[chat-persistence]]: seeded web sessions from
@@ -476,7 +486,7 @@ See `backend/AGENTS.md` for required env and secrets.
   document, is posted into the Slack thread on failure unless an operator
   explicitly sets it to `"false"`.
 - **`respond_member_group_list` is a single allowlist doing two jobs.** It gates
-  who can invoke the bot at all (before telemetry, before user provisioning) and
+  who can invoke the bot at all (before answer processing, before user provisioning) and
   also scopes who sees the ephemeral response. Configuring it wrong (e.g. an
   admin expecting it to only affect visibility) silences the bot for everyone
   else in the channel, including tags and DMs.

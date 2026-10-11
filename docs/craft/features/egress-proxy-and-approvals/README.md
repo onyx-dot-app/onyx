@@ -20,15 +20,16 @@ The short version:
 
 Proxy runtime:
 
+- `backend/onyx/sandbox_proxy/models.py` defines shared destination, credential
+  injection, and MCP classification models.
 - `backend/onyx/sandbox_proxy/server.py` starts mitmproxy, health checks, CA
   bootstrap, identity lookup, request evaluator, credential resolvers, and the
   gate addon.
 - `backend/onyx/sandbox_proxy/addons/gate.py` owns request classification,
   approval parking, grant resolution, credential injection dispatch, internal
   destination blocking, and SIGTERM drain cleanup.
-- `backend/onyx/sandbox_proxy/identity.py`,
-  `identity_k8s.py`, and `identity_docker.py` resolve source IPs to sandbox,
-  tenant, and user identity.
+- `backend/onyx/sandbox_proxy/sandbox_identity/` modules resolve source IPs to sandbox,
+  tenant, and user identity. Its `models.py` defines the identity and session models.
 - `backend/onyx/sandbox_proxy/request_evaluator.py` turns mitmproxy requests
   into external-app action matches.
 - `backend/onyx/sandbox_proxy/credential_injection.py` and
@@ -36,7 +37,7 @@ Proxy runtime:
   and external-app credentials.
 - `backend/onyx/sandbox_proxy/approval_cache.py` defines Redis announce, wake,
   and session-grant cache keys.
-- `backend/onyx/sandbox_proxy/ca.py`, `ca_k8s.py`, and `ca_docker.py` manage
+- `backend/onyx/sandbox_proxy/certificate_authority/` modules manage
   the proxy CA.
 
 Approval persistence and API:

@@ -19,6 +19,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     DocumentSource,
     EntityFailure,
+    HierarchyNode,
     TextSection,
 )
 from onyx.connectors.sharepoint import connector as sp_connector
@@ -243,6 +244,40 @@ def test_permission_indexing_skips_drive_without_list_id(
     assert len(failures) == 1
     assert "requires a list ID" in failures[0].failure_message
     assert final_checkpoint.current_drive is None
+
+
+def test_drive_init_failure_yields_the_next_site_node(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A site whose drives fail to load (e.g. throttled) moves on to the next
+    site, which must still get its hierarchy node: its drives use it as
+    their parent."""
+    connector = _setup_connector(monkeypatch)
+    next_site_url = "https://example.sharepoint.com/sites/next"
+
+    def failing_get_drives(_site_url: str) -> list[SiteDrive]:
+        raise RuntimeError("The request has been throttled")
+
+    monkeypatch.setattr(connector, "_get_drives_for_site", failing_get_drives)
+    checkpoint = SharepointConnectorCheckpoint(has_more=True)
+    checkpoint.cached_site_descriptors = deque(
+        [SiteDescriptor(url=next_site_url, drive_name=None, folder_path=None)]
+    )
+    checkpoint.current_site_descriptor = SiteDescriptor(
+        url=SITE_URL, drive_name=None, folder_path=None
+    )
+
+    yielded, final_checkpoint = _consume_generator(
+        connector._load_from_checkpoint(
+            _EPOCH_START, _END_TS, checkpoint, include_permissions=False
+        )
+    )
+
+    assert len(_failures_from(yielded)) == 1
+    site_nodes = [y for y in yielded if isinstance(y, HierarchyNode)]
+    assert [node.raw_node_id for node in site_nodes] == [next_site_url]
+    assert final_checkpoint.current_site_descriptor is not None
+    assert final_checkpoint.current_site_descriptor.url == next_site_url
 
 
 # ---------------------------------------------------------------------------

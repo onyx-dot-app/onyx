@@ -75,12 +75,20 @@ class LuceneScalarQuantization(BaseModel):
     rescore_oversample_factor: float
     # The first (major, minor) OpenSearch version that accepts these bits.
     min_opensearch_version: tuple[int, int]
+    # Quantile range of each dimension the 7-bit quantizer keeps; values
+    # outside it are clipped. Only 7-bit accepts it. Unset, OpenSearch 3.6's
+    # 7-bit format clipped as hard as 0.9 and lost most of its recall on
+    # Cohere embed-english-v3.0; 1.0 keeps the full range.
+    confidence_interval: float | None = None
 
 
 # VectorQuantization.NONE has no entry.
 LUCENE_SCALAR_QUANTIZATION: dict[VectorQuantization, LuceneScalarQuantization] = {
     VectorQuantization.SCALAR_7_BIT: LuceneScalarQuantization(
-        bits=7, rescore_oversample_factor=1.0, min_opensearch_version=(2, 16)
+        bits=7,
+        rescore_oversample_factor=1.0,
+        min_opensearch_version=(2, 16),
+        confidence_interval=1.0,
     ),
     VectorQuantization.SCALAR_1_BIT: LuceneScalarQuantization(
         bits=1, rescore_oversample_factor=2.0, min_opensearch_version=(3, 6)
@@ -111,24 +119,6 @@ class OpenSearchSearchType(str, Enum):
     DOC_ID_RETRIEVAL = "doc_id_retrieval"
     CC_PAIR_ACCESS_SHADOW = "cc_pair_access_shadow"
     UNKNOWN = "unknown"
-
-
-class HybridSearchSubqueryConfiguration(Enum):
-    TITLE_VECTOR_CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD = 1
-    # Current default.
-    CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD = 2
-
-
-# Will raise and block application start if HYBRID_SEARCH_SUBQUERY_CONFIGURATION
-# is set but not a valid value. If not set, defaults to
-# CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD.
-HYBRID_SEARCH_SUBQUERY_CONFIGURATION: HybridSearchSubqueryConfiguration = (
-    HybridSearchSubqueryConfiguration(
-        int(os.environ["HYBRID_SEARCH_SUBQUERY_CONFIGURATION"])
-    )
-    if os.environ.get("HYBRID_SEARCH_SUBQUERY_CONFIGURATION", None) is not None
-    else HybridSearchSubqueryConfiguration.CONTENT_VECTOR_TITLE_CONTENT_COMBINED_KEYWORD
-)
 
 
 class HybridSearchNormalizationPipeline(Enum):

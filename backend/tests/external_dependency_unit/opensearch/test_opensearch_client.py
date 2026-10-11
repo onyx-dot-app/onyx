@@ -33,7 +33,6 @@ from onyx.document_index.opensearch.client import (
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     HybridSearchNormalizationPipeline,
-    HybridSearchSubqueryConfiguration,
     OpenSearchSearchType,
 )
 from onyx.document_index.opensearch.index_reclaim import (
@@ -81,29 +80,6 @@ def _patch_global_tenant_state(monkeypatch: pytest.MonkeyPatch, state: bool) -> 
     monkeypatch.setattr("onyx.document_index.opensearch.schema.MULTI_TENANT", state)
 
 
-def _patch_hybrid_search_subquery_configuration(
-    monkeypatch: pytest.MonkeyPatch, configuration: HybridSearchSubqueryConfiguration
-) -> None:
-    """
-    Patches HYBRID_SEARCH_SUBQUERY_CONFIGURATION wherever necessary for this
-    test file.
-
-    Args:
-        monkeypatch: The test instance's monkeypatch instance, used for
-            patching.
-        configuration: The intended state of
-            HYBRID_SEARCH_SUBQUERY_CONFIGURATION.
-    """
-    monkeypatch.setattr(
-        "onyx.document_index.opensearch.constants.HYBRID_SEARCH_SUBQUERY_CONFIGURATION",
-        configuration,
-    )
-    monkeypatch.setattr(
-        "onyx.document_index.opensearch.search.HYBRID_SEARCH_SUBQUERY_CONFIGURATION",
-        configuration,
-    )
-
-
 def _patch_hybrid_search_normalization_pipeline(
     monkeypatch: pytest.MonkeyPatch, pipeline: HybridSearchNormalizationPipeline
 ) -> None:
@@ -145,7 +121,6 @@ def _create_test_document_chunk(
     chunk_index: int = 0,
     content_vector: list[float] | None = None,
     title: str | None = None,
-    title_vector: list[float] | None = None,
     hidden: bool = False,
     document_access: DocumentAccess = _PUBLIC_DOCUMENT_ACCESS,
     source_type: DocumentSource = DocumentSource.FILE,
@@ -158,15 +133,10 @@ def _create_test_document_chunk(
         # Generate dummy vector - 128 dimensions for fast testing.
         content_vector = [0.1] * 128
 
-    # If title is provided but no vector, generate one.
-    if title is not None and title_vector is None:
-        title_vector = [0.2] * 128
-
     return DocumentChunk(
         document_id=document_id,
         chunk_index=chunk_index,
         title=title,
-        title_vector=title_vector,
         content=content,
         content_vector=content_vector,
         source_type=source_type.value,
@@ -1505,13 +1475,13 @@ class TestOpenSearchClient:
                 properties_to_update={"hidden": True},
             )
 
-    def test_hybrid_search_configurations_and_pipelines(
+    def test_hybrid_search_pipelines(
         self,
         test_client: OpenSearchIndexClient,
         search_pipeline: None,  # noqa: ARG002
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Tests all hybrid search configurations and pipelines."""
+        """Tests hybrid search under every normalization pipeline."""
         # Precondition.
         _patch_global_tenant_state(monkeypatch, False)
         _patch_opensearch_match_highlights_disabled(monkeypatch, False)
@@ -1551,62 +1521,58 @@ class TestOpenSearchClient:
         # Refresh index to make documents searchable.
         test_client.refresh_index()
 
-        for configuration in HybridSearchSubqueryConfiguration:
-            _patch_hybrid_search_subquery_configuration(monkeypatch, configuration)
-            for pipeline in HybridSearchNormalizationPipeline:
-                _patch_hybrid_search_normalization_pipeline(monkeypatch, pipeline)
-                pipeline_name, pipeline_config = (
-                    get_normalization_pipeline_name_and_config()
-                )
-                test_client.create_search_pipeline(
-                    pipeline_id=pipeline_name,
-                    pipeline_body=pipeline_config,
-                )
+        for pipeline in HybridSearchNormalizationPipeline:
+            _patch_hybrid_search_normalization_pipeline(monkeypatch, pipeline)
+            pipeline_name, pipeline_config = (
+                get_normalization_pipeline_name_and_config()
+            )
+            test_client.create_search_pipeline(
+                pipeline_id=pipeline_name,
+                pipeline_body=pipeline_config,
+            )
 
-                # Search query.
-                query_text = "Python programming"
-                query_vector = _generate_test_vector(0.12)
-                search_body = DocumentQuery.get_hybrid_search_query(
-                    query_text=query_text,
-                    query_vector=query_vector,
-                    num_hits=5,
-                    tenant_state=tenant_state,
-                    # We're not worried about filtering here. tenant_id in this object
-                    # is not relevant.
-                    index_filters=IndexFilters(
-                        access_control_list=None, tenant_id=None
-                    ),
-                    include_hidden=False,
-                )
+            # Search query.
+            query_text = "Python programming"
+            query_vector = _generate_test_vector(0.12)
+            search_body = DocumentQuery.get_hybrid_search_query(
+                query_text=query_text,
+                query_vector=query_vector,
+                num_hits=5,
+                tenant_state=tenant_state,
+                # We're not worried about filtering here. tenant_id in this object
+                # is not relevant.
+                index_filters=IndexFilters(access_control_list=None, tenant_id=None),
+                include_hidden=False,
+            )
 
-                # Under test.
-                results = test_client.search(
-                    body=search_body, search_pipeline_id=pipeline_name
-                )
+            # Under test.
+            results = test_client.search(
+                body=search_body, search_pipeline_id=pipeline_name
+            )
 
-                # Postcondition.
-                assert len(results) == len(docs)
-                # Assert that all the chunks above are present.
-                assert all(
-                    chunk.document_chunk.document_id in docs.keys() for chunk in results
+            # Postcondition.
+            assert len(results) == len(docs)
+            # Assert that all the chunks above are present.
+            assert all(
+                chunk.document_chunk.document_id in docs.keys() for chunk in results
+            )
+            # Make sure the chunk contents are preserved.
+            for i, chunk in enumerate(results):
+                expected = docs[chunk.document_chunk.document_id]
+                assert chunk.document_chunk == DocumentChunkWithoutVectors(
+                    **{
+                        k: getattr(expected, k)  # ods: ignore[getattr]
+                        for k in DocumentChunkWithoutVectors.model_fields
+                    }
                 )
-                # Make sure the chunk contents are preserved.
-                for i, chunk in enumerate(results):
-                    expected = docs[chunk.document_chunk.document_id]
-                    assert chunk.document_chunk == DocumentChunkWithoutVectors(
-                        **{
-                            k: getattr(expected, k)  # ods: ignore[getattr]
-                            for k in DocumentChunkWithoutVectors.model_fields
-                        }
-                    )
-                    # Make sure score reporting seems reasonable (it should not be None
-                    # or 0).
-                    assert chunk.score
-                    # Make sure there is some kind of match highlight only for the first
-                    # result. The other results are so bad they're not expected to have
-                    # match highlights.
-                    if i == 0:
-                        assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
+                # Make sure score reporting seems reasonable (it should not be None
+                # or 0).
+                assert chunk.score
+                # Make sure there is some kind of match highlight only for the first
+                # result. The other results are so bad they're not expected to have
+                # match highlights.
+                if i == 0:
+                    assert chunk.match_highlights.get(CONTENT_FIELD_NAME, [])
 
     def test_search_empty_index(
         self,

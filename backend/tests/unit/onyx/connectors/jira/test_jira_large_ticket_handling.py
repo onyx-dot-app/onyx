@@ -1,94 +1,47 @@
-from collections.abc import Generator
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from jira.resources import Issue
-from pytest_mock import MockFixture
 
 from onyx.connectors.jira.connector import _perform_jql_search, process_jira_issue
 
 
 @pytest.fixture
-def mock_jira_client() -> MagicMock:
-    return MagicMock()
+def mock_issue_small(
+    create_mock_issue: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    return create_mock_issue(
+        key="SMALL-1",
+        summary="Small Issue",
+        description="Small description",
+        comments=[{"body": "Small comment 1"}, {"body": "Small comment 2"}],
+    )
 
 
 @pytest.fixture
-def mock_issue_small() -> MagicMock:
-    issue = MagicMock(spec=Issue)
-    fields = MagicMock()
-    fields.description = "Small description"
-    fields.comment = MagicMock()
-    fields.comment.comments = [
-        MagicMock(body="Small comment 1"),
-        MagicMock(body="Small comment 2"),
-    ]
-    fields.reporter = MagicMock()
-    fields.reporter.displayName = "John Doe"
-    fields.reporter.emailAddress = "john@example.com"
-    fields.assignee = MagicMock()
-    fields.assignee.displayName = "John Doe"
-    fields.assignee.emailAddress = "john@example.com"
-    fields.summary = "Small Issue"
-    fields.updated = "2023-01-01T00:00:00+0000"
-    fields.created = "2023-01-01T00:00:00+0000"
-    fields.labels = []
-
-    issue.fields = fields
-    issue.key = "SMALL-1"
-    return issue
-
-
-@pytest.fixture
-def mock_issue_large() -> MagicMock:
-    issue = MagicMock(spec=Issue)
-    fields = MagicMock()
-    fields.description = "a" * 99_000
-    fields.comment = MagicMock()
-    fields.comment.comments = [
-        MagicMock(body="Large comment " * 1000),
-        MagicMock(body="Another large comment " * 1000),
-    ]
-    fields.reporter = MagicMock()
-    fields.reporter.displayName = "Jane Doe"
-    fields.reporter.emailAddress = "jane@example.com"
-    fields.assignee = MagicMock()
-    fields.assignee.displayName = "Jane Doe"
-    fields.assignee.emailAddress = "jane@example.com"
-    fields.summary = "Large Issue"
-    fields.updated = "2023-01-02T00:00:00+0000"
-    fields.created = "2023-01-02T00:00:00+0000"
-    fields.labels = []
-
-    issue.fields = fields
-    issue.key = "LARGE-1"
-    return issue
-
-
-@pytest.fixture
-def mock_jira_api_version() -> Generator[Any, Any, Any]:
-    with patch("onyx.connectors.jira.utils.JIRA_CLOUD_API_VERSION", "3"):
-        with patch("onyx.connectors.jira.utils.JIRA_SERVER_API_VERSION", "2"):
-            yield
-
-
-@pytest.fixture
-def patched_environment(
-    mock_jira_api_version: MockFixture,  # noqa: ARG001
-) -> Generator[Any, Any, Any]:
-    yield
+def mock_issue_large(
+    create_mock_issue: Callable[..., dict[str, Any]],
+) -> dict[str, Any]:
+    return create_mock_issue(
+        key="LARGE-1",
+        summary="Large Issue",
+        description="a" * 99_000,
+        comments=[
+            {"body": "Large comment " * 1000},
+            {"body": "Another large comment " * 1000},
+        ],
+    )
 
 
 def test_fetch_jira_issues_batch_small_ticket(
-    mock_jira_client: MagicMock,
-    mock_issue_small: MagicMock,
-    patched_environment: MockFixture,  # noqa: ARG001
+    mock_source_operations: MagicMock,
+    mock_issue_small: dict[str, Any],
 ) -> None:
-    mock_jira_client.search_issues.return_value = [mock_issue_small]
+    mock_source_operations.search_issues.return_value = [mock_issue_small]
 
     # First get the issues via pagination
-    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    issues = list(_perform_jql_search(mock_source_operations, "project = TEST", 0, 50))
     assert len(issues) == 1
 
     # Then process each issue
@@ -106,14 +59,13 @@ def test_fetch_jira_issues_batch_small_ticket(
 
 
 def test_fetch_jira_issues_batch_large_ticket(
-    mock_jira_client: MagicMock,
-    mock_issue_large: MagicMock,
-    patched_environment: MockFixture,  # noqa: ARG001
+    mock_source_operations: MagicMock,
+    mock_issue_large: dict[str, Any],
 ) -> None:
-    mock_jira_client.search_issues.return_value = [mock_issue_large]
+    mock_source_operations.search_issues.return_value = [mock_issue_large]
 
     # First get the issues via pagination
-    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    issues = list(_perform_jql_search(mock_source_operations, "project = TEST", 0, 50))
     assert len(issues) == 1
 
     # Then process each issue
@@ -124,15 +76,17 @@ def test_fetch_jira_issues_batch_large_ticket(
 
 
 def test_fetch_jira_issues_batch_mixed_tickets(
-    mock_jira_client: MagicMock,
-    mock_issue_small: MagicMock,
-    mock_issue_large: MagicMock,
-    patched_environment: MockFixture,  # noqa: ARG001
+    mock_source_operations: MagicMock,
+    mock_issue_small: dict[str, Any],
+    mock_issue_large: dict[str, Any],
 ) -> None:
-    mock_jira_client.search_issues.return_value = [mock_issue_small, mock_issue_large]
+    mock_source_operations.search_issues.return_value = [
+        mock_issue_small,
+        mock_issue_large,
+    ]
 
     # First get the issues via pagination
-    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    issues = list(_perform_jql_search(mock_source_operations, "project = TEST", 0, 50))
     assert len(issues) == 2
 
     # Then process each issue
@@ -147,15 +101,17 @@ def test_fetch_jira_issues_batch_mixed_tickets(
 
 @patch("onyx.connectors.jira.connector.JIRA_CONNECTOR_MAX_TICKET_SIZE", 50)
 def test_fetch_jira_issues_batch_custom_size_limit(
-    mock_jira_client: MagicMock,
-    mock_issue_small: MagicMock,
-    mock_issue_large: MagicMock,
-    patched_environment: MockFixture,  # noqa: ARG001
+    mock_source_operations: MagicMock,
+    mock_issue_small: dict[str, Any],
+    mock_issue_large: dict[str, Any],
 ) -> None:
-    mock_jira_client.search_issues.return_value = [mock_issue_small, mock_issue_large]
+    mock_source_operations.search_issues.return_value = [
+        mock_issue_small,
+        mock_issue_large,
+    ]
 
     # First get the issues via pagination
-    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    issues = list(_perform_jql_search(mock_source_operations, "project = TEST", 0, 50))
     assert len(issues) == 2
 
     # Then process each issue

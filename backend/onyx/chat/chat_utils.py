@@ -297,7 +297,7 @@ def _get_or_extract_plaintext(
     return content_text
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def load_chat_file(
     file_descriptor: FileDescriptor, db_session: Session
 ) -> ChatLoadedFile:

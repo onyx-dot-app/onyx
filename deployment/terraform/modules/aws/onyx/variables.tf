@@ -549,3 +549,9 @@ variable "iam_role_path" {
   description = "IAM path for every role the stack creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
   default     = null
 }
+
+variable "cluster_admin_principal_arn" {
+  type        = string
+  description = "IAM principal that gets EKS cluster-admin and administers the cluster's KMS key. Null keeps the default: whoever runs Terraform."
+  default     = null
+}

@@ -208,12 +208,18 @@ def find_hierarchy_node(
 
 
 @pytest.fixture
-def mock_store_image() -> MagicMock:
-    """Mock store_image_and_create_section to return a predefined ImageSection."""
+def mock_store_image(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Mock store_image_and_create_section to return a predefined ImageSection.
+
+    Images embedded in DOCX, PPTX and PDF files go through image_utils, not
+    drive_items, so that module is patched here too: CI has no file store."""
     mock = MagicMock()
     mock.return_value = (
         ImageSection(image_file_id="mocked-file-id", link="https://example.com/image"),
         "mocked-file-id",
+    )
+    monkeypatch.setattr(
+        "onyx.file_processing.image_utils.store_image_and_create_section", mock
     )
     return mock
 

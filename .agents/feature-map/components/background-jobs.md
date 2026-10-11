@@ -125,6 +125,8 @@ this document.
   raising `WorkerShutdown` on timeout. `on_worker_ready` and `on_worker_shutdown`
   touch/remove a file-based readiness probe (`app_base.py:make_probe_path`,
   checked by `celery_k8s_probe.py`'s `main_readiness`/`main_liveness`).
+  `on_worker_ready` also starts the worker's fleet telemetry sender
+  (`utils/fleet_telemetry.py:start_telemetry`). See [[observability]] §4.11.
   `LivenessProbe` (`app_base.py:LivenessProbe`) is a Celery bootstep that
   refreshes the liveness file every 15 seconds.
 - The primary worker additionally holds a singleton Redis lock,
@@ -158,8 +160,7 @@ lists plus its own additions):
   taking `beat_task_templates` (with the cloud-only `skip_gated`/`work_gated`
   option keys stripped) and adding self-hosted-only entries
   (`monitor-celery-queues`, `monitor-process-memory`, `celery-beat-heartbeat`,
-  `emit-version-telemetry`, `cleanup-oauth-provider-clients`).
-  `beat_schedule.py:tasks_to_schedule`
+  `cleanup-oauth-provider-clients`). `beat_schedule.py:tasks_to_schedule`
 
 The per-tenant `cleanup-oauth-provider-grants` template deletes expired OAuth
 provider grants daily; their tokens cascade. Without Celery (`DISABLE_VECTOR_DB`),
@@ -197,7 +198,9 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
 - `SyncRecord` (`onyx/db/models.py`, via `onyx/db/sync_record.py`): one row per
   sync attempt against an entity (`entity_id` + `SyncType`, e.g. `PRUNING`).
   `insert_sync_record` cancels any prior `IN_PROGRESS` record for the same
-  entity/type before creating the new one (`db/sync_record.py:insert_sync_record`).
+  entity/type, and sets its end time, before creating the new one
+  (`db/sync_record.py:insert_sync_record`). The fleet collection pass finds the
+  cancellation by that end time (`db/fleet_telemetry.py:job_rows`).
 - `BackgroundError` (`onyx/db/models.py:BackgroundError`, via
   `onyx/db/background_error.py:create_background_error`): a message plus an
   optional `cc_pair_id`. Written through
@@ -424,7 +427,12 @@ See [[document-index]] for the cached admin warnings it supplies.
   fallback path.
 - [[chat-persistence]]: `chat_ttl_deletion` queue (Light worker).
 - [[observability]]: `monitoring` worker, Prometheus metrics, `BackgroundError`
-  rows.
+  rows. The per-tenant `collect-fleet-telemetry` beat entry runs
+  `tasks/monitoring/tasks.py:collect_fleet_telemetry` on the `monitoring` queue,
+  which reads `SyncRecord` rows (`db/fleet_telemetry.py:job_rows`).
+  `monitor_celery_queues` also sends the queue depths to the fleet
+  (`tasks/monitoring/tasks.py:_report_queue_depths`). `DISABLE_TELEMETRY` removes
+  only the fleet entry; the other `monitoring` tasks still run.
 
 ---
 
@@ -433,7 +441,7 @@ See [[document-index]] for the cached admin warnings it supplies.
 | If your change... | Also check |
 |---|---|
 | adds a new task | which worker's `-Q` list (supervisord.conf and every relevant Helm `celery-worker-*.yaml`) includes its queue; whether it needs an `expires=`; whether it needs `tenant_id` propagated explicitly if not beat-scheduled |
-| changes a queue name (an `OnyxCeleryQueues` constant) | every `-Q` list in `backend/supervisord.conf` and `deployment/helm/charts/onyx/templates/celery-worker-*.yaml`; every `send_task`/`apply_async` call that references the old name; the queue-length metric mapping in `tasks/monitoring/tasks.py:_collect_queue_metrics` |
+| changes a queue name (an `OnyxCeleryQueues` constant) | every `-Q` list in `backend/supervisord.conf` and `deployment/helm/charts/onyx/templates/celery-worker-*.yaml`; every `send_task`/`apply_async` call that references the old name |
 | changes the beat schedule (`beat_schedule.py` or the EE equivalent) | whether the task is per-tenant or cloud-wide (wrong list changes whether `beat_multiplier` applies); the `expires` value; whether `DISABLE_VECTOR_DB` filtering needs the task name added to `_VECTOR_DB_BEAT_TASK_NAMES` |
 | changes a fence or lock (key name, TTL, payload schema) | the checker task's fence-validation pass for that fence family (mirror `validate_pruning_fences`); `on_task_postrun`/`on_task_revoked` taskset cleanup, which matches on key prefix; `ACTIVE_FENCES` membership add/remove sites |
 | adds a worker | its `apps/<name>.py`, `versioned_apps/<name>.py`, `configs/<name>.py`; an entry in `backend/supervisord.conf`; a Helm `celery-worker-<name>.yaml` (plus HPA/ScaledObject if it should autoscale); an entry in `background/README.md`'s worker table (keep it truthful, see §9); whether it needs an EE counterpart under `ee/onyx/background/celery/apps/` |
@@ -520,10 +528,6 @@ shared machinery, not feature correctness.
   `expires`) with no error, no log on the sending side, and no exception
   anywhere. The only symptom is "this never happened." Cross-check §2's table
   whenever you touch a queue name.
-- **`monitoring`'s queue-length metrics do not cover every queue.** `_collect_queue_metrics`
-  (`tasks/monitoring/tasks.py`) maps roughly twenty queues to Prometheus
-  metrics, but `scheduled_tasks` is not among them, so a backlog on that queue
-  produces no queue-length signal today.
 - **`BackgroundError` is not a general failure-surfacing mechanism.** It is
   written from exactly two call sites (both under `ee/onyx`, both in
   external-group/permission-sync code), and nothing reads it back through an

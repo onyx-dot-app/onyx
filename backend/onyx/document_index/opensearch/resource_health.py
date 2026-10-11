@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.document_index.opensearch.client import OpenSearchClient
@@ -15,6 +16,7 @@ from onyx.document_index.opensearch.models import (
 )
 from onyx.redis.redis_pool import get_shared_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.utils.fleet_telemetry import emit_telemetry
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -25,6 +27,16 @@ HEAP_USAGE_THRESHOLD_PERCENT: int = 85
 VECTOR_USAGE_THRESHOLD_PERCENT: int = 90
 RESOURCE_SNAPSHOT_KEY: str = "opensearch_resource_snapshot"
 RESOURCE_CHECK_LEASE_KEY: str = "opensearch_resource_check_lease"
+# Cluster health counts that fleet telemetry reports.
+_CLUSTER_COUNTS: tuple[str, ...] = (
+    "number_of_nodes",
+    "number_of_data_nodes",
+    "active_shards",
+    "unassigned_shards",
+    "initializing_shards",
+    "relocating_shards",
+    "number_of_pending_tasks",
+)
 
 
 def evaluate_resource_health(
@@ -96,9 +108,43 @@ def get_resource_health() -> ResourceHealth:
     )
 
 
+def _report_to_fleet(
+    cluster: dict[str, Any] | None, snapshot: ResourceSnapshot | None
+) -> None:
+    """Fleet telemetry: cluster status, shard counts, and resource pressure."""
+    data: dict[str, Any] = {
+        "service_instance_id": "opensearch-health",
+        "shared": True,
+        "opensearch_status": "unavailable",
+        "opensearch_checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    status: object = (cluster or {}).get("status")
+    if (
+        cluster
+        and status in {"green", "yellow", "red"}
+        and not cluster.get("timed_out")
+    ):
+        data["opensearch_status"] = status
+        for key in _CLUSTER_COUNTS:
+            value: object = cluster.get(key)
+            if type(value) is int and value >= 0:
+                data["opensearch_" + key] = value
+    if snapshot is not None:
+        data.update(
+            opensearch_resource_checked_at=snapshot.checked_at.isoformat(),
+            opensearch_resource_stale=False,
+            opensearch_disk_pressure=ResourceIssue.DISK in snapshot.issues,
+            opensearch_heap_pressure=ResourceIssue.JVM_MEMORY in snapshot.issues,
+            opensearch_vector_pressure=ResourceIssue.VECTOR_MEMORY in snapshot.issues,
+        )
+    emit_telemetry("resource", data, service="opensearch")
+
+
 def refresh_resource_health() -> None:
     if DISABLE_VECTOR_DB:
         return
+    cluster: dict[str, Any] | None = None
+    snapshot: ResourceSnapshot | None = None
     try:
         redis: TenantRedisClient = get_shared_redis_client()
         # Retain the lease on failure too, so duplicate tasks cannot hammer an unhealthy cluster.
@@ -115,10 +161,16 @@ def refresh_resource_health() -> None:
         ) as client:
             nodes: NodesResourceStats = client.get_node_resource_stats()
             vectors: VectorResourceStats = client.get_vector_resource_stats()
-        snapshot: ResourceSnapshot = evaluate_resource_health(
+            try:
+                cluster = client.cluster_health()
+            except Exception:
+                # Only fleet telemetry reads the cluster status.
+                pass
+        snapshot = evaluate_resource_health(
             nodes, vectors, previous, datetime.now(timezone.utc)
         )
         # Keep the last observation on failure; the API marks old observations stale.
         redis.set(RESOURCE_SNAPSHOT_KEY, snapshot.model_dump_json())
     except Exception:
         logger.exception("Unable to refresh OpenSearch resource health")
+    _report_to_fleet(cluster, snapshot)

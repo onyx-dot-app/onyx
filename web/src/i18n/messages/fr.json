@@ -1429,24 +1429,33 @@
           "label": "Passer à Community"
         },
         "modal": {
+          "changes": {
+            "text": "Lors de la rétrogradation :"
+          },
           "confirmButton": {
-            "label": "Passer à Community",
-            "loading": "Changement en cours..."
+            "label": "Rétrograder",
+            "loading": "Rétrogradation..."
           },
-          "connectors": {
-            "text": "Tous les connecteurs deviennent publics. Les documents que les permissions synchronisées ou les groupes gardaient privés deviennent visibles par tous les utilisateurs. Les résultats de recherche suivent une fois l'index réécrit, ce qui peut prendre du temps sur un grand index."
+          "deleted": {
+            "text": "**Supprimés :** groupes d'utilisateurs, clés API des comptes de service, limites de débit de jetons et hooks ;"
           },
-          "description": "Cette action supprime votre licence et toutes les fonctionnalités payantes. Elle est irréversible.",
-          "features": {
-            "text": "Les clés d'API des comptes de service, les limites de débit de jetons et les hooks sont supprimés. Les réponses standard et les jetons SCIM sont désactivés. La personnalisation de la marque et la rétention des conversations sont réinitialisées."
+          "description": "Supprime votre licence et toutes les fonctionnalités payantes.",
+          "disabled": {
+            "text": "**Désactivés :** réponses standard et jetons SCIM ;"
           },
-          "groups": {
-            "text": "Les groupes d'utilisateurs sont supprimés. Les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et skills partagés avec un groupe deviennent publics."
+          "intro": {
+            "text": "Les contrôles d'accès sont supprimés de ce déploiement. **Cela lance une réindexation** pour que les résultats de recherche reflètent le changement, ce qui peut prendre du temps sur un grand index."
           },
-          "license": {
-            "text": "La licence est supprimée de ce déploiement."
+          "madePublic": {
+            "text": "**Rendus publics :** tous les connecteurs, ainsi que les agents, ensembles de documents, fournisseurs LLM, serveurs MCP et compétences partagés avec un groupe d'utilisateurs ;"
           },
-          "title": "Passer à Community Edition"
+          "reset": {
+            "text": "**Réinitialisés :** personnalisation de la marque et politique de conservation des conversations."
+          },
+          "title": "Rétrograder vers l'édition Community",
+          "warning": {
+            "text": "Les documents restreints par des permissions synchronisées ou des groupes d'utilisateurs deviennent **visibles par tous les utilisateurs**. Cette action est irréversible."
+          }
         }
       },
       "footer": {
@@ -5112,6 +5121,16 @@
           "title": "URL cible"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "L'URL de base de votre passerelle Bifrost. {appName} envoie les requêtes d'embedding à son point de terminaison /v1/embeddings.",
+          "title": "URL de base"
+        },
+        "modelName": {
+          "description": "L'identifiant du modèle Bifrost, par exemple openai/text-embedding-3-large. À l'enregistrement, {appName} calcule l'embedding d'un texte de test pour vérifier qu'il s'agit d'un modèle d'embedding et obtenir sa dimension.",
+          "editDescription": "{appName} utilise actuellement ce modèle. L'enregistrement le teste avec la nouvelle URL et la nouvelle clé. Pour utiliser un autre modèle, sélectionnez-le dans la liste des modèles."
+        }
+      },
       "cancelReindexModal": {
         "description": "L'annulation rétablira le modèle d'embedding précédent et toute la progression de la réindexation sera perdue.",
         "submit": {
@@ -6193,6 +6212,19 @@
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour",
         "unknownError": "Erreur inconnue"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Mode auto",
+          "description": "Ajoute une option Auto au sélecteur de modèle qui choisit le modèle le plus adapté à chaque message."
+        },
+        "target": {
+          "title": "Modèle de routage",
+          "description": "Gère le routage des modèles pour le mode Auto.",
+          "empty": "Aucun modèle routeur trouvé. Activez d'abord un modèle routeur sur un fournisseur de passerelle.",
+          "error": "Impossible de charger les modèles de routage.",
+          "retry": "Réessayer"
+        }
       }
     },
     "mcpActions": {
@@ -11217,6 +11249,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "La modification de ce paramètre n'est pas prise en charge pour ce modèle."
+      },
+      "autoItem": {
+        "label": "Auto",
+        "description": "Choisit le meilleur modèle pour chaque message"
       }
     },
     "nrf": {
@@ -12300,6 +12336,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Basculer {name}"
+      },
+      "status": {
+        "loading": "Chargement des résultats…",
+        "incomplete": "Certains résultats ne peuvent pas être affichés. Ouvrez Fichiers pour parcourir l’espace de travail.",
+        "error": "Impossible d’actualiser les résultats. Réessayez."
       }
     },
     "chatPanel": {
@@ -12438,6 +12479,10 @@
       },
       "noContent": {
         "label": "Aucun contenu"
+      },
+      "csv": {
+        "truncated": "Aperçu limité à {rows, number} lignes, {columns, number} colonnes et {cells, number} cellules. Téléchargez le fichier original pour toutes les données.",
+        "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier."
       }
     },
     "filesTab": {
@@ -12445,17 +12490,11 @@
         "description": "Les fichiers créés pendant la construction apparaîtront ici",
         "title": "Aucun fichier pour l'instant"
       },
-      "emptyDirectory": {
-        "label": "Aucun fichier dans ce répertoire"
-      },
       "error": {
         "title": "Erreur de chargement des fichiers"
       },
       "loading": {
         "label": "Chargement des fichiers..."
-      },
-      "loadingChildren": {
-        "label": "Chargement..."
       },
       "preparing": {
         "description": "Configuration de votre environnement de développement",
@@ -12472,6 +12511,9 @@
       },
       "preview": {
         "ariaLabel": "Aperçu de {name}"
+      },
+      "background": {
+        "contrast": "Fond contrasté"
       }
     },
     "inputBar": {
@@ -12615,6 +12657,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Fermer {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Commencez à construire quelque chose pour voir des artefacts !"
       },
@@ -12638,6 +12683,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Diapositives"
+      },
+      "previous": {
+        "label": "Diapositive précédente"
+      },
+      "next": {
+        "label": "Diapositive suivante"
+      },
       "converting": {
         "label": "Conversion de la présentation..."
       },
@@ -12652,6 +12706,9 @@
       },
       "slide": {
         "counter": "Diapositive {current} sur {total}"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionner les miniatures des diapositives"
       }
     },
     "previewTab": {
@@ -13043,9 +13100,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# appel} other {# appels}}"
-        },
-        "failed": {
-          "tag": "{count} en échec"
         },
         "working": {
           "label": "En cours"

@@ -5,6 +5,7 @@ import contextvars
 import copy
 import threading
 import uuid
+from collections import deque
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
 from concurrent.futures import (
     FIRST_COMPLETED,
@@ -610,6 +611,30 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                     ] = next_ind  # ty: ignore[invalid-assignment]
                     next_ind += 1
                 del future_to_index[future]
+
+
+def drain(
+    items: Sequence[_T], listing: Callable[[_T], Iterator[R]], workers: int
+) -> Iterator[R]:
+    """Every item listed, ``workers`` at a time, each worker taking the next
+    item off a shared queue so a slow item holds back only its own worker."""
+    if workers <= 1 or len(items) <= 1:
+        for item in items:
+            yield from listing(item)
+        return
+    queue: deque[_T] = deque(items)
+
+    def worker() -> Iterator[R]:
+        while True:
+            try:
+                item = queue.popleft()
+            except IndexError:
+                return
+            yield from listing(item)
+
+    yield from parallel_yield(
+        [worker() for _ in range(min(workers, len(items)))], max_workers=workers
+    )
 
 
 def parallel_yield_from_funcs(

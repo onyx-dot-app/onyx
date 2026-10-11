@@ -125,6 +125,9 @@ plus the aggregate `BATCH_TOTAL` and the derived, never-written
 `BATCH_UNACCOUNTED`. `StageScope` marks each as `ATTEMPT_LEVEL` (one event) or
 `BATCH_LEVEL` (many, per docprocessing task).
 
+The fleet telemetry collection pass reads the rows of recent attempts that changed
+(`db/fleet_telemetry.py:stage_rows`) and never writes them (§4.10).
+
 ### `Document`, `DocumentByConnectorCredentialPair`, `Tag` (`onyx/db/models.py`, `onyx/db/document.py`, `onyx/db/tag.py`)
 
 `Document` is the durable Postgres row per source document: `content_hash` (used by
@@ -333,8 +336,9 @@ enrichment (`_partition_documents_blocked_by_llm_spend_limit`).
 `indexing_pipeline.py`). Chunks are split into sub-batches of at most
 `MAX_CHUNKS_PER_DOC_BATCH` (1000) and each sub-batch is embedded in one call to
 `EmbeddingModel.encode` (`natural_language_processing/search_nlp_models.py`), which
-reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Chunk
-titles are deduplicated and embedded once per unique title, not once per chunk.
+reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Titles
+get no separate embedding: the title reaches the vector only through the chunk's
+`title_prefix`.
 Each successfully embedded sub-batch is immediately pickled to disk via
 `ChunkBatchStore.save` (`chunk_batch_store.py`) so the full embedded batch never
 sits entirely in process memory; `store.stream()` re-reads it lazily for the write
@@ -446,9 +450,15 @@ case it kills the now-orphaned subprocess.
 the indexing pipeline directly. It re-enumerates the source's live document IDs
 (`extract_ids_from_runnable_connector`, a `SLIM_RETRIEVAL` connector call, no
 content fetched), diffs them against `get_documents_for_connector_credential_pair`,
-and for every ID present locally but absent from the source, dispatches
+and for every ID present locally but absent from the listing, dispatches
 `DOCUMENT_BY_CC_PAIR_CLEANUP_TASK` (`redis_connector_prune.py:generate_tasks`) on the
-`connector_deletion` queue.
+`connector_deletion` queue. When the pair has an `indexing_start` and the
+connector's listing filters by the same date as indexing
+(`connectors/interfaces.py:prune_listing_honors_indexing_start`), the listing
+starts at `indexing_start`. The prune then also removes documents that still
+exist at the source but were last updated before the start. A dated listing
+omits unchanged folders, so `pruning/tasks.py:_get_live_hierarchy_node_ids`
+keeps the hierarchy nodes above each kept document.
 
 **`document_by_cc_pair_cleanup_task`** (`background/celery/tasks/shared/tasks.py`) is
 the actual removal path, shared by both pruning and connector deletion. It reads
@@ -488,6 +498,22 @@ write, `post_index` deliberately does nothing beyond the chunk write itself, lea
 status/notification side effects to the PRESENT pass. Full ownership of user file
 storage, projects, and the upload flow belongs to [[file-store-and-user-files]];
 this component only describes how a `UserFile` reaches the vector index.
+
+### 4.10 Fleet telemetry counters
+
+The fetch, embed, and write steps send per-batch counter deltas to the process's
+fleet sender through `utils/fleet_telemetry.py:emit_stage_counter`: fetch in
+`run_docfetching.py:_timed_connector_runs`, embed in
+`indexing_pipeline.py:embed_and_stream`, and write in
+`opensearch/client.py:_report_written_chunks` ([[document-index]] §4.2). These
+calls never raise into the pipeline. The sender sums the deltas per attempt and
+stage ([[observability]] §4.11). Attempt state reaches the fleet only from the
+collection pass's reads of `IndexAttempt` rows.
+
+A spawned docfetching process starts its own sender in `job_client.py:_initializer`
+and stops it with a bounded wait (`EXIT_FLUSH_SECONDS`) in that function's `finally`
+block. `docfetching/tasks.py:_docfetching_task` ends with `os._exit`, which skips
+that block, so it calls `stop_telemetry` itself first.
 
 ---
 
@@ -570,6 +596,9 @@ this component only describes how a `UserFile` reaches the vector index.
   generation once this pipeline's attempts against it reach the swap criterion.
 - [[cc-pairs-and-credentials]]: the admin connector-status page reads `IndexAttempt`
   rows this component writes.
+- [[observability]]: the fleet telemetry collection pass reads `IndexAttempt`,
+  `IndexAttemptError`, and `IndexAttemptStageMetric` rows (`db/fleet_telemetry.py`),
+  and the pipeline sends stage counters to the fleet sender (§4.10).
 - Nothing in the retrieval or chat path calls into this component directly; it is a
   write-only, background producer for [[document-index]].
 
@@ -588,6 +617,7 @@ this component only describes how a `UserFile` reaches the vector index.
 | changes dedup gating in `get_docs_to_update` | both the connector-triggered path (`ignore_time_skip=False`) and the docprocessing path (always `ignore_time_skip=True`), plus the FUTURE-write path (`ignore_content_hash_gate=True`) |
 | changes pruning or deletion's document-removal task | both callers (`pruning/tasks.py` and `connector_deletion/tasks.py`) share `document_by_cc_pair_cleanup_task`; a change there affects both flows even though they trigger differently |
 | changes the reindex-port re-embed logic | `port_reembed.py`'s two strategies must still match what the chunker/embedder currently produce for a fresh index, or the ported chunks will diverge from a true reindex |
+| renames or drops an `IndexAttempt`, `IndexAttemptError`, or `IndexAttemptStageMetric` column | the fleet queries (`db/fleet_telemetry.py:attempt_rows`, `stage_rows`) and [[observability]] §7; only the collection pass fails, so no indexing test catches it |
 
 ---
 

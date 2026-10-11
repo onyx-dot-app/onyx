@@ -100,7 +100,7 @@ from onyx.db.token_limit import insert_global_token_rate_limit
 from onyx.db.tools import can_manage_mcp_server, can_manage_tool
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.credential import (
-    _assert_credential_share_within_scope,
+    assert_credential_share_within_scope,
     create_credential_from_model,
     create_credential_with_private_key,
 )
@@ -407,10 +407,10 @@ def test_both_credential_create_paths_share_the_scope_gate(
         )
 
     assert not _guard_raises(
-        _assert_credential_share_within_scope, cred([]), manager, db_session
+        assert_credential_share_within_scope, cred([]), manager, db_session
     )
     assert _guard_raises(
-        _assert_credential_share_within_scope, cred([unmanaged.id]), manager, db_session
+        assert_credential_share_within_scope, cred([unmanaged.id]), manager, db_session
     )
 
 

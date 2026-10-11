@@ -392,6 +392,49 @@
       "temperature": true,
       "tool_call": true
     },
+    "anthropic.claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
     "anthropic.claude-opus-4-1-20250805-v1:0": {
       "attachment": true,
       "cost": {
@@ -879,6 +922,49 @@
       "release_date": "2025-10-15",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "au.anthropic.claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "input": 0.11,
+        "output": 0.55,
+        "tiers": [
+          {
+            "cache_read": 0.055,
+            "cache_write": 0.6875,
+            "input": 0.55,
+            "output": 2.75,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5 (AU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": false,
+      "temperature": false,
       "tool_call": true
     },
     "au.anthropic.claude-opus-4-6-v1": {
@@ -1463,6 +1549,49 @@
       "temperature": true,
       "tool_call": true
     },
+    "eu.anthropic.claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "input": 0.11,
+        "output": 0.55,
+        "tiers": [
+          {
+            "cache_read": 0.055,
+            "cache_write": 0.6875,
+            "input": 0.55,
+            "output": 2.75,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5 (EU)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": false,
+      "temperature": false,
+      "tool_call": true
+    },
     "eu.anthropic.claude-opus-4-5-20251101-v1:0": {
       "attachment": true,
       "cost": {
@@ -1969,6 +2098,49 @@
       "release_date": "2025-10-15",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "global.anthropic.claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5 (Global)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": false,
+      "temperature": false,
       "tool_call": true
     },
     "global.anthropic.claude-opus-4-5-20251101-v1:0": {
@@ -3207,6 +3379,49 @@
       "release_date": "2025-10-15",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "jp.anthropic.claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "input": 0.11,
+        "output": 0.55,
+        "tiers": [
+          {
+            "cache_read": 0.055,
+            "cache_write": 0.6875,
+            "input": 0.55,
+            "output": 2.75,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5 (JP)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": false,
+      "temperature": false,
       "tool_call": true
     },
     "jp.anthropic.claude-opus-4-7": {
@@ -5409,6 +5624,49 @@
       "release_date": "2025-10-15",
       "structured_output": true,
       "temperature": true,
+      "tool_call": true
+    },
+    "us.anthropic.claude-haiku-5-5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.011,
+        "cache_write": 0.1375,
+        "input": 0.11,
+        "output": 0.55,
+        "tiers": [
+          {
+            "cache_read": 0.055,
+            "cache_write": 0.6875,
+            "input": 0.55,
+            "output": 2.75,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Claude Haiku 5.5 (US)",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": false,
+      "temperature": false,
       "tool_call": true
     },
     "us.anthropic.claude-opus-4-1-20250805-v1:0": {

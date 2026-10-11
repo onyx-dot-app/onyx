@@ -85,6 +85,9 @@ class OnyxErrorCode(Enum):
     # A re-index refused because an earlier generation still holds the index name it
     # wants. Reclamation is draining that index now, so the same request works shortly.
     INDEX_NAME_RECLAIMING = ("INDEX_NAME_RECLAIMING", 409)
+    # A connector edit plan whose pair changed after it was computed. The client
+    # computes a new plan.
+    EDIT_PLAN_STALE = ("EDIT_PLAN_STALE", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)

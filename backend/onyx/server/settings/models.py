@@ -67,6 +67,10 @@ class Settings(BaseModel):
     reasoning_override_enabled: bool | None = True
     # Model selector shows one flat list instead of per-provider groups.
     hide_provider_grouping: bool = False
+
+    # "Auto" picker item backed by the chosen router configuration.
+    model_routing_enabled: bool = False
+    model_routing_model_configuration_id: int | None = None
     auto_scroll: bool | None = False
     query_history_type: QueryHistoryType | None = None
 

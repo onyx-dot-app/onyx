@@ -51,6 +51,7 @@ export const SWR_KEYS = {
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
+  llmRouterModels: "/api/admin/llm/router-models",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
@@ -190,8 +191,6 @@ export const SWR_KEYS = {
   buildUserLibraryTree: "/api/build/user-library/tree",
   buildSessionFiles: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/files?path=`,
-  buildSessionOutputFiles: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/files?path=outputs`,
   buildSessionWebappInfo: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/webapp-info`,
   buildSessionArtifacts: (sessionId: string) =>

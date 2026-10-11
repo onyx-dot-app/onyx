@@ -205,7 +205,7 @@ def _get_research_agent_tool_id() -> int:
         ).id
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def run_deep_research_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,

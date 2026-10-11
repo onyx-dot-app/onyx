@@ -21,8 +21,14 @@ connection's per-tenant search_path, so all statements schema-qualify using
 current_schema() read from the migration connection.
 """
 
+import logging
+import time
+
+import asyncpg.exceptions
+import psycopg2.errors
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.exc import DBAPIError
 
 
 # revision identifiers, used by Alembic.
@@ -31,7 +37,15 @@ down_revision = "c2cc933f0a40"
 branch_labels = None
 depends_on = None
 
+logger = logging.getLogger("alembic.runtime.migration")
+
 INDEX_NAME = "ix_chat_session_user_id_onyxbot_flow_time_updated"
+
+# CONCURRENTLY waits on every older transaction in the database, whatever schema
+# it runs in. A bounded wait fails naming the schema instead of hanging the run.
+LOCK_TIMEOUT = "60s"
+MAX_BUILD_ATTEMPTS = 10
+RETRY_DELAY_SEC = 5
 
 
 def _index_state(conn: sa.engine.Connection, schema: str) -> bool | None:
@@ -61,19 +75,58 @@ def _release_migration_snapshot() -> tuple[sa.engine.Connection, str]:
     return bind, schema
 
 
+def _is_lock_timeout(e: DBAPIError) -> bool:
+    # Deployed runs use asyncpg, whose SQLAlchemy adapter raises its own error
+    # from the driver's. Migration tests run on a sync psycopg2 engine.
+    cause: BaseException | None = e.orig.__cause__ if e.orig is not None else None
+    return isinstance(cause, asyncpg.exceptions.LockNotAvailableError) or isinstance(
+        e.orig, psycopg2.errors.LockNotAvailable
+    )
+
+
+def _build_index(conn: sa.engine.Connection, schema: str) -> None:
+    """Builds the index, retrying each time another transaction outlasts lock_timeout.
+
+    A timed-out CONCURRENTLY build leaves an INVALID index, so every attempt
+    drops that leftover first."""
+    conn.exec_driver_sql(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
+    for attempt in range(1, MAX_BUILD_ATTEMPTS + 1):
+        try:
+            if _index_state(conn, schema) is False:
+                conn.exec_driver_sql(
+                    f'DROP INDEX CONCURRENTLY "{schema}"."{INDEX_NAME}"'
+                )
+            conn.exec_driver_sql(
+                f'CREATE INDEX CONCURRENTLY "{INDEX_NAME}" '
+                f'ON "{schema}".chat_session (user_id, onyxbot_flow, time_updated DESC)'
+            )
+            return
+        except DBAPIError as e:
+            if not _is_lock_timeout(e):
+                raise
+            if attempt == MAX_BUILD_ATTEMPTS:
+                raise RuntimeError(
+                    f"{INDEX_NAME} on {schema}: another transaction blocked the "
+                    f"build for {MAX_BUILD_ATTEMPTS} attempts of {LOCK_TIMEOUT}. "
+                    "End that transaction and rerun the migration"
+                ) from e
+            logger.warning(
+                "%s on %s: build blocked by another transaction, attempt %d/%d",
+                INDEX_NAME,
+                schema,
+                attempt,
+                MAX_BUILD_ATTEMPTS,
+            )
+            time.sleep(RETRY_DELAY_SEC)
+
+
 def upgrade() -> None:
     bind, schema = _release_migration_snapshot()
 
     with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        state = _index_state(conn, schema)
-        if state is True:
+        if _index_state(conn, schema) is True:
             return
-        if state is False:
-            conn.exec_driver_sql(f'DROP INDEX CONCURRENTLY "{schema}"."{INDEX_NAME}"')
-        conn.exec_driver_sql(
-            f'CREATE INDEX CONCURRENTLY "{INDEX_NAME}" '
-            f'ON "{schema}".chat_session (user_id, onyxbot_flow, time_updated DESC)'
-        )
+        _build_index(conn, schema)
 
 
 def downgrade() -> None:

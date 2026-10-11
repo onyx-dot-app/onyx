@@ -22,12 +22,12 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SIDECAR_HEALTH_PATH,
     SIDECAR_OUTPUTS_MANIFEST_PATH,
     SIDECAR_PUSH_PATH,
+    FilesystemEntry,
     FilesystemListRequest,
     FilesystemListResponse,
     OutputsManifestRequest,
     OutputsManifestResponse,
 )
-from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.timeouts import (
     BULK_TRANSFER_TIMEOUT_SECONDS,
     CONNECT_TIMEOUT_SECONDS,
@@ -162,16 +162,7 @@ class SidecarClient:
             raise SidecarStatusError("filesystem list", resp.status_code, resp.text)
 
         listing = FilesystemListResponse.model_validate_json(resp.content)
-        return [
-            FilesystemEntry(
-                name=entry.name,
-                path=entry.path,
-                is_directory=entry.is_directory,
-                size=entry.size,
-                mime_type=entry.mime_type,
-            )
-            for entry in listing.entries
-        ]
+        return listing.entries
 
     def outputs_manifest(
         self,

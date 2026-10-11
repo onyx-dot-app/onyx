@@ -159,6 +159,16 @@ def _normalize_model(entry: dict[str, Any]) -> dict[str, Any]:
     for field in _DICT_FIELDS:
         if entry.get(field) is not None:
             out[field] = entry[field]
+    cost: Any = out.get("cost")
+    if isinstance(cost, dict):
+        # Negative rates are upstream "unknown price" sentinels, not prices.
+        out["cost"] = {
+            k: v
+            for k, v in cost.items()
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or v >= 0
+        }
+        if not out["cost"]:
+            del out["cost"]
     return out
 
 
@@ -234,6 +244,9 @@ def _build_provider_section(
     models: dict[str, Any] = {}
     for slug in slugs:
         for model_id, entry in (api.get(slug, {}).get("models") or {}).items():
+            # Junk upstream keys with an empty model id (e.g. ".../models/").
+            if not model_id or model_id.endswith("/"):
+                continue
             models.setdefault(model_id, _normalize_model(entry))
     if not models:
         return None
@@ -382,11 +395,16 @@ def _litellm_cost(entry: dict[str, Any]) -> dict[str, float]:
     for src_key, dst_key in _LITELLM_TOKEN_COST_FIELDS.items():
         value = entry.get(src_key)
         if value is not None:
-            cost[dst_key] = float(value) * 1_000_000
+            # Negative rates are upstream "unknown price" sentinels.
+            amount: float = float(value)
+            if amount >= 0:
+                cost[dst_key] = amount * 1_000_000
     for src_key, dst_key in _LITELLM_UNIT_COST_FIELDS.items():
         value = entry.get(src_key)
         if value is not None:
-            cost[dst_key] = float(value)
+            amount = float(value)
+            if amount >= 0:
+                cost[dst_key] = amount
     return cost
 
 
@@ -524,9 +542,12 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
     if prompt == 0 and completion == 0:
         return None
 
+    # Negative rates are upstream "unknown price" sentinels — not real prices;
+    # skip those fields so they land as "unknown" rather than negative spend.
     cost: dict[str, float] = {
-        "input": prompt * 1_000_000,
-        "output": completion * 1_000_000,
+        k: v * 1_000_000
+        for k, v in (("input", prompt), ("output", completion))
+        if v >= 0
     }
     for src_key, dst_key in (
         ("input_cache_read", "cache_read"),
@@ -535,17 +556,23 @@ def _openrouter_entry(raw: dict[str, Any]) -> dict[str, Any] | None:
         try:
             value = pricing.get(src_key)
             if value is not None:
-                cost[dst_key] = float(value) * 1_000_000
+                amount: float = float(value)
+                if amount >= 0:
+                    cost[dst_key] = amount * 1_000_000
         except (TypeError, ValueError):
             continue
     # pricing.image is USD per image, not per token.
     try:
         if pricing.get("image") is not None:
-            cost["image_input"] = float(pricing["image"])
+            amount = float(pricing["image"])
+            if amount >= 0:
+                cost["image_input"] = amount
     except (TypeError, ValueError):
         pass
 
-    entry: dict[str, Any] = {"name": raw.get("name") or raw["id"], "cost": cost}
+    entry: dict[str, Any] = {"name": raw.get("name") or raw["id"]}
+    if cost:
+        entry["cost"] = cost
     context = raw.get("context_length")
     max_out = (raw.get("top_provider") or {}).get("max_completion_tokens")
     if context or max_out:
@@ -602,8 +629,8 @@ def merge_openrouter(
             models[model_id] = merged
             added += 1
             continue
-        cost = existing.setdefault("cost", {})
-        for key, value in merged["cost"].items():
+        for key, value in (merged.get("cost") or {}).items():
+            cost = existing.setdefault("cost", {})
             if key not in cost:
                 cost[key] = value
                 filled += 1
@@ -618,11 +645,13 @@ def _preserve_unbounded_flags(providers: dict[str, Any], output_dir: Path) -> No
     if section is None:
         return
     try:
-        vendored: dict[str, Any] = json.loads(
-            (output_dir / "openrouter.json").read_text()
-        )
-    except Exception:
+        vendored_text: str = (output_dir / "openrouter.json").read_text()
+    except FileNotFoundError:
+        # First sync has no vendored file to carry flags over from.
         return
+    # Anything else (unreadable or corrupt file) must surface, not silently
+    # drop the flags — the sync is about to rewrite this file.
+    vendored: dict[str, Any] = json.loads(vendored_text)
     vendored_models: dict[str, Any] = vendored.get("models") or {}
     restored: int = 0
     for model_id, entry in section["models"].items():

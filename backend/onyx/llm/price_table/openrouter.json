@@ -522,6 +522,77 @@
       "structured_output": true,
       "tool_call": true
     },
+    "anthropic/claude-haiku-5.5": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01,
+        "cache_write": 0.125,
+        "cache_write_above_1hr": 0.19999999999999998,
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "claude-haiku",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "Claude Haiku 5.5",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-07",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "anthropic/claude-haiku-5.5:batch": {
+      "cost": {
+        "cache_read": 0.005,
+        "cache_write": 0.0625,
+        "input": 0.049999999999999996,
+        "output": 0.25
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "file"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Anthropic: Claude Haiku 5.5 (batch)",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "anthropic/claude-opus-4.1": {
       "attachment": true,
       "cost": {
@@ -1215,7 +1286,7 @@
     "anthropic/claude-sonnet-5.5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
+        "cache_read": 0.1,
         "cache_write": 2.5,
         "cache_write_above_1hr": 4.0,
         "input": 2,
@@ -1247,7 +1318,7 @@
     },
     "anthropic/claude-sonnet-5.5:batch": {
       "cost": {
-        "cache_read": 0.09999999999999999,
+        "cache_read": 0.049999999999999996,
         "cache_write": 1.25,
         "input": 1.0,
         "output": 5.0
@@ -2015,14 +2086,14 @@
     "deepseek/deepseek-v3.2": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.028,
-        "input": 0.28,
+        "cache_read": 0.135,
+        "input": 0.259,
         "output": 0.42
       },
       "family": "deepseek",
       "limit": {
         "context": 163840,
-        "output": 65536
+        "output": 147456
       },
       "modalities": {
         "input": [
@@ -2073,8 +2144,8 @@
     "deepseek/deepseek-v4-flash": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.0299,
-        "input": 0.0299,
+        "cache_read": 0.03,
+        "input": 0.03,
         "output": 1.28
       },
       "family": "deepseek-flash",
@@ -2102,8 +2173,8 @@
     "deepseek/deepseek-v4-flash-0731": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.015,
-        "input": 0.015,
+        "cache_read": 0.018,
+        "input": 0.018,
         "output": 1.28
       },
       "family": "deepseek-flash",
@@ -4063,35 +4134,6 @@
       "temperature": true,
       "tool_call": false
     },
-    "kwaipilot/kat-coder-pro-v2.5": {
-      "attachment": false,
-      "cost": {
-        "cache_read": 0.15,
-        "input": 0.74,
-        "output": 2.96
-      },
-      "family": "kat-coder",
-      "limit": {
-        "context": 262144,
-        "output": 235929
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "mode": "chat",
-      "name": "KAT-Coder-Pro V2.5",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2026-07-10",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "liquid/lfm-2.5-2.6b:free": {
       "attachment": false,
       "cost": {
@@ -4907,10 +4949,10 @@
         ]
       },
       "mode": "chat",
-      "name": "Codestral 2508",
+      "name": "Codestral 25.08",
       "open_weights": false,
       "reasoning": false,
-      "release_date": "2025-08-01",
+      "release_date": "2025-07-30",
       "structured_output": true,
       "temperature": true,
       "tool_call": true
@@ -5751,9 +5793,9 @@
     "moonshotai/kimi-k2.6": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.16,
-        "input": 0.95,
-        "output": 4
+        "cache_read": 0.0975,
+        "input": 0.465,
+        "output": 2.45
       },
       "family": "kimi-k2",
       "limit": {
@@ -5811,8 +5853,8 @@
     "moonshotai/kimi-k3": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.29,
-        "input": 0.89,
+        "cache_read": 0.45,
+        "input": 0.5,
         "output": 15
       },
       "family": "kimi-k3",
@@ -6074,7 +6116,7 @@
       "family": "nemotron",
       "limit": {
         "context": 262144,
-        "output": 235929
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -6298,14 +6340,14 @@
     "nvidia/nemotron-3.5-lightning": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.06,
-        "output": 0.16
+        "cache_read": 0.0245,
+        "input": 0.049,
+        "output": 0.14
       },
       "family": "nemotron",
       "limit": {
         "context": 262144,
-        "output": 32768
+        "output": 131072
       },
       "modalities": {
         "input": [
@@ -6353,10 +6395,6 @@
       "tool_call": true
     },
     "nvidia/switchyard": {
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 1000000
       },
@@ -9683,10 +9721,6 @@
       "unbounded": true
     },
     "openrouter/auto-beta": {
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 2000000
       },
@@ -9769,10 +9803,6 @@
     },
     "openrouter/fusion": {
       "attachment": false,
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 1000000,
         "output": 128000
@@ -9796,10 +9826,6 @@
     },
     "openrouter/pareto-code": {
       "attachment": false,
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 2000000,
         "output": 200000
@@ -10517,13 +10543,13 @@
     "qwen/qwen3-30b-a3b-instruct-2507": {
       "attachment": false,
       "cost": {
-        "input": 0.1,
-        "output": 0.3
+        "input": 0.04815,
+        "output": 0.19305
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 235929
+        "output": 32000
       },
       "modalities": {
         "input": [
@@ -11238,14 +11264,14 @@
     "qwen/qwen3.5-35b-a3b": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.04,
-        "input": 0.08,
-        "output": 0.75
+        "cache_read": 0.05,
+        "input": 0.15,
+        "output": 1
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 32768
+        "output": 235929
       },
       "modalities": {
         "input": [
@@ -11452,13 +11478,13 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.03,
-        "input": 0.32,
-        "output": 3.25
+        "input": 0.3,
+        "output": 2
       },
       "family": "qwen",
       "limit": {
         "context": 262144,
-        "output": 262140
+        "output": 65536
       },
       "modalities": {
         "input": [
@@ -12661,14 +12687,14 @@
     "thinkingmachines/inkling": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.16,
-        "input": 0.95,
+        "cache_read": 0.17,
+        "input": 1,
         "output": 4.05
       },
       "family": "ling",
       "limit": {
         "context": 524288,
-        "output": 262144
+        "output": 471859
       },
       "modalities": {
         "input": [
@@ -12793,10 +12819,6 @@
       "name": "typesafe/jev-1.13"
     },
     "typesafe/jev-router": {
-      "cost": {
-        "input": -1000000.0,
-        "output": -1000000.0
-      },
       "limit": {
         "context": 1000000
       },
@@ -13800,15 +13822,15 @@
     "z-ai/glm-5.1": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.26,
+        "cache_read": 0.1794,
         "cache_write": 0.0,
-        "input": 1.4,
-        "output": 4.4
+        "input": 0.966,
+        "output": 3.036
       },
       "family": "glm",
       "limit": {
         "context": 204800,
-        "output": 131072
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -13830,9 +13852,9 @@
     "z-ai/glm-5.2": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.15,
-        "input": 0.152,
-        "output": 12
+        "cache_read": 0.162,
+        "input": 0.171,
+        "output": 7.2
       },
       "family": "glm",
       "limit": {
@@ -13859,9 +13881,9 @@
     "z-ai/glm-5.3": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.065,
-        "input": 0.07,
-        "output": 7
+        "cache_read": 0.06,
+        "input": 0.062,
+        "output": 3.39
       },
       "family": "glm",
       "limit": {
@@ -14091,16 +14113,28 @@
     "~anthropic/claude-haiku-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.1,
-        "cache_write": 1.25,
+        "cache_read": 0.01,
+        "cache_write": 0.125,
         "cache_write_above_1hr": 2.0,
-        "input": 1,
-        "output": 5
+        "input": 0.1,
+        "output": 0.5,
+        "tiers": [
+          {
+            "cache_read": 0.05,
+            "cache_write": 0.625,
+            "input": 0.5,
+            "output": 2.5,
+            "tier": {
+              "size": 100000,
+              "type": "context"
+            }
+          }
+        ]
       },
       "family": "claude-haiku",
       "limit": {
-        "context": 200000,
-        "output": 64000
+        "context": 1000000,
+        "output": 128000
       },
       "modalities": {
         "input": [
@@ -14157,7 +14191,7 @@
     "~anthropic/claude-sonnet-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
+        "cache_read": 0.1,
         "cache_write": 2.5,
         "cache_write_above_1hr": 4.0,
         "input": 2,
@@ -14190,9 +14224,9 @@
     "~deepseek/deepseek-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.002,
-        "input": 0.002,
-        "output": 2.4
+        "cache_read": 0.009,
+        "input": 0.019,
+        "output": 0.424
       },
       "family": "deepseek-flash",
       "limit": {
@@ -14220,8 +14254,8 @@
     "~deepseek/deepseek-pro-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.25,
-        "input": 0.2514,
+        "cache_read": 0.2,
+        "input": 0.2856,
         "output": 4.2
       },
       "family": "deepseek",
@@ -14249,8 +14283,8 @@
     "~deepseek/deepseek-v4-flash-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.015,
-        "input": 0.015,
+        "cache_read": 0.018,
+        "input": 0.018,
         "output": 1.28
       },
       "family": "deepseek",
@@ -14367,7 +14401,7 @@
       "attachment": true,
       "cost": {
         "cache_read": 0.45,
-        "input": 0.83,
+        "input": 0.49,
         "output": 13
       },
       "family": "kimi",
@@ -14675,8 +14709,8 @@
     "~z-ai/glm-flash-latest": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.0244,
-        "input": 0.0244,
+        "cache_read": 0.025,
+        "input": 0.04,
         "output": 0.5
       },
       "family": "glm-flash",
@@ -14706,14 +14740,14 @@
     "~z-ai/glm-latest": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.03,
-        "input": 0.03,
-        "output": 12
+        "cache_read": 0.06,
+        "input": 0.062,
+        "output": 3.39
       },
       "family": "glm",
       "limit": {
         "context": 1048576,
-        "output": 131072
+        "output": 943718
       },
       "modalities": {
         "input": [

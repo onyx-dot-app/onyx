@@ -19,7 +19,7 @@
 `backend/onyx/server/features/build/sandbox/docker/` (`docker_sandbox_manager.py`,
 `dev_mode_serve.py`, `internal/exec_helpers.py`),
 `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/` (`server.py`,
-`snapshot.py`, `extract.py`, `filesystem.py`, `manifest.py`, `models.py`,
+`snapshot.py`, `extract.py`, `filesystem.py`, `outputs_manifest.py`, `models.py`,
 `opencode_history.py`),
 `backend/onyx/server/features/build/sandbox/util/` (`agent_instructions.py`,
 `opencode_config.py`, `mcp_config.py`, `api_url_check.py`),
@@ -80,6 +80,7 @@ visible seams:
 | `SANDBOX_NEXTJS_PORT_START` / `_END` | 3010 / 3100 | Per-session Next.js dev-server port range, shared by the Service, the NetworkPolicy, and the PodTemplate's container ports. |
 | `ONYX_SANDBOX_PUSH_PRIVATE_KEY` | required | Ed25519 seed signing every sidecar request (`kubernetes/sidecar_client.py:get_push_key_pair`). |
 | `SANDBOX_PROXY_HOST` / `SANDBOX_PROXY_NAMESPACE` | required (K8s) / `onyx` | The egress-proxy endpoint pinned via `hostAliases` (see §5, §9). |
+| `SANDBOX_LISTEN_HOST` | `0.0.0.0` | Shared listener for OpenCode, the sidecar, and generated previews. Helm `sandboxPod.listenHost` sets it; use `::` for IPv6-only pods. |
 
 Celery task: `CLEANUP_IDLE_SANDBOXES` (`backend/onyx/background/celery/tasks/build/tasks.py`),
 scheduled every `SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS` on self-hosted beats
@@ -150,7 +151,13 @@ a failed init retries on the next call (`factory.py:20-57`):
   dedicated bridge network, snapshots streamed through `docker exec` instead of
   a sidecar HTTP API. There is **no sidecar container** on Docker; filesystem
   and snapshot operations exec directly into the sandbox container
-  (`docker_sandbox_manager.py`, module docstring, "Snapshots").
+  (`docker_sandbox_manager.py`, module docstring, "Snapshots"). The manager
+  reads the bridge's `EnableIPv4` flag. IPv6-only bridges inject
+  `SANDBOX_LISTEN_HOST=::`; IPv4 and dual-stack bridges retain `0.0.0.0`.
+  Proxy listener configuration is separate: use `SANDBOX_PROXY_LISTEN_HOST=::`
+  for an IPv6-only bridge, with complete internal CIDRs. The API can remain
+  on the original Compose network because the proxy forwards sandbox API
+  traffic. Existing IPv4 bridge behavior remains the default.
 
 Where they diverge, by design (`docker_sandbox_manager.py` module docstring,
 "Threat model: Docker vs Kubernetes parity gap"):
@@ -222,6 +229,17 @@ that creates `/workspace/sessions/$id/{outputs,attachments}`, symlinks `.opencod
 `user_library` to the sandbox-wide managed directories, writes `AGENTS.md` and
 `opencode.json`, and (if the session has a port) writes `start-webapp.sh`. It
 never scaffolds or starts the dev server itself (`[[craft-webapp-proxy]]` owns that).
+New session config directories copy the image's preinstalled OpenCode plugin SDK
+from `/workspace/templates/opencode`. Existing dependencies and package manifests
+remain intact. Older images without this template use OpenCode's install fallback.
+The image-owned script handles SDK copies
+(`backend/onyx/server/features/build/sandbox/image/seed-opencode-dependencies.sh`).
+Configuration regeneration also calls this script after snapshot restore.
+A session seed lock serializes copies. Dependencies publish by rename after copying.
+Kubernetes verifies a completion sentinel before reporting configuration regeneration success.
+SDK files stay outside snapshots, which contain outputs and attachments.
+Global configuration directories hardlink template dependencies to save image space.
+Their manifests and all session dependency copies remain independent.
 A completion sentinel (`ONYX_WORKSPACE_SETUP_COMPLETE`) is the only reliable
 success signal, because the K8s exec client returns buffered output without
 raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
@@ -311,6 +329,30 @@ signed `GET`/`POST` over plain HTTP to
 `http://{pod-name}.{namespace}.svc.cluster.local:8731`, with retry-until-deadline
 on transient failures (`_post`) and a streaming path for archive
 create/download (`request_and_stream_new_snapshot`).
+
+Directory listings use one `FilesystemEntry` model in `sandbox_daemon/models.py`
+across the daemon, both sandbox managers, and the API. The sidecar client returns
+these validated entries directly.
+
+The outputs manifest scans visible regular files under `outputs/` without reading file contents.
+It shares file browsing's hidden-name rules through `sandbox_daemon/models.py`.
+The scan excludes dotfiles, dependencies, caches, runtime logs, symlinks, and special files.
+It also skips the root web subtree within outputs before descent. Nested directories named `web` remain visible.
+All examined entries count toward one scan budget, including ignored names and directories.
+A depth limit bounds recursion. Descriptor-relative descent refuses symlinks at every workspace component.
+
+Kubernetes sends a signed request with the session ID. Docker invokes
+`python -E -s -m sandbox_daemon.outputs_manifest` from the root-owned `/opt` copy.
+Both transports call `build_outputs_manifest` and return paths, sizes, modification times, change times, and completeness.
+The API exposes sizes and string revisions, so JavaScript does not round nanosecond timestamps.
+Revisions include change time to detect same-size overwrites that preserve modification time.
+Missing session workspaces, scan limits, and unreadable entries make the response incomplete.
+An existing workspace without an outputs directory returns a complete empty response.
+Callers must not infer deletions from incomplete responses.
+
+This contract requires the matching sandbox image alongside the API server.
+Existing healthy sandboxes keep their image until replacement.
+Update running sandboxes through the normal snapshot and recovery lifecycle during rollout.
 
 **Current state versus the sidecar-migration doc:** as of this code, snapshot
 create/restore and file push already go through the sidecar HTTP API (confirmed
@@ -481,12 +523,16 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    backstop that only takes effect where the cluster's CNI enforces
    NetworkPolicy, and allows only the proxy and DNS. See §9 and `[[craft-admin]]`
    §5.4 for why this is a different mechanism from the egress-proxy action
-   gate.
+   gate. Both IPv4 and IPv6 OUTPUT chains use a DROP policy. They allow
+   loopback and established connections. Only the resolved proxy address
+   family permits new TCP connections to the proxy port. IPv6 permits
+   neighbor solicitations and advertisements with hop limit 255. The unused
+   address family stays blocked, including IPv4 compatibility egress on EKS.
 5. **The sidecar and main container must agree on the workspace path.**
    `SESSIONS_ROOT` is defined twice (`session_workspace.py:19` on the
    api-server side, `image/sandbox_daemon/snapshot.py:18` inside the image)
    because the daemon cannot import the api-server package at runtime
-   (`base.py:62-67`). A path change on one side without the other silently
+   (`backend/onyx/server/features/build/configs.py`). A path change on one side without the other silently
    breaks snapshot/restore or workspace setup.
 6. **Every sidecar-mutating request must be Ed25519-signed and fresh.**
    `_verify_signature` (`sandbox_daemon/server.py`) checks both the signature
@@ -683,3 +729,24 @@ set.
   it (rare, but the sidecar's SQLite backup step exists specifically to avoid
   copying a hot, inconsistent DB file) has no fallback prior version to
   restore from the way a session's outputs/attachments do.
+
+### Document thumbnail conversion
+
+Both providers use `SandboxManager.generate_document_preview` for PowerPoint slides
+and first-page PDF or PowerPoint thumbnails. They deploy the shared converter and
+LibreOffice helper as real files in a versioned bundle through the existing sandbox
+push API. This bundle is independent of enabled agent skills.
+
+The converter checks session workspace confinement. The 20 MiB thumbnail size
+check is advisory preflight. Concurrent edits can change input during rendering.
+A 30-second thumbnail deadline and 120-second full-slide deadline bound lock waiting
+and conversion time. The lock opens without blocking and must be a regular file.
+
+Finished JPEGs replace cached files atomically. Failed conversion retains the last
+complete image. Source revision checks reject changed input; cache metadata records
+the rendered revision. Missing, invalid, or non-regular metadata causes regeneration. Metadata opens do not block on special files or follow symlinks.
+Both providers validate conversion status and session-relative JPEG paths with one parser.
+
+Thumbnails live under `outputs/.document-thumbnails`, which inventory rules hide.
+Both providers exclude this root cache from snapshots. Nested user directories
+with the same name remain in snapshots.

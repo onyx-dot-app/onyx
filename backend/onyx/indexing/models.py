@@ -87,7 +87,6 @@ class DocAwareChunk(BaseChunk):
 
 class IndexChunk(DocAwareChunk):
     embeddings: ChunkEmbedding
-    title_embedding: Embedding | None
 
 
 # TODO(rkuo): currently, this extra metadata sent during indexing is just for speed,

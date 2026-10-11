@@ -24,13 +24,18 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckState,
     DraftCheckStateKind,
     DraftRerunMode,
+    DraftRunPairScope,
     DraftRunStatus,
     StoredDraftRun,
     apply_cached_result,
+    cc_pair_draft_key,
+    clear_latest_draft_run,
     decide_draft_check_state,
     draft_result_cache_key,
     draft_run_start_lock,
     get_cached_draft_result,
+    is_superseded,
+    load_draft_run,
     save_draft_run,
     set_latest_draft_run,
 )
@@ -50,6 +55,8 @@ from onyx.connectors.capability_checks.runner import (
     capability_check_run_stale_after,
 )
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP, ConnectorMapping
+from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.credential_capability import (
     mark_capability_report_running,
     mark_capability_run_failed,
@@ -167,7 +174,7 @@ def start_capability_checks_for_new_credential(
 @dataclass(frozen=True)
 class _PlannedDraft:
     form_state: FormState[Any]
-    # None for a form with no values: config-reading checks wait.
+    # None for a config-less create form: config-reading checks wait.
     connector_specific_config: dict[str, Any] | None
     checks: list[tuple[CapabilityCheck[Any], DraftCheckState]]
 
@@ -178,12 +185,23 @@ def _plan_draft(
     config_class: type[ConnectorConfig],
     access_type: AccessType | None,
     form_values: dict[str, Any],
+    config_is_complete: bool = False,
 ) -> _PlannedDraft:
     """Decides each check's state before it runs. Reads no credential and does
-    no I/O to the source."""
+    no I/O to the source.
+
+    A create form with no values is config-less, and config-reading checks
+    wait, unless the defaults alone make a complete config (a source whose
+    fields all have defaults, such as Linear). With ``config_is_complete`` (a
+    pair's proposed config), {} selects the defaults."""
     form_state = validate_form_state(config_class, form_values)
-    connector_specific_config = (
-        form_values if form_state.provided or form_state.errors else None
+    connector_specific_config: dict[str, Any] | None = (
+        form_values
+        if config_is_complete
+        or form_state.provided
+        or form_state.errors
+        or form_state.complete is not None
+        else None
     )
     context = CapabilityCheckContext(
         source=source,
@@ -236,10 +254,12 @@ def start_draft_capability_check_run(
     draft_key: str,
     form_values: dict[str, Any],
     rerun: DraftRerunMode = DraftRerunMode.NONE,
+    pair_scope: DraftRunPairScope | None = None,
 ) -> DraftCheckRunSnapshot:
     """Decides every check's draft state, fills results from the cache, and
     enqueues one task for the checks that are left. Does no I/O to the source.
     The run replaces any earlier run of the same user and draft key.
+    ``pair_scope`` makes the run a dry run of an existing pair.
 
     ``rerun`` picks the cached results to ignore: with FAILED, a cached FAILED
     result is run again, so a fix made at the source since the last run shows;
@@ -252,6 +272,7 @@ def start_draft_capability_check_run(
             lock for too long.
     """
     plan = _plan_draft(
+        config_is_complete=pair_scope is not None,
         source=source,
         config_class=config_class,
         access_type=access_type,
@@ -274,6 +295,7 @@ def start_draft_capability_check_run(
             form_values=(
                 form_state.values if connector_specific_config is not None else None
             ),
+            cc_pair_id=pair_scope.cc_pair_id if pair_scope is not None else None,
         )
         cached = (
             None if rerun == DraftRerunMode.ALL else get_cached_draft_result(cache_key)
@@ -301,6 +323,7 @@ def start_draft_capability_check_run(
             checks=checks,
         ),
         result_cache_keys=result_cache_keys,
+        pair_scope=pair_scope,
     )
     if has_pending:
         # The task can wait in the queue this long, plus a margin for the
@@ -346,3 +369,80 @@ def start_draft_capability_check_run(
         save_draft_run(run)
         raise CapabilityRunEnqueueError(str(e)) from e
     return run.snapshot
+
+
+def start_cc_pair_draft_check_run(
+    db_session: Session,
+    *,
+    user_id: UUID,
+    cc_pair_id: int,
+    proposed_credential: Credential | None,
+    access_type: AccessType,
+    connector_specific_config: dict[str, Any],
+    rerun: DraftRerunMode = DraftRerunMode.NONE,
+) -> DraftCheckRunSnapshot:
+    """Starts a dry run of the capability checks for a proposed state of an
+    existing pair. Like a create-form draft run, it never writes a stored
+    report; the checks get the pair's connector, as at creation.
+    ``proposed_credential`` None keeps the pair's credential. The caller
+    authorizes the user for the pair and the proposed credential.
+
+    Raises:
+        OnyxError: The pair does not exist, or its source has no connector
+            configuration.
+        CapabilityRunEnqueueError: As for a create-form draft run.
+    """
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session, cc_pair_id, eager_load_connector=True, eager_load_credential=True
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            f"Connector-credential pair {cc_pair_id} does not exist.",
+        )
+    connector = cc_pair.connector
+    mapping: ConnectorMapping | None = CONNECTOR_CLASS_MAP.get(connector.source)
+    if mapping is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"{connector.source.value} has no connector configuration.",
+        )
+    return start_draft_capability_check_run(
+        user_id=user_id,
+        credential=proposed_credential or cc_pair.credential,
+        source=connector.source,
+        config_class=mapping.config_class,
+        access_type=access_type,
+        draft_key=cc_pair_draft_key(cc_pair_id),
+        form_values=connector_specific_config,
+        rerun=rerun,
+        pair_scope=DraftRunPairScope(
+            cc_pair_id=cc_pair_id,
+            connector_id=connector.id,
+            input_type=connector.input_type,
+        ),
+    )
+
+
+def cancel_draft_capability_check_run(*, run_id: UUID, user_id: UUID) -> bool:
+    """Stops a draft run the user started: it reads as SUPERSEDED, and its task
+    stops before its next check. A check already running still finishes.
+
+    Returns False when the run expired or another user started it. A run a
+    newer run already replaced is left alone, so the newer one keeps going.
+    """
+    run = load_draft_run(run_id)
+    if run is None or run.user_id != user_id:
+        return False
+    start_lock = draft_run_start_lock(user_id, run.snapshot.draft_key)
+    if not start_lock.acquire(blocking_timeout=_DRAFT_START_LOCK_WAIT_SECONDS):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "A check run for this form is starting; try again shortly.",
+        )
+    try:
+        if not is_superseded(run):
+            clear_latest_draft_run(run)
+    finally:
+        start_lock.release()
+    return True

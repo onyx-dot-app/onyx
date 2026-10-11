@@ -26,6 +26,7 @@ import { Row, targetTakesFocus } from "@opal/components/dropdown/rows";
 import type {
   DropdownMode,
   DropdownRow,
+  DropdownSizePreset,
   DropdownSearch,
   RowGroup,
 } from "@opal/components/dropdown/types";
@@ -53,6 +54,7 @@ interface DropdownListProps {
   viewDirection: "forward" | "back";
   /** Post-filter, post-fold groups in render order. */
   groups: RowGroup[];
+  sizePreset: DropdownSizePreset;
   /** The supplied set itself is empty, not merely filtered out. */
   emptySet: boolean;
   isSelected: (row: DropdownRow) => boolean;
@@ -111,6 +113,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       viewKey,
       viewDirection,
       groups,
+      sizePreset,
       emptySet,
       isSelected,
       exactValue,
@@ -231,6 +234,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       mode,
       label,
       groups,
+      sizePreset,
       emptySet,
       isSelected,
       exactValue,
@@ -392,6 +396,7 @@ interface CardProps {
   mode: DropdownMode;
   label: string;
   groups: RowGroup[];
+  sizePreset: DropdownSizePreset;
   emptySet: boolean;
   isSelected: (row: DropdownRow) => boolean;
   exactValue: string | undefined;
@@ -438,6 +443,7 @@ function Card({
   mode,
   label,
   groups,
+  sizePreset,
   emptySet,
   isSelected,
   exactValue,
@@ -553,6 +559,7 @@ function Card({
             listId={listId}
             mode={mode}
             groups={groups}
+            sizePreset={sizePreset}
             isSelected={isSelected}
             exactValue={exactValue}
             highlightedIndex={highlightedIndex}
@@ -574,6 +581,7 @@ interface RowsProps {
   listId: string;
   mode: DropdownMode;
   groups: RowGroup[];
+  sizePreset: DropdownSizePreset;
   isSelected: (row: DropdownRow) => boolean;
   exactValue: string | undefined;
   highlightedIndex: number;
@@ -591,6 +599,7 @@ function Rows({
   listId,
   mode,
   groups,
+  sizePreset,
   isSelected,
   exactValue,
   highlightedIndex,
@@ -610,7 +619,8 @@ function Rows({
           interaction={highlightedIndex === 0 ? "hover" : "rest"}
           rounding={2}
           title={create.text}
-          sizePreset="main-ui"
+          sizePreset={sizePreset}
+          padding={sizePreset === "secondary" ? 0 : 0.5}
           variant="body"
           rightChildren={<SvgPlus className="opal-dropdown-create-icon" />}
           id={createElementId(listId)}
@@ -648,6 +658,7 @@ function Rows({
               listId={listId}
               mode={mode}
               row={row}
+              sizePreset={sizePreset}
               index={rowIndex}
               isHighlighted={rowIndex >= 0 && rowIndex === highlightedIndex}
               isSelected={

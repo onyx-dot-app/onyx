@@ -16,10 +16,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.credential_injection import (
-    CredentialUnavailableError,
-    InjectionContext,
-)
+from onyx.sandbox_proxy.credential_injection import CredentialUnavailableError
+from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.resolvers import external_app
 from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
 from tests.unit.sandbox_proxy.conftest import (

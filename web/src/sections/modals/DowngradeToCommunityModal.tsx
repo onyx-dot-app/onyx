@@ -2,17 +2,18 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Text } from "@opal/components";
-import { SvgAlertTriangle } from "@opal/icons";
+import { Button, MessageCard, Text } from "@opal/components";
+import { SvgArrowDownCircle } from "@opal/icons";
 import { ConfirmationModalLayout, toast } from "@opal/layouts";
+import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { downgradeToCommunity } from "@/lib/billing";
 
-const CONSEQUENCE_KEYS = [
-  "modal.connectors.text",
-  "modal.groups.text",
-  "modal.features.text",
-  "modal.license.text",
+const CHANGE_KEYS = [
+  "modal.madePublic.text",
+  "modal.deleted.text",
+  "modal.disabled.text",
+  "modal.reset.text",
 ] as const;
 
 interface DowngradeToCommunityModalProps {
@@ -43,7 +44,8 @@ export default function DowngradeToCommunityModal({
 
   return (
     <ConfirmationModalLayout
-      icon={SvgAlertTriangle}
+      icon={SvgArrowDownCircle}
+      color="warning"
       title={t("modal.title")}
       description={t("modal.description")}
       // Closing would not stop the request, and reopening could send it twice.
@@ -60,12 +62,29 @@ export default function DowngradeToCommunityModal({
         </Button>
       }
     >
-      <Section gap={0.75} alignItems="start" height="auto">
-        {CONSEQUENCE_KEYS.map((key) => (
-          <Text key={key} as="p" font="main-ui-muted" color="text-03">
-            {t(key)}
+      <Section gap={1} alignItems="start" height="auto">
+        <Section gap={0.5} alignItems="start" height="auto">
+          <Text as="p" font="main-ui-body" color="text-03">
+            {markdown(t("modal.intro.text"))}
           </Text>
-        ))}
+          <Text as="p" font="main-ui-body" color="text-03">
+            {t("modal.changes.text")}
+          </Text>
+          <ul className="list-disc space-y-0.5 ps-5">
+            {CHANGE_KEYS.map((key) => (
+              <Text key={key} as="li" font="main-ui-body" color="text-03">
+                {markdown(t(key))}
+              </Text>
+            ))}
+          </ul>
+        </Section>
+        <MessageCard
+          variant="warning"
+          outerPadding={1}
+          innerPadding={1}
+          titleMaxLines={undefined}
+          title={markdown(t("modal.warning.text"))}
+        />
       </Section>
     </ConfirmationModalLayout>
   );

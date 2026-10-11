@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
@@ -436,7 +437,7 @@ def get_documents_for_connector_credential_pair_limited_columns(
     for row in rows:
         doc_row = DocumentRow(
             id=row.id,
-            doc_metadata=row.doc_metadata,
+            doc_metadata=row.doc_metadata or {},
             external_user_group_ids=row.external_user_group_ids or [],
             external_user_emails=row.external_user_emails or [],
         )
@@ -1290,6 +1291,34 @@ def mark_cc_pair_documents_for_sync__no_commit(
             DbDocument.chunk_count.is_not(None),
         )
         .values(last_modified=datetime.now(timezone.utc))
+    )
+
+
+def build_cc_pair_has_unsynced_documents_clause() -> ColumnElement[bool]:
+    """EXISTS over the indexed documents of the enclosing query's
+    ConnectorCredentialPair row that wait for metadata sync: the documents
+    mark_cc_pair_documents_for_sync__no_commit marks, not yet synced.
+
+    Documents with a NULL chunk_count (indexed before the column existed) are
+    left out. Metadata sync skips their chunks and still marks them synced, so
+    waiting for them protects nothing. Only a re-index rewrites their access,
+    and the perm-sync-pending guarantee does not cover them."""
+    return (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id
+            == ConnectorCredentialPair.connector_id,
+            DocumentByConnectorCredentialPair.credential_id
+            == ConnectorCredentialPair.credential_id,
+            DbDocument.chunk_count.is_not(None),
+            or_(
+                DbDocument.last_modified > DbDocument.last_synced,
+                DbDocument.last_synced.is_(None),
+            ),
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
     )
 
 

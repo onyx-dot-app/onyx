@@ -11,6 +11,8 @@ no hold applies. The hold reads the pair's connector-scoped report (credential
   stored report that cannot be read holds the same way.
 - A required, applicable check that FAILED holds. INDETERMINATE and SKIPPED
   do not.
+- A finished report that ran with another config (e.g. an edit's proposed
+  config that apply rejected) counts as no report.
 
 A pair with a dispatched index attempt, a pair without a report, and a source
 without named checks are never held. Nothing is held while
@@ -34,6 +36,7 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.registry import has_named_capability_checks
 from onyx.connectors.capability_checks.runner import capability_check_run_stale_after
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.db.credential_capability import get_capability_report_row
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import CapabilityReportRunStatus
@@ -45,16 +48,21 @@ logger = setup_logger()
 
 
 def decide_indexing_hold(
-    row: CredentialCapabilityReportRow, *, now: datetime, stale_after: timedelta
+    row: CredentialCapabilityReportRow,
+    *,
+    live_config_hash: str | None,
+    now: datetime,
+    stale_after: timedelta,
 ) -> IndexingHold | None:
-    """The hold that the report row puts on a pair's first index attempt."""
+    """The hold that the report row puts on a pair's first index attempt.
+    ``live_config_hash`` is the hash of the pair's saved config."""
     if row.run_status == CapabilityReportRunStatus.RUNNING:
         if row.run_started_at is not None and row.run_started_at >= now - stale_after:
             return IndexingHold(reason=IndexingHoldReason.CHECKS_RUNNING)
         return IndexingHold(reason=IndexingHoldReason.CHECKS_FAILED_TO_RUN)
     if row.run_status == CapabilityReportRunStatus.FAILED_TO_RUN:
         return IndexingHold(reason=IndexingHoldReason.CHECKS_FAILED_TO_RUN)
-    if row.report is None:
+    if row.report is None or row.connector_config_hash != live_config_hash:
         return None
     try:
         report = CredentialCapabilityReport.model_validate(row.report)
@@ -105,6 +113,9 @@ def get_first_indexing_hold(
         return None
     return decide_indexing_hold(
         row,
+        live_config_hash=compute_connector_config_hash(
+            cc_pair.connector.connector_specific_config
+        ),
         now=get_db_current_time(db_session),
         stale_after=capability_check_run_stale_after(source),
     )

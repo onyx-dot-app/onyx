@@ -169,10 +169,8 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
-    RecordType,
     mt_cloud_identify_user,
     mt_cloud_telemetry,
-    optional_telemetry,
 )
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params, sanitize_next_url
@@ -1005,7 +1003,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             oauth_account_dict,
         )
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
         oauth_name: str,
@@ -1409,11 +1407,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
 
         logger.debug("User %s has registered.", user.id)
-        optional_telemetry(
-            record_type=RecordType.SIGN_UP,
-            data={"action": "create"},
-            user_id=str(user.id),
-        )
 
         emit_audit_event(
             AuditAction.REGISTER,
@@ -1535,7 +1528,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
@@ -3058,7 +3051,7 @@ def get_oauth_router(
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     @router.get(
         "/callback",
         name=callback_route_name,

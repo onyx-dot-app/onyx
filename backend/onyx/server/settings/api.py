@@ -18,6 +18,10 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import KV_REINDEX_KEY, NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.llm import (
+    mark_model_configuration_visible,
+    require_router_model_configuration,
+)
 from onyx.db.models import User
 from onyx.db.notification import (
     dismiss_all_notifications,
@@ -34,6 +38,7 @@ from onyx.server.features.build.utils import (
     is_craft_enabled_for_user,
 )
 from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -73,6 +78,7 @@ def admin_patch_settings(
     current_user: User = Depends(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
+    db_session: Session = Depends(get_session),
 ) -> Settings:
     if global_version.is_ee_version():
         from ee.onyx.utils.tier import get_tier
@@ -134,6 +140,16 @@ def admin_patch_settings(
                 OnyxErrorCode.FEATURE_NOT_AVAILABLE,
                 "The LLM gateway requires the Business or Enterprise plan.",
             )
+
+        routing_id = merged.model_routing_model_configuration_id
+        if (
+            "model_routing_model_configuration_id" in settings.model_fields_set
+            and routing_id is not None
+        ):
+            routing_model = require_router_model_configuration(db_session, routing_id)
+            # Hidden routers don't reach the picker's provider payload.
+            if mark_model_configuration_visible(db_session, routing_model):
+                invalidate_provider_listing_cache()
 
         store_settings(merged)
 

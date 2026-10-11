@@ -1,52 +1,82 @@
-"""The thread key, the grouping of message copies into threads, the reader
-rules, and the file store round trip of the attempt's thread table."""
+"""The thread key, the root test, and the rules that turn one mailbox's copy
+of a thread into documents from its headers alone."""
 
 import base64
-import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
 
-import pytest
-
-from onyx.connectors.outlook.models import OutlookMailbox, ThreadListing
+from onyx.connectors.outlook.models import (
+    DocumentPlan,
+    OutlookMailbox,
+    OutlookMessageChange,
+    OutlookRecipient,
+    ThreadListing,
+)
 from onyx.connectors.outlook.threads import (
-    ThreadTable,
-    candidate_copies,
-    choose_builder,
+    MAX_MESSAGES_PER_CONVERSATION,
     copy_document_id,
-    delete_abandoned_tables,
-    group_threads,
-    newest_message_ids,
-    partial_copies,
-    readers_of,
+    designated_builder,
+    is_thread_root,
+    listing_row,
+    newest_rows,
+    own_document_id,
+    plan_documents,
+    roster_of,
     thread_document_id,
     thread_key,
 )
-from tests.unit.onyx.connectors.outlook.outlook_api_shapes import memory_file_store
 
 ROOT = bytes(range(22))
 ROOT_INDEX = base64.b64encode(ROOT).decode()
 REPLY_INDEX = base64.b64encode(ROOT + bytes(5)).decode()
 T0 = datetime(2026, 10, 1, tzinfo=timezone.utc)
 
+ALICE = OutlookMailbox(id="user-1", address="alice@contoso.com")
+BOB = OutlookMailbox(id="user-2", address="bob@contoso.com")
+CAROL = OutlookMailbox(id="user-3", address="carol@contoso.com")
+ROSTER = roster_of([ALICE, BOB, CAROL])
+OUTSIDER = "vendor@example.com"
 
-def _mailbox(n: int) -> OutlookMailbox:
-    return OutlookMailbox(id=f"user-{n}", address=f"user{n}@contoso.com")
+
+def _recipient(address: str) -> OutlookRecipient:
+    return OutlookRecipient(address=address)
 
 
-def _listing(key: str, mailbox_n: int, message: str, minute: int = 0) -> ThreadListing:
+def _walked(mailbox: OutlookMailbox) -> bool:
+    del mailbox
+    return True
+
+
+def _row(
+    message: str,
+    sender: OutlookMailbox | None,
+    *named: OutlookMailbox,
+    minute: int = 0,
+    root: bool = False,
+) -> ThreadListing:
+    everyone = {m.id: m for m in ([sender] if sender else []) + list(named)}
     return ThreadListing(
-        key=key,
-        mailbox=_mailbox(mailbox_n),
-        conversation_id=f"conv-{key}-{mailbox_n}",
+        key="a",
+        conversation_id="conv-a",
         message_id=message,
         received_at=T0 + timedelta(minutes=minute),
+        is_root=root,
+        sender=sender,
+        named=list(everyone.values()),
     )
+
+
+def _ids(plans: list[DocumentPlan]) -> dict[str, tuple[list[str], set[str]]]:
+    return {
+        plan.document_id: (plan.message_ids, {r.id for r in plan.readers})
+        for plan in plans
+    }
 
 
 def test_a_reply_shares_its_root_message_thread_key() -> None:
     assert thread_key(REPLY_INDEX) == thread_key(ROOT_INDEX)
     assert thread_key(ROOT_INDEX) is not None
+    assert is_thread_root(ROOT_INDEX)
+    assert not is_thread_root(REPLY_INDEX)
 
 
 def test_thread_key_is_safe_inside_a_document_id() -> None:
@@ -54,234 +84,221 @@ def test_thread_key_is_safe_inside_a_document_id() -> None:
     assert key is not None
     assert "/" not in key and "+" not in key and "=" not in key
     assert thread_document_id(key) == f"outlook-thread:{key}"
-    assert copy_document_id(key, _mailbox(1)) == f"outlook-thread:{key}:user-1"
+    assert copy_document_id(key, ALICE) == f"outlook-thread:{key}:user-1"
+    assert own_document_id(key, ALICE) == f"outlook-thread:{key}:user-1:own"
 
 
 def test_thread_key_rejects_short_or_malformed_indexes() -> None:
     assert thread_key(base64.b64encode(b"short").decode()) is None
     assert thread_key("not base64!") is None
     assert thread_key("") is None
+    assert not is_thread_root("not base64!")
 
 
-def test_grouping_folds_copies_per_mailbox_and_finds_the_newest_message() -> None:
-    groups = group_threads(
-        [
-            _listing("a", 1, "m1", 0),
-            _listing("a", 2, "m1", 0),
-            _listing("a", 1, "m2", 5),
-            _listing("a", 1, "m2", 5),
-            _listing("b", 2, "m9", 1),
-        ]
+def test_roster_answers_to_aliases_but_a_primary_address_wins() -> None:
+    alice = OutlookMailbox(
+        id="user-1", address="alice@contoso.com", aliases=("al@contoso.com",)
+    )
+    bob = OutlookMailbox(
+        id="user-2", address="bob@contoso.com", aliases=("al@contoso.com",)
+    )
+    al = OutlookMailbox(id="user-3", address="al@contoso.com")
+
+    roster = roster_of([bob, alice, al])
+
+    assert roster["al@contoso.com"] == al
+    assert roster_of([bob, alice])["al@contoso.com"] == bob
+
+
+def test_a_reply_to_an_alias_still_names_the_mailbox() -> None:
+    alice = OutlookMailbox(
+        id="user-1", address="alice@contoso.com", aliases=("al@contoso.com",)
+    )
+    change = OutlookMessageChange(
+        id="g-2",
+        conversation_id="conv-a",
+        conversation_index=REPLY_INDEX,
+        sender=_recipient(BOB.address),
+        to_recipients=[_recipient("Al@Contoso.com")],
     )
 
-    by_key = {group.key: group for group in groups}
-    assert set(by_key) == {"a", "b"}
-    assert by_key["a"].newest_message_id == "m2"
-    copies = {copy.mailbox.id: copy for copy in by_key["a"].copies}
-    assert set(copies["user-1"].received) == {"m1", "m2"}
-    assert set(copies["user-2"].received) == {"m1"}
-    assert copies["user-1"].conversation_id == "conv-a-1"
+    row = listing_row(change, roster_of([alice, BOB]))
+
+    assert row is not None
+    assert [m.id for m in row.named] == [BOB.id, alice.id]
 
 
-def test_newest_message_ties_break_on_the_message_id_in_every_run() -> None:
-    forward = group_threads([_listing("a", 1, "m-x", 0), _listing("a", 1, "m-y", 0)])
-    backward = group_threads([_listing("a", 1, "m-y", 0), _listing("a", 1, "m-x", 0)])
+def test_listing_row_maps_headers_to_the_walked_mailboxes() -> None:
+    change = OutlookMessageChange(
+        id="g-1",
+        internet_message_id="<m1@contoso.com>",
+        conversation_id="conv-a",
+        conversation_index=ROOT_INDEX,
+        received_at=T0,
+        sender=_recipient(OUTSIDER),
+        to_recipients=[_recipient("Bob@Contoso.com"), _recipient(OUTSIDER)],
+        cc_recipients=[_recipient(CAROL.address), _recipient(BOB.address)],
+    )
 
-    assert forward[0].newest_message_id == backward[0].newest_message_id == "m-y"
+    row = listing_row(change, ROSTER)
+
+    assert row is not None
+    assert row.message_id == "<m1@contoso.com>"
+    assert row.is_root
+    assert row.sender is None
+    assert [m.id for m in row.named] == [BOB.id, CAROL.id]
 
 
-def test_readers_are_the_candidates_holding_every_message_of_the_builder() -> None:
-    # Alice and Bob share the thread. Dave replied privately to Alice, and
-    # Alice answered Bob: Alice holds all three, Bob two, Dave one.
-    group = group_threads(
-        [
-            _listing("a", 1, "root", 0),
-            _listing("a", 2, "root", 0),
-            _listing("a", 3, "private", 1),
-            _listing("a", 1, "private", 1),
-            _listing("a", 1, "answer", 2),
-            _listing("a", 2, "answer", 2),
-        ]
-    )[0]
+def test_listing_row_skips_removals_drafts_and_messages_without_a_thread() -> None:
+    removed = OutlookMessageChange(
+        id="g-1", conversation_id="conv-a", conversation_index=ROOT_INDEX, removed=True
+    )
+    draft = OutlookMessageChange(
+        id="g-1", conversation_id="conv-a", conversation_index=ROOT_INDEX, is_draft=True
+    )
+    no_conversation = OutlookMessageChange(id="g-1", conversation_index=ROOT_INDEX)
+    no_index = OutlookMessageChange(id="g-1", conversation_id="conv-a")
 
-    candidates = candidate_copies(group)
-    assert {copy.mailbox.id for copy in candidates} == {"user-1", "user-2"}
-    builder = choose_builder(candidates)
-    assert builder.mailbox.id == "user-1"
-    document_messages = newest_message_ids(builder, keep=100)
-    assert document_messages == {"root", "private", "answer"}
-    # Bob never received the private reply, so the thread document that
-    # holds it is Alice's alone. Bob and Dave get documents of their own copies.
-    readers = readers_of(candidates, document_messages)
-    assert [m.id for m in readers] == ["user-1"]
-    assert sorted(copy.mailbox.id for copy in partial_copies(group, readers)) == [
-        "user-2",
-        "user-3",
+    for change in (removed, draft, no_conversation, no_index):
+        assert listing_row(change, ROSTER) is None
+
+
+def test_newest_rows_keep_each_message_once_and_cut_to_the_newest() -> None:
+    rows = [_row(f"m{i}", ALICE, minute=i) for i in range(5)]
+    rows.append(_row("m2", ALICE, minute=2))
+
+    assert [r.message_id for r in newest_rows(rows, keep=3)] == ["m2", "m3", "m4"]
+
+
+def test_builder_is_the_sender_else_the_lowest_named_mailbox() -> None:
+    assert designated_builder(_row("m", CAROL, BOB, root=True), _walked) == CAROL
+    assert designated_builder(_row("m", None, CAROL, BOB, root=True), _walked) == BOB
+    assert designated_builder(_row("m", None, root=True), _walked) is None
+
+
+def test_a_mailbox_the_run_cannot_open_is_passed_over_as_builder() -> None:
+    """Carol is a guest with no mailbox: she never builds, so Bob does, and
+    her copy of the root is nobody's to write."""
+    root = _row("root", CAROL, ALICE, BOB, root=True)
+
+    def not_carol(mailbox: OutlookMailbox) -> bool:
+        return mailbox.id != CAROL.id
+
+    assert designated_builder(root, not_carol) == ALICE
+    assert designated_builder(_row("m", CAROL, root=True), not_carol) is None
+    assert _ids(plan_documents([root], ALICE, not_carol)) == {
+        thread_document_id("a"): (["root"], {ALICE.id, BOB.id, CAROL.id})
+    }
+    assert plan_documents([root], BOB, not_carol) == []
+
+
+def test_builder_writes_the_thread_for_everyone_named_on_every_message() -> None:
+    rows = [
+        _row("root", ALICE, BOB, CAROL, root=True),
+        _row("reply", BOB, ALICE, CAROL, minute=1),
     ]
 
+    plans = _ids(plan_documents(rows, ALICE, _walked))
 
-def test_builder_is_the_largest_copy_and_the_lowest_mailbox_id_on_a_tie() -> None:
-    group = group_threads(
-        [
-            _listing("a", 2, "m1", 0),
-            _listing("a", 2, "m2", 1),
-            _listing("a", 1, "m2", 1),
-            _listing("a", 3, "m1", 0),
-            _listing("a", 3, "m2", 1),
-        ]
-    )[0]
-
-    assert choose_builder(candidate_copies(group)).mailbox.id == "user-2"
-    assert newest_message_ids(choose_builder(candidate_copies(group)), keep=1) == {"m2"}
+    assert plans == {
+        thread_document_id("a"): (["root", "reply"], {ALICE.id, BOB.id, CAROL.id})
+    }
+    assert plan_documents(rows, BOB, _walked) == []
+    assert plan_documents(rows, CAROL, _walked) == []
 
 
-def test_thread_table_round_trips_pages_into_buckets_and_cleans_up() -> None:
-    store = memory_file_store()
-    with (
-        patch(
-            "onyx.connectors.outlook.threads.get_default_file_store", return_value=store
-        ),
-        patch("onyx.connectors.outlook.threads.ROWS_PER_BUCKET", 2),
-        patch("onyx.connectors.outlook.threads.BUCKET_FLUSH_ROWS", 1),
-    ):
-        table = ThreadTable("run")
-        table.write_page(0, [_listing("a", 1, "m1"), _listing("b", 1, "m2")])
-        table.write_page(1, [_listing("a", 2, "m1"), _listing("c", 2, "m3")])
-        table.write_mailbox_exclusions("user-1", ["junk"])
-
-        bucket_count = table.write_buckets(page_count=2, row_count=4)
-        assert bucket_count == 2
-        rows = [row for b in range(bucket_count) for row in table.read_bucket(b)]
-        assert sorted((r.key, r.mailbox.id) for r in rows) == [
-            ("a", "user-1"),
-            ("a", "user-2"),
-            ("b", "user-1"),
-            ("c", "user-2"),
-        ]
-        # Every copy of a thread lands in the same bucket.
-        for b in range(bucket_count):
-            keys = {row.key for row in table.read_bucket(b)}
-            assert sum(1 for r in rows if r.key in keys) == len(table.read_bucket(b))
-        # Chunks and the manifest are plain JSON, so another run can read them.
-        manifest = json.loads(store.files["outlook-threads/run/buckets.json"])
-        assert manifest["next_page"] == 2
-        assert manifest["chunks"] == [
-            sum(
-                1
-                for f in store.files
-                if f.startswith(f"outlook-threads/run/bucket-{b}-")
-            )
-            for b in range(bucket_count)
-        ]
-        assert ThreadTable("run").read_bucket(0) == table.read_bucket(0)
-        table.fold_exclusions()
-        assert ThreadTable("run").read_exclusions() == {"user-1": {"junk"}}
-
-        table.touch()
-        table.delete_all()
-
-    assert store.files == {}
-
-
-def test_abandoned_tables_go_by_their_newest_write() -> None:
-    now = datetime.now(timezone.utc)
-    stale = now - timedelta(days=9)
-    store = MagicMock()
-    store.list_files_by_prefix.return_value = [
-        MagicMock(file_id="outlook-threads/old/listing-0.json", created_at=stale),
-        MagicMock(file_id="outlook-threads/old/touch.json", created_at=stale),
-        MagicMock(file_id="outlook-threads/live/listing-0.json", created_at=stale),
-        MagicMock(file_id="outlook-threads/live/touch.json", created_at=now),
+def test_a_mailbox_dropped_from_a_reply_gets_the_messages_that_name_it() -> None:
+    """Alice wrote to Bob and Carol, Bob answered Alice alone. Carol never
+    received the answer, so the thread is Alice's and Bob's, and Alice
+    writes Carol a document of the first message."""
+    rows = [
+        _row("root", ALICE, BOB, CAROL, root=True),
+        _row("private", BOB, ALICE, minute=1),
     ]
-    with patch(
-        "onyx.connectors.outlook.threads.get_default_file_store", return_value=store
-    ):
-        delete_abandoned_tables(days_to_keep=7)
 
-    deleted = {call.args[0] for call in store.delete_file.call_args_list}
-    assert deleted == {
-        "outlook-threads/old/listing-0.json",
-        "outlook-threads/old/touch.json",
+    plans = _ids(plan_documents(rows, ALICE, _walked))
+
+    assert plans == {
+        thread_document_id("a"): (["root", "private"], {ALICE.id, BOB.id}),
+        copy_document_id("a", CAROL): (["root"], {CAROL.id}),
+    }
+    # Carol's own copy holds only the first message, which names the builder.
+    assert plan_documents([rows[0]], CAROL, _walked) == []
+
+
+def test_a_reply_that_left_the_builder_out_is_its_holders_own() -> None:
+    """Bob answered Carol without Alice. Alice cannot see it, so Bob and
+    Carol each write it as their own document."""
+    rows = [
+        _row("root", ALICE, BOB, CAROL, root=True),
+        _row("aside", BOB, CAROL, minute=1),
+    ]
+
+    assert _ids(plan_documents(rows, BOB, _walked)) == {
+        own_document_id("a", BOB): (["aside"], {BOB.id})
+    }
+    assert _ids(plan_documents(rows, CAROL, _walked)) == {
+        own_document_id("a", CAROL): (["aside"], {CAROL.id})
     }
 
 
-def test_total_buffer_cap_flushes_the_fullest_bucket() -> None:
-    store = memory_file_store()
-    with (
-        patch(
-            "onyx.connectors.outlook.threads.get_default_file_store",
-            return_value=store,
-        ),
-        patch("onyx.connectors.outlook.threads.ROWS_PER_BUCKET", 3),
-        patch("onyx.connectors.outlook.threads.BUCKET_FLUSH_ROWS", 100),
-        patch("onyx.connectors.outlook.threads.BUCKET_BUFFER_ROWS", 3),
-    ):
-        table = ThreadTable("run")
-        table.write_page(0, [_listing(f"k{i}", 1, f"m{i}") for i in range(6)])
-        bucket_count = table.write_buckets(page_count=1, row_count=6)
-        chunks = [f for f in store.files if "/bucket-" in f]
-        # Two buckets, six rows, three buffered at most: without the cap only
-        # the two final flushes would write a chunk.
-        assert bucket_count == 2
-        assert len(chunks) >= 3
-        rows = [r for b in range(bucket_count) for r in table.read_bucket(b)]
-        assert sorted(r.key for r in rows) == [f"k{i}" for i in range(6)]
-
-
-def test_bucketing_resumes_by_page_and_a_replayed_step_changes_nothing() -> None:
-    store = memory_file_store()
-    pages = [
-        [_listing(f"k{p}-{i}", 1, f"m{p}-{i}") for i in range(4)] for p in range(5)
+def test_a_holder_the_first_message_does_not_name_writes_its_whole_copy() -> None:
+    """Carol was added on the reply, so the builder never counts her."""
+    rows = [
+        _row("root", ALICE, BOB, root=True),
+        _row("reply", BOB, ALICE, CAROL, minute=1),
     ]
-    with (
-        patch(
-            "onyx.connectors.outlook.threads.get_default_file_store",
-            return_value=store,
-        ),
-        patch("onyx.connectors.outlook.threads.BUCKETING_ROWS_PER_STEP", 8),
-    ):
-        table = ThreadTable("run")
-        for number, page in enumerate(pages):
-            table.write_page(number, page)
 
-        first = table.bucket_pages(0, page_count=5, bucket_count=3)
-        assert first == 2
-        after_first = dict(store.files)
-        # The checkpoint was not saved, so the same step runs again.
-        assert ThreadTable("run").bucket_pages(0, page_count=5, bucket_count=3) == 2
-        assert store.files == after_first
-
-        second = table.bucket_pages(first, page_count=5, bucket_count=3)
-        third = table.bucket_pages(second, page_count=5, bucket_count=3)
-        assert (second, third) == (4, 5)
-        # A later step replayed after its manifest was written returns at once.
-        before_replay = dict(store.files)
-        assert ThreadTable("run").bucket_pages(first, page_count=5, bucket_count=3) == 5
-        assert store.files == before_replay
-        rows = [row for b in range(3) for row in ThreadTable("run").read_bucket(b)]
-
-    assert sorted(row.message_id for row in rows) == sorted(
-        row.message_id for page in pages for row in page
-    )
+    assert _ids(plan_documents(rows, CAROL, _walked)) == {
+        own_document_id("a", CAROL): (["root", "reply"], {CAROL.id})
+    }
+    assert _ids(plan_documents(rows, ALICE, _walked)) == {
+        thread_document_id("a"): (["root", "reply"], {ALICE.id, BOB.id})
+    }
 
 
-def test_an_empty_listing_cuts_into_one_empty_bucket() -> None:
-    store = memory_file_store()
-    with patch(
-        "onyx.connectors.outlook.threads.get_default_file_store", return_value=store
-    ):
-        table = ThreadTable("run")
-        assert table.write_buckets(page_count=0, row_count=0) == 1
-        table.fold_exclusions()
-        assert ThreadTable("run").read_bucket(0) == []
-        assert ThreadTable("run").read_exclusions() == {}
+def test_a_copy_without_the_first_message_is_its_holders_own() -> None:
+    rows = [_row("reply", BOB, ALICE, minute=1)]
+
+    assert _ids(plan_documents(rows, ALICE, _walked)) == {
+        own_document_id("a", ALICE): (["reply"], {ALICE.id})
+    }
 
 
-def test_a_row_that_does_not_open_with_its_key_fails_the_cut() -> None:
-    store = memory_file_store()
-    store.files["outlook-threads/run/listing-0.jsonl"] = b'{"mailbox":{},"key":"k"}'
-    with patch(
-        "onyx.connectors.outlook.threads.get_default_file_store", return_value=store
-    ):
-        with pytest.raises(ValueError, match="does not open with its key"):
-            ThreadTable("run").bucket_pages(0, page_count=1, bucket_count=2)
+def test_a_thread_from_outside_to_no_walked_mailbox_is_every_holders_own() -> None:
+    rows = [_row("root", None, root=True)]
+
+    assert _ids(plan_documents(rows, ALICE, _walked)) == {
+        own_document_id("a", ALICE): (["root"], {ALICE.id})
+    }
+
+
+def test_the_builder_reads_its_thread_even_when_unnamed_on_a_message() -> None:
+    """A message Alice was only Bcc'd on names Bob alone. Bob is named on
+    every message, so he reads the thread, and the builder always does."""
+    rows = [
+        _row("root", ALICE, BOB, root=True),
+        _row("bcc", BOB, minute=1),
+    ]
+
+    assert _ids(plan_documents(rows, ALICE, _walked)) == {
+        thread_document_id("a"): (["root", "bcc"], {ALICE.id, BOB.id})
+    }
+
+
+def test_the_thread_is_cut_to_the_newest_messages_but_the_root_still_chooses() -> None:
+    rows = [_row("root", BOB, ALICE, root=True)] + [
+        _row(f"m{i}", ALICE, BOB, minute=i + 1)
+        for i in range(MAX_MESSAGES_PER_CONVERSATION + 5)
+    ]
+
+    plans = plan_documents(rows, BOB, _walked)
+
+    assert [p.document_id for p in plans] == [thread_document_id("a")]
+    assert len(plans[0].message_ids) == MAX_MESSAGES_PER_CONVERSATION
+    assert "root" not in plans[0].message_ids
+    assert plan_documents(rows, ALICE, _walked) == []
+
+
+def test_an_empty_copy_yields_nothing() -> None:
+    assert plan_documents([], ALICE, _walked) == []

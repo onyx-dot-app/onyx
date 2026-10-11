@@ -2,6 +2,7 @@
 readable by the people SharePoint grants it to. A channel's files live in a
 SharePoint document library, so its readers come from SharePoint REST."""
 
+import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
 from datetime import datetime, timezone
@@ -9,6 +10,7 @@ from urllib.parse import urlsplit
 
 import msal
 import requests
+from office365.graph_client import GraphClient
 from office365.sharepoint.client_context import ClientContext
 from office365.teams.team import Team
 
@@ -102,8 +104,10 @@ class FileSource:
         # A channel's library, opened once per channel per attempt. None is a
         # channel whose library would not open, so every page does not try again.
         self._libraries: dict[str, ChannelLibrary | None] = {}
-        # One REST context per channel site, rebuilt after _REST_CTX_MAX_AGE_S.
-        self._rest_contexts: dict[str, tuple[ClientContext, float]] = {}
+        # One REST context per channel site on each thread, since the SDK's
+        # context queues requests on the instance, rebuilt after
+        # _REST_CTX_MAX_AGE_S and freed with the thread.
+        self._rest_contexts: threading.local = threading.local()
         # Group expansions SharePoint resolves, shared across files.
         self._permission_cache = SharepointPermissionCache()
 
@@ -234,8 +238,12 @@ class FileSource:
 
     def rest_context(self, site_url: str) -> ClientContext:
         """SharePoint REST for a channel's site, the way the SharePoint connector
-        opens it: one context per site, rebuilt once its token could be stale."""
-        cached = self._rest_contexts.get(site_url)
+        opens it: one context per site on the calling thread, rebuilt once its
+        token could be stale."""
+        by_site: dict[str, tuple[ClientContext, float]] = (
+            self._rest_contexts.__dict__.setdefault("by_site", {})
+        )
+        cached = by_site.get(site_url)
         if cached and time.monotonic() - cached[1] <= _REST_CTX_MAX_AGE_S:
             return cached[0]
         msal_app = self._msal_app()
@@ -244,7 +252,7 @@ class FileSource:
         context = ClientContext(site_url).with_access_token(
             lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
         )
-        self._rest_contexts[site_url] = (context, time.monotonic())
+        by_site[site_url] = (context, time.monotonic())
         return context
 
     def _file_access(
@@ -253,11 +261,14 @@ class FileSource:
         """The file's own readers from SharePoint, expanded through site and
         Entra groups. Empty without the enterprise permission code, as for
         SharePoint documents, so the pair's access type decides on those builds."""
+        # The lookup fetches a list item Graph did not name through the drive
+        # item's own client, so that client must be this thread's as well.
+        graph_client: GraphClient = self._session.graph_for_thread()
         access = get_sharepoint_external_access(
             ctx=self.rest_context(library.site_url),
-            graph_client=self._session.graph(),
+            graph_client=graph_client,
             permission_cache=self._permission_cache,
-            drive_item=item.to_sdk_driveitem(self._session.graph()),
+            drive_item=item.to_sdk_driveitem(graph_client),
             list_id=library.list_id,
         )
         return ExternalAccess(
@@ -269,7 +280,10 @@ class FileSource:
         )
 
     def _channel_files(
-        self, library: ChannelLibrary, start: SecondsSinceUnixEpoch | None
+        self,
+        library: ChannelLibrary,
+        start: SecondsSinceUnixEpoch | None,
+        before_page: Callable[[], None] | None = None,
     ) -> Iterator[DriveItemData]:
         """Every indexable file under the channel's folder, changed since
         ``start``. Both walks apply the same eligibility rule, so pruning removes
@@ -280,6 +294,7 @@ class FileSource:
             library.drive_id,
             folder_id=library.folder_id,
             start=window_start,
+            before_page=before_page,
         )
         return (item for item in items if _indexable_file(item))
 
@@ -349,8 +364,9 @@ class FileSource:
         folder or site raises: a channel missing from this listing would have
         its documents pruned."""
         with channel_context(channel, "files"):
+            walk.page_signals()
             library = self.resolve_library(channel)
-            for item in self._channel_files(library, start=None):
+            for item in self._channel_files(library, None, walk.page_signals):
                 yield SlimDocument(
                     id=file_document_id(item.id),
                     external_access=(

@@ -76,6 +76,7 @@ def test_perm_synced_pair_becomes_public(
         pair.auto_sync_options = {"customer_id": "123"}
         pair.last_time_perm_sync = _OLD
         pair.last_time_external_group_sync = _OLD
+        pair.perm_sync_pending_since = _OLD
         # _get_doc expires the session, which would drop these unsaved values.
         db_session.flush()
         doc = _get_doc(db_session, doc_id)
@@ -125,6 +126,7 @@ def test_perm_synced_pair_becomes_public(
         assert pair.access_type == AccessType.PUBLIC
         assert pair.last_time_perm_sync is None
         assert pair.last_time_external_group_sync is None
+        assert pair.perm_sync_pending_since is None
         # SQL NULL, not a JSON null.
         assert db_session.scalar(
             select(ConnectorCredentialPair.auto_sync_options.is_(None)).where(
