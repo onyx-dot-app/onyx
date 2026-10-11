@@ -54,7 +54,7 @@ def _drive_item(list_item_id: str | None = None) -> DriveItemData:
 
 def _paged(items: list[Any]) -> MagicMock:
     """An SDK collection whose get_all hands one page to page_loaded."""
-    page = MagicMock()
+    page: MagicMock = MagicMock()
     page.current_page = items
 
     def get_all(*, page_loaded: Any, page_size: int | None = None) -> MagicMock:
@@ -171,7 +171,7 @@ def test_role_assignments_come_back_as_plain_data(_mock_sleep: MagicMock) -> Non
     )
     with_member = MagicMock(member=member, role_definition_bindings=[binding])
     without_member = MagicMock(member=None, role_definition_bindings=None)
-    context = MagicMock()
+    context: MagicMock = MagicMock()
     context.web.role_assignments = _paged([with_member, without_member])
 
     assignments = read_role_assignments(
@@ -196,6 +196,45 @@ def test_role_assignments_come_back_as_plain_data(_mock_sleep: MagicMock) -> Non
 
 
 @patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+def test_role_assignments_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
+    context: MagicMock = MagicMock()
+    expanded: MagicMock = context.web.role_assignments.expand.return_value
+    page: MagicMock = MagicMock()
+    page.current_page = []
+    expanded.top.return_value.get.return_value = page
+
+    assignments = read_role_assignments(
+        context, SharepointSecurable(kind=SharepointSecurableKind.SITE), max_rows=100
+    )
+
+    expanded.top.assert_called_once_with(100)
+    expanded.get_all.assert_not_called()
+    assert assignments == []
+
+
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+def test_site_group_users_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
+    context: MagicMock = MagicMock()
+    users: MagicMock = context.web.site_groups.get_by_name.return_value.users
+    page: MagicMock = MagicMock()
+    page.current_page = [
+        MagicMock(
+            principal_type=1,
+            login_name="i:0#.f|membership|a@x.com",
+            title="A",
+            user_principal_name="a@x.com",
+        )
+    ]
+    users.top.return_value.get.return_value = page
+
+    principals = read_site_group_users(context, "Members", max_rows=50)
+
+    users.top.assert_called_once_with(50)
+    users.get_all.assert_not_called()
+    assert [principal.title for principal in principals] == ["A"]
+
+
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
 def test_incomplete_principals_are_skipped(_mock_sleep: MagicMock) -> None:
     complete = MagicMock(
         principal_type=8,
@@ -204,7 +243,7 @@ def test_incomplete_principals_are_skipped(_mock_sleep: MagicMock) -> None:
         user_principal_name=None,
     )
     no_title = MagicMock(principal_type=8, login_name="Ghost", title=None)
-    context = MagicMock()
+    context: MagicMock = MagicMock()
     context.web.site_groups.get_by_name.return_value.users = _paged(
         [complete, no_title]
     )
@@ -227,6 +266,21 @@ def test_link_scopes_skip_permissions_without_a_link(_mock_sleep: MagicMock) -> 
         scopes = read_sharing_link_scopes(MagicMock(), _drive_item())
 
     assert scopes == ["anonymous", "organization"]
+
+
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+def test_link_scopes_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
+    page: MagicMock = MagicMock()
+    page.current_page = [MagicMock(link=MagicMock(scope="anonymous"))]
+    with patch.object(DriveItemData, "to_sdk_driveitem") as to_sdk:
+        permissions: MagicMock = to_sdk.return_value.permissions
+        permissions.top.return_value.get.return_value = page
+
+        scopes = read_sharing_link_scopes(MagicMock(), _drive_item(), max_rows=50)
+
+    permissions.top.assert_called_once_with(50)
+    permissions.get_all.assert_not_called()
+    assert scopes == ["anonymous"]
 
 
 def _directory_object(data: dict[str, Any], type_name: str = "DirectoryObject") -> Any:
@@ -265,7 +319,7 @@ def test_reads_raise_refusals_as_microsoft_errors() -> None:
     response = requests.Response()
     response.status_code = 404
     response._content = json.dumps({"error": {"code": "itemNotFound"}}).encode()
-    context = MagicMock()
+    context: MagicMock = MagicMock()
     context.web.site_groups.get_by_name.return_value.users.get_all.return_value.execute_query.side_effect = ClientRequestException(
         response=response
     )
@@ -399,3 +453,17 @@ def test_a_retried_nested_listing_reads_every_page(_mock_sleep: MagicMock) -> No
 
     assert mock_get.call_count == 4
     assert groups == BOTH_GROUPS
+
+
+def test_nested_groups_read_one_page_under_max_rows() -> None:
+    with patch(
+        "office365.runtime.client_request.requests.get",
+        side_effect=[_graph_page(SECOND_PAGE)],
+    ) as mock_get:
+        groups = read_nested_entra_groups(_graph_client(), PARENT_ID, max_rows=50)
+
+    requested: list[str] = [call.kwargs["url"] for call in mock_get.call_args_list]
+    assert requested == [
+        f"{MEMBERS_URL}?$select=id,displayName,securityEnabled&$top=50"
+    ]
+    assert groups == [EntraGroup(id=SECOND_ID, displayName="Infra")]

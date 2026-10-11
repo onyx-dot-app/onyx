@@ -7,14 +7,10 @@ from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
     ResolvedEntraGroup,
 )
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
-    AZURE_AD_GROUP_PRINCIPAL_TYPE,
-    SHAREPOINT_GROUP_PRINCIPAL_TYPE,
-    USER_PRINCIPAL_TYPE,
     DocumentGroupsResult,
     GroupsResult,
     _get_azuread_groups,
     _get_nested_azuread_groups,
-    _has_only_limited_access,
     _is_public_item,
     _resolve_document_groups,
     get_external_access_from_sharepoint,
@@ -31,6 +27,10 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointRoleAssignment,
     SharepointSecurable,
     SharepointSecurableKind,
+)
+from onyx.connectors.microsoft_utils.sharepoint_principals import (
+    SharepointPrincipalType,
+    has_only_limited_access,
 )
 from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
 from onyx.connectors.sharepoint.connector_utils import (
@@ -53,7 +53,7 @@ def _make_ad_group(name: str, login_name: str | None = None) -> SharepointGroup:
     return SharepointGroup(
         name=name,
         login_name=login_name or name,
-        principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
+        principal_type=SharepointPrincipalType.ENTRA_GROUP,
     )
 
 
@@ -61,7 +61,7 @@ def _make_sharepoint_group(name: str) -> SharepointGroup:
     return SharepointGroup(
         name=name,
         login_name=name,
-        principal_type=SHAREPOINT_GROUP_PRINCIPAL_TYPE,
+        principal_type=SharepointPrincipalType.SHAREPOINT_GROUP,
     )
 
 
@@ -286,19 +286,19 @@ def test_document_readers_list_nested_groups_without_members() -> None:
 
 @pytest.mark.parametrize("role_type_kind", [1, 9])
 def test_limited_access_detection_uses_numeric_role_type(role_type_kind: int) -> None:
-    assert _has_only_limited_access(
+    assert has_only_limited_access(
         SharepointRoleAssignment(member=None, role_type_kinds=[role_type_kind])
     )
 
 
 def test_limited_access_detection_rejects_mixed_roles() -> None:
-    assert not _has_only_limited_access(
+    assert not has_only_limited_access(
         SharepointRoleAssignment(member=None, role_type_kinds=[1, 2])
     )
 
 
 def test_assignment_without_bindings_grants_access() -> None:
-    assert not _has_only_limited_access(
+    assert not has_only_limited_access(
         SharepointRoleAssignment(member=None, role_type_kinds=[])
     )
 
@@ -391,7 +391,9 @@ def test_sharepoint_group_ids_are_scoped_to_their_site() -> None:
     second_site = "https://contoso.sharepoint.com/sites/second"
     reader = FakeSharepointReader(
         role_assignments={
-            site: [_assignment(SHAREPOINT_GROUP_PRINCIPAL_TYPE, "Project Members")]
+            site: [
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Project Members")
+            ]
             for site in (first_site, second_site)
         }
     )
@@ -408,10 +410,12 @@ def test_group_sync_skips_users_and_limited_access() -> None:
         role_assignments={
             SITE_URL: [
                 _assignment(
-                    USER_PRINCIPAL_TYPE, "Ada", user_principal_name="ada@contoso.com"
+                    SharepointPrincipalType.USER,
+                    "Ada",
+                    user_principal_name="ada@contoso.com",
                 ),
-                _assignment(SHAREPOINT_GROUP_PRINCIPAL_TYPE, "Guests", [1]),
-                _assignment(SHAREPOINT_GROUP_PRINCIPAL_TYPE, "Members"),
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Guests", [1]),
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Members"),
             ]
         }
     )
@@ -575,13 +579,13 @@ def test_document_access_collects_users_and_prefixed_groups() -> None:
         role_assignments={
             SITE_URL: [
                 _assignment(
-                    USER_PRINCIPAL_TYPE,
+                    SharepointPrincipalType.USER,
                     "Ada",
                     user_principal_name="ada@contoso.onmicrosoft.com",
                 ),
-                _assignment(USER_PRINCIPAL_TYPE, "No UPN"),
-                _assignment(SHAREPOINT_GROUP_PRINCIPAL_TYPE, "Members"),
-                _assignment(SHAREPOINT_GROUP_PRINCIPAL_TYPE, "Limited", [1]),
+                _assignment(SharepointPrincipalType.USER, "No UPN"),
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Members"),
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Limited", [1]),
             ]
         }
     )

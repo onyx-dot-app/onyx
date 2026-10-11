@@ -42,6 +42,10 @@ from onyx.connectors.onedrive.capability_checks import (
 from onyx.connectors.outlook.capability_checks import (
     build_outlook_doc_permission_sync_checks,
 )
+from onyx.connectors.sharepoint.capability_checks import (
+    build_sharepoint_doc_permission_sync_checks,
+    build_sharepoint_group_sync_checks,
+)
 from onyx.connectors.slack.capability_checks import (
     build_slack_doc_permission_sync_checks,
 )
@@ -58,6 +62,7 @@ _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
     DocumentSource.JIRA: build_jira_doc_permission_sync_checks(),
     DocumentSource.GOOGLE_DRIVE: build_google_drive_doc_permission_sync_checks(),
     DocumentSource.LINEAR: build_linear_doc_permission_sync_checks(),
+    DocumentSource.SHAREPOINT: build_sharepoint_doc_permission_sync_checks(),
 }
 
 # Slack registers nothing here by design: it has no group sync (channel access
@@ -66,6 +71,7 @@ _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
 _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.ONEDRIVE: build_onedrive_group_sync_checks(),
     DocumentSource.CONFLUENCE: build_confluence_group_sync_checks(),
+    DocumentSource.SHAREPOINT: build_sharepoint_group_sync_checks(),
     DocumentSource.JIRA: build_jira_group_sync_checks(),
     DocumentSource.GOOGLE_DRIVE: build_google_drive_group_sync_checks(),
     DocumentSource.LINEAR: build_linear_group_sync_checks(),
