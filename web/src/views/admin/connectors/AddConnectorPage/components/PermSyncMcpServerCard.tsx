@@ -8,14 +8,7 @@ import { SvgCheckCircle, SvgPlug } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import type { PermSyncMcpServerConfig } from "@/lib/connectors/AutoSyncOptionFields";
 import { useAdminMcpServers } from "@/lib/mcp/hooks";
-import {
-  getMCPUserOAuthNavigationUrl,
-  type MCPUserOAuthStartResponse,
-  startMCPUserOAuth,
-  upsertMCPServer,
-  type UpsertMCPServerResponse,
-} from "@/lib/mcp/svc";
-import type { ApiResponse } from "@/lib/tools/types";
+import { upsertMCPServer, type UpsertMCPServerResponse } from "@/lib/mcp/svc";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -24,16 +17,16 @@ import {
   type MCPServer,
 } from "@/lib/mcp/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import type { ApiResponse } from "@/lib/tools/types";
 import { Permission } from "@/lib/types";
 
 /** A registered server the censor accepts: same host, and a grant that
- * belongs to each user rather than to the admin. The censor takes the first
- * such server the searching user can authenticate, so prefer that one. */
+ * belongs to each user rather than to the admin. */
 export function findPerUserMcpServer(
   servers: MCPServer[],
   host: string
 ): MCPServer | undefined {
-  const matches: MCPServer[] = servers.filter((server) => {
+  return servers.find((server) => {
     try {
       return (
         new URL(server.server_url).hostname === host &&
@@ -44,18 +37,15 @@ export function findPerUserMcpServer(
       return false;
     }
   });
-  return matches.find((server) => server.user_can_authenticate) ?? matches[0];
 }
 
 interface PermSyncMcpServerCardProps {
   config: PermSyncMcpServerConfig;
 }
 
-/** Registers the source's per-user MCP server from the connector form and
- * lets the admin connect their own account, so permission sync needs no trip
- * to the MCP Actions page. Other users connect from an assistant that
- * includes the server. The connect opens a new tab so the unsaved form
- * survives, and the listing refreshes when this tab regains focus. */
+/** Registers the source's per-user MCP server from the connector form, so
+ * permission sync needs no trip to the MCP Actions page. Users connect their
+ * own account later from an assistant that includes the server. */
 export default function PermSyncMcpServerCard({
   config,
 }: PermSyncMcpServerCardProps) {
@@ -79,8 +69,7 @@ export default function PermSyncMcpServerCard({
     mcpData?.mcp_servers ?? [],
     host
   );
-  const connected: boolean = server?.user_can_authenticate === true;
-  const canAct: boolean = isGlobalHolder && listError === undefined;
+  const canRegister: boolean = isGlobalHolder && listError === undefined;
 
   async function register() {
     setBusy(true);
@@ -104,31 +93,6 @@ export default function PermSyncMcpServerCard({
     }
   }
 
-  async function connect(serverId: number) {
-    setBusy(true);
-    setError(null);
-    // Opened during the click so the browser allows it. The navigation lands
-    // once the start call answers, and a blocked tab falls back to this tab.
-    const tab: Window | null = window.open("", "_blank");
-    try {
-      const start: MCPUserOAuthStartResponse = await startMCPUserOAuth(
-        serverId,
-        window.location.pathname + window.location.search
-      );
-      const url: string = getMCPUserOAuthNavigationUrl(start);
-      if (tab) {
-        tab.location.href = url;
-      } else {
-        window.location.href = url;
-      }
-    } catch (e) {
-      tab?.close();
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (isLoading) {
     return (
       <Card border="solid" rounding={4} padding={4}>
@@ -144,38 +108,24 @@ export default function PermSyncMcpServerCard({
       name: config.name,
       url: config.url,
     });
-    if (canAct) {
+    if (canRegister) {
       action = (
         <Button disabled={busy} onClick={register}>
           {t("register.label")}
         </Button>
       );
     }
-  } else if (connected) {
-    description = t("connected.description", { name: server.name });
-    action = (
-      <Tag title={t("connected.label")} color="green" icon={SvgCheckCircle} />
-    );
   } else {
     description = t("registered.description", { name: server.name });
-    if (canAct) {
-      const serverId: number = server.id;
-      action = (
-        <Button
-          icon={SvgPlug}
-          disabled={busy}
-          onClick={() => connect(serverId)}
-        >
-          {t("connect.label")}
-        </Button>
-      );
-    }
+    action = (
+      <Tag title={t("registered.label")} color="green" icon={SvgCheckCircle} />
+    );
   }
 
   return (
     <Card border="solid" rounding={4} padding={4}>
       <ContentAction
-        icon={connected ? SvgCheckCircle : SvgPlug}
+        icon={server === undefined ? SvgPlug : SvgCheckCircle}
         title={t("title", { name: config.name })}
         description={description}
         sizePreset="main-content"

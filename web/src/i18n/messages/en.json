@@ -3038,14 +3038,8 @@
                 "label": "Register"
               },
               "registered": {
-                "description": "{name} is registered. Connect your own account in a new tab so your own searches return results from this connector."
-              },
-              "connect": {
-                "label": "Connect my account"
-              },
-              "connected": {
-                "description": "{name} is registered and your account is connected.",
-                "label": "Connected"
+                "description": "{name} is registered. Users connect their own account from the Actions menu of an assistant that includes this server.",
+                "label": "Registered"
               }
             }
           },

@@ -3038,14 +3038,8 @@
                 "label": "Enregistrer"
               },
               "registered": {
-                "description": "{name} est enregistré. Connectez votre propre compte dans un nouvel onglet pour que vos recherches renvoient des résultats de ce connecteur."
-              },
-              "connect": {
-                "label": "Connecter mon compte"
-              },
-              "connected": {
-                "description": "{name} est enregistré et votre compte est connecté.",
-                "label": "Connecté"
+                "description": "{name} est enregistré. Les utilisateurs connectent leur propre compte depuis le menu Actions d'un assistant qui inclut ce serveur.",
+                "label": "Enregistré"
               }
             }
           },

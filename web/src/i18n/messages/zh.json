@@ -3038,14 +3038,8 @@
                 "label": "注册"
               },
               "registered": {
-                "description": "{name} 已注册。在新标签页中连接您自己的账户，您自己的搜索才会返回此连接器的结果。"
-              },
-              "connect": {
-                "label": "连接我的账户"
-              },
-              "connected": {
-                "description": "{name} 已注册，且您的账户已连接。",
-                "label": "已连接"
+                "description": "{name} 已注册。用户从包含此服务器的助手的操作菜单中连接自己的账户。",
+                "label": "已注册"
               }
             }
           },

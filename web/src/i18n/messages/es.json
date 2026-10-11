@@ -3038,14 +3038,8 @@
                 "label": "Registrar"
               },
               "registered": {
-                "description": "{name} está registrado. Conecta tu propia cuenta en una pestaña nueva para que tus búsquedas devuelvan resultados de este conector."
-              },
-              "connect": {
-                "label": "Conectar mi cuenta"
-              },
-              "connected": {
-                "description": "{name} está registrado y tu cuenta está conectada.",
-                "label": "Conectado"
+                "description": "{name} está registrado. Los usuarios conectan su propia cuenta desde el menú Acciones de un asistente que incluya este servidor.",
+                "label": "Registrado"
               }
             }
           },

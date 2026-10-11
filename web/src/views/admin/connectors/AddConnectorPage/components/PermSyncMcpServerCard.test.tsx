@@ -1,5 +1,5 @@
 /** Guards the connector-form MCP card: per-user OAuth server matching, the
- * register payload, the admin's connect in a new tab, and the permission gate. */
+ * register payload, the registered state, and the permission gate. */
 
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import PermSyncMcpServerCard, {
@@ -17,16 +17,13 @@ jest.mock("@/lib/mcp/hooks", () => ({
 }));
 jest.mock("@/lib/mcp/svc", () => ({
   upsertMCPServer: jest.fn(),
-  startMCPUserOAuth: jest.fn(),
-  getMCPUserOAuthNavigationUrl: jest.fn(),
 }));
 jest.mock("@/lib/permissions/hooks", () => ({
   usePermissionAuthority: jest.fn(),
 }));
 
 const { useAdminMcpServers } = jest.requireMock("@/lib/mcp/hooks");
-const { upsertMCPServer, startMCPUserOAuth, getMCPUserOAuthNavigationUrl } =
-  jest.requireMock("@/lib/mcp/svc");
+const { upsertMCPServer } = jest.requireMock("@/lib/mcp/svc");
 const { usePermissionAuthority } = jest.requireMock("@/lib/permissions/hooks");
 
 const CONFIG = { name: "Notion MCP", url: "https://mcp.notion.com/mcp" };
@@ -68,13 +65,11 @@ beforeEach(() => {
   });
 });
 
-test("finds only a per-user OAuth server on the host, preferring the connected one", () => {
+test("finds only a per-user OAuth server on the host", () => {
   const admin = server({ auth_performer: MCPAuthenticationPerformer.ADMIN });
   const other = server({ server_url: "https://mcp.example.com/mcp" });
-  const first = server({ id: 1 });
-  const connected = server({ id: 2, user_can_authenticate: true });
-  expect(findPerUserMcpServer([admin, other, first], HOST)).toBe(first);
-  expect(findPerUserMcpServer([admin, first, connected], HOST)).toBe(connected);
+  const match = server();
+  expect(findPerUserMcpServer([admin, other, match], HOST)).toBe(match);
   expect(findPerUserMcpServer([server({ server_url: "::" })], HOST)).toBe(
     undefined
   );
@@ -111,61 +106,15 @@ test("shows the register error and keeps the button", async () => {
   expect(screen.getByRole("button", { name: /register/i })).toBeInTheDocument();
 });
 
-test("opens the admin's own connect in a new tab when registered but not connected", async () => {
-  mockServers([server({ user_can_authenticate: false })]);
-  startMCPUserOAuth.mockResolvedValue({
-    status: "authorization_required",
-    server_id: 7,
-    authorization_url: "https://mcp.notion.com/authorize",
-    redirect_url: "/admin/connectors/notion",
-  });
-  getMCPUserOAuthNavigationUrl.mockReturnValue(
-    "https://mcp.notion.com/authorize"
-  );
-  const tab = { location: { href: "" }, close: jest.fn() };
-  const open = jest
-    .spyOn(window, "open")
-    .mockImplementation(() => tab as unknown as Window);
-  const user = setupUser();
+test("shows registered without any button once the server exists", () => {
+  mockServers([server()]);
   render(<PermSyncMcpServerCard config={CONFIG} />);
 
-  await user.click(screen.getByRole("button", { name: /connect my account/i }));
-
-  expect(open).toHaveBeenCalledWith("", "_blank");
-  await waitFor(() =>
-    expect(tab.location.href).toBe("https://mcp.notion.com/authorize")
-  );
-  expect(startMCPUserOAuth).toHaveBeenCalledWith(7, expect.any(String));
-  expect(upsertMCPServer).not.toHaveBeenCalled();
-  open.mockRestore();
-});
-
-test("shows the connect error and closes the blank tab", async () => {
-  mockServers([server({ user_can_authenticate: false })]);
-  startMCPUserOAuth.mockRejectedValue(new Error("auth down"));
-  const tab = { location: { href: "" }, close: jest.fn() };
-  const open = jest
-    .spyOn(window, "open")
-    .mockImplementation(() => tab as unknown as Window);
-  const user = setupUser();
-  render(<PermSyncMcpServerCard config={CONFIG} />);
-
-  await user.click(screen.getByRole("button", { name: /connect my account/i }));
-
-  expect(await screen.findByText("auth down")).toBeInTheDocument();
-  expect(tab.close).toHaveBeenCalled();
-  open.mockRestore();
-});
-
-test("shows connected without any button once the grant resolves", () => {
-  mockServers([server({ user_can_authenticate: true })]);
-  render(<PermSyncMcpServerCard config={CONFIG} />);
-
-  expect(screen.getByText("Connected")).toBeInTheDocument();
+  expect(screen.getByText("Registered")).toBeInTheDocument();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
-test("hides the actions without the global action permission or when the listing fails", () => {
+test("hides the register button without the global action permission or when the listing fails", () => {
   usePermissionAuthority.mockReturnValue({
     isGlobalHolder: false,
     isScopedManager: true,

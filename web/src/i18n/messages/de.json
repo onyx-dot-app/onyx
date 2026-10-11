@@ -3038,14 +3038,8 @@
                 "label": "Registrieren"
               },
               "registered": {
-                "description": "{name} ist registriert. Verbinde dein eigenes Konto in einem neuen Tab, damit deine eigenen Suchen Ergebnisse aus diesem Connector liefern."
-              },
-              "connect": {
-                "label": "Mein Konto verbinden"
-              },
-              "connected": {
-                "description": "{name} ist registriert und dein Konto ist verbunden.",
-                "label": "Verbunden"
+                "description": "{name} ist registriert. Nutzer verbinden ihr eigenes Konto über das Aktionen-Menü eines Assistenten, der diesen Server enthält.",
+                "label": "Registriert"
               }
             }
           },
