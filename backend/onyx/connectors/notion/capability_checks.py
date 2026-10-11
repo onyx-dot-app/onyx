@@ -13,9 +13,8 @@ wiki with it. Notion answers 404 for content that exists but is not shared, so
 the remediation text for a 404 names sharing, and the text for a 403 names the
 capability.
 
-Notion registers no perm-sync checks. It has no document or group sync:
-permission enforcement happens at query time through each user's own Notion
-MCP grant.
+Permission-sync checks are not registered here: they live in EE beside the
+censor.
 """
 
 from typing import Any, NoReturn
@@ -40,8 +39,6 @@ from onyx.connectors.notion.source_operations import (
     NotionSourceOperations,
 )
 from onyx.connectors.source_operations import SourceOperations
-from onyx.db.enums import AccessType
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 _NOTION_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/notion"
 
@@ -315,35 +312,6 @@ class _DatabaseQueryCheck(CapabilityCheck):
             )
 
 
-class _PerUserMcpServerCheck(CapabilityCheck):
-    """A permission-synced Notion connector censors each result through the
-    searching user's own Notion MCP grant, so one per-user OAuth Notion MCP
-    server must exist before the pairing is saved. The probe lives in EE with
-    the censor; on CE builds permission sync does not exist and this passes.
-    """
-
-    def __init__(self) -> None:
-        super().__init__(
-            capability=CredentialCapability.INDEXING,
-            check_id="notion_per_user_mcp_server",
-            display_name="Notion MCP server for permission sync is registered",
-            requires_connector_instance=False,
-            access_types=frozenset(AccessType.perm_synced_types()),
-            remediation=(
-                "Add https://mcp.notion.com/mcp under MCP Actions as an OAuth "
-                "server that each user authenticates."
-            ),
-            docs_link=_NOTION_DOCS_LINK,
-        )
-
-    def run(self, context: CapabilityCheckContext) -> None:  # noqa: ARG002
-        fetch_ee_implementation_or_noop(
-            "onyx.connectors.perm_sync_valid",
-            "raise_if_no_per_user_notion_mcp_server",
-            noop_return_value=None,
-        )()
-
-
 def build_notion_indexing_checks() -> list[CapabilityCheck]:
     """Returns the INDEXING capability checks for Notion."""
     return [
@@ -352,5 +320,4 @@ def build_notion_indexing_checks() -> list[CapabilityCheck]:
         _RootPageCheck(),
         _PageContentCheck(),
         _DatabaseQueryCheck(),
-        _PerUserMcpServerCheck(),
     ]

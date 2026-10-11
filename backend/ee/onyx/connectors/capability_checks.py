@@ -9,7 +9,10 @@ implementations stay in the OSS connector modules, mirroring the
 from ee.onyx.connectors.capability_applicability import (
     get_applicable_perm_sync_capabilities,
 )
-from ee.onyx.connectors.perm_sync_valid import source_has_perm_sync_probe
+from ee.onyx.connectors.perm_sync_valid import (
+    raise_if_no_per_user_notion_mcp_server,
+    source_has_perm_sync_probe,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -35,6 +38,7 @@ from onyx.connectors.slack.capability_checks import (
     build_slack_doc_permission_sync_checks,
 )
 from onyx.connectors.source_operations import get_source_operations_class
+from onyx.db.enums import AccessType
 
 # Named perm-sync checks per source. Per-connector work registers named checks
 # here.
@@ -53,6 +57,39 @@ _EXTERNAL_GROUP_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
     DocumentSource.ONEDRIVE: build_onedrive_group_sync_checks(),
     DocumentSource.CONFLUENCE: build_confluence_group_sync_checks(),
     DocumentSource.JIRA: build_jira_group_sync_checks(),
+}
+
+
+class _NotionPerUserMcpServerCheck(CapabilityCheck):
+    """A permission-synced Notion connector censors each result through the
+    searching user's own Notion MCP grant, so one per-user OAuth Notion MCP
+    server must exist before the pairing is saved. Notion has no document or
+    group sync, so this rides the INDEXING capability, limited to the
+    permission-synced access types.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="notion_per_user_mcp_server",
+            display_name="Notion MCP server for permission sync is registered",
+            requires_connector_instance=False,
+            access_types=frozenset(AccessType.perm_synced_types()),
+            remediation=(
+                "Add https://mcp.notion.com/mcp under MCP Actions as an OAuth "
+                "server that each user authenticates."
+            ),
+            docs_link="https://docs.onyx.app/admins/connectors/official/notion",
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:  # noqa: ARG002
+        raise_if_no_per_user_notion_mcp_server()
+
+
+# Checks a source needs only when it is permission-synced, whatever capability
+# they ride on. Notion's censor has no sync of its own to hang a check on.
+_PERM_SYNC_GATED_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
+    DocumentSource.NOTION: [_NotionPerUserMcpServerCheck()],
 }
 
 
@@ -121,4 +158,5 @@ def get_perm_sync_capability_checks(source: DocumentSource) -> list[CapabilityCh
             checks.extend(registered)
         elif capability in applicable and source_has_perm_sync_probe(source):
             checks.append(_PermSyncFallbackCheck(source, capability))
+    checks.extend(_PERM_SYNC_GATED_CHECKS_BY_SOURCE.get(source, []))
     return checks
