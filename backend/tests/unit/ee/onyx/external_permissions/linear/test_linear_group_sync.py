@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ee.onyx.configs.app_configs import LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY
+from ee.onyx.external_permissions.linear.connector import LinearPermSyncConnector
 from ee.onyx.external_permissions.linear.group_sync import (
     linear_group_sync,
     team_groups,
@@ -16,7 +17,6 @@ from ee.onyx.external_permissions.sync_params import (
     source_requires_external_group_sync,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.linear.models import LinearTeam, WorkspaceMembers
 
 MODULE = "onyx.connectors.linear.connector"
@@ -42,14 +42,14 @@ def _page_info(end_cursor: str | None = None) -> dict[str, Any]:
     return {"hasNextPage": end_cursor is not None, "endCursor": end_cursor}
 
 
-def _connector() -> LinearConnector:
-    connector = LinearConnector()
+def _connector() -> LinearPermSyncConnector:
+    connector = LinearPermSyncConnector()
     connector.load_credentials({"linear_api_key": "lin_api_test"})
     return connector
 
 
 def test_groups_are_the_workspace_and_every_visible_team() -> None:
-    connector = MagicMock(spec=LinearConnector)
+    connector = MagicMock(spec=LinearPermSyncConnector)
     connector.workspace_members.return_value = WorkspaceMembers(
         organization_id="org-1", emails={"b@x", "a@x"}
     )
@@ -182,7 +182,7 @@ def test_the_sync_builds_the_connector_on_the_db_provider() -> None:
 
     build.assert_called_once_with(DocumentSource.LINEAR, 3)
     connector: Any = groups.call_args.args[0]
-    assert isinstance(connector, LinearConnector)
+    assert isinstance(connector, LinearPermSyncConnector)
     assert connector.team_keys == ["ENG"]
     assert connector._credentials_provider is provider
 

@@ -230,16 +230,16 @@ def test_a_walk_reads_the_key_before_every_page() -> None:
     pages[1].json.return_value = {
         "data": {
             "teams": {
-                "nodes": [],
+                "nodes": [{"key": "ENG"}],
                 "pageInfo": {"hasNextPage": False, "endCursor": None},
             }
         }
     }
-    connector = LinearConnector()
+    connector = LinearConnector(team_keys=["ENG"])
     with (
         patch.object(LinearConnector, "_api_key", return_value="key") as api_key,
         patch(f"{OPS}._make_query", side_effect=pages),
     ):
-        assert connector.list_teams() == []
+        connector.validate_connector_settings()
 
     assert api_key.call_count == 2

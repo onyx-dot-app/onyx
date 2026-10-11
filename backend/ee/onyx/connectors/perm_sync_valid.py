@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
+from ee.onyx.external_permissions.linear.connector import LinearPermSyncConnector
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.box.connector import BoxConnector
 from onyx.connectors.canvas.connector import CanvasConnector
@@ -91,12 +92,9 @@ def validate_onedrive_perm_sync(connector: OneDriveConnector) -> None:
 
 
 def validate_linear_perm_sync(connector: LinearConnector) -> None:
-    """
-    A guest's token sees only the guest's own teams and cannot list the
-    workspace's members, so every public issue would end up readable by
-    nobody. Probe the token's user here so that fails at connector creation.
-    """
-    connector.probe_perm_sync_access()
+    """A guest's token cannot see the workspace's members, so the sync would
+    revoke everyone's access. Probe before each scheduled sync as well."""
+    LinearPermSyncConnector.from_connector(connector).probe_perm_sync_access()
 
 
 def validate_zoom_perm_sync(connector: ZoomConnector) -> None:

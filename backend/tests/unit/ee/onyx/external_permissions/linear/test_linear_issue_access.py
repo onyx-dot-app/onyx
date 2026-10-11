@@ -7,14 +7,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.access.models import ExternalAccess
-from onyx.connectors.linear.access import (
+from ee.onyx.external_permissions.linear.access import (
     SharedAccessIndex,
     issue_access,
     member_emails,
     workspace_members_group_id,
 )
-from onyx.connectors.linear.connector import LinearConnector
+from ee.onyx.external_permissions.linear.connector import LinearPermSyncConnector
+from onyx.access.models import ExternalAccess
 from onyx.connectors.linear.models import IssueShare, LinearTeam, LinearUser
 from onyx.connectors.models import SlimDocument
 
@@ -179,7 +179,7 @@ def test_the_walk_yields_inheriting_sub_issues_after_their_parents_page() -> Non
             None,
         ),
     ]
-    connector = LinearConnector()
+    connector = LinearPermSyncConnector()
     connector.load_credentials({"linear_api_key": "lin_api_test"})
 
     with patch(f"{MODULE}._make_query", side_effect=pages) as query:
@@ -239,7 +239,7 @@ def _share_lookup_response(errors: list[dict[str, Any]] | None) -> MagicMock:
 
 
 def test_a_parent_outside_the_scope_is_read_for_its_shares() -> None:
-    connector = LinearConnector()
+    connector = LinearPermSyncConnector()
     connector.load_credentials({"linear_api_key": "lin_api_test"})
 
     with patch(
@@ -252,7 +252,7 @@ def test_a_parent_outside_the_scope_is_read_for_its_shares() -> None:
 
 
 def test_a_parent_the_token_cannot_see_grants_nothing() -> None:
-    connector = LinearConnector()
+    connector = LinearPermSyncConnector()
     connector.load_credentials({"linear_api_key": "lin_api_test"})
     missing = [{"message": "Entity not found: Issue", "path": ["issue"]}]
 
@@ -263,7 +263,7 @@ def test_a_parent_the_token_cannot_see_grants_nothing() -> None:
 
 
 def test_any_other_lookup_failure_fails_the_walk() -> None:
-    connector = LinearConnector()
+    connector = LinearPermSyncConnector()
     connector.load_credentials({"linear_api_key": "lin_api_test"})
     outage = [{"message": "Rate limited", "path": ["issue"]}]
 

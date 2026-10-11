@@ -20,42 +20,24 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
     time_str_to_utc,
 )
-from onyx.connectors.exceptions import (
-    ConnectorValidationError,
-    InsufficientPermissionsError,
-)
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CredentialsConnector,
     CredentialsProviderInterface,
     GenerateDocumentsOutput,
-    GenerateSlimDocumentOutput,
     LoadConnector,
     NormalizationResult,
     OAuthConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
-    SlimConnectorWithPermSync,
-)
-from onyx.connectors.linear.access import (
-    SharedAccessIndex,
-    issue_access,
-    member_emails,
-)
-from onyx.connectors.linear.models import (
-    IssueShare,
-    LinearTeam,
-    LinearUser,
-    WorkspaceMembers,
 )
 from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
     HierarchyNode,
     ImageSection,
-    SlimDocument,
     TextSection,
 )
-from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 
@@ -121,7 +103,7 @@ class LinearGraphQLError(RuntimeError):
         )
 
 
-def _run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str, Any]:
+def run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str, Any]:
     """The query's data. Linear answers 200 with an `errors` list for a bad
     query, so that is raised here rather than read as an empty result."""
     response = _make_query({"query": query, "variables": variables}, api_key)
@@ -136,7 +118,7 @@ _LISTING_PAGE_SIZE: int = 100
 # A walk still paging past this is a cursor cycling rather than ending.
 _MAX_PAGES: int = 100_000
 
-_PAGE_INFO: str = """
+PAGE_INFO: str = """
     pageInfo {
         hasNextPage
         endCursor
@@ -146,7 +128,7 @@ _TEAMS_BY_KEY_QUERY: str = f"""
     query TeamsByKey($keys: [String!], $first: Int, $after: String) {{
         teams(first: $first, after: $after, filter: {{ key: {{ in: $keys }} }}) {{
             nodes {{ key }}
-            {_PAGE_INFO}
+            {PAGE_INFO}
         }}
     }}
 """
@@ -154,7 +136,7 @@ _PROJECTS_QUERY: str = f"""
     query ProjectsInScope($filter: ProjectFilter, $first: Int, $after: String) {{
         projects(first: $first, after: $after, filter: $filter) {{
             nodes {{ name slugId }}
-            {_PAGE_INFO}
+            {PAGE_INFO}
         }}
     }}
 """
@@ -179,89 +161,6 @@ def _project_scope(entries: list[str] | None) -> tuple[list[str], list[str]]:
         else:
             names.add(entry)
     return sorted(names), sorted(slug_ids)
-
-
-# A page of these access fields fits under the complexity cap at 250 issues.
-_ACCESS_PAGE_SIZE = 250
-# Every walked issue id stays in memory until the walk ends, with the shares
-# that name anyone. Past this many the workspace is worth a look.
-_RETAINED_ISSUES_WARNING: int = 250_000
-_USER_FIELDS = "email active guest app"
-
-_ISSUE_ACCESS_QUERY = f"""
-    query IterateIssueAccess($first: Int, $after: String, $filter: IssueFilter) {{
-        organization {{ id }}
-        issues(orderBy: updatedAt, first: $first, after: $after, filter: $filter) {{
-            nodes {{
-                id
-                inheritsSharedAccess
-                parent {{ id }}
-                team {{ id key visibility parent {{ id }} }}
-                sharedAccess {{ sharedWithUsers {{ {_USER_FIELDS} }} }}
-            }}
-            {_PAGE_INFO}
-        }}
-    }}
-"""
-_TEAMS_QUERY = f"""
-    query IterateTeams($first: Int, $after: String) {{
-        teams(first: $first, after: $after) {{
-            nodes {{ id key visibility parent {{ id }} }}
-            {_PAGE_INFO}
-        }}
-    }}
-"""
-_TEAM_MEMBERS_QUERY = f"""
-    query IterateTeamMembers($teamId: String!, $first: Int, $after: String) {{
-        team(id: $teamId) {{
-            memberships(first: $first, after: $after) {{
-                nodes {{ user {{ {_USER_FIELDS} }} }}
-                {_PAGE_INFO}
-            }}
-        }}
-    }}
-"""
-_USERS_QUERY = f"""
-    query IterateUsers($first: Int, $after: String) {{
-        organization {{ id userCount }}
-        users(first: $first, after: $after) {{
-            nodes {{ {_USER_FIELDS} }}
-            {_PAGE_INFO}
-        }}
-    }}
-"""
-_ISSUE_SHARE_QUERY = f"""
-    query IssueShare($id: String!) {{
-        issue(id: $id) {{
-            inheritsSharedAccess
-            parent {{ id }}
-            sharedAccess {{ sharedWithUsers {{ {_USER_FIELDS} }} }}
-        }}
-    }}
-"""
-_VIEWER_QUERY = "query Viewer { viewer { guest } }"
-
-
-def _share(node: dict[str, Any]) -> IssueShare:
-    parent: dict[str, Any] | None = node["parent"]
-    return IssueShare(
-        parent_id=parent["id"] if parent else None,
-        inherits=node["inheritsSharedAccess"],
-        emails=member_emails(
-            LinearUser.model_validate(user)
-            for user in node["sharedAccess"]["sharedWithUsers"]
-        ),
-    )
-
-
-def _team(node: dict[str, Any]) -> LinearTeam:
-    parent: dict[str, Any] | None = node["parent"]
-    return LinearTeam(
-        id=node["id"],
-        key=node["key"],
-        visibility=node["visibility"],
-        parent_id=parent["id"] if parent else None,
-    )
 
 
 def refresh_oauth_token(credentials: dict[str, Any]) -> dict[str, Any]:
@@ -311,11 +210,7 @@ def _authorization(credentials: dict[str, Any]) -> str:
 
 
 class LinearConnector(
-    LoadConnector,
-    PollConnector,
-    OAuthConnector,
-    SlimConnectorWithPermSync,
-    CredentialsConnector,
+    LoadConnector, PollConnector, OAuthConnector, CredentialsConnector
 ):
     supports_manual_credentials = True
 
@@ -329,6 +224,9 @@ class LinearConnector(
         self.team_keys = sorted(
             {key.strip().upper() for key in team_keys or [] if key.strip()}
         )
+        # The entries as configured, for the permission sync twin built from
+        # an instance the factory made.
+        self.projects: list[str] = projects or []
         self.project_names, self.project_slug_ids = _project_scope(projects)
         self.batch_size = batch_size
         self._credentials_provider: CredentialsProviderInterface | None = None
@@ -357,24 +255,29 @@ class LinearConnector(
         self._authorization_cache = None
         self._authorization_expires_at = None
 
+    @property
+    def credentials_provider(self) -> CredentialsProviderInterface:
+        if self._credentials_provider is None:
+            raise ConnectorMissingCredentialError("Linear")
+        return self._credentials_provider
+
     def _api_key(self) -> str:
         """The Authorization header value, refreshing an expiring OAuth token
         under the provider's lock so two syncs never both redeem it."""
-        if self._credentials_provider is None:
-            raise ConnectorMissingCredentialError("Linear")
         now: float = time.time()
         if self._authorization_cache is not None and (
             self._authorization_expires_at is None
             or self._authorization_expires_at >= now + _REFRESH_BUFFER_SECONDS
         ):
             return self._authorization_cache
-        credentials: dict[str, Any] = self._credentials_provider.get_credentials()
+        provider: CredentialsProviderInterface = self.credentials_provider
+        credentials: dict[str, Any] = provider.get_credentials()
         if is_expiring(credentials):
-            with self._credentials_provider:
-                credentials = self._credentials_provider.get_credentials()
+            with provider:
+                credentials = provider.get_credentials()
                 if is_expiring(credentials):
                     credentials = refresh_oauth_token(credentials)
-                    self._credentials_provider.set_credentials(credentials)
+                    provider.set_credentials(credentials)
         self._authorization_cache = _authorization(credentials)
         self._authorization_expires_at = credentials.get(_EXPIRE_AT)
         return self._authorization_cache
@@ -464,7 +367,7 @@ class LinearConnector(
         The key is read per page so a token expiring mid-walk is refreshed."""
         cursor: str | None = None
         for _ in range(_MAX_PAGES):
-            data: dict[str, Any] = _run_query(
+            data: dict[str, Any] = run_query(
                 query,
                 {**variables, "first": page_size, "after": cursor},
                 self._api_key(),
@@ -480,126 +383,6 @@ class LinearConnector(
                 raise RuntimeError(f"Linear stopped advancing the {path[-1]} cursor")
             cursor = page_info["endCursor"]
         raise RuntimeError(f"Linear kept paging {path[-1]} past {_MAX_PAGES} pages")
-
-    def retrieve_all_slim_docs_perm_sync(
-        self,
-        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
-    ) -> GenerateSlimDocumentOutput:
-        """Every issue the token can read, with who may read it. The doc sync
-        makes any indexed issue this does not list private, so the window is
-        ignored. A sub-issue that inherits sharing waits for the walk to end,
-        since its parent can page after it."""
-        shares: SharedAccessIndex = SharedAccessIndex(self._issue_share)
-        warned: bool = False
-        inheriting: list[tuple[str, LinearTeam]] = []
-        organization_id: str = ""
-        for data in self._pages(
-            _ISSUE_ACCESS_QUERY,
-            {"filter": self._issue_filter()},
-            ("issues",),
-            _ACCESS_PAGE_SIZE,
-        ):
-            organization_id = data["organization"]["id"]
-            docs: list[SlimDocument | HierarchyNode] = []
-            for node in data["issues"]["nodes"]:
-                team: LinearTeam = _team(node["team"])
-                share: IssueShare = _share(node)
-                shares.record(node["id"], share)
-                if share.inherits:
-                    inheriting.append((node["id"], team))
-                    continue
-                docs.append(
-                    SlimDocument(
-                        id=node["id"],
-                        external_access=issue_access(
-                            team, organization_id, share.emails
-                        ),
-                    )
-                )
-            yield docs
-            if not warned and len(shares) > _RETAINED_ISSUES_WARNING:
-                warned = True
-                logger.warning(
-                    "Linear permission sync is keeping %s walked issues in memory "
-                    "until the walk ends",
-                    len(shares),
-                )
-        for start in range(0, len(inheriting), _ACCESS_PAGE_SIZE):
-            yield [
-                SlimDocument(
-                    id=issue_id,
-                    external_access=issue_access(
-                        team, organization_id, shares.emails_for(issue_id)
-                    ),
-                )
-                for issue_id, team in inheriting[start : start + _ACCESS_PAGE_SIZE]
-            ]
-
-    def _issue_share(self, issue_id: str) -> IssueShare:
-        """The shares of an ancestor the scoped walk left out. One the token
-        cannot see grants nothing, which is the safe side for access. Any
-        other failure raises, so an outage never reads as revoked access."""
-        try:
-            data: dict[str, Any] = _run_query(
-                _ISSUE_SHARE_QUERY, {"id": issue_id}, self._api_key()
-            )
-        except LinearGraphQLError as e:
-            if not e.is_not_found:
-                raise
-            logger.warning(
-                "Linear parent issue %s is not visible to the token, so its "
-                "sub-issues inherit no shared readers",
-                issue_id,
-            )
-            return IssueShare(parent_id=None, inherits=False, emails=set())
-        return _share(data["issue"])
-
-    def list_teams(self) -> list[LinearTeam]:
-        return [
-            _team(node)
-            for data in self._pages(_TEAMS_QUERY, {}, ("teams",))
-            for node in data["teams"]["nodes"]
-        ]
-
-    def team_member_emails(self, team_id: str) -> set[str]:
-        return member_emails(
-            LinearUser.model_validate(node["user"])
-            for data in self._pages(
-                _TEAM_MEMBERS_QUERY, {"teamId": team_id}, ("team", "memberships")
-            )
-            for node in data["team"]["memberships"]["nodes"]
-        )
-
-    def workspace_members(self) -> WorkspaceMembers:
-        """Raises on a listing shorter than the workspace's own count: a group
-        filled from part of it would revoke access for everyone left out."""
-        users: list[LinearUser] = []
-        expected: int = 0
-        organization_id: str = ""
-        for data in self._pages(_USERS_QUERY, {}, ("users",)):
-            organization_id = data["organization"]["id"]
-            expected = data["organization"]["userCount"]
-            users.extend(
-                LinearUser.model_validate(node) for node in data["users"]["nodes"]
-            )
-        if len(users) < expected:
-            raise RuntimeError(
-                f"Linear listed {len(users)} of the {expected} users it reported"
-            )
-        return WorkspaceMembers(
-            organization_id=organization_id,
-            emails=member_emails(user for user in users if not user.guest),
-        )
-
-    def probe_perm_sync_access(self) -> None:
-        """Raises for a guest token, which cannot see the workspace's members."""
-        if _run_query(_VIEWER_QUERY, {}, self._api_key())["viewer"]["guest"]:
-            raise InsufficientPermissionsError(
-                "The connected Linear user is a guest. Connect as a workspace "
-                "member who belongs to every private team to index."
-            )
 
     @classmethod
     def oauth_id(cls) -> DocumentSource:

@@ -6,9 +6,11 @@ well, so its own group holds only the people added to it, guests included."""
 from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.external_permissions.linear.connector import linear_connector
-from onyx.connectors.linear.access import workspace_members_group_id
-from onyx.connectors.linear.connector import LinearConnector
+from ee.onyx.external_permissions.linear.access import workspace_members_group_id
+from ee.onyx.external_permissions.linear.connector import (
+    LinearPermSyncConnector,
+    linear_connector,
+)
 from onyx.connectors.linear.models import WorkspaceMembers
 from onyx.db.models import ConnectorCredentialPair
 
@@ -20,7 +22,9 @@ def linear_group_sync(
     yield from team_groups(linear_connector(cc_pair))
 
 
-def team_groups(connector: LinearConnector) -> Generator[ExternalUserGroup, None, None]:
+def team_groups(
+    connector: LinearPermSyncConnector,
+) -> Generator[ExternalUserGroup, None, None]:
     # Bare ids: the source prefix is added when the groups are stored, which
     # is how they meet the ids the doc sync writes on an issue.
     workspace: WorkspaceMembers = connector.workspace_members()

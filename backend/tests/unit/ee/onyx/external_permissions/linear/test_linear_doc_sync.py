@@ -36,7 +36,9 @@ def test_the_walk_becomes_access_rows_and_unlisted_issues_go_private() -> None:
     provider = MagicMock()
 
     with (
-        patch(f"{CONNECTOR}.LinearConnector", return_value=connector) as factory,
+        patch(
+            f"{CONNECTOR}.LinearPermSyncConnector", return_value=connector
+        ) as factory,
         patch(f"{CONNECTOR}.build_db_credentials_provider", return_value=provider),
     ):
         rows = list(
