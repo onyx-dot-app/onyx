@@ -338,7 +338,7 @@ class _PerUserMcpServerCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> None:  # noqa: ARG002
         fetch_ee_implementation_or_noop(
-            "ee.onyx.connectors.perm_sync_valid",
+            "onyx.connectors.perm_sync_valid",
             "raise_if_no_per_user_notion_mcp_server",
             noop_return_value=None,
         )()
