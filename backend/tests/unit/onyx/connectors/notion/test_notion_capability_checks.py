@@ -3,12 +3,15 @@ gateway operations indexing uses, and every Notion answer maps onto the
 validation-exception family the runner understands."""
 
 from typing import Any
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.models import CapabilityCheckContext
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheck,
+    CapabilityCheckContext,
+)
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -24,6 +27,7 @@ from onyx.connectors.notion.source_operations import (
     NotionSourceOperations,
     NotionTransportError,
 )
+from onyx.db.enums import AccessType
 
 _CHECKS_BY_ID = {check.check_id: check for check in build_notion_indexing_checks()}
 
@@ -70,9 +74,35 @@ def _run(check_id: str, context: CapabilityCheckContext) -> None:
 
 
 def test_registry_serves_the_named_checks_without_fallback() -> None:
-    checks = get_capability_checks(DocumentSource.NOTION)
+    checks: list[CapabilityCheck] = get_capability_checks(DocumentSource.NOTION)
     assert {check.check_id for check in checks} == set(_CHECKS_BY_ID)
     assert not any(check.is_fallback for check in checks)
+
+
+def test_per_user_mcp_server_check_applies_to_perm_synced_access_only() -> None:
+    check: CapabilityCheck = _CHECKS_BY_ID["notion_per_user_mcp_server"]
+    assert check.access_types == frozenset(AccessType.perm_synced_types())
+    assert check.required
+
+
+def test_per_user_mcp_server_check_fails_through_the_ee_probe() -> None:
+    def no_server() -> None:
+        raise ConnectorValidationError("no server")
+
+    with patch(
+        "onyx.connectors.notion.capability_checks.fetch_ee_implementation_or_noop",
+        return_value=no_server,
+    ):
+        with pytest.raises(ConnectorValidationError, match="no server"):
+            _run("notion_per_user_mcp_server", _context(_gateway()))
+
+
+def test_per_user_mcp_server_check_passes_on_a_build_without_the_probe() -> None:
+    with patch(
+        "onyx.connectors.notion.capability_checks.fetch_ee_implementation_or_noop",
+        return_value=lambda: None,
+    ):
+        _run("notion_per_user_mcp_server", _context(_gateway()))
 
 
 def test_token_auth_missing_token() -> None:
@@ -211,6 +241,26 @@ def test_page_content_reads_the_first_shared_page() -> None:
     _run("notion_page_content", _context(gateway))
     gateway.get_page.assert_called_once_with(page_id="page-1")
     gateway.list_block_children.assert_called_once_with(block_id="page-1")
+
+
+def test_page_content_reads_the_configured_root_without_searching() -> None:
+    gateway: MagicMock = _gateway(search_results=[])
+    _run(
+        "notion_page_content",
+        _context(gateway, connector_specific_config={"root_page_id": "root-1"}),
+    )
+    gateway.search.assert_not_called()
+    gateway.list_block_children.assert_called_once_with(block_id="root-1")
+
+
+def test_page_content_unshared_root_fails() -> None:
+    gateway: MagicMock = _gateway(search_results=[])
+    gateway.list_block_children.side_effect = _api_error(404)
+    with pytest.raises(ConnectorValidationError, match="root page `root-1`"):
+        _run(
+            "notion_page_content",
+            _context(gateway, connector_specific_config={"root_page_id": "root-1"}),
+        )
 
 
 def test_page_content_skips_without_pages() -> None:

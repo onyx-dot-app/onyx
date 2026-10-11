@@ -1274,7 +1274,13 @@ class NotionConnector(
             # One cheap authenticated call: the root page when configured, else
             # a one-result search.
             if self.root_page_id:
-                ops.get_page(page_id=self.root_page_id)
+                try:
+                    ops.get_page(page_id=self.root_page_id)
+                except NotionApiError as page_error:
+                    # A page turned into a wiki is a database to the API.
+                    if page_error.status_code not in (400, 404):
+                        raise
+                    ops.get_database(database_id=self.root_page_id)
             else:
                 ops.search(
                     query={

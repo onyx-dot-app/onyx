@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.notion.connector import (
     NotionConnector,
     NotionDataSource,
@@ -101,6 +102,37 @@ class TestGetBotUser:
 
         assert bot_user.workspace_id == "bot-user-1"
         assert bot_user.workspace_name == "Notion Workspace"
+
+
+class TestValidateConnectorSettings:
+    def test_wiki_root_falls_back_to_the_database(self) -> None:
+        connector = NotionConnector(root_page_id="root-1")
+        connector.load_credentials({"notion_integration_token": "fake-token"})
+        page_resp = _mock_response({"object": "error"}, status_code=404)
+        db_resp = _mock_response({"object": "database", "id": "root-1"})
+        with patch(
+            "onyx.connectors.notion.source_operations.rl_requests.get",
+            side_effect=[page_resp, db_resp],
+        ) as mock_get:
+            connector.validate_connector_settings()
+
+        assert [call.args[0] for call in mock_get.call_args_list] == [
+            "https://api.notion.com/v1/pages/root-1",
+            "https://api.notion.com/v1/databases/root-1",
+        ]
+
+    def test_unshared_root_is_a_validation_error(self) -> None:
+        connector = NotionConnector(root_page_id="root-1")
+        connector.load_credentials({"notion_integration_token": "fake-token"})
+        resp = _mock_response({"object": "error"}, status_code=404)
+        with (
+            patch(
+                "onyx.connectors.notion.source_operations.rl_requests.get",
+                return_value=resp,
+            ),
+            pytest.raises(ConnectorValidationError, match="HTTP 404"),
+        ):
+            connector.validate_connector_settings()
 
 
 class TestFetchChildBlocks:

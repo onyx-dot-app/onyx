@@ -108,11 +108,16 @@ def validate_zoom_perm_sync(connector: ZoomConnector) -> None:
 
 
 def validate_notion_perm_sync(connector: NotionConnector) -> None:  # noqa: ARG001
+    raise_if_no_per_user_notion_mcp_server()
+
+
+def raise_if_no_per_user_notion_mcp_server() -> None:
     """
     Notion's query-time censor fetches each result page through Notion MCP
     with the searching user's own grant, so a perm-synced Notion connector is
     useless until a per-user OAuth Notion MCP server exists: every user would
-    see nothing from it. Fail at connector creation instead.
+    see nothing from it. Fail at connector creation instead. Connector-free so
+    the named capability check can run it at credential time.
     """
     with get_session_with_current_tenant() as db_session:
         if any(
