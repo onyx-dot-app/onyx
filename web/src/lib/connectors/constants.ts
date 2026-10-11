@@ -70,6 +70,7 @@ export const SOURCE_CATEGORY_LABEL_KEYS = {
   [SourceCategory.TicketingAndTaskManagement]:
     "categories.ticketingAndTaskManagement.label",
   [SourceCategory.Messaging]: "categories.messaging.label",
+  [SourceCategory.Meetings]: "categories.meetings.label",
   [SourceCategory.Sales]: "categories.sales.label",
   [SourceCategory.CodeRepository]: "categories.codeRepository.label",
   [SourceCategory.AiObservability]: "categories.aiObservability.label",
@@ -425,7 +426,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   zoom: {
     icon: SvgZoom,
     displayName: "Zoom",
-    category: SourceCategory.Messaging,
+    category: SourceCategory.Meetings,
   },
   gmail: {
     icon: SvgGmail,
@@ -487,7 +488,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   fireflies: {
     icon: SvgFireflies,
     displayName: "Fireflies",
-    category: SourceCategory.Sales,
+    category: SourceCategory.Meetings,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/fireflies`,
   },
   highspot: {
