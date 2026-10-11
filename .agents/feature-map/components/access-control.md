@@ -155,7 +155,10 @@ OpenSearch chunk document
 - `UserGroup` (`onyx/db/models.py`, EE-managed via `ee/onyx/db/user_group.py`):
   a named group. Two are seeded and protected as "default": Admin and Basic
   (`onyx/db/user_group.py:assert_group_config_is_editable`,
-  `assert_not_shared_with_default_group`). Sharing a resource with the Basic
+  `assert_not_shared_with_default_group`). The one write a default group takes
+  besides membership is the permission toggle on Basic, limited to
+  `auth/permissions.py:DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS`
+  (`onyx/db/user_group.py:assert_group_permissions_editable`). Sharing a resource with the Basic
   default group is refused outright: use the resource's own `is_public` flag
   instead, since Basic holds every user. The Community downgrade
   (`ee/onyx/db/community_downgrade.py:remove_custom_user_groups__no_commit`,

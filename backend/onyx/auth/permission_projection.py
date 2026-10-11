@@ -209,23 +209,25 @@ def user_group_permissions(
     is_user_groups_admin: bool,
     is_full_admin: bool,
     is_default: bool,
+    permission_toggles_allowed: bool,
 ) -> dict[str, bool]:
     """User group affordance map. ``manage`` (rename, assign agents/document sets, set
     manager) and ``edit_token_limits`` are the per-group ``manages_group`` decision — group
     in the manager's managed set, or global MANAGE_USER_GROUPS. A scoped manager gets full
     token-limit CRUD for groups they manage: every token route (read/create/update/delete)
     now admits scope. ``delete`` needs global MANAGE_USER_GROUPS (its route has no
-    ``allow_scope``). ``edit_permissions`` is FULL_ADMIN (the permission-toggle route).
+    ``allow_scope``). ``edit_permissions`` is FULL_ADMIN plus ``permission_toggles_allowed``
+    (the permission-toggle route).
 
-    A seeded default group (Admin/Basic) has members and nothing else, so it keeps only
-    ``manage_members``, and only for a full admin — mirroring the routes, where every other
-    write raises CONFLICT."""
+    A seeded default group (Admin/Basic) holds members and nothing else, so a full admin
+    gets ``manage_members`` and, on Basic only, ``edit_permissions`` for its allowlisted
+    toggles. Every other write on a default group raises CONFLICT at the route."""
     is_editable = can_manage and not is_default
     result: UserGroupPermissions = {
         "manage": is_editable,
         "manage_members": is_full_admin if is_default else can_manage,
         "delete": is_user_groups_admin and not is_default,
-        "edit_permissions": is_full_admin and not is_default,
+        "edit_permissions": is_full_admin and permission_toggles_allowed,
         "edit_token_limits": is_editable,
     }
     return cast(dict[str, bool], result)
