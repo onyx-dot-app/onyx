@@ -121,6 +121,15 @@ def _team(node: dict[str, Any]) -> LinearTeam:
     )
 
 
+def _beat(callback: IndexingHeartbeatInterface | None, amount: int) -> None:
+    """Renews the sync's lease and honours a stop between reads."""
+    if callback is None:
+        return
+    if callback.should_stop():
+        raise RuntimeError("Linear permission sync stopped on the heartbeat's signal")
+    callback.progress("linear_perm_sync", amount)
+
+
 class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
     """The connector with its permission walk and membership listings."""
 
@@ -140,7 +149,7 @@ class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
         self,
         start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         """Every issue the token can read, with who may read it. The doc sync
         makes any indexed issue this does not list private, so the window is
@@ -174,6 +183,7 @@ class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
                     )
                 )
             yield docs
+            _beat(callback, len(data["issues"]["nodes"]))
             if not warned and len(shares) > _RETAINED_ISSUES_WARNING:
                 warned = True
                 logger.warning(
@@ -181,16 +191,24 @@ class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
                     "until the walk ends",
                     len(shares),
                 )
-        for start in range(0, len(inheriting), _ACCESS_PAGE_SIZE):
-            yield [
+        # Each inheriting issue can read ancestors outside the scope, so the
+        # heartbeat runs per issue rather than per batch.
+        batch: list[SlimDocument | HierarchyNode] = []
+        for issue_id, team in inheriting:
+            batch.append(
                 SlimDocument(
                     id=issue_id,
                     external_access=issue_access(
                         team, organization_id, shares.emails_for(issue_id)
                     ),
                 )
-                for issue_id, team in inheriting[start : start + _ACCESS_PAGE_SIZE]
-            ]
+            )
+            _beat(callback, 1)
+            if len(batch) == _ACCESS_PAGE_SIZE:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
     def _issue_share(self, issue_id: str) -> IssueShare:
         """The shares of an ancestor the scoped walk left out. One the token

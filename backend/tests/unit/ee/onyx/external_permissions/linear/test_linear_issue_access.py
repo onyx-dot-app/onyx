@@ -272,3 +272,33 @@ def test_any_other_lookup_failure_fails_the_walk() -> None:
         pytest.raises(RuntimeError, match="Rate limited"),
     ):
         connector._issue_share("far")
+
+
+def test_the_walk_beats_per_page_and_per_inheriting_issue() -> None:
+    private = {"id": "p", "key": "P", "visibility": "private", "parent": None}
+    pages = [
+        _page(
+            [
+                _issue("root", private),
+                _issue("a", private, parent_id="root", inherits=True),
+                _issue("b", private, parent_id="root", inherits=True),
+            ],
+            None,
+        )
+    ]
+    callback = MagicMock()
+    callback.should_stop.side_effect = [False, False, True]
+    connector = LinearPermSyncConnector()
+    connector.load_credentials({"linear_api_key": "lin_api_test"})
+
+    with (
+        patch(f"{MODULE}._make_query", side_effect=pages),
+        pytest.raises(RuntimeError, match="stopped"),
+    ):
+        list(connector.retrieve_all_slim_docs_perm_sync(callback=callback))
+
+    # One beat for the page of three, one per inheriting issue until the stop.
+    assert [call.args for call in callback.progress.call_args_list] == [
+        ("linear_perm_sync", 3),
+        ("linear_perm_sync", 1),
+    ]
