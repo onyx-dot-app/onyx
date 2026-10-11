@@ -112,7 +112,7 @@ it.each(["remove", "send"])(
 );
 
 it("clears sent selections while retaining sandbox files, including after revisiting", async () => {
-  const { result, rerender } = renderHook(useUploadFilesContext, {
+  const { result, rerender, unmount } = renderHook(useUploadFilesContext, {
     wrapper: Provider,
   });
   act(() => result.current.setActiveSession("session"));
@@ -121,10 +121,11 @@ it("clears sent selections while retaining sandbox files, including after revisi
   );
   act(() => result.current.clearFiles());
   rerender();
-  act(() => result.current.endSessionVisit());
-  act(() => result.current.setActiveSession("session"));
+  unmount();
+  const fresh = renderHook(useUploadFilesContext, { wrapper: Provider });
+  act(() => fresh.result.current.setActiveSession("session"));
   await act(async () => {});
-  expect(result.current.currentMessageFiles).toEqual([]);
+  expect(fresh.result.current.currentMessageFiles).toEqual([]);
   expect(deleteFile).not.toHaveBeenCalled();
   expect(fetchDirectoryListing).not.toHaveBeenCalled();
 });
@@ -230,25 +231,19 @@ it("does not carry a pending welcome draft into an unrelated saved session", asy
   expect(uploadFile).not.toHaveBeenCalled();
 });
 
-it.each(["send", "end"])(
-  "releases welcome sources after %s",
-  async (action) => {
-    const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
-    await act(async () =>
-      result.current.uploadFiles([new File(["draft"], "draft.txt")])
-    );
-    act(() => {
-      if (action === "send") result.current.clearFiles();
-      else result.current.endSessionVisit();
-    });
-    act(() =>
-      result.current.setActiveSession("replacement", { draftId: null })
-    );
-    await act(async () => {});
-    expect(result.current.currentMessageFiles).toEqual([]);
-    expect(uploadFile).not.toHaveBeenCalled();
-  }
-);
+it("releases welcome sources after send", async () => {
+  const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
+  await act(async () =>
+    result.current.uploadFiles([new File(["draft"], "draft.txt")])
+  );
+  act(() => {
+    result.current.clearFiles();
+  });
+  act(() => result.current.setActiveSession("replacement", { draftId: null }));
+  await act(async () => {});
+  expect(result.current.currentMessageFiles).toEqual([]);
+  expect(uploadFile).not.toHaveBeenCalled();
+});
 
 it("rejects stale actions and an old upload after returning to the same session", async () => {
   const upload = deferred<Awaited<ReturnType<typeof uploadFile>>>();

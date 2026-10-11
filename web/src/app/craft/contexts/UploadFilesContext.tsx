@@ -222,9 +222,6 @@ interface UploadFilesContextValue {
     options?: { draftId: string | null }
   ) => void;
 
-  /** End the current chat visit, including a pending welcome session. */
-  endSessionVisit: () => void;
-
   /**
    * Upload files to the active session.
    * - If session is available: uploads immediately
@@ -451,11 +448,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     [resetActiveScope, setCurrentMessageFiles]
   );
 
-  const endSessionVisit = useCallback(
-    () => resetActiveScope(null, false),
-    [resetActiveScope]
-  );
-
   /**
    * Upload files. Uses activeSessionId internally.
    * Validates files before upload (size, batch limits).
@@ -559,7 +551,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       getCurrentMessageFiles,
       activeSessionId,
       setActiveSession,
-      endSessionVisit,
       uploadFiles,
       removeFile,
       clearFiles,
@@ -571,7 +562,6 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       getCurrentMessageFiles,
       activeSessionId,
       setActiveSession,
-      endSessionVisit,
       uploadFiles,
       removeFile,
       clearFiles,

@@ -507,7 +507,7 @@ Replacing that destination preserves selected source files and uploads them into
 New Build, another session, or visit end clears the previous draft.
 Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
 Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
-ChatPanel ends the attachment visit on unmount, including pending welcome files and navigation to Craft apps.
+ChatPanel owns its UploadFilesProvider. Unmounting chat releases its draft, including pending welcome files and navigation to Craft apps.
 
 ### 4.8 User library
 
