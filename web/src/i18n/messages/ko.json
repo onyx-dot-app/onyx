@@ -4426,6 +4426,7 @@
           "tooltip": "이 그룹의 최근 변경 사항으로 인해 문서 embedding을 업데이트하는 중입니다."
         },
         "systemGroup": {
+          "basicDescription": "{appName}가 이 그룹을 관리합니다. 이 그룹에는 멤버만 포함되며, 아래 권한은 모든 멤버에게 적용됩니다.",
           "description": "{appName}가 이 그룹을 관리합니다. 이 그룹에는 멤버만 포함되며, 변경할 수 있는 항목도 멤버뿐입니다.",
           "title": "시스템 그룹"
         },

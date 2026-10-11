@@ -4426,6 +4426,7 @@
           "tooltip": "Die Dokument-Embeddings werden aufgrund kürzlicher Änderungen an dieser Gruppe aktualisiert."
         },
         "systemGroup": {
+          "basicDescription": "{appName} verwaltet diese Gruppe. Sie enthält nur Mitglieder, und die Berechtigungen unten gelten für alle darin.",
           "description": "{appName} verwaltet diese Gruppe. Sie enthält nur Mitglieder, und nur diese können Sie ändern.",
           "title": "Systemgruppe"
         },

@@ -4426,6 +4426,7 @@
           "tooltip": "Document embeddings are being updated due to recent changes to this group."
         },
         "systemGroup": {
+          "basicDescription": "{appName} manages this group. Members are the only thing it holds, and the permissions below apply to everyone in it.",
           "description": "{appName} manages this group. Members are the only thing it holds, and the only thing you can change.",
           "title": "System group"
         },

@@ -50,17 +50,23 @@ const ICON_MAP: Record<string, IconFunctionComponent> = {
 interface GroupPermissionsSectionProps {
   enabledPermissions: Set<string>;
   onPermissionsChange: (permissions: Set<string>) => void;
+  // A seeded default group only offers the rows the backend marks for it.
+  isDefaultGroup?: boolean;
 }
 
 function GroupPermissionsSection({
   enabledPermissions,
   onPermissionsChange,
+  isDefaultGroup = false,
 }: GroupPermissionsSectionProps) {
   const t = useTranslations("admin.groups");
-  const { data: registry, isLoading } = useSWR<PermissionRegistryEntry[]>(
+  const { data: fullRegistry, isLoading } = useSWR<PermissionRegistryEntry[]>(
     SWR_KEYS.permissionRegistry,
     errorHandlingFetcher
   );
+  const registry = isDefaultGroup
+    ? fullRegistry?.filter((entry) => entry.default_group_toggleable)
+    : fullRegistry;
 
   function isRowEnabled(entry: PermissionRegistryEntry): boolean {
     return entry.permissions.every((p) => enabledPermissions.has(p));

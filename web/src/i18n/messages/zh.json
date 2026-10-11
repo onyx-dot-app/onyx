@@ -4426,6 +4426,7 @@
           "tooltip": "由于此用户组最近发生更改，正在更新文档 embedding。"
         },
         "systemGroup": {
+          "basicDescription": "此用户组由 {appName} 管理。它只包含成员，下方的权限适用于其中的所有人。",
           "description": "此用户组由 {appName} 管理。它只包含成员，您也只能更改成员。",
           "title": "系统用户组"
         },
