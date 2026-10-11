@@ -882,6 +882,10 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Service desk requests & incidents"
+        },
+
         "productboard": {
           "description": "Gestión de producto"
         },
