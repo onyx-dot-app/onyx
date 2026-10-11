@@ -86,42 +86,44 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/sharepoint"
-_PROBE_SITES = 5
+_DOCS_LINK: str = "https://docs.onyx.app/admins/connectors/official/sharepoint"
+_PROBE_SITES: int = 5
 # Libraries whose first delta page holds no indexable file before the probe
 # stops, so a tenant of empty libraries cannot spend the check's budget.
-_PROBE_LIBRARIES = 10
+_PROBE_LIBRARIES: int = 10
 # Site groups searched for an Entra group when the site names none directly,
 # the way the sync expands site groups to find the Entra groups inside them.
-_PROBE_SITE_GROUPS = 5
+_PROBE_SITE_GROUPS: int = 5
 # One page each: a probe proves the read without walking a large permission
 # list, site group or Entra group.
-_PROBE_ROLE_ASSIGNMENTS = 100
-_PROBE_SHARING_LINKS = 50
-_PROBE_GROUP_MEMBERS = 50
-_PROBE_NESTED_GROUPS = 50
+_PROBE_ROLE_ASSIGNMENTS: int = 100
+_PROBE_SHARING_LINKS: int = 50
+_PROBE_GROUP_MEMBERS: int = 50
+_PROBE_NESTED_GROUPS: int = 50
 # A delta page lists folders before files, so one row is rarely a file.
-_PROBE_DELTA_PAGE_SIZE = 25
+_PROBE_DELTA_PAGE_SIZE: int = 25
 # A download probe reads one real file. A large one would spend the check's
 # time budget on bytes the check learns nothing from.
-_MAX_PROBE_DOWNLOAD_BYTES = 5 * 1024 * 1024
-_READ_REMEDIATION = (
+_MAX_PROBE_DOWNLOAD_BYTES: int = 5 * 1024 * 1024
+_READ_REMEDIATION: str = (
     "Grant `Sites.Read.All` (application permission) and admin-consent it, or "
     "with `Sites.Selected` grant the app read access on each configured site."
 )
-_REST_REMEDIATION = (
+_REST_REMEDIATION: str = (
     "Grant `Sites.FullControl.All` (application permission) and admin-consent "
     "it, or with `Sites.Selected` grant the app full control on each configured "
     "site."
 )
-_GROUPS_REMEDIATION = (
+_GROUPS_REMEDIATION: str = (
     "Grant `GroupMember.Read.All` (application permission) and admin-consent it."
 )
-_CERTIFICATE_REMEDIATION = (
+_CERTIFICATE_REMEDIATION: str = (
     "Recreate the credential with Certificate Authentication, or turn permission "
     "sync off."
 )
-_SITE_SECURABLE = SharepointSecurable(kind=SharepointSecurableKind.SITE)
+_SITE_SECURABLE: SharepointSecurable = SharepointSecurable(
+    kind=SharepointSecurableKind.SITE
+)
 
 
 def _gateway(context: CapabilityCheckContext) -> SharepointSourceOperations:
