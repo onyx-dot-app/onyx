@@ -3027,7 +3027,26 @@
             "disabledReason": "El método de autenticación de la credencial actual no admite la sincronización automática de permisos. Cambia el método de autenticación de la credencial a uno compatible.",
             "title": "Sincronizar con {source}",
             "sourceNotice": {
-              "notion": "Notion no comparte los permisos de las páginas. Cada resultado se comprueba en el momento de la búsqueda a través de la conexión Notion MCP del propio usuario. Registra Notion MCP (https://mcp.notion.com/mcp) como servidor MCP con OAuth por usuario y pide a cada usuario que lo conecte. Los usuarios que no se hayan conectado no verán resultados de este conector."
+              "notion": "Notion no comparte permisos de páginas. Cada resultado se comprueba en el momento de la búsqueda a través de la conexión Notion MCP del propio usuario. Los usuarios que no la hayan conectado no ven resultados de este conector."
+            },
+            "mcpServer": {
+              "title": "Servidor {name}",
+              "unregistered": {
+                "description": "Registra {name} ({url}) como servidor MCP con OAuth por usuario. Cada usuario conecta después su propia cuenta desde el menú Acciones de un asistente que incluya este servidor."
+              },
+              "register": {
+                "label": "Registrar"
+              },
+              "registered": {
+                "description": "{name} está registrado. Conecta tu propia cuenta en una pestaña nueva para que tus búsquedas devuelvan resultados de este conector."
+              },
+              "connect": {
+                "label": "Conectar mi cuenta"
+              },
+              "connected": {
+                "description": "{name} está registrado y tu cuenta está conectada.",
+                "label": "Conectado"
+              }
             }
           },
           "title": "Acceso a documentos"

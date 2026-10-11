@@ -3027,7 +3027,26 @@
             "disabledReason": "현재 자격 증명의 인증 방식은 권한 자동 동기화를 지원하지 않습니다. 지원되는 인증 방식으로 변경해 주세요.",
             "title": "{source}와(과) 동기화",
             "sourceNotice": {
-              "notion": "Notion은 페이지 권한을 공유하지 않습니다. 각 결과는 검색 시 사용자 본인의 Notion MCP 연결을 통해 확인됩니다. Notion MCP (https://mcp.notion.com/mcp)를 사용자별 OAuth MCP 서버로 등록하고 각 사용자에게 연결을 요청하세요. 연결하지 않은 사용자에게는 이 커넥터의 결과가 표시되지 않습니다."
+              "notion": "Notion은 페이지 권한을 공유하지 않습니다. 각 결과는 사용자 본인의 Notion MCP 연결을 통해 검색 시점에 확인됩니다. 연결하지 않은 사용자에게는 이 커넥터의 결과가 표시되지 않습니다."
+            },
+            "mcpServer": {
+              "title": "{name} 서버",
+              "unregistered": {
+                "description": "{name}({url})을(를) 사용자별 OAuth MCP 서버로 등록합니다. 이후 각 사용자는 이 서버가 포함된 어시스턴트의 작업 메뉴에서 자신의 계정을 연결합니다."
+              },
+              "register": {
+                "label": "등록"
+              },
+              "registered": {
+                "description": "{name}이(가) 등록되었습니다. 새 탭에서 본인 계정을 연결하면 본인의 검색에 이 커넥터의 결과가 표시됩니다."
+              },
+              "connect": {
+                "label": "내 계정 연결"
+              },
+              "connected": {
+                "description": "{name}이(가) 등록되었고 내 계정이 연결되었습니다.",
+                "label": "연결됨"
+              }
             }
           },
           "title": "문서 액세스"

@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import type { ValidAutoSyncSource } from "@/lib/connectors/types/source";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";
+import PermSyncMcpServerCard from "@/views/admin/connectors/AddConnectorPage/components/PermSyncMcpServerCard";
 
 interface AutoSyncOptionsProps {
   connectorType: ValidAutoSyncSource;
@@ -16,9 +17,10 @@ export default function AutoSyncOptions({
   const tNotice = useTranslations(
     "admin.connectorsList.settings.documentAccess.sync.sourceNotice"
   );
-  const { noticeKey, fields } = autoSyncConfigBySource[connectorType];
+  const { noticeKey, fields, mcpServer } =
+    autoSyncConfigBySource[connectorType];
 
-  if (!noticeKey && !fields) {
+  if (!noticeKey && !fields && !mcpServer) {
     return null;
   }
 
@@ -29,6 +31,7 @@ export default function AutoSyncOptions({
           {tNotice(noticeKey)}
         </Text>
       )}
+      {mcpServer && <PermSyncMcpServerCard config={mcpServer} />}
       {Object.entries(fields ?? {}).map(([key, config]) => {
         const name = `auto_sync_options.${key}`;
         return (

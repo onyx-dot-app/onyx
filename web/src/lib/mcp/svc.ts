@@ -126,7 +126,7 @@ export async function updateMCPServerStatus(
   }
 }
 
-interface UpsertMCPServerResponse {
+export interface UpsertMCPServerResponse {
   server_id: number;
   server_name: string;
   server_url: string;

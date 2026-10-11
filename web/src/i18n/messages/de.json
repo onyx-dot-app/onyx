@@ -3027,7 +3027,26 @@
             "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechsle zu einer unterstützten Authentifizierungsmethode.",
             "title": "Mit {source} synchronisieren",
             "sourceNotice": {
-              "notion": "Notion gibt keine Seitenberechtigungen weiter. Jedes Ergebnis wird bei der Suche über die eigene Notion-MCP-Verbindung des Nutzers geprüft. Registriere Notion MCP (https://mcp.notion.com/mcp) als MCP-Server mit OAuth pro Nutzer und bitte alle Nutzer, die Verbindung herzustellen. Wer nicht verbunden ist, sieht keine Ergebnisse aus diesem Connector."
+              "notion": "Notion gibt keine Seitenberechtigungen weiter. Jedes Ergebnis wird zur Suchzeit über die eigene Notion-MCP-Verbindung des Nutzers geprüft. Nutzer ohne Verbindung sehen keine Ergebnisse aus diesem Connector."
+            },
+            "mcpServer": {
+              "title": "{name}-Server",
+              "unregistered": {
+                "description": "Registriere {name} ({url}) als MCP-Server mit OAuth pro Nutzer. Jeder Nutzer verbindet danach sein eigenes Konto über das Aktionen-Menü eines Assistenten, der diesen Server enthält."
+              },
+              "register": {
+                "label": "Registrieren"
+              },
+              "registered": {
+                "description": "{name} ist registriert. Verbinde dein eigenes Konto in einem neuen Tab, damit deine eigenen Suchen Ergebnisse aus diesem Connector liefern."
+              },
+              "connect": {
+                "label": "Mein Konto verbinden"
+              },
+              "connected": {
+                "description": "{name} ist registriert und dein Konto ist verbunden.",
+                "label": "Verbunden"
+              }
             }
           },
           "title": "Dokumentzugriff"

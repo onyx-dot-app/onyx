@@ -3027,7 +3027,26 @@
             "disabledReason": "La méthode d'authentification de l'identifiant actuel ne prend pas en charge la synchronisation automatique des permissions. Veuillez passer à une méthode d'authentification prise en charge.",
             "title": "Synchroniser avec {source}",
             "sourceNotice": {
-              "notion": "Notion ne partage pas les permissions des pages. Chaque résultat est vérifié au moment de la recherche via la connexion Notion MCP de l'utilisateur. Enregistrez Notion MCP (https://mcp.notion.com/mcp) comme serveur MCP avec OAuth par utilisateur et demandez à chaque utilisateur de s'y connecter. Les utilisateurs non connectés ne voient aucun résultat de ce connecteur."
+              "notion": "Notion ne partage pas les permissions des pages. Chaque résultat est vérifié au moment de la recherche via la connexion Notion MCP de l'utilisateur. Les utilisateurs qui ne l'ont pas connectée ne voient aucun résultat de ce connecteur."
+            },
+            "mcpServer": {
+              "title": "Serveur {name}",
+              "unregistered": {
+                "description": "Enregistrez {name} ({url}) comme serveur MCP avec OAuth par utilisateur. Chaque utilisateur connecte ensuite son propre compte depuis le menu Actions d'un assistant qui inclut ce serveur."
+              },
+              "register": {
+                "label": "Enregistrer"
+              },
+              "registered": {
+                "description": "{name} est enregistré. Connectez votre propre compte dans un nouvel onglet pour que vos recherches renvoient des résultats de ce connecteur."
+              },
+              "connect": {
+                "label": "Connecter mon compte"
+              },
+              "connected": {
+                "description": "{name} est enregistré et votre compte est connecté.",
+                "label": "Connecté"
+              }
             }
           },
           "title": "Accès aux documents"
