@@ -107,7 +107,9 @@ class SharepointPermissionReader(EntraGroupReader, Protocol):
 
     def get_list_item_id(self, *, item: DriveItemData) -> int | None: ...
 
-    def list_sharing_link_scopes(self, *, item: DriveItemData) -> list[str]: ...
+    def list_sharing_link_scopes(
+        self, *, item: DriveItemData, max_rows: int | None = None
+    ) -> list[str]: ...
 
 
 def _principal(member: Principal) -> SharepointPrincipal | None:
@@ -278,8 +280,10 @@ def read_list_item_id(graph_client: GraphClient, item: DriveItemData) -> int | N
 
 
 def read_sharing_link_scopes(
-    graph_client: GraphClient, item: DriveItemData
+    graph_client: GraphClient, item: DriveItemData, max_rows: int | None = None
 ) -> list[str]:
+    """Every sharing link scope of the item, or with ``max_rows`` one page of
+    at most that many permissions."""
     scopes: list[str] = []
 
     def collect(page: PermissionCollection) -> None:
@@ -291,9 +295,15 @@ def read_sharing_link_scopes(
         )
         _check_read_size(scopes, f"Sharing links of `{item.id}`")
 
+    permissions: PermissionCollection = item.to_sdk_driveitem(graph_client).permissions
+    if max_rows is not None:
+        page: PermissionCollection = sleep_and_retry(
+            permissions.top(max_rows).get(), "list_sharing_link_scopes"
+        )
+        collect(page)
+        return scopes
     sleep_and_retry(
-        item.to_sdk_driveitem(graph_client).permissions.get_all(page_loaded=collect),
-        "list_sharing_link_scopes",
+        permissions.get_all(page_loaded=collect), "list_sharing_link_scopes"
     )
     return scopes
 
@@ -437,9 +447,11 @@ class SharepointRestReads(SharepointPermissionReader):
         with raise_microsoft_errors():
             return read_list_item_id(self._graph_client, item)
 
-    def list_sharing_link_scopes(self, *, item: DriveItemData) -> list[str]:
+    def list_sharing_link_scopes(
+        self, *, item: DriveItemData, max_rows: int | None = None
+    ) -> list[str]:
         with raise_microsoft_errors():
-            return read_sharing_link_scopes(self._graph_client, item)
+            return read_sharing_link_scopes(self._graph_client, item, max_rows)
 
     def find_entra_group_id(self, *, display_name: str) -> str | None:
         with raise_microsoft_errors():

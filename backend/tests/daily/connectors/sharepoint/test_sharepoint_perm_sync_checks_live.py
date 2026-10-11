@@ -69,7 +69,7 @@ def _config(sites: list[str], **overrides: Any) -> dict[str, Any]:
 def _run(
     credentials: dict[str, Any], config: dict[str, Any]
 ) -> tuple[list[CapabilityCheckResult], dict[CredentialCapability, CapabilityVerdict]]:
-    context = CapabilityCheckContext(
+    context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.SHAREPOINT,
         credential_json=credentials,
         connector_specific_config=config,
@@ -80,7 +80,7 @@ def _run(
             connector_specific_config=config,
         ),
     )
-    results = run_capability_checks(
+    results: list[CapabilityCheckResult] = run_capability_checks(
         get_perm_sync_capability_checks(DocumentSource.SHAREPOINT), context
     )
     return results, compute_capability_verdicts(_CAPABILITIES, results)
@@ -117,7 +117,7 @@ def _failed(results: list[CapabilityCheckResult]) -> set[str]:
 def test_the_certificate_app_passes(
     test_secrets: dict[TestSecret, str], site_suffixes: list[str]
 ) -> None:
-    sites = [_site(suffix) for suffix in site_suffixes]
+    sites: list[str] = [_site(suffix) for suffix in site_suffixes]
 
     results, verdicts = _run(
         _certificate_credentials(test_secrets),

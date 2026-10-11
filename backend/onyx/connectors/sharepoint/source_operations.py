@@ -596,8 +596,10 @@ class SharepointSourceOperations(SourceOperations):
             "permissions check reads it under that setting."
         ),
     )
-    def list_sharing_link_scopes(self, *, item: DriveItemData) -> list[str]:
-        return self._reads().list_sharing_link_scopes(item=item)
+    def list_sharing_link_scopes(
+        self, *, item: DriveItemData, max_rows: int | None = None
+    ) -> list[str]:
+        return self._reads().list_sharing_link_scopes(item=item, max_rows=max_rows)
 
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},

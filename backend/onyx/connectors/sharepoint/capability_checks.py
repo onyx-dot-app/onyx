@@ -97,6 +97,7 @@ _PROBE_SITE_GROUPS = 5
 # One page each: a probe proves the read without walking a large permission
 # list, site group or Entra group.
 _PROBE_ROLE_ASSIGNMENTS = 100
+_PROBE_SHARING_LINKS = 50
 _PROBE_GROUP_MEMBERS = 50
 _PROBE_NESTED_GROUPS = 50
 # A delta page lists folders before files, so one row is rarely a file.
@@ -1020,10 +1021,20 @@ class _DocumentPermissionsCheck(_SharepointCheck):
         list_id: str,
         item: DriveItemData,
     ) -> None:
+        # A file that went away between the listing and a read is a per-item
+        # failure for the sync, not a grant problem.
         if config.treat_sharing_link_as_public:
             try:
-                gateway.list_sharing_link_scopes(item=item)
+                gateway.list_sharing_link_scopes(
+                    item=item, max_rows=_PROBE_SHARING_LINKS
+                )
             except MicrosoftGraphError as error:
+                if error.status == 404:
+                    logger.info(
+                        "`%s` went away before its sharing links were read.",
+                        item.name,
+                    )
+                    return
                 raise_for_graph_error(
                     error,
                     f"The app cannot read the sharing links of `{item.name}`.",

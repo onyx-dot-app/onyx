@@ -268,6 +268,21 @@ def test_link_scopes_skip_permissions_without_a_link(_mock_sleep: MagicMock) -> 
     assert scopes == ["anonymous", "organization"]
 
 
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+def test_link_scopes_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
+    page: MagicMock = MagicMock()
+    page.current_page = [MagicMock(link=MagicMock(scope="anonymous"))]
+    with patch.object(DriveItemData, "to_sdk_driveitem") as to_sdk:
+        permissions: MagicMock = to_sdk.return_value.permissions
+        permissions.top.return_value.get.return_value = page
+
+        scopes = read_sharing_link_scopes(MagicMock(), _drive_item(), max_rows=50)
+
+    permissions.top.assert_called_once_with(50)
+    permissions.get_all.assert_not_called()
+    assert scopes == ["anonymous"]
+
+
 def _directory_object(data: dict[str, Any], type_name: str = "DirectoryObject") -> Any:
     """The classifier falls back on the SDK class name, so the fake is named."""
     return type(type_name, (), {"to_json": lambda _self: data})()

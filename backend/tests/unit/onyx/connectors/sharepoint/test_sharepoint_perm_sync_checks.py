@@ -31,6 +31,7 @@ from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.microsoft_utils.models import (
     SharepointPrincipal,
     SharepointRoleAssignment,
+    SharepointSecurable,
     SharepointSecurableKind,
 )
 from onyx.connectors.microsoft_utils.sharepoint_principals import (
@@ -459,7 +460,9 @@ def test_document_permissions_read_the_library_folder_and_item() -> None:
     gateway.get_folder_unique_id.assert_called_once_with(
         site_url=SITE_URL, server_relative_path="/sites/eng/Shared Documents/Plans"
     )
-    item_securable = gateway.list_role_assignments.call_args.kwargs["securable"]
+    item_securable: SharepointSecurable = (
+        gateway.list_role_assignments.call_args.kwargs["securable"]
+    )
     assert (item_securable.list_id, item_securable.item_id) == ("list-id", 7)
     gateway.list_sharing_link_scopes.assert_not_called()
 
@@ -471,6 +474,20 @@ def test_sharing_links_are_read_under_the_setting() -> None:
     _run("sharepoint_document_permissions_read", _context(gateway, config))
 
     assert gateway.list_sharing_link_scopes.call_args.kwargs["item"].id == "item-id"
+    assert gateway.list_sharing_link_scopes.call_args.kwargs["max_rows"] == 50
+
+
+def test_a_sampled_item_whose_sharing_links_went_away_is_skipped() -> None:
+    """The sync records that item and moves on, so the check does not block."""
+    gateway: MagicMock = _gateway()
+    gateway.list_sharing_link_scopes.side_effect = _refusal(404, "itemNotFound")
+
+    _run(
+        "sharepoint_document_permissions_read",
+        _context(gateway, _config(treat_sharing_link_as_public=True)),
+    )
+
+    gateway.get_list_item_id.assert_not_called()
 
 
 def test_a_root_file_reads_no_folder() -> None:
@@ -571,7 +588,9 @@ def test_page_permissions_read_the_first_page() -> None:
 
     _run("sharepoint_page_permissions_read", _context(gateway, _config()))
 
-    securable = gateway.list_role_assignments.call_args.kwargs["securable"]
+    securable: SharepointSecurable = gateway.list_role_assignments.call_args.kwargs[
+        "securable"
+    ]
     assert securable.kind is SharepointSecurableKind.PAGE
     assert securable.page_url == f"{SITE_URL}/SitePages/Home.aspx"
 
