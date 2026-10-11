@@ -27,6 +27,15 @@ logger = setup_logger()
 _RETAINED_ISSUES_WARNING: int = 250_000
 
 
+def _beat(callback: IndexingHeartbeatInterface | None, amount: int) -> None:
+    """Renews the sync's lease and honours a stop between reads."""
+    if callback is None:
+        return
+    if callback.should_stop():
+        raise RuntimeError("Linear permission sync stopped on the heartbeat's signal")
+    callback.progress("linear_perm_sync", amount)
+
+
 class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
     """The connector with its permission walk."""
 
@@ -46,7 +55,7 @@ class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
         self,
         start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
-        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         """Every issue the token can read, with who may read it. The doc sync
         makes any indexed issue this does not list private, so the window is
@@ -76,6 +85,7 @@ class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
                     )
                 )
             yield docs
+            _beat(callback, len(page.issues))
             if not warned and len(shares) > _RETAINED_ISSUES_WARNING:
                 warned = True
                 logger.warning(
@@ -83,16 +93,24 @@ class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
                     "until the walk ends",
                     len(shares),
                 )
-        for start_index in range(0, len(inheriting), ACCESS_PAGE_SIZE):
-            yield [
+        # Each inheriting issue can read ancestors outside the scope, so the
+        # heartbeat runs per issue rather than per batch.
+        batch: list[SlimDocument | HierarchyNode] = []
+        for issue in inheriting:
+            batch.append(
                 SlimDocument(
                     id=issue.id,
                     external_access=issue_access(
                         issue.team, organization_id, shares.emails_for(issue.id)
                     ),
                 )
-                for issue in inheriting[start_index : start_index + ACCESS_PAGE_SIZE]
-            ]
+            )
+            _beat(callback, 1)
+            if len(batch) == ACCESS_PAGE_SIZE:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
 
 def linear_connector(cc_pair: ConnectorCredentialPair) -> LinearPermSyncConnector:

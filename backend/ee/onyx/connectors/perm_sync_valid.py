@@ -13,6 +13,7 @@ from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.factory import identify_connector_class
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.linear.config import LinearConnectorConfig
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.onedrive.capability_checks import (
     build_onedrive_doc_permission_sync_checks,
@@ -102,10 +103,9 @@ def validate_linear_perm_sync(connector: LinearConnector) -> None:
         source=DocumentSource.LINEAR,
         credential_json={},
         connector=connector,
-        connector_specific_config={
-            "team_keys": connector.team_keys,
-            "projects": connector.projects,
-        },
+        connector_specific_config=LinearConnectorConfig(
+            team_keys=connector.team_keys, projects=connector.projects
+        ).model_dump(mode="json"),
         source_operations=connector.ops,
     )
     for check in (

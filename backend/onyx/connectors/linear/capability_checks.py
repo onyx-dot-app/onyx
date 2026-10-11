@@ -37,8 +37,8 @@ from onyx.connectors.linear.source_operations import (
 
 T = TypeVar("T")
 
-DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/linear"
-PROBE_PAGE_SIZE = 1
+DOCS_LINK: str = "https://docs.onyx.app/admins/connectors/official/linear"
+PROBE_PAGE_SIZE: int = 1
 
 
 def gateway_from_context(context: CapabilityCheckContext) -> LinearSourceOperations:
@@ -58,8 +58,6 @@ def _raise_for_linear_error(error: Exception, denied: str) -> NoReturn:
         raise CredentialInvalidError(
             "Linear refused the credential. Check the API key or reconnect."
         ) from error
-    if isinstance(error, LinearGraphQLError):
-        raise UnexpectedValidationError(f"{denied} {error}") from error
     raise UnexpectedValidationError(f"{denied} {error}") from error
 
 

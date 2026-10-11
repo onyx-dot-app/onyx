@@ -20,7 +20,7 @@ from onyx.connectors.linear.capability_checks import (
 from onyx.connectors.linear.config import LinearConnectorConfig
 from onyx.connectors.linear.models import LinearViewer, WorkspaceUsers
 
-_GUEST_REMEDIATION = (
+_GUEST_REMEDIATION: str = (
     "Connect as a workspace member who belongs to every private team to index."
 )
 
