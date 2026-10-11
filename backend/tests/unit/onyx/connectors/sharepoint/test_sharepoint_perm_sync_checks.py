@@ -71,6 +71,12 @@ _EXPANSIONS: list[tuple[str, Callable[[MagicMock], MagicMock]]] = [
 # The group members check falls back to a listed group, so the "nothing to
 # expand" cases hold for the nested-groups check alone.
 _NESTED_ONLY: list[tuple[str, Callable[[MagicMock], MagicMock]]] = _EXPANSIONS[:1]
+# The arguments each expansion reads the found group with. The nested-groups
+# read is bounded so a probe never walks a large group.
+_EXPANSION_KWARGS: dict[str, dict[str, Any]] = {
+    "sharepoint_entra_nested_groups_read": {"group_id": GROUP_ID, "max_rows": 50},
+    "sharepoint_entra_group_members_read": {"group_id": GROUP_ID},
+}
 _CHECKS_BY_ID = {
     check.check_id: check
     for check in build_sharepoint_doc_permission_sync_checks()
@@ -354,8 +360,7 @@ def test_entra_group_is_resolved_from_its_claims_login(
 
     _run(check_id, _context(gateway, _config()))
 
-    expansion(gateway).assert_called_once()
-    assert expansion(gateway).call_args.kwargs["group_id"] == GROUP_ID
+    expansion(gateway).assert_called_once_with(**_EXPANSION_KWARGS[check_id])
     gateway.find_entra_group_id.assert_not_called()
 
 
@@ -465,8 +470,7 @@ def test_entra_group_inside_a_site_group_is_found(
     gateway.list_site_group_users.assert_called_once_with(
         site_url=SITE_URL, group_name="Eng Members", max_rows=50
     )
-    expansion(gateway).assert_called_once()
-    assert expansion(gateway).call_args.kwargs["group_id"] == GROUP_ID
+    expansion(gateway).assert_called_once_with(**_EXPANSION_KWARGS[check_id])
 
 
 def test_no_entra_group_anywhere_passes_the_nested_check_without_a_read() -> None:
