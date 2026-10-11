@@ -56,14 +56,6 @@ VANISHED_ID = "ZOOM_MEETING_vanished"
 STRANGER = "nobody@example.com"
 
 
-def _secret(test_secrets: dict[TestSecret, str], name: TestSecret) -> str:
-    # get_secrets drops whatever it cannot resolve, so an unavailable secret
-    # shows up as a missing key rather than an error.
-    if name not in test_secrets:
-        pytest.skip(f"{name.value} is not available")
-    return test_secrets[name]
-
-
 def _connector(credentials: dict[str, str], **config: Any) -> ZoomConnector:
     connector = ZoomConnector(**config)
     connector.load_credentials(credentials)
@@ -73,15 +65,15 @@ def _connector(credentials: dict[str, str], **config: Any) -> ZoomConnector:
 @pytest.fixture(scope="module")
 def credentials(test_secrets: dict[TestSecret, str]) -> dict[str, str]:
     return {
-        "zoom_account_id": _secret(test_secrets, TestSecret.ZOOM_ACCOUNT_ID),
-        "zoom_client_id": _secret(test_secrets, TestSecret.ZOOM_CLIENT_ID),
-        "zoom_client_secret": _secret(test_secrets, TestSecret.ZOOM_CLIENT_SECRET),
+        "zoom_account_id": test_secrets[TestSecret.ZOOM_ACCOUNT_ID],
+        "zoom_client_id": test_secrets[TestSecret.ZOOM_CLIENT_ID],
+        "zoom_client_secret": test_secrets[TestSecret.ZOOM_CLIENT_SECRET],
     }
 
 
 @pytest.fixture(scope="module")
 def owner_email(test_secrets: dict[TestSecret, str]) -> str:
-    return _secret(test_secrets, TestSecret.ZOOM_TEST_HOST_EMAIL).strip().lower()
+    return test_secrets[TestSecret.ZOOM_TEST_HOST_EMAIL].strip().lower()
 
 
 @pytest.fixture(scope="module")
@@ -95,7 +87,7 @@ def meeting_connector(
 ) -> ZoomConnector:
     return _connector(
         credentials,
-        meeting_ids=[_secret(test_secrets, TestSecret.ZOOM_TEST_MEETING_ID)],
+        meeting_ids=[test_secrets[TestSecret.ZOOM_TEST_MEETING_ID]],
     )
 
 
@@ -107,7 +99,7 @@ def webinar_connector(
     # webinar call fails whatever the scopes are.
     return _connector(
         credentials,
-        webinar_ids=[_secret(test_secrets, TestSecret.ZOOM_TEST_WEBINAR_ID)],
+        webinar_ids=[test_secrets[TestSecret.ZOOM_TEST_WEBINAR_ID]],
     )
 
 
@@ -115,9 +107,7 @@ def webinar_connector(
 def group_connector(
     test_secrets: dict[TestSecret, str], credentials: dict[str, str]
 ) -> ZoomConnector:
-    return _connector(
-        credentials, group_id=_secret(test_secrets, TestSecret.ZOOM_TEST_GROUP_ID)
-    )
+    return _connector(credentials, group_id=test_secrets[TestSecret.ZOOM_TEST_GROUP_ID])
 
 
 @pytest.fixture(scope="module")
@@ -272,19 +262,6 @@ def test_a_zoom_group_indexes_its_members_recordings(
     _assert_transcripts(_walk(group_connector))
 
 
-def test_the_meeting_number_walk_lists_every_indexed_document(
-    meeting_connector: ZoomConnector,
-) -> None:
-    """Pruning deletes every indexed id the slim path leaves out. The id path
-    resolves the number to its host before it can list anything, so it is the
-    half most likely to come back empty."""
-    indexed_ids = {doc.id for doc in _walk(meeting_connector)}
-    assert indexed_ids
-
-    with _no_transcript_downloads(meeting_connector):
-        assert set(_slim(meeting_connector.retrieve_all_slim_docs())) == indexed_ids
-
-
 def _readers(docs: list[Document]) -> dict[str, ExternalAccess]:
     readers: dict[str, ExternalAccess] = {}
     for doc in docs:
@@ -356,6 +333,30 @@ def test_the_perm_sync_walk_names_the_readers_indexing_named(
         listed = _slim(host_connector.retrieve_all_slim_docs_perm_sync())
 
     assert _stored(listed) == _readers(indexed)
+
+
+@pytest.mark.parametrize(
+    "discovery",
+    ["meeting_connector", "webinar_connector"],
+    ids=["meeting-number", "webinar-number"],
+)
+def test_an_id_walk_lists_and_names_readers_as_indexing_did(
+    discovery: str, request: pytest.FixtureRequest
+) -> None:
+    """Pruning deletes every indexed id the slim walk leaves out, and the doc
+    sync makes it private. The id path resolves the number to its host before
+    it can list anything, so it is the half most likely to come back empty."""
+    connector: ZoomConnector = request.getfixturevalue(discovery)
+    indexed = _walk(connector, include_permissions=True)
+    assert indexed
+
+    with _no_transcript_downloads(connector):
+        pruned = _slim(connector.retrieve_all_slim_docs())
+        synced = _slim(connector.retrieve_all_slim_docs_perm_sync())
+
+    assert set(pruned) == {doc.id for doc in indexed}
+    assert all(access is None for access in pruned.values())
+    assert _stored(synced) == _readers(indexed)
 
 
 def test_the_doc_sync_rewrites_every_access_and_revokes_a_vanished_document(
