@@ -246,7 +246,7 @@ def send_subagent_message(
         # Capture values needed for streaming before the endpoint returns and
         # FastAPI tears down the dependency-injected db_session.
         user_id = user.id
-        message_content = request.content
+        message_content = build_attachment_prompt(request.content, [])
         events_yielded = 0
 
         try:
