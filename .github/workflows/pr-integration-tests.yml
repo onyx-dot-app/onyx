@@ -14,6 +14,11 @@ on:
   push:
     tags:
       - "v*.*.*"
+  schedule:
+    # Daily run of the suites that PRs skip unless related code changes (the
+    # reindex port suite). 11:00 UTC is 3 AM PST / 4 AM PDT.
+    - cron: "0 11 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -62,6 +67,10 @@ jobs:
       # so PRs run it only for related changes. Merge queue and tag runs include it
       # whenever the integration suite runs.
       slack: ${{ github.event_name == 'pull_request' && steps.filter.outputs.slack || 'true' }}
+      # The reindex port suite is slow (each test waits for a full re-embed and
+      # swap). PRs and the merge queue run it only for related changes; the
+      # daily run and tag runs always include it.
+      reindex_port: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && steps.filter.outputs.reindex_port || 'true' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
@@ -102,6 +111,21 @@ jobs:
               - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
               - 'backend/tests/integration/connector_job_tests/slack/**'
               - '.github/workflows/pr-integration-tests.yml'
+            reindex_port:
+              - 'backend/onyx/background/celery/tasks/port/**'
+              - 'backend/onyx/background/celery/tasks/docprocessing/**'
+              - 'backend/onyx/background/celery/tasks/beat_schedule.py'
+              - 'backend/onyx/background/celery/apps/docprocessing.py'
+              - 'backend/onyx/background/celery/apps/primary.py'
+              - 'backend/onyx/db/port_attempt.py'
+              - 'backend/onyx/db/port_orphan_candidate.py'
+              - 'backend/onyx/db/swap_index.py'
+              - 'backend/onyx/db/search_settings.py'
+              - 'backend/onyx/server/manage/search_settings.py'
+              - 'backend/onyx/document_index/**'
+              - 'backend/onyx/indexing/**'
+              - 'backend/tests/integration/tests/reindex_port/**'
+              - '.github/workflows/pr-integration-tests.yml'
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -123,16 +147,26 @@ jobs:
         env:
           GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
           SLACK_CHANGED: ${{ needs.changes.outputs.slack }}
+          REINDEX_PORT_CHANGED: ${{ needs.changes.outputs.reindex_port }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           # Find all leaf-level directories in both test directories.
           # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" ! -name "gateway_clients" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" ! -name "gateway_clients" ! -name "reindex_port" -exec basename {} \; | sort)
           if [[ "$GATEWAY_CHANGED" == "true" ]]; then
             tests_dirs="$tests_dirs gateway_clients"
+          fi
+          if [[ "$REINDEX_PORT_CHANGED" == "true" ]]; then
+            tests_dirs="$tests_dirs reindex_port"
           fi
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" -exec basename {} \; | sort)
           if [[ "$SLACK_CHANGED" == "true" ]]; then
             connector_dirs="$connector_dirs slack"
+          fi
+          # The daily run covers only the suites that PRs skip by default.
+          if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tests_dirs="reindex_port"
+            connector_dirs=""
           fi
 
           # Create JSON array with directory info
@@ -501,6 +535,8 @@ jobs:
 
   onyx-lite-tests:
     needs: [build-devcontainer-image]
+    # The daily run covers only the reindex port suite.
+    if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
     permissions:
       id-token: write # Required for OIDC-based AWS credential exchange
       contents: read
@@ -611,6 +647,8 @@ jobs:
 
   multitenant-tests:
     needs: [build-model-server-image, build-devcontainer-image]
+    # The daily run covers only the reindex port suite.
+    if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
     runs-on:
       [
         runs-on,
@@ -755,6 +793,7 @@ jobs:
           INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
           LITE_RESULT: ${{ needs.onyx-lite-tests.result }}
           MULTITENANT_RESULT: ${{ needs.multitenant-tests.result }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           # Fail closed if `changes` didn't succeed. Otherwise an empty
           # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
@@ -767,6 +806,11 @@ jobs:
           if [ "${RUN_TESTS}" != "true" ]; then
             echo "No relevant paths changed — required check passes."
             exit 0
+          fi
+          # The daily run skips the onyx-lite and multitenant jobs.
+          if [ "${EVENT_NAME}" = "schedule" ] || [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            LITE_RESULT=success
+            MULTITENANT_RESULT=success
           fi
           if [ "${INTEGRATION_RESULT}" != "success" ] \
              || [ "${LITE_RESULT}" != "success" ] \
@@ -798,3 +842,31 @@ jobs:
             -f context=ci/tested-base/integration \
             -f description="${DESCRIPTION:0:140}" \
             -f target_url="${RUN_URL}"
+
+  notify-slack-on-failure:
+    needs: [required]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-slim
+    environment: ci-protected
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Send Slack notification
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          details: |
+            *The daily reindex port run failed.*
+            Check the linked workflow run for the failed job.
+
+            *To reproduce locally:*
+            Start the Onyx services, then run:
+            `uv run --env-file .vscode/.env pytest backend/tests/integration/tests/reindex_port`
+          title: "🚨 Daily reindex port integration tests failed!"
+          ref-name: ${{ github.ref_name }}
