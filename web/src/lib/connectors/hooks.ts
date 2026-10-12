@@ -1,11 +1,14 @@
 "use client";
 
+import type { CredentialRef } from "@/lib/credentials/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { checkCredentialBinding } from "@/lib/connectors/svc";
+import { useSavedDraftCredential } from "@/lib/credentials/hooks";
+import { bindingCheckCredentialId } from "@/lib/credentials/utils";
 import {
   bindingCheckInput,
   decideBindingGate,
@@ -216,8 +219,8 @@ const BINDING_CHECK_CREDENTIAL_DELAY_MS = 50;
 
 export interface UseBoundFieldsGateParams {
   source: ValidSources;
-  /** `null` when no credential is selected. */
-  credentialId: number | null;
+  /** A saved credential or a draft; `null` when none is selected. */
+  credential: CredentialRef | null;
   /** The credential's `time_updated`. An edit makes older results stale. */
   credentialUpdatedAt: string | null;
   /** A credential is selected, or the source needs none. */
@@ -252,7 +255,7 @@ interface BindingCheckResult {
  */
 export function useBoundFieldsGate({
   source,
-  credentialId,
+  credential,
   credentialUpdatedAt,
   credentialSelected,
   boundFieldNames,
@@ -260,8 +263,20 @@ export function useBoundFieldsGate({
   values,
   extra,
 }: UseBoundFieldsGateParams): UseBoundFieldsGateResult {
+  const { savedDraft } = useSavedDraftCredential(source);
+  // The check sends no values: a typed account goes by its saved draft, so it
+  // waits until a check run saves its current values.
+  const credentialId: number | null =
+    credential === null
+      ? null
+      : bindingCheckCredentialId(credential, savedDraft);
+  const awaitingRun: boolean = credential !== null && credentialId === null;
+  // A string, so effects follow the credential rather than the object. The
+  // values are part of it: a draft keeps its id when they change.
+  const credentialKey: string | null =
+    credentialId === null ? null : JSON.stringify([credential, credentialId]);
   const { key: inputKey, config } = bindingCheckInput(
-    credentialId,
+    credentialKey,
     boundFieldNames,
     values
   );
@@ -333,9 +348,9 @@ export function useBoundFieldsGate({
   );
 
   useEffect(() => {
-    if (credentialId === null) return;
+    if (credentialKey === null) return;
     schedule(BINDING_CHECK_CREDENTIAL_DELAY_MS);
-  }, [credentialId, credentialUpdatedAt, schedule]);
+  }, [credentialKey, credentialUpdatedAt, schedule]);
 
   useEffect(
     () => () => {
@@ -351,11 +366,13 @@ export function useBoundFieldsGate({
   );
 
   const binding: BindingCheckState =
-    credentialId === null
+    credential === null
       ? { kind: credentialSelected ? "unavailable" : "idle" }
-      : result !== null && result.key === key
-        ? result.state
-        : { kind: "idle" };
+      : awaitingRun
+        ? { kind: "awaitingRun" }
+        : result !== null && result.key === key
+          ? result.state
+          : { kind: "idle" };
   const gate = decideBindingGate({
     hasBoundFields: boundFields.length > 0,
     credentialSelected,
@@ -385,6 +402,8 @@ export function useBindingGateMessage(
       return t("credentialRequired.tooltip");
     case "awaitingCheck":
       return t("bindingGate.awaitingCheck");
+    case "runChecks":
+      return t("bindingGate.runChecks");
     case "checking":
       return t("bindingGate.checking");
     case "fieldRejected":

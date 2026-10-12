@@ -89,14 +89,19 @@ export class ConnectorSetupPage {
     await this.page.getByRole("option", { name: startsWithTitle }).click();
   }
 
-  /** The row for a credential in the credential section, by its name. */
-  credentialRow(credentialName: string): Locator {
-    return this.page.getByRole("row", { name: credentialName });
+  /**
+   * The card for a saved account in the credential section, by its id. The
+   * card is titled by its creator, so its name may not show.
+   */
+  credentialRow(credentialId: number): Locator {
+    return this.page.getByTestId(`authentication-account-${credentialId}`);
   }
 
-  /** Pick a credential in the credential section by its name. */
-  async selectCredential(credentialName: string) {
-    await this.credentialRow(credentialName).getByRole("radio").click();
+  /** Pick a saved account in the credential section by its id. */
+  async selectCredential(credentialId: number) {
+    await this.credentialRow(credentialId)
+      .getByRole("button", { name: "Use Account" })
+      .click();
   }
 
   /**

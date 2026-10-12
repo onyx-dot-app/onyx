@@ -35,6 +35,8 @@ class BookstackConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
+        # Checked against the credential by the binding; unused here.
+        bookstack_base_url: str | None = None,  # noqa: ARG002
     ) -> None:
         self.batch_size = batch_size
         self.bookstack_client: BookStackApiClient | None = None

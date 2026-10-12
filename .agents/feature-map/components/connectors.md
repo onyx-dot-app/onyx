@@ -90,7 +90,7 @@ frontend changes a new connector requires.
 | GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). |
-| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. |
+| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The add-connector form sends a typed account's values only with a check run or Create, and its binding check names the draft by id once a run saved the current values. The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. |
 | POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
@@ -480,6 +480,15 @@ mirrors one `__init__` kwarg of the connector. A config may inherit a
 `CredentialBinding` model for fields whose valid values depend on the account behind
 the credential, such as a site URL. `factory.py:validate_credential_binding` checks
 those fields at pairing and on config edit.
+
+Every realm (where an account works: its site, host or subdomain) is a bound field.
+A source whose credential records its realm (GitHub, GitLab, Zendesk and nine more)
+uses `RealmCredentialBinding`: the config holds the realm under the credential's
+key, and the credential must record the same one, compared without case, scheme or
+a trailing slash. An empty config realm accepts every credential. The connector
+still reads the realm from the credential. The add-connector form shows bound
+fields first, copies a realm into a new account's values, and disables saved
+accounts whose stored value differs (`credentialMatchesBoundFields`).
 
 `credential_families.py` lets related sources share one stored credential: Atlassian
 (Confluence, Jira), Google (Gmail, Drive), and Microsoft (SharePoint, OneDrive,
