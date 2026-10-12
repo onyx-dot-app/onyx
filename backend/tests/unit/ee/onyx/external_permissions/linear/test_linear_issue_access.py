@@ -10,15 +10,19 @@ import pytest
 from ee.onyx.external_permissions.linear.access import (
     SharedAccessIndex,
     issue_access,
-    member_emails,
     workspace_members_group_id,
 )
 from ee.onyx.external_permissions.linear.connector import LinearPermSyncConnector
 from onyx.access.models import ExternalAccess
-from onyx.connectors.linear.models import IssueShare, LinearTeam, LinearUser
+from onyx.connectors.linear.models import (
+    IssueShare,
+    LinearTeam,
+    LinearUser,
+    member_emails,
+)
 from onyx.connectors.models import SlimDocument
 
-MODULE = "onyx.connectors.linear.connector"
+OPS = "onyx.connectors.linear.source_operations"
 ORG = "org-1"
 
 PRIVATE_PARENT = LinearTeam(id="p", key="P", visibility="private")
@@ -159,6 +163,12 @@ def _page(nodes: list[dict[str, Any]], end_cursor: str | None) -> MagicMock:
     return response
 
 
+def _ops_connector() -> LinearPermSyncConnector:
+    connector = LinearPermSyncConnector()
+    connector.load_credentials({"linear_api_key": "lin_api_test"})
+    return connector
+
+
 def test_the_walk_yields_inheriting_sub_issues_after_their_parents_page() -> None:
     private = {"id": "p", "key": "P", "visibility": "private", "parent": None}
     public = {"id": "q", "key": "Q", "visibility": "public", "parent": None}
@@ -179,13 +189,11 @@ def test_the_walk_yields_inheriting_sub_issues_after_their_parents_page() -> Non
             None,
         ),
     ]
-    connector = LinearPermSyncConnector()
-    connector.load_credentials({"linear_api_key": "lin_api_test"})
 
-    with patch(f"{MODULE}._make_query", side_effect=pages) as query:
+    with patch(f"{OPS}._make_query", side_effect=pages) as query:
         batches = [
             [cast(SlimDocument, doc) for doc in batch]
-            for batch in connector.retrieve_all_slim_docs_perm_sync()
+            for batch in _ops_connector().retrieve_all_slim_docs_perm_sync()
         ]
 
     by_id: dict[str, ExternalAccess] = {}
@@ -239,39 +247,32 @@ def _share_lookup_response(errors: list[dict[str, Any]] | None) -> MagicMock:
 
 
 def test_a_parent_outside_the_scope_is_read_for_its_shares() -> None:
-    connector = LinearPermSyncConnector()
-    connector.load_credentials({"linear_api_key": "lin_api_test"})
-
     with patch(
-        f"{MODULE}._make_query", return_value=_share_lookup_response(None)
+        f"{OPS}._make_query", return_value=_share_lookup_response(None)
     ) as query:
-        share = connector._issue_share("far")
+        share = _ops_connector().ops.get_issue_share(issue_id="far")
 
     assert share == IssueShare(parent_id=None, inherits=False, emails={"far@x"})
     assert query.call_args.args[0]["variables"] == {"id": "far"}
 
 
 def test_a_parent_the_token_cannot_see_grants_nothing() -> None:
-    connector = LinearPermSyncConnector()
-    connector.load_credentials({"linear_api_key": "lin_api_test"})
     missing = [{"message": "Entity not found: Issue", "path": ["issue"]}]
 
-    with patch(f"{MODULE}._make_query", return_value=_share_lookup_response(missing)):
-        assert connector._issue_share("far") == IssueShare(
+    with patch(f"{OPS}._make_query", return_value=_share_lookup_response(missing)):
+        assert _ops_connector().ops.get_issue_share(issue_id="far") == IssueShare(
             parent_id=None, inherits=False, emails=set()
         )
 
 
 def test_any_other_lookup_failure_fails_the_walk() -> None:
-    connector = LinearPermSyncConnector()
-    connector.load_credentials({"linear_api_key": "lin_api_test"})
     outage = [{"message": "Rate limited", "path": ["issue"]}]
 
     with (
-        patch(f"{MODULE}._make_query", return_value=_share_lookup_response(outage)),
+        patch(f"{OPS}._make_query", return_value=_share_lookup_response(outage)),
         pytest.raises(RuntimeError, match="Rate limited"),
     ):
-        connector._issue_share("far")
+        _ops_connector().ops.get_issue_share(issue_id="far")
 
 
 def test_the_walk_beats_per_page_and_per_inheriting_issue() -> None:
@@ -288,14 +289,12 @@ def test_the_walk_beats_per_page_and_per_inheriting_issue() -> None:
     ]
     callback = MagicMock()
     callback.should_stop.side_effect = [False, False, True]
-    connector = LinearPermSyncConnector()
-    connector.load_credentials({"linear_api_key": "lin_api_test"})
 
     with (
-        patch(f"{MODULE}._make_query", side_effect=pages),
+        patch(f"{OPS}._make_query", side_effect=pages),
         pytest.raises(RuntimeError, match="stopped"),
     ):
-        list(connector.retrieve_all_slim_docs_perm_sync(callback=callback))
+        list(_ops_connector().retrieve_all_slim_docs_perm_sync(callback=callback))
 
     # One beat for the page of three, one per inheriting issue until the stop.
     assert [call.args for call in callback.progress.call_args_list] == [

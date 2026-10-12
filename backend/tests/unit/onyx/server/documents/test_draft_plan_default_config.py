@@ -16,9 +16,12 @@ def _states(source: DocumentSource) -> dict[str, DraftCheckStateKind]:
 
 def test_an_empty_form_runs_checks_when_the_defaults_are_complete() -> None:
     # Every Linear config field has a default, so the form never sends values.
-    assert _states(DocumentSource.LINEAR) == {
-        "linear_connector_settings": DraftCheckStateKind.PENDING
-    }
+    states = _states(DocumentSource.LINEAR)
+    assert states["linear_token"] == DraftCheckStateKind.PENDING
+    assert states["linear_issues"] == DraftCheckStateKind.PENDING
+    # An empty scope list means every team and project, so there is nothing to check.
+    assert states["linear_teams"] == DraftCheckStateKind.NOT_APPLICABLE
+    assert states["linear_projects"] == DraftCheckStateKind.NOT_APPLICABLE
 
 
 def test_an_empty_form_waits_when_a_field_is_required() -> None:

@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
@@ -11,6 +11,8 @@ from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.linear.connector import LinearConnector
+from onyx.connectors.linear.models import LinearViewer
+from onyx.connectors.linear.source_operations import LinearSourceOperations
 from onyx.connectors.zoom.connector import ZoomConnector
 
 
@@ -85,16 +87,12 @@ def test_dispatch_is_a_noop_for_probeless_connectors() -> None:
     validate_perm_sync(MagicMock(spec=BaseConnector))
 
 
-def test_linear_probes_the_viewer_on_the_connectors_own_credential() -> None:
-    """The EE twin reads the factory-built connector's credential: a guest
-    token fails before a scheduled sync hides every issue outside its teams."""
+def test_linear_reruns_its_named_sync_checks_before_each_sync() -> None:
+    """A user who became a guest after setup fails the scheduled sync's
+    validation instead of hiding every issue outside the guest's teams."""
     connector = LinearConnector(team_keys=["ENG"])
-    connector.load_credentials({"linear_api_key": "lin_api_test"})
-    guest = MagicMock()
-    guest.json.return_value = {"data": {"viewer": {"guest": True}}}
+    connector._ops = create_autospec(LinearSourceOperations, instance=True)
+    connector._ops.get_viewer.return_value = LinearViewer(guest=True)
 
-    with (
-        patch("onyx.connectors.linear.connector._make_query", return_value=guest),
-        pytest.raises(InsufficientPermissionsError, match="guest"),
-    ):
+    with pytest.raises(InsufficientPermissionsError, match="guest"):
         validate_perm_sync(connector)
