@@ -20,10 +20,15 @@ from onyx.connectors.capability_checks.draft_runs import (
     decide_draft_check_state,
 )
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityVerdict,
+    CheckFinding,
+    CheckFindingKey,
     CredentialCapability,
+    FindingOption,
+    OptionsFinding,
     compute_capability_verdicts,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
@@ -334,6 +339,58 @@ def test_spaces_403_names_the_classic_scope_for_a_scoped_token() -> None:
         InsufficientPermissionsError, match="read:confluence-space.summary"
     ):
         _run("confluence_spaces_visible", _context(gateway, _form(scoped_token=True)))
+
+
+# confluence_space_listing
+
+
+def test_space_listing_finds_the_visible_spaces_as_space_options() -> None:
+    gateway = _gateway()
+    gateway.list_spaces.side_effect = lambda **_: iter(
+        [{"key": "KB", "name": "Knowledge Base"}, {"key": "~ada"}]
+    )
+
+    findings: list[CheckFinding] | None = _CHECKS_BY_ID["confluence_space_listing"].run(
+        _context(gateway, _form())
+    )
+
+    assert findings == [
+        OptionsFinding(
+            key=CheckFindingKey.VISIBLE_SPACES,
+            field_name="space",
+            options=[
+                FindingOption(value="KB", label="Knowledge Base"),
+                FindingOption(value="~ada", label="~ada"),
+            ],
+        )
+    ]
+
+
+def test_space_listing_stops_at_the_option_cap() -> None:
+    gateway = _gateway()
+    gateway.list_spaces.side_effect = lambda **_: (
+        {"key": f"S{number}", "name": f"Space {number}"} for number in range(5000)
+    )
+
+    findings: list[CheckFinding] | None = _CHECKS_BY_ID["confluence_space_listing"].run(
+        _context(gateway, _form())
+    )
+
+    assert findings is not None
+    listing: CheckFinding = findings[0]
+    assert isinstance(listing, OptionsFinding)
+    assert len(listing.options) == MAX_FINDING_OPTIONS
+    assert listing.truncated is True
+
+
+def test_space_listing_403_fails_and_leaves_the_verdict_alone() -> None:
+    gateway = _gateway()
+    gateway.list_spaces.side_effect = _http_error(403)
+
+    with pytest.raises(InsufficientPermissionsError, match="cannot list"):
+        _run("confluence_space_listing", _context(gateway, _form()))
+    assert _CHECKS_BY_ID["confluence_space_listing"].discovery is True
+    assert _CHECKS_BY_ID["confluence_space_listing"].required is False
 
 
 # confluence_configured_space
@@ -712,16 +769,18 @@ def test_user_names_without_an_author_pass() -> None:
 
 
 def test_optional_checks_are_the_approved_ones() -> None:
+    checks: list[CapabilityCheck] = build_confluence_indexing_checks()
     optional = {
-        check.check_id
-        for check in build_confluence_indexing_checks()
-        if not check.required
+        check.check_id for check in checks if not check.required and not check.discovery
     }
 
     assert optional == {
         "confluence_comments_read",
         "confluence_attachments_read",
         "confluence_user_names",
+    }
+    assert {check.check_id for check in checks if check.discovery} == {
+        "confluence_space_listing"
     }
 
 
