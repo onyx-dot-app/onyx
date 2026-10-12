@@ -130,6 +130,8 @@ module.exports = {
         "action-danger-02": "var(--action-danger-02)",
         "action-danger-01": "var(--action-danger-01)",
         "action-text-link-05": "var(--action-text-link-05)",
+        link: "var(--action-text-link-05)",
+        "link-hover": "var(--action-selection-06)",
         "action-text-danger-05": "var(--action-text-danger-05)",
         "highlight-match": "var(--highlight-match)",
         "highlight-selection": "var(--highlight-selection)",
