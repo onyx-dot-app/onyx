@@ -9037,9 +9037,6 @@
       "docsLink": {
         "label": "التوثيق"
       },
-      "rerunButton": {
-        "label": "إعادة تشغيل الفحوصات"
-      },
       "foldButton": {
         "fold": "طي",
         "expand": "توسيع"
@@ -9056,7 +9053,7 @@
       "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى.",
       "requiredFailed": "{count, plural, one {فشل فحص مطلوب واحد} other {فشل # فحوصات مطلوبة}}",
       "state": {
-        "completed": "اكتملت عمليات التحقق",
+        "completed": "اكتملت عمليات التحقق.",
         "inProgress": "عمليات التحقق قيد التنفيذ…"
       }
     }

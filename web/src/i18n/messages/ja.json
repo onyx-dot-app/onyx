@@ -9037,9 +9037,6 @@
       "docsLink": {
         "label": "ドキュメント"
       },
-      "rerunButton": {
-        "label": "チェックを再実行"
-      },
       "foldButton": {
         "fold": "折りたたむ",
         "expand": "展開"
@@ -9056,7 +9053,7 @@
       "failedToRun": "チェックを実行できませんでした。もう一度お試しください。",
       "requiredFailed": "{count, plural, one {必須チェック # 件が失敗} other {必須チェック # 件が失敗}}",
       "state": {
-        "completed": "チェックが完了しました",
+        "completed": "チェックが完了しました。",
         "inProgress": "チェックを実行中…"
       }
     }

@@ -9037,9 +9037,6 @@
       "docsLink": {
         "label": "Documentation"
       },
-      "rerunButton": {
-        "label": "Rerun Checks"
-      },
       "foldButton": {
         "fold": "Fold",
         "expand": "Expand"
@@ -9056,7 +9053,7 @@
       "failedToRun": "Checks failed to run. Try again.",
       "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
       "state": {
-        "completed": "Checks completed",
+        "completed": "Checks completed.",
         "inProgress": "Checks in progress…"
       }
     }

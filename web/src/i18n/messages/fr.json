@@ -9037,9 +9037,6 @@
       "docsLink": {
         "label": "Documentation"
       },
-      "rerunButton": {
-        "label": "Relancer les vérifications"
-      },
       "foldButton": {
         "fold": "Réduire",
         "expand": "Développer"
@@ -9056,7 +9053,7 @@
       "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
-        "completed": "Vérifications terminées",
+        "completed": "Vérifications terminées.",
         "inProgress": "Vérifications en cours…"
       }
     }
