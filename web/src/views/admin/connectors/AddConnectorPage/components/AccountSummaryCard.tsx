@@ -104,7 +104,7 @@ export function AccountSummary({
 }
 
 interface AccountSummaryCardProps {
-  credential: SimilarCredential;
+  account: SummarizedAccount;
   /** The source being set up. */
   source: ConfigurableSources;
   /** The source's display name. */
@@ -114,28 +114,26 @@ interface AccountSummaryCardProps {
 }
 
 /**
- * The picked saved account while the account section is folded. Clicking it
- * opens the section.
+ * The chosen account, saved or new, while the account section is folded.
+ * Clicking it opens the section.
  */
 export default function AccountSummaryCard({
-  credential,
+  account,
   source,
   sourceName,
   onExpand,
 }: AccountSummaryCardProps) {
-  const title: string = credential.user_email ?? credential.name ?? "";
   return (
     <SelectCard
       state="filled"
       border="solid"
       rounding={4}
       padding={2}
-      aria-label={title || undefined}
       data-testid="account-summary"
       onClick={onExpand}
     >
       <AccountSummary
-        account={{ kind: "saved", credential }}
+        account={account}
         source={source}
         sourceName={sourceName}
       />

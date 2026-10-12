@@ -60,6 +60,7 @@ import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 import AccountSummaryCard, {
   AccountSummary,
+  type SummarizedAccount,
 } from "@/views/admin/connectors/AddConnectorPage/components/AccountSummaryCard";
 
 interface AuthenticationAccountSectionProps {
@@ -118,8 +119,8 @@ export default function AuthenticationAccountSection({
     isAuthorizing,
   } = useCredentialSetup(connector);
   const checkReports = useCredentialCheckReports(connector);
-  // Expanded, the section lists every account. Folded, it shows the picked
-  // saved account's summary and the new-account card.
+  // Expanded, the section lists every account. Folded, it shows the chosen
+  // account's summary, or the new-account card when nothing is chosen.
   const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
 
   // The create card's one label, whatever the number of routes; the tabs
@@ -348,6 +349,11 @@ export default function AuthenticationAccountSection({
     isDraftCredential(checkedCredential)
       ? checkedCredential
       : null;
+  const chosenAccount: SummarizedAccount | null = pickedSavedCredential
+    ? { kind: "saved", credential: pickedSavedCredential }
+    : chosenDraft
+      ? { kind: "draft", draft: chosenDraft }
+      : null;
 
   // One card creates a credential. Its header toggles it; the fold below is a
   // plain container, so a click in the open form cannot fold it away. The
@@ -473,19 +479,18 @@ export default function AuthenticationAccountSection({
       {!credentials ? null : (
         <Section gap={6} alignItems="stretch" width="full">
           {!accountsExpanded ? (
-            // Folded: the picked saved account's summary, and the new-account
-            // card, which still opens and closes.
-            <Section gap={2} alignItems="stretch" width="full">
-              {pickedSavedCredential && (
-                <AccountSummaryCard
-                  credential={pickedSavedCredential}
-                  source={connector}
-                  sourceName={displayName}
-                  onExpand={() => setAccountsExpanded(true)}
-                />
-              )}
-              {newAccountCard}
-            </Section>
+            // Folded: the chosen account's summary, or the new-account card
+            // when nothing is chosen.
+            chosenAccount ? (
+              <AccountSummaryCard
+                account={chosenAccount}
+                source={connector}
+                sourceName={displayName}
+                onExpand={() => setAccountsExpanded(true)}
+              />
+            ) : (
+              newAccountCard
+            )
           ) : (
             <Section gap={2} alignItems="stretch" width="full">
               {credentials.map(renderSavedCard)}
