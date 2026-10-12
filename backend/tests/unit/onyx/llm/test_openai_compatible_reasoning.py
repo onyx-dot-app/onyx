@@ -147,6 +147,21 @@ def test_gpt_6_tool_turn_delivers_explicit_none() -> None:
     assert "reasoning_effort" in kwargs["allowed_openai_params"]
 
 
+def test_native_openai_tool_turn_delivers_explicit_none() -> None:
+    """A GPT-5.4+ model the release catalog does not know still forces
+    reasoning "none" on native OpenAI tool turns, and the explicit none must
+    survive LiteLLM's drop_params (issue #15908)."""
+    llm = LitellmLLM(
+        api_key="test-key",
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-9.9-fictional",
+        max_input_tokens=100000,
+    )
+    kwargs = _sent_kwargs(llm, _TOOL_LOOP)
+    assert kwargs["reasoning_effort"] == "none"
+    assert "reasoning_effort" in kwargs["allowed_openai_params"]
+
+
 def test_unflagged_unknown_model_sends_no_effort() -> None:
     kwargs = _sent_kwargs(_llm("gemini-3.1-pro"), [UserMessage(content="hi")], None)
     assert "reasoning_effort" not in kwargs
