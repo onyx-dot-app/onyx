@@ -5,34 +5,28 @@ import { Button } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgPlusCircle, SvgUserEdit } from "@opal/icons";
 import type { DraftCredential } from "@/lib/credentials/types";
-import { getCredentialDetails } from "@/lib/credentials/utils";
-import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import { useUser } from "@/providers/UserProvider";
 
 interface AccountSummaryProps {
   /** The new account typed into the form, which Create saves. */
   draft: DraftCredential;
-  /** The source being set up. */
-  source: ConfigurableSources;
   /** The source's display name, for an account with no name to show. */
   sourceName: string;
 }
 
 /**
- * One row that names the new account: its display name, else its first value
- * that is not a secret (such as its email). The new-account card shows it as
- * its closed header once the account is usable.
+ * One row that names the new account: its display name, else the current
+ * user's email. The new-account card shows it as its closed header once the
+ * account is usable.
  */
-export function AccountSummary({
-  draft,
-  source,
-  sourceName,
-}: AccountSummaryProps) {
+export function AccountSummary({ draft, sourceName }: AccountSummaryProps) {
   const t = useTranslations("admin.connectorsList.add");
+  const { user } = useUser();
+  // Named like a saved account: its display name, else its creator (the
+  // current user).
   const title: string =
     draft.sharing.name ??
-    getCredentialDetails(draft, source).fields.find(
-      ({ field }) => field.kind !== "secret"
-    )?.value ??
+    user?.email ??
     t("newAccountButton.label", { source: sourceName });
 
   return (

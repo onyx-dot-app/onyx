@@ -357,8 +357,7 @@ export default function AuthenticationAccountSection({
       // The form keeps what was typed while folded.
       expandableKeepMounted
       border="solid"
-      // Filled while open, and while closed on a usable new account's summary.
-      state={isCreating || chosenDraft ? "filled" : "empty"}
+      state={isCreating ? "filled" : "empty"}
       rounding={4}
       padding={2}
       // The card is one action, so it names itself. Nothing inside the
@@ -407,11 +406,7 @@ export default function AuthenticationAccountSection({
     >
       {/* Closed, a usable new account shows its summary as the header. */}
       {!isCreating && chosenDraft ? (
-        <AccountSummary
-          draft={chosenDraft}
-          source={connector}
-          sourceName={displayName}
-        />
+        <AccountSummary draft={chosenDraft} sourceName={displayName} />
       ) : (
         <Section padding={2} width="full">
           <Content
