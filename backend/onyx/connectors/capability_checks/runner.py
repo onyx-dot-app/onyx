@@ -7,11 +7,16 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings_setting import check_findings_enabled
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckAdvisory,
+    CheckFinding,
+    CheckNotApplicableError,
+    CheckOutput,
     CredentialCapability,
     CredentialCapabilityReport,
     compute_capability_verdicts,
@@ -29,6 +34,7 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import (
     SourceOperations,
     get_source_operations_class,
@@ -58,6 +64,8 @@ _SKIP_NEEDS_CONFIG_MESSAGE = (
     "Requires connector configuration -- will re-run automatically when the "
     "connector is configured."
 )
+_SKIP_FINDINGS_OFF_MESSAGE = "Findings are turned off for this workspace."
+_SKIP_VALIDATION_FAILED_MESSAGE = "Skipped: a required check failed."
 _TIMEOUT_MESSAGE = (
     "Check timed out; the source may be slow -- try re-running the checks."
 )
@@ -96,6 +104,8 @@ class _CheckOutcome(BaseModel):
     error_type: str | None = None
     duration_ms: int | None = None
     applicable: bool = True
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
 
 
 def _build_result(
@@ -115,6 +125,9 @@ def _build_result(
         duration_ms=outcome.duration_ms,
         applicable=outcome.applicable,
         validates_binding=check.validates_binding,
+        discovery=check.discovery,
+        findings=outcome.findings,
+        advisories=outcome.advisories,
     )
 
 
@@ -176,7 +189,17 @@ def _execute_check(
         return int((time.monotonic() - start) * 1000)
 
     try:
-        run_with_timeout(timeout_seconds, check.run, context)
+        output: CheckOutput | None = run_with_timeout(
+            timeout_seconds, check.run, context
+        )
+    except CheckNotApplicableError as e:
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=str(e),
+            error_type=type(e).__name__,
+            applicable=False,
+            duration_ms=elapsed_ms(),
+        )
     except ConnectorValidationError as e:
         return _CheckOutcome(
             status=CapabilityCheckStatus.FAILED,
@@ -221,7 +244,63 @@ def _execute_check(
             error_type=type(e).__name__,
             duration_ms=elapsed_ms(),
         )
-    return _CheckOutcome(status=CapabilityCheckStatus.PASSED, duration_ms=elapsed_ms())
+    output = output or CheckOutput()
+    return _CheckOutcome(
+        status=CapabilityCheckStatus.PASSED,
+        duration_ms=elapsed_ms(),
+        findings=_findings_for_source(output.findings, check, context.source),
+        advisories=output.advisories,
+    )
+
+
+def _findings_for_source(
+    findings: list[CheckFinding], check: CapabilityCheck, source: DocumentSource
+) -> list[CheckFinding]:
+    """Drops a finding whose ``field_name`` is not a field of the source's
+    config: a form could not use it, so it is a bug in the check."""
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    fields: frozenset[str] = (
+        frozenset(mapping.config_class.model_fields) if mapping else frozenset()
+    )
+    kept: list[CheckFinding] = []
+    for finding in findings:
+        if finding.field_name is not None and finding.field_name not in fields:
+            logger.error(
+                "Capability check %s returned a finding for %s, which is not a "
+                "%s config field; the finding is dropped.",
+                check.check_id,
+                finding.field_name,
+                source.value,
+            )
+            continue
+        kept.append(finding)
+    return kept
+
+
+def _discovery_skip_outcome(
+    validation_results: Sequence[CapabilityCheckResult],
+    keep_findings: bool,
+    required_check_failed: bool,
+) -> _CheckOutcome | None:
+    """Why a discovery check does not run, or None when it runs.
+    ``required_check_failed`` covers failures this run did not execute, such
+    as a draft run's cached results."""
+    if not keep_findings:
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=_SKIP_FINDINGS_OFF_MESSAGE,
+            applicable=False,
+        )
+    if required_check_failed or any(
+        result.required and result.status == CapabilityCheckStatus.FAILED
+        for result in validation_results
+    ):
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=_SKIP_VALIDATION_FAILED_MESSAGE,
+            applicable=False,
+        )
+    return None
 
 
 def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
@@ -256,6 +335,7 @@ def run_capability_checks(
     context: CapabilityCheckContext,
     on_result: CapabilityCheckProgressCallback | None = None,
     timeout_cap_seconds: float | None = None,
+    required_check_failed: bool = False,
 ) -> list[CapabilityCheckResult]:
     """Runs checks sequentially and maps their outcomes to statuses.
 
@@ -296,12 +376,28 @@ def run_capability_checks(
     outcome_by_check_id: dict[str, _CheckOutcome] = {}
 
     def record(check: CapabilityCheck, outcome: _CheckOutcome) -> None:
+        # Read per result: a run can take minutes, and the setting can be
+        # turned off meanwhile.
+        if outcome.findings and not check_findings_enabled():
+            outcome = outcome.model_copy(update={"findings": []})
         results.append(_build_result(check, outcome))
         if on_result is not None:
             # A snapshot: the callback must not observe later appends.
             on_result(tuple(results))
 
-    for check in checks:
+    # Discovery checks run after validation, and only when it found the
+    # credential usable: they exist to show what a working credential reaches.
+    ordered: list[CapabilityCheck] = [
+        check for check in checks if not check.discovery
+    ] + [check for check in checks if check.discovery]
+    for check in ordered:
+        if check.discovery:
+            discovery_outcome: _CheckOutcome | None = _discovery_skip_outcome(
+                results, check_findings_enabled(), required_check_failed
+            )
+            if discovery_outcome is not None:
+                record(check, discovery_outcome)
+                continue
         unrunnable_outcome = _unrunnable_outcome(check, context)
         if unrunnable_outcome is not None:
             record(check, unrunnable_outcome)
@@ -451,6 +547,7 @@ def generate_capability_report(
     on_result: CapabilityCheckProgressCallback | None = None,
     check_ids: frozenset[str] | None = None,
     timeout_cap_seconds: float | None = None,
+    required_check_failed: bool = False,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -568,7 +665,11 @@ def generate_capability_report(
         source_operations=source_operations,
     )
     results = run_capability_checks(
-        checks, context, on_result=on_result, timeout_cap_seconds=timeout_cap_seconds
+        checks,
+        context,
+        on_result=on_result,
+        timeout_cap_seconds=timeout_cap_seconds,
+        required_check_failed=required_check_failed,
     )
     return CredentialCapabilityReport(
         credential_id=credential.id,

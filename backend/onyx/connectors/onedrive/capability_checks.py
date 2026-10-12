@@ -1,14 +1,22 @@
 from collections.abc import Callable, Generator
 from typing import TypeVar
 
+from onyx.connectors.capability_checks.findings import bounded_count
+from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
+    CheckFindingKey,
+    CheckOutput,
+    CountFinding,
     CredentialCapability,
     form_config,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    UnexpectedValidationError,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
@@ -41,9 +49,31 @@ from onyx.connectors.onedrive.source_operations import (
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/onedrive"
 _PROBE_PAGE_SIZE = 1
 _CANDIDATE_PAGES = 20
+# A bound on the pages the drive count reads. Pages hold up to 999 users, so
+# the count reaches its cap long before this unless Graph sends empty pages.
+_COUNT_PAGES = 20
 
 T = TypeVar("T")
 _HIDDEN_MEMBERSHIP_VISIBILITY = "HiddenMembership"
+
+_EMPTY_DRIVE_ADVISORY = CheckAdvisory(
+    message=(
+        "The check found no item in the OneDrives it sampled. "
+        "It did not read item permissions. "
+        f"The check samples the drives of the first {_CANDIDATE_PAGES} configured "
+        f"users, or of the users on the first {_CANDIDATE_PAGES} pages of the "
+        "user list. Add a file to one of those drives and run the check again "
+        "to verify this access."
+    )
+)
+_NO_VISIBLE_GROUP_ADVISORY = CheckAdvisory(
+    message=(
+        "The check found no Entra group with visible membership "
+        f"in the first {_CANDIDATE_PAGES} groups. "
+        "It did not read transitive group members. "
+        "The check skips groups with hidden membership."
+    )
+)
 
 
 class _NoCandidateFound(ConnectorValidationError):
@@ -246,6 +276,57 @@ class _UsersCheck(CapabilityCheck):
             raise_for_graph_error(error, "The app cannot list tenant users.")
 
 
+def _tenant_users(
+    gateway: OneDriveSourceOperations,
+) -> Generator[OneDriveUser, None, None]:
+    """The tenant's enabled member users, read one page at a time."""
+    next_link: str | None = None
+    for _ in range(_COUNT_PAGES):
+        page: OneDriveUserPage = gateway.list_users(next_link=next_link)
+        yield from page.users
+        next_link = page.next_link
+        if next_link is None:
+            return
+    raise UnexpectedValidationError(
+        f"The tenant's user listing did not end within {_COUNT_PAGES} pages."
+    )
+
+
+class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
+    """Counts the enabled member users: the owners of the OneDrives indexing
+    walks in every-user mode. It does not open each drive, so a user without a
+    OneDrive still counts. Separate from ``onedrive_users``, which reads one
+    user to validate. A config that lists users walks only those, so the
+    tenant count does not apply to it."""
+
+    config_class = OneDriveConnectorConfig
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="onedrive_drive_count",
+            display_name="Counts the tenant's OneDrives",
+            requires_connector_instance=False,
+            remediation="Grant and admin-consent `User.Read.All`.",
+            docs_link=_DOCS_LINK,
+            discovery=True,
+        )
+
+    def applies(self, form_state: FormState[OneDriveConnectorConfig]) -> bool:
+        return not [user for user in form_state.config.users or [] if user.strip()]
+
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        try:
+            finding: CountFinding = bounded_count(
+                _tenant_users(_gateway(context)),
+                key=CheckFindingKey.READABLE_DRIVES,
+                cap=MAX_FINDING_OPTIONS,
+            )
+        except OneDriveGraphError as error:
+            raise_for_graph_error(error, "The app cannot list tenant users.")
+        return CheckOutput(findings=[finding])
+
+
 class _ConfiguredUsersCheck(CapabilityCheck[OneDriveConnectorConfig]):
     config_class = OneDriveConnectorConfig
 
@@ -349,7 +430,7 @@ class _PermissionCheck(CapabilityCheck[OneDriveConnectorConfig]):
             docs_link=_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway = _gateway(context)
         host = _config(context).graph_api_host.rstrip("/")
         found_empty_drive = False
@@ -372,11 +453,12 @@ class _PermissionCheck(CapabilityCheck[OneDriveConnectorConfig]):
                 "No readable OneDrive was found among the first users.",
             )
         except _NoCandidateFound:
-            if found_empty_drive:
-                return
-            raise
+            if not found_empty_drive:
+                raise
+            return CheckOutput(advisories=[_EMPTY_DRIVE_ADVISORY])
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot read OneDrive permissions.")
+        return None
 
 
 class _GroupListCheck(CapabilityCheck):
@@ -408,22 +490,24 @@ class _GroupMembershipCheck(CapabilityCheck):
             docs_link=_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway = _gateway(context)
         try:
             group = _group_membership_probe_group(gateway)
             if group is None:
-                return
+                return CheckOutput(advisories=[_NO_VISIBLE_GROUP_ADVISORY])
             gateway.list_transitive_group_members(group_id=group.id)
         except OneDriveGraphError as error:
             denied = "The app cannot expand transitive Entra group members."
             raise_for_graph_error(error, denied)
+        return None
 
 
 def build_onedrive_indexing_checks() -> list[CapabilityCheck]:
     return [
         _TokenCheck(),
         _UsersCheck(),
+        _DriveCountCheck(),
         _ConfiguredUsersCheck(),
         _DriveCheck(),
         _DeltaCheck(),
