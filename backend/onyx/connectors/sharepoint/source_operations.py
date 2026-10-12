@@ -23,7 +23,10 @@ from office365.onedrive.sites.sites_with_root import SitesWithRoot
 from office365.runtime.auth.token_response import TokenResponse
 from office365.sharepoint.client_context import ClientContext
 
-from onyx.configs.app_configs import SHAREPOINT_CONNECTOR_SIZE_THRESHOLD
+from onyx.configs.app_configs import (
+    REQUEST_TIMEOUT_SECONDS,
+    SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -40,10 +43,13 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveFolderReference,
     DriveItemContent,
     DriveItemData,
+    download_via_graph_api,
+    download_with_cap,
     extract_drive_item_content,
     iter_drive_items_delta,
     iter_drive_items_paged,
     resolve_drive_folder,
+    scrub_url_credentials,
 )
 from onyx.connectors.microsoft_utils.entra import (
     ENTRA_NAMED_GROUP_SELECT,
@@ -85,6 +91,7 @@ from onyx.connectors.sharepoint.connector_utils import (
 from onyx.connectors.sharepoint.models import (
     SharepointCredentials,
     SharepointDrive,
+    SharepointTokenInfo,
     SitePagesPage,
 )
 from onyx.connectors.source_operations import (
@@ -112,7 +119,7 @@ REST_PROBE_TIMEOUT_S = 10
 # new one, so the context is rebuilt well inside the token's 60-75 minute life.
 REST_CTX_MAX_AGE_S = 30 * 60
 
-_UNTESTED = "Checks land in the next PR of the stack."
+_UNTESTED = "The permission-sync checks land in the next PR of the stack."
 
 
 def _drive(drive: Drive) -> SharepointDrive:
@@ -128,11 +135,15 @@ def _drive(drive: Drive) -> SharepointDrive:
     )
 
 
-def _iter_site_listing(sites: SitesWithRoot) -> Generator[Site, None, None]:
+def _iter_site_listing(
+    sites: SitesWithRoot, max_pages: int | None
+) -> Generator[Site, None, None]:
+    pages: int = 0
     while sites:
         if sites.current_page:
             yield from sites.current_page
-        if not sites.has_next:
+        pages += 1
+        if not sites.has_next or (max_pages is not None and pages >= max_pages):
             break
         sites = sites._get_next().execute_query()
 
@@ -208,13 +219,14 @@ class SharepointSourceOperations(SourceOperations):
         return self._graph_api().get_json(url, params)
 
     def _graph_client(self) -> GraphClient:
-        """The office365 SDK client, for the site, drive and permission reads."""
-        if self._sdk_client is None:
-            gateway: MicrosoftGraphGateway = self._gateway()
-            self._sdk_client = GraphClient(
-                gateway.token_response, environment=self._env().environment
-            )
-        return self._sdk_client
+        """The office365 SDK client, for the site, drive and permission reads.
+        A failed query stays queued on its client and runs again with the next
+        one, so every read gets its own client. Tests set ``_sdk_client``."""
+        if self._sdk_client is not None:
+            return self._sdk_client
+        return GraphClient(
+            self._gateway().token_response, environment=self._env().environment
+        )
 
     def _tenant_domain(self) -> str:
         """The tenant label the REST token is minted for: from the configured
@@ -267,7 +279,6 @@ class SharepointSourceOperations(SourceOperations):
                 self._cached_rest_ctx_url != site_url,
             )
             self._graph_gateway = None
-            self._sdk_client = None
 
         msal_app: msal.ConfidentialClientApplication = self._auth().app
         tenant_domain: str = self._tenant_domain()
@@ -287,6 +298,17 @@ class SharepointSourceOperations(SourceOperations):
         return f"{self._base()}/sites/{site_id}/pages"
 
     @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def check_token(self) -> SharepointTokenInfo:
+        response: dict[str, Any] = self._gateway().token_response()
+        expires: int | str | None = response.get("expires_in")
+        return SharepointTokenInfo(
+            expires_in=int(expires) if expires is not None else None
+        )
+
+    @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
         untested=_UNTESTED,
@@ -299,7 +321,11 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=(
+            "Read only by the connector's host validation, from the configured "
+            "site URLs. The configured-sites check applies the same host rule "
+            "through the shared helper."
+        ),
     )
     def resolve_tenant_domain(self) -> str:
         return self._tenant_domain()
@@ -307,20 +333,23 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
-    def list_site_urls(self) -> list[str]:
-        """Every site collection in the tenant, by web URL."""
+    def list_site_urls(self, *, max_pages: int | None = None) -> list[str]:
+        """Site collections in the tenant, by web URL: every one, or the first
+        ``max_pages`` listing pages for a probe."""
         with raise_microsoft_errors():
             sites: SitesWithRoot = (
                 self._graph_client().sites.get_all_sites().execute_query()
             )
-            return [site.web_url for site in _iter_site_listing(sites) if site.web_url]
+            return [
+                site.web_url
+                for site in _iter_site_listing(sites, max_pages)
+                if site.web_url
+            ]
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_site_id(self, *, site_url: str) -> str:
         with raise_microsoft_errors():
@@ -333,7 +362,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def list_drives(self, *, site_url: str) -> list[SharepointDrive]:
         with raise_microsoft_errors():
@@ -349,7 +377,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def list_site_pages(
         self, *, site_id: str, next_link: str | None = None, expand_canvas: bool
@@ -369,7 +396,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_site_page(
         self, *, site_id: str, page_id: str, expand_canvas: bool
@@ -381,7 +407,10 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=(
+            "Runs only for a configured folder path, which the coverage spy's "
+            "empty config never has."
+        ),
     )
     def resolve_folder(
         self, *, drive_id: str, folder_path: str
@@ -392,7 +421,11 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=(
+            "The walk pages through folders until it finds a file, which no "
+            "probe can bound. The documents check reads the delta page under "
+            "the same grant."
+        ),
     )
     def iter_folder_items(
         self,
@@ -416,7 +449,10 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+        untested=(
+            "The slim walk reads the delta endpoint the documents check reads "
+            "through get_delta_page."
+        ),
     )
     def iter_delta_items(
         self, *, drive_id: str, start: datetime | None, end: datetime | None
@@ -431,7 +467,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_delta_page(
         self, *, drive_id: str, page_url: str, allow_full_resync: bool
@@ -448,7 +483,6 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
     )
     def get_drive_item(self, *, drive_id: str, item_id: str) -> DriveItemData | None:
         """None when the item is not in this drive."""
@@ -466,7 +500,42 @@ class SharepointSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_UNTESTED,
+    )
+    def read_item_bytes(
+        self, *, drive_id: str, item: DriveItemData, max_bytes: int
+    ) -> int:
+        """Reads an item's content and answers its size, for a probe that must
+        not extract or store anything. The download link is tried first and
+        Graph's content endpoint second, the way indexing reads a file."""
+        with raise_microsoft_errors():
+            if item.download_url:
+                try:
+                    return len(
+                        download_with_cap(
+                            item.download_url, REQUEST_TIMEOUT_SECONDS, max_bytes
+                        )
+                    )
+                except requests.RequestException as error:
+                    # The link's query carries a download credential.
+                    logger.warning(
+                        "Download link of '%s' refused (%s). Reading through Graph.",
+                        item.name,
+                        scrub_url_credentials(str(error)),
+                    )
+            gateway: MicrosoftGraphGateway = self._gateway()
+            content: bytes = download_via_graph_api(
+                gateway.access_token, drive_id, item.id, max_bytes, self._base()
+            )
+        return len(content)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Extracts and stores content, which needs the file store. The "
+            "documents check reads the bytes with read_item_bytes under the same "
+            "grant."
+        ),
     )
     def download_item(
         self,
