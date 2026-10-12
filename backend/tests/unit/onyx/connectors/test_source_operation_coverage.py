@@ -51,6 +51,10 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
     SharepointPrincipalType,
 )
 from onyx.connectors.sharepoint.models import SharepointDrive, SitePagesPage
+from onyx.connectors.slack.source_operations import (
+    SlackChannelMembersPage,
+    SlackChannelsPage,
+)
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -76,6 +80,17 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
 
     spy.get_server_version.return_value = (9, 1)
     spy.get_space_permissions.side_effect = get_space_permissions
+
+
+def _configure_slack_spy(spy: MagicMock) -> None:
+    """A workspace where the bot sees one channel with one member, so the
+    checks that read a channel after they find one run."""
+    spy.list_channels.side_effect = lambda **_kwargs: iter(
+        [SlackChannelsPage(channels=[{"id": "C1", "name": "general"}])]
+    )
+    spy.list_channel_members.side_effect = lambda **_kwargs: iter(
+        [SlackChannelMembersPage(members=["U1"])]
+    )
 
 
 def _configure_google_drive_spy(spy: MagicMock) -> None:
@@ -264,6 +279,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
+    DocumentSource.SLACK: [_configure_slack_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every
