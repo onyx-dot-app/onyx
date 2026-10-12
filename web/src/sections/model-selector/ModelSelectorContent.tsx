@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
@@ -18,6 +18,7 @@ import {
   SvgChevronRight,
   SvgCode,
   SvgSliders,
+  SvgSparkle,
   SvgThermometer,
 } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
@@ -26,8 +27,6 @@ import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import {
   GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
   buildLlmOptions,
   groupLlmOptions,
   llmOptionKey,
@@ -44,7 +43,7 @@ import {
   minReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -52,6 +51,18 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/refresh-components/Collapsible";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+  ModelPaging,
+} from "@/lib/languageModels/types";
+
+/** Scroll distance from the list bottom that pulls in the next model page. */
+const LOAD_MORE_THRESHOLD_PX = 48;
+/** Pause after the last keystroke before the unloaded models are searched. */
+const SERVER_SEARCH_DEBOUNCE_MS = 300;
+/** Windows loaded without a scroll event before the list is left short. */
+const AUTOFILL_CAP = 3;
 
 export interface TemperatureManager {
   temperature: number;
@@ -392,6 +403,9 @@ export interface ModelSelectorContentProps {
    * instead of "no models".
    */
   isLoading?: boolean;
+  /** Set by a host that fetches `providerOptions` itself, so a truncated
+   *  provider loads more on scroll and is searched on the server. */
+  modelPaging?: ModelPaging;
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
@@ -413,6 +427,7 @@ export default function ModelSelectorContent({
   currentModelName,
   providerOptions,
   isLoading: isLoadingProp = false,
+  modelPaging: modelPagingProp,
   includeHiddenModels = false,
   requiresImageInput,
   onSelect,
@@ -425,16 +440,23 @@ export default function ModelSelectorContent({
   onDetailSelect,
 }: ModelSelectorContentProps) {
   const t = useTranslations("chat.modelSelector");
-  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
+  const {
+    hide_provider_grouping: hideProviderGrouping,
+    model_routing_enabled: modelRoutingEnabled,
+    model_routing_model_configuration_id: routingModelId,
+  } = useSettings();
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
     llmProviders: currentAgentProviderOptions,
     isLoading: currentAgentProvidersLoading,
-  } = useCurrentAgentLLMProviders();
+    modelPaging: currentAgentModelPaging,
+  } = useLanguageModelsForCurrentAgent();
   const llmProviders = providerOptions ?? currentAgentProviderOptions;
   const isLoading =
     isLoadingProp ||
     (providerOptions === undefined && currentAgentProvidersLoading);
+  const modelPaging =
+    providerOptions === undefined ? currentAgentModelPaging : modelPagingProp;
   const [searchQuery, setSearchQuery] = useState("");
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
@@ -444,8 +466,18 @@ export default function ModelSelectorContent({
     [llmProviders, currentModelName, includeHiddenModels]
   );
 
+  // "Auto" selects the admin-configured router; router rows never list.
+  const autoOption = useMemo<LLMOption | undefined>(() => {
+    if (!modelRoutingEnabled || routingModelId == null) return undefined;
+    const backing: LLMOption | undefined = llmOptions.find(
+      (opt) => opt.modelConfigurationId === routingModelId
+    );
+    if (!backing) return undefined;
+    return { ...backing, displayName: t("autoItem.label"), isAuto: true };
+  }, [llmOptions, modelRoutingEnabled, routingModelId, t]);
+
   const filteredOptions = useMemo(() => {
-    let result = llmOptions;
+    let result = llmOptions.filter((opt) => !opt.isRouter);
     if (requiresImageInput) {
       result = result.filter((opt) => opt.supportsImageInput);
     }
@@ -499,14 +531,107 @@ export default function ModelSelectorContent({
 
   // A lone group needs no header, and an admin can drop them workspace-wide.
   const showFlatList = hideProviderGrouping || groupedOptions.length === 1;
+  const isLoadingMore = !isLoading && (modelPaging?.isLoading ?? false);
+  // A search with no local hit may still be matching on the server.
+  const showEmpty = groupedOptions.length === 0 && !isLoadingMore;
+
+  // Providers whose remaining models scrolling may page in, in display order:
+  // every listed provider in a flat list, only the expanded groups otherwise.
+  // Providers sharing a display name share a group, so each group may hold
+  // several.
+  const pageableProviderIds = useMemo(
+    () => [
+      ...new Set(
+        groupedOptions
+          .filter((group) => showFlatList || expandedGroups.has(group.key))
+          .flatMap((group) =>
+            group.options.flatMap((option) => option.providerId ?? [])
+          )
+      ),
+    ],
+    [groupedOptions, showFlatList, expandedGroups]
+  );
+
+  // Server search only when nothing loaded matches. The query is remembered so
+  // a merged page, which changes `modelPaging`, does not re-run it. A skipped
+  // search stays unremembered and retries once the page load settles.
+  const lastServerSearchRef = useRef("");
+  const trimmedQuery = searchQuery.trim();
+  useEffect(() => {
+    if (!trimmedQuery || !modelPaging?.hasMore || filteredOptions.length > 0) {
+      return;
+    }
+    if (lastServerSearchRef.current === trimmedQuery) return;
+    const handle = setTimeout(() => {
+      modelPaging
+        .search(trimmedQuery)
+        .then((searched) => {
+          if (searched) lastServerSearchRef.current = trimmedQuery;
+        })
+        .catch(console.error);
+    }, SERVER_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [trimmedQuery, modelPaging, filteredOptions]);
+
+  // Scrolling to the bottom pages the expanded providers, or the current
+  // server search's remaining matches. The list container remounts when the
+  // detail pane closes, so the listener re-attaches on that change too.
+  const loadNextWindow = useCallback(() => {
+    if (!modelPaging || modelPaging.isLoading) return;
+    if (isSearching) {
+      if (
+        lastServerSearchRef.current === trimmedQuery &&
+        modelPaging.searchHasMore
+      ) {
+        modelPaging.loadMoreSearch().catch(console.error);
+      }
+      return;
+    }
+    if (modelPaging.hasMore) {
+      modelPaging.loadMore(pageableProviderIds).catch(console.error);
+    }
+  }, [modelPaging, isSearching, trimmedQuery, pageableProviderIds]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      const remaining =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (remaining <= LOAD_MORE_THRESHOLD_PX) loadNextWindow();
+    };
+    container.addEventListener("scroll", onScroll);
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [scrollContainerRef, loadNextWindow, detailOption]);
+
+  // A page whose visible rows fit the box never scrolls (hidden or filtered
+  // rows, a short tail), so it keeps loading until the list overflows, up to
+  // a few windows per expansion.
+  const autofillCountRef = useRef(0);
+  const pageableKey = pageableProviderIds.join(",");
+  useEffect(() => {
+    autofillCountRef.current = 0;
+  }, [pageableKey, trimmedQuery]);
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || isLoading || autofillCountRef.current >= AUTOFILL_CAP) {
+      return;
+    }
+    if (container.scrollHeight > container.clientHeight + 1) return;
+    autofillCountRef.current += 1;
+    loadNextWindow();
+  }, [scrollContainerRef, isLoading, loadNextWindow, groupedOptions]);
 
   const renderModelItem = (option: LLMOption) => {
     const selected = isSelected(option);
     const disabled = isDisabled?.(option) ?? false;
 
     // Skip the model-id description when it would just repeat the display name.
-    const description =
-      option.modelName !== option.displayName ? option.modelName : undefined;
+    const description: string | undefined = option.isAuto
+      ? t("autoItem.description")
+      : option.modelName !== option.displayName
+        ? option.modelName
+        : undefined;
 
     return (
       <Disabled key={llmOptionKey(option)} disabled={disabled}>
@@ -514,7 +639,9 @@ export default function ModelSelectorContent({
           <LineItemButton
             selectVariant="select-heavy"
             state={selected ? "selected" : "empty"}
-            icon={selectionIcon(selected)}
+            icon={
+              option.isAuto && !selected ? SvgSparkle : selectionIcon(selected)
+            }
             title={option.displayName}
             description={description}
             onClick={() => onSelect(option)}
@@ -585,6 +712,9 @@ export default function ModelSelectorContent({
                 />,
               ]
             : []),
+          ...(autoOption && !requiresImageInput && !isLoading
+            ? [renderModelItem(autoOption)]
+            : []),
           null,
           ...(isLoading
             ? [
@@ -592,7 +722,7 @@ export default function ModelSelectorContent({
                   {t("list.loading.text")}
                 </Text>,
               ]
-            : groupedOptions.length === 0
+            : showEmpty
               ? [
                   <Text key="empty" font="secondary-body" color="text-03">
                     {t("list.empty.text")}
@@ -665,6 +795,13 @@ export default function ModelSelectorContent({
                     // null children render as PopoverMenu divider lines.
                     return groupIndex > 0 ? [null, collapsible] : [collapsible];
                   })),
+          ...(isLoadingMore
+            ? [
+                <Text key="loading-more" font="secondary-body" color="text-03">
+                  {t("list.loadingMore.text")}
+                </Text>,
+              ]
+            : []),
         ]}
       </PopoverMenu>
     </Section>

@@ -20,6 +20,18 @@ export function markdown(...lines: string[]): RichStr {
   return { __brand: "RichStr", raw: lines.join("\n") };
 }
 
+/**
+ * Title-cases an identifier in snake, kebab or camel case:
+ * `confluence_username` → "Confluence Username", `apiKey` → "Api Key".
+ */
+export function toTitleCase(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 export function escapeMarkdown(value: string): string {
   return value
     .replace(/[!-/:-@[-`{-~]/g, (character) => `&#${character.charCodeAt(0)};`)

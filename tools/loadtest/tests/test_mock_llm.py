@@ -198,6 +198,72 @@ def test_query_rephrase_flow_echoes_user_text() -> None:
     assert "onboarding" in choice["message"]["content"]
 
 
+def test_rephrase_echo_excludes_prompt_scaffolding() -> None:
+    # The rephrase output becomes the search query, so it must be the question
+    # alone. Echoing a fixed-width tail instead drags the prompt's boilerplate
+    # and the user's memories in, making every question embed to nearly the
+    # same vector and turning retrieval into a cache hit.
+    question = "how do I rotate database credentials?"
+    scaffolding = (
+        "Here is some information about the user: N/A Here are some memories "
+        "about the user: - User's email: loadtest@example.com "
+        "========================= CRITICAL: ONLY provide the standalone "
+        "query and nothing else."
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": "You are an assistant that reformulates the last user "
+            "message into a standalone, self-contained query.",
+        },
+        {
+            "role": "user",
+            "content": f"{scaffolding}\n\nFinal user query:\n{question}",
+        },
+    ]
+    choice = complete(messages=messages)
+    text = choice["message"]["content"]
+    assert "rotate database credentials" in text
+    assert "memories about the user" not in text
+    assert "CRITICAL" not in text
+
+
+def test_search_tool_argument_uses_the_question() -> None:
+    # A synthesized search tool call must search for what the user asked, not
+    # for the head of the prompt.
+    question = "what are the hardware requirements for self-hosting?"
+    choice = complete(
+        messages=[
+            {
+                "role": "user",
+                "content": f"Context block that precedes the ask.\n\n"
+                f"Final user query:\n{question}",
+            }
+        ],
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="required",
+    )
+    args = choice["message"]["tool_calls"][0]["function"]["arguments"]
+    assert "hardware requirements" in args
+    assert "Context block" not in args
+
+
+def test_search_tool_argument_survives_message_padding() -> None:
+    # ONYX_MSG_CHARS pads a message with filler after the question, and a raw
+    # chat message carries no question label. Searching the padding would give
+    # every user the same query and restore the cache hits this avoids.
+    question = "which insurance plans are available to staff?"
+    padding = "Please consider the full context of the conversation so far. " * 40
+    choice = complete(
+        messages=[{"role": "user", "content": f"{question} {padding}"}],
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="required",
+    )
+    args = choice["message"]["tool_calls"][0]["function"]["arguments"]
+    assert "insurance plans" in args
+    assert "consider the full context" not in args
+
+
 def test_normal_answer_is_filler_not_echo() -> None:
     chunks = stream_chunks(
         messages=[{"role": "user", "content": "what is the onboarding process?"}]

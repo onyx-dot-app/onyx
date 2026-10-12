@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import {
   Button,
   SelectButton,
@@ -10,20 +10,18 @@ import {
   Divider,
   Tooltip,
 } from "@opal/components";
-import { SvgPlusCircle, SvgX } from "@opal/icons";
+import { SvgPlusCircle, SvgSparkle, SvgX } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import {
-  LLMOption,
-  buildLlmOptions,
-  llmOptionKey,
-} from "@/lib/languageModels/options";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+import { buildLlmOptions, llmOptionKey } from "@/lib/languageModels/options";
+import { useLanguageModelsForCurrentAgent } from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
   useModelDetailManagers,
 } from "@/sections/model-selector/ModelSelectorContent";
+import type { LLMOption } from "@/lib/languageModels/types";
 
 export const MAX_MODELS = 3;
 
@@ -61,6 +59,11 @@ export default function MultiModelSelector({
 
   const settings = useSettings();
   const multiModelAllowed = settings.multi_model_chat_enabled ?? true;
+  const routingEnabled: boolean =
+    (settings.model_routing_enabled ?? false) &&
+    settings.model_routing_model_configuration_id != null;
+  const routingModelId: number | null | undefined =
+    settings.model_routing_model_configuration_id;
 
   const modelDetail = useModelDetailManagers(
     temperatureManager,
@@ -69,7 +72,7 @@ export default function MultiModelSelector({
 
   // Mirror the data source used by `ModelSelectorContent` so the selector is
   // disabled precisely when the popover would render "No models found".
-  const { llmProviders, isLoading } = useCurrentAgentLLMProviders();
+  const { llmProviders, isLoading } = useLanguageModelsForCurrentAgent();
   const noModelsToSelect = useMemo(
     () => !isLoading && buildLlmOptions(llmProviders).length === 0,
     [isLoading, llmProviders]
@@ -220,10 +223,12 @@ export default function MultiModelSelector({
               )}
               <div className="flex items-center shrink-0">
                 {selectedModels.map((model, index) => {
-                  const ProviderIcon = getModelIcon(
-                    model.provider,
-                    model.modelName
-                  );
+                  const isAutoModel: boolean =
+                    routingEnabled &&
+                    model.modelConfigurationId === routingModelId;
+                  const ProviderIcon: IconFunctionComponent = isAutoModel
+                    ? SvgSparkle
+                    : getModelIcon(model.provider, model.modelName);
 
                   return (
                     <div
@@ -264,7 +269,7 @@ export default function MultiModelSelector({
                           );
                         }}
                       >
-                        {model.displayName}
+                        {isAutoModel ? t("autoItem.label") : model.displayName}
                       </SelectButton>
                     </div>
                   );

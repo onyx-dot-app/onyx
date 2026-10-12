@@ -6,13 +6,11 @@ import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { getSourceMetadata } from "@/lib/sources";
+import { useSettings } from "@/lib/settings/hooks";
 import type { AgentAttachedDocument } from "@/lib/agents/types";
 import type { ProjectFile } from "@/lib/projects/types";
-import type {
-  CCPairSummary,
-  DocumentSetSummary,
-  ValidSources,
-} from "@/lib/types";
+import type { CCPairSummary, DocumentSetSummary } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import SourceHierarchyBrowser from "@/sections/knowledge/SourceHierarchyBrowser";
 import { Button } from "@opal/components";
 import { Content } from "@opal/layouts";
@@ -161,6 +159,7 @@ export function RecentFilesTableContent({
   hasProcessingFiles,
 }: RecentFilesTableContentProps) {
   const t = useTranslations("knowledge");
+  const { appName } = useSettings();
   const locale = useLocale();
   const [searchValue, setSearchValue] = useState("");
 
@@ -233,7 +232,7 @@ export function RecentFilesTableContent({
       {hasProcessingFiles && (
         <GeneralLayouts.Section height="auto" alignItems="start">
           <Text as="p" text03 secondaryBody>
-            {t("recentFiles.processing.description")}
+            {t("recentFiles.processing.description", { appName })}
           </Text>
         </GeneralLayouts.Section>
       )}

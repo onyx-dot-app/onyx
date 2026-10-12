@@ -3,18 +3,23 @@
 import React, { useState, useCallback, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Popover, OpenButton } from "@opal/components";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
+import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
+import { useSettings } from "@/lib/settings/hooks";
 import {
-  GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
-} from "@/lib/languageModels/options";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
   useModelDetailManagers,
 } from "@/sections/model-selector/ModelSelectorContent";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+  ModelPaging,
+} from "@/lib/languageModels/types";
 
 export interface ModelSelectorProps {
   /** The currently selected model, identified by model_configuration_id. */
@@ -23,6 +28,9 @@ export interface ModelSelectorProps {
   /** Limits the built-in provider list to models available to this agent. */
   agentId?: number;
   providerOptions?: ModelOptionProvider[];
+  /** Pages in the models a host-supplied `providerOptions` list left out.
+   *  Ignored when the selector fetches its own list, which pages itself. */
+  modelPaging?: ModelPaging;
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
 
@@ -60,6 +68,7 @@ export default function ModelSelector({
   onChange,
   agentId,
   providerOptions,
+  modelPaging: modelPagingProp,
   includeHiddenModels = false,
   requiresImageInput,
   renderTrigger,
@@ -78,11 +87,16 @@ export default function ModelSelector({
     llmProviders: fetchedProviderOptions,
     defaultText,
     isLoading: providersLoading,
-  } = useLLMProviders(agentId);
+    modelPaging: fetchedModelPaging,
+  } = useLanguageModelsForAgent(agentId);
   const {
     llmProviders: globalProviderOptions,
     defaultText: globalDefaultText,
-  } = useLLMProviders();
+  } = useLanguageModels();
+  const {
+    model_routing_enabled: modelRoutingEnabled,
+    model_routing_model_configuration_id: routingModelId,
+  } = useSettings();
   const llmProviders = providerOptions ?? fetchedProviderOptions ?? [];
   const isLoading = providerOptions === undefined && providersLoading;
   const [open, setOpen] = useState(false);
@@ -120,8 +134,13 @@ export default function ModelSelector({
   }, [defaultText, llmProviders]);
 
   const effectiveOption = currentOption ?? defaultModelOption;
-  const currentDisplayName =
-    effectiveOption?.displayName ?? t("trigger.noSelection.label");
+  const isAutoSelected: boolean =
+    (modelRoutingEnabled ?? false) &&
+    routingModelId != null &&
+    value === routingModelId;
+  const currentDisplayName: string = isAutoSelected
+    ? t("autoItem.label")
+    : (effectiveOption?.displayName ?? t("trigger.noSelection.label"));
   const globalDefaultDisplayName = useMemo(() => {
     if (!globalDefaultText || !globalProviderOptions) return null;
     const provider = globalProviderOptions.find(
@@ -180,6 +199,9 @@ export default function ModelSelector({
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
           providerOptions={llmProviders}
+          modelPaging={
+            providerOptions === undefined ? fetchedModelPaging : modelPagingProp
+          }
           isLoading={isLoading}
           includeHiddenModels={includeHiddenModels}
           requiresImageInput={requiresImageInput}

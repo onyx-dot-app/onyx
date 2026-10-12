@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { FieldArray, useFormikContext, ErrorMessage } from "formik";
 import { DocumentSetSummary } from "@/lib/types";
 import { toast } from "@opal/layouts";
@@ -18,7 +19,7 @@ import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
-import { InputComboBox } from "@opal/components";
+import { InputSingleComboBox } from "@opal/components";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { AlertCircle } from "lucide-react";
@@ -35,6 +36,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { CheckboxField } from "@/refresh-components/form/LabeledCheckboxField";
+import { isPermSynced } from "@/lib/connectors/accessType";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
@@ -58,6 +60,7 @@ export function SlackChannelConfigFormFields({
   formikProps,
 }: SlackChannelConfigFormFieldsProps) {
   const t = useTranslations("admin.slackBots");
+  const { appName } = useSettings();
   const router = useRouter();
   const { values, setFieldValue } = useFormikContext<any>();
   const [viewUnselectableSets, setViewUnselectableSets] = useState(false);
@@ -65,8 +68,8 @@ export function SlackChannelConfigFormFields({
 
   // Helper function to check if a document set contains sync connectors
   const documentSetContainsSync = (documentSet: DocumentSetSummary) => {
-    return documentSet.cc_pair_summaries.some(
-      (summary) => summary.access_type === "sync"
+    return documentSet.cc_pair_summaries.some((summary) =>
+      isPermSynced(summary.access_type)
     );
   };
 
@@ -125,7 +128,7 @@ export function SlackChannelConfigFormFields({
   const searchAgentOptions = useMemo(
     () =>
       availableAgents.map((persona) => ({
-        label: persona.name,
+        title: persona.name,
         value: String(persona.id),
       })),
     [availableAgents]
@@ -134,7 +137,7 @@ export function SlackChannelConfigFormFields({
   const nonSearchAgentOptions = useMemo(
     () =>
       nonSearchAgents.map((persona) => ({
-        label: persona.name,
+        title: persona.name,
         value: String(persona.id),
       })),
     [nonSearchAgents]
@@ -360,14 +363,13 @@ export function SlackChannelConfigFormFields({
               </>
             </SubLabel>
 
-            <InputComboBox
+            <InputSingleComboBox
               placeholder={t("form.agent.placeholder")}
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>
                 setFieldValue("persona_id", val ? Number(val) : null)
               }
               options={searchAgentOptions}
-              strict
             />
             {viewSyncEnabledAgents && syncEnabledAgents.length > 0 && (
               <div className="mt-4">
@@ -422,14 +424,13 @@ export function SlackChannelConfigFormFields({
               </>
             </SubLabel>
 
-            <InputComboBox
+            <InputSingleComboBox
               placeholder={t("form.agent.placeholder")}
               value={String(values.persona_id ?? "")}
               onValueChange={(val) =>
                 setFieldValue("persona_id", val ? Number(val) : null)
               }
               options={nonSearchAgentOptions}
-              strict
             />
           </div>
         )}
@@ -479,7 +480,7 @@ export function SlackChannelConfigFormFields({
               <CheckboxField
                 name="show_continue_in_web_ui"
                 label={t("form.showContinueInWebUi.label")}
-                tooltip={t("form.showContinueInWebUi.tooltip")}
+                tooltip={t("form.showContinueInWebUi.tooltip", { appName })}
               />
 
               <CheckboxField

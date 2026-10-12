@@ -88,6 +88,17 @@ func TestRunImage_imageWithoutPackagesIsClean(t *testing.T) {
 }
 
 func TestRunImage_errors(t *testing.T) {
+	t.Run("strict rejects an image with no packages", func(t *testing.T) {
+		bin := fakeBinDir(t)
+		t.Setenv("TMPDIR", t.TempDir())
+		fakeDockerWithImage(t, bin)
+
+		_, err := RunImage(ImageOptions{Image: testImageRef, Strict: true, Stdout: &bytes.Buffer{}, Stderr: &bytes.Buffer{}})
+		if err == nil || !strings.Contains(err.Error(), "image scan failed") {
+			t.Fatalf("expected the empty extraction to fail, got %v", err)
+		}
+	})
+
 	t.Run("pull failure", func(t *testing.T) {
 		bin := fakeBinDir(t)
 		t.Setenv("TMPDIR", t.TempDir())

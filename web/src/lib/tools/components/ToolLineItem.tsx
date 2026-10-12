@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
@@ -265,7 +266,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
             aria-label={connectorsLabel}
             tooltip={connectorsLabel}
             onClick={() => {
-              if (needsConnectors) router.push("/admin/add-connector");
+              if (needsConnectors) router.push(ADMIN_ROUTES.CONNECTORS.path);
               else openSources();
             }}
           />

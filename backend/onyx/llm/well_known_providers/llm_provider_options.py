@@ -31,6 +31,7 @@ from onyx.llm.well_known_providers.constants import (
     OPENAI_PROVIDER_NAME,
     OPENROUTER_PROVIDER_NAME,
     PORTKEY_PROVIDER_NAME,
+    VERCEL_AI_GATEWAY_PROVIDER_NAME,
     VERTEXAI_PROVIDER_NAME,
 )
 from onyx.llm.well_known_providers.models import WellKnownLLMProviderDescriptor
@@ -46,11 +47,11 @@ _cached_recommendations_time: float = 0.0
 
 
 def _get_provider_to_models_map() -> dict[str, list[str]]:
-    """Lazy-load provider model mappings to avoid importing litellm at module level.
+    """Lazy-load provider model mappings.
 
     Dynamic providers (Bedrock, Ollama, OpenRouter) return empty lists here
     because their models are fetched directly from the source API, which is
-    more up-to-date than LiteLLM's static lists.
+    more up-to-date than a static catalog.
     """
     return {
         OPENAI_PROVIDER_NAME: get_openai_model_names(),
@@ -65,6 +66,7 @@ def _get_provider_to_models_map() -> dict[str, list[str]]:
         OPENAI_COMPATIBLE_PROVIDER_NAME: [],  # Dynamic - fetched from OpenAI-compatible API
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: [],  # Dynamic - fetched from /v1/models
         PORTKEY_PROVIDER_NAME: [],  # Dynamic - fetched from the Portkey gateway
+        VERCEL_AI_GATEWAY_PROVIDER_NAME: [],  # Dynamic - fetched from the public catalog
     }
 
 
@@ -104,59 +106,18 @@ def get_recommendations() -> LLMRecommendations:
         return result
 
 
-def is_obsolete_model(model_name: str, provider: str) -> bool:
-    """Check if a model is obsolete and should be filtered out.
-
-    Filters models that are 2+ major versions behind or deprecated.
-    This is the single source of truth for obsolete model detection.
-    """
-    model_lower = model_name.lower()
-
-    # OpenAI obsolete models
-    if provider == LlmProviderNames.OPENAI:
-        # GPT-3 models are obsolete
-        if "gpt-3" in model_lower:
-            return True
-        # Legacy models
-        deprecated = {
-            "text-davinci-003",
-            "text-davinci-002",
-            "text-curie-001",
-            "text-babbage-001",
-            "text-ada-001",
-            "davinci",
-            "curie",
-            "babbage",
-            "ada",
-        }
-        if model_lower in deprecated:
-            return True
-
-    # Anthropic obsolete models
-    if provider == LlmProviderNames.ANTHROPIC:
-        if "claude-2" in model_lower or "claude-instant" in model_lower:
-            return True
-
-    # Vertex AI obsolete models
-    if provider == LlmProviderNames.VERTEX_AI:
-        if "gemini-1.0" in model_lower:
-            return True
-        if "palm" in model_lower or "bison" in model_lower:
-            return True
-
-    return False
-
-
 def get_openai_model_names() -> list[str]:
-    """Get OpenAI model names dynamically from litellm."""
+    """Get OpenAI model names from the vendored model catalog."""
     import re
 
-    import litellm
+    from onyx.llm import model_catalog
 
     # TODO: remove these lists once we have a comprehensive model configuration page
     # The ideal flow should be: fetch all available models --> filter by type
     # --> allow user to modify filters and select models based on current context
-    non_chat_model_terms = {
+    # NOTE: deprecated-but-still-served models (e.g. gpt-3.5-turbo, gpt-4) are
+    # intentionally kept — the catalog only contains models OpenAI still serves.
+    excluded_terms = {
         "embed",
         "audio",
         "tts",
@@ -167,8 +128,6 @@ def get_openai_model_names() -> list[str]:
         "sora",
         "container",
     }
-    deprecated_model_terms = {"babbage", "davinci", "gpt-3.5", "gpt-4-"}
-    excluded_terms = non_chat_model_terms | deprecated_model_terms
 
     # NOTE: We are explicitly excluding all "timestamped" models
     # because they are mostly just noise in the admin configuration panel
@@ -183,8 +142,8 @@ def get_openai_model_names() -> list[str]:
 
     return sorted(
         (
-            model.removeprefix("openai/")
-            for model in litellm.open_ai_chat_completion_models
+            model
+            for model in model_catalog.iter_models(LlmProviderNames.OPENAI, mode="chat")
             if is_valid_model(model)
         ),
         reverse=True,
@@ -192,51 +151,23 @@ def get_openai_model_names() -> list[str]:
 
 
 def get_anthropic_model_names() -> list[str]:
-    """Get Anthropic model names dynamically from litellm."""
-    import litellm
-
-    # Models to exclude from Anthropic's model list (deprecated or duplicates)
-    _IGNORABLE_ANTHROPIC_MODELS = {
-        "claude-2",
-        "claude-instant-1",
-        "anthropic/claude-3-5-sonnet-20241022",
-    }
+    """Get Anthropic model names from the vendored model catalog."""
+    from onyx.llm import model_catalog
 
     return sorted(
-        [
-            model
-            for model in litellm.anthropic_models
-            if model not in _IGNORABLE_ANTHROPIC_MODELS
-            and not is_obsolete_model(model, LlmProviderNames.ANTHROPIC)
-        ],
-        reverse=True,
+        model_catalog.iter_models(LlmProviderNames.ANTHROPIC, mode="chat"), reverse=True
     )
 
 
 def get_vertexai_model_names() -> list[str]:
-    """Get Vertex AI model names dynamically from litellm model_cost."""
-    import litellm
+    """Get Vertex AI model names from the vendored model catalog (the
+    vertex_ai section already merges google-vertex and
+    google-vertex-anthropic models)."""
+    from onyx.llm import model_catalog
 
-    # Combine all vertex model sets
-    vertex_models: set[str] = set()
-    vertex_model_sets = [
-        "vertex_chat_models",
-        "vertex_language_models",
-        "vertex_anthropic_models",
-        "vertex_llama3_models",
-        "vertex_mistral_models",
-        "vertex_ai_ai21_models",
-        "vertex_deepseek_models",
-    ]
-    for attr in vertex_model_sets:
-        if hasattr(litellm, attr):
-            vertex_models.update(getattr(litellm, attr))  # ods: ignore[getattr]
-
-    # Also extract from model_cost for any models not in the sets
-    for key in litellm.model_cost.keys():
-        if key.startswith("vertex_ai/"):
-            model_name = key.replace("vertex_ai/", "")
-            vertex_models.add(model_name)
+    vertex_models = set(
+        model_catalog.iter_models(LlmProviderNames.VERTEX_AI, mode="chat")
+    )
 
     return sorted(
         [
@@ -253,7 +184,6 @@ def get_vertexai_model_names() -> list[str]:
             and "/" not in model  # filter out prefixed models like openai/gpt-oss
             and "search_api" not in model.lower()  # not a model
             and "-maas" not in model.lower()  # marketplace models
-            and not is_obsolete_model(model, LlmProviderNames.VERTEX_AI)
         ],
         reverse=True,
     )
@@ -367,6 +297,7 @@ def get_provider_display_name(provider_name: str) -> str:
         OPENAI_COMPATIBLE_PROVIDER_NAME: "OpenAI-Compatible",
         NEBIUS_TOKENFACTORY_PROVIDER_NAME: "Nebius TokenFactory",
         PORTKEY_PROVIDER_NAME: "Portkey",
+        VERCEL_AI_GATEWAY_PROVIDER_NAME: "Vercel AI Gateway",
     }
 
     if provider_name in _ONYX_PROVIDER_DISPLAY_NAMES:

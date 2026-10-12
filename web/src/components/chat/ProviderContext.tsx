@@ -1,7 +1,7 @@
 "use client";
 import { LLMProviderDescriptor } from "@/lib/languageModels/types";
 import React, { createContext, useContext, useCallback } from "react";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 
 interface ProviderContextType {
   refreshProviderInfo: () => Promise<void>;
@@ -23,7 +23,7 @@ export function ProviderContextProvider({
     llmProviders,
     isLoading: isLoadingProviders,
     refetch: refetchProviders,
-  } = useLLMProviders();
+  } = useLanguageModels();
 
   const hasProviders = (llmProviders?.length ?? 0) > 0;
 

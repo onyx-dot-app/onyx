@@ -48,38 +48,42 @@ function InputSwitch({
   }
 
   return (
-    <button
-      // Spread first: type/role/aria-checked/disabled/onClick are this
-      // control's contract and must not be overridable through the spread.
-      {...props}
-      ref={ref}
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      className={cn(
-        "peer inline-flex h-4.5 w-8 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-hidden",
-        disabled
-          ? checked
-            ? "switch-disabled-checked"
-            : "switch-disabled"
-          : checked
-            ? "switch-normal-checked"
-            : "switch-normal"
-      )}
-      disabled={disabled}
-      onClick={handleClick}
-    >
-      <span
+    // The mocks pad the track by 1px vertically and 2px horizontally; the
+    // wrapper carries that so the button stays the exact track size.
+    <div className="opal-switch">
+      <button
+        // Spread first: type/role/aria-checked/disabled/onClick are this
+        // control's contract and must not be overridable through the spread.
+        {...props}
+        ref={ref}
+        type="button"
+        role="switch"
+        aria-checked={checked}
         className={cn(
-          "pointer-events-none block h-3.5 w-3.5 rounded-full ring-0 transition-transform",
-          // rtl: the knob travels toward the inline end, so RTL negates.
-          checked
-            ? "translate-x-[15px] rtl:-translate-x-[15px]"
-            : "translate-x-px rtl:-translate-x-px",
-          disabled ? "switch-thumb-disabled" : "switch-thumb"
+          "peer inline-flex h-4.5 w-8 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline-hidden",
+          disabled
+            ? checked
+              ? "switch-disabled-checked"
+              : "switch-disabled"
+            : checked
+              ? "switch-normal-checked"
+              : "switch-normal"
         )}
-      />
-    </button>
+        disabled={disabled}
+        onClick={handleClick}
+      >
+        <span
+          className={cn(
+            "pointer-events-none block h-3.5 w-3.5 rounded-full ring-0 transition-transform",
+            // rtl: the knob travels toward the inline end, so RTL negates.
+            checked
+              ? "translate-x-[15px] rtl:-translate-x-[15px]"
+              : "translate-x-px rtl:-translate-x-px",
+            disabled ? "switch-thumb-disabled" : "switch-thumb"
+          )}
+        />
+      </button>
+    </div>
   );
 }
 

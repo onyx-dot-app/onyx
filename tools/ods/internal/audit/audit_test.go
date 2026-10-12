@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
 // fakeDependabot installs a gh that prints alertsJSON, and returns its args log.
@@ -69,7 +71,7 @@ func TestRun_combinesBackendsAndAppliesTheAllowlist(t *testing.T) {
 		t.Fatalf("expected nothing on stderr, got %q", stderr.String())
 	}
 
-	wantGH := [][]string{{"api", "repos/{owner}/{repo}/dependabot/alerts", "--paginate", "-f", "state=open", "-f", "per_page=100"}}
+	wantGH := [][]string{{"api", "--method", "GET", "repos/{owner}/{repo}/dependabot/alerts", "--paginate", "-f", "state=open", "-f", "per_page=100"}}
 	if got := ghArgs(); !reflect.DeepEqual(got, wantGH) {
 		t.Fatalf("expected gh calls %q, got %q", wantGH, got)
 	}
@@ -208,7 +210,7 @@ func TestLockfilePaths_selectsExistingLockfiles(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := lockfilePaths(tc.web, tc.python)
+			got, err := lockfilePaths(tc.web, tc.python, false)
 			if err != nil {
 				t.Fatalf("lockfilePaths: %v", err)
 			}
@@ -219,8 +221,52 @@ func TestLockfilePaths_selectsExistingLockfiles(t *testing.T) {
 	}
 }
 
+func TestLockfilePaths_allKeepsTrackedLockfilesBesideTheirManifest(t *testing.T) {
+	root := chdirNewRepo(t)
+	for _, name := range []string{
+		"bun.lock", "package.json",
+		"uv.lock", "pyproject.toml",
+		"web/bun.lock", "web/package.json",
+		// A lockfile whose project is gone.
+		"stale/uv.lock",
+		// Only the exact name counts.
+		"tools/notbun.lock", "tools/package.json",
+	} {
+		writeFixture(t, root, name, "")
+	}
+	gittest.Git(t, root, "add", ".")
+	// An untracked lockfile is not part of the repo.
+	writeFixture(t, root, "scratch/bun.lock", "")
+	writeFixture(t, root, "scratch/package.json", "")
+
+	cases := []struct {
+		name        string
+		web, python bool
+		want        []string
+	}{
+		{"web", true, false, []string{"bun.lock", "web/bun.lock"}},
+		{"python", false, true, []string{"uv.lock"}},
+		{"both", true, true, []string{"bun.lock", "uv.lock", "web/bun.lock"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := lockfilePaths(tc.web, tc.python, true)
+			if err != nil {
+				t.Fatalf("lockfilePaths: %v", err)
+			}
+			var want []string
+			for _, rel := range tc.want {
+				want = append(want, filepath.Join(root, filepath.FromSlash(rel)))
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected %v, got %v", want, got)
+			}
+		})
+	}
+}
+
 func TestScanLockfiles_missingLockfileFails(t *testing.T) {
-	if _, err := scanLockfiles([]string{filepath.Join(t.TempDir(), "uv.lock")}); err == nil {
+	if _, err := scanLockfiles([]string{filepath.Join(t.TempDir(), "uv.lock")}, false); err == nil {
 		t.Fatal("expected an error for a missing lockfile")
 	}
 }

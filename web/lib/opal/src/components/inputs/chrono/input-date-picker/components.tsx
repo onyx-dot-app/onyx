@@ -3,7 +3,7 @@
 import "@opal/components/inputs/shared.css";
 import React from "react";
 import type { InputVariants } from "@opal/types";
-import { Button, Calendar, Popover } from "@opal/components";
+import { Button, Calendar, Popover, Text } from "@opal/components";
 import { SvgCalendar, SvgX } from "@opal/icons";
 import {
   SEGMENT_INPUT_PROPS,
@@ -87,6 +87,12 @@ interface InputDatePickerProps {
 
   /** Applied to the month segment so a `<label htmlFor>` can target the field. */
   id?: string;
+
+  /**
+   * Text shown in place of the empty segments while the field is empty and
+   * unfocused (e.g. "All time"). Focus reveals the segments.
+   */
+  placeholder?: string;
 }
 
 /**
@@ -104,6 +110,7 @@ function InputDatePicker({
   minDate,
   maxDate,
   id,
+  placeholder,
 }: InputDatePickerProps) {
   const variant: InputVariants = disabled
     ? "disabled"
@@ -118,6 +125,7 @@ function InputDatePicker({
     toSegments(value)
   );
   const [open, setOpen] = React.useState(false);
+  const [focused, setFocused] = React.useState(false);
   const strings = useOpalStrings();
 
   const monthRef = React.useRef<HTMLInputElement>(null);
@@ -165,6 +173,7 @@ function InputDatePicker({
     const next = e.relatedTarget as Node | null;
     if (e.currentTarget.contains(next)) return;
     if (next && popoverContentRef.current?.contains(next)) return;
+    setFocused(false);
     commit(segments);
   }
 
@@ -175,6 +184,14 @@ function InputDatePicker({
   }
 
   const separator = <SegmentSeparator>/</SegmentSeparator>;
+  const showPlaceholder =
+    !!placeholder &&
+    value == null &&
+    !focused &&
+    !open &&
+    !segments.month &&
+    !segments.day &&
+    !segments.year;
 
   return (
     <div className="opal-input-segmented-root">
@@ -182,13 +199,27 @@ function InputDatePicker({
         <div
           className="opal-input opal-input-segmented"
           data-variant={variant}
+          onFocus={() => setFocused(true)}
           onBlur={handleRootBlur}
         >
           <div
             className="opal-input-segmented-content"
             role="group"
             aria-label={strings.date}
+            data-placeholder-shown={showPlaceholder || undefined}
           >
+            {/* The segments stay mounted under the placeholder, so a click or
+                Tab still lands in the month segment and reveals them. */}
+            {showPlaceholder && (
+              <span className="opal-input-segmented-placeholder">
+                <Text
+                  font="main-ui-body"
+                  color={disabled ? "text-01" : "text-02"}
+                >
+                  {placeholder}
+                </Text>
+              </span>
+            )}
             {SEGMENT_FIELDS.map((field, i) => (
               <React.Fragment key={field.part}>
                 {i > 0 && separator}

@@ -3,7 +3,7 @@
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { Section } from "@/layouts/general-layouts";
 import { SettingsLayouts, toast } from "@opal/layouts";
@@ -21,6 +21,7 @@ import { createGuildConfig } from "@/app/admin/discord-bot/lib";
 import { DiscordGuildsTable } from "@/app/admin/discord-bot/DiscordGuildsTable";
 import { BotConfigCard } from "@/app/admin/discord-bot/BotConfigCard";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.DISCORD_BOTS;
 
@@ -127,6 +128,7 @@ function DiscordBotContent() {
 
 export default function Page() {
   const t = useTranslations("admin.discordBot");
+  const { appName } = useSettings();
   const adminRouteTitle = useAdminRouteTitle();
 
   return (
@@ -134,7 +136,7 @@ export default function Page() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={adminRouteTitle(route)}
-        description={t("page.header.description")}
+        description={t("page.header.description", { appName })}
       />
       <SettingsLayouts.Body>
         <DiscordBotContent />

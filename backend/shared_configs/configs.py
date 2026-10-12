@@ -147,6 +147,8 @@ PRESERVED_SEARCH_FIELDS = [
     "normalize",
     "passage_prefix",
     "query_prefix",
+    # Part of the index mapping; a change needs a reindex into a new index.
+    "vector_quantization",
     # Immutable per settings id; server-controlled, never set via update.
     "use_port_flow",
 ]
@@ -193,6 +195,17 @@ CORS_ALLOW_CREDENTIALS: bool = cors_allow_credentials(CORS_ALLOWED_ORIGIN)
 # Multi-tenancy configuration
 MULTI_TENANT = os.environ.get("MULTI_TENANT", "").lower() == "true"
 
+# Air-gapped deployment: no outbound calls to onyx-controlled endpoints
+# (recommended-models sync, remote model catalog lookup, release notes).
+# Inbound traffic and user-configured integrations are unaffected.
+ONYX_AIRGAPPED = os.environ.get("ONYX_AIRGAPPED", "").lower() == "true"
+
+# How often to check GitHub for updated onyx-published LLM config
+# (recommended-models, remote model catalog sections).
+AUTO_LLM_UPDATE_INTERVAL_SECONDS = int(
+    os.environ.get("AUTO_LLM_UPDATE_INTERVAL_SECONDS", 1800)  # 30 minutes
+)
+
 # Outside this file, should almost always use `POSTGRES_DEFAULT_SCHEMA` unless you
 # have a very good reason
 POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE = "public"
@@ -211,6 +224,10 @@ async def async_return_default_schema(
 
 # Prefix used for all tenant ids
 TENANT_ID_PREFIX = "tenant_"
+# Schema the rollout job keeps at head and dumps into the snapshot that new tenants
+# are cloned from. Migrated and re-encrypted like a tenant, never scheduled work
+# or assigned a user.
+TENANT_TEMPLATE_SCHEMA = f"{TENANT_ID_PREFIX}template"
 
 DISALLOWED_SLACK_BOT_TENANT_IDS = os.environ.get("DISALLOWED_SLACK_BOT_TENANT_IDS")
 DISALLOWED_SLACK_BOT_TENANT_LIST = (

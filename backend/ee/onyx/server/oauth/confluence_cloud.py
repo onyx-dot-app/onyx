@@ -19,6 +19,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.utils import CONFLUENCE_OAUTH_TOKEN_URL
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.db.credentials import (
     create_credential,
     fetch_credential_by_id_for_user,
@@ -281,10 +282,13 @@ def confluence_oauth_accessible_resources(
     if not credential:
         raise HTTPException(400, f"Credential {credential_id} not found.")
 
-    credential_dict = (
-        credential.credential_json.get_value(apply_mask=False)
-        if credential.credential_json
-        else {}
+    credential_dict = to_source_credential_json(
+        DocumentSource.CONFLUENCE,
+        (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        ),
     )
     access_token = credential_dict["confluence_access_token"]
 
@@ -352,10 +356,13 @@ def confluence_oauth_finalize(
             detail=f"Confluence Cloud OAuth failed - credential {credential_id} not found.",
         )
 
-    existing_credential_json = (
-        credential.credential_json.get_value(apply_mask=False)
-        if credential.credential_json
-        else {}
+    existing_credential_json = to_source_credential_json(
+        DocumentSource.CONFLUENCE,
+        (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        ),
     )
     new_credential_json: dict[str, Any] = dict(existing_credential_json)
     new_credential_json["cloud_id"] = cloud_id

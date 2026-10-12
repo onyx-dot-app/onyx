@@ -3,9 +3,11 @@
 ## Status
 
 These modules are validated against the `azurerm` provider schema and each one
-ships a `terraform test` suite that plans it against a mocked provider. They
-have not yet been applied to a live subscription. Treat the first deployment as
-a first deployment.
+ships a `terraform test` suite that plans it against a mocked provider.
+
+The `onyx` composition has been applied to a live subscription, and the Onyx
+Helm chart runs on it. The WAF policy is created but not attached, because it
+needs an Application Gateway or Front Door (see `waf`).
 
 ## Overview
 

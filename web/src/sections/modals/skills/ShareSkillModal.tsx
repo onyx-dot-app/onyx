@@ -11,7 +11,7 @@ import { useUser } from "@/providers/UserProvider";
 import { Modal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
-import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
+import { SharePermissionMenu } from "@/lib/permissions/components";
 import {
   useSharePermissionOptions,
   useShareScopeOptions,
@@ -374,7 +374,6 @@ export default function ShareSkillModal({
             <SharePermissionMenu
               ariaLabel={t("share.scopeMenu.ariaLabel")}
               disabled={!canEditOrgVisibility}
-              menuWidth="2xl"
               onChange={(scope) => {
                 setDraftState((currentDraftState) =>
                   currentDraftState

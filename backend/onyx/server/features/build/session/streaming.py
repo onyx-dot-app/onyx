@@ -319,10 +319,15 @@ def merge_events_with_announces(
         )
         try:
             for evt in event_iter:
+                if stop.is_set():
+                    break
                 output.put(evt)
         except Exception as e:
             output.put(e)
         finally:
+            # Close on this thread: it owns the generator, and close() runs the
+            # subscription teardown (bus unsubscribe, client close).
+            event_iter.close()
             output.put(done_sentinel)
 
     def drive_announces() -> None:

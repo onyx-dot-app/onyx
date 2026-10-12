@@ -581,36 +581,6 @@ export const AppearanceThemeSettings = forwardRef<
         </div>
       </Disabled>
 
-      <Disabled
-        disabled={!enterpriseTier}
-        tooltip={t("branding.enterpriseTooltip")}
-      >
-        <FormField state="idle" className="gap-0">
-          <div className="flex justify-between items-center">
-            <FormField.Label>
-              {t("branding.label")}
-              {!enterpriseTier && (
-                <Tag {...planTagProps("enterprise")} size="sm" />
-              )}
-            </FormField.Label>
-            <FormField.Control>
-              <InputSwitch
-                aria-label={t("branding.label")}
-                data-label="hide-onyx-branding-toggle"
-                checked={values.hide_onyx_branding}
-                onCheckedChange={(checked) =>
-                  setFieldValue("hide_onyx_branding", checked)
-                }
-                disabled={!enterpriseTier}
-              />
-            </FormField.Control>
-          </div>
-          <FormField.Description>
-            {t("branding.description")}
-          </FormField.Description>
-        </FormField>
-      </Disabled>
-
       <Divider />
 
       <div className="flex flex-col gap-4 p-4 bg-background-tint-00 rounded-16">

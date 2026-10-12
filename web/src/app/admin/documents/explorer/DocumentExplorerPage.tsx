@@ -4,7 +4,7 @@ import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Explorer } from "./Explorer";
-import { Connector } from "@/lib/connectors/connectors";
+import type { Connector } from "@/lib/connectors/types";
 import { DocumentSetSummary } from "@/lib/types";
 
 const route = ADMIN_ROUTES.DOCUMENT_EXPLORER;

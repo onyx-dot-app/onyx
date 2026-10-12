@@ -7,8 +7,8 @@ import pytest
 from onyx.llm.api_surfaces import resolve_api_surface
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import (
+    catalog_model_supports_image_input,
     get_max_input_tokens,
-    litellm_thinks_model_supports_image_input,
     model_identity_names,
     model_is_reasoning_model,
     supported_reasoning_efforts,
@@ -20,6 +20,7 @@ from onyx.llm.well_known_providers.llm_provider_options import (
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
@@ -74,7 +75,7 @@ def assert_response_is_equivalent(
         )
         return {
             **filled_with_max_input_tokens.model_dump(),
-            "supports_image_input": litellm_thinks_model_supports_image_input(
+            "supports_image_input": catalog_model_supports_image_input(
                 req.name, provider_name
             ),
             "supports_reasoning": model_is_reasoning_model(req.name, provider_name),
@@ -630,7 +631,7 @@ def test_delete_default_vision_provider_clears_vision_default(
     )
     assert vision_response.status_code == 200
     vision_provider = vision_response.json()
-    _set_default_vision_provider(admin_user, vision_provider["id"], "gpt-4o")
+    LLMProviderManager.set_default_vision(vision_provider["id"], admin_user, "gpt-4o")
 
     # Verify vision default is set
     data = _get_providers_admin(admin_user)
@@ -1375,21 +1376,6 @@ def _set_default_provider(
     assert response.status_code == 200
 
 
-def _set_default_vision_provider(
-    admin_user: DATestUser, provider_id: int, vision_model: str | None = None
-) -> None:
-    """Utility function to set a provider as the default vision provider."""
-    response = client.post(
-        f"{API_SERVER_URL}/admin/llm/default-vision",
-        json={
-            "provider_id": provider_id,
-            "model_name": vision_model,
-        },
-        headers=admin_user.headers,
-    )
-    assert response.status_code == 200
-
-
 def test_multiple_providers_default_switching(
     reset: None,  # noqa: ARG001
 ) -> None:  # noqa: ARG001
@@ -1859,8 +1845,8 @@ def test_default_provider_and_vision_provider_selection(
     _set_default_provider(admin_user, provider_1["id"], provider_1_non_vision_model)
 
     # Step 4: Set provider 2 with a specific vision model as the default vision provider
-    _set_default_vision_provider(
-        admin_user, provider_2["id"], provider_2_vision_model_1
+    LLMProviderManager.set_default_vision(
+        provider_2["id"], admin_user, provider_2_vision_model_1
     )
 
     # Step 5: Verify via admin endpoint
@@ -2211,8 +2197,8 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
     vision_provider = create_vision_response.json()
 
     # Set as default vision provider
-    _set_default_vision_provider(
-        admin_user, vision_provider["id"], "gpt-4-vision-preview"
+    LLMProviderManager.set_default_vision(
+        vision_provider["id"], admin_user, "gpt-4-vision-preview"
     )
 
     # Step 3: Create image generation config using clone mode from regular provider

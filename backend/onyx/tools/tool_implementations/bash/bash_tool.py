@@ -11,6 +11,7 @@ from onyx.configs.app_configs import (
     CODE_INTERPRETER_MAX_OUTPUT_LENGTH,
 )
 from onyx.db.code_interpreter import fetch_code_interpreter_server
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     BashToolDelta,
@@ -102,24 +103,21 @@ class BashTool(Tool[BashToolOverrideKwargs]):
                 CodeInterpreterClient.delete_session,
             )
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        CMD_FIELD: {
-                            "type": "string",
-                            "description": "Bash command to execute in the session.",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    CMD_FIELD: {
+                        "type": "string",
+                        "description": "Bash command to execute in the session.",
                     },
-                    "required": [CMD_FIELD],
                 },
+                "required": [CMD_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         """Emit start packet for this tool. Code will be emitted in run() method."""

@@ -19,7 +19,11 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
+from ee.onyx.db.connector_credential_pair import (
+    clear_perm_sync_pending__no_commit,
+    get_all_auto_sync_cc_pairs,
+    get_perm_sync_pending_cc_pair_sources,
+)
 from ee.onyx.db.document import upsert_document_external_perms
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.models import DocExternalAccess, ElementExternalAccess
@@ -59,7 +63,6 @@ from onyx.db.engine.sql_engine import (
     get_session_with_tenant,
 )
 from onyx.db.enums import (
-    AccessType,
     CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
     SyncStatus,
@@ -104,7 +107,6 @@ from onyx.utils.logger import (
     format_error_for_logging,
     setup_logger,
 )
-from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -115,7 +117,6 @@ DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER = 10 * 60
 DOCUMENT_PERMISSIONS_UPDATE_MAX_WAIT = 60
 
 
-# 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
 LIGHT_SOFT_TIME_LIMIT = 105
 LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
 
@@ -160,10 +161,10 @@ def _fail_doc_permission_sync_attempt(
         )
 
 
-def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
+def is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external doc permissions sync is due."""
 
-    if cc_pair.access_type != AccessType.SYNC:
+    if not cc_pair.access_type.is_perm_synced():
         return False
 
     # skip doc permissions sync if not active
@@ -190,6 +191,12 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     # If the last sync is None, it has never been run so we run the sync
     last_perm_sync = cc_pair.last_time_perm_sync
     if last_perm_sync is None:
+        return True
+
+    # A sync that started before the pair began to wait for its first
+    # permission sync does not count, so the pair is not hidden for a period.
+    pending_since = cc_pair.perm_sync_pending_since
+    if pending_since is not None and last_perm_sync < pending_since:
         return True
 
     source_sync_period = sync_config.doc_sync_config.doc_sync_frequency
@@ -235,7 +242,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             cc_pair_ids_to_sync.extend(
                 cc_pair.id
                 for cc_pair in cc_pairs
-                if _is_external_doc_permissions_sync_due(cc_pair)
+                if is_external_doc_permissions_sync_due(cc_pair)
             )
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
@@ -294,6 +301,9 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                     monitor_ccpair_permissions_taskset(
                         tenant_id, key_bytes, r, db_session
                     )
+
+        lock_beat.reacquire()
+        clear_caught_up_perm_sync_pending_marks(tenant_id)
         task_logger.info(f"check_for_doc_permissions_sync finished: tenant={tenant_id}")
     except SoftTimeLimitExceeded:
         task_logger.info(
@@ -312,6 +322,36 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             lock_beat.release()
 
     return True
+
+
+def clear_caught_up_perm_sync_pending_marks(tenant_id: str) -> None:
+    """Clears the mark of each pair awaiting its first permission sync whose
+    permissions are now in the document index. Group ACL entries are only as
+    current as the group memberships, so a source with group sync also waits
+    for one. A mark on a source with no doc permission sync clears at once."""
+    with get_session_with_current_tenant() as db_session:
+        pending_cc_pair_sources = get_perm_sync_pending_cc_pair_sources(db_session)
+        if not pending_cc_pair_sources:
+            return
+        # Keeps this beat running for the tenant until the marks clear.
+        maybe_mark_tenant_active(tenant_id, caller="doc_permission_sync")
+        for cc_pair_id, source in pending_cc_pair_sources.items():
+            sync_config = get_source_perm_sync_config(source)
+            if clear_perm_sync_pending__no_commit(
+                db_session,
+                cc_pair_id,
+                needs_doc_sync=(
+                    sync_config is not None and sync_config.doc_sync_config is not None
+                ),
+                needs_group_sync=(
+                    sync_config is not None
+                    and sync_config.group_sync_config is not None
+                ),
+            ):
+                task_logger.info(
+                    f"Cleared perm sync pending mark: cc_pair={cc_pair_id}"
+                )
+        db_session.commit()
 
 
 def try_creating_permissions_sync_task(
@@ -1099,30 +1139,12 @@ def monitor_ccpair_permissions_taskset(
         f"Permissions sync progress: cc_pair={cc_pair_id} id={payload.id} remaining={remaining} initial={initial}"
     )
 
-    # Add telemetry for permission syncing progress
-    optional_telemetry(
-        record_type=RecordType.PERMISSION_SYNC_PROGRESS,
-        data={
-            "cc_pair_id": cc_pair_id,
-            "total_docs_synced": initial if initial is not None else 0,
-            "remaining_docs_to_sync": remaining,
-        },
-        tenant_id=tenant_id,
-    )
-
     if remaining > 0:
         return
 
     mark_cc_pair_as_permissions_synced(db_session, int(cc_pair_id), payload.started)
     task_logger.info(
         f"Permissions sync finished: cc_pair={cc_pair_id} id={payload.id} num_synced={initial}"
-    )
-
-    # Add telemetry for permission syncing complete
-    optional_telemetry(
-        record_type=RecordType.PERMISSION_SYNC_COMPLETE,
-        data={"cc_pair_id": cc_pair_id},
-        tenant_id=tenant_id,
     )
 
     update_sync_record_status(

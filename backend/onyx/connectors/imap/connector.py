@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.imap.config import DEFAULT_IMAP_PORT_NUMBER
 from onyx.connectors.imap.models import EmailHeaders
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -34,7 +35,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-_DEFAULT_IMAP_PORT_NUMBER = int(os.environ.get("IMAP_PORT", 993))
 _IMAP_OKAY_STATUS = "OK"
 _PAGE_SIZE = 100
 _USERNAME_KEY = "imap_username"
@@ -73,7 +73,7 @@ class ImapConnector(
     def __init__(
         self,
         host: str,
-        port: int = _DEFAULT_IMAP_PORT_NUMBER,
+        port: int = DEFAULT_IMAP_PORT_NUMBER,
         mailboxes: list[str] | None = None,
     ) -> None:
         self._host = host

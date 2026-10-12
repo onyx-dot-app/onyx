@@ -8,9 +8,11 @@ import { Button, InputTextArea, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useState } from "react";
 import { Spacer } from "@opal/components";
+import { useSettings } from "@/lib/settings/hooks";
 
 export default function CustomAnalyticsUpdateForm() {
   const t = useTranslations("admin.customAnalytics");
+  const { appName } = useSettings();
   const customAnalyticsScript = useCustomAnalyticsScript();
 
   const [newCustomAnalyticsScript, setNewCustomAnalyticsScript] =
@@ -64,6 +66,7 @@ export default function CustomAnalyticsUpdateForm() {
           <>
             {t.rich("secretKey.description", {
               i: (chunks) => <i>{chunks}</i>,
+              appName,
             })}
           </>
         </SubLabel>

@@ -88,8 +88,10 @@ class _KeyServer(ThreadingHTTPServer):
     def __init__(self) -> None:
         super().__init__(("127.0.0.1", 0), _KeyRequestHandler)
         self.responses: dict[str, tuple[str, str]] = {}
+        self.fetch_count = 0
 
     def set_key(self, key: _RSAKey) -> None:
+        self.fetch_count = 0
         self.responses = {
             "/jwks": ("application/json", json.dumps({"keys": [key.jwk]})),
             "/pem": ("application/x-pem-file", key.public_pem),
@@ -104,6 +106,7 @@ class _KeyRequestHandler(BaseHTTPRequestHandler):
     server: _KeyServer
 
     def do_GET(self) -> None:
+        self.server.fetch_count += 1
         response = self.server.responses.get(self.path)
         if response is None:
             self.send_error(404)
@@ -132,9 +135,24 @@ def key_server() -> Any:
 
 @pytest.fixture(autouse=True)
 def _reset_key_cache() -> Any:
-    jwt_module._fetch_public_key_payload.cache_clear()
+    jwt_module._reset_public_key_cache()
     yield
-    jwt_module._fetch_public_key_payload.cache_clear()
+    jwt_module._reset_public_key_cache()
+
+
+class _FrozenClock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> _FrozenClock:
+    clock = _FrozenClock()
+    monkeypatch.setattr(jwt_module, "time", clock)
+    return clock
 
 
 def _point_at(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
@@ -280,3 +298,119 @@ async def test_rotated_key_refetched_without_restart(
     authenticated = await _authenticate(new_key.mint_token(user.email))
     assert authenticated is not None
     assert authenticated.id == user.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("tenant_context")
+@pytest.mark.parametrize("key_path", ["/jwks", "/pem"])
+async def test_invalid_bearers_do_not_force_key_refetches(
+    db_session: Session,
+    key_server: _KeyServer,
+    monkeypatch: pytest.MonkeyPatch,
+    key_path: str,
+) -> None:
+    # Precondition: prime the cache with the trusted key.
+    user = create_test_user(db_session, "jwt_refetch_flood")
+    key = _RSAKey(kid="primary")
+    key_server.set_key(key)
+    _point_at(monkeypatch, key_server.url(key_path))
+    assert await _authenticate(key.mint_token(user.email)) is not None
+    assert key_server.fetch_count == 1
+
+    fetch_threads: list[int] = []
+    real_fetch = jwt_module._fetch_public_key_payload
+
+    def _spy_fetch(*args: Any) -> Any:
+        fetch_threads.append(threading.get_ident())
+        return real_fetch(*args)
+
+    monkeypatch.setattr(jwt_module, "_fetch_public_key_payload", _spy_fetch)
+
+    # Under test: bearers that new keys cannot make valid never refetch.
+    for _ in range(10):
+        for bearer in (
+            "x",
+            "onyx_pat_abc",
+            "on_abc",
+            "a.b.c",
+            key.mint_token(user.email, expires_in_seconds=-300),
+        ):
+            assert await _authenticate(bearer) is None
+    assert key_server.fetch_count == 1
+
+    # Under test: tokens signed by an unknown key (known and unknown kid).
+    attacker_key = _RSAKey(kid="attacker")
+    for _ in range(10):
+        assert await _authenticate(attacker_key.mint_token(user.email)) is None
+        forged = attacker_key.mint_token(user.email, kid="primary")
+        assert await _authenticate(forged) is None
+
+    # Postcondition: one rate-limited refetch at most, off the event loop, and
+    # the trusted key is still usable.
+    assert key_server.fetch_count <= 2
+    assert threading.get_ident() not in fetch_threads
+    assert await _authenticate(key.mint_token(user.email)) is not None
+    assert key_server.fetch_count <= 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("tenant_context")
+async def test_rotated_key_accepted_after_refetch_interval(
+    db_session: Session,
+    key_server: _KeyServer,
+    monkeypatch: pytest.MonkeyPatch,
+    frozen_clock: _FrozenClock,
+) -> None:
+    # Precondition: a forged token has already used the refetch budget.
+    user = create_test_user(db_session, "jwt_rotation_rate_limited")
+    old_key = _RSAKey(kid="old")
+    key_server.set_key(old_key)
+    _point_at(monkeypatch, key_server.url("/jwks"))
+    assert await _authenticate(old_key.mint_token(user.email)) is not None
+    forged = _RSAKey(kid="attacker").mint_token(user.email, kid="old")
+    assert await _authenticate(forged) is None
+
+    # Under test: the IdP rotates its signing key.
+    new_key = _RSAKey(kid="new")
+    key_server.set_key(new_key)
+    assert await _authenticate(new_key.mint_token(user.email)) is None
+    assert key_server.fetch_count == 0
+
+    # Postcondition: once the interval elapses, the rotated key is fetched.
+    frozen_clock.now += jwt_module._PUBLIC_KEY_REFRESH_MIN_INTERVAL_SECONDS
+    authenticated = await _authenticate(new_key.mint_token(user.email))
+    assert authenticated is not None
+    assert authenticated.id == user.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("tenant_context")
+async def test_idp_outage_recovers_after_failure_backoff(
+    db_session: Session,
+    key_server: _KeyServer,
+    monkeypatch: pytest.MonkeyPatch,
+    frozen_clock: _FrozenClock,
+) -> None:
+    # Precondition: the IdP key endpoint is down; the refetch clock is frozen.
+    user = create_test_user(db_session, "jwt_idp_outage")
+    key = _RSAKey(kid="primary")
+    key_server.set_key(key)
+    key_server.responses = {}
+    _point_at(monkeypatch, key_server.url("/jwks"))
+    backoff = jwt_module._PUBLIC_KEY_FETCH_FAILURE_BACKOFF_SECONDS
+    forged = _RSAKey(kid="attacker").mint_token(user.email, kid="primary")
+
+    # Under test: valid and forged tokens during the outage.
+    for window in range(1, 4):
+        for _ in range(10):
+            assert await _authenticate(key.mint_token(user.email)) is None
+            assert await _authenticate(forged) is None
+        # At most one fetch per backoff window.
+        assert key_server.fetch_count == window
+        frozen_clock.now += backoff
+
+    # Postcondition: once the IdP is back, a valid token is accepted after the
+    # short backoff, not the long refresh interval.
+    key_server.set_key(key)
+    assert await _authenticate(key.mint_token(user.email)) is not None
+    assert key_server.fetch_count == 1

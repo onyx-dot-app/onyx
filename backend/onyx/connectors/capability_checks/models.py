@@ -1,18 +1,23 @@
-import hashlib
-import json
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from functools import cached_property
+from typing import Any, Generic
 
 from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.capability_checks.form_state import (
+    ConfigT,
+    FormState,
+    validate_form_state,
+)
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import SourceOperations
-from onyx.db.enums import CapabilityCheckTrigger
+from onyx.db.enums import AccessType, CapabilityCheckTrigger
 
 
 class CapabilityCheckStatus(str, Enum):
@@ -61,18 +66,64 @@ class CapabilityCheckContext(BaseModel):
     credential_json: dict[str, Any]
     connector: BaseConnector | None = None
     connector_specific_config: dict[str, Any] | None = None
+    # The access type the connector is (or will be) created with. None when the
+    # caller does not know it; checks limited to some access types then run.
+    access_type: AccessType | None = None
     instantiation_error: Exception | None = None
     source_operations: SourceOperations | None = None
 
+    @cached_property
+    def form_state(self) -> FormState[Any] | None:
+        """``connector_specific_config`` validated field by field against the
+        source's config model. None when there is no config, or the source has
+        no connector class."""
+        if self.connector_specific_config is None:
+            return None
+        mapping = CONNECTOR_CLASS_MAP.get(self.source)
+        if mapping is None:
+            return None
+        return validate_form_state(mapping.config_class, self.connector_specific_config)
 
-class CapabilityCheck(ABC):
+
+_PERM_SYNC_CAPABILITIES = frozenset(
+    {
+        CredentialCapability.DOC_PERMISSION_SYNC,
+        CredentialCapability.EXTERNAL_GROUP_SYNC,
+    }
+)
+_PERM_SYNCED_ACCESS_TYPES = frozenset(AccessType.perm_synced_types())
+
+
+class CapabilityCheck(ABC, Generic[ConfigT]):
     """
     A named probe of one permission/capability assumption a connector makes.
 
     Concrete checks pass their metadata to ``__init__`` and implement ``run``,
     which raises a ``ValidationError``-family exception on failure and returns
     nothing on success; the runner maps exceptions to statuses.
+
+    A check that reads the connector config sets ``config_class`` to the source's
+    ``ConnectorConfig`` and reads it through ``config``. It declares:
+
+    - ``requires_fields``: config fields that must hold a value for the check
+      to mean anything. Name only fields with no usable empty state: a field
+      whose absence means "all" (e.g. no channel filter) is read with its
+      default instead.
+    - ``access_types``: the access types the check applies to. Omitted or
+      None, a check applies to all of them, except a permission-sync check,
+      which applies to the permission-synced ones. Pass ``frozenset(AccessType)``
+      to make a permission-sync check apply to all of them.
+    - ``applies``: a predicate on the form state, for anything the two
+      declarations above cannot express.
+
+    ``validates_binding`` marks a check that proves the credential works with
+    the credential-bound fields (e.g. it signs in to the site URL). Such a
+    check may require only bound fields. A create form can wait on these
+    checks before it unlocks the rest of the configuration.
     """
+
+    # The source's config model. None for checks that never read the config.
+    config_class: type[ConfigT] | None = None
 
     def __init__(
         self,
@@ -83,10 +134,13 @@ class CapabilityCheck(ABC):
         required: bool = True,
         requires_connector_instance: bool = True,
         requires_connector_config: bool = False,
+        requires_fields: frozenset[str] = frozenset(),
+        access_types: frozenset[AccessType] | None = None,
         timeout_seconds: float | None = None,
         is_fallback: bool = False,
         remediation: str | None = None,
         docs_link: str | None = None,
+        validates_binding: bool = False,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
@@ -95,7 +149,19 @@ class CapabilityCheck(ABC):
         # downgrade PASSED to PASSED_WITH_WARNINGS (partial capability).
         self.required = required
         self.requires_connector_instance = requires_connector_instance
-        self.requires_connector_config = requires_connector_config
+        # Needs a config to read, even if every field it reads is optional.
+        # Implied by a non-empty ``requires_fields``.
+        self.requires_connector_config = requires_connector_config or bool(
+            requires_fields
+        )
+        self.requires_fields = requires_fields
+        self.access_types = (
+            access_types
+            if access_types is not None
+            else _PERM_SYNCED_ACCESS_TYPES
+            if capability in _PERM_SYNC_CAPABILITIES
+            else None
+        )
         # Per-check hang guard in seconds; None falls back to the
         # ``CAPABILITY_CHECK_TIMEOUT_SECONDS`` default. Timing out maps to
         # INDETERMINATE, never FAILED.
@@ -106,10 +172,51 @@ class CapabilityCheck(ABC):
         self.is_fallback = is_fallback
         self.remediation = remediation
         self.docs_link = docs_link
+        self.validates_binding = validates_binding
 
     @abstractmethod
     def run(self, context: CapabilityCheckContext) -> None:
         """Probes the capability; raises on failure, returns on success."""
+
+    @property
+    def reads_connector_config(self) -> bool:
+        """True when the check reads the config, so an invalid field fails it.
+        A check can read the config without requiring one: a config-less run
+        then reads the defaults."""
+        return self.requires_connector_config or self.config_class is not None
+
+    def applies(
+        self,
+        form_state: FormState[ConfigT],  # noqa: ARG002
+    ) -> bool:
+        """False when the check means nothing for this form state. Called only
+        for a config-reading check on a run with a config, once every
+        ``requires_fields`` field is provided."""
+        return True
+
+    def config(self, context: CapabilityCheckContext) -> ConfigT:
+        """The connector config, typed. Fields that were not provided hold their
+        defaults; the runner guarantees ``requires_fields`` are provided."""
+        if self.config_class is None:
+            raise TypeError(
+                f"{type(self).__name__} reads the config but sets no config_class."
+            )
+        return form_config(context, self.config_class)
+
+
+def form_config(
+    context: CapabilityCheckContext, config_class: type[ConfigT]
+) -> ConfigT:
+    """The context's connector config as ``config_class``, for helpers shared by
+    several checks. Defaults only on a config-less run."""
+    if context.form_state is None:
+        return config_class.model_construct()
+    if context.form_state.config_class is not config_class:
+        raise TypeError(
+            f"Expected a {config_class.__name__} form state, not "
+            f"{context.form_state.config_class.__name__}."
+        )
+    return context.form_state.config
 
 
 class CapabilityCheckResult(BaseModel):
@@ -126,6 +233,10 @@ class CapabilityCheckResult(BaseModel):
     remediation: str | None = None
     docs_link: str | None = None
     duration_ms: int | None = None
+    # False for a SKIPPED check that does not apply to the access type or the
+    # config. It does not count toward the verdict.
+    applicable: bool = True
+    validates_binding: bool = False
 
 
 class CredentialCapabilityReport(BaseModel):
@@ -141,16 +252,44 @@ class CredentialCapabilityReport(BaseModel):
     check_results: list[CapabilityCheckResult]
 
 
-def compute_connector_config_hash(config: dict[str, Any] | None) -> str | None:
-    """Returns the sha256 of the canonical config JSON a report ran with.
+class NamedCheckRun(BaseModel):
+    """The outcome of the named checks after the blocking budget."""
 
-    This is the staleness signal, shared by every report writer so stored hashes
-    stay comparable.
-    """
-    if config is None:
-        return None
-    canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    # Results of the checks that finished, reused draft results included.
+    finished_results: list[CapabilityCheckResult]
+    # Checks that were still running at the end of the budget.
+    unfinished_check_ids: frozenset[str]
+
+    @property
+    def failed_required_results(self) -> list[CapabilityCheckResult]:
+        """The finished required checks that failed. Only these block a
+        pairing."""
+        return [
+            result
+            for result in self.finished_results
+            if result.required and result.status == CapabilityCheckStatus.FAILED
+        ]
+
+
+class ProposedPairingValidation(BaseModel):
+    """The result of validating a pairing state that is not stored."""
+
+    # Set when the credential binding, the connector construction, or the
+    # legacy validation failed. The named checks do not run then.
+    validation_error: str | None = None
+    # Named checks only: the finished results, and the checks still running at
+    # the end of the blocking budget.
+    check_results: list[CapabilityCheckResult] = []
+    unfinished_check_ids: frozenset[str] = frozenset()
+
+    @property
+    def blocks_pairing(self) -> bool:
+        """True when the validation failed or a finished required check
+        failed."""
+        return self.validation_error is not None or any(
+            result.required and result.status == CapabilityCheckStatus.FAILED
+            for result in self.check_results
+        )
 
 
 def aggregate_capability_verdict(
@@ -164,11 +303,13 @@ def aggregate_capability_verdict(
     SKIPPED leaves the capability's core unverified, so no pass-ish claim may be
     made. Non-required failures and indeterminates only downgrade to
     PASSED_WITH_WARNINGS (partial capability); non-required skips do not
-    downgrade at all. An empty result list aggregates to SKIPPED: a capability
-    is never PASSED on the basis of having checked nothing.
+    downgrade at all. Checks that do not apply are left out. An empty result
+    list aggregates to SKIPPED: a capability is never PASSED on the basis of
+    having checked nothing.
     """
     if not applicable:
         return CapabilityVerdict.NOT_APPLICABLE
+    results = [result for result in results if result.applicable]
     if any(
         result.status == CapabilityCheckStatus.FAILED and result.required
         for result in results

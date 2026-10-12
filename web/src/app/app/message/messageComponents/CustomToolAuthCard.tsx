@@ -46,6 +46,8 @@ function CustomToolAuthCard({
 
   return (
     <MessageCard
+      outerPadding={1}
+      innerPadding={1}
       title={t("customToolAuth.card.title", { toolName })}
       description={t("customToolAuth.card.description", { toolName })}
       rightChildren={

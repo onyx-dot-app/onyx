@@ -94,7 +94,7 @@ def create_pg_ssl_context() -> ssl.SSLContext | str | None:
         check_hostname = POSTGRES_SSLMODE == "verify-full"
         ca_certs = POSTGRES_SSLROOTCERT
 
-    return build_ssl_context(
+    context = build_ssl_context(
         verify_mode=verify_mode,
         check_hostname=check_hostname,
         ca_certs=ca_certs,
@@ -102,3 +102,9 @@ def create_pg_ssl_context() -> ssl.SSLContext | str | None:
         keyfile=POSTGRES_SSLKEY,
         key_password=POSTGRES_SSLKEY_PASSWORD,
     )
+    # Verify like libpq (the sync engine) does. Python 3.13 turns on
+    # VERIFY_X509_STRICT, which rejects server certificates that libpq accepts,
+    # e.g. Cloud SQL GOOGLE_MANAGED_INTERNAL_CA certs without an Authority Key
+    # Identifier. The chain and CA checks are unchanged.
+    context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return context

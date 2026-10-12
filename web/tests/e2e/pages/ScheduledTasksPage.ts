@@ -39,7 +39,7 @@ export class ScheduledTasksPage {
     this.nameInput = page.getByTestId("task-name-input");
     this.promptInput = page.getByTestId("task-prompt-input");
     this.intervalEveryInput = page.getByTestId("interval-every");
-    // The interval-unit InputSelect has no test ID; it's the only combobox
+    // The interval-unit select has no test ID; it's the only combobox
     // on the new-task form.
     this.intervalUnitTrigger = page.getByRole("combobox").first();
     this.saveAndRunNowButton = page.getByTestId("save-and-run-now");

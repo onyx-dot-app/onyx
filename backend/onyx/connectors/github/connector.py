@@ -27,7 +27,10 @@ from onyx.connectors.exceptions import (
     ValidationError,
 )
 from onyx.connectors.github.models import SerializedRepository
-from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
+from onyx.connectors.github.rate_limit_utils import (
+    BoundedGithubRetry,
+    sleep_after_rate_limit_exception,
+)
 from onyx.connectors.github.utils import (
     deserialize_repository,
     get_external_access_permission,
@@ -619,9 +622,12 @@ class GithubConnector(
         include_issues: bool = False,
         include_files: bool = False,
         branch: str | None = None,
+        # Checked against the credential by the binding; unused here.
+        github_base_url: str | None = None,  # noqa: ARG002
     ) -> None:
         self.repo_owner = repo_owner
-        self.repositories = repositories
+        # None means every repository of the owner.
+        self.repositories = (repositories or "").strip() or None
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues
@@ -651,9 +657,14 @@ class GithubConnector(
                 credentials["github_access_token"],
                 base_url=base_url,
                 per_page=ITEMS_PER_PAGE,
+                retry=BoundedGithubRetry(),
             )
             if base_url
-            else Github(credentials["github_access_token"], per_page=ITEMS_PER_PAGE)
+            else Github(
+                credentials["github_access_token"],
+                per_page=ITEMS_PER_PAGE,
+                retry=BoundedGithubRetry(),
+            )
         )
         return None
 
@@ -1055,7 +1066,7 @@ class GithubConnector(
                         logger.exception(error_msg)
                         yield ConnectorFailure(
                             failed_document=DocumentFailure(
-                                document_id=str(pr.id), document_link=pr.html_url
+                                document_id=pr.html_url, document_link=pr.html_url
                             ),
                             failure_message=error_msg,
                             exception=e,
@@ -1148,7 +1159,7 @@ class GithubConnector(
                         logger.exception(error_msg)
                         yield ConnectorFailure(
                             failed_document=DocumentFailure(
-                                document_id=str(issue.id),
+                                document_id=issue.html_url,
                                 document_link=issue.html_url,
                             ),
                             failure_message=error_msg,

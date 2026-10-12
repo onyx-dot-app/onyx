@@ -27,7 +27,6 @@ from tests.external_dependency_unit.answer.conftest import (  # noqa: F401  # no
     mock_file_store,  # noqa: F401
     mock_gpu_status,  # noqa: F401
     mock_nlp_embeddings_post,
-    mock_vespa_query,
 )
 from tests.external_dependency_unit.conftest import (
     db_session,  # noqa: F401

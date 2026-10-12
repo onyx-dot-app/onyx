@@ -20,8 +20,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.factory import get_image_generation_provider, validate_credentials
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
+from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.utils import collect_credential_values, litellm_exception_to_safe_error
+from onyx.llm.utils import collect_credential_values
 from onyx.server.manage.image_generation.models import (
     ImageGenerationConfigCreate,
     ImageGenerationConfigUpdate,

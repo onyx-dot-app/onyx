@@ -64,6 +64,20 @@ def get_scoped_groups(
     return fetch_managed_group_ids(user, db_session)
 
 
+def get_visible_user_group_ids(user: User, db_session: Session) -> set[int] | None:
+    """The groups the user can see, as GET /manage/admin/user-group lists them.
+    None means every group (global READ_USER_GROUPS). A scoped manager sees the
+    groups they manage; anyone else sees none."""
+    if has_global_permission(user, Permission.READ_USER_GROUPS):
+        return None
+    if (
+        has_permission(user, Permission.MANAGE_USER_GROUPS)
+        is not PermissionAuthority.SCOPED
+    ):
+        return set()
+    return get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
+
+
 def within_scope(
     user: User,
     db_session: Session,

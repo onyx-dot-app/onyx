@@ -9,12 +9,12 @@ import { Modal } from "@opal/components";
 import { InputVertical, toast } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import { createMCPServer, updateMCPServer } from "@/lib/tools/svc";
+import { createMCPServer, updateMCPServer } from "@/lib/mcp/svc";
 import {
   MCPServerCreateRequest,
   MCPServerStatus,
   MCPServer,
-} from "@/lib/tools/types";
+} from "@/lib/mcp/types";
 import { useModal } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";

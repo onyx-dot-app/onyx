@@ -1,5 +1,5 @@
 import { openDocument } from "@/lib/search/utils";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 
 it.each([
   "javascript:alert(1)",

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, ConnectorManageRole
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
@@ -63,11 +63,17 @@ def test_a_pair_reports_only_the_groups_it_is_still_in(
     db_session.add_all(
         [
             UserGroup__ConnectorCredentialPair(
-                user_group_id=live_group.id, cc_pair_id=cc_pair.id, is_current=True
+                user_group_id=live_group.id,
+                cc_pair_id=cc_pair.id,
+                role=ConnectorManageRole.EDITOR,
+                is_current=True,
             ),
             # What an in-flight group update leaves behind.
             UserGroup__ConnectorCredentialPair(
-                user_group_id=left_group.id, cc_pair_id=cc_pair.id, is_current=False
+                user_group_id=left_group.id,
+                cc_pair_id=cc_pair.id,
+                role=ConnectorManageRole.EDITOR,
+                is_current=False,
             ),
         ]
     )

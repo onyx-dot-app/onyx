@@ -16,8 +16,8 @@ import {
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
 import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
-import { StreamStopInfo } from "@/lib/search/interfaces";
-import type { SourceMetadata } from "@/lib/search/interfaces";
+import { StreamStopInfo } from "@/lib/search/types";
+import type { SourceMetadata } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
@@ -32,7 +32,7 @@ import {
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
@@ -49,7 +49,7 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "@/app/app/interfaces";
-import { StreamStopReason } from "@/lib/search/interfaces";
+import { StreamStopReason } from "@/lib/search/types";
 import { createChatSession } from "@/app/app/services/lib";
 import {
   getFinalLLM,
@@ -133,13 +133,20 @@ interface UseChatControllerProps {
   resetInputBar: () => void;
 }
 
-async function stopChatSession(chatSessionId: string): Promise<void> {
-  const response = await fetch(`/api/chat/stop-chat-session/${chatSessionId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+async function stopChatSession(
+  chatSessionId: string,
+  streamId: number | undefined
+): Promise<void> {
+  const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
+  const response = await fetch(
+    `/api/chat/stop-chat-session/${chatSessionId}${query}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to stop chat session: ${response.statusText}`);
@@ -377,7 +384,10 @@ export default function useChatController({
     // This signals the backend to stop processing as soon as possible
     // The backend will emit a STOP packet when it detects the fence
     try {
-      await stopChatSession(currentSession);
+      await stopChatSession(
+        currentSession,
+        useChatSessionStore.getState().sessions.get(currentSession)?.streamId
+      );
     } catch (error) {
       console.error("Failed to stop chat session:", error);
       // Continue with UI cleanup even if backend call fails
@@ -626,6 +636,9 @@ export default function useChatController({
       // set the ability to cancel the request
       const controller = new AbortController();
       setAbortController(currChatSessionId, controller);
+      useChatSessionStore
+        .getState()
+        .updateSessionData(currChatSessionId, { streamId: undefined });
 
       const messageToResend = currentHistory.find(
         (message) => message.messageId === messageIdToResend
@@ -1199,6 +1212,11 @@ export default function useChatController({
             ) {
               newAgentMessageId = (packet as MessageResponseIDInfo)
                 .reserved_assistant_message_id;
+              useChatSessionStore
+                .getState()
+                .updateSessionData(frozenSessionId, {
+                  streamId: newAgentMessageId,
+                });
             }
 
             // Multi-model: handle reserved IDs for N parallel model responses.
@@ -1213,6 +1231,14 @@ export default function useChatController({
               const multiPacket = packet as MultiModelMessageResponseIDInfo;
               newUserMessageId =
                 multiPacket.user_message_id ?? newUserMessageId;
+              // A multi-model stream is keyed by its user message.
+              if (newUserMessageId !== null) {
+                useChatSessionStore
+                  .getState()
+                  .updateSessionData(frozenSessionId, {
+                    streamId: newUserMessageId,
+                  });
+              }
               for (let mi = 0; mi < multiPacket.responses.length; mi++) {
                 const slot = multiPacket.responses[mi]!;
                 assistantMessageIds[mi] = slot.message_id;

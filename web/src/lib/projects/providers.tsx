@@ -23,6 +23,7 @@ import {
   type ProjectFile,
   type UserFileDeleteResult,
 } from "@/lib/projects/types";
+import { isFilePending } from "@/lib/projects/utils";
 import {
   fetchProjects as svcFetchProjects,
   createProject as svcCreateProject,
@@ -164,6 +165,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
     new Set()
   );
+  const trackedUploadIdsRef = useRef<Set<string>>(trackedUploadIds);
+  useEffect(() => {
+    trackedUploadIdsRef.current = trackedUploadIds;
+  }, [trackedUploadIds]);
   const [allRecentFiles, setAllRecentFiles] = useState<ProjectFile[]>([]);
   const [allCurrentProjectFiles, setAllCurrentProjectFiles] = useState<
     ProjectFile[]
@@ -565,6 +570,33 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     currentMessageFilesRef.current = currentMessageFiles;
   }, [currentMessageFiles]);
 
+  // Files attached from recents or a project can still be processing; poll
+  // them too so their status does not stay pending. Each attach registers
+  // once, so a file the server stops reporting is not re-polled forever.
+  const autoTrackedIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const attachedIds = new Set(currentMessageFiles.map((f) => f.id));
+    autoTrackedIdsRef.current.forEach((id) => {
+      if (!attachedIds.has(id)) autoTrackedIdsRef.current.delete(id);
+    });
+    const toTrack = currentMessageFiles
+      .filter(
+        (f) =>
+          f.status !== UserFileStatus.UPLOADING &&
+          isFilePending(f.status) &&
+          !autoTrackedIdsRef.current.has(f.id)
+      )
+      .map((f) => f.id);
+    if (toTrack.length === 0) return;
+    toTrack.forEach((id) => autoTrackedIdsRef.current.add(id));
+    setTrackedUploadIds((prev) => {
+      if (toTrack.every((id) => prev.has(id))) return prev;
+      const next = new Set(prev);
+      toTrack.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [currentMessageFiles]);
+
   // Sync SWR-fetched recent files into local state. On first arrival, seed
   // allRecentFiles as well. Subsequent updates only touch recentFiles so the
   // merge effect below can non-destructively apply them to allRecentFiles.
@@ -720,31 +752,38 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         });
 
         // Remove completed/skipped/failed from tracking
-        const remaining = new Set(trackedUploadIds);
+        const finishedIds = new Set<string>();
         const newlyFailed: ProjectFile[] = [];
         for (const f of statuses) {
           const s = String(f.status).toLowerCase();
           if (s === "completed" || s === "skipped") {
-            remaining.delete(f.id);
+            finishedIds.add(f.id);
           } else if (s === "failed") {
-            remaining.delete(f.id);
+            finishedIds.add(f.id);
             newlyFailed.push(f);
           }
         }
         // Requested ids the server no longer reports are deleted files: stop
-        // tracking them. Ids registered after this request went out stay.
+        // tracking them.
         for (const id of ids) {
           if (!statusById.has(id)) {
-            remaining.delete(id);
+            finishedIds.add(id);
           }
         }
         if (newlyFailed.length > 0) {
           setLastFailedFiles(newlyFailed);
         }
-        const trackingChanged = remaining.size !== trackedUploadIds.size;
-        if (trackingChanged) {
-          setTrackedUploadIds(remaining);
-        }
+        // Remove from the latest set, not this poll's snapshot, so ids
+        // registered while the request was in flight stay tracked.
+        const remaining = new Set(
+          Array.from(trackedUploadIdsRef.current).filter(
+            (id) => !finishedIds.has(id)
+          )
+        );
+        setTrackedUploadIds((prev) => {
+          if (!Array.from(prev).some((id) => finishedIds.has(id))) return prev;
+          return new Set(Array.from(prev).filter((id) => !finishedIds.has(id)));
+        });
 
         // If all tracked uploads finished (completed or failed), do a single refresh
         if (remaining.size === 0) {

@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -6,7 +6,6 @@ from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.document_filter import select_sections_for_expansion
 from tests.unit.onyx.secondary_llm_flows.test_document_filter import (
     _make_section,
-    _noop_span,
 )
 
 
@@ -26,21 +25,14 @@ from tests.unit.onyx.secondary_llm_flows.test_document_filter import (
         ("", [0, 1, 2, 3, 4], None),
     ],
 )
-@patch("onyx.secondary_llm_flows.document_filter.record_llm_response")
-@patch(
-    "onyx.secondary_llm_flows.document_filter.llm_generation_span",
-    side_effect=_noop_span,
-)
 def test_select_sections_parses_complete_marked_and_unmarked_lists(
-    _span: MagicMock,
-    _record: MagicMock,
     response_text: str,
     expected_indices: list[int],
     expected_full_document_ids: list[str] | None,
 ) -> None:
     sections = [_make_section(index) for index in range(5)]
     response = MagicMock()
-    response.choice.message.content = response_text
+    response.text = response_text
     llm = MagicMock(spec=LLM)
     llm.invoke = MagicMock(return_value=response)
 

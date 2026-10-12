@@ -9,6 +9,7 @@ import type { SharingScope } from "@/app/craft/types/streamingTypes";
 import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface ShareButtonProps {
   sessionId: string;
@@ -24,6 +25,7 @@ export default function ShareButton({
   onScopeChange,
 }: ShareButtonProps) {
   const t = useTranslations("craft.share");
+  const { appName } = useSettings();
   const scopeOptions = useMemo<
     { value: SharingScope; label: string; description: string }[]
   >(
@@ -36,10 +38,10 @@ export default function ShareButton({
       {
         value: "public_org",
         label: t("organization.label"),
-        description: t("organization.description"),
+        description: t("organization.description", { appName }),
       },
     ],
-    [t]
+    [t, appName]
   );
   const [isOpen, setIsOpen] = useState(false);
   const [sharingScope, setSharingScope] = useState<SharingScope>(initialScope);

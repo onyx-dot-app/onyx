@@ -1,5 +1,5 @@
 /**
- * Page Object Model for the connector status page (`/admin/indexing/status`).
+ * Page Object Model for the connector status page (`/admin/indexing-status`).
  *
  * Encapsulates the locators and interactions used by the visual-regression
  * spec so it stays declarative (see `web/tests/e2e/README.md` §1).
@@ -28,7 +28,7 @@ export class IndexingStatusPage {
   }
 
   async goto() {
-    await this.page.goto("/admin/indexing/status");
+    await this.page.goto("/admin/indexing-status");
     await expect(this.pageTitle).toBeVisible({ timeout: 10_000 });
   }
 

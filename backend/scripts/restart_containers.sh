@@ -9,6 +9,8 @@ COMPOSE_FILE="$SCRIPT_DIR/../../deployment/docker_compose/docker-compose.yml"
 COMPOSE_DEV_FILE="$SCRIPT_DIR/../../deployment/docker_compose/docker-compose.dev.yml"
 
 stop_and_remove_containers() {
+  # onyx_vespa was started by older versions of this script; remove it if it
+  # is still around.
   docker stop onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
   docker rm onyx_postgres onyx_vespa onyx_redis onyx_minio onyx_code_interpreter 2>/dev/null || true
   docker compose -f "$COMPOSE_FILE" -f "$COMPOSE_DEV_FILE" --profile opensearch-enabled stop opensearch 2>/dev/null || true
@@ -24,8 +26,8 @@ cleanup() {
 trap 'echo "Error occurred on line $LINENO. Exiting script." >&2; cleanup' ERR
 
 # Usage of the script with optional volume arguments
-# ./restart_containers.sh [vespa_volume] [postgres_volume] [redis_volume]
-# [minio_volume] [--keep-opensearch-data]
+# ./restart_containers.sh [postgres_volume] [redis_volume] [minio_volume]
+# [--keep-opensearch-data]
 
 KEEP_OPENSEARCH_DATA=false
 POSITIONAL_ARGS=()
@@ -37,10 +39,17 @@ for arg in "$@"; do
     fi
 done
 
-VESPA_VOLUME=${POSITIONAL_ARGS[0]:-""}
-POSTGRES_VOLUME=${POSITIONAL_ARGS[1]:-""}
-REDIS_VOLUME=${POSITIONAL_ARGS[2]:-""}
-MINIO_VOLUME=${POSITIONAL_ARGS[3]:-""}
+# The old first argument (vespa_volume) is gone. Stop on the old four-argument
+# form so a Vespa volume is never mounted as the Postgres data volume.
+if [[ ${#POSITIONAL_ARGS[@]} -gt 3 ]]; then
+    echo "Usage: $0 [postgres_volume] [redis_volume] [minio_volume] [--keep-opensearch-data]" >&2
+    echo "The vespa_volume argument was removed. Pass the Postgres volume first." >&2
+    exit 1
+fi
+
+POSTGRES_VOLUME=${POSITIONAL_ARGS[0]:-""}
+REDIS_VOLUME=${POSITIONAL_ARGS[1]:-""}
+MINIO_VOLUME=${POSITIONAL_ARGS[2]:-""}
 
 # Stop and remove the existing containers
 echo "Stopping and removing existing containers..."
@@ -52,14 +61,6 @@ if [[ -n "$POSTGRES_VOLUME" ]]; then
     docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d -v "$POSTGRES_VOLUME":/var/lib/postgresql/data postgres -c max_connections=250
 else
     docker run -p 5432:5432 --name onyx_postgres -e POSTGRES_PASSWORD=password -d postgres -c max_connections=250
-fi
-
-# Start the Vespa container with optional volume
-echo "Starting Vespa container..."
-if [[ -n "$VESPA_VOLUME" ]]; then
-    docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 -v "$VESPA_VOLUME":/opt/vespa/var vespaengine/vespa:8
-else
-    docker run --detach --name onyx_vespa --hostname vespa-container --publish 8081:8081 --publish 19071:19071 vespaengine/vespa:8
 fi
 
 # If OPENSEARCH_ADMIN_PASSWORD is not already set, try loading it from
@@ -96,7 +97,7 @@ fi
 # Start the MinIO container with optional volume
 # TODO(security): publish on 127.0.0.1:9004/9005 to bind loopback, not 0.0.0.0.
 echo "Starting MinIO container..."
-MINIO_IMAGE="quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z-cpuv1@sha256:13582eff79c6605a2d315bdd0e70164142ea7e98fc8411e9e10d089502a6d883"
+MINIO_IMAGE="onyxdotapp/minio:RELEASE.2025-07-23T15-54-02Z-cpuv1@sha256:7330be2e7320a7a699b36f72bd06a94d8a21ec9f6f397345d9c38fc6751141f5"
 if [[ -n "$MINIO_VOLUME" ]]; then
     docker run --detach --name onyx_minio --publish 9004:9000 --publish 9005:9001 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin -v "$MINIO_VOLUME":/data "$MINIO_IMAGE" server /data --console-address ":9001"
 else

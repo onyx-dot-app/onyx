@@ -263,9 +263,8 @@ export class ChatPreferencesPage {
       await this.expectToast("Settings updated").catch(() => {});
       return;
     }
-    if (
-      ((await this.retentionTrigger.textContent()) ?? "").includes("Forever")
-    ) {
+    // The trigger is a read-only input: its text is its value.
+    if ((await this.retentionTrigger.inputValue()).includes("Forever")) {
       return;
     }
     await this.selectRetentionPreset("Forever");

@@ -1,8 +1,7 @@
 """External-dependency unit tests for cloud tier resolution.
 
-Covers `ee.onyx.utils.tier.get_tier()` end-to-end against real Redis. The CP
-boundary (`fetch_billing_information`) is the only mocked dependency. Cache
-reads, writes, JSON serialization, and datetime parsing run for real.
+Covers tier resolution with real primary Redis and mocked control-plane responses.
+Cache reads, writes, JSON serialization, and datetime parsing run for real.
 
 A trialing tenant resolves to the same tier it will hold when the trial
 expires.
@@ -19,22 +18,29 @@ from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
 from ee.onyx.server.tenants.tier_management import (
     TENANT_TIER_KEY,
+    TENANT_TIER_MISS_KEY,
     get_cached_tier,
+    mark_tenant_tier_miss,
     update_tenant_tier,
 )
 from ee.onyx.utils import tier as tier_module
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import Tier
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+
+TEST_TENANT_ID = "tenant-tier-test"
 
 
 @pytest.fixture(autouse=True)
-def _clean_tier_cache() -> Generator[None, None, None]:
+def _clean_tier_cache(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     """Wipe the tier cache before and after each test so runs are isolated."""
-    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    redis_client.delete(TENANT_TIER_KEY)
+    monkeypatch.setattr(
+        "ee.onyx.server.tenants.tier_management.get_redis_replica_client",
+        get_redis_client,
+    )
+    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    redis_client.delete(TENANT_TIER_KEY, TENANT_TIER_MISS_KEY)
     yield
-    redis_client.delete(TENANT_TIER_KEY)
+    redis_client.delete(TENANT_TIER_KEY, TENANT_TIER_MISS_KEY)
 
 
 @pytest.fixture(autouse=True)
@@ -97,9 +103,9 @@ def test_cached_tier_ignores_trial_state(
     trial_end = (
         datetime.now(timezone.utc) + trial_offset if trial_offset is not None else None
     )
-    update_tenant_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, customer_tier, trial_end)
+    update_tenant_tier(TEST_TENANT_ID, customer_tier, trial_end)
 
-    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == expected
+    assert tier_module.get_tier(TEST_TENANT_ID) == expected
 
 
 def test_cache_miss_lazy_refresh_caches_contractual_tier() -> None:
@@ -109,11 +115,11 @@ def test_cache_miss_lazy_refresh_caches_contractual_tier() -> None:
     billing = _billing_info(CustomerTier.BUSINESS, future, status="trialing")
 
     with patch.object(tier_module, "fetch_billing_information", return_value=billing):
-        result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+        result = tier_module.get_tier(TEST_TENANT_ID)
 
     assert result == Tier.BUSINESS
 
-    cached = get_cached_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cached = get_cached_tier(TEST_TENANT_ID)
     assert cached is not None
     assert cached.customer_tier == CustomerTier.BUSINESS
     # Allow microsecond drift from ISO round-trip.
@@ -124,7 +130,7 @@ def test_cache_miss_lazy_refresh_caches_contractual_tier() -> None:
 def test_cached_naive_trial_end_is_treated_as_none() -> None:
     """A cache entry with a naive `trial_end` ISO string is parsed as `None`
     (logged). The tenant resolves to their contractual tier."""
-    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
     payload = json.dumps(
         {
             "customer_tier": CustomerTier.BUSINESS.value,
@@ -134,13 +140,13 @@ def test_cached_naive_trial_end_is_treated_as_none() -> None:
     )
     redis_client.set(TENANT_TIER_KEY, payload)
 
-    cached = get_cached_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    cached = get_cached_tier(TEST_TENANT_ID)
     assert cached is not None
     assert cached.customer_tier == CustomerTier.BUSINESS
     assert cached.trial_end is None
 
     # End-to-end: resolves the contractual BUSINESS.
-    assert tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE) == Tier.BUSINESS
+    assert tier_module.get_tier(TEST_TENANT_ID) == Tier.BUSINESS
 
 
 def test_cp_naive_trial_end_is_not_cached() -> None:
@@ -149,10 +155,10 @@ def test_cp_naive_trial_end_is_not_cached() -> None:
     billing = _billing_info(CustomerTier.BUSINESS, naive_future, status="trialing")
 
     with patch.object(tier_module, "fetch_billing_information", return_value=billing):
-        result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+        result = tier_module.get_tier(TEST_TENANT_ID)
 
     assert result == Tier.BUSINESS
-    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
     raw_cached = redis_client.get(TENANT_TIER_KEY)
     assert raw_cached is not None
     assert json.loads(raw_cached)["trial_end"] is None
@@ -163,9 +169,23 @@ def test_cache_miss_subscription_status_response_falls_back_to_business() -> Non
     response = SubscriptionStatusResponse(subscribed=False, customer_tier=None)
 
     with patch.object(tier_module, "fetch_billing_information", return_value=response):
-        result = tier_module.get_tier(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+        result = tier_module.get_tier(TEST_TENANT_ID)
 
     assert result == Tier.BUSINESS
     # The resolver does not cache this fallback.
-    redis_client = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
     assert redis_client.get(TENANT_TIER_KEY) is None
+    assert redis_client.get(TENANT_TIER_MISS_KEY) == b"1"
+
+
+def test_positive_tier_update_clears_recent_miss() -> None:
+    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
+    mark_tenant_tier_miss(TEST_TENANT_ID)
+    assert redis_client.exists(TENANT_TIER_MISS_KEY)
+
+    update_tenant_tier(TEST_TENANT_ID, CustomerTier.ENTERPRISE)
+
+    assert not redis_client.exists(TENANT_TIER_MISS_KEY)
+    cached = get_cached_tier(TEST_TENANT_ID)
+    assert cached is not None
+    assert cached.customer_tier == CustomerTier.ENTERPRISE

@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource, DocumentSourceDescription
 from onyx.db.connector import _INTERNAL_ONLY_SOURCES
-from onyx.db.connector_credential_pair import get_connector_credential_pairs_for_user
+from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
+    get_connector_credential_pairs_for_user,
+)
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import User
 from onyx.external_apps.providers.registry import (
@@ -45,7 +48,7 @@ def build_available_sources_section(
     cc_pairs = get_connector_credential_pairs_for_user(
         db_session,
         user,
-        get_editable=False,
+        access_level=CCPairAccessLevel.READ,
         eager_load_connector=True,
     )
 

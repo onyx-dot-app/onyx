@@ -5,7 +5,7 @@ import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPag
 
 /**
  * Visual-regression coverage for the connector status page
- * (`/admin/indexing/status`).
+ * (`/admin/indexing-status`).
  *
  * This page is deliberately excluded from the parallel admin-pages sweep (see
  * `VISUAL_REGRESSION_EXCLUDED_PATHS` in `admin_pages.spec.ts`): it renders the

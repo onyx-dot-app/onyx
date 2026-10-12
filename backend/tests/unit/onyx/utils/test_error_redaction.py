@@ -14,7 +14,7 @@ from onyx.chat.models import StreamingError
 from onyx.connectors import connector_runner
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import ConnectorCheckpoint
-from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.models import ToolChoiceOptions
 from onyx.main import validation_exception_handler
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.utils import retry_wrapper
@@ -152,10 +152,9 @@ def test_chat_provider_tracebacks_only_reach_development_clients(
     setup = MagicMock()
     setup.incognito_record_mode = None
     setup.llms = [MagicMock()]
-    setup.llms[0].config.api_key = None
-    setup.llms[0].config.custom_config = None
     setup.llms[0].config.model_name = "test-model"
     setup.llms[0].config.model_provider = "test-provider"
+    setup.llms[0].redact_error.side_effect = lambda text: text
 
     def build_turn(**_kwargs: object) -> Generator[None, None, MagicMock]:
         yield from ()

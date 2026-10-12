@@ -50,7 +50,7 @@ export interface ImageGenFormChildProps<T extends FormValues> {
   disabled: boolean;
   isEditMode: boolean;
   isLoadingCredentials: boolean;
-  apiKeyOptions: { value: string; label: string }[];
+  apiKeyOptions: { value: string; title: string }[];
   resetApiState: () => void;
   imageProvider: ImageProvider;
 }

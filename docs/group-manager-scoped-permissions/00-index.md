@@ -26,7 +26,7 @@ live) · D2 admins-only create groups · D3 admin-or-manager-of-that-group assig
 everything **except delete** · **D7 attaching an agent to a group is controlled by `manage:agents`** (standard GATE 2 keyed on
 `MANAGE_AGENTS` — admins/global holders self-share to their groups, scoped managers to managed groups;
 `add:agents`-only users can't group-share). The reviews confirmed PAT,
-chat-runtime, and document/Vespa ACL are untouched, and refuted the backfill data-loss concern. Full
+chat-runtime, and document-index ACL are untouched, and refuted the backfill data-loss concern. Full
 case-by-case coverage + the boot-bug prerequisite are in **[03 §11](03-detailed-design.md)** — the
 authoritative implementation checklist.
 

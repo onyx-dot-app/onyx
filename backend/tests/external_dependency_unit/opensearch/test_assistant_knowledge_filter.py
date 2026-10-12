@@ -9,7 +9,7 @@ hierarchy nodes, document sets, and persona/project user files.
 from typing import Any
 
 from onyx.configs.constants import DocumentSource
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.schema import (
     ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME,
     DOCUMENT_ID_FIELD_NAME,
@@ -45,6 +45,7 @@ def _get_search_filters(
         tenant_state=TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False),
         include_hidden=False,
         access_control_list=["user_email:test@example.com"],
+        cc_pair_access=None,
         source_types=source_types,
         tags=[],
         document_sets=document_sets or [],

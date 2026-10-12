@@ -5,17 +5,33 @@ tests. Additive to the root `AGENTS.md`.
 
 ## Key Rules
 
+- Use explicit validation in application code. Reserve `assert` for tests.
+- Declare owned protocol implementations through explicit inheritance.
+
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run
-  queries outside of those directories.
+  queries outside of those directories. Exception: `backend/onyx/cache/postgres_backend.py` is the
+  PostgreSQL implementation of `CacheBackend`, so its queries belong there.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
   function.
-- OpenSearch is the current document index backend for search and indexing. Some legacy modules,
-  Celery task names, and migration helpers still mention Vespa; treat those as compatibility or
-  migration artifacts unless the active `DocumentIndex` factory/config path explicitly uses them.
+- OpenSearch is the only document index backend for search and indexing. Onyx no longer uses
+  Vespa. Some live Celery names still say "vespa" (the `vespa_metadata_sync` queue, the
+  `check_for_vespa_sync_task` task, the `onyx.background.celery.tasks.vespa` module); they sync
+  the document index and keep their names so running deployments are not disrupted.
 - Do not use `getattr`: it hides attribute access from the type checker. Use
   plain attribute access when the name is statically known. A genuinely dynamic
   lookup needs an `# ods: ignore[getattr]` comment with a brief justification
   (checked by `ods check-getattr`).
+- Use `CacheBackend` (`get_cache_backend()` / `get_shared_cache_backend()` in
+  `backend/onyx/cache/factory.py`) for cache and short-lived state: one-time codes, counters,
+  rate limits, locks. Do not call Redis directly or write Lua scripts. Onyx can run with
+  PostgreSQL as its cache (`CACHE_BACKEND=postgres`, for example Onyx Lite), so direct Redis
+  code breaks those deployments. If `CacheBackend` does not have an operation you need, add it
+  to the interface with both the Redis and PostgreSQL implementations.
+- Do not use functions as constants. A value that depends only on startup configuration (env
+  vars, `app_configs`) is a module-level constant computed once, not a zero-argument function
+  that recomputes it on every call. If the configuration can be invalid, the loader returns
+  `None` and logs instead of raising, so a bad value disables the feature rather than breaking
+  imports. Tests patch the module constant.
 
 ## Background Workers (Celery)
 
@@ -89,6 +105,13 @@ uv run alembic -n schema_private revision -m "description"
 ```
 
 Write the migration manually and place it in the file that alembic creates when running the above command.
+
+Rows a revision in `alembic/versions` inserts must be identical on every schema: fixed ids and
+literal values, no `uuid4()`, `now()`, randomness or env reads. The template snapshot is cloned
+into new tenants and compared with a fresh build on deploy, so a run-dependent value breaks the
+comparison. Schema defaults and updates to existing rows are fine.
+`scripts/check_migration_determinism.py` enforces this on commit for revisions newer than the
+rule, and `# migration-determinism: allow` marks a deliberate exception.
 
 ## Testing Strategy
 
@@ -220,17 +243,19 @@ raise OnyxError(
 
 ## AI/LLM Integration
 
-LLM calls go through LiteLLM; models are configurable per feature (chat, search, embeddings).
+Text generation uses `LLM` with `GenerationRequest` and `GenerationContext`.
+The LiteLLM adapter implements the client. Models remain configurable per feature.
 
 ### Tracing — every LLM invocation must be tagged
 
 Every LLM, embedding, rerank, image-generation, voice (STT/TTS), and intent-classification call must open a generation span tagged with a value from the `LLMFlow` registry in `backend/onyx/tracing/flows.py`. Use one of:
 
-- `llm_generation_span(llm=..., flow=LLMFlow.X, input_messages=...)` for calls going through an `LLM` subclass.
+- `GenerationContext(flow=LLMFlow.X)` for shared client calls. The client owns the generation span.
+- `llm_generation_span(llm=llm, flow=LLMFlow.X, input_messages=...)` for raw provider operations in protocol gateways.
 - `traced_llm_call(flow=LLMFlow.X, model=..., provider=..., input_messages=...)` for direct provider SDK / `litellm` / model_server HTTP calls that bypass the `LLM` abstraction.
 
 Rules:
 
 1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
 2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
-3. The auto-wrap fallback in `onyx/llm/tracing_wrap.py` emits `LLMFlow.UNTAGGED_INVOKE` / `UNTAGGED_STREAM` for calls that reach `LLM.invoke` / `LLM.stream` without an explicit span. These sentinels are visible in dashboards and indicate missing instrumentation — fix the call site, don't rely on the fallback.
+3. Shared calls without a flow emit `LLMFlow.UNTAGGED_INVOKE` or `UNTAGGED_STREAM`. These sentinels indicate missing instrumentation. Fix the call site.

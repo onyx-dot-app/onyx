@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { SvgArrowUp, SvgPlus } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 
 const PROMPT_PILL_KEYS = [
   "engineering",
@@ -50,7 +50,11 @@ export default function WelcomePageMock({
           <div className="w-full max-w-3xl">
             <div className="flex flex-row items-center justify-between gap-4 pb-6">
               <div className="flex flex-row items-baseline gap-2 select-none">
-                <Logo onyxBranded size={28} className="translate-y-[6px]" />
+                <FoldableLogo
+                  onyxBranded
+                  size={28}
+                  className="translate-y-[6px]"
+                />
                 <span
                   className="text-text-05"
                   style={{

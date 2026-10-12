@@ -6,7 +6,7 @@ import { SvgCpu } from "@opal/icons";
 import { Divider } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import LLMProviderCard from "@/sections/onboarding/components/LLMProviderCard";
-import { getProvider } from "@/lib/languageModels";
+import { getProvider } from "@/lib/languageModels/utils";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";
 import {
   CRAFT_PROVIDERS,

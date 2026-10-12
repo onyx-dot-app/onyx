@@ -19,17 +19,20 @@ from tests.integration.common_utils.cimd_oauth import (
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
-from tests.integration.common_utils.test_models import (
-    DATestLLMProvider,
-    DATestPersona,
-    DATestUser,
+from tests.integration.common_utils.test_models import DATestPersona, DATestUser
+from tests.integration.mock_services.mock_llm_server.models import (
+    Reply,
+    RequestConditions,
+    ToolCall,
 )
 
 MCP_SERVER_NAME = "integration-mcp-cimd"
 KNOWN_PROVIDER_SERVER_NAME = "integration-mcp-known-provider"
 RETURN_PATH = "/admin/actions/mcp"
 MCP_TOOL_NAME = "tool_0"
+MCP_TOOL_CALL_ID = "call_mcp_1"
 
 
 def _create_oauth_mcp_server(
@@ -188,7 +191,7 @@ def test_mcp_oauth_cimd_only_flow(
     cimd_oauth_services: CimdOAuthTestServices,
     admin_user: DATestUser,
     basic_user: DATestUser,
-    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    mock_llm: MockLLMScript,
 ) -> None:
     discovery_response = httpx.get(
         f"{cimd_oauth_services.oidc_issuer}/.well-known/oauth-authorization-server",
@@ -272,6 +275,25 @@ def test_mcp_oauth_cimd_only_flow(
             force_reauthentication=True,
         )
 
+        mock_llm.conversation(
+            "chat",
+            Reply(
+                tool_calls=[
+                    ToolCall(
+                        id=MCP_TOOL_CALL_ID,
+                        name=MCP_TOOL_NAME,
+                        arguments={"name": "integration-test"},
+                    )
+                ],
+                conditions=RequestConditions(
+                    offers=[MCP_TOOL_NAME], tool_choice="required"
+                ),
+            ),
+            Reply(
+                text="The MCP tool ran.",
+                conditions=RequestConditions(has_results_for=[MCP_TOOL_CALL_ID]),
+            ),
+        )
         chat_session = ChatSessionManager.create(
             persona_id=persona.id,
             user_performing_action=admin_user,
@@ -281,9 +303,6 @@ def test_mcp_oauth_cimd_only_flow(
             message="Invoke the CIMD MCP tool.",
             user_performing_action=admin_user,
             forced_tool_ids=[tool_id],
-            mock_llm_response=(
-                '{"name":"tool_0","arguments":{"name":"integration-test"}}'
-            ),
         )
         assert chat_response.error is None
         assert any(

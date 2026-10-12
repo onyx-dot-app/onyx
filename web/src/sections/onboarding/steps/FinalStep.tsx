@@ -9,6 +9,7 @@ import { FinalStepItemProps } from "@/interfaces/onboarding";
 import { SvgExternalLink } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 import { ContentAction } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
 
 const FinalStepItem = React.memo(
   ({
@@ -50,6 +51,7 @@ FinalStepItem.displayName = "FinalStepItem";
 
 export default function FinalStep() {
   const t = useTranslations("onboarding");
+  const { appName } = useSettings();
 
   return (
     <Section gap={2}>
@@ -59,7 +61,7 @@ export default function FinalStep() {
           icon={item.icon}
           buttonHref={item.buttonHref}
           title={t(item.titleKey)}
-          description={t(item.descriptionKey)}
+          description={t(item.descriptionKey, { appName })}
           buttonText={t(item.buttonTextKey)}
         />
       ))}

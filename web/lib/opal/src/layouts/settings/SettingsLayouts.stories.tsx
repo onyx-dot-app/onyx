@@ -36,7 +36,11 @@ export const WithActions: Story = {
         icon={SvgServer}
         title="Data Sources"
         description="Manage connected data sources"
-        rightChildren={<Button prominence="primary">Add source</Button>}
+        actions={[
+          <Button key="add" prominence="primary">
+            Add source
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>
         <div className="h-96 bg-background-neutral-01 rounded-08 flex items-center justify-center">
@@ -54,7 +58,7 @@ export const WithBackButton: Story = {
         icon={SvgUser}
         title="Edit User"
         description="Update user details"
-        backButton
+        cancel
       />
       <SettingsLayouts.Body>
         <div className="h-96 bg-background-neutral-01 rounded-08 flex items-center justify-center">

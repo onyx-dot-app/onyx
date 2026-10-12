@@ -23,7 +23,8 @@ from onyx.context.search.utils import (
 from onyx.db.document import fetch_document_ids_by_links, filter_existing_document_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OpenUrlDocuments,
@@ -406,7 +407,9 @@ def _convert_sections_to_llm_string_with_citations(
         total_chars += result_chars
 
     output = {"results": results}
-    return json.dumps(output, indent=2, ensure_ascii=False), citation_mapping
+    return json.dumps(
+        output, separators=(",", ":"), ensure_ascii=False
+    ), citation_mapping
 
 
 class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
@@ -493,28 +496,25 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         """
         return True
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        URLS_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": (
-                                "List of URLs to open and read, can be a single URL or multiple URLs. "
-                                "This will return the text content of the page(s)."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    URLS_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of URLs to open and read, can be a single URL or multiple URLs. "
+                            "This will return the text content of the page(s)."
+                        ),
                     },
-                    "required": [URLS_FIELD],
                 },
+                "required": [URLS_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         """Emit start packet to signal tool has started."""
@@ -863,12 +863,13 @@ class OpenURLTool(Tool[OpenURLToolOverrideKwargs]):
         return IndexedRetrievalResult(sections=sections, missing_document_ids=missing)
 
     def _build_index_filters(self, db_session: Session) -> IndexFilters:
-        access_control_list = build_access_filters_for_user(self._user, db_session)
+        user_access_filters = build_access_filters_for_user(self._user, db_session)
         return IndexFilters(
             source_type=None,
             document_set=None,
             tags=None,
-            access_control_list=access_control_list,
+            access_control_list=user_access_filters.access_control_list,
+            cc_pair_access=user_access_filters.cc_pair_access,
             tenant_id=get_current_tenant_id() if MULTI_TENANT else None,
             project_id_filter=None,
         )

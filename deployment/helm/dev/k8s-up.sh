@@ -85,6 +85,13 @@ if [[ "$CURRENT_CTX" != "$EXPECTED_CTX" ]]; then
   exit 1
 fi
 
+# Kindnet handles network-policy packets; a CPU cap can stall sandbox egress.
+echo "removing the kindnet CPU limit ..."
+kubectl --context "$EXPECTED_CTX" -n kube-system patch daemonset kindnet \
+  --type=strategic \
+  -p '{"spec":{"template":{"spec":{"containers":[{"name":"kindnet-cni","resources":{"limits":{"cpu":null}}}]}}}}'
+kubectl --context "$EXPECTED_CTX" -n kube-system rollout status daemonset/kindnet --timeout=120s
+
 # ---- 2. helm install / upgrade ----
 
 if [[ "$SKIP_HELM" -eq 1 ]]; then
@@ -117,7 +124,6 @@ trap 'rm -rf "$HELM_DEV_HOME"' EXIT
 
 # Repo names must match the dep names in Chart.yaml.
 helm repo add cloudnative-pg  https://cloudnative-pg.github.io/charts          >/dev/null
-helm repo add vespa           https://onyx-dot-app.github.io/vespa-helm-charts >/dev/null
 helm repo add opensearch      https://opensearch-project.github.io/helm-charts >/dev/null
 helm repo add ingress-nginx   https://kubernetes.github.io/ingress-nginx       >/dev/null
 helm repo add redis-ot        https://ot-container-kit.github.io/helm-charts   >/dev/null

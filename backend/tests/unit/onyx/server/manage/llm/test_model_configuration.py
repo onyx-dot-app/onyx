@@ -100,7 +100,7 @@ class TestModelConfigurationViewVisionFallback:
         litellm_vision: bool,
     ) -> ModelConfigurationView:
         with patch(
-            "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+            "onyx.server.manage.llm.models.catalog_model_supports_image_input",
             return_value=litellm_vision,
         ):
             return ModelConfigurationView.from_model(
@@ -377,7 +377,7 @@ class TestModelConfigurationViewFromModelStatic:
                 return_value=128000,
             ),
             patch(
-                "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+                "onyx.server.manage.llm.models.catalog_model_supports_image_input",
                 return_value=False,
             ),
             patch(
@@ -400,7 +400,7 @@ class TestModelConfigurationViewFromModelStatic:
 
     def test_deployment_alias_reveals_vision_support(self) -> None:
         """The model row's own name is opaque; only the deployment alias
-        (litellm_thinks_model_supports_image_input left unpatched) is what
+        (catalog_model_supports_image_input left unpatched) is what
         the cost map recognizes."""
         mc = _make_model_config(
             name="foundry-deploy-7",
@@ -490,7 +490,7 @@ class TestModelConfigurationViewFromModelStatic:
                 return_value=128000,
             ),
             patch(
-                "onyx.server.manage.llm.models.litellm_thinks_model_supports_image_input",
+                "onyx.server.manage.llm.models.catalog_model_supports_image_input",
                 return_value=False,
             ),
             patch(
@@ -578,7 +578,9 @@ class TestLLMProviderDescriptorRecommendedDefault:
                 return_value=default,
             ),
         ):
-            return LLMProviderDescriptor.from_model(provider_model)
+            return LLMProviderDescriptor.from_model(
+                provider_model, provider_model.model_configurations, None
+            )
 
     def test_marks_only_the_recommended_default_model(self) -> None:
         descriptor = self._from_model(
@@ -622,7 +624,9 @@ class TestLLMProviderDescriptorRecommendedDefault:
                 return_value=None,
             ),
         ):
-            LLMProviderDescriptor.from_model(provider_model)
+            LLMProviderDescriptor.from_model(
+                provider_model, provider_model.model_configurations, None
+            )
 
         assert mock_filter.call_args.kwargs["deployment_name"] == "gpt-5.1"
 

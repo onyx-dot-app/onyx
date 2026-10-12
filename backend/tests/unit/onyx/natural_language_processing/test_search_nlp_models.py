@@ -4,16 +4,19 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.auth.credentials import Credentials
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
 from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.search_nlp_models import (
     CloudEmbedding,
     EmbeddingModel,
     clean_model_name,
 )
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
 
@@ -88,14 +91,71 @@ def _build_google_embed_response(
 
 
 @pytest.mark.asyncio
+async def test_vertex_workload_identity_embeds_each_gemini_2_input_separately() -> None:
+    client = MagicMock()
+    client.aio.models.embed_content = AsyncMock(
+        side_effect=[
+            _build_google_embed_response([[0.1, 0.2]]),
+            _build_google_embed_response([[0.3, 0.4]]),
+        ]
+    )
+    client.aio.aclose = AsyncMock()
+    with (
+        patch(
+            "google.auth.default",
+            return_value=(MagicMock(spec=Credentials), "cluster-project"),
+        ),
+        patch("google.genai.Client", return_value=client) as genai,
+        patch("onyx.natural_language_processing.search_nlp_models.get_tokenizer"),
+    ):
+        model = EmbeddingModel(
+            server_host="localhost",
+            server_port=9000,
+            model_name="gemini-embedding-2",
+            normalize=False,
+            query_prefix=None,
+            passage_prefix=None,
+            api_key=None,
+            api_url=None,
+            provider_type=EmbeddingProvider.GOOGLE,
+            auth=build_embedding_auth(
+                EmbeddingProvider.GOOGLE,
+                None,
+                VertexEmbeddingConfig(
+                    auth_method="workload_identity",
+                    project_id="target-project",
+                    location="global",
+                ),
+            ),
+        )
+        response = await model._make_direct_api_call(
+            EmbedRequest(
+                model_name="gemini-embedding-2",
+                texts=["first", "second"],
+                text_type=EmbedTextType.PASSAGE,
+                max_context_length=512,
+                normalize_embeddings=False,
+            )
+        )
+    assert response.embeddings == [[0.1, 0.2], [0.3, 0.4]]
+    assert genai.call_args.kwargs["project"] == "target-project"
+    assert client.aio.models.embed_content.await_count == 2
+    assert all(
+        len(call.kwargs["contents"]) == 1
+        for call in client.aio.models.embed_content.await_args_list
+    )
+    client.aio.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_vertex_embed_keeps_task_type_for_existing_models(
     sample_embeddings: list[list[float]],
 ) -> None:
     """Existing Vertex models continue to receive task_type and unmodified text."""
     with patch(
-        "google.oauth2.service_account.Credentials.from_service_account_info"
+        "google.oauth2.service_account.Credentials.from_service_account_info",
     ) as mock_credentials:
-        mock_credentials.return_value = MagicMock()
+        mock_credentials.return_value = MagicMock(spec=Credentials)
 
         with patch("google.genai.Client") as mock_genai_client:
             mock_client = MagicMock()
@@ -152,9 +212,9 @@ async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
 ) -> None:
     """gemini-embedding-2 omits task_type and prefixes the text per Google's docs."""
     with patch(
-        "google.oauth2.service_account.Credentials.from_service_account_info"
+        "google.oauth2.service_account.Credentials.from_service_account_info",
     ) as mock_credentials:
-        mock_credentials.return_value = MagicMock()
+        mock_credentials.return_value = MagicMock(spec=Credentials)
 
         with patch("google.genai.Client") as mock_genai_client:
             mock_client = MagicMock()
@@ -247,6 +307,35 @@ async def test_cohere_embed_supports_v4_response_format(
             await embedding.aclose()
 
         assert result == sample_embeddings
+
+
+@pytest.mark.asyncio
+async def test_voyage_embed_splits_requests_under_per_request_token_cap() -> None:
+    """voyage-4-large accepts at most 120k tokens per request, so a full API
+    batch (512 chunks of up to 512 tokens) must go out as several requests."""
+    texts = [f"text-{i}" for i in range(300)]
+
+    async def fake_embed(texts: list[str], **_: Any) -> MagicMock:
+        response = MagicMock()
+        response.embeddings = [[float(t.split("-")[1])] for t in texts]
+        return response
+
+    with patch(
+        "onyx.natural_language_processing.search_nlp_models.voyageai.AsyncClient"
+    ) as mock_voyage:
+        mock_client = MagicMock()
+        mock_client.embed = AsyncMock(side_effect=fake_embed)
+        mock_voyage.return_value = mock_client
+
+        embedding = CloudEmbedding("fake-key", EmbeddingProvider.VOYAGE)
+        try:
+            result = await embedding._embed_voyage(texts, "voyage-4-large", "document")
+        finally:
+            await embedding.aclose()
+
+    batch_sizes = [len(c.kwargs["texts"]) for c in mock_client.embed.call_args_list]
+    assert batch_sizes == [128, 128, 44]
+    assert result == [[float(i)] for i in range(300)]
 
 
 @pytest.mark.asyncio

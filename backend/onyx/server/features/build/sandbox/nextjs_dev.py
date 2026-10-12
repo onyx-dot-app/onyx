@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.server.features.build.sandbox.base import BUN_CACHE_DIR, BUN_IMAGE_CACHE_DIR
+from onyx.server.features.build.configs import BUN_CACHE_DIR, BUN_IMAGE_CACHE_DIR
 
 _TEMPLATE_NEXT_CONFIG = (
     Path(__file__).parent / "image" / "templates" / "outputs" / "web" / "next.config.ts"
@@ -109,7 +109,7 @@ fi
 echo "Starting Next.js dev server on port {nextjs_port}..."
 # 9>&-: the server must not inherit the lock fd, or it would hold the
 # check-and-spawn lock for its entire lifetime.
-nohup bun run dev -- -H 0.0.0.0 $PORT_FLAG > {session_path}/nextjs.log 2>&1 9>&- &
+nohup bun run dev -- -H "${{SANDBOX_LISTEN_HOST:-0.0.0.0}}" $PORT_FLAG > {session_path}/nextjs.log 2>&1 9>&- &
 NEXTJS_PID=$!
 echo "Next.js server started with PID $NEXTJS_PID"
 echo $NEXTJS_PID > {session_path}/nextjs.pid
@@ -176,9 +176,16 @@ if [ "$?" -ne 0 ]; then
 fi
 
 echo "Waiting for the dev server to become ready..."
+NEXTJS_HOST="${{SANDBOX_LISTEN_HOST:-0.0.0.0}}"
+case "$NEXTJS_HOST" in
+    0.0.0.0) PROBE_HOST=127.0.0.1 ;;
+    ::) PROBE_HOST='[::1]' ;;
+    *:*) PROBE_HOST="[$NEXTJS_HOST]" ;;
+    *) PROBE_HOST="$NEXTJS_HOST" ;;
+esac
 DEADLINE=$((SECONDS + 90))
 while [ "$SECONDS" -lt "$DEADLINE" ]; do
-    if curl -s -o /dev/null --noproxy '*' --max-time 2 "http://127.0.0.1:$PORT/"; then
+    if curl -s -o /dev/null --noproxy '*' --max-time 2 "http://$PROBE_HOST:$PORT/"; then
         echo "web app dev server running on port $PORT - app dir: outputs/web, logs: nextjs.log. It hot-reloads on file changes and never needs 'bun run dev' run by hand."
         exit 0
     fi

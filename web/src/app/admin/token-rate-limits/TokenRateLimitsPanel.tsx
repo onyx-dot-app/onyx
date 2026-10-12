@@ -1,8 +1,7 @@
 "use client";
 
-import SimpleTabs from "@/refresh-components/SimpleTabs";
 import { useTranslations } from "next-intl";
-import { Button, Text } from "@opal/components";
+import { Button, Tabs, Text } from "@opal/components";
 import { toast } from "@opal/layouts";
 import { useState } from "react";
 import { mutate } from "swr";
@@ -142,50 +141,48 @@ export default function TokenRateLimitsPanel({
       </Button>
 
       {enterpriseTier ? (
-        <SimpleTabs
-          tabs={{
-            "0": {
-              name: t("panel.tabs.global.name"),
-              icon: SvgGlobe,
-              content: (
-                <GenericTokenRateLimitTable
-                  fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-                  description={t("panel.global.description")}
-                />
-              ),
-            },
-            "1": {
-              name: t("panel.tabs.users.name"),
-              icon: SvgUser,
-              content: (
-                <GenericTokenRateLimitTable
-                  fetchUrl={USER_TOKEN_FETCH_URL}
-                  description={t("panel.user.description")}
-                />
-              ),
-            },
-            "2": {
-              name: t("panel.tabs.groups.name"),
-              icon: SvgUsers,
-              content: (
-                <GenericTokenRateLimitTable
-                  fetchUrl={USER_GROUP_FETCH_URL}
-                  description={t("panel.userGroup.description")}
-                  responseMapper={(data: Record<string, TokenRateLimit[]>) =>
-                    Object.entries(data).flatMap(([groupName, elements]) =>
-                      elements.map((element) => ({
-                        ...element,
-                        group_name: groupName,
-                      }))
-                    )
-                  }
-                />
-              ),
-            },
-          }}
+        <Tabs
           value={tabIndex.toString()}
           onValueChange={(value) => setTabIndex(parseInt(value, 10))}
-        />
+        >
+          <Tabs.List>
+            <Tabs.Trigger value="0" icon={SvgGlobe}>
+              {t("panel.tabs.global.name")}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="1" icon={SvgUser}>
+              {t("panel.tabs.users.name")}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="2" icon={SvgUsers}>
+              {t("panel.tabs.groups.name")}
+            </Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content value="0">
+            <GenericTokenRateLimitTable
+              fetchUrl={GLOBAL_TOKEN_FETCH_URL}
+              description={t("panel.global.description")}
+            />
+          </Tabs.Content>
+          <Tabs.Content value="1">
+            <GenericTokenRateLimitTable
+              fetchUrl={USER_TOKEN_FETCH_URL}
+              description={t("panel.user.description")}
+            />
+          </Tabs.Content>
+          <Tabs.Content value="2">
+            <GenericTokenRateLimitTable
+              fetchUrl={USER_GROUP_FETCH_URL}
+              description={t("panel.userGroup.description")}
+              responseMapper={(data: Record<string, TokenRateLimit[]>) =>
+                Object.entries(data).flatMap(([groupName, elements]) =>
+                  elements.map((element) => ({
+                    ...element,
+                    group_name: groupName,
+                  }))
+                )
+              }
+            />
+          </Tabs.Content>
+        </Tabs>
       ) : (
         <GenericTokenRateLimitTable
           fetchUrl={GLOBAL_TOKEN_FETCH_URL}

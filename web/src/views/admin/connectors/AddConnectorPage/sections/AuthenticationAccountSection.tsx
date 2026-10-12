@@ -1,0 +1,537 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import {
+  Button,
+  Divider,
+  Fold,
+  InputTypeIn,
+  SelectCard,
+  Tabs,
+} from "@opal/components";
+import {
+  Content,
+  ContentAction,
+  InputVertical,
+  Section,
+  toast,
+} from "@opal/layouts";
+import { Disabled } from "@opal/core";
+import { FormikField } from "@/refresh-components/form/FormikField";
+import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
+import type {
+  Credential,
+  DraftCredential,
+  SimilarCredential,
+} from "@/lib/credentials/types";
+import {
+  useCredentialCheckReports,
+  useCredentialSetup,
+} from "@/lib/credentials/hooks";
+import { useSettings } from "@/lib/settings/hooks";
+import CreateCredential from "@/lib/credentials/components/CreateCredential";
+import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
+import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
+import { getIn, useFormikContext } from "formik";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
+import {
+  NEW_ACCOUNT_FIELD,
+  NEW_ACCOUNT_NAME_FIELD,
+  initialNewAccountValues,
+  typedAccountSpec,
+  type NewAccountValues,
+} from "@/views/admin/connectors/AddConnectorPage/newAccount";
+import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
+import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import {
+  credentialMatchesBoundFields,
+  getCredentialSpec,
+  isDraftCredential,
+  realmFields,
+  shouldRedirectToOAuth,
+  toCredentialRef,
+} from "@/lib/credentials/utils";
+import { CredentialCreationMethod } from "@/lib/credentials/types";
+import type { AccessType } from "@/lib/types";
+import type { ConfigurableSources } from "@/lib/connectors/types/source";
+import { credentialBoundFieldNames } from "@/lib/connectors/utils";
+import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
+import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
+import { AccountSummary } from "@/views/admin/connectors/AddConnectorPage/components/AccountSummary";
+
+interface AuthenticationAccountSectionProps {
+  /** The source being set up. */
+  connector: ConfigurableSources;
+  /** Access type from the connector form; a new credential inherits it. */
+  accessType: AccessType;
+  /** The saved account the page pairs once the connector is created. */
+  currentCredential: Credential<any> | null;
+  /** Called when the user picks a saved account, or drops it. */
+  onCredentialChange: (credential: Credential<any> | null) => void;
+  /**
+   * Whether the account typed into the new-account form has valid values.
+   * Without a saved pick it is then the chosen account; Create saves it.
+   */
+  newAccountReady: boolean;
+  /** The account the capability checks run with; `null` locks them. */
+  checkedCredential: Credential<any> | DraftCredential | null;
+  /** Locks the Start Checks prompt, as the configuration below is locked. */
+  checksLocked: boolean;
+}
+
+/**
+ * The credential step of the connector setup page: pick a saved credential,
+ * create one, or authorize the source through OAuth. Once the credential
+ * section is valid, the user can run the capability checks against the
+ * unsaved form; the rest of the form unlocks when they pass.
+ */
+export default function AuthenticationAccountSection({
+  connector,
+  accessType,
+  currentCredential,
+  onCredentialChange,
+  newAccountReady,
+  checkedCredential,
+  checksLocked,
+}: AuthenticationAccountSectionProps) {
+  const t = useTranslations("admin.connectorsList");
+  const tCreate = useTranslations("admin.credentials.create");
+  const newAccountNameField = `${NEW_ACCOUNT_FIELD}.${NEW_ACCOUNT_NAME_FIELD}`;
+  const settings = useSettings();
+  const {
+    displayName,
+    credentials,
+    oauthDetails,
+    methods,
+    canAuthorize,
+    openMethod,
+    namesMethods,
+    open,
+    selectMethod,
+    close,
+    remove,
+    refresh,
+    authorize,
+    isAuthorizing,
+  } = useCredentialSetup(connector);
+  const checkReports = useCredentialCheckReports(connector);
+  // Expanded, the section lists every account. Folded, only the chosen one
+  // (or the new-account card when nothing is chosen) stays.
+  const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
+  /** Folds the section. The new-account card closes too; expanding leaves it closed. */
+  function foldAccounts() {
+    close();
+    setAccountsExpanded(false);
+  }
+
+  // The create card's one label, whatever the number of routes; the tabs
+  // inside it name the routes.
+  const newAccountLabel = t("add.newAccountButton.label", {
+    source: displayName,
+  });
+  const selectedSavedId: number | null = currentCredential?.id ?? null;
+  // The source's fields when a new account is typed into this form; `null`
+  // when it saves through its own account form instead.
+  const typedSpec = typedAccountSpec(connector);
+  const accountRealmFields = typedSpec ? realmFields(typedSpec) : [];
+  const realmKeys: ReadonlySet<string> = new Set(
+    accountRealmFields.map(([key]) => key)
+  );
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const { values, setFieldError, setFieldTouched, setFieldValue } =
+    useFormikContext<Record<string, unknown>>();
+
+  const newAccountValues: NewAccountValues | undefined = getIn(
+    values,
+    NEW_ACCOUNT_FIELD
+  );
+
+  // The credential-bound fields filled in first above, such as the realm,
+  // restrict the saved accounts to the ones that work with them.
+  const boundFieldNames = credentialBoundFieldNames(connector);
+  const specFields = getCredentialSpec(connector)?.fields ?? {};
+  const isSelectable = (credential: Credential<any>): boolean =>
+    credentialMatchesBoundFields(
+      boundFieldNames,
+      specFields,
+      credential.credential_json ?? {},
+      values
+    );
+  const pickOutsideRealm: boolean =
+    currentCredential !== null && !isSelectable(currentCredential);
+  useEffect(() => {
+    if (pickOutsideRealm) onCredentialChange(null);
+  }, [pickOutsideRealm, onCredentialChange]);
+
+  // Typing into the new account chooses it: the saved pick is dropped.
+  const newAccountKey: string = JSON.stringify(newAccountValues ?? null);
+  const lastNewAccountKey = useRef<string>(newAccountKey);
+  useEffect(() => {
+    if (newAccountKey === lastNewAccountKey.current) return;
+    lastNewAccountKey.current = newAccountKey;
+    if (currentCredential !== null) onCredentialChange(null);
+  }, [newAccountKey, currentCredential, onCredentialChange]);
+
+  async function onDeleteCredential(credential: Credential<any | null>) {
+    const error = await remove(credential, t("add.unknownError.toast"));
+    if (error === null) {
+      // A deleted account cannot stay picked.
+      if (credential.id === selectedSavedId) onCredentialChange(null);
+    } else {
+      toast.error(error);
+    }
+  }
+
+  async function onSwap(selectedCredential: Credential<any>) {
+    // Picking a saved account starts the new account over: its values and
+    // errors clear, and its card closes.
+    if (typedSpec) {
+      const cleared: NewAccountValues = initialNewAccountValues(typedSpec);
+      // A reset, not typing: the pick below must stay.
+      lastNewAccountKey.current = JSON.stringify(cleared);
+      void setFieldValue(NEW_ACCOUNT_FIELD, cleared, false);
+      for (const key of Object.keys(cleared)) {
+        const path = `${NEW_ACCOUNT_FIELD}.${key}`;
+        void setFieldTouched(path, false, false);
+        setFieldError(path, undefined);
+      }
+    }
+    close();
+    onCredentialChange(selectedCredential);
+    refresh();
+  }
+
+  /**
+   * One route into the source, rendered inside the card. A source that
+   * takes no extra OAuth fields is a plain hand-off, so its route is the
+   * button alone.
+   */
+  function renderCredentialForm(method: CredentialCreationMethod) {
+    if (method === CredentialCreationMethod.OAuth && oauthDetails) {
+      return shouldRedirectToOAuth(oauthDetails) ? (
+        <OAuthSignInRow source={displayName} onConnect={attemptOauthRedirect} />
+      ) : (
+        <CreateStdOAuthCredential
+          sourceType={connector}
+          additionalFields={oauthDetails.additional_kwargs}
+        />
+      );
+    }
+    if (typedSpec) {
+      // Part of the connector form, and saved only by Create. Once its
+      // values are valid it is the chosen account.
+      return (
+        <Section alignItems="stretch" gap={4}>
+          <CredentialFieldsRenderer
+            source={connector}
+            spec={typedSpec}
+            namePrefix={NEW_ACCOUNT_FIELD}
+            // Asked for above this section, first.
+            exclude={realmKeys}
+            authMethod={
+              typeof newAccountValues?.authentication_method === "string"
+                ? newAccountValues.authentication_method
+                : undefined
+            }
+          />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
+          {/* Opens once the account's own fields are valid. */}
+          <Disabled disabled={!newAccountReady}>
+            <Section alignItems="stretch" gap={4}>
+              <InputVertical
+                withLabel={newAccountNameField}
+                title={tCreate("nameField.title")}
+                suffix="optional"
+              >
+                <FormikField<string>
+                  name={newAccountNameField}
+                  render={(formikField) => (
+                    <InputTypeIn
+                      {...formikField}
+                      id={newAccountNameField}
+                      value={formikField.value ?? ""}
+                      placeholder={tCreate("nameField.placeholder")}
+                    />
+                  )}
+                />
+              </InputVertical>
+              {businessTier && (
+                <ShareAccountField
+                  namePrefix={NEW_ACCOUNT_FIELD}
+                  disabled={!newAccountReady}
+                />
+              )}
+            </Section>
+          </Disabled>
+        </Section>
+      );
+    }
+    return (
+      <CreateCredential
+        close
+        refresh={refresh}
+        sourceType={connector}
+        accessType={accessType}
+        onSwitch={onSwap}
+        onClose={close}
+      />
+    );
+  }
+
+  async function attemptOauthRedirect() {
+    const error = await open(CredentialCreationMethod.OAuth);
+    if (error !== null) {
+      toast.error(error || t("add.oauthStartFailed.toast"));
+    }
+  }
+
+  /** The card is open while a route is chosen; the route is the open tab. */
+  const isCreating = openMethod !== null;
+
+  /** The route the card opens on: typing one in, when the source allows it. */
+  const defaultMethod =
+    methods.find((method) => method === CredentialCreationMethod.Manual) ??
+    methods[0] ??
+    CredentialCreationMethod.Manual;
+
+  // With no saved account to pick, the new-account card starts open. With
+  // saved accounts, it starts closed, so the user picks one first.
+  const startedRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (startedRef.current || credentials === undefined) return;
+    startedRef.current = true;
+    if (credentials.length === 0) selectMethod(defaultMethod);
+  }, [credentials, defaultMethod, selectMethod]);
+
+  /**
+   * The routes in tab order. Typing a token in leads, because it is the
+   * route every source shares and the one the card opens on;
+   * `getCredentialCreationMethods` returns OAuth first and is shared with
+   * the connector detail page, so the order is settled here rather than
+   * there.
+   */
+  const orderedMethods = [...methods].sort((left) =>
+    left === CredentialCreationMethod.Manual ? -1 : 1
+  );
+
+  // Gets an auth url from the server and sends the user to it in a popup.
+  async function handleAuthorize() {
+    const error = await authorize(t("add.oauthStartFailed.toast"));
+    if (error !== null) {
+      toast.error(error || t("add.unknownError.toast"));
+    }
+  }
+
+  function renderSavedCard(credential: SimilarCredential) {
+    return (
+      <AuthenticationAccountCard
+        key={credential.id}
+        credential={credential}
+        source={connector}
+        sourceName={displayName}
+        selected={credential.id === selectedSavedId}
+        selectable={isSelectable(credential)}
+        // Folded, the pick is the only card shown: it keeps a light look,
+        // and a click opens the section rather than dropping the pick.
+        quietSelection={!accountsExpanded}
+        onSelect={() => onSwap(credential)}
+        onDeselect={() =>
+          accountsExpanded
+            ? onCredentialChange(null)
+            : setAccountsExpanded(true)
+        }
+        onDelete={() => onDeleteCredential(credential)}
+        checkReport={checkReports.reportFor(credential.id)}
+        onRerunChecks={() => checkReports.rerun(credential.id)}
+      />
+    );
+  }
+
+  // The chosen account: the picked saved account, or the new account once it
+  // is usable and no saved account is picked.
+  const chosenDraft: DraftCredential | null =
+    selectedSavedId === null &&
+    checkedCredential !== null &&
+    isDraftCredential(checkedCredential)
+      ? checkedCredential
+      : null;
+
+  // One card creates a credential. Its header toggles it; the fold below is a
+  // plain container, so a click in the open form cannot fold it away. The
+  // routes into the source are tabs inside the fold.
+  const newAccountCard = (
+    <SelectCard
+      expandable
+      expanded={isCreating}
+      expandableContentHeight="full"
+      // The form keeps what was typed while folded.
+      expandableKeepMounted
+      border="solid"
+      state={isCreating ? "filled" : "empty"}
+      rounding={4}
+      padding={2}
+      // The card is one action, so it names itself. Nothing inside the
+      // interactive half is focusable, so a role here folds no other
+      // control into that name.
+      role="button"
+      // Showing a summary, the card is named by it (its visible text).
+      aria-label={!isCreating && chosenDraft ? undefined : newAccountLabel}
+      aria-expanded={isCreating}
+      tabIndex={0}
+      expandedContent={
+        <div className="p-4" data-testid="credential-form">
+          {namesMethods ? (
+            <Tabs
+              gap={4}
+              value={openMethod ?? defaultMethod}
+              onValueChange={(value) => {
+                // Matched against the real methods rather than cast:
+                // the tab strip hands back a plain string.
+                const picked = methods.find((method) => method === value);
+                if (picked) selectMethod(picked);
+              }}
+            >
+              <Tabs.List>
+                {orderedMethods.map((method) => (
+                  <Tabs.Trigger key={method} value={method}>
+                    {method === CredentialCreationMethod.OAuth
+                      ? t("add.connectWithTab.label")
+                      : t("add.manualTab.label")}
+                  </Tabs.Trigger>
+                ))}
+              </Tabs.List>
+              {/* A tab switch keeps what the user typed in the other
+            route. */}
+              {orderedMethods.map((method) => (
+                <Tabs.Content key={method} value={method} keepMounted>
+                  {renderCredentialForm(method)}
+                </Tabs.Content>
+              ))}
+            </Tabs>
+          ) : (
+            renderCredentialForm(defaultMethod)
+          )}
+        </div>
+      }
+      onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
+    >
+      {/* Closed, a usable new account shows its summary as the header. */}
+      {!isCreating && chosenDraft ? (
+        <AccountSummary draft={chosenDraft} sourceName={displayName} />
+      ) : (
+        <Section padding={2} width="full">
+          <Content
+            icon={SvgPlusCircle}
+            title={newAccountLabel}
+            sizePreset="main-ui"
+            variant="body"
+            color={isCreating ? "interactive" : "muted"}
+          />
+        </Section>
+      )}
+    </SelectCard>
+  );
+
+  return (
+    <Section gap={2} alignItems="stretch" width="full">
+      <ContentAction
+        title={t("add.credentialStep.title")}
+        description={t("add.credentialStep.description", {
+          appName: settings.appName,
+        })}
+        sizePreset="main-content"
+        variant="section"
+        padding={0}
+        rightChildren={
+          <Section flexDirection="row" alignItems="center" gap={0} width="fit">
+            <Section padding={2} width="fit">
+              <Content
+                icon={SvgListTree}
+                title={t("add.savedAccounts.label", {
+                  count: credentials?.length ?? 0,
+                })}
+                sizePreset="main-ui"
+                variant="body"
+                color="muted"
+                width="fit"
+              />
+            </Section>
+            <Button
+              icon={accountsExpanded ? SvgFold : SvgExpand}
+              prominence="tertiary"
+              aria-label={
+                accountsExpanded
+                  ? t("add.savedAccounts.collapseButton.ariaLabel")
+                  : t("add.savedAccounts.expandButton.ariaLabel")
+              }
+              aria-expanded={accountsExpanded}
+              onClick={() =>
+                accountsExpanded ? foldAccounts() : setAccountsExpanded(true)
+              }
+            />
+          </Section>
+        }
+      />
+
+      {/* The page mounts this step only once the credentials have loaded,
+      and shows its own loader and error until then; the guard only keeps
+      the types honest. */}
+      {!credentials ? null : (
+        <Section gap={6} alignItems="stretch" width="full">
+          {/* One list in a fixed order. Folded, each card that is not the
+          chosen one fades, then its height collapses, so the chosen card
+          moves up on its own. Each item holds its own spacing: a closed fold
+          takes no height, but a gap around it would stay. */}
+          <div className="flex flex-col">
+            {credentials.map((credential) => (
+              <Fold
+                key={credential.id}
+                open={accountsExpanded || credential.id === selectedSavedId}
+                keepMounted
+              >
+                <div className="pb-2">{renderSavedCard(credential)}</div>
+              </Fold>
+            ))}
+            {canAuthorize && (
+              <Fold open={accountsExpanded} keepMounted>
+                <div className="pb-2">
+                  <Section flexDirection="row" justifyContent="start" gap={1}>
+                    <Button
+                      disabled={isAuthorizing}
+                      variant="action"
+                      onClick={handleAuthorize}
+                    >
+                      {isAuthorizing
+                        ? t("add.authorizeButton.pendingLabel")
+                        : t("add.authorizeButton.label", {
+                            source: displayName,
+                          })}
+                    </Button>
+                  </Section>
+                </div>
+              </Fold>
+            )}
+            {/* Shown unless a saved account is the pick. Its own fold (the
+            form) is independent of the section's. */}
+            <Fold
+              open={accountsExpanded || selectedSavedId === null}
+              keepMounted
+            >
+              {newAccountCard}
+            </Fold>
+          </div>
+
+          <CredentialChecksCard
+            source={connector}
+            credential={toCredentialRef(checkedCredential)}
+            locked={checksLocked || !checkedCredential}
+            // Starting the checks completes the account step, so it folds.
+            onStart={foldAccounts}
+          />
+        </Section>
+      )}
+    </Section>
+  );
+}

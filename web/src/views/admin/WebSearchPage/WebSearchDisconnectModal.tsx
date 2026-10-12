@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Button, Text } from "@opal/components";
 import { SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
@@ -21,6 +22,7 @@ export function WebSearchDisconnectModal({
   disconnectTarget,
 }: WebSearchDisconnectModalProps) {
   const t = useTranslations("admin.webSearch");
+  const { appName } = useSettings();
   const onClose = useModalClose();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const {
@@ -117,7 +119,7 @@ export function WebSearchDisconnectModal({
             </Text>
             {!hasAnotherProvider && (
               <Text color="text-03">
-                {t("disconnectModal.fallback.description")}
+                {t("disconnectModal.fallback.description", { appName })}
               </Text>
             )}
           </>

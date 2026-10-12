@@ -89,6 +89,7 @@
     "metro@0.84.5": "patches/metro@0.84.5.patch"
   },
   "overrides": {
-    "metro": "0.84.5"
+    "metro": "0.84.5",
+    "uuid": "11.1.1"
   }
 }

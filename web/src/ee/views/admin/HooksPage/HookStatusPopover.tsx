@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
@@ -20,7 +21,6 @@ import {
   SvgCheckCircle,
   SvgMaximize2,
   SvgXOctagon,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
@@ -235,7 +235,7 @@ export default function HookStatusPopover({
           >
             {isLoading ? (
               <Section justifyContent="center">
-                <SvgSimpleLoader />
+                <IconLoader />
               </Section>
             ) : error ? (
               <Text font="secondary-body" color="text-03">

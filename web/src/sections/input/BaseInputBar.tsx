@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   forwardRef,
   memo,
@@ -19,7 +20,7 @@ import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
 import { Button, Text } from "@opal/components";
-import { SvgArrowUp, SvgLoader, SvgSimpleLoader, SvgStop } from "@opal/icons";
+import { SvgArrowUp, SvgLoader, SvgStop } from "@opal/icons";
 import Keycap from "@/refresh-components/Keycap";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
@@ -370,7 +371,7 @@ const BaseInputBar = memo(
                 >
                   <Button
                     prominence="tertiary"
-                    icon={isInterrupting ? SvgSimpleLoader : SvgStop}
+                    icon={isInterrupting ? IconLoader : SvgStop}
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
                     tooltip={t("baseInputBar.stopButton.tooltip")}

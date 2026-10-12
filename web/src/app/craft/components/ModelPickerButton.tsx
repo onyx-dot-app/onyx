@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import { SelectButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
-import { getModelIcon } from "@/lib/languageModels";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
 import { useUser } from "@/providers/UserProvider";
@@ -45,7 +45,7 @@ export default function ModelPickerButton({
   persistSelection = true,
   loading = false,
 }: ModelPickerButtonProps) {
-  const { llmProviders, defaultText, defaultCraft } = useLLMProviders();
+  const { llmProviders, defaultText, defaultCraft } = useLanguageModels();
   const { user } = useUser();
 
   const effective = useMemo(

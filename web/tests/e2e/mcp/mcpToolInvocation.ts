@@ -9,28 +9,41 @@ import {
   getToolPacketCounts,
   sendMessageAndCaptureStreamPackets,
 } from "@tests/e2e/utils/chatStream";
+import { addMockLlmConversation, mockLlmNonce } from "@tests/e2e/utils/mockLlm";
 
 /**
  * Send a chat message that forces the given MCP tool to be called and return
- * the per-tool invocation packet counts (start / delta / debug).
+ * the per-tool invocation packet counts (start / delta / debug). The mock LLM
+ * calls the tool only when the request offers it.
  */
 export async function sendForcedMcpToolCall(
   page: Page,
   toolName: string,
   forcedToolId?: number | null
 ): Promise<{ start: number; delta: number; debug: number }> {
-  const argName = `playwright-${Date.now()}`;
+  const nonce = mockLlmNonce();
+  const callId = `call-${nonce}`;
+  await addMockLlmConversation({
+    name: `mcp-${nonce}`,
+    conditions: { prompt_contains: [nonce] },
+    replies: [
+      {
+        tool_calls: [
+          { id: callId, name: toolName, arguments: { name: nonce } },
+        ],
+        conditions: { offers: [toolName] },
+      },
+      { text: "Done.", conditions: { has_results_for: [callId] } },
+    ],
+  });
+
   const prompt = [
     `Call the MCP tool "${toolName}" now.`,
-    `Pass {"name":"${argName}"} as the arguments.`,
+    `Pass {"name":"${nonce}"} as the arguments.`,
     "Return the exact tool output.",
   ].join(" ");
 
   const packets = await sendMessageAndCaptureStreamPackets(page, prompt, {
-    mockLlmResponse: JSON.stringify({
-      name: toolName,
-      arguments: { name: argName },
-    }),
     payloadOverrides:
       forcedToolId != null
         ? { forced_tool_id: forcedToolId, forced_tool_ids: [forcedToolId] }

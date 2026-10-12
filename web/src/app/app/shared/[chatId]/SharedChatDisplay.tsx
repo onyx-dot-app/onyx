@@ -9,7 +9,7 @@ import HumanMessage from "@/app/app/message/HumanMessage";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { Section } from "@/layouts/general-layouts";
@@ -17,7 +17,7 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
 import { Button } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
@@ -42,7 +42,7 @@ export default function SharedChatDisplay({
 
   // The shared viewer is authenticated, so the user-facing provider list is
   // available for resolving each model's provider icon, same as the live view.
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
   const modelProviderLookup = useMemo(
     () => buildModelProviderLookup(llmProviders),
     [llmProviders]

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgImage } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 
@@ -12,14 +12,11 @@ interface ImagePreviewProps {
   fileName: string;
 }
 
-/**
- * ImagePreview - Displays images with loading and error states
- * Includes proper accessibility attributes
- */
 export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
   const t = useTranslations("craft.imagePreview");
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [contrastBackground, setContrastBackground] = useState(true);
 
   // Extract just the filename from path for better alt text
   const displayName = fileName.split("/").pop() || fileName;
@@ -51,7 +48,17 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 flex items-center justify-center p-4">
+      <div className="flex justify-end px-4 pt-3">
+        <Button
+          prominence={contrastBackground ? "secondary" : "tertiary"}
+          size="xs"
+          aria-pressed={contrastBackground}
+          onClick={() => setContrastBackground((value) => !value)}
+        >
+          {t("background.contrast")}
+        </Button>
+      </div>
+      <div className="relative min-h-0 flex-1 flex items-center justify-center p-4">
         {imageLoading && (
           <div className="absolute">
             <Text font="secondary-body" color="text-03">
@@ -65,7 +72,8 @@ export default function ImagePreview({ src, fileName }: ImagePreviewProps) {
 
           aria-label={t("preview.ariaLabel", { name: displayName })}
           className={cn(
-            "max-w-full max-h-full object-contain transition-opacity",
+            "max-w-full max-h-full object-contain rounded-md transition-opacity",
+            contrastBackground && "bg-background-neutral-inverted-04",
             imageLoading ? "opacity-0" : "opacity-100"
           )}
           onLoad={() => setImageLoading(false)}

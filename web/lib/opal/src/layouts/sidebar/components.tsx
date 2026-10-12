@@ -297,7 +297,7 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
 
   return (
     <ShadowDiv
-      mask
+      variant="mask"
       scrollContainerRef={scrollRef}
       containerClassName="opal-sidebar-body"
       className="opal-sidebar-body__scroll"

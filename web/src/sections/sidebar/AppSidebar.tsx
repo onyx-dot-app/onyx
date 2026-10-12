@@ -619,8 +619,8 @@ export default function AppSidebar() {
             </SidebarTab>
           </div>
           <ChatSearchCommandMenu
-            trigger={(open) => (
-              <SidebarTab icon={SvgSearchMenu} onClick={open}>
+            trigger={(open, isOpen) => (
+              <SidebarTab icon={SvgSearchMenu} selected={isOpen} onClick={open}>
                 {t("appSidebar.searchChats.label")}
               </SidebarTab>
             )}

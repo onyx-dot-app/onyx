@@ -10,6 +10,12 @@ export const widgetStyles = css`
     font-family: var(--onyx-font-family);
   }
 
+  /* Without a host height, the inline container's height: 100% resolves to
+     auto and the panel grows with its content instead of filling the parent. */
+  :host([mode="inline"]) {
+    height: 100%;
+  }
+
   .launcher {
     position: fixed;
     background: var(--background-neutral-00);

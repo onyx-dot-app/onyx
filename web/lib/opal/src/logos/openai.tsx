@@ -1,7 +1,7 @@
 import React from "react";
 import type { IconProps } from "@opal/types";
 
-const SvgOpenai = ({ size, ...props }: IconProps) => {
+const SvgOpenAI = ({ size, ...props }: IconProps) => {
   const clipId = React.useId();
   return (
     <svg
@@ -27,4 +27,4 @@ const SvgOpenai = ({ size, ...props }: IconProps) => {
   );
 };
 
-export default SvgOpenai;
+export default SvgOpenAI;

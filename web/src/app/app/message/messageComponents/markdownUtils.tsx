@@ -21,6 +21,7 @@ import {
   preprocessLaTeX,
   escapeIncompleteBlockMath,
   escapeIncompleteInlineMath,
+  labelBareCodeFences,
 } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
@@ -115,22 +116,7 @@ export const processContent = (content: string): string => {
   // to a rendered formula the moment the closing `$$` arrives.
   content = escapeIncompleteBlockMath(content);
 
-  const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
-  const matches = content.match(codeBlockRegex);
-
-  if (matches) {
-    content = matches.reduce((acc, match) => {
-      if (!match.match(/```\w+/)) {
-        return acc.replace(match, match.replace("```", "```plaintext"));
-      }
-      return acc;
-    }, content);
-
-    const lastMatch = matches[matches.length - 1];
-    if (lastMatch && !lastMatch.endsWith("```")) {
-      return escapeIncompleteInlineMath(preprocessLaTeX(content));
-    }
-  }
+  content = labelBareCodeFences(content);
 
   const processed = preprocessLaTeX(content);
   return escapeIncompleteInlineMath(processed);

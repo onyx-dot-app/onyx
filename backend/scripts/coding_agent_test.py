@@ -25,7 +25,7 @@ import queue
 from uuid import uuid4
 
 from onyx.chat.emitter import Emitter
-from onyx.coding_agent.mock_tools import (
+from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_QUERY_KEY,
     CODING_AGENT_REPO_KEY,
     CODING_AGENT_TOOL_NAME,

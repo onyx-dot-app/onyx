@@ -5,16 +5,19 @@ import { setDefaultLlmModel } from "@/lib/languageModels/svc";
 
 const PERSONA_PROVIDER_ENDPOINT_PATTERN =
   /^\/api\/llm\/persona\/\d+\/providers$/;
-
+const ADMIN_PROVIDER_ENDPOINT_PATTERN = /^\/api\/admin\/llm\/provider\/\d+$/;
 export async function refreshLlmProviderCaches(
   mutate: ScopedMutator
 ): Promise<void> {
   await Promise.all([
-    mutate(SWR_KEYS.adminLlmProviders),
+    mutate(SWR_KEYS.adminLlmProvidersPaged),
     mutate(SWR_KEYS.llmProviders),
+    mutate(SWR_KEYS.llmRouterModels),
     mutate(
       (key) =>
-        typeof key === "string" && PERSONA_PROVIDER_ENDPOINT_PATTERN.test(key)
+        typeof key === "string" &&
+        (PERSONA_PROVIDER_ENDPOINT_PATTERN.test(key) ||
+          ADMIN_PROVIDER_ENDPOINT_PATTERN.test(key))
     ),
   ]);
 }

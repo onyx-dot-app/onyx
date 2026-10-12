@@ -109,7 +109,8 @@ opensearch:
   persistence:
     size: 128Gi  # existing PVCs must be expanded manually
   # Pin to the dedicated index node group if you provisioned one — see the
-  # placement note in the Large section.
+  # placement note in the Large section. The terraform module keeps the legacy
+  # `vespa` names for this group so existing state is not replaced.
   nodeSelector:
     eks.amazonaws.com/nodegroup: vespa-node-group
   tolerations:
@@ -192,5 +193,5 @@ opensearch:
 If you use a managed OpenSearch domain (`opensearch.enabled: false` +
 `OPENSEARCH_HOST` in the configMap), skip every `opensearch:` block above and
 size the domain in terraform instead. In that case the terraform module's
-dedicated index node group has nothing to run — shrink
-`vespa_node_instance_types` to a small instance.
+dedicated index node group has nothing to run — set
+`vespa_node_enabled = false`.

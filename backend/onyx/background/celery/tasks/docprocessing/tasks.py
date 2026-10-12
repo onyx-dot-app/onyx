@@ -20,11 +20,12 @@ from onyx.background.celery.celery_redis import (
     celery_get_queued_task_ids,
     celery_get_unacked_task_ids,
 )
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.docfetching.task_creation_utils import (
     try_creating_docfetching_task,
+    try_creating_pending_backfill_attempt,
+    try_dispatching_waiting_attempt,
 )
 from onyx.background.celery.tasks.docprocessing.heartbeat import (
     start_heartbeat,
@@ -47,12 +48,7 @@ from onyx.background.indexing.index_attempt_utils import (
     cleanup_index_attempts,
     get_old_index_attempt_ids,
 )
-from onyx.configs.app_configs import (
-    MANAGED_VESPA,
-    PERSISTENT_INDEXING,
-    VESPA_CLOUD_CERT_PATH,
-    VESPA_CLOUD_KEY_PATH,
-)
+from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP, PERSISTENT_INDEXING
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_INDEXING_LOCK_TIMEOUT,
@@ -66,7 +62,9 @@ from onyx.configs.constants import (
     OnyxRedisLocks,
     OnyxRedisSignals,
 )
+from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
 from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
+from onyx.db.backfill_models import PendingBackfill
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_alerts import (
     clear_connector_alerts__no_commit,
@@ -78,6 +76,12 @@ from onyx.db.connector_credential_pair import (
     set_cc_pair_repeated_error_state,
     update_connector_credential_pair_from_id,
 )
+from onyx.db.connector_edit_requests import (
+    clear_full_reindex_request__no_commit,
+    promote_prune_after_reindex_request__no_commit,
+    resolve_backfill_attempts__no_commit,
+    track_backfills_covered_by_attempt__no_commit,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
@@ -88,10 +92,13 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt import (
     IndexAttemptError,
+    cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
+    get_active_index_attempts_without_task,
     get_index_attempt,
     get_index_attempt_errors_for_cc_pair,
     get_stale_not_started_index_attempts,
+    get_waiting_index_attempt,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
@@ -103,7 +110,7 @@ from onyx.db.index_attempt_metrics import (
     time_stage,
 )
 from onyx.db.indexing_coordination import CoordinationStatus, IndexingCoordination
-from onyx.db.models import IndexAttempt, SearchSettings
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
@@ -115,7 +122,6 @@ from onyx.file_store.document_batch_storage import (
     get_document_batch_storage,
 )
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import (
@@ -135,7 +141,7 @@ from onyx.server.metrics.connector_health_metrics import (
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.middleware import make_randomized_onyx_request_id
-from onyx.utils.telemetry import RecordType, mt_cloud_telemetry, optional_telemetry
+from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.configs import (
     INDEXING_MODEL_SERVER_HOST,
     INDEXING_MODEL_SERVER_PORT,
@@ -441,7 +447,10 @@ def monitor_indexing_attempt_progress(
         return
 
     # Check if the CC Pair should be moved to INITIAL_INDEXING
-    if cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED:
+    if (
+        cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED
+        and not attempt.is_backfill
+    ):
         cc_pair.status = ConnectorCredentialPairStatus.INITIAL_INDEXING
         db_session.commit()
 
@@ -476,7 +485,9 @@ def monitor_indexing_attempt_progress(
         return
 
     storage = get_document_batch_storage(
-        attempt.connector_credential_pair_id, attempt.id
+        attempt.connector_credential_pair_id,
+        attempt.id,
+        is_backfill=attempt.is_backfill,
     )
 
     # Check task completion using Celery
@@ -601,7 +612,10 @@ def check_indexing_completion(
             status=attempt.status.value,
         )
 
-        if attempt.status.is_successful():
+        # A backfill leaves the pair's status, schedule, error state and success
+        # metrics alone: it ran outside the incremental cursor, often with a
+        # partial config.
+        if attempt.status.is_successful() and not attempt.is_backfill:
             # NOTE: we define the last successful index time as the time the last successful
             # attempt finished. This is distinct from the poll_range_end of the last successful
             # attempt, which is the time up to which documents have been fetched.
@@ -649,6 +663,27 @@ def check_indexing_completion(
                     cc_pair_id=cc_pair.id,
                     connector_name=connector_name,
                     in_error=False,
+                )
+
+            if attempt.full_reindex_requested_at is not None:
+                clear_full_reindex_request__no_commit(
+                    db_session,
+                    cc_pair.id,
+                    served_request_at=attempt.full_reindex_requested_at,
+                )
+                db_session.commit()
+
+            if attempt.prune_after_reindex_requested_at is not None:
+                promote_prune_after_reindex_request__no_commit(
+                    db_session,
+                    cc_pair.id,
+                    served_request_at=attempt.prune_after_reindex_requested_at,
+                )
+                db_session.commit()
+                logger.info(
+                    "Full re-index succeeded, prune requested: cc_pair=%s attempt=%s",
+                    cc_pair.id,
+                    index_attempt_id,
                 )
 
             if attempt.status == IndexingStatus.SUCCESS:
@@ -744,6 +779,137 @@ class _KickoffResult:
         )
 
 
+def _dispatch_pair_waiting_attempt(
+    celery_app: Celery,
+    db_session: Session,
+    *,
+    cc_pair_id: int,
+    search_settings: SearchSettings,
+    redis_client: TenantRedisClient,
+    tenant_id: str,
+) -> bool:
+    """Sends the task of the pair's attempt that waits for the capability
+    checks, when they pass. False when no attempt waits or it still waits."""
+    waiting = get_waiting_index_attempt(db_session, cc_pair_id, search_settings.id)
+    if waiting is None:
+        return False
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=cc_pair_id
+    )
+    if cc_pair is None:
+        task_logger.debug(
+            f"Waiting index attempt has no cc_pair: index_attempt={waiting.id} "
+            f"cc_pair={cc_pair_id}"
+        )
+        return False
+    # Most beats find the hold still in place; check it before taking the
+    # creation lock. The dispatch checks it again under the lock.
+    if get_first_indexing_hold(db_session, cc_pair) is not None:
+        return False
+    dispatched = try_dispatching_waiting_attempt(
+        celery_app,
+        cc_pair,
+        search_settings,
+        waiting.id,
+        db_session,
+        redis_client,
+        tenant_id,
+    )
+    if dispatched:
+        task_logger.info(
+            f"Waiting index attempt dispatched: index_attempt={waiting.id} "
+            f"cc_pair={cc_pair_id} search_settings={search_settings.id}"
+        )
+    return dispatched
+
+
+def _next_ready_backfill(
+    pending_backfills: list[PendingBackfill], now: datetime
+) -> PendingBackfill | None:
+    """The oldest request that is not in a failure backoff. A request in
+    backoff does not hold back the ones after it: each backfill writes the
+    same documents in any order."""
+    return next(
+        (
+            pending
+            for pending in pending_backfills
+            if pending.retry_after is None or pending.retry_after <= now
+        ),
+        None,
+    )
+
+
+def _try_creating_pending_backfill(
+    celery_app: Celery,
+    db_session: Session,
+    *,
+    cc_pair: ConnectorCredentialPair,
+    search_settings: SearchSettings,
+    secondary_index_building: bool,
+    redis_client: TenantRedisClient,
+    tenant_id: str,
+) -> bool:
+    """Settles the pair's ended backfill attempts, then creates the attempt of
+    its oldest ready backfill on the current index. The caller checked that no
+    attempt is active there. The backfill waits while the pair is not ACTIVE,
+    and while an indexing trigger, a prune-after-reindex or a full re-index
+    request is pending: that run goes first, and a full re-index covers the
+    backfill. The creation checks these again under the pair's row lock."""
+    if not search_settings.status.is_current() or not cc_pair.pending_backfills:
+        return False
+    if (
+        cc_pair.status != ConnectorCredentialPairStatus.ACTIVE
+        or cc_pair.indexing_trigger is not None
+        or cc_pair.prune_after_reindex_requested_at is not None
+        or cc_pair.full_reindex_requested_at is not None
+        or (DISABLE_INDEX_UPDATE_ON_SWAP and secondary_index_building)
+    ):
+        return False
+
+    now = get_db_current_time(db_session)
+    resolution = resolve_backfill_attempts__no_commit(db_session, cc_pair.id, now)
+    db_session.commit()
+    for pending in resolution.succeeded:
+        task_logger.info(
+            f"Pending backfill succeeded: index_attempt={pending.attempt_id} "
+            f"cc_pair={cc_pair.id} request_id={pending.request_id}"
+        )
+    for released in resolution.interrupted:
+        task_logger.info(
+            f"Pending backfill attempt was interrupted, released: "
+            f"cc_pair={cc_pair.id} request_id={released.request_id}"
+        )
+    for failed in resolution.failed:
+        task_logger.warning(
+            f"Pending backfill attempt did not succeed: cc_pair={cc_pair.id} "
+            f"request_id={failed.pending.request_id} status={failed.status} "
+            f"failure_count={failed.pending.failure_count} "
+            f"retry_after={failed.pending.retry_after}"
+        )
+    if resolution.attempt_active:
+        return False
+
+    pending = _next_ready_backfill(cc_pair.pending_backfills, now)
+    if pending is None:
+        return False
+    attempt_id = try_creating_pending_backfill_attempt(
+        celery_app,
+        cc_pair,
+        search_settings,
+        pending.request_id,
+        db_session,
+        redis_client,
+        tenant_id,
+    )
+    if attempt_id is None:
+        return False
+    task_logger.info(
+        f"Pending backfill queued: index_attempt={attempt_id} cc_pair={cc_pair.id} "
+        f"request_id={pending.request_id} failure_count={pending.failure_count}"
+    )
+    return True
+
+
 def _kickoff_indexing_tasks(
     celery_app: Celery,
     db_session: Session,
@@ -769,7 +935,19 @@ def _kickoff_indexing_tasks(
             search_settings_id=search_settings.id,
             db_session=db_session,
         ):
-            result.skipped_active += 1
+            # A first attempt that waits for the capability checks starts here
+            # once they pass.
+            if _dispatch_pair_waiting_attempt(
+                celery_app,
+                db_session,
+                cc_pair_id=cc_pair_id,
+                search_settings=search_settings,
+                redis_client=redis_client,
+                tenant_id=tenant_id,
+            ):
+                result.created += 1
+            else:
+                result.skipped_active += 1
             continue
 
         cc_pair = get_connector_credential_pair_from_id(
@@ -781,6 +959,20 @@ def _kickoff_indexing_tasks(
                 f"_kickoff_indexing_tasks - CC pair not found: cc_pair={cc_pair_id}"
             )
             result.skipped_not_found += 1
+            continue
+
+        # Before should_index: a backfill does not wait for the refresh
+        # schedule, and runs on a pair with no refresh_freq.
+        if _try_creating_pending_backfill(
+            celery_app,
+            db_session,
+            cc_pair=cc_pair,
+            search_settings=search_settings,
+            secondary_index_building=secondary_index_building,
+            redis_client=redis_client,
+            tenant_id=tenant_id,
+        ):
+            result.created += 1
             continue
 
         # Heavyweight check after fetching cc pair
@@ -819,6 +1011,14 @@ def _kickoff_indexing_tasks(
 
             mark_ccpair_with_indexing_trigger(cc_pair.id, None, db_session)
 
+        # Until a full re-index succeeds, each run serves the pending request
+        # for one, or to prune after one.
+        if search_settings.status.is_current() and (
+            cc_pair.prune_after_reindex_requested_at is not None
+            or cc_pair.full_reindex_requested_at is not None
+        ):
+            reindex = True
+
         # using a task queue and only allowing one task per cc_pair/search_setting
         # prevents us from starving out certain attempts
         attempt_id = try_creating_docfetching_task(
@@ -836,6 +1036,19 @@ def _kickoff_indexing_tasks(
                 f"Connector indexing queued: index_attempt={attempt_id} cc_pair={cc_pair.id} search_settings={search_settings.id}"
             )
             result.created += 1
+            if (
+                reindex
+                and search_settings.status.is_current()
+                and cc_pair.pending_backfills
+            ):
+                covered = track_backfills_covered_by_attempt__no_commit(
+                    db_session, cc_pair.id, attempt_id
+                )
+                db_session.commit()
+                task_logger.info(
+                    f"Full re-index covers pending backfills: index_attempt={attempt_id} "
+                    f"cc_pair={cc_pair.id} covered={covered}"
+                )
         else:
             task_logger.error(
                 f"Failed to create indexing task: cc_pair={cc_pair.id} search_settings={search_settings.id}"
@@ -843,6 +1056,40 @@ def _kickoff_indexing_tasks(
             result.failed_to_create += 1
 
     return result
+
+
+def fail_inconsistent_index_attempts(db_session: Session, lock_beat: RedisLock) -> None:
+    """Fails active attempts without a Celery task. A first attempt that waits
+    for the capability checks has no task by design, so it is left alone."""
+    for attempt in get_active_index_attempts_without_task(db_session):
+        lock_beat.reacquire()
+
+        # Double-check the attempt still has the inconsistent state
+        fresh_attempt = get_index_attempt(db_session, attempt.id)
+        if (
+            not fresh_attempt
+            or fresh_attempt.celery_task_id
+            or fresh_attempt.status.is_terminal()
+        ):
+            continue
+        # A backfill is always created with its task, so it never waits.
+        if (
+            fresh_attempt.status == IndexingStatus.NOT_STARTED
+            and not fresh_attempt.is_backfill
+            and not cc_pair_has_dispatched_index_attempts(
+                db_session, fresh_attempt.connector_credential_pair_id
+            )
+        ):
+            continue
+
+        failure_reason = (
+            f"Inconsistent index attempt found - active status without Celery task: "
+            f"index_attempt={attempt.id} "
+            f"cc_pair={attempt.connector_credential_pair_id} "
+            f"search_settings={attempt.search_settings_id}"
+        )
+        task_logger.error(failure_reason)
+        mark_attempt_failed(attempt.id, db_session, failure_reason=failure_reason)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -1095,42 +1342,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         # This can happen if attempt creation fails partway through
         lock_beat.reacquire()
         with get_session_with_current_tenant() as db_session:
-            inconsistent_attempts = (
-                db_session.execute(
-                    select(IndexAttempt).where(
-                        IndexAttempt.status.in_(
-                            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                        ),
-                        IndexAttempt.celery_task_id.is_(None),
-                        IndexAttempt.targeted_reindex_job_id.is_(None),
-                    )
-                )
-                .scalars()
-                .all()
-            )
-
-            for attempt in inconsistent_attempts:
-                lock_beat.reacquire()
-
-                # Double-check the attempt still has the inconsistent state
-                fresh_attempt = get_index_attempt(db_session, attempt.id)
-                if (
-                    not fresh_attempt
-                    or fresh_attempt.celery_task_id
-                    or fresh_attempt.status.is_terminal()
-                ):
-                    continue
-
-                failure_reason = (
-                    f"Inconsistent index attempt found - active status without Celery task: "
-                    f"index_attempt={attempt.id} "
-                    f"cc_pair={attempt.connector_credential_pair_id} "
-                    f"search_settings={attempt.search_settings_id}"
-                )
-                task_logger.error(failure_reason)
-                mark_attempt_failed(
-                    attempt.id, db_session, failure_reason=failure_reason
-                )
+            fail_inconsistent_index_attempts(db_session, lock_beat)
 
         lock_beat.reacquire()
         # we want to run this less frequently than the overall task
@@ -1480,6 +1692,7 @@ def docprocessing_task(
     tenant_id: str,
     batch_num: int,
     enqueue_time_ms: int | None = None,
+    is_backfill: bool = False,
 ) -> None:
     """Process a batch of documents through the indexing pipeline.
 
@@ -1490,6 +1703,9 @@ def docprocessing_task(
     docfetching enqueued this task. Used to compute the QUEUE_WAIT stage
     metric. Optional + defaults to None so in-flight tasks queued by an older
     docfetching deployment continue to work across rolling deploys.
+
+    ``is_backfill`` selects the backfill batch storage. It defaults to False
+    for the same reason.
     """
     # Start heartbeat for this indexing attempt
     heartbeat_thread, stop_event = start_heartbeat(index_attempt_id)
@@ -1497,7 +1713,12 @@ def docprocessing_task(
         # Cannot use the TaskSingleton approach here because the worker is multithreaded
         token = INDEX_ATTEMPT_INFO_CONTEXTVAR.set((cc_pair_id, index_attempt_id))
         _docprocessing_task(
-            index_attempt_id, cc_pair_id, tenant_id, batch_num, enqueue_time_ms
+            index_attempt_id,
+            cc_pair_id,
+            tenant_id,
+            batch_num,
+            enqueue_time_ms,
+            is_backfill=is_backfill,
         )
     finally:
         stop_heartbeat(heartbeat_thread, stop_event)  # Stop heartbeat before exiting
@@ -1634,6 +1855,8 @@ def _docprocessing_task(
     tenant_id: str,
     batch_num: int,
     enqueue_time_ms: int | None = None,
+    *,
+    is_backfill: bool = False,
 ) -> None:
     start_time = time.monotonic()
 
@@ -1683,19 +1906,8 @@ def _docprocessing_task(
         f"Processing document batch: attempt={index_attempt_id} batch_num={batch_num} "
     )
 
-    # Get the document batch storage
-    storage = get_document_batch_storage(cc_pair_id, index_attempt_id)
-
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     r = get_redis_client(tenant_id=tenant_id)
-
-    # 20 is the documented default for httpx max_keepalive_connections
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            20, ssl_cert=VESPA_CLOUD_CERT_PATH, ssl_key=VESPA_CLOUD_KEY_PATH
-        )
-    else:
-        httpx_init_vespa_pool(20)
 
     # dummy lock to satisfy linter
     per_batch_lock: RedisLock | None = None
@@ -1707,7 +1919,7 @@ def _docprocessing_task(
 
     try:
         # Inside the try so a failed first-use import still marks the attempt failed.
-        from onyx.document_index.factory import get_all_document_indices
+        from onyx.document_index.factory import get_default_document_index
         from onyx.indexing.adapters.document_indexing_adapter import (
             DocumentIndexingBatchAdapter,
         )
@@ -1725,6 +1937,10 @@ def _docprocessing_task(
                 "index_attempt_id": index_attempt_id,
                 "batch_num": batch_num,
             },
+        )
+
+        storage = get_document_batch_storage(
+            cc_pair_id, index_attempt_id, is_backfill=is_backfill
         )
 
         # Retrieve documents from storage. Time recorded as BATCH_LOAD; we
@@ -1755,7 +1971,8 @@ def _docprocessing_task(
         )
 
         # Phase 1: fast DB reads to set up the pipeline. Session closes before
-        # the slow embedding + Vespa work begins, returning the connection to the pool.
+        # the slow embedding + document index work begins, returning the connection
+        # to the pool.
         with get_session_with_current_tenant() as db_session:
             # matches parts of _run_indexing
             index_attempt = get_index_attempt(
@@ -1798,10 +2015,9 @@ def _docprocessing_task(
                 callback=callback,
             )
 
-            document_indices = get_all_document_indices(
+            document_index = get_default_document_index(
                 index_attempt.search_settings,
                 None,
-                httpx_client=HttpxPool.get("vespa"),
             )
 
             # Set up metadata for this batch
@@ -1856,7 +2072,7 @@ def _docprocessing_task(
         # real work happens here!
         index_pipeline_result = run_indexing_pipeline(
             embedder=embedding_model,
-            document_indices=document_indices,
+            document_index=document_index,
             ignore_time_skip=True,  # Documents are already filtered during extraction
             index_to_secondary=index_to_secondary,
             tenant_id=tenant_id,
@@ -1929,7 +2145,6 @@ def _docprocessing_task(
 
         # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.
         _finalization_start = time.monotonic()
-        coordination_status = None
         # Record failures in the database
         if index_pipeline_result.failures:
             with get_session_with_current_tenant() as db_session:
@@ -1952,27 +2167,6 @@ def _docprocessing_task(
                     index_pipeline_result.failures[-1],
                 )
 
-        # Add telemetry for indexing progress using database coordination status
-        # only re-fetch coordination status if necessary
-        if coordination_status is None:
-            with get_session_with_current_tenant() as db_session:
-                coordination_status = IndexingCoordination.get_coordination_status(
-                    db_session, index_attempt_id
-                )
-
-        optional_telemetry(
-            record_type=RecordType.INDEXING_PROGRESS,
-            data={
-                "index_attempt_id": index_attempt_id,
-                "cc_pair_id": cc_pair_id,
-                "current_docs_indexed": coordination_status.total_docs,
-                "current_chunks_indexed": coordination_status.total_chunks,
-                "source": connector_source,
-                "completed_batches": coordination_status.completed_batches,
-                "total_batches": coordination_status.total_batches,
-            },
-            tenant_id=tenant_id,
-        )
         # Clean up this batch after successful processing
         storage.delete_batch_by_num(batch_num)
         safe_record_single_event(
@@ -2008,7 +2202,7 @@ def _docprocessing_task(
         # Record BATCH_TOTAL on the successful path. We deliberately do not
         # record on the exception path -- a partially-completed batch's total
         # would skew the average. BATCH_TOTAL spans run_indexing_pipeline and
-        # all post-indexing bookkeeping (coord update, telemetry, cleanup).
+        # all post-indexing bookkeeping (coord update, failure records, cleanup).
         batch_total_ms = max(0, int((time.monotonic() - batch_total_start) * 1000))
         safe_record_single_event(
             IndexAttemptStage.BATCH_TOTAL, index_attempt_id, batch_total_ms

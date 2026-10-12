@@ -8,7 +8,7 @@ import { useScimToken } from "@/hooks/useScimToken";
 import { useCreateModal } from "@opal/components";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
-import { PageLoader } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
 import type { ScimTokenCreatedResponse, ScimModalView } from "./interfaces";

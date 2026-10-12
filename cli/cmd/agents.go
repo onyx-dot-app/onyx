@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
+	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +55,7 @@ Use --json for machine-readable output.`,
 				if len(desc) > 60 {
 					desc = desc[:57] + "..."
 				}
-				fmt.Fprintf(w, "%d\t%s\t%s\n", a.ID, a.Name, desc)
+				fmt.Fprintf(w, "%d\t%s\t%s\n", a.ID, sanitize.Line(a.Name), sanitize.Line(desc))
 			}
 			_ = w.Flush()
 

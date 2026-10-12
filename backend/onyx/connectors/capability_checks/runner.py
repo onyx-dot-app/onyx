@@ -1,6 +1,7 @@
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from onyx.connectors.capability_checks.registry import (
     get_applicable_capabilities,
     get_capability_checks,
 )
+from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -33,7 +35,7 @@ from onyx.connectors.source_operations import (
 )
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import CapabilityCheckTrigger
+from onyx.db.enums import AccessType, CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
@@ -60,6 +62,28 @@ _TIMEOUT_MESSAGE = (
     "Check timed out; the source may be slow -- try re-running the checks."
 )
 
+# Receives the results recorded so far, after each result row is appended. The
+# runner calls it on its own thread, never on an abandoned probe thread.
+CapabilityCheckProgressCallback = Callable[[Sequence[CapabilityCheckResult]], None]
+
+
+class CheckReadinessKind(str, Enum):
+    NOT_APPLICABLE = "not_applicable"
+    MISSING_FIELDS = "missing_fields"
+    INVALID_FIELDS = "invalid_fields"
+    NEEDS_CONFIG = "needs_config"
+    NEEDS_INSTANCE = "needs_instance"
+    RUNNABLE = "runnable"
+
+
+class CheckReadiness(BaseModel):
+    """Whether a check can run in a context, and why not."""
+
+    kind: CheckReadinessKind
+    # The missing or invalid field names, for those kinds.
+    fields: frozenset[str] = frozenset()
+    message: str = ""
+
 
 class _CheckOutcome(BaseModel):
     """
@@ -71,6 +95,7 @@ class _CheckOutcome(BaseModel):
     message: str = ""
     error_type: str | None = None
     duration_ms: int | None = None
+    applicable: bool = True
 
 
 def _build_result(
@@ -88,6 +113,8 @@ def _build_result(
         remediation=check.remediation,
         docs_link=check.docs_link,
         duration_ms=outcome.duration_ms,
+        applicable=outcome.applicable,
+        validates_binding=check.validates_binding,
     )
 
 
@@ -120,8 +147,19 @@ def _missing_instance_outcome(instantiation_error: Exception | None) -> _CheckOu
     )
 
 
+def effective_check_timeout_seconds(check: CapabilityCheck[Any]) -> float:
+    """The check's hang guard: its own timeout, else the default."""
+    return check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+
+
+def _capped(timeout_seconds: float, cap_seconds: float | None) -> float:
+    return timeout_seconds if cap_seconds is None else min(timeout_seconds, cap_seconds)
+
+
 def _execute_check(
-    check: CapabilityCheck, context: CapabilityCheckContext
+    check: CapabilityCheck,
+    context: CapabilityCheckContext,
+    timeout_cap_seconds: float | None,
 ) -> _CheckOutcome:
     """
     Executes one check under its hang guard and maps the outcome to a status.
@@ -129,7 +167,9 @@ def _execute_check(
     A timeout maps to INDETERMINATE, never FAILED; a slow source is not proof of
     a broken credential.
     """
-    timeout_seconds = check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+    timeout_seconds = _capped(
+        effective_check_timeout_seconds(check), timeout_cap_seconds
+    )
     start = time.monotonic()
 
     def elapsed_ms() -> int:
@@ -194,7 +234,7 @@ def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
     guard).
     """
     timeout_by_check_id = {
-        check.check_id: check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
+        check.check_id: effective_check_timeout_seconds(check)
         for check in get_capability_checks(source)
     }
     return int(CAPABILITY_CHECK_TIMEOUT_SECONDS + sum(timeout_by_check_id.values()))
@@ -214,6 +254,8 @@ def capability_check_run_stale_after(source: DocumentSource) -> timedelta:
 def run_capability_checks(
     checks: Sequence[CapabilityCheck],
     context: CapabilityCheckContext,
+    on_result: CapabilityCheckProgressCallback | None = None,
+    timeout_cap_seconds: float | None = None,
 ) -> list[CapabilityCheckResult]:
     """Runs checks sequentially and maps their outcomes to statuses.
 
@@ -225,6 +267,12 @@ def run_capability_checks(
     sync capabilities) are one check surfaced per capability: they execute once
     and the outcome mirrors onto each result. Distinct check_ids always execute
     independently, even when they share an implementation.
+
+    ``on_result`` is called after every result row, skips included, with the
+    rows recorded so far in run order. It is how a caller publishes per-check
+    progress before the run completes; an exception from it propagates.
+
+    ``timeout_cap_seconds`` caps each check's hang guard.
     """
     # A check_id may repeat only as one check mirrored across capabilities;
     # anything else is a registration bug, caught before it silently collapses
@@ -246,26 +294,108 @@ def run_capability_checks(
 
     results: list[CapabilityCheckResult] = []
     outcome_by_check_id: dict[str, _CheckOutcome] = {}
+
+    def record(check: CapabilityCheck, outcome: _CheckOutcome) -> None:
+        results.append(_build_result(check, outcome))
+        if on_result is not None:
+            # A snapshot: the callback must not observe later appends.
+            on_result(tuple(results))
+
     for check in checks:
-        unrunnable_outcome: _CheckOutcome | None = None
-        if (
-            check.requires_connector_config
-            and context.connector_specific_config is None
-        ):
-            unrunnable_outcome = _CheckOutcome(
-                status=CapabilityCheckStatus.SKIPPED,
-                message=_SKIP_NEEDS_CONFIG_MESSAGE,
-            )
-        elif check.requires_connector_instance and context.connector is None:
-            unrunnable_outcome = _missing_instance_outcome(context.instantiation_error)
+        unrunnable_outcome = _unrunnable_outcome(check, context)
         if unrunnable_outcome is not None:
-            results.append(_build_result(check, unrunnable_outcome))
+            record(check, unrunnable_outcome)
             continue
 
         if check.check_id not in outcome_by_check_id:
-            outcome_by_check_id[check.check_id] = _execute_check(check, context)
-        results.append(_build_result(check, outcome_by_check_id[check.check_id]))
+            outcome_by_check_id[check.check_id] = _execute_check(
+                check, context, timeout_cap_seconds
+            )
+        record(check, outcome_by_check_id[check.check_id])
     return results
+
+
+def decide_check_readiness(
+    check: CapabilityCheck[Any], context: CapabilityCheckContext
+) -> CheckReadiness:
+    """Decides whether a check can run in this context. Order matters: a check
+    that does not apply is excluded before its inputs are judged."""
+    if (
+        check.access_types is not None
+        and context.access_type is not None
+        and context.access_type not in check.access_types
+    ):
+        return CheckReadiness(
+            kind=CheckReadinessKind.NOT_APPLICABLE,
+            message=(
+                f"Does not apply to connectors with {context.access_type.value} access."
+            ),
+        )
+    if check.requires_connector_config and context.connector_specific_config is None:
+        return CheckReadiness(
+            kind=CheckReadinessKind.NEEDS_CONFIG, message=_SKIP_NEEDS_CONFIG_MESSAGE
+        )
+    form_state = context.form_state
+    if check.reads_connector_config and form_state is not None:
+        # A check that reads the config cannot trust it while a field is
+        # invalid: the invalid value would silently read as the default.
+        if form_state.errors:
+            return CheckReadiness(
+                kind=CheckReadinessKind.INVALID_FIELDS,
+                fields=frozenset(form_state.errors),
+                message="Invalid connector settings: "
+                + "; ".join(
+                    f"{name}: {message}"
+                    for name, message in sorted(form_state.errors.items())
+                ),
+            )
+        missing = form_state.missing(check.requires_fields)
+        if missing:
+            return CheckReadiness(
+                kind=CheckReadinessKind.MISSING_FIELDS,
+                fields=missing,
+                message=f"Needs connector settings: {', '.join(sorted(missing))}.",
+            )
+        if not check.applies(form_state):
+            return CheckReadiness(
+                kind=CheckReadinessKind.NOT_APPLICABLE,
+                message="Does not apply to these connector settings.",
+            )
+    if check.requires_connector_instance and context.connector is None:
+        return CheckReadiness(
+            kind=CheckReadinessKind.NEEDS_INSTANCE,
+            message=_SKIP_NEEDS_INSTANCE_MESSAGE,
+        )
+    return CheckReadiness(kind=CheckReadinessKind.RUNNABLE)
+
+
+def _unrunnable_outcome(
+    check: CapabilityCheck[Any], context: CapabilityCheckContext
+) -> _CheckOutcome | None:
+    """The outcome of a check that must not run in this context, or None when
+    it can run."""
+    readiness = decide_check_readiness(check, context)
+    match readiness.kind:
+        case CheckReadinessKind.RUNNABLE:
+            return None
+        case CheckReadinessKind.NEEDS_INSTANCE:
+            return _missing_instance_outcome(context.instantiation_error)
+        case CheckReadinessKind.INVALID_FIELDS:
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.FAILED,
+                message=readiness.message,
+                error_type=ConnectorValidationError.__name__,
+            )
+        case CheckReadinessKind.NOT_APPLICABLE:
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED,
+                message=readiness.message,
+                applicable=False,
+            )
+        case CheckReadinessKind.NEEDS_CONFIG | CheckReadinessKind.MISSING_FIELDS:
+            return _CheckOutcome(
+                status=CapabilityCheckStatus.SKIPPED, message=readiness.message
+            )
 
 
 def _instantiate_connector_isolated(
@@ -299,20 +429,28 @@ def _instantiate_connector_isolated(
             connector_specific_config=connector_specific_config,
             credential=credential,
         )
-        credential_json = (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
+        credential_json = to_source_credential_json(
+            source,
+            (
+                credential.credential_json.get_value(apply_mask=False)
+                if credential.credential_json
+                else {}
+            ),
         )
         return connector, credential_json
 
 
 def generate_capability_report(
     credential: Credential,
+    source: DocumentSource | None = None,
     connector_specific_config: dict[str, Any] | None = None,
     connector_id: int | None = None,
     input_type: InputType | None = None,
     trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.MANUAL,
+    access_type: AccessType | None = None,
+    on_result: CapabilityCheckProgressCallback | None = None,
+    check_ids: frozenset[str] | None = None,
+    timeout_cap_seconds: float | None = None,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -324,10 +462,22 @@ def generate_capability_report(
     instance-requiring checks instead (see ``_missing_instance_outcome``).
     Unlike ``validate_ccpair_for_user``, no source is exempted: MOCK_CONNECTOR
     must run so integration tests can exercise the full pipeline. ``credential``
-    may be a detached instance; only loaded columns are read.
+    may be a detached instance; only loaded columns are read. ``source`` picks
+    the checks: the connector's source for a connector-scoped run, which for a
+    family credential may not be the credential's own source. It defaults to the
+    credential's source. ``on_result`` is forwarded to ``run_capability_checks``
+    for per-check progress.
+
+    ``check_ids`` limits the run to those checks. A limited run instantiates the
+    connector only when a selected check needs the instance.
+
+    ``timeout_cap_seconds`` caps every hang guard of the run: each check's and
+    the connector instantiation's.
     """
-    source = credential.source
+    source = source or credential.source
     checks = get_capability_checks(source)
+    if check_ids is not None:
+        checks = [check for check in checks if check.check_id in check_ids]
     # Fail loudly for programmer errors (a source with no connector class)
     # rather than degrading them to skips in the guarded instantiation below.
     identify_connector_class(source, input_type)
@@ -342,29 +492,33 @@ def generate_capability_report(
     connector: BaseConnector | None = None
     fresh_credential_json: dict[str, Any] | None = None
     instantiation_error: Exception | None = None
-    try:
-        # Under the guard the run ceiling budgets for it: construction and
-        # ``load_credentials`` can probe the source with no timeout of their
-        # own, and the stale-run sweep trusts the ceiling.
-        connector, fresh_credential_json = run_with_timeout(
-            CAPABILITY_CHECK_TIMEOUT_SECONDS,
-            _instantiate_connector_isolated,
-            source=source,
-            input_type=input_type,
-            connector_specific_config=instantiation_config,
-            credential_id=credential.id,
-        )
-    except Exception as e:
-        # A config-less probe construction fails routinely and stays a skip; a
-        # failure with the real config is actionable and is surfaced on
-        # instance-requiring checks.
-        if connector_specific_config is not None:
-            instantiation_error = e
-        logger.warning(
-            "Could not instantiate %s connector for capability checks: %s",
-            source,
-            e,
-        )
+    should_instantiate = check_ids is None or any(
+        check.requires_connector_instance for check in checks
+    )
+    if should_instantiate:
+        try:
+            # Under the guard the run ceiling budgets for it: construction and
+            # ``load_credentials`` can probe the source with no timeout of their
+            # own, and the stale-run sweep trusts the ceiling.
+            connector, fresh_credential_json = run_with_timeout(
+                _capped(CAPABILITY_CHECK_TIMEOUT_SECONDS, timeout_cap_seconds),
+                _instantiate_connector_isolated,
+                source=source,
+                input_type=input_type,
+                connector_specific_config=instantiation_config,
+                credential_id=credential.id,
+            )
+        except Exception as e:
+            # A config-less probe construction fails routinely and stays a
+            # skip; a failure with the real config is actionable and is
+            # surfaced on instance-requiring checks.
+            if connector_specific_config is not None:
+                instantiation_error = e
+            logger.warning(
+                "Could not instantiate %s connector for capability checks: %s",
+                source,
+                e,
+            )
 
     # Migrated sources always get their gateway constructed: construction is
     # lazy (no client build or decrypt until an operation runs), and checks
@@ -392,10 +546,13 @@ def generate_capability_report(
     credential_json = (
         fresh_credential_json
         if fresh_credential_json is not None
-        else (
-            credential.credential_json.get_value(apply_mask=False)
-            if credential.credential_json
-            else {}
+        else to_source_credential_json(
+            source,
+            (
+                credential.credential_json.get_value(apply_mask=False)
+                if credential.credential_json
+                else {}
+            ),
         )
     )
     context = CapabilityCheckContext(
@@ -406,10 +563,13 @@ def generate_capability_report(
         # marked requires_connector_config must skip on config-less runs rather
         # than probe an empty dict.
         connector_specific_config=connector_specific_config,
+        access_type=access_type,
         instantiation_error=instantiation_error,
         source_operations=source_operations,
     )
-    results = run_capability_checks(checks, context)
+    results = run_capability_checks(
+        checks, context, on_result=on_result, timeout_cap_seconds=timeout_cap_seconds
+    )
     return CredentialCapabilityReport(
         credential_id=credential.id,
         source=source,
@@ -420,4 +580,30 @@ def generate_capability_report(
             get_applicable_capabilities(source), results
         ),
         check_results=results,
+    )
+
+
+def merge_capability_results(
+    report: CredentialCapabilityReport,
+    prior_results: Sequence[CapabilityCheckResult],
+) -> CredentialCapabilityReport:
+    """The report of a limited run with ``prior_results`` added, for the checks
+    the run left out. Results keep the registry order; the run's own result
+    wins over a prior one for the same check."""
+    by_key = {
+        (result.check_id, result.capability): result
+        for result in [*prior_results, *report.check_results]
+    }
+    results = [
+        by_key[key]
+        for check in get_capability_checks(report.source)
+        if (key := (check.check_id, check.capability)) in by_key
+    ]
+    return report.model_copy(
+        update={
+            "check_results": results,
+            "verdicts": compute_capability_verdicts(
+                get_applicable_capabilities(report.source), results
+            ),
+        }
     )

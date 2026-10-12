@@ -4,7 +4,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
-    EntraGroup,
+    ResolvedEntraGroup,
     enumerate_entra_groups,
     expand_entra_group,
     normalize_email,
@@ -64,8 +64,8 @@ def test_enumerate_yields_groups_with_normalized_members() -> None:
             {"id": "g2", "displayName": "Marketing"},
         ],
         members_by_group={
-            "g1": [{"userPrincipalName": "alice@contoso.com"}],
-            "g2": [{"mail": "bob@contoso.onmicrosoft.com"}],
+            "g1": [{"id": "u1", "userPrincipalName": "alice@contoso.com"}],
+            "g2": [{"id": "u2", "mail": "bob@contoso.onmicrosoft.com"}],
         },
     )
 
@@ -142,5 +142,10 @@ def test_expand_names_nested_groups_for_onyx(_mock_sleep: MagicMock) -> None:
         graph_client, "11111111-1111-1111-1111-111111111111"
     )
 
-    assert groups == {EntraGroup(id=NESTED_GROUP_ID, name=f"Nested_{NESTED_GROUP_ID}")}
+    assert groups == {
+        ResolvedEntraGroup(
+            id=NESTED_GROUP_ID,
+            name=f"Nested_{NESTED_GROUP_ID}",
+        )
+    }
     assert user_emails == set()

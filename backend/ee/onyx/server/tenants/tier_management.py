@@ -16,6 +16,9 @@ from onyx.utils.logger import setup_logger
 TENANT_TIER_KEY = "customer_tier"
 TENANT_TIER_CACHE_TTL_SECONDS = 86400  # 24h fallback; CP push is the primary refresh
 
+TENANT_TIER_MISS_KEY = "customer_tier_miss"
+TENANT_TIER_MISS_TTL_SECONDS = 60
+
 logger = setup_logger()
 
 
@@ -58,7 +61,20 @@ def update_tenant_tier(
             "trial_end": trial_end.isoformat() if trial_end is not None else None,
         }
     )
-    redis_client.set(TENANT_TIER_KEY, payload, ex=TENANT_TIER_CACHE_TTL_SECONDS)
+    pipeline = redis_client.pipeline(transaction=True)
+    pipeline.set(TENANT_TIER_KEY, payload, ex=TENANT_TIER_CACHE_TTL_SECONDS)
+    pipeline.delete(TENANT_TIER_MISS_KEY)
+    pipeline.execute()
+
+
+def mark_tenant_tier_miss(tenant_id: str) -> None:
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    redis_client.set(TENANT_TIER_MISS_KEY, "1", ex=TENANT_TIER_MISS_TTL_SECONDS)
+
+
+def has_recent_tenant_tier_miss(tenant_id: str) -> bool:
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    return bool(redis_client.exists(TENANT_TIER_MISS_KEY))
 
 
 def get_cached_tier(tenant_id: str) -> CachedTier | None:

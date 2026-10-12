@@ -1,4 +1,4 @@
-import { OnyxDocument } from "./search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 
 export function removeDuplicateDocs(
   documents: OnyxDocument[],

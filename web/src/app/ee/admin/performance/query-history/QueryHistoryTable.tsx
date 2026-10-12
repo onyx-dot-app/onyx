@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Table,
@@ -10,8 +11,7 @@ import {
   TableHeader,
 } from "@/components/ui/table";
 import Text from "@/refresh-components/texts/Text";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
+import { InputSingleSelect } from "@opal/components";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
@@ -104,32 +104,28 @@ function SelectFeedbackType({
   onValueChange: (value: Feedback | "all") => void;
 }) {
   const t = useTranslations("admin.queryHistory");
+  const tInputSelect = useTranslations("common.inputSelect");
   return (
     <Section alignItems="start" gap={1}>
       <Text as="p" className="font-medium">
         {t("filters.feedbackType.label")}
       </Text>
-      <InputSelect
+      <InputSingleSelect
         value={value}
         onValueChange={onValueChange as (value: string) => void}
-      >
-        <InputSelect.Trigger />
-
-        <InputSelect.Content>
-          <InputSelect.Item value="all" icon={SvgMinusCircle}>
-            {t("filters.any.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="like" icon={SvgThumbsUp}>
-            {t("feedback.like.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="dislike" icon={SvgThumbsDown}>
-            {t("feedback.dislike.label")}
-          </InputSelect.Item>
-          <InputSelect.Item value="mixed" icon={SvgMinus}>
-            {t("feedback.mixed.label")}
-          </InputSelect.Item>
-        </InputSelect.Content>
-      </InputSelect>
+        defaultOption="all"
+        placeholder={tInputSelect("placeholder.fallback")}
+        options={[
+          { value: "all", title: t("filters.any.label"), icon: SvgMinusCircle },
+          { value: "like", title: t("feedback.like.label"), icon: SvgThumbsUp },
+          {
+            value: "dislike",
+            title: t("feedback.dislike.label"),
+            icon: SvgThumbsDown,
+          },
+          { value: "mixed", title: t("feedback.mixed.label"), icon: SvgMinus },
+        ]}
+      />
     </Section>
   );
 }
@@ -351,7 +347,7 @@ export function QueryHistoryTable({
                 <TableRow>
                   <TableCell colSpan={6} className="text-center">
                     <div className="flex justify-center">
-                      <SvgSimpleLoader className="h-6 w-6" />
+                      <IconLoader className="h-6 w-6" />
                     </div>
                   </TableCell>
                 </TableRow>

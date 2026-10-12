@@ -7,36 +7,46 @@ from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.llm.model_capabilities import (
     get_llm_max_output_tokens,
     get_max_input_tokens,
-    get_model_map,
     llm_max_input_tokens,
 )
 
 
 def test_model_context_metadata_is_not_inferred_or_overwritten() -> None:
-    metadata = {
-        "gpt-5.6-sol": {"max_input_tokens": 922000, "max_output_tokens": 128000},
-        "gpt-5.6-luna": {"max_input_tokens": 922000, "max_output_tokens": 128000},
-        "openrouter/openai/gpt-5.6-sol": {
-            "max_input_tokens": 64000,
-            "max_output_tokens": 8000,
-        },
-        "gpt-5.6-terra": {
-            "max_input_tokens": 922000,
-            "max_output_tokens": 128000,
-            "max_context_tokens": 1048000,
-        },
+    """The rendered map carries a catalog entry's limits verbatim — no
+    inferred or synthesized token fields."""
+    from onyx.llm import model_catalog
+
+    catalog = {
+        "openai": {
+            "models": {
+                "gpt-5.6-sol": {
+                    "name": "GPT-5.6 Sol",
+                    "limit": {"context": 922000, "output": 128000},
+                },
+                "gpt-5.6-terra": {
+                    "name": "GPT-5.6 Terra",
+                    "limit": {"context": 1048000, "output": 128000},
+                },
+            },
+            "aliases": {},
+        }
     }
-    get_model_map.cache_clear()
-    try:
-        with patch("litellm.model_cost", metadata):
-            model_map = get_model_map()
-        for name, limits in metadata.items():
-            assert model_map[name] == limits
-        assert "gpt-5.6" not in model_map
-        assert "openai/gpt-5.6" not in model_map
-        assert "max_context_tokens" not in metadata["gpt-5.6-sol"]
-    finally:
-        get_model_map.cache_clear()
+    with patch.object(model_catalog, "_catalog", return_value=catalog):
+        model_catalog.build_model_map.cache_clear()
+        try:
+            model_map = model_catalog.build_model_map()
+        finally:
+            model_catalog.build_model_map.cache_clear()
+
+    sol = model_map["openai/gpt-5.6-sol"]
+    assert sol["max_input_tokens"] == 922000
+    assert sol["max_output_tokens"] == 128000
+    terra = model_map["openai/gpt-5.6-terra"]
+    assert terra["max_input_tokens"] == 1048000
+    assert terra["max_output_tokens"] == 128000
+    assert "max_context_tokens" not in sol
+    # Models absent from the catalog do not appear in the map.
+    assert "gpt-5.6" not in model_map
 
 
 class TestLlmMaxInputTokens:

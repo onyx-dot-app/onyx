@@ -70,3 +70,5 @@ import { InputCheckbox } from "@opal/components";
 // Disabled
 <InputCheckbox disabled checked />
 ```
+
+Formik: `InputCheckboxField` from `@opal/form`, bound to a `boolean` field.

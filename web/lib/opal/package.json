@@ -49,6 +49,10 @@
       "types": "./dist/illustrations/index.d.ts",
       "import": "./dist/illustrations/index.js"
     },
+    "./loaders": {
+      "types": "./dist/loaders/index.d.ts",
+      "import": "./dist/loaders/index.js"
+    },
     "./logos": {
       "types": "./dist/logos/index.d.ts",
       "import": "./dist/logos/index.js"

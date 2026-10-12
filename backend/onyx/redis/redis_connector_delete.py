@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import (
-    CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
+    CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
@@ -127,9 +127,9 @@ class RedisConnectorDelete:
         for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
             doc_id = cast(str, doc_id)
             current_time = time.monotonic()
-            if current_time - last_lock_time >= (
-                CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
-            ):
+            # The caller holds the connector-deletion beat lock, whose TTL is
+            # the generic one, so refresh on a quarter of that TTL.
+            if current_time - last_lock_time >= (CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4):
                 lock.reacquire()
                 last_lock_time = current_time
 

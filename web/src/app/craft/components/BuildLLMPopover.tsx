@@ -20,7 +20,7 @@ import {
   setStoredRecommendedModelsOnly,
 } from "@/app/craft/utils/llmPreferences";
 import { useUser } from "@/providers/UserProvider";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 import { Section } from "@/layouts/general-layouts";
 import {

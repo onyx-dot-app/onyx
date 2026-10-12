@@ -6,11 +6,13 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
-from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.chunk import update_chunk_boost_components__no_commit
 from onyx.db.document import (
     fetch_chunk_counts_for_documents,
+    get_cc_pair_ids_for_documents,
+    get_document_source_types,
     mark_document_as_indexed_for_cc_pair__no_commit,
     prepare_to_modify_documents,
     update_docs_chunk_count__no_commit,
@@ -46,7 +48,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
 
     Keeps orchestration logic in the pipeline and side-effects in the adapter.
     Each phase opens its own short-lived session so no connection is held idle
-    during the long embedding and Vespa-write phases.
+    during the long embedding and document-index-write phases.
     """
 
     def __init__(
@@ -66,6 +68,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         documents: list[Document],
         ignore_time_skip: bool,
         index_to_secondary: bool,
+        force_update: bool = False,
     ) -> DocumentBatchPrepareContext | None:
         """Upsert docs, map CC pairs, return context or mark as indexed if no-op.
 
@@ -79,6 +82,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
                 db_session=db_session,
                 ignore_time_skip=ignore_time_skip,
                 index_to_secondary=index_to_secondary,
+                force_update=force_update,
             )
 
             if not context:
@@ -147,6 +151,14 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
             ),
             doc_id_to_ancestor_ids=self._get_ancestor_ids_for_documents(
                 context.updatable_docs, tenant_id, db_session
+            ),
+            doc_id_to_source_types=get_document_source_types(
+                db_session=db_session,
+                document_ids=updatable_ids,
+            ),
+            doc_id_to_cc_pair_ids=get_cc_pair_ids_for_documents(
+                db_session=db_session,
+                document_ids=updatable_ids,
             ),
             id_to_boost_map=context.id_to_boost_map,
             doc_id_to_previous_chunk_cnt=dict(
@@ -270,6 +282,8 @@ class DocumentChunkEnricher:
         doc_id_to_access_info: dict[str, DocumentAccess],
         doc_id_to_document_set: dict[str, list[str]],
         doc_id_to_ancestor_ids: dict[str, list[int]],
+        doc_id_to_source_types: dict[str, tuple[DocumentSource, ...]],
+        doc_id_to_cc_pair_ids: dict[str, list[int]],
         id_to_boost_map: dict[str, int],
         doc_id_to_previous_chunk_cnt: dict[str, int],
         doc_id_to_new_chunk_cnt: dict[str, int],
@@ -279,6 +293,8 @@ class DocumentChunkEnricher:
         self._doc_id_to_access_info = doc_id_to_access_info
         self._doc_id_to_document_set = doc_id_to_document_set
         self._doc_id_to_ancestor_ids = doc_id_to_ancestor_ids
+        self._doc_id_to_source_types = doc_id_to_source_types
+        self._doc_id_to_cc_pair_ids = doc_id_to_cc_pair_ids
         self._id_to_boost_map = id_to_boost_map
         self._no_access = no_access
         self._tenant_id = tenant_id
@@ -308,4 +324,9 @@ class DocumentChunkEnricher:
             ancestor_hierarchy_node_ids=self._doc_id_to_ancestor_ids[
                 chunk.source_document.id
             ],
+            source_types=self._doc_id_to_source_types.get(
+                chunk.source_document.id,
+                (chunk.source_document.source,),
+            ),
+            cc_pair_ids=self._doc_id_to_cc_pair_ids.get(chunk.source_document.id),
         )

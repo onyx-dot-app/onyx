@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import {
@@ -13,9 +14,9 @@ import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { InputVertical, toast } from "@opal/layouts";
-import { SvgCheck, SvgKey, SvgLogOut, SvgUsers } from "@opal/icons";
+import { SvgKey, SvgLogOut, SvgUsers } from "@opal/icons";
 import useGroups from "@/hooks/useGroups";
-import { Popover } from "@opal/components";
+import { Dropdown } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -34,6 +35,7 @@ export default function ApiKeyFormModal({
   apiKey,
 }: ApiKeyFormModalProps) {
   const t = useTranslations("admin.serviceAccounts");
+  const { appName } = useSettings();
   const isUpdate = apiKey !== undefined;
   // A key's access is whatever groups it lands in, so Admin/Basic must be offered too.
   const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
@@ -60,7 +62,9 @@ export default function ApiKeyFormModal({
           title={
             isUpdate ? t("formModal.title.update") : t("formModal.title.create")
           }
-          description={isUpdate ? undefined : t("formModal.description")}
+          description={
+            isUpdate ? undefined : t("formModal.description", { appName })
+          }
           onClose={onClose}
         />
         <Formik
@@ -168,78 +172,102 @@ export default function ApiKeyFormModal({
                       justifyContent="start"
                       className="bg-background-tint-02 rounded-08"
                     >
-                      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                        <Popover.Trigger asChild>
-                          <div>
-                            <InputTypeIn
-                              data-testid="groups-search-input"
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              placeholder={t(
-                                "formModal.groups.search.placeholder"
-                              )}
-                              searchIcon
-                            />
-                          </div>
-                        </Popover.Trigger>
-                        <Popover.Content
-                          width="trigger"
-                          align="start"
-                          container={contentEl}
-                        >
-                          {groupsLoading ? (
-                            <LineItem
-                              skeleton
-                              description={t(
-                                "formModal.groups.loading.description"
-                              )}
-                            >
-                              {t("formModal.groups.loading.title")}
-                            </LineItem>
-                          ) : dropdownGroups.length === 0 ? (
-                            <LineItem
-                              skeleton
-                              description={t(
-                                "formModal.groups.noResults.description"
-                              )}
-                            >
-                              {t("formModal.groups.noResults.title")}
-                            </LineItem>
-                          ) : (
-                            <ShadowDiv
-                              shadowHeight="0.75rem"
-                              className={cn(
-                                "flex flex-col gap-1 max-h-[15rem] rounded-08"
-                              )}
-                            >
-                              {dropdownGroups.map((group) => {
-                                const isMember = memberGroupIds.has(group.id);
-                                return (
-                                  <LineItem
-                                    key={group.id}
-                                    icon={isMember ? SvgCheck : SvgUsers}
-                                    description={t(
+                      <Dropdown
+                        open={popoverOpen}
+                        onOpenChange={setPopoverOpen}
+                        container={contentEl}
+                      >
+                        <Dropdown.Trigger asChild typeIn behavior="open">
+                          <InputTypeIn
+                            data-testid="groups-search-input"
+                            value={searchTerm}
+                            onChange={(e) => {
+                              setSearchTerm(e.target.value);
+                              // Typing opens the list, as a type-in does.
+                              setPopoverOpen(true);
+                            }}
+                            placeholder={t(
+                              "formModal.groups.search.placeholder"
+                            )}
+                            searchIcon
+                            aria-label={t(
+                              "formModal.groups.search.placeholder"
+                            )}
+                          />
+                        </Dropdown.Trigger>
+                        <Dropdown.Data
+                          label={t("formModal.groups.search.placeholder")}
+                          query={searchTerm}
+                          values={new Set(Array.from(memberGroupIds, String))}
+                          onSelect={(option) =>
+                            toggleGroup(Number(option.value))
+                          }
+                          items={
+                            groupsLoading
+                              ? [
+                                  {
+                                    kind: "custom",
+                                    id: "loading",
+                                    disabled: true,
+                                    pinned: true,
+                                    render: ({ props }) => (
+                                      <div {...props}>
+                                        <LineItem
+                                          skeleton
+                                          description={t(
+                                            "formModal.groups.loading.description"
+                                          )}
+                                        >
+                                          {t("formModal.groups.loading.title")}
+                                        </LineItem>
+                                      </div>
+                                    ),
+                                  },
+                                ]
+                              : dropdownGroups.length === 0
+                                ? [
+                                    {
+                                      kind: "custom",
+                                      id: "no-results",
+                                      disabled: true,
+                                      pinned: true,
+                                      render: ({ props }) => (
+                                        <div {...props}>
+                                          <LineItem
+                                            skeleton
+                                            description={t(
+                                              "formModal.groups.noResults.description"
+                                            )}
+                                          >
+                                            {t(
+                                              "formModal.groups.noResults.title"
+                                            )}
+                                          </LineItem>
+                                        </div>
+                                      ),
+                                    },
+                                  ]
+                                : (allGroups ?? []).map((group) => ({
+                                    kind: "option",
+                                    value: String(group.id),
+                                    icon: SvgUsers,
+                                    title: group.name,
+                                    description: t(
                                       "formModal.groups.memberCount",
-                                      { count: group.users.length }
-                                    )}
-                                    selected={isMember}
-                                    emphasized={isMember}
-                                    onClick={() => toggleGroup(group.id)}
-                                  >
-                                    {group.name}
-                                  </LineItem>
-                                );
-                              })}
-                            </ShadowDiv>
-                          )}
-                        </Popover.Content>
-                      </Popover>
+                                      {
+                                        count: group.users.length,
+                                      }
+                                    ),
+                                  }))
+                          }
+                        />
+                      </Dropdown>
 
                       <ShadowDiv
                         className={cn(
                           "max-h-[11rem] flex flex-col gap-1 rounded-08"
                         )}
-                        shadowHeight="0.75rem"
+                        shadowHeight={3}
                       >
                         {joinedGroups.length === 0 ? (
                           <LineItem

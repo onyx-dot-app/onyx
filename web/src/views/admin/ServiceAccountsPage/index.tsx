@@ -1,8 +1,10 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -11,14 +13,13 @@ import {
   BasicModalFooter,
   Button,
   Code,
-  LineItemButton,
+  Dropdown,
   MessageCard,
   Modal,
-  Popover,
-  PopoverMenu,
   Table,
   Tag,
   Text,
+  type TableColumn,
 } from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
@@ -31,15 +32,14 @@ import {
   SvgUserEdit,
   SvgUserKey,
   SvgUsers,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import { markdown } from "@opal/utils";
+import { escapeMarkdown, markdown } from "@opal/utils";
 
 import { useBillingInformation } from "@/hooks/useBillingInformation";
-import { BillingStatus, hasActiveSubscription } from "@/lib/billing/interfaces";
+import { BillingStatus, hasActiveSubscription } from "@/lib/billing/types";
 import {
   deleteApiKey,
   regenerateApiKey,
@@ -49,13 +49,10 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/views/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/views/admin/ServiceAccountsPage/ApiKeyFormModal";
 import EditServiceAccountModal from "@/views/admin/ServiceAccountsPage/EditServiceAccountModal";
-import { createTableColumns } from "@opal/components/table/columns";
 import { Section } from "@/layouts/general-layouts";
 
 const API_KEY_SWR_KEY = SWR_KEYS.adminApiKeys;
 const route = ADMIN_ROUTES.API_KEYS;
-
-const tc = createTableColumns<APIKey>();
 
 // ---------------------------------------------------------------------------
 // Page
@@ -63,6 +60,7 @@ const tc = createTableColumns<APIKey>();
 
 export default function ServiceAccountsPage() {
   const t = useTranslations("admin.serviceAccounts");
+  const { appName } = useSettings();
   const adminRouteTitle = useAdminRouteTitle();
   const {
     data: apiKeys,
@@ -132,13 +130,16 @@ export default function ServiceAccountsPage() {
   };
 
   const columns = useMemo(
-    () => [
-      tc.qualifier({
+    (): TableColumn<APIKey>[] => [
+      {
+        kind: "qualifier",
         content: "icon",
-        getContent: () => SvgUserKey,
-      }),
-      tc.column("api_key_name", {
-        header: t("table.columns.name.header"),
+        icon: () => SvgUserKey,
+      },
+      {
+        kind: "data",
+        field: "api_key_name",
+        title: t("table.columns.name.header"),
         weight: 25,
         cell: (value) => (
           <Content
@@ -147,19 +148,22 @@ export default function ServiceAccountsPage() {
             variant="body"
           />
         ),
-      }),
-      tc.column("api_key_display", {
-        header: t("table.columns.apiKey.header"),
+      },
+      {
+        kind: "data",
+        field: "api_key_display",
+        title: t("table.columns.apiKey.header"),
         weight: 30,
         cell: (value) => (
           <Text font="secondary-mono" color="text-03">
             {value}
           </Text>
         ),
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "groups",
-        header: t("table.columns.groups.header"),
+        title: t("table.columns.groups.header"),
         width: { weight: 25, minWidth: 160 },
         cell: (row) => {
           const groups = row.groups ?? [];
@@ -187,8 +191,9 @@ export default function ServiceAccountsPage() {
             </div>
           );
         },
-      }),
-      tc.actions({
+      },
+      {
+        kind: "actions",
         cell: (row) => (
           <div className="flex flex-row gap-1">
             <Button
@@ -197,47 +202,49 @@ export default function ServiceAccountsPage() {
               tooltip={t("table.regenerateButton.tooltip")}
               onClick={() => setRegenerateTarget(row)}
             />
-            <Popover>
-              <Popover.Trigger asChild>
+            <Dropdown>
+              <Dropdown.Trigger asChild>
                 <Button
                   icon={SvgMoreHorizontal}
                   prominence="tertiary"
                   tooltip={t("table.moreButton.tooltip")}
+                  aria-label={t("table.moreButton.tooltip")}
                 />
-              </Popover.Trigger>
-              <Popover.Content side="bottom" align="end" width="md">
-                <PopoverMenu>
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgUsers}
-                    onClick={() => setGroupsRolesTarget(row)}
-                    title={t("table.actions.groups.label")}
-                  />
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgUserEdit}
-                    onClick={() => {
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("table.moreButton.tooltip")}
+                items={[
+                  {
+                    kind: "action",
+                    id: "groups",
+                    icon: SvgUsers,
+                    title: t("table.actions.groups.label"),
+                    onSelect: () => setGroupsRolesTarget(row),
+                  },
+                  {
+                    kind: "action",
+                    id: "edit",
+                    icon: SvgUserEdit,
+                    title: t("table.actions.edit.label"),
+                    onSelect: () => {
                       setSelectedApiKey(row);
                       setShowCreateUpdateForm(true);
-                    }}
-                    title={t("table.actions.edit.label")}
-                  />
-                  <LineItemButton
-                    sizePreset="main-ui"
-                    rounding={2}
-                    icon={SvgTrash}
-                    color="danger"
-                    onClick={() => setDeleteTarget(row)}
-                    title={t("table.actions.delete.label")}
-                  />
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+                    },
+                  },
+                  {
+                    kind: "action",
+                    id: "delete",
+                    icon: SvgTrash,
+                    danger: true,
+                    title: t("table.actions.delete.label"),
+                    onSelect: () => setDeleteTarget(row),
+                  },
+                ]}
+              />
+            </Dropdown>
           </div>
         ),
-      }),
+      },
     ],
     [t] // eslint-disable-line react-hooks/exhaustive-deps
   );
@@ -248,7 +255,7 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={adminRouteTitle(route)}
           icon={route.icon}
-          description={t("page.description")}
+          description={t("page.description", { appName })}
           divider
         />
         <SettingsLayouts.Body>
@@ -268,11 +275,11 @@ export default function ServiceAccountsPage() {
         <SettingsLayouts.Header
           title={adminRouteTitle(route)}
           icon={route.icon}
-          description={t("page.description")}
+          description={t("page.description", { appName })}
           divider
         />
         <SettingsLayouts.Body>
-          <SvgSimpleLoader />
+          <IconLoader />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
     );
@@ -285,7 +292,7 @@ export default function ServiceAccountsPage() {
       <SettingsLayouts.Header
         title={adminRouteTitle(route)}
         icon={route.icon}
-        description={t("page.description")}
+        description={t("page.description", { appName })}
         divider
       />
 
@@ -314,10 +321,10 @@ export default function ServiceAccountsPage() {
 
           {hasKeys && (
             <Table
-              data={filteredApiKeys}
+              items={filteredApiKeys}
               getRowId={(row) => String(row.api_key_id)}
               columns={columns}
-              searchTerm={search}
+              query={search}
             />
           )}
         </div>
@@ -446,8 +453,11 @@ export default function ServiceAccountsPage() {
             <Text as="p" color="text-03">
               {markdown(
                 t("deleteModal.description", {
-                  name: deleteTarget.api_key_name || t("table.name.unnamed"),
+                  name: escapeMarkdown(
+                    deleteTarget.api_key_name || t("table.name.unnamed")
+                  ),
                   keyDisplay: deleteTarget.api_key_display,
+                  appName: escapeMarkdown(appName),
                 })
               )}
             </Text>

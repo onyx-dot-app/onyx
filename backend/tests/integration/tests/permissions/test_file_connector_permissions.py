@@ -53,7 +53,7 @@ def _create_connector_managers_group(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User-group permission tests are enterprise only",
 )
 @pytest.mark.usefixtures("reset")

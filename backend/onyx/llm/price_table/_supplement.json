@@ -1,0 +1,76 @@
+{
+  "_comment": "Hand-maintained entries for live models missing from the models.dev feed (it prunes deprecated generations, sometimes aggressively). Only models still callable on the named provider belong here — retired models must not be re-added. The sync job ignores files prefixed with '_'. Bedrock entries get cross-region inference-profile aliases generated at load time.",
+  "openai": {
+    "models": {
+      "gpt-5-chat": {
+        "name": "GPT-5 Chat",
+        "cost": {"input": 1.25, "output": 10.0, "cache_read": 0.125},
+        "limit": {"context": 128000, "output": 16384},
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true
+      },
+      "gpt-5-chat-latest": {
+        "name": "GPT-5 Chat (latest)",
+        "cost": {"input": 1.25, "output": 10.0, "cache_read": 0.125},
+        "limit": {"context": 128000, "output": 16384},
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true
+      },
+      "gpt-5.1-chat-latest": {
+        "name": "GPT-5.1 Chat (latest)",
+        "cost": {"input": 1.25, "output": 10.0, "cache_read": 0.125},
+        "limit": {"context": 128000, "output": 16384},
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true
+      },
+      "dall-e-3": {
+        "name": "DALL-E 3",
+        "mode": "image_generation",
+        "cost": {"image_input": 0.04}
+      }
+    }
+  },
+  "deepseek": {
+    "models": {
+      "deepseek-chat": {
+        "name": "DeepSeek Chat",
+        "cost": {"input": 0.28, "output": 0.42, "cache_read": 0.028},
+        "limit": {"context": 131072, "output": 8192},
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "reasoning": false,
+        "tool_call": true
+      },
+      "deepseek-reasoner": {
+        "name": "DeepSeek Reasoner",
+        "cost": {"input": 0.28, "output": 0.42, "cache_read": 0.028},
+        "limit": {"context": 131072, "output": 65536},
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": false
+      }
+    }
+  },
+  "bedrock": {
+    "models": {
+      "anthropic.claude-sonnet-4-20250514-v1:0": {
+        "name": "Claude Sonnet 4",
+        "cost": {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_write": 3.75},
+        "limit": {"context": 200000, "output": 64000},
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true
+      },
+      "anthropic.claude-opus-4-20250514-v1:0": {
+        "name": "Claude Opus 4",
+        "cost": {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_write": 18.75},
+        "limit": {"context": 200000, "output": 32000},
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true
+      }
+    }
+  }
+}

@@ -4,6 +4,7 @@ import { Permission } from "@/lib/types";
 import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
+import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -247,7 +248,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 });
 
 test.describe("Permission gating — MANAGE_CONNECTORS", () => {
-  test("Admin panel and /admin/indexing/status are gated behind MANAGE_CONNECTORS", async ({
+  test("Admin panel and /admin/indexing-status are gated behind MANAGE_CONNECTORS", async ({
     page,
     adminClient,
     testUserContext,
@@ -266,19 +267,19 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
     const ccPairId = await adminClient.createFileConnector(connectorName);
 
     try {
-      // Phase 1: Without MANAGE_CONNECTORS — /admin/indexing/status should redirect to /app
+      // Phase 1: Without MANAGE_CONNECTORS — /admin/indexing-status should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
       await page.goto(ADMIN_ROUTES.INDEXING_STATUS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      // Also verify /admin/add-connector redirects
-      await page.goto(ADMIN_ROUTES.ADD_CONNECTOR.path);
+      // Also verify /admin/connectors redirects
+      await page.goto(ADMIN_ROUTES.CONNECTORS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      // Phase 2: Grant MANAGE_CONNECTORS — /admin/indexing/status should be accessible
+      // Phase 2: Grant MANAGE_CONNECTORS — /admin/indexing-status should be accessible
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await adminClient.setUserGroupPermissions(groupId, [
@@ -292,40 +293,41 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
 
       expect(page.url()).toContain(ADMIN_ROUTES.INDEXING_STATUS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Existing Connectors")
+        page.getByLabel("admin-page-title").getByText("Indexing Status")
       ).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole("table")).toBeVisible();
 
-      // Also verify /admin/add-connector is accessible
-      await page.goto(ADMIN_ROUTES.ADD_CONNECTOR.path);
+      // Also verify /admin/connectors is accessible
+      await page.goto(ADMIN_ROUTES.CONNECTORS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain(ADMIN_ROUTES.ADD_CONNECTOR.path);
+      expect(page.url()).toContain(ADMIN_ROUTES.CONNECTORS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Add Connector")
+        page.getByLabel("admin-page-title").getByText("Connectors")
       ).toBeVisible({ timeout: 10000 });
 
-      // Access type and groups live on the wizard's second step, so reaching
-      // /admin/add-connector says nothing about them. `web` has no credential
-      // template, so the wizard skips straight there.
+      // Access type and groups live on the connector setup page, so reaching
+      // /admin/connectors says nothing about them. `web` has no credential
+      // template, so its page shows the configuration straight away.
+      const setupPage = new ConnectorSetupPage(page, "web");
       await page.goto("/admin/connectors/web");
       await page.waitForLoadState("networkidle");
-      await expect(page.getByText("Document Access")).toBeVisible({
-        timeout: 10000,
-      });
+      await expect(setupPage.accessTypeSelect).toBeVisible({ timeout: 10000 });
 
       // a global holder defaults to public, which has no groups to scope
       // must be the picker, not "assigned to group X" — the old code auto-assigned
-      await page.getByText("Public", { exact: true }).first().click();
-      await page.getByText("Private", { exact: true }).first().click();
-      await expect(
-        page.getByText("Assign group access for this Connector")
-      ).toBeVisible({ timeout: 10000 });
+      await expect(setupPage.accessTypeSelect).toHaveValue(
+        "Everyone in Your Organization"
+      );
+      await setupPage.pickAccessType("Specific Groups");
+      await expect(setupPage.groupAccessPrompt).toBeVisible({ timeout: 10000 });
 
       // Drive's credential form used to render an empty fragment for non-admins
       // — a blank modal, no error, no network call.
       await page.goto("/admin/connectors/google-drive");
       await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Create New" }).click();
+      await page
+        .getByRole("button", { name: "New Google Drive Account" })
+        .click();
       await expect(
         page.getByText("Authenticate with Google Drive")
       ).toBeVisible({ timeout: 10000 });
@@ -877,8 +879,9 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
 });
 
 test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
-  test("Access Tokens section and New Access Token button are gated behind CREATE_USER_API_KEYS", async ({
+  test("The Basic group grants Access Tokens by default and an admin can switch it off", async ({
     page,
+    browser,
     adminClient,
     testUserContext,
   }) => {
@@ -890,30 +893,16 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       "Permission registry unavailable (CE environment)"
     );
 
-    const { groupId, email, password } = testUserContext;
+    const { email, password } = testUserContext;
+    const basicGroup = (await adminClient.getUserGroups()).find(
+      (g) => g.is_default && g.name === "Basic"
+    );
+    expect(basicGroup).toBeDefined();
+    const basicGroupId = basicGroup!.id;
     let createdPatId: number | undefined;
 
     try {
-      // Phase 1: Without permission and no tokens — section should be hidden entirely
-      await page.context().clearCookies();
-      await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).not.toBeVisible();
-      await expect(
-        page.getByRole("button", { name: "New Access Token" })
-      ).not.toBeVisible();
-
-      // Phase 2: Grant CREATE_USER_API_KEYS — section visible, button enabled
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      await adminClient.setUserGroupPermissions(groupId, [
-        Permission.CREATE_USER_API_KEYS,
-      ]);
-
+      // Phase 1: Basic grants it by default, so the section shows and the button is enabled
       await page.context().clearCookies();
       await apiLogin(page, email, password);
       await page.goto("/app/settings/accounts-access");
@@ -929,7 +918,7 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       await expect(newTokenButton).toBeVisible({ timeout: 10000 });
       await expect(newTokenButton).toBeEnabled();
 
-      // Create a PAT via API so Phase 3 can test "token exists but no permission"
+      // Create a PAT via API so Phase 2 can test "token exists but no permission"
       const createResponse = await page.request.post("/api/user/pats", {
         data: {
           name: `E2E PAT ${Date.now()}`,
@@ -940,10 +929,10 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       const patData = await createResponse.json();
       createdPatId = patData.id;
 
-      // Phase 3: Revoke permission — section stays (token exists) but button disabled
+      // Phase 2: Switch it off on Basic. The section stays (a token exists) but the button is disabled
       await page.context().clearCookies();
       await loginAs(page, "admin");
-      await adminClient.setUserGroupPermissions(groupId, []);
+      await adminClient.setUserGroupPermissions(basicGroupId, []);
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
@@ -956,9 +945,39 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
 
       await expect(newTokenButton).toBeVisible({ timeout: 10000 });
       await expect(newTokenButton).toBeDisabled();
+
+      // Phase 3: Switch it back on and the button is enabled again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(basicGroupId, [
+        Permission.CREATE_USER_API_KEYS,
+      ]);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/app/settings/accounts-access");
+      await page.waitForLoadState("networkidle");
+
+      await expect(newTokenButton).toBeVisible({ timeout: 10000 });
+      await expect(newTokenButton).toBeEnabled();
     } finally {
+      // Basic is shared with every other spec, so restore it from a context
+      // that outlives this test's page if the test timed out.
       await cleanup(async () => {
-        // Delete the PAT (only requires BASIC_ACCESS)
+        const restoreContext = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
+        try {
+          await new OnyxApiClient(
+            restoreContext.request
+          ).setUserGroupPermissions(basicGroupId, [
+            Permission.CREATE_USER_API_KEYS,
+          ]);
+        } finally {
+          await restoreContext.close();
+        }
+      });
+      await cleanup(async () => {
         if (createdPatId !== undefined) {
           await page.context().clearCookies();
           await apiLogin(page, email, password);

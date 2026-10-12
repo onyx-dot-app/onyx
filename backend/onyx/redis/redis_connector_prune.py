@@ -27,6 +27,9 @@ class RedisConnectorPrunePayload(BaseModel):
     submitted: datetime
     started: datetime | None
     celery_task_id: str | None
+    # The pair's prune_requested_at when this prune was dispatched. Its
+    # success clears that request only.
+    prune_requested_at: datetime | None = None
 
 
 class RedisConnectorPrune:

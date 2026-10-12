@@ -115,10 +115,10 @@ def _get_fence_validation_block_expiration() -> int:
     return int(base_expiration * beat_multiplier)
 
 
-def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
+def is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external group sync is due."""
 
-    if cc_pair.access_type != AccessType.SYNC:
+    if not cc_pair.access_type.is_perm_synced():
         task_logger.error(
             f"Received non-sync CC Pair {cc_pair.id} for external group sync. Actual access type: {cc_pair.access_type}"
         )
@@ -148,6 +148,14 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     # If the last sync is None, it has never been run so we run the sync
     last_ext_group_sync = cc_pair.last_time_external_group_sync
     if last_ext_group_sync is None:
+        return True
+
+    # A sync that completed before the pair began to wait for its first
+    # permission sync does not count, so the pair is not hidden for a period.
+    # This value is the completion time: a sync that started before the wait
+    # and completed after it counts. That narrow race is accepted.
+    pending_since = cc_pair.perm_sync_pending_since
+    if pending_since is not None and last_ext_group_sync < pending_since:
         return True
 
     source_sync_period = sync_config.group_sync_config.group_sync_frequency
@@ -195,7 +203,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
                 cc_pairs_to_dedupe = get_cc_pairs_by_source(
                     db_session,
                     source,
-                    access_type=AccessType.SYNC,
+                    access_types=AccessType.perm_synced_types(),
                     status=ConnectorCredentialPairStatus.ACTIVE,
                 )
                 # dedupe cc_pairs to only keep the first one
@@ -209,7 +217,7 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
             cc_pair_ids_to_sync.extend(
                 cc_pair.id
                 for cc_pair in cc_pairs
-                if _is_external_group_sync_due(cc_pair)
+                if is_external_group_sync_due(cc_pair)
             )
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership

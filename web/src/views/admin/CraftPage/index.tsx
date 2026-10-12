@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { mutate } from "swr";
@@ -9,7 +10,7 @@ import {
   InputTypeIn,
   InputSwitch,
   Table,
-  createTableColumns,
+  type TableColumn,
 } from "@opal/components";
 import {
   Content,
@@ -18,7 +19,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import SvgNoResult from "@opal/illustrations/no-result";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -40,8 +41,6 @@ const PAGE_SIZE = 10;
 // ---------------------------------------------------------------------------
 // Columns
 // ---------------------------------------------------------------------------
-
-const tc = createTableColumns<UserRow>();
 
 // ---------------------------------------------------------------------------
 // Page
@@ -71,12 +70,13 @@ export default function CraftPage() {
     ? realUsers.length - explicitlyDisabled
     : explicitlyEnabled;
 
-  const columns = useMemo(
+  const columns = useMemo<TableColumn<UserRow>[]>(
     () => [
-      tc.qualifier({
+      {
+        kind: "qualifier",
         content: "icon",
-        iconSize: "lg",
-        getContent: (row) => {
+        avatar: true,
+        icon: (row) => {
           const user = {
             email: row.email,
             personalization: row.personal_name
@@ -85,9 +85,11 @@ export default function CraftPage() {
           } as User;
           return (props) => <UserAvatar user={user} size={props.size} />;
         },
-      }),
-      tc.column("email", {
-        header: t("table.userColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "email",
+        title: t("table.userColumn.header"),
         weight: 44,
         cell: (email, row) => (
           <Content
@@ -97,19 +99,23 @@ export default function CraftPage() {
             description={row.personal_name ? email : undefined}
           />
         ),
-      }),
-      tc.column("groups", {
-        header: t("table.groupsColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "groups",
+        title: t("table.groupsColumn.header"),
         weight: 24,
-        enableSorting: false,
+        sortable: false,
         cell: (value, row) => (
           <GroupsCell groups={value} user={row} onMutate={refresh} />
         ),
-      }),
-      tc.column("craft_enabled", {
-        header: t("table.accessColumn.header"),
+      },
+      {
+        kind: "data",
+        field: "craft_enabled",
+        title: t("table.accessColumn.header"),
         weight: 16,
-        enableSorting: false,
+        sortable: false,
         cell: (_value, row) => (
           <AccessCell
             user={row}
@@ -117,7 +123,7 @@ export default function CraftPage() {
             onMutate={refresh}
           />
         ),
-      }),
+      },
     ],
     [defaultEnabled, refresh, t]
   );
@@ -166,7 +172,7 @@ export default function CraftPage() {
             </Text>
           ) : (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           )}
         </SettingsLayouts.Body>
@@ -232,7 +238,7 @@ export default function CraftPage() {
 
           {isLoading && (
             <div className="flex justify-center py-12">
-              <SvgSimpleLoader className="h-6 w-6" />
+              <IconLoader className="h-6 w-6" />
             </div>
           )}
           {error ? (
@@ -250,11 +256,11 @@ export default function CraftPage() {
                 searchIcon
               />
               <Table
-                data={realUsers}
+                items={realUsers}
                 columns={columns}
                 getRowId={(row) => row.id ?? row.email}
                 pageSize={PAGE_SIZE}
-                searchTerm={searchTerm}
+                query={searchTerm}
                 footer={{ units: t("table.footer.units") }}
                 emptyState={
                   <IllustrationContent

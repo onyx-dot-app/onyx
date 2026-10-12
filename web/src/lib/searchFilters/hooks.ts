@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { Tag } from "@/lib/types";
-import type { SourceMetadata } from "@/lib/search/interfaces";
+import type { SourceMetadata } from "@/lib/search/types";
 import type { InputDateRangePickerValue } from "@opal/components";
 import type { SearchFilters } from "@/lib/searchFilters/types";
 

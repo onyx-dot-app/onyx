@@ -17,6 +17,7 @@ from ee.onyx.external_permissions.github.utils import (
     get_external_access_permission,
     get_external_user_group,
 )
+from onyx.configs.constants import DocumentSource
 from onyx.db.models import ConnectorCredentialPair
 
 
@@ -61,7 +62,9 @@ def _cc_pair() -> ConnectorCredentialPair:
     return cast(
         ConnectorCredentialPair,
         SimpleNamespace(
-            connector=SimpleNamespace(connector_specific_config={}),
+            connector=SimpleNamespace(
+                source=DocumentSource.GITHUB, connector_specific_config={}
+            ),
             credential=SimpleNamespace(credential_json=credential_json),
         ),
     )

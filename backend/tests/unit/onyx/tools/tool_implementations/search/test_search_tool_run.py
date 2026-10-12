@@ -4,7 +4,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import BaseFilters, UserAccessFilters
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
@@ -55,7 +55,10 @@ def _run(
     )
     with (
         patch(f"{MODULE}.get_session_with_current_tenant") as mock_session_ctx,
-        patch(f"{MODULE}.build_access_filters_for_user", return_value=[]),
+        patch(
+            f"{MODULE}.build_access_filters_for_user",
+            return_value=UserAccessFilters(access_control_list=[], cc_pair_access=None),
+        ),
         patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
         patch(f"{MODULE}.EmbeddingModel"),
         patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),

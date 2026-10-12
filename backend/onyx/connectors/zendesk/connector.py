@@ -393,10 +393,14 @@ class ZendeskConnectorCheckpoint(ConnectorCheckpoint):
 class ZendeskConnector(
     SlimConnectorWithPermSync, CheckpointedConnector[ZendeskConnectorCheckpoint]
 ):
+    slim_listing_honors_indexing_start = True
+
     def __init__(
         self,
         content_type: str = "articles",
         calls_per_minute: int | None = None,
+        # Checked against the credential by the binding; unused here.
+        zendesk_subdomain: str | None = None,  # noqa: ARG002
     ) -> None:
         self.content_type = content_type
         self.subdomain = ""
@@ -483,7 +487,7 @@ class ZendeskConnector(
             except Exception as e:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
-                        document_id=f"{article.get('id')}",
+                        document_id=f"article:{article.get('id')}",
                         document_link=article.get("html_url", ""),
                     ),
                     failure_message=str(e),
@@ -549,7 +553,7 @@ class ZendeskConnector(
             except Exception as e:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
-                        document_id=f"{ticket.get('id')}",
+                        document_id=f"zendesk_ticket_{ticket.get('id')}",
                         document_link=ticket.get("url", ""),
                     ),
                     failure_message=str(e),

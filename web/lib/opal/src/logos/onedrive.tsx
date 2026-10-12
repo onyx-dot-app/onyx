@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgOnedrive = ({ size, ...props }: IconProps) => (
+const SvgOneDrive = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -152,4 +152,4 @@ const SvgOnedrive = ({ size, ...props }: IconProps) => (
     </defs>
   </svg>
 );
-export default SvgOnedrive;
+export default SvgOneDrive;

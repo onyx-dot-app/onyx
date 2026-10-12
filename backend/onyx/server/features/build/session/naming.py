@@ -12,17 +12,18 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.configs.constants import MessageType
 from onyx.llm.factory import get_default_llm
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
-    LanguageModelInput,
+    GenerationOptions,
+    GenerationRequest,
+    Message,
     ReasoningEffort,
     SystemMessage,
     UserMessage,
 )
-from onyx.llm.utils import llm_response_to_string
 from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -88,7 +89,7 @@ def generate_session_name(db_session: DBSession, session_id: UUID) -> str:
 
     try:
         llm = get_default_llm()
-        prompt_messages: LanguageModelInput = [
+        prompt_messages: list[Message] = [
             SystemMessage(content=_NAMING_SYSTEM_PROMPT),
             UserMessage(
                 content=_NAMING_USER_PROMPT.format(
@@ -102,16 +103,14 @@ def generate_session_name(db_session: DBSession, session_id: UUID) -> str:
             group_id=str(session_id),
             metadata={"session_id": str(session_id)},
         ):
-            with llm_generation_span(
-                llm=llm,
-                flow=LLMFlow.BUILD_SESSION_NAMING,
-                input_messages=prompt_messages,
-            ) as span_generation:
-                response = llm.invoke(
-                    prompt_messages, reasoning_effort=ReasoningEffort.OFF
-                )
-                record_llm_response(span_generation, response)
-                generated = llm_response_to_string(response).strip().strip('"')
+            response = llm.invoke(
+                GenerationRequest(
+                    messages=prompt_messages,
+                    options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+                ),
+                context=GenerationContext(flow=LLMFlow.BUILD_SESSION_NAMING),
+            )
+            generated = response.text.strip().strip('"')
 
         if not generated:
             return _fallback_name(session_id)

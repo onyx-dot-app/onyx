@@ -2,14 +2,13 @@ import ipaddress
 import random
 import socket
 import time
-from enum import Enum
 from typing import Any, cast
 from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import BrowserContext, Playwright, TimeoutError
-from pydantic import BaseModel, TypeAdapter
+from pydantic import TypeAdapter
 from typing_extensions import override
 from urllib3.exceptions import MaxRetryError
 
@@ -29,6 +28,7 @@ from onyx.connectors.interfaces import (
     SlimConnector,
 )
 from onyx.connectors.models import Document, HierarchyNode, SlimDocument, TextSection
+from onyx.connectors.web.config import WEB_CONNECTOR_VALID_SETTINGS, UrlRewriteRule
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.security.models import web_connector_ssrf_enforced
@@ -47,14 +47,6 @@ from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
-
-
-class UrlRewriteRule(BaseModel):
-    """A single URL prefix rewrite: any fetched URL starting with ``source``
-    has that prefix replaced by ``target`` before the document is stored."""
-
-    source: str
-    target: str
 
 
 _URL_REWRITES_ADAPTER = TypeAdapter(list[UrlRewriteRule])
@@ -137,17 +129,6 @@ JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
 # Grace period after page navigation to allow bot-detection challenges
 # and SPA content rendering to complete
 PAGE_RENDER_TIMEOUT_MS = 5000
-
-
-class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
-    # Given a base site, index everything under that path
-    RECURSIVE = "recursive"
-    # Given a URL, index only the given page
-    SINGLE = "single"
-    # Given a sitemap.xml URL, parse all the pages in it
-    SITEMAP = "sitemap"
-    # Given a file upload where every line is a URL, parse all the URLs provided
-    UPLOAD = "upload"
 
 
 def protected_url_check(url: str) -> None:

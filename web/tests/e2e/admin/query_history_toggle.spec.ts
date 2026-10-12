@@ -35,7 +35,7 @@ async function getQueryHistoryValue(page: Page): Promise<string> {
     .filter({ hasText: "Query History Visibility" })
     .locator('[role="combobox"]');
 
-  const text = (await trigger.textContent()) ?? "";
+  const text = await trigger.inputValue();
   for (const label of ["Show with User Info", "Anonymized", "Hidden"]) {
     if (text.includes(label)) return label;
   }

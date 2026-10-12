@@ -21,7 +21,11 @@ resource "onyx_connector" "test" {
   name                      = "tf-acc-ccpair-connector"
   source                    = "mock_connector"
   input_type                = "poll"
-  connector_specific_config = jsonencode({})
+  # A closed local port: the pair never reaches a real service.
+  connector_specific_config = jsonencode({
+    mock_server_host = "localhost"
+    mock_server_port = 9
+  })
 }
 
 resource "onyx_credential" "test" {

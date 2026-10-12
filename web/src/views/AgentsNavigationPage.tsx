@@ -123,8 +123,9 @@ export default function AgentsNavigationPage() {
         icon={SvgOnyxOctagon}
         title={t("navigation.header.title")}
         description={t("navigation.header.description")}
-        rightChildren={
+        actions={[
           <Button
+            key="primary"
             href={canCreateAgent ? "/app/agents/create" : undefined}
             icon={SvgPlus}
             aria-label={NEW_AGENT_BUTTON_ARIA_LABEL}
@@ -136,8 +137,8 @@ export default function AgentsNavigationPage() {
             }
           >
             {t("navigation.newAgent.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       >
         <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">

@@ -11,7 +11,7 @@ import {
 } from "@opal/icons";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { timeAgo } from "@opal/time";
 import { useLocale } from "next-intl";
 import type { IconProps } from "@opal/types";

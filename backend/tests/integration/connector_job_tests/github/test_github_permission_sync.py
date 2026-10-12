@@ -20,7 +20,7 @@ logger = setup_logger()
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission tests are enterprise only",
 )
 def test_github_private_repo_permission_sync(
@@ -76,7 +76,8 @@ def test_github_private_repo_permission_sync(
 
         # Use a longer timeout for GitHub permission sync operations
         # GitHub API operations can be slow, especially with rate limiting
-        # This accounts for document sync, group sync, and vespa sync operations
+        # This accounts for document sync, group sync, and document index sync
+        # operations
         CCPairManager.wait_for_sync(
             cc_pair=github_cc_pair,
             user_performing_action=admin_user,
@@ -139,7 +140,7 @@ def test_github_private_repo_permission_sync(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission tests are enterprise only",
 )
 def test_github_public_repo_permission_sync(
@@ -250,7 +251,7 @@ def test_github_public_repo_permission_sync(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission tests are enterprise only",
 )
 def test_github_internal_repo_permission_sync(

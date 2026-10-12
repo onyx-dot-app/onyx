@@ -29,16 +29,17 @@ test.describe("scoped manager affordances", () => {
     await detail.expectLoaded();
   });
 
-  test("delete is offered on the groupless connector, not the shared one", async ({
+  test("delete is offered on the Editor connector and the groupless one", async ({
     page,
     world,
   }) => {
     await actAsManager(page, world.manager);
     const detail = new AdminConnectorDetailPage(page);
 
+    // the managed group is an Editor on this connector, and Editors may delete
     await detail.goto(world.managedCcPairId);
     await detail.openManageMenu();
-    await detail.expectDeleteOffered(false);
+    await detail.expectDeleteOffered(true);
 
     await detail.goto(world.grouplessCcPairId);
     await detail.openManageMenu();

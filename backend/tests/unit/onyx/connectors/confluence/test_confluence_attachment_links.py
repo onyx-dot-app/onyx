@@ -5,8 +5,13 @@ from unittest import mock
 import pytest
 
 from onyx.connectors.confluence.connector import ConfluenceConnector
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence,
+)
 from onyx.connectors.models import Document
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
+)
 
 _PAGE_ID = "111"
 _ATTACHMENT_PAGE_ID = "222"
@@ -64,15 +69,15 @@ def test_attachment_section_link_uses_platform_specific_url(
     expected_link: str,
 ) -> None:
     connector = ConfluenceConnector(wiki_base=wiki_base, is_cloud=is_cloud)
-    confluence_client = mock.Mock(spec=OnyxConfluence)
+    confluence_client = mock.Mock(spec=_OnyxConfluence)
     confluence_client.paginated_cql_retrieval.return_value = iter([_ATTACHMENT])
 
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=confluence_client,
+            return_value=gateway_with_client(confluence_client),
         ),
         mock.patch(
             "onyx.connectors.confluence.connector.convert_attachment_to_content",
@@ -95,15 +100,15 @@ def test_attachment_failure_uses_attachment_document_id() -> None:
     connector = ConfluenceConnector(
         wiki_base="https://wiki.example.com", is_cloud=False
     )
-    confluence_client = mock.Mock(spec=OnyxConfluence)
+    confluence_client = mock.Mock(spec=_OnyxConfluence)
     confluence_client.paginated_cql_retrieval.return_value = iter([_ATTACHMENT])
 
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=confluence_client,
+            return_value=gateway_with_client(confluence_client),
         ),
         mock.patch(
             "onyx.connectors.confluence.connector.convert_attachment_to_content",

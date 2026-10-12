@@ -13,6 +13,11 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_BATCH_PATH_PREFIX = "iab"
+# Backfill batches live apart, so a backfill never deletes or reissues the
+# leftover batches a normal attempt resumes from, and vice versa.
+_BACKFILL_BATCH_PATH_PREFIX = "iab_backfill"
+
 
 def _has_legacy_tabular_section(doc_dict: dict) -> bool:
     """True if a section is a pre-`csv_file_id` tabular section (inline text only).
@@ -50,9 +55,12 @@ class BatchStoragePathInfo(BaseModel):
 class DocumentBatchStorage(ABC):
     """Abstract base class for document batch storage implementations."""
 
-    def __init__(self, cc_pair_id: int, index_attempt_id: int):
+    def __init__(
+        self, cc_pair_id: int, index_attempt_id: int, is_backfill: bool = False
+    ):
         self.cc_pair_id = cc_pair_id
         self.index_attempt_id = index_attempt_id
+        self.is_backfill = is_backfill
         self.base_path = f"{self._per_cc_pair_base_path()}/{index_attempt_id}"
 
     @abstractmethod
@@ -150,14 +158,21 @@ class DocumentBatchStorage(ABC):
 
     def _per_cc_pair_base_path(self) -> str:
         """Get the base path for the cc pair."""
-        return f"iab/{self.cc_pair_id}"
+        prefix = _BACKFILL_BATCH_PATH_PREFIX if self.is_backfill else _BATCH_PATH_PREFIX
+        return f"{prefix}/{self.cc_pair_id}"
 
 
 class FileStoreDocumentBatchStorage(DocumentBatchStorage):
     """FileStore-based implementation of document batch storage."""
 
-    def __init__(self, cc_pair_id: int, index_attempt_id: int, file_store: FileStore):
-        super().__init__(cc_pair_id, index_attempt_id)
+    def __init__(
+        self,
+        cc_pair_id: int,
+        index_attempt_id: int,
+        file_store: FileStore,
+        is_backfill: bool = False,
+    ):
+        super().__init__(cc_pair_id, index_attempt_id, is_backfill)
         self.file_store = file_store
 
     def _get_batch_file_name(self, batch_num: int) -> str:
@@ -277,7 +292,7 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
         path_spl = path.split("/")
         # TODO: remove this in a few months, just for backwards compatibility
         if len(path_spl) == 3:
-            path_spl = ["iab"] + path_spl
+            path_spl = [_BATCH_PATH_PREFIX] + path_spl
         try:
             _, cc_pair_id, index_attempt_id, batch_num = path_spl
             return BatchStoragePathInfo(
@@ -291,10 +306,12 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
 
 def get_document_batch_storage(
-    cc_pair_id: int, index_attempt_id: int
+    cc_pair_id: int, index_attempt_id: int, *, is_backfill: bool
 ) -> DocumentBatchStorage:
     """Factory function to get the configured document batch storage implementation."""
     # The get_default_file_store will now correctly use S3BackedFileStore
     # or other configured stores based on environment variables
     file_store = get_default_file_store()
-    return FileStoreDocumentBatchStorage(cc_pair_id, index_attempt_id, file_store)
+    return FileStoreDocumentBatchStorage(
+        cc_pair_id, index_attempt_id, file_store, is_backfill
+    )

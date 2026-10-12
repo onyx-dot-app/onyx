@@ -43,7 +43,7 @@ Constraints from the existing code that shape the design:
   actions with a stored `external_app_policy` row reach the matcher at
   all; "gated" means a stored row with `ASK`.
 - **`SessionContext` does not carry `origin`** —
-  `resolve_session_by_id` (`sandbox_proxy/identity.py`) selects only
+  `resolve_session_by_id` (`sandbox_proxy/sandbox_identity/resolution.py`) selects only
   `BuildSession.id`. The short-circuit needs one new joined lookup:
   `BuildSession → ScheduledTaskRun (session_id FK) → ScheduledTask`;
   grants come along with the task row.

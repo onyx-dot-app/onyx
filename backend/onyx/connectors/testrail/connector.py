@@ -26,6 +26,10 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
+from onyx.connectors.testrail.config import (
+    DEFAULT_MAX_PAGES,
+    DEFAULT_SKIP_DOC_ABSOLUTE_CHARS,
+)
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
@@ -62,6 +66,8 @@ class TestRailConnector(LoadConnector, PollConnector):
         cases_page_size: int | None = None,
         max_pages: int | None = None,
         skip_doc_absolute_chars: int | None = None,
+        # Checked against the credential by the binding; unused here.
+        testrail_base_url: str | None = None,  # noqa: ARG002
     ) -> None:
         self.base_url: str | None = None
         self.username: str | None = None
@@ -93,12 +99,14 @@ class TestRailConnector(LoadConnector, PollConnector):
             else 250
         )
         self.max_pages = (
-            int(max_pages) if max_pages and str(max_pages).strip() else 10000
+            int(max_pages)
+            if max_pages and str(max_pages).strip()
+            else DEFAULT_MAX_PAGES
         )
         self.skip_doc_absolute_chars = (
             int(skip_doc_absolute_chars)
             if skip_doc_absolute_chars and str(skip_doc_absolute_chars).strip()
-            else 200000
+            else DEFAULT_SKIP_DOC_ABSOLUTE_CHARS
         )
 
         # Cache for field labels and value mappings - will be populated on first use

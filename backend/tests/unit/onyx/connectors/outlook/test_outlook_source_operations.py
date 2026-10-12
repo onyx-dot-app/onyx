@@ -15,13 +15,19 @@ from msal.exceptions import MsalServiceError
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
-from onyx.connectors.outlook.models import (
+from onyx.connectors.microsoft_utils.graph_errors import (
     INVALID_AUTH_METHOD_CODE,
     INVALID_AUTHORITY_CODE,
     INVALID_CERTIFICATE_CODE,
     MISSING_CREDENTIAL_CODE,
-    OutlookAuthError,
-    OutlookGraphError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftAuthError as OutlookAuthError,
+)
+from onyx.connectors.microsoft_utils.graph_errors import (
+    MicrosoftGraphError as OutlookGraphError,
+)
+from onyx.connectors.outlook.models import (
     OutlookRecipient,
 )
 from onyx.connectors.outlook.source_operations import (
@@ -52,7 +58,8 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     user_json,
 )
 
-MODULE = "onyx.connectors.outlook.source_operations"
+MODULE = "onyx.connectors.microsoft_utils.graph_auth"
+SOURCE_MODULE = "onyx.connectors.outlook.source_operations"
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
@@ -66,7 +73,7 @@ def _gateway(
         )
     )
     client = MagicMock()
-    gateway._graph_client = client
+    gateway._gateway()._client = client
     return gateway, client
 
 
@@ -85,8 +92,11 @@ def test_list_mailbox_users_builds_the_users_query() -> None:
     assert url == f"{GRAPH_BASE}/users"
     assert params["$filter"] == "accountEnabled eq true"
     assert params["$top"] == "2"
+    assert "proxyAddresses" in params["$select"]
     # An enabled user without a mail address has no mailbox to probe.
     assert [m.address for m in result.mailboxes] == [MAILBOX_ADDRESS]
+    # SMTP aliases only, never the primary or an X.500 address.
+    assert result.mailboxes[0].aliases == ("al@contoso.com",)
     assert result.next_link is None
 
 
@@ -97,6 +107,90 @@ def test_list_mailbox_users_follows_next_link_without_resending_params() -> None
     gateway.list_mailbox_users(next_link="https://graph/next")
 
     assert client.get_json.call_args.args[:2] == ("https://graph/next", None)
+
+
+GROUP_ID = "0b7c4c6e-5b7b-4c53-9a36-1e6a5f3f2d10"
+
+
+def test_resolve_groups_reads_an_object_id_directly() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = {"id": GROUP_ID, "displayName": "Onyx Users"}
+
+    result = gateway.resolve_groups(identifier=GROUP_ID)
+
+    assert [group.id for group in result] == [GROUP_ID]
+    assert client.get_json.call_args.args[0] == f"{GRAPH_BASE}/groups/{GROUP_ID}"
+
+
+def test_resolve_groups_treats_an_unknown_object_id_as_no_match() -> None:
+    gateway, client = _gateway()
+    client.get_json.side_effect = http_error(404, "Request_ResourceNotFound")
+
+    assert gateway.resolve_groups(identifier=GROUP_ID) == []
+
+
+def test_resolve_groups_follows_a_continuation_after_one_match() -> None:
+    gateway, client = _gateway()
+    first = page_json([{"id": "group-1"}])
+    first["@odata.nextLink"] = "https://graph/next"
+    client.get_json.side_effect = [first, page_json([{"id": "group-2"}])]
+
+    result = gateway.resolve_groups(identifier="Sales")
+
+    assert [group.id for group in result] == ["group-1", "group-2"]
+    assert client.get_json.call_args.args[0] == "https://graph/next"
+
+
+def test_resolve_groups_returns_every_group_sharing_a_display_name() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [{"id": "group-1", "displayName": "Sales"}, {"id": "group-2"}]
+    )
+
+    result = gateway.resolve_groups(identifier="Sales's")
+
+    url, params = client.get_json.call_args.args[:2]
+    assert url == f"{GRAPH_BASE}/groups"
+    assert params["$filter"] == "displayName eq 'Sales''s'"
+    assert [group.id for group in result] == ["group-1", "group-2"]
+
+
+def test_group_member_without_an_account_enabled_field_is_kept() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([user_json()])
+
+    result = gateway.list_group_mailbox_users(group_id=GROUP_ID)
+
+    assert [m.id for m in result.mailboxes] == [MAILBOX_ID]
+
+
+def test_resolve_groups_canonicalises_an_object_id_in_the_path() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = {"id": GROUP_ID, "displayName": "Onyx Users"}
+
+    gateway.resolve_groups(identifier="{" + GROUP_ID.upper() + "}")
+
+    assert client.get_json.call_args.args[0] == f"{GRAPH_BASE}/groups/{GROUP_ID}"
+
+
+def test_group_members_keep_only_enabled_users_with_a_mail_address() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [
+            user_json(),
+            user_json(id="user-disabled", accountEnabled=False),
+            user_json(id="user-no-mail", mail=None),
+        ]
+    )
+    client.get_json.return_value["@odata.nextLink"] = "https://graph/next"
+
+    result = gateway.list_group_mailbox_users(group_id=GROUP_ID)
+
+    assert client.get_json.call_args.args[0] == (
+        f"{GRAPH_BASE}/groups/{GROUP_ID}/transitiveMembers/microsoft.graph.user"
+    )
+    assert [m.id for m in result.mailboxes] == [MAILBOX_ID]
+    assert result.next_link == "https://graph/next"
 
 
 def test_resolve_mailbox_falls_back_to_the_primary_smtp_address() -> None:
@@ -268,6 +362,16 @@ def test_folder_listing_marks_hidden_folders() -> None:
     assert [f.is_hidden for f in result.folders] == [False, True]
 
 
+def test_delta_page_selects_the_conversation_index_the_thread_key_needs() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json([change_json()])
+
+    page = gateway.fetch_folder_delta_page(mailbox_id=MAILBOX_ID, folder_id=INBOX_ID)
+
+    assert "conversationIndex" in client.get_json.call_args.args[1]["$select"]
+    assert page.changes[0].conversation_index == change_json()["conversationIndex"]
+
+
 def test_delta_page_sends_query_params_once_and_the_page_size_header_always() -> None:
     gateway, client = _gateway()
     client.get_json.return_value = page_json(
@@ -326,7 +430,7 @@ def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
     )
 
     result = gateway.fetch_conversation_messages_page(
-        mailbox_id=MAILBOX_ID, conversation_id="conv'1", page_size=3
+        mailbox_id=MAILBOX_ID, conversation_id="conv'1"
     )
 
     url, params, headers = client.get_json.call_args.args
@@ -335,12 +439,37 @@ def test_conversation_page_orders_newest_first_and_reads_text_bodies() -> None:
         f"receivedDateTime ge {EPOCH_TIMESTAMP} and conversationId eq 'conv''1'"
     )
     assert params["$orderby"] == "receivedDateTime desc"
-    assert params["$top"] == "3"
+    assert params["$top"] == str(MESSAGES_PAGE_SIZE)
     assert headers == {"Prefer": TEXT_BODY_PREFERENCE}
     assert [m.id for m in result.messages] == ["msg-1", "msg-2"]
     assert result.messages[1].body_text == "Hi Bob"
     assert result.messages[0].sender is not None
     assert result.messages[0].sender.address == MAILBOX_ADDRESS
+    assert result.next_link == "https://graph/messages?page=2"
+
+
+def test_conversation_outline_reads_identity_fields_without_a_body() -> None:
+    gateway, client = _gateway()
+    client.get_json.return_value = page_json(
+        [
+            change_json(internetMessageId="<a@contoso.com>", isDraft=True),
+            change_json(id="msg-2"),
+        ],
+        next_link="https://graph/messages?page=2",
+    )
+
+    result = gateway.fetch_conversation_outline_page(
+        mailbox_id=MAILBOX_ID, conversation_id=CONVERSATION_ID
+    )
+
+    url, params, headers = client.get_json.call_args.args
+    assert url == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages"
+    assert params["$select"] == CHANGE_SELECT
+    assert "body" not in params["$select"].split(",")
+    assert params["$orderby"] == "receivedDateTime desc"
+    assert headers is None
+    assert [c.match_id for c in result.changes] == ["<a@contoso.com>", "msg-2"]
+    assert [c.is_draft for c in result.changes] == [True, False]
     assert result.next_link == "https://graph/messages?page=2"
 
 
@@ -647,10 +776,11 @@ def test_certificate_method_without_a_key_is_a_missing_credential() -> None:
 
     with (
         patch(f"{MODULE}.build_msal_app") as build,
-        pytest.raises(OutlookAuthError, match="outlook_private_key"),
+        pytest.raises(OutlookAuthError) as exc_info,
     ):
         gateway.check_token()
 
+    assert exc_info.value.code == MISSING_CREDENTIAL_CODE
     build.assert_not_called()
 
 
@@ -751,19 +881,25 @@ def test_attachment_download_streams_the_value_endpoint_with_a_cap() -> None:
             f"{MODULE}.acquire_graph_token",
             return_value={"access_token": "tok"},
         ),
-        patch(f"{MODULE}.download_graph_url_with_cap", return_value=b"pdf") as download,
+        patch(
+            f"{SOURCE_MODULE}.download_graph_url_with_cap", return_value=b"pdf"
+        ) as download,
     ):
         data = gateway.download_attachment(
             mailbox_id=MAILBOX_ID, message_id="msg-1", attachment_id="att-1", cap=10
         )
+        download.assert_called_once()
+        called = download.call_args.kwargs
+        # The getter is the gateway's own token fetch, called per attempt.
+        assert called["get_access_token"]() == "tok"
 
     assert data == b"pdf"
-    download.assert_called_once_with(
-        access_token="tok",
-        url=f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments/att-1/$value",
-        cap=10,
-        description="outlook attachment att-1",
+    assert (
+        called["url"]
+        == f"{GRAPH_BASE}/users/{MAILBOX_ID}/messages/msg-1/attachments/att-1/$value"
     )
+    assert called["cap"] == 10
+    assert called["description"] == "outlook attachment att-1"
 
 
 def test_attachment_download_failure_is_a_graph_error() -> None:
@@ -773,7 +909,7 @@ def test_attachment_download_failure_is_a_graph_error() -> None:
         patch(f"{MODULE}.build_msal_app"),
         patch(f"{MODULE}.acquire_graph_token", return_value={"access_token": "tok"}),
         patch(
-            f"{MODULE}.download_graph_url_with_cap",
+            f"{SOURCE_MODULE}.download_graph_url_with_cap",
             side_effect=http_error(404, "ErrorItemNotFound"),
         ),
         pytest.raises(OutlookGraphError) as exc_info,

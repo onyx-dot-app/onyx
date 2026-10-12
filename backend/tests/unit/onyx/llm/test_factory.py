@@ -1,5 +1,10 @@
+from collections.abc import Mapping
 from functools import partial
+from typing import cast
 from unittest.mock import MagicMock, patch
+
+import pytest
+from litellm.types.utils import ModelResponse as LiteLLMModelResponse
 
 from onyx.chat.incognito import (
     BIFROST_DISABLE_CONTENT_LOGGING_HEADER,
@@ -15,7 +20,9 @@ from onyx.llm.factory import (
     get_llm_for_persona,
     llm_from_provider,
 )
-from onyx.llm.interfaces import LlmRequestPolicy
+from onyx.llm.interfaces import LLMConfig, LlmRequestPolicy
+from onyx.llm.models import GenerationRequest, UserMessage
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.constants import (
     BIFROST_PROVIDER_NAME,
     LM_STUDIO_API_KEY_CONFIG_KEY,
@@ -355,3 +362,202 @@ class TestPolicyFnForwarding:
             assert (
                 mock_from_provider.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
             )
+
+
+def test_client_config_resolves_capabilities() -> None:
+    from onyx.llm.multi_llm import LitellmLLM
+
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"custom-model": {"supports_vision": True}},
+    ):
+        client: LitellmLLM = LitellmLLM(
+            api_key="secret-key",
+            model_provider="openai",
+            model_name="custom-model",
+            max_input_tokens=1000,
+        )
+    metadata: LLMConfig = client.config
+    assert client.config == metadata
+    assert client.config is not metadata
+    assert metadata.supports_images is True
+    assert metadata.api_key == "secret-key"
+
+
+def test_factory_carries_configured_vision_support_to_client() -> None:
+    provider: LLMProviderView = _build_provider_view("openai", 4096)
+    provider.model_configurations[0].supports_image_input = True
+    with patch("onyx.llm.factory.LitellmLLM") as create_client:
+        llm_from_provider("test-model", provider)
+    assert create_client.call_args.kwargs["supports_images"] is True
+
+
+def test_factory_falls_back_to_catalog_without_configured_vision() -> None:
+    provider: LLMProviderView = _build_provider_view("openai", 4096)
+    provider.model_configurations[0].supports_image_input = False
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"test-model": {"supports_vision": True}},
+    ):
+        client: LitellmLLM = llm_from_provider("test-model", provider)
+    assert client.config.supports_images is True
+
+
+def test_client_config_is_a_defensive_snapshot() -> None:
+    from onyx.llm.multi_llm import LitellmLLM
+
+    settings: dict[str, str] = {"custom_api_key": "original-key"}
+    client: LitellmLLM = LitellmLLM(
+        api_key="secret-key",
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=1000,
+        custom_config=settings,
+    )
+    settings["custom_api_key"] = "changed-input"
+    snapshot: LLMConfig = client.config
+    assert snapshot.custom_config == {"custom_api_key": "original-key"}
+    snapshot.custom_config["custom_api_key"] = "changed-snapshot"
+    assert client.config.custom_config == {"custom_api_key": "original-key"}
+
+
+@pytest.mark.parametrize(
+    "catalog, override, expected",
+    [
+        ({}, None, None),
+        ({"supports_vision": None}, None, None),
+        ({"supports_vision": False}, None, False),
+        ({"supports_vision": True}, False, False),
+        ({"supports_vision": False}, True, True),
+    ],
+)
+def test_client_image_capability_fallback(
+    catalog: dict[str, bool | None], override: bool | None, expected: bool | None
+) -> None:
+    with patch(
+        "onyx.llm.multi_llm.get_model_map", return_value={"test-model": catalog}
+    ) as model_map:
+        client: LitellmLLM = get_llm(
+            provider="openai",
+            model="test-model",
+            deployment_name=None,
+            max_input_tokens=4096,
+            supports_images=override,
+        )
+    assert client.config.supports_images is expected
+    if override is not None:
+        model_map.assert_not_called()
+    else:
+        model_map.assert_called_once()
+
+
+def test_client_resolves_image_capability_from_deployment_name() -> None:
+    with patch(
+        "onyx.llm.multi_llm.get_model_map",
+        return_value={"known-model": {"supports_vision": True}},
+    ):
+        client: LitellmLLM = get_llm(
+            provider="openai",
+            model="deployment-alias",
+            deployment_name="known-model",
+            max_input_tokens=4096,
+        )
+    assert client.config.supports_images is True
+
+
+def test_factory_captures_nested_request_and_policy_settings() -> None:
+    kwargs: dict[str, dict[str, str]] = {"metadata": {"source": "caller"}}
+    policy_kwargs: dict[str, dict[str, bool]] = {"extra_body": {"store": False}}
+    client: LitellmLLM = get_llm(
+        provider="openai",
+        model="gpt-5-mini",
+        deployment_name=None,
+        max_input_tokens=4096,
+        model_kwargs=kwargs,
+        policy_model_kwargs=policy_kwargs,
+    )
+    kwargs["metadata"]["source"] = "changed"
+    policy_kwargs["extra_body"]["store"] = True
+    response: LiteLLMModelResponse = LiteLLMModelResponse(
+        id="captured-settings",
+        created=1,
+        choices=[
+            {
+                "message": {"role": "assistant", "content": "done"},
+                "finish_reason": "stop",
+            }
+        ],
+    )
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        patch("litellm.completion", return_value=response) as completion,
+    ):
+        assert (
+            client.invoke(
+                GenerationRequest(messages=[UserMessage(content="test")])
+            ).text
+            == "done"
+        )
+    sent: Mapping[str, object] = completion.call_args.kwargs
+    assert sent["metadata"] == {"source": "caller"}
+    body: Mapping[str, object] = cast(Mapping[str, object], sent["extra_body"])
+    assert body["store"] is False
+
+
+def test_client_does_not_modify_caller_model_kwargs() -> None:
+    kwargs: dict[str, dict[str, str]] = {"metadata": {"source": "caller"}}
+    LitellmLLM(
+        api_key=None,
+        model_provider="ollama_chat",
+        model_name="unknown-model",
+        max_input_tokens=4096,
+        model_kwargs=kwargs,
+    )
+    assert kwargs == {"metadata": {"source": "caller"}}
+
+
+def test_client_captures_nested_deployment_settings_after_merging() -> None:
+    deployment: list[str] = ["original"]
+    defaults: dict[str, bool] = {"enabled": True}
+    deployment_body: dict[str, object] = {
+        "metadata": {"deployment": deployment, "source": "deployment"},
+        "default_only": defaults,
+    }
+    request_metadata: dict[str, str] = {"source": "request"}
+    kwargs: dict[str, object] = {
+        "extra_body": {"metadata": request_metadata},
+    }
+    client: LitellmLLM = LitellmLLM(
+        api_key="secret-key",
+        model_provider="openai",
+        model_name="gpt-5-mini",
+        max_input_tokens=4096,
+        extra_body=deployment_body,
+        model_kwargs=kwargs,
+    )
+    assert deployment_body == {
+        "metadata": {"deployment": ["original"], "source": "deployment"},
+        "default_only": {"enabled": True},
+    }
+    assert kwargs == {"extra_body": {"metadata": {"source": "request"}}}
+    deployment.append("changed")
+    defaults["enabled"] = False
+    request_metadata["source"] = "changed"
+    response: LiteLLMModelResponse = LiteLLMModelResponse(
+        choices=[{"message": {"role": "assistant", "content": "done"}}],
+    )
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False),
+        patch("litellm.completion", return_value=response) as completion,
+    ):
+        assert (
+            client.invoke(
+                GenerationRequest(messages=[UserMessage(content="test")])
+            ).text
+            == "done"
+        )
+    sent: Mapping[str, object] = completion.call_args.kwargs
+    assert sent["extra_body"] == {
+        "metadata": {"deployment": ["original"], "source": "request"},
+        "default_only": {"enabled": True},
+    }

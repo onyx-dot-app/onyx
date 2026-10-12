@@ -24,11 +24,15 @@ import sys
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
+from ee.onyx.db.tenant_snapshot import template_session  # noqa: E402
 from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
     get_session_with_tenant,
 )
-from onyx.db.engine.tenant_utils import get_all_tenant_ids  # noqa: E402
+from onyx.db.engine.tenant_utils import (  # noqa: E402
+    get_all_tenant_ids,
+    get_template_shards,
+)
 from onyx.db.rotate_encryption_key import rotate_encryption_key  # noqa: E402
 from onyx.utils.variable_functionality import global_version  # noqa: E402
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA  # noqa: E402
@@ -38,7 +42,18 @@ def _run_for_tenant(tenant_id: str, old_key: str | None, dry_run: bool = False) 
     print(f"Re-encrypting secrets for tenant: {tenant_id}")
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         results = rotate_encryption_key(db_session, old_key=old_key, dry_run=dry_run)
+    _report(results, dry_run)
 
+
+def _run_for_template(shard_name: str, old_key: str | None, dry_run: bool) -> None:
+    # The template is nobody's workspace but its rows are cloned into new ones.
+    print(f"Re-encrypting secrets for the tenant template on shard: {shard_name}")
+    with template_session(shard_name) as db_session:
+        results = rotate_encryption_key(db_session, old_key=old_key, dry_run=dry_run)
+    _report(results, dry_run)
+
+
+def _report(results: dict[str, int], dry_run: bool) -> None:
     if results:
         for col, count in results.items():
             print(
@@ -95,6 +110,12 @@ def main() -> None:
             except Exception as e:
                 print(f"  ERROR for tenant {tid}: {e}")
                 failed_tenants.append(tid)
+        for shard_name in get_template_shards():
+            try:
+                _run_for_template(shard_name, old_key, dry_run=args.dry_run)
+            except Exception as e:
+                print(f"  ERROR for the template on shard {shard_name}: {e}")
+                failed_tenants.append(f"template on {shard_name}")
         if failed_tenants:
             print(f"FAILED tenants ({len(failed_tenants)}): {failed_tenants}")
             sys.exit(1)

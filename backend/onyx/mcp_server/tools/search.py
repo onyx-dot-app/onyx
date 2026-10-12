@@ -10,7 +10,10 @@ import httpx
 from fastmcp.server.auth.auth import AccessToken
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from onyx.configs.app_configs import MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import (
+    MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS,
+    OPEN_URLS_MAX_URLS_PER_REQUEST,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
@@ -485,6 +488,7 @@ async def open_urls(
     Useful for following up on web search results when snippets do not provide enough information.
 
     Returns the full text content of each URL along with metadata like title and content type.
+    Accepts a limited number of URLs per call (20 by default).
 
     Example usage:
     ```
@@ -501,6 +505,11 @@ async def open_urls(
     outcome = MCPToolCallStatus.ERROR
 
     try:
+        if len(urls) > OPEN_URLS_MAX_URLS_PER_REQUEST:
+            return _error_payload(
+                f"Too many URLs ({len(urls)}); pass at most "
+                f"{OPEN_URLS_MAX_URLS_PER_REQUEST} per call."
+            )
         response = await _post_model(
             f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/web-search/open-urls",
             OpenUrlsToolRequest(urls=urls),

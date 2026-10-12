@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
   useEffect,
@@ -15,10 +16,10 @@ import {
   Table,
   Text,
   Tooltip,
-  createTableColumns,
+  type TableColumn,
 } from "@opal/components";
 import SvgLock from "@opal/icons/lock";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import { markdown } from "@opal/utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { Section } from "@/layouts/general-layouts";
@@ -45,8 +46,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 interface RunHistoryTableProps {
   taskId: string;
 }
-
-const tc = createTableColumns<ScheduledRunSummary>();
 type RunHistoryTranslate = ReturnType<
   typeof useTranslations<"craft.tasks.runHistory">
 >;
@@ -124,12 +123,17 @@ function SummaryCell({ row }: SummaryCellProps) {
   );
 }
 
-function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
+function buildColumns(
+  t: RunHistoryTranslate,
+  tReason: RunReasonTranslate
+): TableColumn<ScheduledRunSummary>[] {
   return [
-    tc.column("started_at", {
-      header: t("columns.started"),
+    {
+      kind: "data",
+      field: "started_at",
+      title: t("columns.started"),
       weight: 22,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
           <div className="flex flex-col gap-0.5">
@@ -146,11 +150,13 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
           </div>
         </NonClickableCell>
       ),
-    }),
-    tc.column("status", {
-      header: t("columns.status"),
+    },
+    {
+      kind: "data",
+      field: "status",
+      title: t("columns.status"),
       weight: 14,
-      enableSorting: false,
+      sortable: false,
       cell: (status, row) => {
         const reason = getNonClickableReason(row, tReason);
         return (
@@ -173,10 +179,11 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
           </NonClickableCell>
         );
       },
-    }),
-    tc.displayColumn({
+    },
+    {
+      kind: "display",
       id: "duration",
-      header: t("columns.duration"),
+      title: t("columns.duration"),
       width: { weight: 12 },
       cell: (row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
@@ -189,17 +196,20 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
           </Text>
         </NonClickableCell>
       ),
-    }),
-    tc.displayColumn({
+    },
+    {
+      kind: "display",
       id: "summary",
-      header: t("columns.summary"),
+      title: t("columns.summary"),
       width: { weight: 38 },
       cell: (row) => <SummaryCell row={row} />,
-    }),
-    tc.column("trigger_source", {
-      header: t("columns.trigger"),
+    },
+    {
+      kind: "data",
+      field: "trigger_source",
+      title: t("columns.trigger"),
       weight: 14,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <NonClickableCell reason={getNonClickableReason(row, tReason)}>
           <Text
@@ -213,7 +223,7 @@ function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
           </Text>
         </NonClickableCell>
       ),
-    }),
+    },
   ];
 }
 
@@ -289,7 +299,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   if (isLoading && !data) {
     return (
       <div className="flex justify-center py-8">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }
@@ -325,7 +335,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   return (
     <Section gap={2} alignItems="stretch">
       <Table
-        data={allRuns}
+        items={allRuns}
         columns={columns}
         getRowId={(row) => row.id}
         selectionBehavior="single-select"

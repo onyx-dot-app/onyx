@@ -1,6 +1,8 @@
 """Tests for license API utilities."""
 
 import inspect
+from collections.abc import Generator
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from types import FunctionType
 from unittest.mock import MagicMock, patch
@@ -10,6 +12,7 @@ import pytest
 from ee.onyx.server.license.api import (
     claim_license,
     delete_license,
+    downgrade_to_community,
     get_license_status,
     get_seat_usage,
     refresh_license_cache_endpoint,
@@ -248,6 +251,62 @@ class TestClaimUsesTheCheckoutSession:
         mock_post.assert_not_called()
 
 
+_DOWNGRADE_STEPS: list[str] = [
+    "make_all_cc_pairs_public__no_commit",
+    "remove_custom_user_groups__no_commit",
+    "disable_paid_features__no_commit",
+    "invalidate_provider_listing_cache",
+    "reset_enterprise_settings",
+    "clear_chat_retention",
+    "db_delete_license",
+]
+
+
+@pytest.fixture
+def downgrade_steps() -> Generator[MagicMock, None, None]:
+    """Every step of the downgrade mocked under one parent, which records the
+    order they ran in."""
+    steps: MagicMock = MagicMock()
+    with ExitStack() as stack:
+        for name in _DOWNGRADE_STEPS:
+            mock = stack.enter_context(patch(f"ee.onyx.server.license.api.{name}"))
+            steps.attach_mock(mock, name)
+        steps.make_all_cc_pairs_public__no_commit.return_value = [1, 2]
+        steps.remove_custom_user_groups__no_commit.return_value = 3
+        yield steps
+
+
+class TestDowngradeToCommunity:
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", False)
+    def test_the_license_goes_last(self, downgrade_steps: MagicMock) -> None:
+        """Removed earlier, a later failure would leave an unlicensed deployment
+        that still holds synced permissions and running paid features."""
+        db_session = MagicMock()
+        downgrade_steps.attach_mock(db_session.commit, "commit")
+
+        response = downgrade_to_community(user=MagicMock(), db_session=db_session)
+
+        assert response.connectors_made_public == 2
+        assert response.user_groups_removed == 3
+        assert [call[0] for call in downgrade_steps.mock_calls] == [
+            "make_all_cc_pairs_public__no_commit",
+            "remove_custom_user_groups__no_commit",
+            "disable_paid_features__no_commit",
+            "commit",
+            "invalidate_provider_listing_cache",
+            "reset_enterprise_settings",
+            "clear_chat_retention",
+            "db_delete_license",
+        ]
+
+    @patch("ee.onyx.server.license.api.MULTI_TENANT", True)
+    def test_cloud_is_rejected_untouched(self, downgrade_steps: MagicMock) -> None:
+        with pytest.raises(OnyxError):
+            downgrade_to_community(user=MagicMock(), db_session=MagicMock())
+
+        assert not downgrade_steps.mock_calls
+
+
 class TestLicenseHandlersStayOffTheEventLoop:
     """Every handler blocks: control-plane HTTP, sync SQLAlchemy, RSA verify
     that reads a key off disk, Redis. Declared `async def` they run on the
@@ -263,6 +322,7 @@ class TestLicenseHandlersStayOffTheEventLoop:
             upload_license,
             refresh_license_cache_endpoint,
             delete_license,
+            downgrade_to_community,
         ],
     )
     def test_the_handler_is_not_a_coroutine_function(

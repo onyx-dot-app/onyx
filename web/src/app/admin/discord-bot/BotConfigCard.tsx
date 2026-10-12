@@ -1,12 +1,12 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Card, InputPasswordTypeIn } from "@opal/components";
 import { Badge } from "@/components/ui/badge";
-import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { Tooltip } from "@opal/components";
 import {
   useDiscordBotConfig,
@@ -52,7 +52,7 @@ export function BotConfigCard() {
             </Text>
           </Section>
           <div className="flex justify-center">
-            <SvgSimpleLoader className="h-6 w-6" />
+            <IconLoader className="h-6 w-6" />
           </div>
         </Section>
       </Card>

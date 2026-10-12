@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -40,9 +41,13 @@ const (
 	// also bounds how long its spinner can turn with nothing else on screen.
 	dockerDesktopWait = 120 * time.Second
 
-	// s3FilestoreProfile is the COMPOSE_PROFILES entry that runs MinIO: on in
-	// standard mode, off in lite. It is the only entry the CLI owns.
+	// s3FilestoreProfile is the COMPOSE_PROFILES entry that runs the bundled
+	// stores: on in standard mode, off in lite. It is the only entry the CLI owns.
 	s3FilestoreProfile = "s3-filestore"
+
+	// Bundled S3 endpoints of the legacy MinIO and the object store.
+	minioEndpoint       = "http://minio:9000"
+	objectStoreEndpoint = "http://object-store:8333"
 )
 
 // preflight carries the environment facts gathered concurrently while the
@@ -364,7 +369,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 		}
 	}
 	if in.dev {
-		in.warnf("Dev overlay: Postgres, Redis, OpenSearch, MinIO, the model server and the API are published on this host, not just nginx. Only run it on a machine you trust the network of.")
+		in.warnf("Dev overlay: Postgres, Redis, OpenSearch, the object store, the model server and the API are published on this host, not just nginx. Only run it on a machine you trust the network of.")
 	}
 	in.noteComposeOverride()
 
@@ -399,6 +404,11 @@ func (in *installer) runInstall(ctx context.Context) error {
 			in.rollbackEnv(envPath, prevEnv)
 			return err
 		}
+	}
+
+	if err := in.alignObjectStoreEndpoint(envPath); err != nil {
+		in.rollbackEnv(envPath, prevEnv)
+		return err
 	}
 
 	if in.craft {
@@ -830,19 +840,23 @@ func (in *installer) createFreshEnv(envPath, tag string) (string, int, error) {
 	}
 	env = SetVar(env, "HOST_PORT", strconv.Itoa(hostPort))
 
+	// A fresh install never held files in MinIO, so it neither writes there
+	// nor starts it.
+	env = SetVarUncomment(env, "MINIO_REPLICAS", "0")
 	if in.lite {
-		// MinIO never starts in lite mode and the overlay forces the
-		// postgres file store at runtime; align .env so it isn't misleading.
+		// The object store never starts in lite mode and the overlay forces
+		// the postgres file store at runtime, so .env is aligned to match.
 		env = SetVar(env, "COMPOSE_PROFILES", withoutProfile(Var(env, "COMPOSE_PROFILES"), s3FilestoreProfile))
 		env = SetVar(env, "FILE_STORE_BACKEND", "postgres")
 	}
 
 	env = SetVar(env, "USER_AUTH_SECRET", `"`+randomHex(32)+`"`)
-	minioAccessKey, minioSecretKey := randomHex(16), randomHex(32)
-	env = SetVar(env, "MINIO_ROOT_USER", minioAccessKey)
-	env = SetVar(env, "MINIO_ROOT_PASSWORD", minioSecretKey)
-	env = SetVar(env, "S3_AWS_ACCESS_KEY_ID", minioAccessKey)
-	env = SetVar(env, "S3_AWS_SECRET_ACCESS_KEY", minioSecretKey)
+	// A pinned older tag runs MinIO from MINIO_ROOT_* alone, so both pairs match.
+	accessKey, secretKey := randomHex(16), randomHex(32)
+	env = SetVar(env, "MINIO_ROOT_USER", accessKey)
+	env = SetVar(env, "MINIO_ROOT_PASSWORD", secretKey)
+	env = SetVar(env, "S3_AWS_ACCESS_KEY_ID", accessKey)
+	env = SetVar(env, "S3_AWS_SECRET_ACCESS_KEY", secretKey)
 
 	if in.craft {
 		env = SetVarUncomment(env, "ENABLE_CRAFT", "true")
@@ -859,8 +873,58 @@ func (in *installer) createFreshEnv(envPath, tag string) (string, int, error) {
 	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
 		return "", 0, fmt.Errorf("failed to write .env: %w", err)
 	}
-	in.successf(".env created (auth secret and MinIO credentials generated) — customize it any time")
+	in.successf(".env created (auth secret and object store credentials generated) — customize it any time")
 	return tag, hostPort, nil
+}
+
+// objectStoreService matches the service key in a compose file at any indentation.
+var objectStoreService = regexp.MustCompile(`(?m)^\s+object-store:\s*$`)
+
+// alignObjectStoreEndpoint points S3_ENDPOINT_URL at the store the compose file
+// on disk runs, since a pinned older tag lays down a MinIO-only file. Moving to
+// the object store sets S3_LEGACY_ENDPOINT_URL to MinIO and keeps MinIO running
+// (MINIO_REPLICAS=1) for the copy. External endpoints stay.
+func (in *installer) alignObjectStoreEndpoint(envPath string) error {
+	compose := deployfiles.Compose
+	if in.prod {
+		compose = deployfiles.ProdCompose
+	}
+	content, err := os.ReadFile(filepath.Join(in.root.Dir, filepath.FromSlash(compose.DestRel)))
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", compose.DestRel, err)
+	}
+	want := minioEndpoint
+	if objectStoreService.Match(content) {
+		want = objectStoreEndpoint
+	}
+
+	existing, err := os.ReadFile(envPath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", envPath, err)
+	}
+	env := string(existing)
+	current := Var(env, "S3_ENDPOINT_URL")
+	if current != minioEndpoint && current != objectStoreEndpoint {
+		return nil
+	}
+	if current == want {
+		return nil
+	}
+	env = SetVar(env, "S3_ENDPOINT_URL", want)
+	// Reads fall back to MinIO while object-store-copy moves its files.
+	legacy := ""
+	if want == objectStoreEndpoint {
+		legacy = minioEndpoint
+		// The install ran on MinIO, so it holds files there: keep MinIO up
+		// even if a fresh install on a pinned release wrote MINIO_REPLICAS=0.
+		env = SetVarUncomment(env, "MINIO_REPLICAS", "1")
+	}
+	env = SetVarUncomment(env, "S3_LEGACY_ENDPOINT_URL", legacy)
+	if err := os.WriteFile(envPath, []byte(env), 0600); err != nil {
+		return fmt.Errorf("failed to write .env: %w", err)
+	}
+	in.successf("Set S3_ENDPOINT_URL to %s to match the bundled file store", want)
+	return nil
 }
 
 // reconfigureExistingEnv applies the rerun decision: restart keeps .env
@@ -901,7 +965,7 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 
 	if updateTag != "" && updateTag != Var(env, "IMAGE_TAG") {
 		env = SetVar(env, "IMAGE_TAG", updateTag)
-		in.successf("Updated IMAGE_TAG to %s (all other settings preserved)", updateTag)
+		in.successf("Updated IMAGE_TAG to %s", updateTag)
 	} else {
 		in.infof("Restarting with the current configuration")
 	}
@@ -920,24 +984,27 @@ func (in *installer) reconfigureExistingEnv(envPath, updateTag string) (string, 
 		in.successf("Onyx Craft enabled (ENABLE_CRAFT=true, SANDBOX_BACKEND=%s, image tag: %s)", backend, effectiveTag)
 	}
 
-	// Lite mode on an existing .env: the template ships with s3-filestore
-	// enabled; drop that entry so MinIO doesn't start. Only that entry — any
-	// other profile in the list was turned on by the user, and clearing the
-	// whole value would switch their services off with no way to name them
-	// again on the way back.
+	// Lite mode drops only the s3-filestore entry so object-store doesn't start.
+	// Every other profile in the list was turned on by the user.
 	if in.lite && hasProfile(Var(env, "COMPOSE_PROFILES"), s3FilestoreProfile) {
 		env = SetVar(env, "COMPOSE_PROFILES", withoutProfile(Var(env, "COMPOSE_PROFILES"), s3FilestoreProfile))
 		in.successf("Dropped %s from COMPOSE_PROFILES for lite mode", s3FilestoreProfile)
 	}
 	// Leaving lite behind: undo those same adjustments, or the "standard"
-	// deployment keeps lite's storage behaviour with MinIO never starting.
+	// deployment keeps lite's storage behaviour with the object store never starting.
 	// The rest of the profile list, and a file store the user has since
 	// pointed somewhere else, are left as they are.
 	if !in.lite && in.wasLite {
 		env = SetVar(env, "COMPOSE_PROFILES", withProfile(Var(env, "COMPOSE_PROFILES"), s3FilestoreProfile))
 		if Var(env, "FILE_STORE_BACKEND") == "postgres" {
 			env = SetVar(env, "FILE_STORE_BACKEND", "s3")
-			in.warnf("Files stored while in lite mode live in Postgres; standard mode reads the MinIO store, so they won't be listed until you switch back.")
+			in.warnf("Files stored while in lite mode live in Postgres; standard mode reads the object store, so they won't be listed until you switch back.")
+		}
+		// An install that once ran MinIO gets it back as the legacy store, so a
+		// rollback to a MinIO-only tag finds every file. A fresh install stopped
+		// MinIO and has nothing there.
+		if Var(env, "S3_ENDPOINT_URL") == objectStoreEndpoint && Var(env, "S3_LEGACY_ENDPOINT_URL") == "" && Var(env, "MINIO_REPLICAS") != "0" {
+			env = SetVarUncomment(env, "S3_LEGACY_ENDPOINT_URL", minioEndpoint)
 		}
 		in.successf("Restored the standard file store (COMPOSE_PROFILES=%s, FILE_STORE_BACKEND=%s)",
 			Var(env, "COMPOSE_PROFILES"), Var(env, "FILE_STORE_BACKEND"))
@@ -1484,7 +1551,7 @@ func (in *installer) printSuccess(ctx context.Context, hostPort int) {
 	if in.dev {
 		lines = append(lines, "",
 			"Dev overlay: the API (8080) and the data services (Postgres, Redis,",
-			"OpenSearch, MinIO, model server) are published on this host.")
+			"OpenSearch, object store, model server) are published on this host.")
 	}
 	lines = append(lines, "")
 	lines = append(lines, manageLines()...)

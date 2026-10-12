@@ -35,7 +35,9 @@ jobs:
     permissions:
       contents: read # checkout + read lockfiles
       id-token: write # OIDC for fetching the S3 allowlist
-      security-events: write # SARIF upload (nightly) + read Dependabot alerts
+      security-events: write # SARIF upload (nightly)
+      vulnerability-alerts: read # read Dependabot alerts
+      actions: write # dispatch the alerts when the gate fails
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -61,10 +63,35 @@ jobs:
 
       # PR runs gate on criticals; nightly/dispatch runs upload a SARIF report.
       - name: Run audit (gate)
+        id: gate
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run --no-sync ods audit --fail-on=critical
+
+      # A critical that fails the gate on a PR is on main too (the gate scans
+      # the checked-out lockfiles, and a bump landing on a PR fails on main
+      # first), so the alerts run on main now instead of at the next nightly.
+      # A fork's token cannot dispatch, so those PRs leave it to the nightly.
+      # One advisory fails every open PR at once, and GitHub cancels the older
+      # pending run of a concurrency group when a newer one lands, so a main
+      # run still waiting in the queue stands for all of them: it scans after
+      # this failure. A run already in progress has scanned, so a new one is
+      # queued behind it.
+      - name: Dispatch CVE Alerts on main
+        if: failure() && steps.gate.outcome == 'failure' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          queued="$(gh run list --repo "${REPO}" -w cve-alerts.yml -b main --json status --jq '[.[] | select(.status == "queued" or .status == "waiting" or .status == "pending")] | length')"
+          if [ "${queued}" != "0" ]; then
+            echo "A CVE Alerts run on main is already waiting to start, leaving it to that one"
+            exit 0
+          fi
+          gh workflow run cve-alerts.yml --repo "${REPO}" --ref main -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
 
       - name: Run audit (SARIF report)
         if: github.event_name != 'pull_request'

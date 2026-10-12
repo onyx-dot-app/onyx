@@ -80,7 +80,18 @@
 }
 
 .opal-input-segmented-content {
-  @apply flex min-h-6 flex-1 items-center p-0.5;
+  @apply relative flex min-h-6 flex-1 items-center p-0.5;
+}
+
+/* Placeholder over an empty, unfocused field. The segments under it stay
+   focusable but invisible. */
+.opal-input-segmented-placeholder {
+  @apply pointer-events-none absolute inset-0 flex items-center ps-1;
+}
+
+.opal-input-segmented-content[data-placeholder-shown]
+  > :not(.opal-input-segmented-placeholder) {
+  opacity: 0;
 }
 
 .opal-input-segmented-actions {

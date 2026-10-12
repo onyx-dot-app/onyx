@@ -30,7 +30,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_manager_cannot_modify_unscoped_group(reset: None) -> None:  # noqa: ARG001
@@ -119,7 +119,7 @@ def test_manager_cannot_modify_unscoped_group(reset: None) -> None:  # noqa: ARG
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_plain_member_cannot_modify_their_group(reset: None) -> None:  # noqa: ARG001

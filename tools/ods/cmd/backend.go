@@ -17,16 +17,14 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
 )
 
+// devLicenseEnv names the variable that holds the license internal developers
+// seed to unlock paid features. With no license in the database the backend
+// runs as Community.
+const devLicenseEnv = "ONYX_DEV_LICENSE"
+
 // NewBackendCommand creates the parent "backend" command with subcommands for
 // running backend services.
-// BackendOptions holds options shared across backend subcommands.
-type BackendOptions struct {
-	NoEE bool
-}
-
 func NewBackendCommand() *cobra.Command {
-	opts := &BackendOptions{}
-
 	cmd := &cobra.Command{
 		Use:   "backend",
 		Short: "Run backend services (api, model_server)",
@@ -35,23 +33,22 @@ func NewBackendCommand() *cobra.Command {
 On first run, copies .vscode/env_template.txt to .vscode/.env if the
 .env file does not already exist.
 
-Enterprise Edition features are enabled by default for development,
-with license enforcement disabled.
+Paid features need a license in the database. When ONYX_DEV_LICENSE is set, in
+the shell or in .vscode/.env, "backend api" seeds it before the server starts.
+With no license in the database the backend runs as Community Edition.
 
 Available subcommands:
   api            Start the FastAPI backend server
   model_server   Start the model server`,
 	}
 
-	cmd.PersistentFlags().BoolVar(&opts.NoEE, "no-ee", false, "Disable Enterprise Edition features (enabled by default)")
-
-	cmd.AddCommand(newBackendAPICommand(opts))
-	cmd.AddCommand(newBackendModelServerCommand(opts))
+	cmd.AddCommand(newBackendAPICommand())
+	cmd.AddCommand(newBackendModelServerCommand())
 
 	return cmd
 }
 
-func newBackendAPICommand(opts *BackendOptions) *cobra.Command {
+func newBackendAPICommand() *cobra.Command {
 	var port string
 
 	cmd := &cobra.Command{
@@ -61,10 +58,9 @@ func newBackendAPICommand(opts *BackendOptions) *cobra.Command {
 
 Examples:
   ods backend api
-  ods backend api --port 9090
-  ods backend api --no-ee`,
+  ods backend api --port 9090`,
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := runBackendService("api", "onyx.main:app", port, opts); err != nil {
+			if err := runBackendService("api", "onyx.main:app", port); err != nil {
 				exitBackendService(err)
 			}
 		},
@@ -75,7 +71,7 @@ Examples:
 	return cmd
 }
 
-func newBackendModelServerCommand(opts *BackendOptions) *cobra.Command {
+func newBackendModelServerCommand() *cobra.Command {
 	var port string
 
 	cmd := &cobra.Command{
@@ -87,7 +83,7 @@ Examples:
   ods backend model_server
   ods backend model_server --port 9001`,
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := runBackendService("model_server", "model_server.main:app", port, opts); err != nil {
+			if err := runBackendService("model_server", "model_server.main:app", port); err != nil {
 				exitBackendService(err)
 			}
 		},
@@ -110,9 +106,9 @@ func resolvePort(port string) (string, error) {
 	return strconv.Itoa(resolved), nil
 }
 
-// exitBackendService ends the process after runBackendService fails. A service
-// that ran and exited passes its exit code through, so the stderr it already
-// printed is not repeated.
+// exitBackendService ends the process after a command's child process fails. A
+// child that ran and exited passes its exit code through, so the stderr it
+// already printed is not repeated.
 func exitBackendService(err error) {
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
@@ -126,7 +122,7 @@ func exitBackendService(err error) {
 // runBackendService runs the service with uv. Only the service's own failure
 // wraps its *exec.ExitError. Setup errors format theirs with %v, so a failing
 // git call is logged rather than passed through as an exit code.
-func runBackendService(name, module, port string, opts *BackendOptions) error {
+func runBackendService(name, module, port string) error {
 	root, err := paths.GitRoot()
 	if err != nil {
 		return fatalErrorf("Failed to find git root: %v", err)
@@ -146,10 +142,15 @@ func runBackendService(name, module, port string, opts *BackendOptions) error {
 		return err
 	}
 
-	eeDefaults := eeEnvDefaults(opts.NoEE)
-	fileVars = append(fileVars, eeDefaults...)
-
 	backendDir := filepath.Join(root, "backend")
+	mergedEnv := mergeEnv(os.Environ(), fileVars)
+	log.Debugf("Applied %d env vars from %s (shell takes precedence)", len(fileVars), envFile)
+
+	if name == "api" {
+		if err := seedDevLicense(backendDir, mergedEnv); err != nil {
+			return err
+		}
+	}
 
 	uvicornArgs := []string{
 		"run", "uvicorn", module,
@@ -157,13 +158,7 @@ func runBackendService(name, module, port string, opts *BackendOptions) error {
 		"--port", port,
 	}
 	log.Infof("Starting %s on port %s...", name, port)
-	if !opts.NoEE {
-		log.Info("Enterprise Edition enabled (use --no-ee to disable)")
-	}
 	log.Debugf("Running in %s: uv %v", backendDir, uvicornArgs)
-
-	mergedEnv := mergeEnv(os.Environ(), fileVars)
-	log.Debugf("Applied %d env vars from %s (shell takes precedence)", len(fileVars), envFile)
 
 	svcCmd := exec.Command("uv", uvicornArgs...)
 	svcCmd.Dir = backendDir
@@ -178,19 +173,38 @@ func runBackendService(name, module, port string, opts *BackendOptions) error {
 	return nil
 }
 
-// eeEnvDefaults returns env entries for EE and license enforcement settings.
-// These are appended to the file vars so they act as defaults — shell env
-// and .env file values still take precedence via mergeEnv.
-func eeEnvDefaults(noEE bool) []string {
-	if noEE {
-		return []string{
-			"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=false",
+// envValue returns the value of key in env, or "" when it is unset.
+func envValue(env []string, key string) string {
+	for _, entry := range env {
+		if value, found := strings.CutPrefix(entry, key+"="); found {
+			return value
 		}
 	}
-	return []string{
-		"ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true",
-		"LICENSE_ENFORCEMENT_ENABLED=false",
+	return ""
+}
+
+// seedDevLicense installs the dev license so paid features unlock. It does
+// nothing when the variable is unset or empty. Multi-tenant mode takes its
+// tier from the control plane, and the seed has no tenant to write to.
+func seedDevLicense(backendDir string, env []string) error {
+	if envValue(env, devLicenseEnv) == "" {
+		return nil
 	}
+	if strings.EqualFold(envValue(env, "MULTI_TENANT"), "true") {
+		log.Infof("Not seeding the dev license from %s in multi-tenant mode", devLicenseEnv)
+		return nil
+	}
+
+	log.Infof("Seeding the dev license from %s...", devLicenseEnv)
+	seedCmd := exec.Command("uv", "run", "python", "-m", "scripts.seed_dev_license")
+	seedCmd.Dir = backendDir
+	seedCmd.Stdout = os.Stdout
+	seedCmd.Stderr = os.Stderr
+	seedCmd.Env = env
+	if err := seedCmd.Run(); err != nil {
+		return fatalErrorf("Failed to seed the dev license: %v", err)
+	}
+	return nil
 }
 
 // ensureBackendEnvFile copies env_template.txt to .env if .env doesn't exist.

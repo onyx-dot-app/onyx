@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { Button, LinkButton, Text } from "@opal/components";
@@ -13,7 +14,7 @@ import {
 } from "@opal/icons";
 import { BasicModalFooter, Modal } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelect } from "@opal/components";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputVertical, toast } from "@opal/layouts";
@@ -110,6 +111,7 @@ interface TimeoutFieldProps {
 
 function TimeoutField({ spec }: TimeoutFieldProps) {
   const t = useTranslations("admin.hooks");
+  const { appName } = useSettings();
   const { values, setFieldValue, isSubmitting } =
     useFormikContext<HookFormState>();
 
@@ -120,6 +122,7 @@ function TimeoutField({ spec }: TimeoutFieldProps) {
       suffix={t("form.timeout.suffix")}
       subDescription={t("form.timeout.description", {
         max: MAX_TIMEOUT_SECONDS,
+        appName,
       })}
     >
       <div className="[&_input]:!font-main-ui-mono [&_input::placeholder]:!font-main-ui-mono [&_input]:[appearance:textfield]! [&_input::-webkit-outer-spin-button]:appearance-none! [&_input::-webkit-inner-spin-button]:appearance-none! w-full">
@@ -163,6 +166,7 @@ export default function HookFormModal({
   onSuccess,
 }: HookFormModalProps) {
   const t = useTranslations("admin.hooks");
+  const { appName } = useSettings();
   const isEdit = !!hook;
   const [isConnected, setIsConnected] = useState(false);
   const [apiKeyCleared, setApiKeyCleared] = useState(false);
@@ -264,7 +268,7 @@ export default function HookFormModal({
           {({ values, setFieldValue, isSubmitting, isValid, dirty }) => {
             const failStrategyDescription =
               values.fail_strategy === "soft"
-                ? t("form.softStrategy.description")
+                ? t("form.softStrategy.description", { appName })
                 : spec?.fail_hard_description;
 
             return (
@@ -324,41 +328,33 @@ export default function HookFormModal({
                     title={t("form.failStrategy.title")}
                     subDescription={failStrategyDescription}
                   >
-                    <InputSelect
+                    <InputSingleSelect
                       value={values.fail_strategy}
                       onValueChange={(v) =>
                         setFieldValue("fail_strategy", v as HookFailStrategy)
                       }
                       disabled={isSubmitting}
-                    >
-                      <InputSelect.Trigger
-                        placeholder={t("form.failStrategy.placeholder")}
-                      />
-                      <InputSelect.Content>
-                        <InputSelect.Item value="soft">
-                          {t("form.failStrategy.soft.label")}
-                          {spec?.default_fail_strategy === "soft" && (
-                            <>
-                              {" "}
-                              <Text color="text-03">
-                                {t("form.failStrategy.default.label")}
-                              </Text>
-                            </>
-                          )}
-                        </InputSelect.Item>
-                        <InputSelect.Item value="hard">
-                          {t("form.failStrategy.hard.label")}
-                          {spec?.default_fail_strategy === "hard" && (
-                            <>
-                              {" "}
-                              <Text color="text-03">
-                                {t("form.failStrategy.default.label")}
-                              </Text>
-                            </>
-                          )}
-                        </InputSelect.Item>
-                      </InputSelect.Content>
-                    </InputSelect>
+                      defaultOption={spec?.default_fail_strategy ?? "hard"}
+                      placeholder={t("form.failStrategy.placeholder")}
+                      options={[
+                        {
+                          value: "soft",
+                          title: t("form.failStrategy.soft.label"),
+                          description:
+                            spec?.default_fail_strategy === "soft"
+                              ? t("form.failStrategy.default.label")
+                              : undefined,
+                        },
+                        {
+                          value: "hard",
+                          title: t("form.failStrategy.hard.label"),
+                          description:
+                            spec?.default_fail_strategy === "hard"
+                              ? t("form.failStrategy.default.label")
+                              : undefined,
+                        },
+                      ]}
+                    />
                   </InputVertical>
 
                   <TimeoutField spec={spec} />
@@ -380,7 +376,7 @@ export default function HookFormModal({
                   <InputVertical
                     withLabel="api_key"
                     title={t("form.apiKey.title")}
-                    subDescription={t("form.apiKey.description")}
+                    subDescription={t("form.apiKey.description", { appName })}
                   >
                     <PasswordInputTypeInField
                       name="api_key"
