@@ -36,9 +36,10 @@ export function AccountSummary({
     t("newAccountButton.label", { source: sourceName });
 
   return (
+    // The action sits level with the title line.
     <Section
       flexDirection="row"
-      alignItems="center"
+      alignItems="start"
       justifyContent="between"
       gap={4}
       width="full"

@@ -357,7 +357,8 @@ export default function AuthenticationAccountSection({
       // The form keeps what was typed while folded.
       expandableKeepMounted
       border="solid"
-      state={isCreating ? "filled" : "empty"}
+      // Filled while open, and while closed on a usable new account's summary.
+      state={isCreating || chosenDraft ? "filled" : "empty"}
       rounding={4}
       padding={2}
       // The card is one action, so it names itself. Nothing inside the
