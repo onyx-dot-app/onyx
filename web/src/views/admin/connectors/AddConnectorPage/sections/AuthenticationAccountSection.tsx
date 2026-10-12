@@ -120,6 +120,11 @@ export default function AuthenticationAccountSection({
   // Expanded, the section lists every account. Folded, only the chosen one
   // (or the new-account card when nothing is chosen) stays.
   const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
+  /** Folds the section. The new-account card closes too; expanding leaves it closed. */
+  function foldAccounts() {
+    close();
+    setAccountsExpanded(false);
+  }
 
   // The create card's one label, whatever the number of routes; the tabs
   // inside it name the routes.
@@ -462,12 +467,9 @@ export default function AuthenticationAccountSection({
                   : t("add.savedAccounts.expandButton.ariaLabel")
               }
               aria-expanded={accountsExpanded}
-              onClick={() => {
-                // Folding also closes the new-account card; expanding leaves
-                // it closed.
-                if (accountsExpanded) close();
-                setAccountsExpanded(!accountsExpanded);
-              }}
+              onClick={() =>
+                accountsExpanded ? foldAccounts() : setAccountsExpanded(true)
+              }
             />
           </Section>
         }
@@ -525,6 +527,8 @@ export default function AuthenticationAccountSection({
             source={connector}
             credential={toCredentialRef(checkedCredential)}
             locked={checksLocked || !checkedCredential}
+            // Starting the checks completes the account step, so it folds.
+            onStart={foldAccounts}
           />
         </Section>
       )}

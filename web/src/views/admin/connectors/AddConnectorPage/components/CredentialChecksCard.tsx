@@ -453,11 +453,14 @@ export interface CredentialChecksCardProps {
   credential: CredentialRef | null;
   /** Locks the Start Checks prompt until the credential section is valid. */
   locked: boolean;
+  /** Called when Start Checks starts the first run. */
+  onStart?: () => void;
 }
 export default function CredentialChecksCard({
   source,
   credential,
   locked,
+  onStart,
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
@@ -479,7 +482,14 @@ export default function CredentialChecksCard({
           center
           padding={0}
           rightChildren={
-            <Button icon={SvgPlay} disabled={locked} onClick={checks.begin}>
+            <Button
+              icon={SvgPlay}
+              disabled={locked}
+              onClick={() => {
+                checks.begin();
+                onStart?.();
+              }}
+            >
               {promptT("startButton.label")}
             </Button>
           }
