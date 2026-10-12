@@ -542,6 +542,7 @@ It captures a complete manifest after workspace restoration and before the promp
 After the producer stops, it compares a second complete manifest while the runner still owns the prompt slot.
 Confirmed changes update the existing artifact index before terminal status releases the turn.
 Missing baselines, incomplete scans, and lost ownership preserve previous attribution.
+A later complete inventory marks missing indexed files deleted, including deletions missed by earlier failed captures.
 Reclaimed runners do not infer attribution from a replacement baseline.
 
 One indexed path appears beneath its latest producing turn. App source changes become one `outputs/web` card.

@@ -131,6 +131,34 @@ def test_uncertain_or_stale_capture_preserves_existing_cards(
     assert card.revision == 1
 
 
+@pytest.mark.parametrize("failed_capture", ["before", "after"])
+def test_complete_inventory_recovers_a_previously_missed_deletion(
+    db_session: Session,
+    test_user: User,
+    build_session_with_user: Callable[..., BuildSession],
+    failed_capture: str,
+) -> None:
+    session = build_session_with_user()
+    files = manifest(**{"report.pdf": 1})
+    persist_capture(db_session, session, 0, manifest(), files, owns_turn=lambda: True)
+    before, after = files, manifest()
+    incomplete = OutputsManifestResponse(entries=[], complete=False)
+    if failed_capture == "before":
+        before = incomplete
+    else:
+        after = incomplete
+    persist_capture(db_session, session, 1, before, after, owns_turn=lambda: True)
+    assert not get_output_cards(session.id, test_user, db_session).cards[0].deleted
+
+    # The later turn starts after deletion, so neither inventory includes the file.
+    persist_capture(
+        db_session, session, 2, manifest(), manifest(), owns_turn=lambda: True
+    )
+    card = get_output_cards(session.id, test_user, db_session).cards[0]
+    assert card.deleted
+    assert (card.turn_index, card.revision) == (0, 1)
+
+
 # Exact viewed revisions and authorization.
 def test_viewed_revision_is_monotonic_and_cannot_clear_newer_output(
     db_session: Session,

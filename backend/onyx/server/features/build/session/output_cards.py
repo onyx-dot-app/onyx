@@ -135,9 +135,10 @@ def persist_turn_outputs(
                 if writes % 32 == 0 and not owns_turn():
                     transaction.rollback()
                     return
-            for path in snapshot.sources.keys() - after.keys():
-                artifact = existing.get(path)
-                if artifact is not None and (
+            # A complete inventory also repairs deletions missed by an earlier scan.
+            for path in existing.keys() - after.keys():
+                artifact = existing[path]
+                if not artifact.deleted and (
                     artifact.turn_index is None
                     or artifact.turn_index <= snapshot.turn_index
                 ):
