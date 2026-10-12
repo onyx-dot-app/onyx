@@ -49,8 +49,11 @@ test("the Drive form takes the credential kind from the picked credential", asyn
   );
   // The checks send it, though the field is hidden.
   expect(
-    connectorFormState(connectorConfigs.google_drive, form.values())
-      .credential_kind
+    connectorFormState(
+      ValidSources.GoogleDrive,
+      connectorConfigs.google_drive,
+      form.values()
+    ).credential_kind
   ).toBe("service_account");
 });
 
@@ -72,7 +75,11 @@ test("without a credential the kind is not sent", async () => {
 
   await waitFor(() =>
     expect(
-      connectorFormState(connectorConfigs.google_drive, form.values())
+      connectorFormState(
+        ValidSources.GoogleDrive,
+        connectorConfigs.google_drive,
+        form.values()
+      )
     ).not.toHaveProperty("credential_kind")
   );
 });

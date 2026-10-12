@@ -60,6 +60,7 @@ import {
   useConnectorConfiguration,
 } from "@/lib/connectors/connectors";
 import {
+  connectorConfigFromForm,
   createConnectorInitialValues,
   createConnectorValidationSchema,
   isLoadState,
@@ -376,7 +377,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
       indexingStart,
       refreshFreq,
       auto_sync_options,
-      ...connector_specific_config
+      ...configValues
     } = values;
 
     const wireAccess = toWireAccess(formAccessType, {
@@ -390,35 +391,11 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
       access_type === "private" ? data_access_group_ids : undefined;
     const manageAccess = toManageAccess(groups, group_roles);
 
-    // Apply special transforms according to application logic
-    const transformedConnectorSpecificConfig = Object.entries(
-      connector_specific_config
-    ).reduce(
-      (acc, [key, value]) => {
-        if (formControlFieldNames.has(key)) {
-          return acc;
-        }
-        // Filter out empty strings from arrays
-        if (Array.isArray(value)) {
-          value = (value as any[]).filter(
-            (item) => typeof item !== "string" || item.trim() !== ""
-          );
-        }
-        const matchingConfigValue = configuration.values.find(
-          (configValue) => configValue.name === key
-        );
-        if (
-          matchingConfigValue &&
-          "transform" in matchingConfigValue &&
-          matchingConfigValue.transform
-        ) {
-          acc[key] = matchingConfigValue.transform(value as string[]);
-        } else {
-          acc[key] = value;
-        }
-        return acc;
-      },
-      {} as Record<string, any>
+    const connectorSpecificConfig = connectorConfigFromForm(
+      connector,
+      configuration,
+      configValues,
+      formControlFieldNames
     );
 
     // Apply advanced configuration-specific transforms.
@@ -489,7 +466,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
       );
 
       const connectorData: ConnectorBase<any> = {
-        connector_specific_config: transformedConnectorSpecificConfig,
+        connector_specific_config: connectorSpecificConfig,
         input_type: isLoadState(connector) ? "load_state" : "poll", // single case
         name: name,
         source: connector,

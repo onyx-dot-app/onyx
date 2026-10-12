@@ -471,6 +471,30 @@ without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
 
+A passing check may return *findings* (`capability_checks/models.py:CheckFinding`):
+structured information about what the credential and config reach, such as a
+count (`CountFinding`) or a list of named options for a config field
+(`OptionsFinding`, at most `MAX_FINDING_OPTIONS`). A finding has a closed `key`
+that the frontend turns into a localized label, and an optional `field_name`.
+The runner puts findings on `CapabilityCheckResult.findings`, so they are stored
+in the report JSON, in the draft-run snapshot (`DraftCheckState.findings`) and in
+the draft result cache, and creation copies cached findings into the new pair's
+report. A stored finding with a type or key this version does not know is
+dropped when read. Findings hold container names, ids and counts only: never
+document content, and users only as a count. With the workspace security setting
+`allow_connector_check_findings` off (`capability_checks/findings_setting.py`), the
+runner keeps no findings, cached findings are not reused, and report, draft-run and
+edit-plan responses hide findings stored earlier.
+
+A *discovery check* (`CapabilityCheck(discovery=True)`) gathers findings that take
+much longer than validation, such as a listing of every space. It is never
+required and never counts toward a verdict. The runner runs it after the
+validation checks of the same run, and skips it (`applicable=False`) when a
+required check failed or findings are off. Creation does not run it: a cached
+draft result is reused, else it is recorded as not run, so neither creation nor
+the first index attempt waits on it. `findings.py:bounded_options` and
+`bounded_count` read a listing lazily up to a cap.
+
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
@@ -484,14 +508,15 @@ mirrors one `__init__` kwarg of the connector. A config may inherit a
 the credential, such as a site URL. `factory.py:validate_credential_binding` checks
 those fields at pairing and on config edit.
 
-Every realm (where an account works: its site, host or subdomain) is a bound field.
-A source whose credential records its realm (GitHub, GitLab, Zendesk and nine more)
-uses `RealmCredentialBinding`: the config holds the realm under the credential's
-key, and the credential must record the same one, compared without case, scheme or
-a trailing slash. An empty config realm accepts every credential. The connector
-still reads the realm from the credential. The add-connector form shows bound
-fields first, copies a realm into a new account's values, and disables saved
-accounts whose stored value differs (`credentialMatchesBoundFields`).
+A realm (where an account works: its site, host or subdomain) lives in the
+credential only, and the connector reads it from there. The connector config does
+not hold it. On the add-connector form the realm is a form-only field
+(`formOnlyFieldNames` in `web/src/lib/connectors/utils.ts`, from the credential
+spec's `realm` fields). The form shows it above the account section, copies it into
+a new account's values, and disables saved accounts whose stored realm differs
+(`credentialMatchesBoundFields`). `withoutFormOnlyFields` removes it from every
+request that sends form values as connector config: Create, check runs and plans,
+and binding checks.
 
 `credential_families.py` lets related sources share one stored credential: Atlassian
 (Confluence, Jira), Google (Gmail, Drive), and Microsoft (SharePoint, OneDrive,

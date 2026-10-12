@@ -39,7 +39,11 @@ jest.mock("@/lib/connectors/utils", () => ({
   splitCredentialBoundFields: () => ({ values: [], advancedValues: [] }),
 }));
 jest.mock("@/lib/connectors/checks/formState", () => ({
-  connectorFormState: (_configuration: unknown, values: unknown) => values,
+  connectorFormState: (
+    _source: unknown,
+    _configuration: unknown,
+    values: unknown
+  ) => values,
 }));
 
 const startMock = startDraftCheckRun as jest.MockedFunction<

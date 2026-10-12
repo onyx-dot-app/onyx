@@ -66,8 +66,6 @@ class TestRailConnector(LoadConnector, PollConnector):
         cases_page_size: int | None = None,
         max_pages: int | None = None,
         skip_doc_absolute_chars: int | None = None,
-        # Checked against the credential by the binding; unused here.
-        testrail_base_url: str | None = None,  # noqa: ARG002
     ) -> None:
         self.base_url: str | None = None
         self.username: str | None = None
