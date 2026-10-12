@@ -77,6 +77,11 @@ interface AuthenticationAccountCardProps {
    * One that cannot is disabled.
    */
   selectable: boolean;
+  /**
+   * Marks the pick with the "Selected" label only, not the selected card
+   * style, as in the folded account section.
+   */
+  quietSelection?: boolean;
   /** Called when the user picks this account. */
   onSelect: () => void;
   /** Called when the user picks the selected account again, to drop it. */
@@ -99,6 +104,7 @@ export default function AuthenticationAccountCard({
   sourceName,
   selected,
   selectable,
+  quietSelection = false,
   onSelect,
   onDeselect,
   onDelete,
@@ -195,7 +201,7 @@ export default function AuthenticationAccountCard({
           expandable
           expanded={expanded}
           expandableContentHeight="full"
-          state={selected ? "selected" : "filled"}
+          state={selected && !quietSelection ? "selected" : "filled"}
           border="solid"
           rounding={4}
           padding={2}

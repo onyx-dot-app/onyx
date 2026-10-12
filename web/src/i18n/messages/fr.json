@@ -2690,7 +2690,19 @@
           "label": "Réessayer"
         },
         "savedAccounts": {
-          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}"
+          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}",
+          "expandButton": {
+            "ariaLabel": "Afficher les comptes enregistrés"
+          },
+          "collapseButton": {
+            "ariaLabel": "Masquer les comptes enregistrés"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Nouveau compte)",
+          "editButton": {
+            "label": "Modifier le compte"
+          }
         },
         "timeout": {
           "toast": "L'opération a expiré après {seconds} secondes. Vérifiez si votre configuration contient des erreurs ?"

@@ -2690,7 +2690,19 @@
           "label": "다시 시도"
         },
         "savedAccounts": {
-          "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}"
+          "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}",
+          "expandButton": {
+            "ariaLabel": "저장된 계정 표시"
+          },
+          "collapseButton": {
+            "ariaLabel": "저장된 계정 숨기기"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(새 계정)",
+          "editButton": {
+            "label": "계정 편집"
+          }
         },
         "timeout": {
           "toast": "{seconds}초 후 작업 시간이 초과되었습니다. 설정에 오류가 있는지 확인하세요."

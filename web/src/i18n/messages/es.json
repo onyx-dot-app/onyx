@@ -2690,7 +2690,19 @@
           "label": "Reintentar"
         },
         "savedAccounts": {
-          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}"
+          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}",
+          "expandButton": {
+            "ariaLabel": "Mostrar cuentas guardadas"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar cuentas guardadas"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Cuenta nueva)",
+          "editButton": {
+            "label": "Editar cuenta"
+          }
         },
         "timeout": {
           "toast": "La operación agotó el tiempo de espera tras {seconds} segundos. ¿Quieres revisar tu configuración por si hay errores?"

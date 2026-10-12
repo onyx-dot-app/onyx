@@ -2690,7 +2690,19 @@
           "label": "Retry"
         },
         "savedAccounts": {
-          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}",
+          "expandButton": {
+            "ariaLabel": "Show saved accounts"
+          },
+          "collapseButton": {
+            "ariaLabel": "Hide saved accounts"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(New Account)",
+          "editButton": {
+            "label": "Edit Account"
+          }
         },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
