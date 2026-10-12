@@ -27,7 +27,7 @@ from onyx.db.models import (
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.documents.models import CredentialBase
+from onyx.server.documents.models import CredentialBase, CredentialSharing
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -373,6 +373,56 @@ def promote_draft_credential(
     )
     _relate_credential_to_user_groups__no_commit(
         db_session=db_session, credential_id=credential.id, user_group_ids=groups
+    )
+    db_session.commit()
+    db_session.expire(credential)
+
+
+def fetch_credential_group_ids(
+    db_session: Session, credential_ids: list[int]
+) -> dict[int, list[int]]:
+    """The user groups each credential is shared with, by credential id. A
+    credential shared with none is absent."""
+    group_ids: dict[int, list[int]] = {}
+    for credential_id, group_id in db_session.execute(
+        select(
+            Credential__UserGroup.credential_id, Credential__UserGroup.user_group_id
+        ).where(Credential__UserGroup.credential_id.in_(credential_ids))
+    ):
+        group_ids.setdefault(credential_id, []).append(group_id)
+    return group_ids
+
+
+def update_credential_sharing(
+    credential: Credential,
+    sharing: CredentialSharing,
+    db_session: Session,
+) -> None:
+    """Renames a saved credential and sets who may reuse it. Keeps its owner
+    and ``time_updated``, so its stored check results still apply."""
+    if credential.is_draft:
+        raise ValueError(f"Credential {credential.id} is a draft.")
+    db_session.execute(
+        update(Credential)
+        .where(Credential.id == credential.id)
+        .values(
+            name=sharing.name,
+            admin_public=sharing.admin_public,
+            curator_public=sharing.curator_public,
+            # Setting the column skips its ``onupdate``.
+            time_updated=Credential.time_updated,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    db_session.execute(
+        delete(Credential__UserGroup).where(
+            Credential__UserGroup.credential_id == credential.id
+        )
+    )
+    _relate_credential_to_user_groups__no_commit(
+        db_session=db_session,
+        credential_id=credential.id,
+        user_group_ids=sharing.groups,
     )
     db_session.commit()
     db_session.expire(credential)

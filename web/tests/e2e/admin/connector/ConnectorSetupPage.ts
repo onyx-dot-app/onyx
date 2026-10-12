@@ -91,7 +91,7 @@ export class ConnectorSetupPage {
 
   /**
    * The card for a saved account in the credential section, by its id. The
-   * card is titled by its creator, so its name may not show.
+   * card is titled by its name, else its creator.
    */
   credentialRow(credentialId: number): Locator {
     return this.page.getByTestId(`authentication-account-${credentialId}`);

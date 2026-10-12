@@ -40,40 +40,47 @@ export function shareAccountPayload({ share, groups }: ShareAccountFormValues) {
 // The tag id of the admins chip; group tags use their numeric ids.
 const ADMINS_TAG_ID = "admins";
 
-interface ShareAccountFieldProps {
-  /** The Formik path `share` and `groups` live under, e.g. `new_account`. */
-  namePrefix?: string;
-  /**
-   * Locks the selects, as while the account's fields are invalid. The caller
-   * wraps the field in `Disabled` for the dimmed look.
-   */
+/** The audience and groups a saved credential is shared with. */
+export function shareAccountValues(credential: {
+  admin_public: boolean;
+  groups?: number[];
+}): ShareAccountFormValues {
+  const groups: number[] = credential.groups ?? [];
+  return {
+    share: !credential.admin_public
+      ? "onlyMe"
+      : groups.length > 0
+        ? "adminsAndGroups"
+        : "admins",
+    groups,
+  };
+}
+
+interface ShareAccountSelectProps {
+  value: ShareAccountFormValues;
+  onChange: (next: ShareAccountFormValues) => void;
+  /** Locks the selects. The caller wraps them in `Disabled` for the look. */
   disabled: boolean;
 }
 
 /**
- * Who may reuse the new credential: admins (the default), admins and named
- * user groups, or only its creator. With groups, a picker below lists them
- * after a fixed admins chip, since admins keep access either way.
+ * Who may reuse a credential: admins (the default), admins and named user
+ * groups, or only its creator. With groups, a picker below lists them after
+ * a fixed admins chip, since admins keep access either way.
  */
-export function ShareAccountField({
+export function ShareAccountSelect({
+  value,
+  onChange,
   disabled,
-  namePrefix,
-}: ShareAccountFieldProps) {
+}: ShareAccountSelectProps) {
   const t = useTranslations("admin.credentials.create.share");
   const tGroups = useTranslations("common.groupsMultiSelect");
-  const { values: formValues, setFieldValue } =
-    useFormikContext<ShareAccountFormValues>();
-  const values: ShareAccountFormValues = namePrefix
-    ? getIn(formValues, namePrefix)
-    : formValues;
-  const path = (field: keyof ShareAccountFormValues): string =>
-    namePrefix ? `${namePrefix}.${field}` : field;
   const { data: userGroups } = useUserGroups();
 
   const groupNames = new Map(
     (userGroups ?? []).map((group) => [group.id, group.name])
   );
-  const groupTags: TagItem[] = values.groups.flatMap((id) => {
+  const groupTags: TagItem[] = value.groups.flatMap((id) => {
     const name = groupNames.get(id);
     return name === undefined ? [] : [{ id: String(id), label: name }];
   });
@@ -95,9 +102,9 @@ export function ShareAccountField({
         center
       >
         <InputSingleSelect
-          value={values.share}
+          value={value.share}
           onValueChange={(next) => {
-            if (isShareAudience(next)) setFieldValue(path("share"), next);
+            if (isShareAudience(next)) onChange({ ...value, share: next });
           }}
           defaultOption={DEFAULT_SHARE_AUDIENCE}
           placeholder={t("title")}
@@ -125,7 +132,7 @@ export function ShareAccountField({
         />
       </InputHorizontal>
 
-      {values.share === "adminsAndGroups" && (
+      {value.share === "adminsAndGroups" && (
         <InputMultiSelect
           tags={[adminsTag, ...groupTags]}
           options={(userGroups ?? []).map((group) => ({
@@ -134,21 +141,58 @@ export function ShareAccountField({
             icon: SvgUsers,
           }))}
           onSelectOption={(option) =>
-            setFieldValue(path("groups"), [
-              ...values.groups,
-              Number(option.value),
-            ])
+            onChange({
+              ...value,
+              groups: [...value.groups, Number(option.value)],
+            })
           }
           onRemoveTag={(id) =>
-            setFieldValue(
-              path("groups"),
-              values.groups.filter((group) => String(group) !== id)
-            )
+            onChange({
+              ...value,
+              groups: value.groups.filter((group) => String(group) !== id),
+            })
           }
           placeholder={tGroups("userGroups.label")}
           disabled={disabled}
         />
       )}
     </Section>
+  );
+}
+
+interface ShareAccountFieldProps {
+  /** The Formik path `share` and `groups` live under, e.g. `new_account`. */
+  namePrefix?: string;
+  /**
+   * Locks the selects, as while the account's fields are invalid. The caller
+   * wraps the field in `Disabled` for the dimmed look.
+   */
+  disabled: boolean;
+}
+
+/** {@link ShareAccountSelect} bound to a Formik form's values. */
+export function ShareAccountField({
+  disabled,
+  namePrefix,
+}: ShareAccountFieldProps) {
+  const { values: formValues, setFieldValue } =
+    useFormikContext<ShareAccountFormValues>();
+  const values: ShareAccountFormValues = namePrefix
+    ? getIn(formValues, namePrefix)
+    : formValues;
+  const path = (field: keyof ShareAccountFormValues): string =>
+    namePrefix ? `${namePrefix}.${field}` : field;
+
+  return (
+    <ShareAccountSelect
+      value={values}
+      onChange={(next) => {
+        if (next.share !== values.share)
+          setFieldValue(path("share"), next.share);
+        if (next.groups !== values.groups)
+          setFieldValue(path("groups"), next.groups);
+      }}
+      disabled={disabled}
+    />
   );
 }

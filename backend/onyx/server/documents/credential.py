@@ -19,10 +19,12 @@ from onyx.db.credentials import (
     delete_credential,
     delete_credential_for_user,
     fetch_credential_by_id_for_user,
+    fetch_credential_group_ids,
     fetch_credentials_for_user,
     fetch_credentials_usable_by_source_for_user,
     swap_credentials_connector,
     update_credential,
+    update_credential_sharing,
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -35,6 +37,7 @@ from onyx.server.documents.capability_check_runs import (
 from onyx.server.documents.models import (
     CredentialBase,
     CredentialDataUpdateRequest,
+    CredentialSharing,
     CredentialSnapshot,
     CredentialSwapRequest,
     CredentialUsage,
@@ -121,6 +124,9 @@ def get_cc_source_full_info(
             )
         )
 
+    group_ids = fetch_credential_group_ids(
+        db_session, [credential.id for credential in credentials]
+    )
     mask_credential_prefix = get_security_settings().mask_credential_prefix
     return [
         SimilarCredentialSnapshot(
@@ -129,7 +135,7 @@ def get_cc_source_full_info(
                     credential,
                     mask_credential_prefix=mask_credential_prefix,
                     view_source=source_type,
-                )
+                ).model_copy(update={"groups": group_ids.get(credential.id, [])})
             ),
             usages=usages[credential.id],
         )
@@ -384,6 +390,61 @@ def update_credential_data(
         credential,
         mask_credential_prefix=get_security_settings().mask_credential_prefix,
     )
+
+
+@router.patch("/admin/credential/{credential_id}/sharing")
+def update_credential_sharing_admin(
+    credential_id: int,
+    sharing: CredentialSharing,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CredentialSnapshot:
+    """Renames a saved credential and sets who may reuse it, without
+    touching its values or its owner."""
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
+        )
+    current_group_ids = fetch_credential_group_ids(db_session, [credential_id]).get(
+        credential_id, []
+    )
+    # Bounds both states, so sharing can be neither widened nor withdrawn out
+    # of scope. The create gate's exemptions apply.
+    is_shared = bool(
+        current_group_ids
+        or sharing.groups
+        or credential.curator_public
+        or sharing.curator_public
+    )
+    if is_shared and credential.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=current_group_ids,
+            requested_group_ids=sharing.groups,
+            is_non_public=not (credential.curator_public or sharing.curator_public),
+        )
+    update_credential_sharing(credential, sharing, db_session)
+    emit_audit_event(
+        AuditAction.CREDENTIAL_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="credential",
+        resource_id=credential_id,
+    )
+    snapshot = CredentialSnapshot.from_credential_db_model(
+        credential,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    )
+    snapshot.groups = fetch_credential_group_ids(db_session, [credential_id]).get(
+        credential_id, []
+    )
+    return snapshot
 
 
 @router.put("/admin/credential/private-key/{credential_id}")

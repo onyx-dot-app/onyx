@@ -2760,6 +2760,12 @@
           },
           "rerunFailed": {
             "toast": "Couldn't start the checks. Try again."
+          },
+          "renameFailed": {
+            "toast": "Couldn't rename the account. Try again."
+          },
+          "shareFailed": {
+            "toast": "Couldn't change who can use the account. Try again."
           }
         }
       },
@@ -9054,7 +9060,8 @@
       "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
       "state": {
         "completed": "Checks completed.",
-        "inProgress": "Checks in progress…"
+        "inProgress": "Checks in progress…",
+        "waiting": "Waiting for connector settings."
       }
     }
   },

@@ -2760,6 +2760,12 @@
           },
           "rerunFailed": {
             "toast": "Impossible de lancer les vérifications. Réessayez."
+          },
+          "renameFailed": {
+            "toast": "Impossible de renommer le compte. Réessayez."
+          },
+          "shareFailed": {
+            "toast": "Impossible de modifier qui peut utiliser le compte. Réessayez."
           }
         }
       },
@@ -9054,7 +9060,8 @@
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
         "completed": "Vérifications terminées.",
-        "inProgress": "Vérifications en cours…"
+        "inProgress": "Vérifications en cours…",
+        "waiting": "En attente des paramètres du connecteur."
       }
     }
   },

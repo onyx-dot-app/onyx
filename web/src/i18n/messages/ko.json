@@ -2760,6 +2760,12 @@
           },
           "rerunFailed": {
             "toast": "검사를 시작할 수 없습니다. 다시 시도하세요."
+          },
+          "renameFailed": {
+            "toast": "계정 이름을 변경하지 못했습니다. 다시 시도하세요."
+          },
+          "shareFailed": {
+            "toast": "계정을 사용할 수 있는 사용자를 변경하지 못했습니다. 다시 시도하세요."
           }
         }
       },
@@ -9054,7 +9060,8 @@
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
       "state": {
         "completed": "검사가 완료되었습니다.",
-        "inProgress": "검사 진행 중…"
+        "inProgress": "검사 진행 중…",
+        "waiting": "커넥터 설정을 기다리는 중입니다."
       }
     }
   },

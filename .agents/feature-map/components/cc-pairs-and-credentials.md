@@ -77,9 +77,10 @@ deletion units.
 | PATCH | `/manage/credential/{id}` | `update_credential_from_model` | |
 | PUT | `/manage/admin/credential/{id}`, `PUT /manage/admin/credential/private-key/{id}` | `update_credential_data` | Admin-only, any user's credential. |
 | DELETE | `/manage/admin/credential/{id}` | `delete_credential_by_id_admin` | |
+| PATCH | `/manage/admin/credential/{id}/sharing` | `update_credential_sharing_admin` | Renames a saved credential and sets `admin_public`, `curator_public` and its groups. Keeps its values, owner and `time_updated`, so its stored check results still apply. The scope gate bounds the stored and the requested groups. The add-connector page's saved-account cards use it. |
 | DELETE | `/manage/credential/{id}`, `/manage/credential/force/{id}` | | Owner delete, and delete that also removes the pairs that use the credential. |
 | PUT | `/manage/admin/credential/swap` | `swap_credentials_for_connector` | Swaps the credential a cc-pair uses. |
-| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Admin listing, masked. |
+| GET | `/manage/admin/credential`, `/manage/admin/similar-credentials/{source}` | | Admin listing, masked. `similar-credentials` also returns each credential's `groups`. |
 | GET, POST | `/connector/oauth/*` | `server/documents/standard_oauth.py` | Connector-side OAuth authorization flow. |
 | PUT | `/manage/connector/{connector_id}/credential/{credential_id}` | `associate_credential_to_connector` | `server/documents/cc_pair.py`. Creates the cc-pair. Takes `ConnectorCredentialPairMetadata`, including manage-access groups and data-access groups. |
 | DELETE | `/manage/connector/{connector_id}/credential/{credential_id}` | `dissociate_credential_from_connector` | Hard-deletes the pairing row directly (no background cleanup); used when the pairing has no indexed documents yet. |

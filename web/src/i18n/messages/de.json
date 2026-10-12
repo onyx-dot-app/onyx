@@ -2760,6 +2760,12 @@
           },
           "rerunFailed": {
             "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
+          },
+          "renameFailed": {
+            "toast": "Das Konto konnte nicht umbenannt werden. Versuchen Sie es erneut."
+          },
+          "shareFailed": {
+            "toast": "Die Freigabe des Kontos konnte nicht geändert werden. Versuchen Sie es erneut."
           }
         }
       },
@@ -9054,7 +9060,8 @@
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
       "state": {
         "completed": "Prüfungen abgeschlossen.",
-        "inProgress": "Prüfungen laufen…"
+        "inProgress": "Prüfungen laufen…",
+        "waiting": "Warten auf Connector-Einstellungen."
       }
     }
   },

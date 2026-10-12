@@ -2760,6 +2760,12 @@
           },
           "rerunFailed": {
             "toast": "Não foi possível iniciar as verificações. Tente novamente."
+          },
+          "renameFailed": {
+            "toast": "Não foi possível renomear a conta. Tente novamente."
+          },
+          "shareFailed": {
+            "toast": "Não foi possível alterar quem pode usar a conta. Tente novamente."
           }
         }
       },
@@ -9054,7 +9060,8 @@
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
       "state": {
         "completed": "Verificações concluídas.",
-        "inProgress": "Verificações em andamento…"
+        "inProgress": "Verificações em andamento…",
+        "waiting": "Aguardando as configurações do conector."
       }
     }
   },

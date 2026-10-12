@@ -6,6 +6,7 @@ import { Disabled } from "@opal/core";
 import {
   Button,
   Card,
+  Divider,
   Modal,
   OverflowText,
   SelectCard,
@@ -25,8 +26,15 @@ import {
 } from "@opal/icons";
 import type {
   CredentialCheckReport,
+  CredentialSharing,
   SimilarCredential,
 } from "@/lib/credentials/types";
+import {
+  ShareAccountSelect,
+  shareAccountPayload,
+  shareAccountValues,
+  type ShareAccountFormValues,
+} from "@/lib/credentials/components/ShareAccountField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
@@ -92,6 +100,10 @@ interface AuthenticationAccountCardProps {
   checkReport: CredentialCheckReport | null;
   /** Starts the checks on this account; resolves once the run is queued. */
   onRerunChecks: () => Promise<void>;
+  /** Shows who may reuse the account; sharing needs the Business tier. */
+  canShare: boolean;
+  /** Saves the account's name and sharing; rejects when the save fails. */
+  onUpdateSharing: (sharing: CredentialSharing) => Promise<void>;
 }
 /**
  * One saved account in the Authentication Account section. The whole card
@@ -110,6 +122,8 @@ export default function AuthenticationAccountCard({
   onDelete,
   checkReport,
   onRerunChecks,
+  canShare,
+  onUpdateSharing,
 }: AuthenticationAccountCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
@@ -142,6 +156,34 @@ export default function AuthenticationAccountCard({
       setStarting(false);
     }
   }
+  // Held here so an edit shows at once; a failed save puts them back.
+  const [name, setName] = useState<string | null>(credential.name ?? null);
+  const [sharing, setSharing] = useState<ShareAccountFormValues>(() =>
+    shareAccountValues(credential)
+  );
+
+  async function saveSharing(
+    nextName: string | null,
+    nextSharing: ShareAccountFormValues,
+    failureToast: string
+  ) {
+    const previousName = name;
+    const previousSharing = sharing;
+    setName(nextName);
+    setSharing(nextSharing);
+    try {
+      await onUpdateSharing({
+        ...shareAccountPayload(nextSharing),
+        curator_public: credential.curator_public ?? false,
+        name: nextName,
+      });
+    } catch {
+      setName(previousName);
+      setSharing(previousSharing);
+      toast.error(failureToast);
+    }
+  }
+
   const [expanded, setExpanded] = useState<boolean>(false);
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
@@ -270,6 +312,22 @@ export default function AuthenticationAccountCard({
                       mono={field.kind === "secret"}
                     />
                   ))}
+                  {canShare && (
+                    <>
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
+                      {/* "Only Me" names the editor, so only the owner
+                      changes who may reuse the account. */}
+                      <Disabled disabled={!isOwnAccount}>
+                        <ShareAccountSelect
+                          value={sharing}
+                          onChange={(next) =>
+                            void saveSharing(name, next, t("shareFailed.toast"))
+                          }
+                          disabled={!isOwnAccount}
+                        />
+                      </Disabled>
+                    </>
+                  )}
                 </Section>
               </Card>
             </Section>
@@ -284,12 +342,17 @@ export default function AuthenticationAccountCard({
             <Section alignItems="start" gap={0} padding={2} width="full">
               <Content
                 icon={getSourceMetadata(source).icon}
-                // Named by who created it; the account's own name stands in
-                // for one with no creator.
-                title={
-                  credential.user_email ??
-                  credential.name ??
-                  t("untitled.label")
+                // Named by its own name, else by who created it, as a new
+                // account is.
+                title={name || credential.user_email || t("untitled.label")}
+                editable
+                // A blank name falls back to the creator.
+                onTitleChange={(next) =>
+                  void saveSharing(
+                    next.trim() || null,
+                    sharing,
+                    t("renameFailed.toast")
+                  )
                 }
                 suffix={t("sourceSuffix", { source: sourceName })}
                 description={t("addedOn.label", { date: addedOn })}
