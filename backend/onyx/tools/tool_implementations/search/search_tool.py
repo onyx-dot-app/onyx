@@ -839,6 +839,20 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         resolved_scope = (
             plan_scope if plan_scope is not None else user_source_restriction
         )
+        # Inferred connector sources must not hide files supplied as context.
+        # Explicit source selections remain the outer bound.
+        if (
+            plan_scope is not None
+            and (
+                self.project_id_filter is not None or self.persona_id_filter is not None
+            )
+            and (
+                user_source_restriction is None
+                or DocumentSource.USER_FILE in user_source_restriction
+            )
+            and DocumentSource.USER_FILE not in plan_scope
+        ):
+            resolved_scope = [*plan_scope, DocumentSource.USER_FILE]
 
         logger.info(
             "Internal search - source scope: %s",
