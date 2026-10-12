@@ -348,3 +348,35 @@ it("renders CSV content as a table through the file preview", async () => {
   ).toBeInTheDocument();
   expect(screen.getByRole("cell", { name: "Alice" })).toBeInTheDocument();
 });
+
+test("shows refresh feedback while retaining a PDF until replacement bytes arrive", async () => {
+  const replacement = deferred<Response>();
+  const fetch = jest
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(new Response("original"))
+    .mockReturnValueOnce(replacement.promise);
+  const preview = (revision: string) => (
+    <FilePreviewContent
+      sessionId="pdf-feedback"
+      filePath="outputs/report.pdf"
+      revision={revision}
+    />
+  );
+  try {
+    const { rerender } = render(preview("1"));
+    const viewer = await screen.findByTitle("report.pdf");
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Loading file...")).not.toBeInTheDocument()
+    );
+    rerender(preview("2"));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(screen.getByTitle("report.pdf")).toBe(viewer);
+    expect(screen.getByLabelText("Loading file...")).toBeInTheDocument();
+    await act(async () => replacement.resolve(new Response("updated")));
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Loading file...")).not.toBeInTheDocument()
+    );
+  } finally {
+    fetch.mockRestore();
+  }
+});

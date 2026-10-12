@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { SWRConfig } from "swr";
 import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -38,28 +38,41 @@ export function FilePreviewContent({
   revision,
   refreshKey,
 }: FilePreviewContentProps) {
+  const t = useTranslations("craft.filePreview");
+  const [documentRefreshing, setDocumentRefreshing] = useState(false);
   // The retained viewer owns its bytes. Eviction releases the entire cache.
   return (
     <SWRConfig
       key={`${sessionId}:${filePath}`}
       value={{ provider: () => new Map() }}
     >
-      {/\.pptx?$/i.test(filePath) ? (
-        <PptxPreview
-          sessionId={sessionId}
-          filePath={filePath}
-          revision={revision}
-          refreshKey={refreshKey}
-          isActive={isActive}
-        />
-      ) : /\.pdf$/i.test(filePath) ? (
-        <PdfPreview
-          sessionId={sessionId}
-          filePath={filePath}
-          revision={revision}
-          refreshKey={refreshKey}
-          isActive={isActive}
-        />
+      {/\.(pdf|pptx?)$/i.test(filePath) ? (
+        <div className="relative h-full">
+          {/\.pptx?$/i.test(filePath) ? (
+            <PptxPreview
+              sessionId={sessionId}
+              filePath={filePath}
+              revision={revision}
+              refreshKey={refreshKey}
+              isActive={isActive}
+              onRefreshingChange={setDocumentRefreshing}
+            />
+          ) : (
+            <PdfPreview
+              sessionId={sessionId}
+              filePath={filePath}
+              revision={revision}
+              refreshKey={refreshKey}
+              isActive={isActive}
+              onRefreshingChange={setDocumentRefreshing}
+            />
+          )}
+          {documentRefreshing && (
+            <div className="absolute top-2 end-2">
+              <IconLoader aria-label={t("loading.label")} />
+            </div>
+          )}
+        </div>
       ) : (
         <FetchedFilePreview
           sessionId={sessionId}

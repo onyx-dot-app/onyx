@@ -316,7 +316,7 @@ the latest revision on activation. Files without inventory revisions revalidate
 when their preview mounts or becomes active. Each successful PowerPoint conversion response gives
 slide images a fresh browser cache token; unchanged retained viewers reuse it.
 PDF activation reads without revisions reuse the displayed Blob when bytes match.
-Changed bytes replace the PDF; previews release their object URL on replacement or unmount. Presentation
+Changed bytes replace the PDF; React-PDF releases its loading tasks on replacement or unmount. Presentation
 keyboard navigation stays inside the active viewer.
 
 The first automatic output selection, manual tab selection, closing a tab or the panel, and
@@ -336,7 +336,8 @@ Within a retained cache, preview remounts reuse matching revisions and reload ch
 Closing or evicting a viewer releases its cache. Reopening it reads the file again.
 Later transient failures cannot restore invalidated content without a successful read.
 Hidden viewers defer scheduled retries until activation.
-Presentation viewers hide cached slides during conversion because conversion replaces slide files.
+Presentation viewers retain accepted slides during conversion and show loading feedback.
+Transient conversion failures retain those slides and show a warning.
 
 CSV files display a sticky-header table limited to 1,000 rows, 100 columns, and 5,000 cells.
 CSV viewers report malformed quoted fields and offer a raw download through the preview toolbar.

@@ -235,6 +235,7 @@ Changed bytes replace the displayed PDF. React-PDF releases its loading tasks wh
 PDF workers, fonts, character maps, and rendering support files use versioned same-origin URLs.
 PDF and presentation viewers share page controls and a resizable thumbnail sidebar.
 PDF controls provide page navigation, fit modes, zoom, and download.
+The file-preview caller shows loading feedback while PDF or presentation refreshes retain their accepted content.
 
 The output panel keeps its five most recently visited tab bodies mounted, including
 pinned tabs and file previews. Inactive bodies keep their layout but are invisible,
