@@ -332,13 +332,14 @@ function CheckCardView({
       title={t("title")}
       suffix={progress.suffix}
       // Expanded, a short state line keeps the header's height steady while
-      // the rows fold.
+      // the rows fold. A run that broke reads the same either way.
       description={
-        collapsed
+        notice ??
+        (collapsed
           ? summary
           : isRunning || inProgressCount > 0
             ? t("state.inProgress")
-            : t("state.completed")
+            : t("state.completed"))
       }
       sizePreset="main-content"
       variant="section"
