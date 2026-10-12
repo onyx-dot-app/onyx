@@ -364,39 +364,42 @@ class _SitesVisibleCheck(_SharepointCheck):
             )
 
 
-class _ConfiguredFolderCheck(_SharepointCheck):
-    """A site URL that goes past the library names a folder, which must exist
-    in that library. Pages do not read libraries, so this is a documents
-    rule."""
+class _ConfiguredLibrariesCheck(_SharepointCheck):
+    """A site URL that goes past the site names a library, and past that a
+    folder, which must exist there. The documents probe reads one file and
+    stops, so a missing second library would otherwise go unnoticed. Pages do
+    not read libraries, so this is a documents rule."""
 
     def __init__(self) -> None:
         super().__init__(
-            check_id="sharepoint_configured_folder",
-            display_name="Configured folders exist",
+            check_id="sharepoint_configured_libraries",
+            display_name="Configured libraries and folders exist",
             remediation=(
-                "Use the folder's path inside the library as it appears in the "
-                "site URL."
+                "Use the library's URL segment and the folder's path inside it "
+                "as they appear in the site URL."
             ),
         )
 
     def applies(self, form_state: FormState[SharepointConnectorConfig]) -> bool:
         return form_state.config.include_site_documents and any(
-            site.folder_path for site in _descriptors(form_state.config)
+            site.drive_name for site in _descriptors(form_state.config)
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
         gateway: SharepointSourceOperations = _gateway(context)
-        scoped: list[tuple[SiteDescriptor, str]] = [
-            (site, site.folder_path)
-            for site in _descriptors(_config(context))
-            if site.folder_path
-        ]
-        for site, folder_path in scoped[:_PROBE_SITES]:
-            folder_url: str = f"{site.url}/{site.drive_name}/{folder_path}"
-            for drive in _site_drives(context, site):
+        scoped: list[SiteDescriptor] = [
+            site for site in _descriptors(_config(context)) if site.drive_name
+        ][:_PROBE_SITES]
+        for site in scoped:
+            # Raises when the site has no library of that name.
+            drives: list[SiteDrive] = _site_drives(context, site)
+            if not site.folder_path:
+                continue
+            folder_url: str = f"{site.url}/{site.drive_name}/{site.folder_path}"
+            for drive in drives:
                 try:
                     gateway.resolve_folder(
-                        drive_id=drive.drive_id, folder_path=folder_path
+                        drive_id=drive.drive_id, folder_path=site.folder_path
                     )
                 except MicrosoftGraphError as error:
                     _raise_for_read_error(
@@ -585,7 +588,7 @@ def build_sharepoint_indexing_checks() -> list[CapabilityCheck]:
         _ContentTypesCheck(),
         _ConfiguredSitesCheck(),
         _SitesVisibleCheck(),
-        _ConfiguredFolderCheck(),
+        _ConfiguredLibrariesCheck(),
         _DocumentsReadCheck(),
         _SitePagesReadCheck(),
     ]

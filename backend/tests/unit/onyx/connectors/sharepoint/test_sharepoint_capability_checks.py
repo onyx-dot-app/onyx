@@ -144,7 +144,7 @@ def test_every_check_passes_on_a_healthy_tenant() -> None:
         "sharepoint_content_types": CapabilityCheckStatus.PASSED,
         "sharepoint_configured_sites": CapabilityCheckStatus.PASSED,
         "sharepoint_sites_visible": CapabilityCheckStatus.SKIPPED,
-        "sharepoint_configured_folder": CapabilityCheckStatus.PASSED,
+        "sharepoint_configured_libraries": CapabilityCheckStatus.PASSED,
         "sharepoint_documents_read": CapabilityCheckStatus.PASSED,
         "sharepoint_site_pages_read": CapabilityCheckStatus.PASSED,
     }
@@ -379,14 +379,14 @@ def test_sites_visible_is_skipped_with_configured_sites() -> None:
     )
 
 
-# sharepoint_configured_folder
+# sharepoint_configured_libraries
 
 
 def test_folder_check_resolves_the_configured_folder() -> None:
     gateway: MagicMock = _gateway()
     config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Shared Documents/Plans/Q1"])
 
-    _run("sharepoint_configured_folder", _context(gateway, config))
+    _run("sharepoint_configured_libraries", _context(gateway, config))
 
     gateway.resolve_folder.assert_called_once_with(
         drive_id="drive-id", folder_path="Plans/Q1"
@@ -399,7 +399,21 @@ def test_missing_folder_fails_with_its_path() -> None:
     config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Shared Documents/Plans"])
 
     with pytest.raises(ConnectorValidationError, match="Plans"):
-        _run("sharepoint_configured_folder", _context(gateway, config))
+        _run("sharepoint_configured_libraries", _context(gateway, config))
+
+
+def test_a_second_library_the_site_lacks_fails() -> None:
+    """The documents probe stops at the first file, so this check is what
+    catches a library name that matches nothing."""
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(
+        sites=[f"{SITE_URL}/Shared Documents", f"{OTHER_SITE_URL}/Archive"]
+    )
+
+    with pytest.raises(ConnectorValidationError, match="Archive"):
+        _run("sharepoint_configured_libraries", _context(gateway, config))
+
+    gateway.resolve_folder.assert_not_called()
 
 
 def test_unknown_library_fails_with_its_segment() -> None:
@@ -407,25 +421,25 @@ def test_unknown_library_fails_with_its_segment() -> None:
     config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Archive/Plans"])
 
     with pytest.raises(ConnectorValidationError, match="Archive"):
-        _run("sharepoint_configured_folder", _context(gateway, config))
+        _run("sharepoint_configured_libraries", _context(gateway, config))
 
 
-def test_folder_check_is_skipped_when_documents_are_off() -> None:
+def test_library_check_is_skipped_when_documents_are_off() -> None:
     config: dict[str, Any] = _config(
         sites=[f"{SITE_URL}/Shared Documents/Plans"], include_site_documents=False
     )
 
     assert (
-        _status("sharepoint_configured_folder", _context(_gateway(), config))
+        _status("sharepoint_configured_libraries", _context(_gateway(), config))
         is CapabilityCheckStatus.SKIPPED
     )
 
 
-def test_folder_check_is_skipped_without_a_folder_path() -> None:
-    config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Shared Documents"])
+def test_library_check_is_skipped_without_a_library() -> None:
+    config: dict[str, Any] = _config(sites=[SITE_URL])
 
     assert (
-        _status("sharepoint_configured_folder", _context(_gateway(), config))
+        _status("sharepoint_configured_libraries", _context(_gateway(), config))
         is CapabilityCheckStatus.SKIPPED
     )
 

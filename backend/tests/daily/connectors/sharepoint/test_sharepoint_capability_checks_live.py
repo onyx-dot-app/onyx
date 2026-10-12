@@ -120,7 +120,7 @@ def test_a_bad_secret_fails_the_token_check(
         (["", "/../victim"], {}, "sharepoint_configured_sites"),
         (["-does-not-exist"], {}, "sharepoint_configured_sites"),
         (["/No Such Library"], {}, "sharepoint_documents_read"),
-        (["/Shared Documents/no-such-folder"], {}, "sharepoint_configured_folder"),
+        (["/Shared Documents/no-such-folder"], {}, "sharepoint_configured_libraries"),
     ],
     ids=[
         "no-content",
