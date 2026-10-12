@@ -313,7 +313,7 @@ Files without revisions revalidate when mounted or activated.
 PowerPoint conversion responses give slide images fresh browser cache tokens.
 Unchanged retained viewers reuse their tokens and selected slides.
 PDF activation reads without revisions retain the displayed Blob when bytes match.
-Changed bytes replace the PDF. Replacement and unmount revoke its object URL.
+Changed bytes replace the PDF. React-PDF releases its loading tasks on replacement or unmount.
 Presentation keyboard navigation stays inside the active viewer.
 
 Tabs, selection, medium split, and Files expansion remain independent of task-stream rendering.

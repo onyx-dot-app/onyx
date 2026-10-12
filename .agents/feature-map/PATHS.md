@@ -174,6 +174,7 @@ so verify the callers rather than a single component.
 |---|---|
 | `web/src/app/app/` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
+| `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
 | `web/src/app/craft/` | craft-sessions, craft-streaming |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx` | craft-webapp-proxy |
 | `web/src/lib/csv.ts` | craft-streaming, chat-frontend |
