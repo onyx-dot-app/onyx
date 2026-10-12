@@ -2702,9 +2702,6 @@
           "newAccountSuffix": "(حساب جديد)",
           "editButton": {
             "label": "تعديل الحساب"
-          },
-          "changeButton": {
-            "label": "تغيير الحساب"
           }
         },
         "timeout": {

@@ -2702,9 +2702,6 @@
           "newAccountSuffix": "(새 계정)",
           "editButton": {
             "label": "계정 편집"
-          },
-          "changeButton": {
-            "label": "계정 변경"
           }
         },
         "timeout": {

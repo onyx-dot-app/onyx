@@ -1,77 +1,39 @@
 "use client";
 
-import { useFormatter, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
-import { SvgArrowExchange, SvgPlusCircle, SvgUserEdit } from "@opal/icons";
-import type {
-  DraftCredential,
-  SimilarCredential,
-} from "@/lib/credentials/types";
+import { SvgPlusCircle, SvgUserEdit } from "@opal/icons";
+import type { DraftCredential } from "@/lib/credentials/types";
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import { getSourceMetadata } from "@/lib/sources";
-
-/** The account the folded account section stands for. */
-export type SummarizedAccount =
-  | { kind: "saved"; credential: SimilarCredential }
-  | { kind: "draft"; draft: DraftCredential };
 
 interface AccountSummaryProps {
-  account: SummarizedAccount;
+  /** The new account typed into the form, which Create saves. */
+  draft: DraftCredential;
   /** The source being set up. */
   source: ConfigurableSources;
-  /** The source's display name. */
+  /** The source's display name, for an account with no name to show. */
   sourceName: string;
 }
 
 /**
- * One row that names the chosen account: a saved account, or the new account
- * typed into the form. A draft is named by its display name, else by its
- * first value that is not a secret (such as its email). The new-account card
- * shows it as its closed header; `AccountSummaryCard` wraps it for a saved
- * account.
+ * One row that names the new account: its display name, else its first value
+ * that is not a secret (such as its email). The new-account card shows it as
+ * its closed header; `AccountSummaryCard` wraps it for the folded section.
  */
 export function AccountSummary({
-  account,
+  draft,
   source,
   sourceName,
 }: AccountSummaryProps) {
   const t = useTranslations("admin.connectorsList.add");
-  const format = useFormatter();
-
-  const summary =
-    account.kind === "saved"
-      ? {
-          icon: getSourceMetadata(source).icon,
-          title:
-            account.credential.user_email ??
-            account.credential.name ??
-            t("account.untitled.label"),
-          suffix: t("account.sourceSuffix", { source: sourceName }),
-          description: t("account.addedOn.label", {
-            date: format.dateTime(new Date(account.credential.time_created), {
-              year: "numeric",
-              month: "2-digit",
-              day: "2-digit",
-            }),
-          }),
-          action: t("accountSummary.changeButton.label"),
-          actionIcon: SvgArrowExchange,
-        }
-      : {
-          icon: SvgPlusCircle,
-          title:
-            account.draft.sharing.name ??
-            getCredentialDetails(account.draft, source).fields.find(
-              ({ field }) => field.kind !== "secret"
-            )?.value ??
-            t("newAccountButton.label", { source: sourceName }),
-          suffix: t("accountSummary.newAccountSuffix"),
-          description: undefined,
-          action: t("accountSummary.editButton.label"),
-          actionIcon: SvgUserEdit,
-        };
+  const title: string =
+    draft.sharing.name ??
+    getCredentialDetails(draft, source).fields.find(
+      ({ field }) => field.kind !== "secret"
+    )?.value ??
+    t("newAccountButton.label", { source: sourceName });
 
   return (
     <Section
@@ -83,42 +45,32 @@ export function AccountSummary({
     >
       <Section alignItems="start" padding={2} width="full">
         <Content
-          icon={summary.icon}
-          title={summary.title}
-          suffix={summary.suffix}
-          description={summary.description}
+          icon={SvgPlusCircle}
+          title={title}
+          suffix={t("accountSummary.newAccountSuffix")}
           sizePreset="main-ui"
           variant="section"
         />
       </Section>
       {/* Repeats its card's own action, so it leaves the tab order. */}
-      <Button
-        prominence="tertiary"
-        rightIcon={summary.actionIcon}
-        tabIndex={-1}
-      >
-        {summary.action}
+      <Button prominence="tertiary" rightIcon={SvgUserEdit} tabIndex={-1}>
+        {t("accountSummary.editButton.label")}
       </Button>
     </Section>
   );
 }
 
-interface AccountSummaryCardProps {
-  account: SummarizedAccount;
-  /** The source being set up. */
-  source: ConfigurableSources;
-  /** The source's display name. */
-  sourceName: string;
+interface AccountSummaryCardProps extends AccountSummaryProps {
   /** Opens the account section again. */
   onExpand: () => void;
 }
 
 /**
- * The chosen account, saved or new, while the account section is folded.
- * Clicking it opens the section.
+ * The new account while the account section is folded. Clicking it opens the
+ * section.
  */
 export default function AccountSummaryCard({
-  account,
+  draft,
   source,
   sourceName,
   onExpand,
@@ -132,11 +84,7 @@ export default function AccountSummaryCard({
       data-testid="account-summary"
       onClick={onExpand}
     >
-      <AccountSummary
-        account={account}
-        source={source}
-        sourceName={sourceName}
-      />
+      <AccountSummary draft={draft} source={source} sourceName={sourceName} />
     </SelectCard>
   );
 }

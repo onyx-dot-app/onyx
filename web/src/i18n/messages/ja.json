@@ -2702,9 +2702,6 @@
           "newAccountSuffix": "(新しいアカウント)",
           "editButton": {
             "label": "アカウントを編集"
-          },
-          "changeButton": {
-            "label": "アカウントを変更"
           }
         },
         "timeout": {
