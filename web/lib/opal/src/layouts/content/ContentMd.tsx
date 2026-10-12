@@ -248,8 +248,6 @@ function ContentMd({
                 )}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
-                // A click in the input belongs to the edit, not a parent row.
-                onClick={(e) => e.stopPropagation()}
                 size={1}
                 onFocus={(e) => e.currentTarget.select()}
                 onBlur={commit}
@@ -320,7 +318,7 @@ function ContentMd({
                 size={config.editButtonSize}
                 tooltip={strings.edit}
                 tooltipSide="right"
-                onClick={handleTitleClick}
+                onClick={startEditing}
               />
             </div>
           )}
