@@ -1,5 +1,6 @@
 "use client";
 
+import type { CredentialRef } from "@/lib/credentials/types";
 import { useCallback, useMemo, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import { ContentAction, Section } from "@opal/layouts";
@@ -28,8 +29,9 @@ import {
   SvgPlay,
   SvgRefreshCw,
   SvgXCircle,
+  SvgXOctagon,
 } from "@opal/icons";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import type {
   CapabilityCheckResult,
@@ -43,6 +45,7 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import {
   useConnectorChecks,
   useConnectorChecksAutoRun,
+  useResetChecksOnCredentialChange,
   useConnectorChecksProgress,
 } from "@/lib/connectors/checks/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -203,7 +206,7 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
     <Divider title={t(label, { count: checks.length })} foldable defaultOpen>
-      <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
+      <Section justifyContent="start" alignItems="stretch" height="fit" gap={1}>
         {checks.map((check) => (
           // The backend repeats some checks across capabilities under the
           // same ID, so the capability keeps the key unique.
@@ -222,6 +225,19 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
  * The ring and the title count every check, so a run fills them in as checks
  * finish.
  */
+/**
+ * A red stop sign, for a run that broke. Content colors its icon from its own
+ * stylesheet, so the red is an inline style; Content's sizing stays.
+ */
+function FailedToRunIcon({ style, ...props }: IconProps) {
+  return (
+    <SvgXOctagon
+      {...props}
+      style={{ ...style, color: "var(--status-error-05)" }}
+    />
+  );
+}
+
 interface CheckCardViewProps {
   status: ConnectorChecksStatus;
   /** The finished checks, in any order. */
@@ -246,6 +262,8 @@ function CheckCardView({
   onRerun,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
+  // The same "Re-run Checks" label the saved account cards use.
+  const tAccount = useTranslations("admin.connectorsList.add.account");
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -284,6 +302,9 @@ function CheckCardView({
   const notice: string | undefined =
     status === "failedToRun" ? t("failedToRun") : undefined;
   const hasResults: boolean = results.length > 0;
+  // A run that broke can still list checks: some finished first, or an
+  // earlier run's results stay after a failed re-run.
+  const hasRows: boolean = hasResults || openChecks.length > 0;
   const total: number = results.length + inProgressCount + expectedCount;
   const hasChecks: boolean = total > 0;
 
@@ -322,53 +343,74 @@ function CheckCardView({
 
   const header = (
     <ContentAction
-      icon={progress.icon}
+      // A run that broke has no counts, so the ring would read as complete;
+      // a red X stands in, without dimming the title.
+      icon={notice ? FailedToRunIcon : progress.icon}
       title={t("title")}
       suffix={progress.suffix}
       // Expanded, a short state line keeps the header's height steady while
-      // the rows fold.
+      // the rows fold. A run that broke reads the same either way.
       description={
-        collapsed
+        notice ??
+        (collapsed
           ? summary
           : isRunning || inProgressCount > 0
             ? t("state.inProgress")
-            : t("state.completed")
+            : t("state.completed"))
       }
       sizePreset="main-content"
       variant="section"
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
-          {!collapsed && (
+          {notice ? (
+            // The way to try again, so it says what it does.
             <Button
-              icon={SvgRefreshCw}
+              rightIcon={SvgRefreshCw}
               prominence="internal"
-              tooltip={t("rerunButton.label")}
-              aria-label={t("rerunButton.label")}
               disabled={isRunning}
               onClick={onRerun}
-            />
+            >
+              {tAccount("rerunButton.label")}
+            </Button>
+          ) : (
+            !collapsed && (
+              <Button
+                icon={SvgRefreshCw}
+                prominence="internal"
+                tooltip={tAccount("rerunButton.label")}
+                aria-label={tAccount("rerunButton.label")}
+                disabled={isRunning}
+                onClick={onRerun}
+              />
+            )
           )}
           {collapsed && requiredFailed > 0 && (
             <Tag
+              icon={SvgXOctagon}
               title={t("requiredFailed", { count: requiredFailed })}
               color="red"
             />
           )}
-          <Button
-            icon={collapsed ? SvgExpand : SvgFold}
-            // Folded, the card hovers grey itself; tertiary matches that
-            // grey, where internal would paint a white square on it.
-            prominence={collapsed ? "tertiary" : "internal"}
-            tooltip={collapsed ? t("foldButton.expand") : t("foldButton.fold")}
-            aria-label={
-              collapsed ? t("foldButton.expand") : t("foldButton.fold")
-            }
-            aria-expanded={!collapsed}
-            // Folded, it repeats the card's own action.
-            tabIndex={collapsed ? -1 : undefined}
-            onClick={() => setCollapsed((value) => !value)}
-          />
+          {/* Shown unless a run that broke left no rows to fold. */}
+          {(!notice || hasRows) && (
+            <Button
+              icon={collapsed ? SvgExpand : SvgFold}
+              // Folded, the card hovers grey itself; tertiary matches that
+              // grey, where internal would paint a white square on it.
+              prominence={collapsed ? "tertiary" : "internal"}
+              tooltip={
+                collapsed ? t("foldButton.expand") : t("foldButton.fold")
+              }
+              aria-label={
+                collapsed ? t("foldButton.expand") : t("foldButton.fold")
+              }
+              aria-expanded={!collapsed}
+              // Folded, it repeats the card's own action.
+              tabIndex={collapsed ? -1 : undefined}
+              onClick={() => setCollapsed((value) => !value)}
+            />
+          )}
         </Section>
       }
     />
@@ -389,6 +431,12 @@ function CheckCardView({
     >
       <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
         {header}
+        {/* The header shows the failure; this announces it. */}
+        {notice && (
+          <span role="alert" className="sr-only">
+            {notice}
+          </span>
+        )}
 
         <Fold open={!collapsed}>
           {/* The space below the header lives inside the fold, so a closed
@@ -400,13 +448,7 @@ function CheckCardView({
             gap={1}
             className="pt-1"
           >
-            {notice && (
-              <Text font="main-ui-body" color="status-error-05" role="alert">
-                {notice}
-              </Text>
-            )}
-
-            {hasResults || openChecks.length > 0 ? (
+            {hasRows ? (
               <Section
                 justifyContent="start"
                 alignItems="stretch"
@@ -447,19 +489,23 @@ function CheckCardView({
  */
 export interface CredentialChecksCardProps {
   source: ConfigurableSources;
-  /** The credential the checks run with; `null` until one is usable. */
-  credentialId: number | null;
+  /** The saved credential or draft the checks run with; `null` until one is usable. */
+  credential: CredentialRef | null;
   /** Locks the Start Checks prompt until the credential section is valid. */
   locked: boolean;
+  /** Called when Start Checks starts the first run. */
+  onStart?: () => void;
 }
 export default function CredentialChecksCard({
   source,
-  credentialId,
+  credential,
   locked,
+  onStart,
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
-  const checks = useConnectorChecks({ source, credentialId });
+  useResetChecksOnCredentialChange({ source, credential });
+  const checks = useConnectorChecks({ source, credential });
   useConnectorChecksAutoRun(checks);
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {
@@ -476,7 +522,14 @@ export default function CredentialChecksCard({
           center
           padding={0}
           rightChildren={
-            <Button icon={SvgPlay} disabled={locked} onClick={checks.begin}>
+            <Button
+              icon={SvgPlay}
+              disabled={locked}
+              onClick={() => {
+                checks.begin();
+                onStart?.();
+              }}
+            >
               {promptT("startButton.label")}
             </Button>
           }

@@ -94,14 +94,14 @@ def test_fallback_synthesis_respects_applicability(
     )
 
     # Under test.
-    checks = get_perm_sync_capability_checks(DocumentSource.GOOGLE_DRIVE)
+    checks = get_perm_sync_capability_checks(DocumentSource.BOX)
 
     # Postcondition.
     assert [check.capability for check in checks] == [
         CredentialCapability.DOC_PERMISSION_SYNC
     ]
     assert checks[0].is_fallback is True
-    assert checks[0].check_id == "google_drive_perm_sync"
+    assert checks[0].check_id == "box_perm_sync"
 
 
 def test_named_checks_ignore_the_probe_allowlist(
@@ -139,7 +139,7 @@ def test_unregistered_sync_source_gets_shared_fallback_checks() -> None:
     Verifies fallback synthesis for a sync-capable source with no named checks.
     """
     # Under test.
-    checks = get_perm_sync_capability_checks(DocumentSource.GOOGLE_DRIVE)
+    checks = get_perm_sync_capability_checks(DocumentSource.BOX)
 
     # Postcondition.
     # One fallback per applicable capability, sharing a single check_id (and
@@ -150,7 +150,7 @@ def test_unregistered_sync_source_gets_shared_fallback_checks() -> None:
     }
     assert all(check.is_fallback for check in checks)
     assert len({type(check) for check in checks}) == 1
-    assert {check.check_id for check in checks} == {"google_drive_perm_sync"}
+    assert {check.check_id for check in checks} == {"box_perm_sync"}
 
 
 def test_registered_checks_clobber_only_their_capability(
@@ -165,23 +165,23 @@ def test_registered_checks_clobber_only_their_capability(
     # requires the gateway).
     monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})
 
-    class _GoogleDriveOperations(SourceOperations):
-        source = DocumentSource.GOOGLE_DRIVE
+    class _BoxOperations(SourceOperations):
+        source = DocumentSource.BOX
         sdk_modules = ()
 
     named_check = _NamedCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,
-        check_id="google_drive_named_check",
+        check_id="box_named_check",
         display_name="Named check",
     )
     monkeypatch.setitem(
         ee_capability_checks._DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE,
-        DocumentSource.GOOGLE_DRIVE,
+        DocumentSource.BOX,
         [named_check],
     )
 
     # Under test.
-    checks = get_perm_sync_capability_checks(DocumentSource.GOOGLE_DRIVE)
+    checks = get_perm_sync_capability_checks(DocumentSource.BOX)
 
     # Postcondition.
     # Doc sync uses the named check; group sync, applicable but still
@@ -212,11 +212,11 @@ def test_fallback_check_calls_validate_perm_sync() -> None:
     # Precondition.
     connector = MagicMock(spec=BaseConnector)
     context = CapabilityCheckContext(
-        source=DocumentSource.GOOGLE_DRIVE,
+        source=DocumentSource.BOX,
         credential_json={},
         connector=connector,
     )
-    check = get_perm_sync_capability_checks(DocumentSource.GOOGLE_DRIVE)[0]
+    check = get_perm_sync_capability_checks(DocumentSource.BOX)[0]
 
     # Under test.
     check.run(context)

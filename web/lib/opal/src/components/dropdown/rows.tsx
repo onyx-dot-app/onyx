@@ -8,6 +8,7 @@ import type {
   DropdownMode,
   DropdownRow,
   DropdownRowProps,
+  DropdownSizePreset,
 } from "@opal/components/dropdown/types";
 
 /**
@@ -26,6 +27,7 @@ interface RowProps {
   listId: string;
   mode: DropdownMode;
   row: DropdownRow;
+  sizePreset: DropdownSizePreset;
   /** The row's keyboard stop, or -1 while it is withheld (folded). */
   index: number;
   isHighlighted: boolean;
@@ -46,6 +48,7 @@ export const Row = React.memo(function Row({
   listId,
   mode,
   row,
+  sizePreset,
   index,
   isHighlighted,
   isSelected,
@@ -88,7 +91,8 @@ export const Row = React.memo(function Row({
         icon={row.icon}
         title={row.title}
         description={row.description}
-        sizePreset="main-ui"
+        sizePreset={sizePreset}
+        padding={sizePreset === "secondary" ? 0 : 0.5}
         variant={row.description ? "heading" : "body"}
         // The switch only shows the state: the row is the control, so the
         // switch takes no pointer or focus of its own.
@@ -124,7 +128,8 @@ export const Row = React.memo(function Row({
       row.kind === "option" ? row.descriptionMaxLines : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,
     tooltip: row.kind === "action" ? row.tooltip : undefined,
-    sizePreset: "main-ui",
+    sizePreset,
+    padding: sizePreset === "secondary" ? 0 : 0.5,
     // `body` resolves to `ContentSm`, which has no description or suffix
     // slot; a row with either takes the `heading` layout.
     variant:

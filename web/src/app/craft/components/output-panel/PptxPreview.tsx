@@ -6,7 +6,9 @@ import {
   useCallback,
   useRef,
   type KeyboardEvent,
+  type PointerEvent,
 } from "react";
+import { useDirection } from "@radix-ui/react-direction";
 import { useFormatter, useTranslations } from "next-intl";
 import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -41,9 +43,25 @@ export default function PptxPreview({
 }: PptxPreviewProps) {
   const t = useTranslations("craft.pptxPreview");
   const format: ReturnType<typeof useFormatter> = useFormatter();
+  const direction = useDirection();
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const resizeGesture = useRef<{
+    pointerId: number;
+    startX: number;
+    width: number;
+  } | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(112);
+  const [layoutWidth, setLayoutWidth] = useState(0);
+  const minimumWidth: number = 88;
+  const maximumWidth: number = layoutWidth
+    ? Math.max(minimumWidth, Math.min(320, layoutWidth * 0.4))
+    : 320;
+  const width: number = Math.max(
+    minimumWidth,
+    Math.min(maximumWidth, sidebarWidth)
+  );
   const selectedThumbnailRef = useRef<HTMLDivElement>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [imageLoading, setImageLoading] = useState(true);
 
   const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionPptxPreview(sessionId, filePath),
@@ -56,17 +74,65 @@ export default function PptxPreview({
     isActive
   );
 
-  const slideCount = data?.slide_count ?? 0;
-  const activeSlide = Math.min(currentSlide, Math.max(0, slideCount - 1));
-
-  // An updated deck can have fewer slides than the current selection.
+  const layoutVisible: boolean =
+    !isLoading && !error && Boolean(data?.slide_count);
   useEffect(() => {
-    if (data) {
-      setCurrentSlide((index) =>
-        Math.min(index, Math.max(0, data.slide_count - 1))
-      );
-    }
-  }, [data]);
+    const layout = layoutRef.current;
+    if (!layout) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setLayoutWidth(entry.contentRect.width);
+    });
+    observer.observe(layout);
+    return () => observer.disconnect();
+  }, [layoutVisible]);
+
+  function resizeAt(clientX: number) {
+    const gesture = resizeGesture.current;
+    if (!gesture) return;
+    const delta: number =
+      (clientX - gesture.startX) * (direction === "rtl" ? -1 : 1);
+    setSidebarWidth(
+      Math.max(minimumWidth, Math.min(maximumWidth, gesture.width + delta))
+    );
+  }
+
+  function finishResize(
+    event: PointerEvent<HTMLDivElement>,
+    cancelled = false
+  ) {
+    if (resizeGesture.current?.pointerId !== event.pointerId) return;
+    if (!cancelled) resizeAt(event.clientX);
+    resizeGesture.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+  }
+
+  function resizeWithKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    const step = direction === "rtl" ? -10 : 10;
+    const next =
+      event.key === "Home"
+        ? minimumWidth
+        : event.key === "End"
+          ? maximumWidth
+          : event.key === "ArrowRight"
+            ? width + step
+            : event.key === "ArrowLeft"
+              ? width - step
+              : null;
+    if (next === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSidebarWidth(Math.max(minimumWidth, Math.min(maximumWidth, next)));
+  }
+
+  const slideCount = data?.slide_count ?? 0;
+  const activeSlide = Math.max(
+    0,
+    Math.min(currentSlide, Math.max(0, slideCount - 1))
+  );
+
+  // Keep the selection in bounds before rendering a replacement deck.
+  if (data && currentSlide !== activeSlide) setCurrentSlide(activeSlide);
 
   const goToPrev = useCallback(() => {
     setCurrentSlide((prev) => Math.max(0, prev - 1));
@@ -81,11 +147,6 @@ export default function PptxPreview({
   useEffect(() => {
     setCurrentSlide(0);
   }, [filePath]);
-
-  // Reset image loading state when slide changes
-  useEffect(() => {
-    setImageLoading(true);
-  }, [currentSlide, data]);
 
   useEffect(() => {
     if (isActive) {
@@ -172,14 +233,18 @@ export default function PptxPreview({
   const slideUrl = `${buildArtifactUrl(sessionId, slidePath)}?revision=${data.imageRevision}`;
 
   return (
-    <div className="h-full min-h-0 flex overflow-hidden">
+    <div
+      ref={layoutRef}
+      className="relative h-full min-h-0 flex overflow-hidden"
+    >
       <div
         role="toolbar"
         aria-label={t("slides.label")}
         aria-orientation="vertical"
         tabIndex={0}
         onKeyDown={handleKeyDown}
-        className="w-28 shrink-0 overflow-y-auto overscroll-contain border-e border-border-02 p-2"
+        style={{ width }}
+        className="shrink-0 overflow-y-auto overscroll-contain p-2"
       >
         <div className="flex flex-col gap-2">
           {data.slide_paths.map((path, index) => (
@@ -214,29 +279,47 @@ export default function PptxPreview({
           ))}
         </div>
       </div>
+      <div
+        role="separator"
+        tabIndex={0}
+        aria-label={t("resize.ariaLabel")}
+        aria-orientation="vertical"
+        aria-valuemin={minimumWidth}
+        aria-valuemax={Math.round(maximumWidth)}
+        aria-valuenow={Math.round(width)}
+        className="group flex w-2 shrink-0 justify-center cursor-col-resize touch-none focus-visible:outline focus-visible:outline-1 focus-visible:outline-border-03"
+        onPointerDown={(event) => {
+          if (event.button !== 0 || resizeGesture.current) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          resizeGesture.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            width,
+          };
+        }}
+        onPointerMove={(event) => {
+          if (resizeGesture.current?.pointerId === event.pointerId)
+            resizeAt(event.clientX);
+        }}
+        onPointerUp={(event) => finishResize(event)}
+        onPointerCancel={(event) => finishResize(event, true)}
+        onLostPointerCapture={() => {
+          resizeGesture.current = null;
+        }}
+        onKeyDown={resizeWithKeyboard}
+      >
+        <div className="pointer-events-none w-1 border-e border-border-02 group-hover:bg-border-01 group-focus-visible:bg-border-01" />
+      </div>
       <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
-        <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
-          {imageLoading && (
-            <div className="absolute">
-              <Text font="secondary-body" color="text-03">
-                {t("loadingSlide.label")}
-              </Text>
-            </div>
-          )}
-          <img
-            src={slideUrl}
-            alt={t("slide.counter", {
-              current: activeSlide + 1,
-              total: slideCount,
-            })}
-            className={cn(
-              "max-w-full max-h-full object-contain transition-opacity",
-              imageLoading ? "opacity-0" : "opacity-100"
-            )}
-            onLoad={() => setImageLoading(false)}
-            onError={() => setImageLoading(false)}
-          />
-        </div>
+        <SlideImage
+          key={slideUrl}
+          src={slideUrl}
+          alt={t("slide.counter", {
+            current: activeSlide + 1,
+            total: slideCount,
+          })}
+        />
         {slideCount > 1 && (
           <div className="flex items-center justify-center gap-3 p-2 border-t border-border-02">
             <Button
@@ -264,6 +347,45 @@ export default function PptxPreview({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface SlideImageProps {
+  src: string;
+  alt: string;
+}
+
+function SlideImage({ src, alt }: SlideImageProps) {
+  const t = useTranslations("craft.pptxPreview");
+  const [status, setStatus] = useState<"loading" | "loaded" | "failed">(
+    "loading"
+  );
+  return (
+    <div className="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
+      {status === "loading" && (
+        <div className="absolute">
+          <Text font="secondary-body" color="text-03">
+            {t("loadingSlide.label")}
+          </Text>
+        </div>
+      )}
+      {status === "failed" ? (
+        <Text font="secondary-body" color="text-03">
+          {t("error.title")}
+        </Text>
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          className={cn(
+            "max-w-full max-h-full object-contain transition-opacity",
+            status === "loading" ? "opacity-0" : "opacity-100"
+          )}
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("failed")}
+        />
+      )}
     </div>
   );
 }

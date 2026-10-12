@@ -532,3 +532,17 @@ See `backend/AGENTS.md` for authoritative test commands and required env.
   the same as `True` (include and attempt to hydrate); only an explicit
   `False` excludes. A skill can therefore ride along as "probably fine"
   until its bundle is actually read and classified.
+
+### Shared document preview script
+
+The built-in PowerPoint preview script also renders first-page PDF and PowerPoint
+thumbnails for Outputs. Both sandbox providers deploy this script and its LibreOffice
+helper in a versioned bundle. Preview requests do not update managed skills or the
+running agent's context. PDF rendering uses Poppler directly.
+
+Thumbnail conversion has a 30-second deadline; full-slide conversion has a
+120-second deadline. Both include lock waiting. Finished JPEGs replace cached files
+atomically, and failed conversion retains the last complete image. The converter
+checks source revisions before publication and cache reuse.
+
+See [[craft-sandboxes]] for advisory size checks, bundle deployment, and snapshot exclusions.

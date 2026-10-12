@@ -27,6 +27,7 @@ from onyx.configs.model_configs import (
 )
 from onyx.llm.api_surfaces import OPENAI_COMPATIBLE_SURFACES, LlmApiSurface
 from onyx.llm.constants import BEDROCK_MODEL_TOKEN_LIMITS, LlmProviderNames
+from onyx.llm.model_catalog import CHAT_MODES
 from onyx.llm.models import ReasoningEffort
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -137,13 +138,10 @@ def find_model_obj(
 
 # litellm modes that are chat-shaped for token-budget purposes; mirrors the
 # sync script's classification (image/embedding/audio modes stay excluded).
-_CHAT_MODES = {"chat", "responses", "completion"}
-
-
 def _is_chat_entry(model_obj: dict) -> bool:
     """Budget lookups must not land on non-chat entries — a bare-name scan can
     resolve e.g. a custom deployment named like an image/embedding model."""
-    return (model_obj.get("mode") or "chat") in _CHAT_MODES
+    return (model_obj.get("mode") or "chat") in CHAT_MODES
 
 
 def llm_max_input_tokens(

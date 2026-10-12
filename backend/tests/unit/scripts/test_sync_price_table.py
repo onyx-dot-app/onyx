@@ -216,3 +216,40 @@ def test_build_provider_section_drops_negative_costs_and_empty_ids() -> None:
     assert list(section["models"]) == ["mistral-large"]
     # The -1 sentinel field is dropped; the real rate stays.
     assert section["models"]["mistral-large"]["cost"] == {"output": 2.0}
+
+
+def test_build_provider_section_drops_nested_negative_rates() -> None:
+    """Sentinel rates nested inside tiers / context_over_200k must be cleaned
+    too — top-level cleanup alone lets -1 rates reach compute_cost_cents."""
+    api: dict[str, Any] = {
+        "mistral": {
+            "models": {
+                "mistral-large": {
+                    "name": "Mistral Large",
+                    "cost": {
+                        "input": 2.0,
+                        "output": 10.0,
+                        "context_over_200k": {"input": -1.0, "output": 15.0},
+                        "tiers": [
+                            {
+                                "tier": {"type": "context", "size": 272000},
+                                "input": -1.0,
+                                "output": 15.0,
+                            }
+                        ],
+                    },
+                    "limit": {"context": 128000, "output": 8192},
+                },
+            }
+        }
+    }
+
+    section: dict[str, Any] | None = _build_provider_section(api, ["mistral"])
+
+    assert section is not None
+    cost: dict[str, Any] = section["models"]["mistral-large"]["cost"]
+    assert cost["input"] == 2.0
+    assert cost["context_over_200k"] == {"output": 15.0}
+    assert cost["tiers"] == [
+        {"tier": {"type": "context", "size": 272000}, "output": 15.0}
+    ]

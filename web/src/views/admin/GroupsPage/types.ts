@@ -29,4 +29,5 @@ export interface PermissionRegistryEntry {
   description: string;
   permissions: string[];
   group: number;
+  default_group_toggleable: boolean;
 }

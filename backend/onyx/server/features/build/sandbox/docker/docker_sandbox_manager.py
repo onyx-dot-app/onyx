@@ -84,6 +84,8 @@ from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ATTACHMENTS_DIRECTORY,
+    BUN_CACHE_DIR,
+    BUN_IMAGE_CACHE_DIR,
     ONYX_SERVER_URL,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
@@ -99,9 +101,9 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_PORT,
 )
 from onyx.server.features.build.sandbox.base import (
-    BUN_CACHE_DIR,
-    BUN_IMAGE_CACHE_DIR,
     SandboxManager,
+    document_preview_command,
+    parse_document_preview_response,
 )
 from onyx.server.features.build.sandbox.docker.dev_mode_serve import (
     opencode_serve_port_bindings,
@@ -1302,7 +1304,7 @@ echo "Session cleanup complete"
             "/bin/sh",
             "-c",
             (
-                f"cd {session_path} && tar -czf - "
+                f"cd {session_path} && tar --exclude=outputs/.document-thumbnails -czf - "
                 f"$([ -d outputs ] && echo outputs) "
                 f"$([ -d attachments ] && echo attachments)"
             ),
@@ -2049,55 +2051,39 @@ echo WRITE_OK"""
             return f"http://{_sandbox_container_name(sandbox_id)}:{port}"
         return f"http://{container.name}:{port}"
 
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
         container = self._require_container(sandbox_id)
-        clean_pptx = _sanitize_relative_path(pptx_path)
+        clean_document = _sanitize_relative_path(document_path)
         clean_cache = _sanitize_relative_path(cache_dir)
         session_root = f"{SESSIONS_ROOT}/{session_id}"
-        pptx_abs = f"{session_root}/{clean_pptx}"
+        document_abs = f"{session_root}/{clean_document}"
         cache_abs = f"{session_root}/{clean_cache}"
 
+        def run_command(command: list[str]) -> str:
+            return _run_in_container_as_sandbox_user(container, command).stdout_text
+
         try:
-            result = _run_in_container_as_sandbox_user(
-                container,
-                [
-                    "python",
-                    f"{MANAGED_SKILLS_PATH}/pptx/scripts/preview.py",
-                    pptx_abs,
+            self._ensure_document_preview_bundle(sandbox_id, run_command)
+            output = run_command(
+                document_preview_command(
+                    document_abs,
                     cache_abs,
-                ],
+                    session_root,
+                    first_page_only=first_page_only,
+                ),
             )
         except ExecError as e:
-            raise RuntimeError(f"Failed to generate PPTX preview: {e}") from e
+            raise RuntimeError(f"Failed to generate document preview: {e}") from e
 
-        lines = [
-            line.strip()
-            for line in result.stdout_text.strip().split("\n")
-            if line.strip()
-        ]
-        if not lines:
-            raise ValueError("Empty response from PPTX conversion.")
-        if lines[0] == "ERROR_NOT_FOUND":
-            raise ValueError(f"File not found: {pptx_path}")
-        if lines[0] == "ERROR_NO_PDF":
-            raise ValueError("soffice did not produce a PDF file.")
-
-        cached = lines[0] == "CACHED"
-        abs_paths = lines[1:] if lines[0] in ("CACHED", "GENERATED") else lines
-        prefix = f"{session_root}/"
-        rel_paths: list[str] = []
-        for p in abs_paths:
-            if p.startswith(prefix):
-                rel_paths.append(p[len(prefix) :])
-            elif p.endswith(".jpg"):
-                rel_paths.append(p)
-        return rel_paths, cached
+        return parse_document_preview_response(output, session_root)
 
 
 class _GeneratorReader:

@@ -109,6 +109,13 @@ type SelectCardExpandableProps = SelectCardBaseProps & {
    * @default 80
    */
   expandableContentHeight?: CardFoldHeight;
+  /**
+   * Keeps the expanded content mounted while folded, e.g. so a form keeps
+   * what was typed. Off, folding drops it once the fold closes.
+   *
+   * @default false
+   */
+  expandableKeepMounted?: boolean;
 };
 
 type SelectCardProps = SelectCardPlainProps | SelectCardExpandableProps;
@@ -169,6 +176,7 @@ function SelectCard(props: SelectCardProps) {
       expanded = false,
       expandedContent,
       expandableContentHeight = 80,
+      expandableKeepMounted = false,
       ...base
     } = props;
     return (
@@ -177,6 +185,7 @@ function SelectCard(props: SelectCardProps) {
         fold={expandedContent}
         foldOpen={expanded && expandedContent !== undefined}
         foldHeight={expandableContentHeight}
+        foldKeepMounted={expandableKeepMounted}
       />
     );
   }
@@ -195,6 +204,7 @@ type SelectCardShellProps = SelectCardBaseProps & {
   /** Whether the fold is open. */
   foldOpen?: boolean;
   foldHeight?: CardFoldHeight;
+  foldKeepMounted?: boolean;
 };
 
 function SelectCardShell({
@@ -210,6 +220,7 @@ function SelectCardShell({
   fold,
   foldOpen = false,
   foldHeight,
+  foldKeepMounted = false,
   ...statefulProps
 }: SelectCardShellProps) {
   const paddingStyle = { padding: spacingToRem(paddingProp) };
@@ -271,6 +282,7 @@ function SelectCardShell({
           borderColor="default"
           radius={radius}
           contentHeight={foldHeight}
+          keepMounted={foldKeepMounted}
         >
           {fold}
         </CardFold>

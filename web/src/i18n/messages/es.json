@@ -2639,17 +2639,11 @@
           "label": "Autorizar con {source}",
           "pendingLabel": "Autorizando..."
         },
-        "collapseButton": {
-          "ariaLabel": "Contraer"
-        },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Crear una nueva"
-        },
-        "credentialDeleted": {
-          "toast": "¡Credencial eliminada!"
         },
         "credentialModal": {
           "title": "Crear una credencial de {source}"
@@ -2662,14 +2656,8 @@
           "description": "Usa una cuenta de servicio compartida. {appName} indexa el contenido como esta cuenta.",
           "title": "Cuenta de autenticación"
         },
-        "credentialSwapped": {
-          "toast": "¡Credencial cambiada!"
-        },
         "error": {
           "toast": "Error: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Expandir"
         },
         "federated": {
           "tooltip": {
@@ -2701,14 +2689,78 @@
         "retryButton": {
           "label": "Reintentar"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}",
+          "expandButton": {
+            "ariaLabel": "Mostrar cuentas guardadas"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar cuentas guardadas"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Cuenta nueva)",
+          "editButton": {
+            "label": "Editar cuenta"
+          }
         },
         "timeout": {
           "toast": "La operación agotó el tiempo de espera tras {seconds} segundos. ¿Quieres revisar tu configuración por si hay errores?"
         },
         "unknownError": {
           "toast": "Ocurrió un error desconocido"
+        },
+        "account": {
+          "untitled": {
+            "label": "Sin título"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Añadida el {date}"
+          },
+          "selected": {
+            "label": "Seleccionada"
+          },
+          "useButton": {
+            "label": "Usar cuenta"
+          },
+          "unsupportedRealm": {
+            "label": "Dominio del sitio no compatible"
+          },
+          "expandButton": {
+            "ariaLabel": "Mostrar detalles de la cuenta"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar detalles de la cuenta"
+          },
+          "deleteButton": {
+            "label": "Eliminar cuenta",
+            "inUseTooltip": "No se puede eliminar esta credencial porque hay otros conectores que la están usando."
+          },
+          "usedBy": {
+            "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
+          },
+          "owner": {
+            "you": "{name} (tú)"
+          },
+          "lastTested": {
+            "title": "Última prueba {date}"
+          },
+          "notTested": {
+            "title": "Aún no probada"
+          },
+          "details": {
+            "description": "Las credenciales de una cuenta guardada no se pueden editar ni redirigir a otro host. Puedes probar la cuenta antes de reutilizarla o añadir una cuenta nueva."
+          },
+          "rerunButton": {
+            "label": "Volver a ejecutar comprobaciones"
+          },
+          "authenticationType": {
+            "label": "Tipo de autenticación"
+          },
+          "rerunFailed": {
+            "toast": "No se pudieron iniciar las comprobaciones. Inténtalo de nuevo."
+          }
         }
       },
       "credentialRequired": {
@@ -2718,6 +2770,7 @@
         "enterField": "Introduce el campo «{field}».",
         "fixField": "Revisa el campo «{field}».",
         "awaitingCheck": "Sal del campo para comprobarlo con la credencial.",
+        "runChecks": "Ejecuta las comprobaciones para comprobar la cuenta nueva con esta configuración.",
         "checking": "Comprobando la credencial…",
         "fieldInvalid": "Revisa el campo «{field}»: {detail}",
         "rejected": "Esta credencial no se puede usar con esta configuración. {detail}"
@@ -3320,6 +3373,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "Usa el correo de la cuenta a la que pertenece el token de API."
+        },
+        "nameField": {
+          "title": "Nombre visible",
+          "placeholder": "Ponle nombre a tu cuenta de autenticación"
         },
         "apiTokenField": {
           "subDescription": "Pega tu token de API para acceder a {source}."
@@ -4426,6 +4483,7 @@
           "tooltip": "Los embeddings de los documentos se están actualizando por los cambios recientes en este grupo."
         },
         "systemGroup": {
+          "basicDescription": "{appName} gestiona este grupo. Solo contiene miembros, y los permisos de abajo se aplican a todos ellos.",
           "description": "{appName} gestiona este grupo. Solo contiene miembros y es lo único que puedes cambiar.",
           "title": "Grupo del sistema"
         },
@@ -8979,9 +9037,6 @@
       "docsLink": {
         "label": "Documentación"
       },
-      "rerunButton": {
-        "label": "Volver a ejecutar las comprobaciones"
-      },
       "foldButton": {
         "fold": "Contraer",
         "expand": "Expandir"
@@ -8998,7 +9053,7 @@
       "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
       "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}",
       "state": {
-        "completed": "Comprobaciones completadas",
+        "completed": "Comprobaciones completadas.",
         "inProgress": "Comprobaciones en curso…"
       }
     }
@@ -12479,6 +12534,10 @@
       },
       "noContent": {
         "label": "Sin contenido"
+      },
+      "csv": {
+        "truncated": "Vista previa limitada a {rows, number} filas, {columns, number} columnas y {cells, number} celdas. Descarga el original para ver todos los datos.",
+        "malformed": "Este CSV contiene un campo entre comillas no válido. Descarga el original para revisarlo."
       }
     },
     "filesTab": {
@@ -12507,6 +12566,9 @@
       },
       "preview": {
         "ariaLabel": "Vista previa de {name}"
+      },
+      "background": {
+        "contrast": "Fondo de contraste"
       }
     },
     "inputBar": {
@@ -12699,6 +12761,9 @@
       },
       "slide": {
         "counter": "Diapositiva {current} de {total}"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar el tamaño de las miniaturas"
       }
     },
     "previewTab": {

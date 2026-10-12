@@ -25,8 +25,10 @@ from onyx.connectors.capability_checks.draft_runs import (
     CachedDraftResult,
     DraftCheckStateKind,
     cached_check_result,
-    draft_result_cache_key,
+    form_draft_result_keys,
     get_cached_draft_result,
+    is_draft_result_in_flight,
+    wait_for_draft_result,
 )
 from onyx.connectors.capability_checks.form_state import validate_form_state
 from onyx.connectors.capability_checks.models import (
@@ -66,6 +68,29 @@ CREATION_BLOCKING_BUDGET_SECONDS = 3.0
 _REJECTED_MESSAGE = "Did not finish before the connector was rejected."
 
 
+def _draft_result_keys(
+    checks: list[CapabilityCheck[Any]],
+    *,
+    credential: Credential,
+    source: DocumentSource,
+    access_type: AccessType,
+    connector_specific_config: dict[str, Any],
+    cc_pair_id: int | None,
+) -> dict[str, str]:
+    """check_id to the draft result key a draft run of this form uses."""
+    return form_draft_result_keys(
+        checks,
+        credential_id=credential.id,
+        credential_updated_at=credential.time_updated,
+        source=source,
+        access_type=access_type,
+        form_values=validate_form_state(
+            CONNECTOR_CLASS_MAP[source].config_class, connector_specific_config
+        ).values,
+        cc_pair_id=cc_pair_id,
+    )
+
+
 def _cached_draft_results(
     checks: list[CapabilityCheck[Any]],
     *,
@@ -78,24 +103,19 @@ def _cached_draft_results(
     """check_id to its cached draft result, for the checks a draft run already
     ran with this credential, access type and form values. With ``cc_pair_id``,
     only that pair's dry runs count; without it, only create-form runs."""
-    form_values = validate_form_state(
-        CONNECTOR_CLASS_MAP[source].config_class, connector_specific_config
-    ).values
+    keys = _draft_result_keys(
+        checks,
+        credential=credential,
+        source=source,
+        access_type=access_type,
+        connector_specific_config=connector_specific_config,
+        cc_pair_id=cc_pair_id,
+    )
     cached_by_check_id: dict[str, CachedDraftResult] = {}
-    for check in checks:
-        cached = get_cached_draft_result(
-            draft_result_cache_key(
-                credential_id=credential.id,
-                credential_updated_at=credential.time_updated,
-                source=source,
-                access_type=access_type,
-                check=check,
-                form_values=form_values,
-                cc_pair_id=cc_pair_id,
-            )
-        )
+    for check_id, key in keys.items():
+        cached = get_cached_draft_result(key)
         if cached is not None:
-            cached_by_check_id[check.check_id] = cached
+            cached_by_check_id[check_id] = cached
     return cached_by_check_id
 
 
@@ -197,9 +217,27 @@ def _run_check_group(
     ).check_results
 
 
+def _await_draft_check(
+    checks: list[CapabilityCheck[Any]], *, check_id: str, result_key: str
+) -> list[CapabilityCheckResult] | None:
+    """The result a draft run of the same form is still to write for the
+    check, with a row per capability it is mirrored on; ``None`` when it does
+    not land within the blocking budget."""
+    cached = wait_for_draft_result(result_key, CREATION_BLOCKING_BUDGET_SECONDS)
+    if cached is None:
+        return None
+    return [
+        cached_check_result(check, cached)
+        for check in checks
+        if check.check_id == check_id
+    ]
+
+
 def _run_checks_within_budget(
     check_ids: list[str],
     *,
+    awaited: dict[str, str],
+    checks: list[CapabilityCheck[Any]],
     credential_id: int,
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
@@ -217,12 +255,15 @@ def _run_checks_within_budget(
     discarded. The threads read a credential loaded on a session that is
     already closed, so they share no session with the request.
     """
-    if not check_ids:
+    if not check_ids and not awaited:
         return [], frozenset()
     with get_session_with_current_tenant() as db_session:
         credential = fetch_credential_by_id(credential_id, db_session)
         if credential is None:
             raise RuntimeError(f"Credential {credential_id} was deleted.")
+    # A check a draft run of this form is still running is awaited, not run
+    # again: its result lands in the draft cache.
+    awaited_ids: list[str] = list(awaited)
     # TODO(evan-onyx): concurrent creation checks can add load on rate-limited
     # sources; they may need a concurrency cap.
     groups = run_functions_tuples_in_parallel(
@@ -241,13 +282,25 @@ def _run_checks_within_budget(
                 (),
             )
             for check_id in check_ids
+        ]
+        + [
+            (
+                partial(
+                    _await_draft_check,
+                    checks,
+                    check_id=check_id,
+                    result_key=awaited[check_id],
+                ),
+                (),
+            )
+            for check_id in awaited_ids
         ],
         timeout=CREATION_BLOCKING_BUDGET_SECONDS,
         timeout_callback=lambda *_: None,
     )
     finished: list[CapabilityCheckResult] = []
     unfinished: set[str] = set()
-    for check_id, group in zip(check_ids, groups, strict=True):
+    for check_id, group in zip([*check_ids, *awaited_ids], groups, strict=True):
         if group is None:
             unfinished.add(check_id)
         else:
@@ -400,12 +453,28 @@ def run_named_checks_within_budget(
         connector_specific_config=connector_specific_config,
         cc_pair_id=cc_pair_id,
     )
+    to_check: list[str] = list(
+        dict.fromkeys(
+            check.check_id for check in checks if check.check_id not in reused
+        )
+    )
+    keys = _draft_result_keys(
+        checks,
+        credential=credential,
+        source=source,
+        access_type=access_type,
+        connector_specific_config=connector_specific_config,
+        cc_pair_id=cc_pair_id,
+    )
+    awaited: dict[str, str] = {
+        check_id: keys[check_id]
+        for check_id in to_check
+        if is_draft_result_in_flight(keys[check_id])
+    }
     finished, unfinished = _run_checks_within_budget(
-        list(
-            dict.fromkeys(
-                check.check_id for check in checks if check.check_id not in reused
-            )
-        ),
+        [check_id for check_id in to_check if check_id not in awaited],
+        awaited=awaited,
+        checks=checks,
         credential_id=credential.id,
         source=source,
         connector_specific_config=connector_specific_config,

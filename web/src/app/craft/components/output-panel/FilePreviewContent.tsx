@@ -10,6 +10,7 @@ import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
+import { CsvPreview } from "@/app/craft/components/output-panel/CsvPreview";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
 import MarkdownFilePreview from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
@@ -137,6 +138,9 @@ function FetchedFilePreview({
   const fileName = filePath.split("/").pop() || filePath;
   if (data.isImage) {
     return <ImagePreview src={data.content} fileName={fileName} />;
+  }
+  if (/\.csv$/i.test(filePath)) {
+    return <CsvPreview content={data.content} isActive={isActive} />;
   }
   if (/\.md$/i.test(filePath)) {
     return (
