@@ -11,6 +11,7 @@ current model always creates a new ALT index, so a changed index_name is proof t
 
 import os
 import time
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -79,6 +80,56 @@ def test_reindex_port_happy_path(
 
     for content in contents:
         assert _search_finds(content, admin_user)
+
+
+def test_reindex_progress_reports_a_copy_for_a_quantization_change(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    """A quantization-only reindex copies the stored vectors, /reindex-progress says
+    so, and the swapped-in index serves the doc with the new quantization."""
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    content: str = f"reindex quantization copy {uuid4().hex[:8]}"
+    DocumentManager.seed_doc_with_content(cc_pair, content, api_key)
+    original_index_name: str = ReindexPortManager.get_current_settings(admin_user)[
+        "index_name"
+    ]
+
+    ReindexPortManager.start_reindex(admin_user, vector_quantization="scalar_7_bit")
+    assert ReindexPortManager.get_progress(admin_user).reembeds is False
+
+    ReindexPortManager.wait_for_reindex_completion(admin_user)
+    new_settings: dict[str, Any] = ReindexPortManager.wait_for_swap(
+        original_index_name, admin_user
+    )
+    assert new_settings["vector_quantization"] == "scalar_7_bit"
+    assert _search_finds(content, admin_user)
+
+
+def test_reindex_progress_reports_a_reembed_for_a_prefix_change(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    """A changed passage prefix changes the vectors, so /reindex-progress reports a
+    re-embed."""
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    DocumentManager.seed_doc_with_content(
+        cc_pair, f"reindex prefix reembed {uuid4().hex[:8]}", api_key
+    )
+    current: dict[str, Any] = ReindexPortManager.get_current_settings(admin_user)
+
+    ReindexPortManager.start_reindex(
+        admin_user,
+        passage_prefix=f"{current.get('passage_prefix') or ''}changed: ",
+    )
+    assert ReindexPortManager.get_progress(admin_user).reembeds is True
+
+    ReindexPortManager.wait_for_reindex_completion(admin_user)
+    ReindexPortManager.wait_for_swap(current["index_name"], admin_user)
 
 
 @_EE_ONLY

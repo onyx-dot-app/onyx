@@ -5456,7 +5456,9 @@
         "cancelButton": {
           "label": "Cancel Re-index & Revert"
         },
+        "copyTitle": "Rebuilding the index…",
         "description": {
+          "copy": "Onyx is rebuilding the index from the stored vectors, without re-embedding. This is much faster than re-embedding. The current index keeps serving search until the rebuild finishes.",
           "withModel": "New embedding settings (**{model}**) are being applied as re-indexing progresses. This may take **hours or days** depending on corpus size.",
           "withoutModel": "New embedding settings are being applied as re-indexing progresses. This may take **hours or days** depending on corpus size."
         },

@@ -60,6 +60,7 @@ from onyx.db.search_settings import (
     find_unreclaimed_past_by_index_name,
     get_current_search_settings,
     get_embedding_provider_from_provider_type,
+    get_search_settings_by_id,
     get_secondary_search_settings,
     mark_abandoned_future_for_reclaim__no_commit,
     set_reclaim_intent_on_current__no_commit,
@@ -81,6 +82,7 @@ from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     update_unstructured_api_key,
 )
+from onyx.indexing.port_reembed import ReembedStrategy, select_reembed_strategy
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
@@ -592,17 +594,47 @@ def _active_port_settings(db_session: Session) -> SearchSettings | None:
     return None
 
 
+class ReindexProgress(ReindexProgressCounts):
+    """Port progress, and whether the port re-embeds chunks or copies their
+    stored vectors."""
+
+    reembeds: bool
+
+
+def _port_reembeds(db_session: Session, target: SearchSettings) -> bool:
+    """Whether the port into `target` re-embeds, by the rule the port itself uses.
+    The source is the recorded backfill source after an INSTANT swap, otherwise
+    the live PRESENT, as in run_port_attempt."""
+    source: SearchSettings | None = (
+        get_search_settings_by_id(db_session, target.port_backfill_source_id)
+        if target.port_backfill_source_id is not None
+        else get_current_search_settings(db_session)
+    )
+    if source is None:
+        return True
+    return select_reembed_strategy(source, target) is not ReembedStrategy.COPY_VECTORS
+
+
 @router.get("/reindex-progress")
 def get_reindex_progress(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> ReindexProgressCounts:
+) -> ReindexProgress:
     target = _active_port_settings(db_session)
     if target is None:
-        return ReindexProgressCounts(
-            total=0, waiting=0, in_progress=0, completed=0, failed=0, paused=0
+        return ReindexProgress(
+            total=0,
+            waiting=0,
+            in_progress=0,
+            completed=0,
+            failed=0,
+            paused=0,
+            reembeds=True,
         )
-    return get_reindex_progress_counts(db_session, target.id)
+    counts: ReindexProgressCounts = get_reindex_progress_counts(db_session, target.id)
+    return ReindexProgress(
+        **counts.model_dump(), reembeds=_port_reembeds(db_session, target)
+    )
 
 
 @router.get("/reindex-errors")

@@ -212,7 +212,8 @@ export interface ReindexProgress {
   in_progress: number;
   completed: number;
   failed: number;
-  paused: number;
+  paused: number; // False when the port copies the stored vectors instead of re-embedding.
+  reembeds: boolean;
 }
 
 /** Mirrors backend `ReindexErrorRow`; exactly one of cc_pair_id / user_id set. */

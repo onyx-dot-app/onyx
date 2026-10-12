@@ -5456,7 +5456,9 @@
         "cancelButton": {
           "label": "Neuindizierung abbrechen & zurücksetzen"
         },
+        "copyTitle": "Index wird neu aufgebaut…",
         "description": {
+          "copy": "Onyx baut den Index aus den gespeicherten Vektoren neu auf, ohne erneutes Embedding. Das geht viel schneller als ein erneutes Embedding. Der aktuelle Index beantwortet weiter Suchanfragen, bis der Neuaufbau abgeschlossen ist.",
           "withModel": "Die neuen Embedding-Einstellungen (**{model}**) werden im Verlauf der Neuindizierung angewendet. Dies kann je nach Korpusgröße **Stunden oder Tage** dauern.",
           "withoutModel": "Die neuen Embedding-Einstellungen werden im Verlauf der Neuindizierung angewendet. Dies kann je nach Korpusgröße **Stunden oder Tage** dauern."
         },
