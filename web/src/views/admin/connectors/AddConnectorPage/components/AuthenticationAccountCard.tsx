@@ -199,7 +199,7 @@ export default function AuthenticationAccountCard({
           border="solid"
           rounding={4}
           padding={2}
-          data-testid="authentication-account"
+          data-testid={`authentication-account-${credential.id}`}
           onClick={() => (selected ? onDeselect() : onSelect())}
           expandedContent={
             <Section padding={2} width="full">
