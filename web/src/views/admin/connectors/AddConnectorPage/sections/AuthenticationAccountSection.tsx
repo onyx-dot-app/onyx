@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Divider,
-  Card,
   InputTypeIn,
   SelectCard,
   Tabs,
@@ -60,7 +59,7 @@ import { credentialBoundFieldNames } from "@/lib/connectors/utils";
 import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
 import AccountSummaryCard, {
-  type SummarizedAccount,
+  AccountSummary,
 } from "@/views/admin/connectors/AddConnectorPage/components/AccountSummaryCard";
 
 interface AuthenticationAccountSectionProps {
@@ -119,8 +118,8 @@ export default function AuthenticationAccountSection({
     isAuthorizing,
   } = useCredentialSetup(connector);
   const checkReports = useCredentialCheckReports(connector);
-  // Expanded, the section lists every account. Folded, it shows only the
-  // chosen one (see `summarizedAccount`).
+  // Expanded, the section lists every account. Folded, it shows the picked
+  // saved account's summary and the new-account card.
   const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
 
   // The create card's one label, whatever the number of routes; the tabs
@@ -339,6 +338,17 @@ export default function AuthenticationAccountSection({
     );
   }
 
+  // The chosen account: the picked saved account, or the new account once it
+  // is usable and no saved account is picked.
+  const pickedSavedCredential: SimilarCredential | undefined =
+    credentials?.find((credential) => credential.id === selectedSavedId);
+  const chosenDraft: DraftCredential | null =
+    selectedSavedId === null &&
+    checkedCredential !== null &&
+    isDraftCredential(checkedCredential)
+      ? checkedCredential
+      : null;
+
   // One card creates a credential. Its header toggles it; the fold below is a
   // plain container, so a click in the open form cannot fold it away. The
   // routes into the source are tabs inside the fold.
@@ -397,29 +407,26 @@ export default function AuthenticationAccountSection({
       }
       onClick={() => (isCreating ? close() : selectMethod(defaultMethod))}
     >
-      <Section padding={2} width="full">
-        <Content
-          icon={SvgPlusCircle}
-          title={newAccountLabel}
-          sizePreset="main-ui"
-          variant="body"
-          color={isCreating ? "interactive" : "muted"}
+      {/* Closed, a usable new account shows its summary as the header. */}
+      {!isCreating && chosenDraft ? (
+        <AccountSummary
+          account={{ kind: "draft", draft: chosenDraft }}
+          source={connector}
+          sourceName={displayName}
         />
-      </Section>
+      ) : (
+        <Section padding={2} width="full">
+          <Content
+            icon={SvgPlusCircle}
+            title={newAccountLabel}
+            sizePreset="main-ui"
+            variant="body"
+            color={isCreating ? "interactive" : "muted"}
+          />
+        </Section>
+      )}
     </SelectCard>
   );
-
-  // The account the folded section shows: the picked saved account, else the
-  // new account when it is usable; `null` when nothing is chosen.
-  const pickedSavedCredential: SimilarCredential | undefined =
-    credentials?.find((credential) => credential.id === selectedSavedId);
-  const summarizedAccount: SummarizedAccount | null = pickedSavedCredential
-    ? { kind: "saved", credential: pickedSavedCredential }
-    : selectedSavedId === null &&
-        checkedCredential !== null &&
-        isDraftCredential(checkedCredential)
-      ? { kind: "draft", draft: checkedCredential }
-      : null;
 
   return (
     <Section gap={2} alignItems="stretch" width="full">
@@ -466,34 +473,19 @@ export default function AuthenticationAccountSection({
       {!credentials ? null : (
         <Section gap={6} alignItems="stretch" width="full">
           {!accountsExpanded ? (
-            summarizedAccount ? (
-              <AccountSummaryCard
-                account={summarizedAccount}
-                source={connector}
-                sourceName={displayName}
-                onExpand={() => setAccountsExpanded(true)}
-              />
-            ) : (
-              // Placeholder until the empty folded state is designed.
-              <Card border="dashed" rounding={4} padding={2}>
-                <ContentAction
-                  title={t("add.accountSummary.nothingChosen.title")}
-                  sizePreset="main-ui"
-                  variant="body"
-                  color="muted"
-                  center
-                  padding={2}
-                  rightChildren={
-                    <Button
-                      prominence="secondary"
-                      onClick={() => setAccountsExpanded(true)}
-                    >
-                      {t("add.accountSummary.nothingChosen.chooseButton.label")}
-                    </Button>
-                  }
+            // Folded: the picked saved account's summary, and the new-account
+            // card, which still opens and closes.
+            <Section gap={2} alignItems="stretch" width="full">
+              {pickedSavedCredential && (
+                <AccountSummaryCard
+                  credential={pickedSavedCredential}
+                  source={connector}
+                  sourceName={displayName}
+                  onExpand={() => setAccountsExpanded(true)}
                 />
-              </Card>
-            )
+              )}
+              {newAccountCard}
+            </Section>
           ) : (
             <Section gap={2} alignItems="stretch" width="full">
               {credentials.map(renderSavedCard)}

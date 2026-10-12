@@ -2705,12 +2705,6 @@
           },
           "changeButton": {
             "label": "تغيير الحساب"
-          },
-          "nothingChosen": {
-            "title": "لم يتم اختيار حساب",
-            "chooseButton": {
-              "label": "اختيار حساب"
-            }
           }
         },
         "timeout": {

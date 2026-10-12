@@ -2705,12 +2705,6 @@
           },
           "changeButton": {
             "label": "アカウントを変更"
-          },
-          "nothingChosen": {
-            "title": "アカウントが選択されていません",
-            "chooseButton": {
-              "label": "アカウントを選択"
-            }
           }
         },
         "timeout": {

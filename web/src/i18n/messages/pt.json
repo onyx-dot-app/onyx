@@ -2705,12 +2705,6 @@
           },
           "changeButton": {
             "label": "Trocar conta"
-          },
-          "nothingChosen": {
-            "title": "Nenhuma conta escolhida",
-            "chooseButton": {
-              "label": "Escolher conta"
-            }
           }
         },
         "timeout": {

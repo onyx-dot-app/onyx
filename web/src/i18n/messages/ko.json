@@ -2705,12 +2705,6 @@
           },
           "changeButton": {
             "label": "계정 변경"
-          },
-          "nothingChosen": {
-            "title": "선택된 계정 없음",
-            "chooseButton": {
-              "label": "계정 선택"
-            }
           }
         },
         "timeout": {

@@ -17,28 +17,26 @@ export type SummarizedAccount =
   | { kind: "saved"; credential: SimilarCredential }
   | { kind: "draft"; draft: DraftCredential };
 
-interface AccountSummaryCardProps {
+interface AccountSummaryProps {
   account: SummarizedAccount;
   /** The source being set up. */
   source: ConfigurableSources;
   /** The source's display name. */
   sourceName: string;
-  /** Opens the account section again. */
-  onExpand: () => void;
 }
 
 /**
- * The chosen account while the account section is folded: a saved account or
- * the new account typed into the form. A draft is named by its display name,
- * else by its first value that is not a secret (such as its email). Clicking
- * the card opens the section.
+ * One row that names the chosen account: a saved account, or the new account
+ * typed into the form. A draft is named by its display name, else by its
+ * first value that is not a secret (such as its email). The new-account card
+ * shows it as its closed header; `AccountSummaryCard` wraps it for a saved
+ * account.
  */
-export default function AccountSummaryCard({
+export function AccountSummary({
   account,
   source,
   sourceName,
-  onExpand,
-}: AccountSummaryCardProps) {
+}: AccountSummaryProps) {
   const t = useTranslations("admin.connectorsList.add");
   const format = useFormatter();
 
@@ -76,41 +74,71 @@ export default function AccountSummaryCard({
         };
 
   return (
+    <Section
+      flexDirection="row"
+      alignItems="center"
+      justifyContent="between"
+      gap={4}
+      width="full"
+    >
+      <Section alignItems="start" padding={2} width="full">
+        <Content
+          icon={summary.icon}
+          title={summary.title}
+          suffix={summary.suffix}
+          description={summary.description}
+          sizePreset="main-ui"
+          variant="section"
+        />
+      </Section>
+      {/* Repeats its card's own action, so it leaves the tab order. */}
+      <Button
+        prominence="tertiary"
+        rightIcon={summary.actionIcon}
+        tabIndex={-1}
+      >
+        {summary.action}
+      </Button>
+    </Section>
+  );
+}
+
+interface AccountSummaryCardProps {
+  credential: SimilarCredential;
+  /** The source being set up. */
+  source: ConfigurableSources;
+  /** The source's display name. */
+  sourceName: string;
+  /** Opens the account section again. */
+  onExpand: () => void;
+}
+
+/**
+ * The picked saved account while the account section is folded. Clicking it
+ * opens the section.
+ */
+export default function AccountSummaryCard({
+  credential,
+  source,
+  sourceName,
+  onExpand,
+}: AccountSummaryCardProps) {
+  const title: string = credential.user_email ?? credential.name ?? "";
+  return (
     <SelectCard
       state="filled"
       border="solid"
       rounding={4}
       padding={2}
-      aria-label={summary.title}
+      aria-label={title || undefined}
       data-testid="account-summary"
       onClick={onExpand}
     >
-      <Section
-        flexDirection="row"
-        alignItems="center"
-        justifyContent="between"
-        gap={4}
-        width="full"
-      >
-        <Section alignItems="start" padding={2} width="full">
-          <Content
-            icon={summary.icon}
-            title={summary.title}
-            suffix={summary.suffix}
-            description={summary.description}
-            sizePreset="main-ui"
-            variant="section"
-          />
-        </Section>
-        {/* Repeats the card's own action, so it leaves the tab order. */}
-        <Button
-          prominence="tertiary"
-          rightIcon={summary.actionIcon}
-          tabIndex={-1}
-        >
-          {summary.action}
-        </Button>
-      </Section>
+      <AccountSummary
+        account={{ kind: "saved", credential }}
+        source={source}
+        sourceName={sourceName}
+      />
     </SelectCard>
   );
 }

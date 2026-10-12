@@ -2705,12 +2705,6 @@
           },
           "changeButton": {
             "label": "Konto wechseln"
-          },
-          "nothingChosen": {
-            "title": "Kein Konto ausgewählt",
-            "chooseButton": {
-              "label": "Konto auswählen"
-            }
           }
         },
         "timeout": {
