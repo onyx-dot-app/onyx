@@ -75,6 +75,11 @@ def _findings(output: CheckOutput | None) -> list[CheckFinding]:
     return output.findings
 
 
+def _advisories(output: CheckOutput | None) -> list[str]:
+    assert output is not None
+    return [advisory.message for advisory in output.advisories]
+
+
 def _gateway() -> MagicMock:
     """A healthy tenant: one user with a readable mailbox holding one message."""
     gateway = create_autospec(OutlookSourceOperations, instance=True)
@@ -454,29 +459,40 @@ def test_mail_read_check_lists_attachments_of_a_sample_that_has_them() -> None:
     gateway = _gateway()
     gateway.read_any_message.return_value = message(has_attachments=True)
 
-    _run("outlook_mail_read", _context(gateway))
+    output = _CHECKS_BY_ID["outlook_mail_read"].run(_context(gateway))
 
     gateway.list_message_attachments.assert_called_once_with(
         mailbox_id=MAILBOX_ID, message_id="msg-1", limit=1
     )
+    assert _advisories(output) == []
 
 
-def test_mail_read_check_passes_when_the_sample_vanishes_before_its_attachments() -> (
+def test_mail_read_check_advises_when_the_sample_vanishes_before_its_attachments() -> (
     None
 ):
     gateway = _gateway()
     gateway.read_any_message.return_value = message(has_attachments=True)
     gateway.list_message_attachments.side_effect = graph_error(404, "ErrorItemNotFound")
 
-    _run("outlook_mail_read", _context(gateway))
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]], _context(gateway)
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "not found" in advisory.message
+    assert "did not verify that the app can read attachments" in advisory.message
 
 
-def test_mail_read_check_skips_attachments_when_the_sample_has_none() -> None:
+def test_mail_read_check_advises_when_the_sample_has_no_attachments() -> None:
     gateway = _gateway()
 
-    _run("outlook_mail_read", _context(gateway))
+    output = _CHECKS_BY_ID["outlook_mail_read"].run(_context(gateway))
 
     gateway.list_message_attachments.assert_not_called()
+    (advisory,) = _advisories(output)
+    assert "no attachments" in advisory
+    assert "did not verify that the app can read attachments" in advisory
 
 
 def test_mail_read_check_maps_a_denied_attachment_listing() -> None:
@@ -488,14 +504,36 @@ def test_mail_read_check_maps_a_denied_attachment_listing() -> None:
         _run("outlook_mail_read", _context(gateway))
 
 
-def test_mail_read_check_is_indeterminate_for_a_mailbox_without_messages() -> None:
-    """An empty mailbox proves nothing about body access, so the check must
-    not report a pass."""
+def test_mail_read_check_passes_with_an_advisory_for_a_mailbox_without_messages() -> (
+    None
+):
+    """An empty mailbox proves the folder reads but not body access, so the
+    check passes and says what it did not verify."""
     gateway = _gateway()
     gateway.read_any_message.return_value = None
 
-    with pytest.raises(UnexpectedValidationError, match="holds no messages"):
-        _run("outlook_mail_read", _context(gateway))
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mail_read"]],
+        _context(gateway, {"mailboxes": [MAILBOX_ADDRESS]}),
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert advisory.message.startswith(f"`{MAILBOX_ADDRESS}` holds no messages")
+    assert "message bodies" in advisory.message
+    gateway.list_message_attachments.assert_not_called()
+
+
+def test_mail_read_check_does_not_name_a_sampled_empty_mailbox() -> None:
+    """Advisories are not hidden by the findings setting, so a mailbox the
+    admin did not type must stay unnamed."""
+    gateway = _gateway()
+    gateway.read_any_message.return_value = None
+
+    (advisory,) = _advisories(_CHECKS_BY_ID["outlook_mail_read"].run(_context(gateway)))
+
+    assert advisory.startswith("The sampled mailbox holds no messages")
+    assert MAILBOX_ADDRESS not in advisory
 
 
 def test_mail_read_check_tells_read_basic_apart_from_read() -> None:
@@ -798,15 +836,29 @@ def test_calendar_check_moves_past_an_empty_calendar_and_needs_one_with_events()
         MAILBOX_ID,
     ]
 
+    gateway.list_mailbox_users.side_effect = None
     gateway.read_any_event.side_effect = None
     gateway.read_any_event.return_value = None
-    with pytest.raises(UnexpectedValidationError, match="no events"):
-        _run(
-            "outlook_calendar_read",
-            _context(
-                gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}
-            ),
-        )
+    with pytest.raises(UnexpectedValidationError, match="holds an event"):
+        _run("outlook_calendar_read", _context(gateway, {"include_calendar": True}))
+
+
+def test_calendar_check_passes_with_an_advisory_for_a_configured_empty_calendar() -> (
+    None
+):
+    gateway = _gateway()
+    gateway.fetch_calendar_delta_page.return_value = OutlookEventPage(events=[])
+    gateway.read_any_event.return_value = None
+
+    (result,) = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_calendar_read"]],
+        _context(gateway, {"include_calendar": True, "mailboxes": [MAILBOX_ADDRESS]}),
+    )
+
+    assert result.status is CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert advisory.message.startswith(f"`{MAILBOX_ADDRESS}` holds no events")
+    assert "event bodies" in advisory.message
 
 
 def test_calendar_check_names_the_missing_grant_on_403() -> None:
