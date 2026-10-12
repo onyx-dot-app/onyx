@@ -67,6 +67,9 @@ jobs:
       # so PRs run it only for related changes. Merge queue and tag runs include it
       # whenever the integration suite runs.
       slack: ${{ github.event_name == 'pull_request' && steps.filter.outputs.slack || 'true' }}
+      # The live OneDrive suite indexes one shared Microsoft tenant, and Graph
+      # throttles it when many PRs run at once. Same rule as Slack.
+      onedrive: ${{ github.event_name == 'pull_request' && steps.filter.outputs.onedrive || 'true' }}
       # The reindex port suite is slow (each test waits for a full re-embed and
       # swap). PRs and the merge queue run it only for related changes; the
       # daily run and tag runs always include it.
@@ -111,6 +114,24 @@ jobs:
               - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
               - 'backend/tests/integration/connector_job_tests/slack/**'
               - '.github/workflows/pr-integration-tests.yml'
+            onedrive:
+              - 'backend/onyx/connectors/onedrive/**'
+              - 'backend/onyx/connectors/microsoft_utils/**'
+              - 'backend/onyx/connectors/microsoft_credential.py'
+              - 'backend/onyx/connectors/*.py'
+              - 'backend/onyx/connectors/capability_checks/**'
+              - 'backend/onyx/utils/retry_after.py'
+              - 'backend/ee/onyx/db/external_perm.py'
+              - 'backend/onyx/access/**'
+              - 'backend/ee/onyx/access/**'
+              - 'backend/ee/onyx/external_permissions/*.py'
+              - 'backend/ee/onyx/external_permissions/onedrive/**'
+              - 'backend/ee/onyx/external_permissions/microsoft_utils/**'
+              - 'backend/ee/onyx/background/celery/tasks/doc_permission_syncing/**'
+              - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
+              - 'backend/tests/integration/connector_job_tests/onedrive/**'
+              - 'backend/tests/integration/common_utils/managers/cc_pair.py'
+              - '.github/workflows/pr-integration-tests.yml'
             reindex_port:
               - 'backend/onyx/background/celery/tasks/port/**'
               - 'backend/onyx/background/celery/tasks/docprocessing/**'
@@ -147,6 +168,7 @@ jobs:
         env:
           GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
           SLACK_CHANGED: ${{ needs.changes.outputs.slack }}
+          ONEDRIVE_CHANGED: ${{ needs.changes.outputs.onedrive }}
           REINDEX_PORT_CHANGED: ${{ needs.changes.outputs.reindex_port }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
@@ -159,9 +181,12 @@ jobs:
           if [[ "$REINDEX_PORT_CHANGED" == "true" ]]; then
             tests_dirs="$tests_dirs reindex_port"
           fi
-          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" -exec basename {} \; | sort)
+          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" ! -name "onedrive" -exec basename {} \; | sort)
           if [[ "$SLACK_CHANGED" == "true" ]]; then
             connector_dirs="$connector_dirs slack"
+          fi
+          if [[ "$ONEDRIVE_CHANGED" == "true" ]]; then
+            connector_dirs="$connector_dirs onedrive"
           fi
           # The daily run covers only the suites that PRs skip by default.
           if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
