@@ -13770,6 +13770,10 @@
       }
     },
     "outputsTab": {
+      "markAllViewed": {
+        "label": "Mark all viewed",
+        "error": "Could not mark outputs as viewed. Try again."
+      },
       "home": {
         "description": "Files created by your agent"
       },
@@ -13803,7 +13807,17 @@
       },
       "search": {
         "placeholder": "Search outputs"
-      }
+      },
+      "scope": {
+        "all": "All outputs"
+      },
+      "unseen": "New or updated"
+    },
+    "turnOutputs": {
+      "showAll": "View all {count} outputs",
+      "app": "App",
+      "unavailable": "No longer available",
+      "appTitle": "Preview your app"
     }
   },
   "knowledge": {

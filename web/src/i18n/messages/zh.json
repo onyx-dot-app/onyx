@@ -13770,6 +13770,10 @@
       }
     },
     "outputsTab": {
+      "markAllViewed": {
+        "label": "全部标为已查看",
+        "error": "无法将输出标为已查看。请重试。"
+      },
       "home": {
         "description": "智能体创建的文件"
       },
@@ -13803,7 +13807,17 @@
       },
       "search": {
         "placeholder": "搜索输出"
-      }
+      },
+      "scope": {
+        "all": "所有输出"
+      },
+      "unseen": "新增或已更新"
+    },
+    "turnOutputs": {
+      "showAll": "查看全部 {count} 个输出",
+      "app": "应用",
+      "unavailable": "已不可用",
+      "appTitle": "预览你的应用"
     }
   },
   "knowledge": {

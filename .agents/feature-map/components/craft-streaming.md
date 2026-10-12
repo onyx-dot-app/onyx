@@ -263,6 +263,16 @@ Session metadata and artifacts may finish after a newer turn starts without repl
 
 ### Output inventory and panel navigation
 
+Turn-end chat cards use the server artifact index, separate from the live output inventory below.
+The browser refreshes card metadata after confirmed worker completion, alongside transcript loading, not the raw completion packet.
+Settlement checks run every 250ms for the first second, then every second for the remaining bounded retry window.
+Each card belongs to the latest indexed producing turn and opens the current resource.
+Three cards appear inline; the overflow action opens Outputs filtered to that turn.
+Unread dots compare artifact version with the owner’s saved viewed revision.
+Opening the overview or loading a thumbnail does not mark an output viewed.
+Reload retrieves card metadata without reconstructing attribution from sandbox files.
+See [[craft-sessions]] §4.7 for capture and persistence boundaries.
+
 The frontend keeps a temporary output inventory in each Zustand session.
 `useBuildSessionStore.ts:refreshOutputInventory` reads one flat response from
 `GET /build/sessions/{id}/outputs`. Each file has a path, size, and opaque revision.

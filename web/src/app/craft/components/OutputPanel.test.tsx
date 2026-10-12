@@ -19,6 +19,7 @@ import {
   fetchFileContent,
   fetchOutputInventory,
   fetchPptxPreview,
+  fetchOutputCards,
 } from "@/app/craft/services/apiServices";
 import type { OutputInventory } from "@/app/craft/types/streamingTypes";
 
@@ -42,6 +43,7 @@ jest.mock("@/lib/download", () => ({ downloadFile: jest.fn() }));
 jest.mock("@/app/craft/services/apiServices", () => ({
   ...jest.requireActual("@/app/craft/services/apiServices"),
   fetchArtifacts: jest.fn().mockResolvedValue([]),
+  fetchOutputCards: jest.fn().mockResolvedValue([]),
   fetchDirectoryListing: jest.fn(),
   fetchFileContent: jest.fn(),
   fetchOutputInventory: jest.fn(),
@@ -164,6 +166,7 @@ const runningSandbox = {
 
 beforeEach(() => {
   mockRenderActualResources = false;
+  jest.mocked(fetchOutputCards).mockResolvedValue([]);
   jest
     .mocked(fetchDirectoryListing)
     .mockResolvedValue({ path: "", entries: [] });
@@ -185,6 +188,26 @@ beforeEach(() => {
 });
 
 // Resource lifecycle and toolbar callbacks
+
+it("clears all collection filters when opening the same turn again", () => {
+  mockRenderActualResources = true;
+  store().openOutputsTab(sessionId, 0);
+  store().updateOutputsTabState(sessionId, {
+    searchQuery: "hidden",
+    folder: "reports",
+    fileType: "extension:pdf",
+  });
+  render(<BuildOutputPanel panelMode="medium" />);
+  expect(screen.getByPlaceholderText("Search outputs")).toHaveValue("hidden");
+  act(() => store().openOutputsTab(sessionId, 0));
+  expect(screen.getByPlaceholderText("Search outputs")).toHaveValue("");
+  expect(store().sessions.get(sessionId)?.outputsTabState).toEqual({
+    turnIndex: 0,
+    searchQuery: "",
+    folder: "",
+    fileType: "all",
+  });
+});
 
 it.each([false, true])(
   "disables reload while a Files read is pending (welcome: %s)",

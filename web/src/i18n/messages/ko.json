@@ -13770,6 +13770,10 @@
       }
     },
     "outputsTab": {
+      "markAllViewed": {
+        "label": "모두 확인한 것으로 표시",
+        "error": "출력을 확인한 것으로 표시하지 못했습니다. 다시 시도하세요."
+      },
       "home": {
         "description": "에이전트가 만든 파일"
       },
@@ -13803,7 +13807,17 @@
       },
       "search": {
         "placeholder": "출력 검색"
-      }
+      },
+      "scope": {
+        "all": "모든 출력"
+      },
+      "unseen": "새 항목 또는 업데이트됨"
+    },
+    "turnOutputs": {
+      "showAll": "출력 {count}개 모두 보기",
+      "app": "앱",
+      "unavailable": "더 이상 사용할 수 없음",
+      "appTitle": "앱 미리보기"
     }
   },
   "knowledge": {

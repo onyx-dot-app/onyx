@@ -13770,6 +13770,10 @@
       }
     },
     "outputsTab": {
+      "markAllViewed": {
+        "label": "Tout marquer comme vu",
+        "error": "Impossible de marquer les sorties comme vues. Réessayez."
+      },
       "home": {
         "description": "Fichiers créés par votre agent"
       },
@@ -13803,7 +13807,17 @@
       },
       "search": {
         "placeholder": "Rechercher des résultats"
-      }
+      },
+      "scope": {
+        "all": "Toutes les sorties"
+      },
+      "unseen": "Nouveau ou mis à jour"
+    },
+    "turnOutputs": {
+      "showAll": "Voir les {count} résultats",
+      "app": "Application",
+      "unavailable": "N’est plus disponible",
+      "appTitle": "Aperçu de votre application"
     }
   },
   "knowledge": {

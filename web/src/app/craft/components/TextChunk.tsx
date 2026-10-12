@@ -15,12 +15,14 @@ interface TextChunkProps {
   content: string;
   /** True while this text is actively streaming in. */
   isStreaming?: boolean;
+  onFileOpen?: (path: string, fileName: string) => void;
 }
 
 export default function TextChunk({
   sessionId,
   content,
   isStreaming = false,
+  onFileOpen,
 }: TextChunkProps) {
   const { enabled: smoothStreaming } = useSmoothStreaming();
   const animate = isStreaming && smoothStreaming;
@@ -47,7 +49,9 @@ export default function TextChunk({
             className="cursor-pointer text-link hover:text-link-hover"
             onClick={(event) => {
               event.preventDefault();
-              openFilePreview(sessionId, path, path.split("/").pop() ?? path);
+              const name = path.split("/").pop() ?? path;
+              if (onFileOpen) onFileOpen(path, name);
+              else openFilePreview(sessionId, path, name);
             }}
           >
             {children}
@@ -55,7 +59,7 @@ export default function TextChunk({
         );
       },
     }),
-    [sessionId, openFilePreview]
+    [sessionId, openFilePreview, onFileOpen]
   );
 
   if (!visible && !isStreaming) return null;

@@ -2904,6 +2904,38 @@ describe("Session loading and restoration", () => {
       }
     });
 
+    it("rechecks completion after 250ms and preserves the message during transcript loading", async () => {
+      jest.useFakeTimers();
+      const messages =
+        deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+      mockedApi.fetchMessages.mockReturnValue(messages.promise);
+      mockedApi.fetchActiveTurn.mockResolvedValueOnce({
+        turn_id: "completed-turn",
+        session_id: SESSION_ID,
+        status: "RUNNING",
+        turn_index: 0,
+      });
+      try {
+        const settling = useBuildSessionStore
+          .getState()
+          .beginTurnSettlement(SESSION_ID, receipt.owner, 0);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(mockedApi.fetchMessages).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(249);
+        expect(mockedApi.fetchMessages).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1);
+        expect(
+          useBuildSessionStore.getState().sessions.get(SESSION_ID)
+            ?.turnSettlement?.phase
+        ).toBe("reconciling");
+        messages.resolve([user, answer]);
+        await settling;
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it("settles without waiting for runtime restoration", async () => {
       mockedApi.fetchSession.mockResolvedValue(sleepingSession() as never);
       await useBuildSessionStore

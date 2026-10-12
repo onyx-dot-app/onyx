@@ -5,6 +5,8 @@ import type { TextPartUpdate } from "@/app/craft/utils/packetTypes";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
 import { create } from "zustand";
+import { mutate } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useShallow } from "zustand/react/shallow";
 import {
   readOutputPanelPreferences,
@@ -765,6 +767,13 @@ export interface BuildSessionData {
   webappNeedsRemount: number;
   /** Counter to trigger files list refresh when outputs/ directory changes (increments on each write/edit) */
   filesNeedsRefresh: number;
+  /** The Outputs collection can be narrowed to one completed turn. */
+  outputsTabState: {
+    turnIndex: number | null;
+    searchQuery: string;
+    folder: string;
+    fileType: string;
+  };
   /** Ordered resource tabs scoped to this session. */
   panelTabs: PanelTab[];
   /** Subagents spawned in this session, keyed by child opencode session id. */
@@ -845,7 +854,9 @@ function reconcileCompletedTranscript(
   };
   const request = (async () => {
     try {
-      for (let attempt = 0; attempt < 30; attempt++) {
+      for (let attempt = 0; attempt < 33; attempt++) {
+        // Catch the usual short commit tail quickly, then back off for slow workers.
+        const retryDelay = attempt < 4 ? 250 : 1000;
         if (!ownsCompletion()) return;
         if (!owner) return;
         let waiting: boolean;
@@ -873,7 +884,7 @@ function reconcileCompletedTranscript(
         }
         if (!ownsCompletion()) return;
         if (waiting) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+          await new Promise<void>((resolve) => setTimeout(resolve, retryDelay));
           continue;
         }
         if (owner.kind === "interactive" && owner.turnId !== null) {
@@ -887,12 +898,20 @@ function reconcileCompletedTranscript(
             completedTurn.status === "QUEUED" ||
             completedTurn.status === "RUNNING"
           ) {
-            await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, retryDelay)
+            );
             continue;
           }
           interactiveFailed = completedTurn.status === "FAILED";
           interactiveFailure = completedTurn.error_detail ?? null;
         }
+        // The worker has committed output revisions. Fetch cards alongside history.
+        void mutate(
+          (key) =>
+            Array.isArray(key) &&
+            key[0] === SWR_KEYS.buildSessionOutputCards(sessionId)
+        ).catch(() => undefined);
         let messages = await fetchMessages(sessionId);
         if (!ownsCompletion()) return;
         if (owner.kind === "interactive") {
@@ -901,7 +920,9 @@ function reconcileCompletedTranscript(
           if (!ownsCompletion()) return;
           if (activeTurn) {
             if (activeTurn.turn_id === owner.turnId) {
-              await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+              await new Promise<void>((resolve) =>
+                setTimeout(resolve, retryDelay)
+              );
               continue;
             }
             successor = activeTurn;
@@ -1222,7 +1243,11 @@ interface BuildSessionStore {
   /** Generic: remove the panel tab whose panelTabId === tabId; clears active if it was active. */
   setCurrentOutputPanelMode: (mode: OutputPanelMode) => void;
   setCurrentMediumPanelProportion: (proportion: number) => void;
-  openOutputsTab: (sessionId: string | null) => void;
+  openOutputsTab: (sessionId: string | null, turnIndex?: number | null) => void;
+  updateOutputsTabState: (
+    sessionId: string,
+    updates: Partial<BuildSessionData["outputsTabState"]>
+  ) => void;
   openFilesTab: (sessionId: string | null) => void;
   openBrowserTab: (
     sessionId: string | null,
@@ -1365,6 +1390,12 @@ const createInitialSessionData = (
     webappNeedsRefresh: 0,
     webappNeedsRemount: 0,
     filesNeedsRefresh: 0,
+    outputsTabState: {
+      turnIndex: null,
+      searchQuery: "",
+      folder: "",
+      fileType: "all",
+    },
     subagents: new Map(),
     viewedSubagentSessionId: null,
     filesTabState: {
@@ -2904,9 +2935,28 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     });
   },
 
-  openOutputsTab: (sessionId) => openCollectionTab(sessionId, "outputs"),
+  openOutputsTab: (sessionId, turnIndex = null) => {
+    if (sessionId)
+      get().updateSessionData(sessionId, {
+        outputsTabState: {
+          turnIndex,
+          searchQuery: "",
+          folder: "",
+          fileType: "all",
+        },
+      });
+    openCollectionTab(sessionId, "outputs");
+  },
 
   openFilesTab: (sessionId) => openCollectionTab(sessionId, "files"),
+
+  updateOutputsTabState: (sessionId, updates) => {
+    const session = get().sessions.get(sessionId);
+    if (session)
+      get().updateSessionData(sessionId, {
+        outputsTabState: { ...session.outputsTabState, ...updates },
+      });
+  },
 
   openBrowserTab: (sessionId, appId, appName) => {
     const state = get();

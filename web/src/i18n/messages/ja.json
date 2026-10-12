@@ -13770,6 +13770,10 @@
       }
     },
     "outputsTab": {
+      "markAllViewed": {
+        "label": "すべて閲覧済みにする",
+        "error": "出力を閲覧済みにできませんでした。もう一度お試しください。"
+      },
       "home": {
         "description": "エージェントが作成したファイル"
       },
@@ -13803,7 +13807,17 @@
       },
       "search": {
         "placeholder": "出力を検索"
-      }
+      },
+      "scope": {
+        "all": "すべての出力"
+      },
+      "unseen": "新規または更新済み"
+    },
+    "turnOutputs": {
+      "showAll": "{count}件の出力をすべて表示",
+      "app": "アプリ",
+      "unavailable": "利用できなくなりました",
+      "appTitle": "アプリをプレビュー"
     }
   },
   "knowledge": {

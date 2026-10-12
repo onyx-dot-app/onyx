@@ -608,6 +608,10 @@ It saves changed paths and their producing turns before terminal status. Webapp 
 Incomplete scans and lost ownership preserve earlier attribution. Reclaimed runners do not invent a new baseline.
 Complete scans mark missing indexed paths deleted. Revisions detect filesystem writes, not differences in file contents.
 
+One indexed path appears beneath its latest producing turn. App source changes become one `outputs/web` card.
+File cards link to current sandbox files; they do not preserve historical file contents.
+Deleted files retain disabled chat cards. Unchanged files stay under their previous turn.
+
 `GET /build/sessions/{id}/output-cards` reads indexed cards without waking the sandbox. It omits rows without a producing turn.
 `PATCH /build/sessions/{id}/output-cards/{artifact_id}/viewed` records the opened revision; `/output-cards/viewed` accepts up to 10,000 ID/revision pairs.
 Bulk acknowledgements lock rows in bytewise path order, matching output capture.

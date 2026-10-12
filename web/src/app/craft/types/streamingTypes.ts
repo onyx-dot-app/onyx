@@ -169,6 +169,18 @@ export interface OutputFile {
   size: number;
 }
 
+export interface OutputCard {
+  id: string;
+  kind: "file" | "app";
+  path: string;
+  name: string;
+  turn_index: number;
+  revision: number;
+  size_bytes: number | null;
+  deleted: boolean;
+  viewed_revision: number | null;
+}
+
 export interface OutputInventory {
   files: OutputFile[];
   complete: boolean;

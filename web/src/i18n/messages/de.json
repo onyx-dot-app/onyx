@@ -13770,6 +13770,10 @@
       }
     },
     "outputsTab": {
+      "markAllViewed": {
+        "label": "Alle als angesehen markieren",
+        "error": "Ausgaben konnten nicht als angesehen markiert werden. Versuchen Sie es erneut."
+      },
       "home": {
         "description": "Von Ihrem Agenten erstellte Dateien"
       },
@@ -13803,7 +13807,17 @@
       },
       "search": {
         "placeholder": "Ergebnisse suchen"
-      }
+      },
+      "scope": {
+        "all": "Alle Ausgaben"
+      },
+      "unseen": "Neu oder aktualisiert"
+    },
+    "turnOutputs": {
+      "showAll": "Alle {count} Ergebnisse anzeigen",
+      "app": "App",
+      "unavailable": "Nicht mehr verfügbar",
+      "appTitle": "Vorschau deiner App"
     }
   },
   "knowledge": {

@@ -1,10 +1,17 @@
 import { useLayoutEffect } from "react";
-import { act, render, screen, setupUser } from "@tests/setup/test-utils";
+import {
+  act,
+  deferred,
+  render,
+  screen,
+  setupUser,
+} from "@tests/setup/test-utils";
 import OutputsTab from "@/app/craft/components/output-panel/OutputsTab";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { FetchError } from "@/lib/fetcher";
 import { readOutputThumbnailCache } from "@/app/craft/services/outputThumbnailCache";
 import { useUser } from "@/providers/UserProvider";
+import type { OutputCard } from "@/app/craft/types/streamingTypes";
 import {
   readOutputInventorySnapshot,
   saveOutputInventorySnapshot,
@@ -19,6 +26,161 @@ jest.mock("motion/react", () => ({ useInView: () => false }));
 const refresh = jest.fn(async () => {});
 const file = { path: "outputs/reports/summary.md", revision: "1", size: 10 };
 const store = () => useBuildSessionStore.getState();
+const outputCard: OutputCard = {
+  id: "summary",
+  kind: "file",
+  path: file.path,
+  name: "summary.md",
+  turn_index: 0,
+  revision: 1,
+  size_bytes: file.size,
+  deleted: false,
+  viewed_revision: null,
+};
+
+// Persisted turn scope and viewed revisions.
+test("includes unavailable overflow outputs only in their turn's collection", () => {
+  const available = Array.from({ length: 3 }, (_, index) => ({
+    ...outputCard,
+    id: `file-${index}`,
+    name: `file-${index}.md`,
+    path: `outputs/file-${index}.md`,
+  }));
+  const removed = {
+    ...outputCard,
+    id: "removed",
+    name: "removed.pdf",
+    path: "outputs/removed.pdf",
+    deleted: true,
+  };
+  store().updateSessionData("session", {
+    outputInventory: Object.fromEntries(
+      available.map((card) => [
+        card.path,
+        { path: card.path, size: 10, revision: "1" },
+      ])
+    ),
+    outputInventoryStatus: "complete",
+  });
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    onFileOpen: jest.fn(),
+    outputCards: [...available, removed],
+  };
+  const { rerender } = render(<OutputsTab {...props} turnIndex={0} />);
+  for (const card of available)
+    expect(screen.getByRole("button", { name: card.path })).toBeInTheDocument();
+  expect(screen.getByRole("group", { name: removed.path })).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
+  expect(screen.getByText("No longer available")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: removed.path })
+  ).not.toBeInTheDocument();
+  rerender(<OutputsTab {...props} turnIndex={null} />);
+  expect(
+    screen.queryByRole("group", { name: removed.path })
+  ).not.toBeInTheDocument();
+});
+
+test("shows persisted output cards before the sandbox inventory loads", () => {
+  render(
+    <OutputsTab
+      sessionId="session"
+      isActive={false}
+      outputCards={[outputCard]}
+      turnIndex={0}
+      onFileOpen={jest.fn()}
+    />
+  );
+  expect(screen.getByRole("button", { name: file.path })).toBeInTheDocument();
+  expect(
+    screen.getByRole("img", { name: "New or updated" })
+  ).toBeInTheDocument();
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+test("scopes files and apps to a turn and switches back to all turns", async () => {
+  const otherFile = { path: "outputs/other.md", size: 12, revision: "2" };
+  const app: OutputCard = {
+    ...outputCard,
+    id: "app",
+    kind: "app",
+    name: "Todo app",
+    path: ".",
+  };
+  store().updateSessionData("session", {
+    outputInventory: { [file.path]: file, [otherFile.path]: otherFile },
+    outputInventoryStatus: "complete",
+  });
+  const onAppOpen = jest.fn();
+  const onTurnChange = jest.fn();
+  const outputCards = [
+    outputCard,
+    app,
+    {
+      ...outputCard,
+      id: "other",
+      path: otherFile.path,
+      name: "other.md",
+      turn_index: 1,
+    },
+  ];
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    outputCards,
+    onFileOpen: jest.fn(),
+    onAppOpen,
+    onTurnChange,
+  };
+  const { rerender } = render(<OutputsTab {...props} turnIndex={0} />);
+  expect(screen.getByRole("button", { name: file.path })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: otherFile.path })
+  ).not.toBeInTheDocument();
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: "Preview your app" }));
+  expect(onAppOpen).toHaveBeenCalledWith(app);
+  expect(
+    screen.queryByRole("button", { name: "Show outputs" })
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "All outputs" }));
+  expect(onTurnChange).toHaveBeenCalledWith(null);
+  rerender(<OutputsTab {...props} turnIndex={null} />);
+  expect(
+    screen.getByRole("button", { name: otherFile.path })
+  ).toBeInTheDocument();
+});
+
+test("removes the unseen marker only when the displayed revision is acknowledged", () => {
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    turnIndex: 0,
+    onFileOpen: jest.fn(),
+  };
+  const { rerender } = render(
+    <OutputsTab
+      {...props}
+      outputCards={[{ ...outputCard, revision: 2, viewed_revision: 1 }]}
+    />
+  );
+  expect(
+    screen.getByRole("img", { name: "New or updated" })
+  ).toBeInTheDocument();
+  rerender(
+    <OutputsTab
+      {...props}
+      outputCards={[{ ...outputCard, revision: 2, viewed_revision: 2 }]}
+    />
+  );
+  expect(
+    screen.queryByRole("img", { name: "New or updated" })
+  ).not.toBeInTheDocument();
+});
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -31,6 +193,24 @@ beforeEach(() => {
 });
 
 // Output cards and retained content.
+test("browses folders in a pre-provisioned workspace before a session store entry exists", async () => {
+  saveOutputInventorySnapshot("cache-user", "welcome-workspace", {
+    [file.path]: file,
+  });
+  const onFileOpen = jest.fn();
+  render(
+    <OutputsTab
+      sessionId="welcome-workspace"
+      isActive={false}
+      onFileOpen={onFileOpen}
+    />
+  );
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: "reports" }));
+  await user.click(screen.getByRole("button", { name: file.path }));
+  expect(onFileOpen).toHaveBeenCalledWith(file.path, "summary.md");
+});
+
 test("resolves the snapshot owner outside the isolated thumbnail cache", () => {
   saveOutputInventorySnapshot("cache-user", "session", { [file.path]: file });
   render(
@@ -338,6 +518,73 @@ test.each(["complete", "error"] as const)(
     ).toBeUndefined();
   }
 );
+
+// --- Unread descendants ---
+test("marks each ancestor folder unread until its descendant revision is viewed", async () => {
+  const nested = {
+    path: "outputs/reports/nested/report.md",
+    size: 12,
+    revision: "2",
+  };
+  store().updateSessionData("session", {
+    outputInventory: { [nested.path]: nested },
+    outputInventoryStatus: "complete",
+  });
+  const card = {
+    ...outputCard,
+    path: nested.path,
+    revision: 2,
+    viewed_revision: 1,
+  };
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    onFileOpen: jest.fn(),
+  };
+  const { rerender } = render(<OutputsTab {...props} outputCards={[card]} />);
+  expect(
+    screen.getByRole("img", { name: "New or updated" })
+  ).toBeInTheDocument();
+  const user = setupUser();
+  await user.click(screen.getByRole("button", { name: "reports" }));
+  expect(screen.getByRole("button", { name: "nested" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("img", { name: "New or updated" })
+  ).toBeInTheDocument();
+  rerender(
+    <OutputsTab {...props} outputCards={[{ ...card, viewed_revision: 2 }]} />
+  );
+  expect(
+    screen.queryByRole("img", { name: "New or updated" })
+  ).not.toBeInTheDocument();
+});
+
+test("marks all viewed with a pending state and disables when no unread revisions remain", async () => {
+  const pending = deferred<void>();
+  const onMarkAllViewed = jest.fn(() => pending.promise);
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    onFileOpen: jest.fn(),
+    onMarkAllViewed,
+  };
+  const { rerender } = render(
+    <OutputsTab {...props} outputCards={[outputCard]} />
+  );
+  const button = screen.getByRole("button", { name: "Mark all viewed" });
+  await setupUser().click(button);
+  expect(onMarkAllViewed).toHaveBeenCalledTimes(1);
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute("aria-busy", "true");
+  await act(async () => pending.resolve());
+  rerender(
+    <OutputsTab
+      {...props}
+      outputCards={[{ ...outputCard, viewed_revision: outputCard.revision }]}
+    />
+  );
+  expect(button).toBeDisabled();
+});
 
 // Session navigation replaces the provider during the same React commit.
 test("keeps preview subscriptions alive when switching between cached sessions", () => {

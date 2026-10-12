@@ -20,7 +20,11 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useCraftStreaming } from "@/providers/CraftStreamingProvider";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
-import { BuildMessageAttachment } from "@/app/craft/types/streamingTypes";
+import {
+  BuildMessageAttachment,
+  type OutputCard,
+} from "@/app/craft/types/streamingTypes";
+import { useOutputCards } from "@/lib/build/hooks";
 import {
   BuildFile,
   UploadFileStatus,
@@ -105,6 +109,32 @@ function ChatPanelContent({
   const router = useRouter();
   const session = useChatSession();
   const sessionId = useSessionId();
+  const outputSessionId = sessionId ?? existingSessionId ?? null;
+  const { cards: outputCards, markViewed } = useOutputCards(outputSessionId);
+  const openOutput = useCallback(
+    (card: OutputCard) => {
+      if (!outputSessionId || card.deleted) return;
+      const store = useBuildSessionStore.getState();
+      if (card.kind === "app")
+        store.openBrowserTab(outputSessionId, outputSessionId);
+      else store.openFilePreview(outputSessionId, card.path, card.name);
+      void markViewed(card);
+    },
+    [outputSessionId, markViewed]
+  );
+  const openOutputFile = useCallback(
+    (path: string, name: string) => {
+      if (!outputSessionId) return;
+      useBuildSessionStore
+        .getState()
+        .openFilePreview(outputSessionId, path, name);
+      const card = outputCards.find(
+        (output) => output.kind === "file" && output.path === path
+      );
+      if (card) void markViewed(card);
+    },
+    [outputSessionId, outputCards, markViewed]
+  );
   const scheduledSessionId = sessionId ?? existingSessionId ?? null;
   // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
   const scheduledRunSessionId =
@@ -649,6 +679,14 @@ function ChatPanelContent({
                       attachmentRefreshKey={session?.webappNeedsRefresh}
                       messages={session?.messages ?? []}
                       streamItems={session?.streamItems ?? []}
+                      outputCards={outputCards}
+                      onOutputOpen={openOutput}
+                      onFileOpen={openOutputFile}
+                      onTurnOutputsOpen={(turnIndex) =>
+                        useBuildSessionStore
+                          .getState()
+                          .openOutputsTab(outputSessionId, turnIndex)
+                      }
                       isStreaming={displayIsRunning}
                       autoScrollEnabled={isAtBottom}
                       scrollContainerRef={scrollContainerRef}

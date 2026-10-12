@@ -24,7 +24,11 @@ import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import CraftMessageAttachments from "@/app/craft/components/CraftMessageAttachments";
-import { BuildMessage } from "@/app/craft/types/streamingTypes";
+import TurnOutputCards from "@/app/craft/components/TurnOutputCards";
+import {
+  BuildMessage,
+  type OutputCard,
+} from "@/app/craft/types/streamingTypes";
 import {
   StreamItem,
   ToolCallState,
@@ -60,6 +64,10 @@ interface BuildMessageListProps {
    * part of the agent's last turn instead of a separate message.
    */
   trailingAssistantSlot?: React.ReactNode;
+  outputCards?: readonly OutputCard[];
+  onOutputOpen?: (output: OutputCard) => void;
+  onTurnOutputsOpen?: (turnIndex: number) => void;
+  onFileOpen?: (path: string, fileName: string) => void;
 }
 
 /**
@@ -80,7 +88,27 @@ export default function BuildMessageList({
   autoScrollEnabled = true,
   scrollContainerRef,
   trailingAssistantSlot,
+  outputCards,
+  onOutputOpen,
+  onTurnOutputsOpen,
+  onFileOpen,
 }: BuildMessageListProps) {
+  const outputsByTurn = useMemo(() => {
+    const groups = new Map<number, OutputCard[]>();
+    for (const output of outputCards ?? []) {
+      const group = groups.get(output.turn_index);
+      if (group) group.push(output);
+      else groups.set(output.turn_index, [output]);
+    }
+    return groups;
+  }, [outputCards]);
+  const lastAssistantByTurn = useMemo(() => {
+    const turns = new Map<number, string>();
+    for (const message of messages)
+      if (message.type === "assistant" && message.turn_index !== undefined)
+        turns.set(message.turn_index, message.id);
+    return turns;
+  }, [messages]);
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (autoScrollEnabled && container) {
@@ -89,6 +117,7 @@ export default function BuildMessageList({
   }, [
     messages.length,
     streamItems.length,
+    outputCards,
     autoScrollEnabled,
     scrollContainerRef,
   ]);
@@ -203,6 +232,7 @@ export default function BuildMessageList({
                 sessionId={sessionId}
                 content={item.content}
                 isStreaming={opts.isCurrentStream && item.isStreaming}
+                onFileOpen={onFileOpen}
               />
             </div>
           );
@@ -290,6 +320,12 @@ export default function BuildMessageList({
     message: BuildMessage,
     trailing?: React.ReactNode
   ) => {
+    const turnIndex = message.turn_index;
+    const outputs =
+      turnIndex === undefined ||
+      lastAssistantByTurn.get(turnIndex) !== message.id
+        ? undefined
+        : outputsByTurn.get(turnIndex);
     const savedStreamItems = message.message_metadata?.streamItems as
       | StreamItem[]
       | undefined;
@@ -306,47 +342,68 @@ export default function BuildMessageList({
         : null;
 
     return (
-      <Hoverable.Root key={message.id} group="craftAgentMessage" width="full">
-        <div className="flex items-start gap-3 py-4">
-          <div className="shrink-0 h-9 flex items-center">
-            <FoldableLogo onyxBranded folded size={24} />
-          </div>
-          <div className="flex-1 flex flex-col gap-2 min-w-0">
-            {visibleSavedRender ? (
-              <>
-                {visibleSavedRender.pinnedTodo && (
-                  <div>
-                    <TodoListCard
-                      todoList={visibleSavedRender.pinnedTodo}
-                      defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
+      <div key={message.id} className="flex flex-col gap-2 py-4">
+        <Hoverable.Root group="craftAgentMessage" width="full">
+          <div className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3">
+            <div className="relative">
+              <div className="h-9 flex items-center">
+                <FoldableLogo onyxBranded folded size={24} />
+              </div>
+              {message.content.trim() && (
+                <div className="absolute start-0 top-[max(2.25rem,calc(100%-1.75rem))]">
+                  <Hoverable.Item
+                    group="craftAgentMessage"
+                    variant="appear-on-hover"
+                  >
+                    <CopyButton
+                      getCopyText={() =>
+                        convertMarkdownTablesToTsv(message.content)
+                      }
+                      prominence="tertiary"
+                      size="sm"
+                      data-testid="CraftAgentMessage/copy-button"
                     />
-                  </div>
-                )}
-                {visibleSavedRender.nodes}
-              </>
-            ) : (
-              <TextChunk sessionId={sessionId} content={message.content} />
-            )}
-            {message.content.trim() && (
-              <Hoverable.Item
-                group="craftAgentMessage"
-                variant="appear-on-hover"
-              >
-                <div className="flex flex-row -ms-1">
-                  <CopyButton
-                    getCopyText={() =>
-                      convertMarkdownTablesToTsv(message.content)
-                    }
-                    prominence="tertiary"
-                    data-testid="CraftAgentMessage/copy-button"
-                  />
+                  </Hoverable.Item>
                 </div>
-              </Hoverable.Item>
-            )}
-            {trailing}
+              )}
+            </div>
+            <div className="flex flex-col gap-2 min-w-0">
+              {visibleSavedRender ? (
+                <>
+                  {visibleSavedRender.pinnedTodo && (
+                    <div>
+                      <TodoListCard
+                        todoList={visibleSavedRender.pinnedTodo}
+                        defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
+                      />
+                    </div>
+                  )}
+                  {visibleSavedRender.nodes}
+                </>
+              ) : (
+                <TextChunk
+                  sessionId={sessionId}
+                  content={message.content}
+                  onFileOpen={onFileOpen}
+                />
+              )}
+            </div>
           </div>
+        </Hoverable.Root>
+        <div className="flex min-w-0 flex-col gap-2 ps-9">
+          {outputs &&
+            onOutputOpen &&
+            onTurnOutputsOpen &&
+            turnIndex !== undefined && (
+              <TurnOutputCards
+                outputs={outputs}
+                onOpen={onOutputOpen}
+                onShowAll={() => onTurnOutputsOpen(turnIndex)}
+              />
+            )}
+          {trailing}
         </div>
-      </Hoverable.Root>
+      </div>
     );
   };
 
@@ -373,16 +430,42 @@ export default function BuildMessageList({
       <div className="w-full max-w-[720px] rounded-16 p-4">
         {messages.map((message, idx) => {
           if (message.type === "user") {
+            const turnIndex = message.turn_index;
+            const outputs =
+              turnIndex !== undefined &&
+              !(showStreamingArea && idx === messages.length - 1) &&
+              !lastAssistantByTurn.has(turnIndex)
+                ? outputsByTurn.get(turnIndex)
+                : undefined;
             return (
-              <div key={message.id} className="py-4">
-                {sessionId && message.attachments && (
-                  <CraftMessageAttachments
-                    sessionId={sessionId}
-                    attachments={message.attachments}
-                    refreshKey={attachmentRefreshKey}
-                  />
-                )}
-                <HumanMessage content={message.content} nodeId={idx} />
+              <div key={message.id}>
+                <div className="py-4">
+                  {sessionId && message.attachments && (
+                    <CraftMessageAttachments
+                      sessionId={sessionId}
+                      attachments={message.attachments}
+                      refreshKey={attachmentRefreshKey}
+                    />
+                  )}
+                  <HumanMessage content={message.content} nodeId={idx} />
+                </div>
+                {outputs &&
+                  onOutputOpen &&
+                  onTurnOutputsOpen &&
+                  turnIndex !== undefined && (
+                    <div className="flex items-start gap-3 py-4">
+                      <div className="flex h-9 shrink-0 items-center">
+                        <FoldableLogo onyxBranded folded size={24} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <TurnOutputCards
+                          outputs={outputs}
+                          onOpen={onOutputOpen}
+                          onShowAll={() => onTurnOutputsOpen(turnIndex)}
+                        />
+                      </div>
+                    </div>
+                  )}
               </div>
             );
           }
