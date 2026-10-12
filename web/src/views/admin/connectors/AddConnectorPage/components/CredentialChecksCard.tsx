@@ -312,7 +312,7 @@ function CheckCardView({
   // "2 failed, 1 skipped, 5 successful". Zero counts are left out.
   const summary = useMemo(() => {
     if (notice) return notice;
-    if (!hasChecks) return isRunning ? t("running.label") : t("empty.label");
+    if (!hasChecks) return isRunning ? t("state.inProgress") : t("empty.label");
     const parts: Array<[string, number]> = [
       [t("summary.failed", { count: count("failed") }), count("failed")],
       [
@@ -469,7 +469,7 @@ function CheckCardView({
             ) : (
               !notice && (
                 <Text font="main-ui-body" color="text-03">
-                  {isRunning ? t("running.label") : t("empty.label")}
+                  {isRunning ? t("state.inProgress") : t("empty.label")}
                 </Text>
               )
             )}

@@ -9034,9 +9034,6 @@
       "required": {
         "label": "Erforderlich"
       },
-      "running": {
-        "label": "Prüfungen laufen…"
-      },
       "empty": {
         "label": "Es wurden noch keine Prüfungen ausgeführt."
       },
@@ -9061,7 +9058,7 @@
       "state": {
         "completed": "Prüfungen abgeschlossen.",
         "inProgress": "Prüfungen laufen…",
-        "waiting": "Warten auf Connector-Einstellungen."
+        "waiting": "Warten auf Connector-Einstellungen…"
       }
     }
   },

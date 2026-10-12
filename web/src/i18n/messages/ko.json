@@ -9034,9 +9034,6 @@
       "required": {
         "label": "필수"
       },
-      "running": {
-        "label": "검사 실행 중…"
-      },
       "empty": {
         "label": "아직 실행된 검사가 없습니다."
       },
@@ -9061,7 +9058,7 @@
       "state": {
         "completed": "검사가 완료되었습니다.",
         "inProgress": "검사 진행 중…",
-        "waiting": "커넥터 설정을 기다리는 중입니다."
+        "waiting": "커넥터 설정을 기다리는 중…"
       }
     }
   },

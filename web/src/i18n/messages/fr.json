@@ -9034,9 +9034,6 @@
       "required": {
         "label": "Obligatoire"
       },
-      "running": {
-        "label": "Vérifications en cours…"
-      },
       "empty": {
         "label": "Aucune vérification n'a encore été exécutée."
       },
@@ -9061,7 +9058,7 @@
       "state": {
         "completed": "Vérifications terminées.",
         "inProgress": "Vérifications en cours…",
-        "waiting": "En attente des paramètres du connecteur."
+        "waiting": "En attente des paramètres du connecteur…"
       }
     }
   },

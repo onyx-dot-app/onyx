@@ -9034,9 +9034,6 @@
       "required": {
         "label": "必需"
       },
-      "running": {
-        "label": "正在运行检查…"
-      },
       "empty": {
         "label": "尚未运行任何检查。"
       },
@@ -9061,7 +9058,7 @@
       "state": {
         "completed": "检查已完成。",
         "inProgress": "检查进行中…",
-        "waiting": "正在等待连接器设置。"
+        "waiting": "正在等待连接器设置…"
       }
     }
   },
