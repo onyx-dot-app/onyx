@@ -14,15 +14,19 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
+// UpdateBaseDigestsOptions holds options for the update-base-digests command.
+type UpdateBaseDigestsOptions struct {
+	Write             bool
+	SummaryFile       string
+	Family            string
+	ListStaleFamilies bool
+	CacheFile         string
+	PinsFile          string
+}
+
 // NewUpdateBaseDigestsCommand creates the update-base-digests command.
 func NewUpdateBaseDigestsCommand() *cobra.Command {
-	var (
-		write             bool
-		summaryFile       string
-		family            string
-		listStaleFamilies bool
-		cacheFile         string
-	)
+	opts := &UpdateBaseDigestsOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "update-base-digests",
@@ -48,9 +52,10 @@ Examples:
   ods update-base-digests                                  # report every reference
   ods update-base-digests --list-stale-families            # families needing a bump
   ods update-base-digests --write --family python \
-      --cache-file digests.json                            # rewrite one family`,
+      --cache-file digests.json                            # rewrite one family
+  ods update-base-digests --pins-file digests.json         # dump this checkout's pins as a cache`,
 		Run: func(cmd *cobra.Command, args []string) {
-			output, err := runUpdateBaseDigests(write, summaryFile, family, listStaleFamilies, cacheFile)
+			output, err := runUpdateBaseDigests(opts)
 			fmt.Print(output)
 			if err != nil {
 				log.Fatal(err)
@@ -58,18 +63,19 @@ Examples:
 		},
 	}
 
-	cmd.Flags().BoolVar(&write, "write", false, "rewrite the files; without it the command only reports")
-	cmd.Flags().StringVar(&summaryFile, "summary-file", "", "write a markdown summary of the changes to this path")
-	cmd.Flags().StringVar(&family, "family", "", "only act on one base family, for example python or node")
-	cmd.Flags().BoolVar(&listStaleFamilies, "list-stale-families", false, "print the families that have a stale digest, one per line, and exit")
-	cmd.Flags().StringVar(&cacheFile, "cache-file", "", "read resolved digests from this path, or write them there if absent")
+	cmd.Flags().BoolVar(&opts.Write, "write", false, "rewrite the files; without it the command only reports")
+	cmd.Flags().StringVar(&opts.SummaryFile, "summary-file", "", "write a markdown summary of the changes to this path")
+	cmd.Flags().StringVar(&opts.Family, "family", "", "only act on one base family, for example python or node")
+	cmd.Flags().BoolVar(&opts.ListStaleFamilies, "list-stale-families", false, "print the families that have a stale digest, one per line, and exit")
+	cmd.Flags().StringVar(&opts.CacheFile, "cache-file", "", "read resolved digests from this path, or write them there if absent")
+	cmd.Flags().StringVar(&opts.PinsFile, "pins-file", "", "write the digests this checkout pins as a cache file and exit, so another checkout can be pinned to them with --cache-file")
 
 	return cmd
 }
 
 // runUpdateBaseDigests returns what Run prints, and an error whose text is the
 // message Run logs before exiting.
-func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamilies bool, cacheFile string) (string, error) {
+func runUpdateBaseDigests(opts *UpdateBaseDigestsOptions) (string, error) {
 	var out strings.Builder
 
 	root, err := paths.GitRoot()
@@ -90,26 +96,35 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 		return out.String(), fatalErrorf("No pinned image references found.")
 	}
 
-	resolved, err := resolveWithCache(refs, cacheFile)
+	if opts.PinsFile != "" {
+		if err := writePins(refs, opts.PinsFile); err != nil {
+			return out.String(), fatalErrorf("Could not write the pins: %v", err)
+		}
+		fmt.Fprintf(&out, "Wrote %d pinned reference(s) to %s.\n", len(refs), opts.PinsFile)
+		return out.String(), nil
+	}
+
+	// Filter before resolving, so one family's rewrite never asks a registry
+	// about another family's tags.
+	if opts.Family != "" {
+		refs = basedigest.FilterFamily(refs, opts.Family)
+		if len(refs) == 0 {
+			return out.String(), fatalErrorf("No references in family %q.", opts.Family)
+		}
+	}
+
+	resolved, err := resolveWithCache(refs, opts.CacheFile)
 	if err != nil {
 		return out.String(), fatalErrorf("Could not resolve every tag:\n%v", err)
 	}
 
 	stale := basedigest.Stale(refs, resolved)
 
-	if listStaleFamilies {
+	if opts.ListStaleFamilies {
 		for _, name := range basedigest.Families(stale) {
 			out.WriteString(name + "\n")
 		}
 		return out.String(), nil
-	}
-
-	if family != "" {
-		refs = basedigest.FilterFamily(refs, family)
-		stale = basedigest.FilterFamily(stale, family)
-		if len(refs) == 0 {
-			return out.String(), fatalErrorf("No references in family %q.", family)
-		}
 	}
 
 	for _, ref := range refs {
@@ -124,7 +139,7 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 
 	if len(stale) == 0 {
 		out.WriteString("\nAll pinned digests are current.\n")
-	} else if write {
+	} else if opts.Write {
 		if err := basedigest.Rewrite(root, stale, resolved); err != nil {
 			return out.String(), fatalErrorf("Could not rewrite the digests: %v", err)
 		}
@@ -133,12 +148,38 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 		fmt.Fprintf(&out, "\n%d reference(s) are stale. Re-run with --write to apply.\n", len(stale))
 	}
 
-	if summaryFile != "" {
-		if err := os.WriteFile(summaryFile, []byte(summary), 0o644); err != nil {
+	if opts.SummaryFile != "" {
+		if err := os.WriteFile(opts.SummaryFile, []byte(summary), 0o644); err != nil {
 			return out.String(), fatalErrorf("Could not write the summary: %v", err)
 		}
 	}
 	return out.String(), nil
+}
+
+// writePins saves each ref's pinned digest in --cache-file form, so another
+// checkout can be rewritten to this one's digests. Two pins of one tag that
+// disagree have drifted, and the file would silently keep the last.
+func writePins(refs []basedigest.Ref, pinsFile string) error {
+	pins := map[string]string{}
+	for _, ref := range refs {
+		if other, ok := pins[ref.Query()]; ok && other != ref.Digest {
+			return fmt.Errorf("%s is pinned to two digests, %s and %s", ref.Display(), other, ref.Digest)
+		}
+		pins[ref.Query()] = ref.Digest
+	}
+	return writeCache(pinsFile, pins)
+}
+
+// writeCache saves digests by query as the JSON --cache-file reads.
+func writeCache(path string, digests map[string]string) error {
+	data, err := json.MarshalIndent(digests, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode cache: %w", err)
+	}
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write cache %s: %w", path, err)
+	}
+	return nil
 }
 
 // resolveWithCache resolves every distinct tag, reusing cacheFile when it exists.
@@ -181,12 +222,8 @@ func resolveWithCache(refs []basedigest.Ref, cacheFile string) (map[string]strin
 	maps.Copy(resolved, cached)
 
 	if cacheFile != "" {
-		data, err := json.MarshalIndent(resolved, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("encode cache: %w", err)
-		}
-		if err := os.WriteFile(cacheFile, append(data, '\n'), 0o644); err != nil {
-			return nil, fmt.Errorf("write cache %s: %w", cacheFile, err)
+		if err := writeCache(cacheFile, resolved); err != nil {
+			return nil, err
 		}
 	}
 	return resolved, nil
