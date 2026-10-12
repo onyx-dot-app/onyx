@@ -205,7 +205,7 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
   const t = useTranslations("admin.connectorChecks");
   return (
     <Divider title={t(label, { count: checks.length })} foldable defaultOpen>
-      <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
+      <Section justifyContent="start" alignItems="stretch" height="fit" gap={1}>
         {checks.map((check) => (
           // The backend repeats some checks across capabilities under the
           // same ID, so the capability keeps the key unique.
