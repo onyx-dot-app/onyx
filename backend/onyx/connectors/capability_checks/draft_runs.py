@@ -25,6 +25,10 @@ from pydantic_core import to_jsonable_python
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings_setting import (
+    check_findings_enabled,
+    hide_findings_if_disabled,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -402,7 +406,8 @@ def cached_check_result(
         docs_link=check.docs_link,
         duration_ms=cached.duration_ms,
         validates_binding=check.validates_binding,
-        findings=cached.findings,
+        # Cached before the workspace turned findings off.
+        findings=cached.findings if check_findings_enabled() else [],
     )
 
 
@@ -421,7 +426,7 @@ def apply_cached_result(
     check_state.state = cached.state
     check_state.message = cached.message
     check_state.duration_ms = cached.duration_ms
-    check_state.findings = cached.findings
+    check_state.findings = cached.findings if check_findings_enabled() else []
     check_state.from_cache = True
 
 
@@ -524,4 +529,5 @@ def read_draft_run_for_user(
             and datetime.now(timezone.utc) > run.lease_expires_at
         ):
             snapshot.status = DraftRunStatus.FAILED_TO_RUN
+    hide_findings_if_disabled(snapshot.checks)
     return snapshot

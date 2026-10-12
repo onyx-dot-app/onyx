@@ -141,6 +141,9 @@ class SecuritySettingsOverrides(BaseModel):
     allow_connector_group_restrictions: bool | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
+    allow_connector_check_findings: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
     ssrf_protection_level: SSRFProtectionLevel | None = Field(
         default=None, json_schema_extra=_operator_locked()
     )
@@ -247,6 +250,7 @@ class SecuritySettings(BaseModel):
     incognito_availability: IncognitoAvailability
     incognito_record_mode: IncognitoRecordMode
     allow_connector_group_restrictions: bool
+    allow_connector_check_findings: bool
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
     llm_custom_config_env_injection: bool

@@ -7,6 +7,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from onyx.connectors.capability_checks.draft_runs import DraftRerunMode
+from onyx.connectors.capability_checks.findings_setting import (
+    hide_findings_if_disabled,
+)
 from onyx.connectors.edit_plan.constants import EDIT_PLAN_TTL_SECONDS
 from onyx.connectors.edit_plan.models import (
     EditPlan,
@@ -50,6 +53,9 @@ class ConnectorEditPlanResponse(BaseModel):
 
     @classmethod
     def from_stored(cls, stored: StoredEditPlan) -> "ConnectorEditPlanResponse":
+        hide_findings_if_disabled(stored.plan.dry_run_results)
+        if stored.plan.validation is not None:
+            hide_findings_if_disabled(stored.plan.validation.check_results)
         return cls(
             plan_id=stored.plan_id,
             cc_pair_id=stored.cc_pair_id,

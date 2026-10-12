@@ -481,7 +481,10 @@ in the report JSON, in the draft-run snapshot (`DraftCheckState.findings`) and i
 the draft result cache, and creation copies cached findings into the new pair's
 report. A stored finding with a type or key this version does not know is
 dropped when read. Findings hold container names, ids and counts only: never
-document content, and users only as a count.
+document content, and users only as a count. With the workspace security setting
+`allow_connector_check_findings` off (`capability_checks/findings_setting.py`), the
+runner keeps no findings, cached findings are not reused, and report, draft-run and
+edit-plan responses hide findings stored earlier.
 
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
