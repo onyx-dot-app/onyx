@@ -9057,8 +9057,8 @@
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
       "state": {
         "completed": "Prüfungen abgeschlossen.",
-        "inProgress": "Prüfungen laufen…",
-        "waiting": "Warten auf Connector-Einstellungen…"
+        "inProgress": "Prüfungen laufen...",
+        "waiting": "Warten auf Connector-Einstellungen..."
       }
     }
   },

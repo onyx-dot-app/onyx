@@ -9057,8 +9057,8 @@
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
         "completed": "Vérifications terminées.",
-        "inProgress": "Vérifications en cours…",
-        "waiting": "En attente des paramètres du connecteur…"
+        "inProgress": "Vérifications en cours...",
+        "waiting": "En attente des paramètres du connecteur..."
       }
     }
   },

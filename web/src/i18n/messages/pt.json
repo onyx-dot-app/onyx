@@ -9057,8 +9057,8 @@
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
       "state": {
         "completed": "Verificações concluídas.",
-        "inProgress": "Verificações em andamento…",
-        "waiting": "Aguardando as configurações do conector…"
+        "inProgress": "Verificações em andamento...",
+        "waiting": "Aguardando as configurações do conector..."
       }
     }
   },

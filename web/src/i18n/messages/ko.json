@@ -9057,8 +9057,8 @@
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
       "state": {
         "completed": "검사가 완료되었습니다.",
-        "inProgress": "검사 진행 중…",
-        "waiting": "커넥터 설정을 기다리는 중…"
+        "inProgress": "검사 진행 중...",
+        "waiting": "커넥터 설정을 기다리는 중..."
       }
     }
   },

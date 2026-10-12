@@ -9057,8 +9057,8 @@
       "requiredFailed": "{count, plural, one {必須チェック # 件が失敗} other {必須チェック # 件が失敗}}",
       "state": {
         "completed": "チェックが完了しました。",
-        "inProgress": "チェックを実行中…",
-        "waiting": "コネクタ設定を待機中…"
+        "inProgress": "チェックを実行中...",
+        "waiting": "コネクタ設定を待機中..."
       }
     }
   },
