@@ -410,6 +410,9 @@ function CheckCardView({
                   title={t("failedToRunCard.title")}
                   description={t("failedToRunCard.description")}
                   innerPadding={1}
+                  // The checks card's radius less its padding, so the corners
+                  // run parallel.
+                  rounding={2}
                 />
               </div>
             )}
