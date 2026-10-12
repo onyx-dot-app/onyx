@@ -14,9 +14,6 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.confluence.capability_checks import (
     build_confluence_indexing_checks,
 )
-from onyx.connectors.google_drive.capability_checks import (
-    build_google_drive_indexing_checks,
-)
 from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
 from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
 from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
@@ -30,7 +27,6 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.SLACK: build_slack_indexing_checks(),
     DocumentSource.CONFLUENCE: build_confluence_indexing_checks(),
-    DocumentSource.GOOGLE_DRIVE: build_google_drive_indexing_checks(),
     DocumentSource.ONEDRIVE: build_onedrive_indexing_checks(),
     DocumentSource.OUTLOOK: build_outlook_indexing_checks(),
     DocumentSource.JIRA: build_jira_indexing_checks(),
