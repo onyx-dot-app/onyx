@@ -29,7 +29,7 @@ from onyx.db.models import CredentialCapabilityReportRow
 from onyx.server.documents.credential_capabilities import CapabilityReportSnapshot
 from onyx.server.security.store import _build_env_defaults
 
-_USERS = CountFinding(key=CheckFindingKey.IMPERSONATABLE_USERS, count=12)
+_USERS = CountFinding(key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS, count=12)
 
 
 class _UsersCheck(CapabilityCheck):

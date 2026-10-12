@@ -215,10 +215,10 @@ def test_bounded_count_reports_a_lower_bound_at_the_cap() -> None:
     read: list[int] = []
 
     at_cap: CountFinding = bounded_count(
-        _numbers(read), key=CheckFindingKey.IMPERSONATABLE_USERS, cap=100
+        _numbers(read), key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS, cap=100
     )
     under_cap: CountFinding = bounded_count(
-        iter(range(7)), key=CheckFindingKey.IMPERSONATABLE_USERS, cap=100
+        iter(range(7)), key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS, cap=100
     )
 
     assert (at_cap.count, at_cap.at_least) == (100, True)

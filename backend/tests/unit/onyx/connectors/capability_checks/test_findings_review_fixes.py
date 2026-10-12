@@ -40,7 +40,9 @@ from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.server.documents.connector_edit_models import ConnectorEditPlanResponse
 
-_USERS: CountFinding = CountFinding(key=CheckFindingKey.IMPERSONATABLE_USERS, count=4)
+_USERS: CountFinding = CountFinding(
+    key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS, count=4
+)
 
 
 class _Check(CapabilityCheck):

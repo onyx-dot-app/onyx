@@ -15,6 +15,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     apply_cached_result,
     apply_check_result,
     cache_draft_result,
+    cached_check_result,
     decide_draft_check_state,
     get_cached_draft_result,
 )
@@ -27,6 +28,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityVerdict,
     CheckAdvisory,
     CheckFindingKey,
+    CheckNotApplicableError,
     CheckOutput,
     CountFinding,
 )
@@ -207,3 +209,71 @@ def test_a_stored_run_with_verdicts_reads_back() -> None:
 
     assert '"verdicts"' in raw
     assert StoredDraftRun.model_validate_json(raw) == run
+
+
+class _OffGridCheck(CapabilityCheck):
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="grid_scope",
+            display_name="Grid scope",
+            requires_connector_instance=False,
+        )
+
+    def run(
+        self,
+        context: CapabilityCheckContext,  # noqa: ARG002
+    ) -> CheckOutput | None:
+        raise CheckNotApplicableError("The workspace is not on Enterprise Grid.")
+
+
+def test_a_check_that_does_not_apply_at_run_time_is_not_applicable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store: dict[str, bytes] = {}
+    cache = MagicMock()
+    cache.set.side_effect = lambda key, value, ex: store.__setitem__(  # noqa: ARG005
+        key, value.encode()
+    )
+    cache.get.side_effect = store.get
+    monkeypatch.setattr(draft_runs, "get_cache_backend", lambda: cache)
+    check = _OffGridCheck()
+
+    result = run_capability_checks([check], _context())[0]
+    state: DraftCheckState = decide_draft_check_state(check, _context())
+    apply_check_result(state, result)
+    cache_draft_result("grid", result)
+    cached = get_cached_draft_result("grid")
+
+    assert result.status == CapabilityCheckStatus.SKIPPED
+    assert result.applicable is False
+    assert state.state == DraftCheckStateKind.NOT_APPLICABLE
+    assert cached is not None
+    assert cached.state == DraftCheckStateKind.NOT_APPLICABLE
+    reused = cached_check_result(check, cached)
+    assert reused.status == CapabilityCheckStatus.SKIPPED
+    assert reused.applicable is False
+
+
+def test_a_skipped_discovery_check_stays_skipped_in_a_draft() -> None:
+    state = DraftCheckState(
+        check_id="listing",
+        display_name="listing",
+        capability=CredentialCapability.INDEXING,
+        required=False,
+        state=DraftCheckStateKind.RUNNING,
+        discovery=True,
+    )
+    skipped = CapabilityCheckResult(
+        capability=CredentialCapability.INDEXING,
+        check_id="listing",
+        display_name="listing",
+        required=False,
+        status=CapabilityCheckStatus.SKIPPED,
+        applicable=False,
+        discovery=True,
+    )
+
+    apply_check_result(state, skipped)
+
+    assert state.state == DraftCheckStateKind.SKIPPED

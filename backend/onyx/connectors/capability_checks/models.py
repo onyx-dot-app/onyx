@@ -49,7 +49,7 @@ MAX_FINDING_TEXT_LENGTH: int = 500
 
 class CheckFindingKey(str, Enum):
     SHARED_DRIVES = "shared_drives"
-    IMPERSONATABLE_USERS = "impersonatable_users"
+    VISIBLE_ORGANIZATION_USERS = "visible_organization_users"
     VISIBLE_SPACES = "visible_spaces"
     READABLE_CHANNELS = "readable_channels"
     READABLE_MAILBOXES = "readable_mailboxes"
@@ -134,6 +134,13 @@ class CheckOutput(BaseModel):
 
     findings: list[CheckFinding] = []
     advisories: list[CheckAdvisory] = Field(default=[], max_length=MAX_CHECK_ADVISORIES)
+
+
+class CheckNotApplicableError(Exception):
+    """Raised by a check that learns at run time that it does not apply, for
+    example a Grid-only check on a workspace that is not on Enterprise Grid.
+    The result is SKIPPED and not applicable, like a check that the config
+    excludes."""
 
 
 class CapabilityCheckStatus(str, Enum):

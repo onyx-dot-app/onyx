@@ -15,6 +15,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CheckAdvisory,
     CheckFinding,
+    CheckNotApplicableError,
     CheckOutput,
     CredentialCapability,
     CredentialCapabilityReport,
@@ -190,6 +191,14 @@ def _execute_check(
     try:
         output: CheckOutput | None = run_with_timeout(
             timeout_seconds, check.run, context
+        )
+    except CheckNotApplicableError as e:
+        return _CheckOutcome(
+            status=CapabilityCheckStatus.SKIPPED,
+            message=str(e),
+            error_type=type(e).__name__,
+            applicable=False,
+            duration_ms=elapsed_ms(),
         )
     except ConnectorValidationError as e:
         return _CheckOutcome(

@@ -38,7 +38,7 @@ _SPACES = OptionsFinding(
     field_name="space",
     options=[FindingOption(value="ENG", label="Engineering")],
 )
-_USERS = CountFinding(key=CheckFindingKey.IMPERSONATABLE_USERS, count=1200)
+_USERS = CountFinding(key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS, count=1200)
 
 
 class _FindingsCheck(CapabilityCheck):

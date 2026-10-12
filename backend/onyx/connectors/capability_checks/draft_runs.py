@@ -40,6 +40,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityVerdict,
     CheckAdvisory,
     CheckFinding,
+    CheckNotApplicableError,
     CredentialCapability,
     compute_capability_verdicts,
     parse_known_findings,
@@ -112,8 +113,21 @@ _CACHEABLE_STATES = frozenset(
         DraftCheckStateKind.PASSED,
         DraftCheckStateKind.FAILED,
         DraftCheckStateKind.SKIPPED,
+        DraftCheckStateKind.NOT_APPLICABLE,
     }
 )
+
+
+def _draft_state(result: CapabilityCheckResult) -> DraftCheckStateKind:
+    """A check that found out at run time that it does not apply is
+    NOT_APPLICABLE, as the same decision made before the run is."""
+    if result.error_type == CheckNotApplicableError.__name__:
+        return DraftCheckStateKind.NOT_APPLICABLE
+    return _STATE_BY_STATUS[result.status]
+
+
+def _result_status(state: DraftCheckStateKind) -> CapabilityCheckStatus:
+    return _STATUS_BY_STATE.get(state, CapabilityCheckStatus.SKIPPED)
 
 
 class DraftRunStatus(str, Enum):
@@ -193,9 +207,7 @@ class DraftCheckRunSnapshot(BaseModel):
                     display_name=check.display_name,
                     required=check.required,
                     # A waiting check has not verified anything yet.
-                    status=_STATUS_BY_STATE.get(
-                        check.state, CapabilityCheckStatus.SKIPPED
-                    ),
+                    status=_result_status(check.state),
                     applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
                     discovery=check.discovery,
                 )
@@ -364,7 +376,7 @@ def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
     """Caches a terminal result; INDETERMINATE is not cached. Neither is a
     SKIPPED discovery check: its skip (a failed required check, findings
     turned off) says nothing about the listing once the cause is gone."""
-    state = _STATE_BY_STATUS[result.status]
+    state = _draft_state(result)
     if state not in _CACHEABLE_STATES:
         return
     if result.discovery and state == DraftCheckStateKind.SKIPPED:
@@ -456,13 +468,14 @@ def cached_check_result(
         check_id=check.check_id,
         display_name=check.display_name,
         required=check.required,
-        status=_STATUS_BY_STATE[cached.state],
+        status=_result_status(cached.state),
         message=cached.message,
         error_type=cached.error_type,
         is_fallback=check.is_fallback,
         remediation=check.remediation,
         docs_link=check.docs_link,
         duration_ms=cached.duration_ms,
+        applicable=cached.state != DraftCheckStateKind.NOT_APPLICABLE,
         validates_binding=check.validates_binding,
         discovery=check.discovery,
         # Cached before the workspace turned findings off.
@@ -474,7 +487,7 @@ def cached_check_result(
 def apply_check_result(
     check_state: DraftCheckState, result: CapabilityCheckResult
 ) -> None:
-    check_state.state = _STATE_BY_STATUS[result.status]
+    check_state.state = _draft_state(result)
     check_state.message = result.message
     check_state.error_type = result.error_type
     check_state.duration_ms = result.duration_ms
