@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings import OptionsFinding
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
@@ -113,6 +114,14 @@ def test_indexing_checks_pass_on_the_test_space(
     assert by_id[auth_check_id].status == CapabilityCheckStatus.PASSED
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
     assert verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.PASSED
+    # The discovery check lists the test space as an option for the space field.
+    space_options = [
+        option.value
+        for finding in by_id["confluence_space_listing"].findings
+        if isinstance(finding, OptionsFinding) and finding.field_name == "space"
+        for option in finding.options
+    ]
+    assert _SPACE in space_options
 
 
 def _scoped_auth_result(token: str) -> CapabilityCheckStatus:
