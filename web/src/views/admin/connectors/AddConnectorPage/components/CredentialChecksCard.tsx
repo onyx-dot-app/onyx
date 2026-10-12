@@ -384,6 +384,7 @@ function CheckCardView({
           )}
           {collapsed && requiredFailed > 0 && (
             <Tag
+              icon={SvgXOctagon}
               title={t("requiredFailed", { count: requiredFailed })}
               color="red"
             />
