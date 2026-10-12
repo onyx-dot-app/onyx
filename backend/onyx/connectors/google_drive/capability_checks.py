@@ -23,7 +23,7 @@ without it.
 from collections.abc import Iterator
 from contextlib import contextmanager
 from itertools import islice
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.form_state import FormState
@@ -59,6 +59,7 @@ from onyx.connectors.google_drive.drive_access import (
 )
 from onyx.connectors.google_drive.models import (
     GDriveMimeType,
+    GoogleDirectoryUser,
     GoogleDriveAuth,
     GoogleDriveFileType,
 )
@@ -1040,6 +1041,8 @@ _PERMISSION_SAMPLE_FIELDS = (
     "permissions(id, emailAddress, type, domain))"
 )
 _PERMISSION_FIELDS = "permissions(id, emailAddress, type),nextPageToken"
+# Permission reads the file check makes before it gives up.
+_MAX_PERMISSION_READS = 3
 _DIRECTORY_HINT = (
     "Make the primary admin a Google Workspace admin. Service account: give it "
     "the admin.directory.user.readonly and admin.directory.group.readonly "
@@ -1047,37 +1050,49 @@ _DIRECTORY_HINT = (
 )
 
 
+def _is_item_denial(error: GoogleDriveHttpError) -> bool:
+    """A 403 or 404 on one file or folder, not a disabled API or a missing
+    scope."""
+    return (
+        error.status_code in (403, 404)
+        and error.access_denied
+        and not _DISABLED_API_REASONS.intersection(error.reasons)
+        and not _SCOPE_REASONS.intersection(error.reasons)
+    )
+
+
 def _read_permissions(
     context: CapabilityCheckContext,
     ops: GoogleDriveSourceOperations,
     user_email: str,
     item: GoogleDriveFileType,
-    kind: str,
-) -> None:
+) -> bool:
     """Reads the permissions of a file or folder that lists them only by id,
-    as the sync does. Fails when none comes back."""
-    name = item.get("name") or item["id"]
-    with _google_errors(
-        context,
-        api=_DRIVE_API,
-        denied=f"The credential cannot read who can open the {kind} '{name}'",
-    ):
-        permissions = list(
+    as the sync does. False when Google denies them for this item or returns
+    none."""
+    try:
+        permissions: list[dict[str, Any]] = list(
             ops.list_file_permissions(
                 user_email=user_email, file_id=item["id"], fields=_PERMISSION_FIELDS
             )
         )
-    if not permissions:
-        raise InsufficientPermissionsError(
-            f"Google Drive returned no permissions for the {kind} '{name}', so "
-            "Onyx cannot tell who can open it."
+    except GoogleDriveHttpError as e:
+        if _is_item_denial(e):
+            return False
+        _raise_google_error(
+            context, e, api=_DRIVE_API, denied="The credential cannot read permissions"
         )
+    except GoogleDriveRefreshError as e:
+        _raise_google_error(context, e, api=_DRIVE_API, denied="")
+    return bool(permissions)
 
 
 class _FilePermissionsCheck(_GoogleDriveCheck):
     """Lists files with their permissions as the primary admin, and reads the
-    permissions of a file that has them only by id. Passes when every sampled
-    file carries its permissions."""
+    permissions of files that have them only by id. Google denies the
+    permissions of some files (for example files of another organization); the
+    sync gives those files to the user who found them, so one denial is not a
+    failure."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -1092,14 +1107,14 @@ class _FilePermissionsCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_DRIVE_API,
             denied="The credential cannot list files with their permissions",
         ):
-            auth = ops.authenticate()
-            files = _files(
+            auth: GoogleDriveAuth = ops.authenticate()
+            files: list[GoogleDriveFileType] = _files(
                 ops.list_files(
                     variant=DriveCorpus.ALL_DRIVES,
                     user_email=auth.primary_admin_email,
@@ -1110,20 +1125,23 @@ class _FilePermissionsCheck(_GoogleDriveCheck):
                 ),
                 _SAMPLE_FILES,
             )
-        by_id_only = next(
-            (
-                file
-                for file in files
-                if file.get("permissionIds") and not file.get("permissions")
-            ),
-            None,
-        )
-        if by_id_only is not None:
-            _read_permissions(
-                context, ops, auth.primary_admin_email, by_id_only, "file"
-            )
+        by_id_only: list[GoogleDriveFileType] = [
+            file
+            for file in files
+            if file.get("permissionIds") and not file.get("permissions")
+        ][:_MAX_PERMISSION_READS]
+        for file in by_id_only:
+            if _read_permissions(context, ops, auth.primary_admin_email, file):
+                return
+        if any(file.get("permissions") for file in files):
             return
-        if files and not any(file.get("permissions") for file in files):
+        if by_id_only:
+            raise UnexpectedValidationError(
+                "Google Drive denied the permissions of every sampled file, so "
+                "Onyx cannot verify the permission sync. The sync gives such "
+                "files only to the user who found them."
+            )
+        if files:
             raise InsufficientPermissionsError(
                 "Google Drive listed files without their permissions, so Onyx "
                 "cannot tell who can open them. Give the credential the "
@@ -1143,8 +1161,10 @@ class _DirectoryAdminCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
-        admin = context.credential_json.get(DB_CREDENTIALS_PRIMARY_ADMIN_KEY)
+        ops: GoogleDriveSourceOperations = _gateway(context)
+        admin: str | None = context.credential_json.get(
+            DB_CREDENTIALS_PRIMARY_ADMIN_KEY
+        )
         with _google_errors(
             context,
             api=_ADMIN_API,
@@ -1171,14 +1191,14 @@ class _DirectoryUsersCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_ADMIN_API,
             denied="The primary admin cannot list the Workspace users",
         ):
             ops.authenticate()
-            first_user = next(ops.list_user_emails(), None)
+            first_user: str | None = next(ops.list_user_emails(), None)
         if first_user is None:
             raise UnexpectedValidationError(
                 "The Workspace directory listed no user, so Onyx cannot verify "
@@ -1199,14 +1219,14 @@ class _GroupsCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_ADMIN_API,
             denied="The primary admin cannot read the Workspace groups",
         ):
             ops.authenticate()
-            first_group = next(ops.list_groups(), None)
+            first_group: str | None = next(ops.list_groups(), None)
             if first_group is None:
                 return
             next(ops.list_group_members(group_email=first_group), None)
@@ -1231,16 +1251,16 @@ class _DriveMembershipCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_DRIVE_API,
             denied="The primary admin cannot read the members of shared drives",
         ):
-            auth = ops.authenticate()
-            admin_user = ops.get_admin_user()
-            is_admin = admin_user.is_admin or admin_user.is_delegated_admin
-            drive_id = next(
+            auth: GoogleDriveAuth = ops.authenticate()
+            admin_user: GoogleDirectoryUser = ops.get_admin_user()
+            is_admin: bool = admin_user.is_admin or admin_user.is_delegated_admin
+            drive_id: str | None = next(
                 ops.list_drives(
                     user_email=auth.primary_admin_email,
                     use_domain_admin_access=is_admin,
@@ -1280,21 +1300,30 @@ class _FolderPermissionsCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_DRIVE_API,
             denied="The credential cannot list folders with their permissions",
         ):
-            auth = ops.authenticate()
-            folder = next(
-                ops.list_folders_with_permissions(user_email=auth.primary_admin_email),
+            auth: GoogleDriveAuth = ops.authenticate()
+            # The sync ends the listing quietly on a denial; the check reports it.
+            folder: GoogleDriveFileType | None = next(
+                ops.list_folders_with_permissions(
+                    user_email=auth.primary_admin_email, continue_on_404_or_403=False
+                ),
                 None,
             )
         if folder is None or folder.get("permissions"):
             return
-        if folder.get("permissionIds"):
-            _read_permissions(context, ops, auth.primary_admin_email, folder, "folder")
+        if folder.get("permissionIds") and not _read_permissions(
+            context, ops, auth.primary_admin_email, folder
+        ):
+            name: str = folder.get("name") or folder["id"]
+            raise InsufficientPermissionsError(
+                f"The credential cannot read who can open the folder '{name}', "
+                "so its members do not get access through it."
+            )
 
 
 def build_google_drive_doc_permission_sync_checks() -> list[CapabilityCheck]:

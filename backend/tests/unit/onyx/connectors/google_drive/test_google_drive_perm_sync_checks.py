@@ -18,9 +18,8 @@ from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_doc_permission_sync_checks,
     build_google_drive_group_sync_checks,
 )
+from onyx.connectors.google_drive.models import GoogleDirectoryUser, GoogleDriveAuth
 from onyx.connectors.google_drive.source_operations import (
-    GoogleDirectoryUser,
-    GoogleDriveAuth,
     GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
@@ -119,15 +118,46 @@ def test_file_permissions_listed_by_id_are_read() -> None:
     assert ops.list_file_permissions.call_args.kwargs["file_id"] == "f1"
 
 
-def test_file_permissions_denied_by_id_fail() -> None:
+def test_a_file_denied_by_id_is_skipped_for_the_next() -> None:
+    ops = _ops()
+    ops.list_files.side_effect = _listing(
+        {"id": "external", "permissionIds": ["p"]},
+        {"id": "f1", "permissionIds": ["p"]},
+    )
+
+    def permissions(*, file_id: str, **_kwargs: Any) -> Iterator[dict[str, Any]]:
+        if file_id == "external":
+            raise _http_error(403, "insufficientFilePermissions")
+        return iter([{"id": "p"}])
+
+    ops.list_file_permissions.side_effect = permissions
+
+    assert _run("google_drive_file_permissions", ops).status == (
+        CapabilityCheckStatus.PASSED
+    )
+
+
+def test_every_sampled_file_denied_is_indeterminate() -> None:
     ops = _ops()
     ops.list_files.side_effect = _listing({"id": "f1", "permissionIds": ["p"]})
     ops.list_file_permissions.side_effect = _http_error(403)
 
     result = _run("google_drive_file_permissions", ops)
 
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
+
+
+def test_a_missing_scope_on_the_permission_read_fails() -> None:
+    ops = _ops()
+    ops.list_files.side_effect = _listing({"id": "f1", "permissionIds": ["p"]})
+    ops.list_file_permissions.side_effect = _http_error(
+        403, "ACCESS_TOKEN_SCOPE_INSUFFICIENT"
+    )
+
+    result = _run("google_drive_file_permissions", ops)
+
     assert result.status == CapabilityCheckStatus.FAILED
-    assert "who can open the file" in result.message
+    assert "missing a scope" in result.message
 
 
 def test_directory_admin_keeps_the_legacy_message() -> None:
@@ -176,4 +206,18 @@ def test_folder_permissions_listed_by_id_are_read() -> None:
     result = _run("google_drive_folder_permissions", ops)
 
     assert result.status == CapabilityCheckStatus.FAILED
-    assert "no permissions for the folder" in result.message
+    assert "who can open the folder 'folder'" in result.message
+
+
+def test_a_denied_folder_listing_is_reported() -> None:
+    ops = _ops()
+    ops.list_folders_with_permissions.side_effect = _http_error(403)
+
+    result = _run("google_drive_folder_permissions", ops)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert "cannot list folders" in result.message
+    assert (
+        ops.list_folders_with_permissions.call_args.kwargs["continue_on_404_or_403"]
+        is False
+    )

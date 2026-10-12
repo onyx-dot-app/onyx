@@ -812,13 +812,14 @@ class GoogleDriveSourceOperations(SourceOperations):
     )
     @_translated
     def list_folders_with_permissions(
-        self, *, user_email: str
+        self, *, user_email: str, continue_on_404_or_403: bool = True
     ) -> Iterator[GoogleDriveFileType]:
-        """Every folder the user can see, with its published permissions."""
+        """Every folder the user can see, with its published permissions. By
+        default a 403 or 404 ends the listing without an error."""
         yield from execute_paginated_retrieval(
             retrieval_function=self._drive(user_email).files().list,
             list_key="files",
-            continue_on_404_or_403=True,
+            continue_on_404_or_403=continue_on_404_or_403,
             corpora=DriveCorpus.ALL_DRIVES.value,
             supportsAllDrives=True,
             includeItemsFromAllDrives=True,
