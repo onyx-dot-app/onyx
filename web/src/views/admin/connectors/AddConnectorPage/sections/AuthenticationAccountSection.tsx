@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   Divider,
+  Fold,
   InputTypeIn,
   SelectCard,
   Tabs,
@@ -18,7 +19,7 @@ import {
 } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import { FormikField } from "@/refresh-components/form/FormikField";
-import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
+import { SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type {
   Credential,
   DraftCredential,
@@ -47,7 +48,6 @@ import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStd
 import {
   credentialMatchesBoundFields,
   getCredentialSpec,
-  isDraftCredential,
   realmFields,
   shouldRedirectToOAuth,
   toCredentialRef,
@@ -58,8 +58,6 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { credentialBoundFieldNames } from "@/lib/connectors/utils";
 import AuthenticationAccountCard from "@/views/admin/connectors/AddConnectorPage/components/AuthenticationAccountCard";
 import CredentialChecksCard from "@/views/admin/connectors/AddConnectorPage/components/CredentialChecksCard";
-import DraftAccountSummaryCard from "@/views/admin/connectors/AddConnectorPage/components/DraftAccountSummaryCard";
-import ExistingAccountSummaryCard from "@/views/admin/connectors/AddConnectorPage/components/ExistingAccountSummaryCard";
 
 interface AuthenticationAccountSectionProps {
   /** The source being set up. */
@@ -117,9 +115,7 @@ export default function AuthenticationAccountSection({
     isAuthorizing,
   } = useCredentialSetup(connector);
   const checkReports = useCredentialCheckReports(connector);
-  // Opens the saved accounts. Folding also closes the new-account card,
-  // which stays on the page.
-  const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
+  const [showSavedAccounts, setShowSavedAccounts] = useState<boolean>(true);
 
   // The create card's one label, whatever the number of routes; the tabs
   // inside it name the routes.
@@ -337,19 +333,6 @@ export default function AuthenticationAccountSection({
     );
   }
 
-  // What the folded section shows: the chosen saved account, the typed
-  // account, or the closed new-account card when nothing is chosen.
-  const pickedSavedCredential: SimilarCredential | null =
-    credentials?.find((credential) => credential.id === selectedSavedId) ??
-    null;
-  const chosenDraft: DraftCredential | null =
-    selectedSavedId === null &&
-    newAccountReady &&
-    checkedCredential !== null &&
-    isDraftCredential(checkedCredential)
-      ? checkedCredential
-      : null;
-
   // One card creates a credential. Its header toggles it; the fold below is a
   // plain container, so a click in the open form cannot fold it away. The
   // routes into the source are tabs inside the fold.
@@ -430,34 +413,18 @@ export default function AuthenticationAccountSection({
         variant="section"
         padding={0}
         rightChildren={
-          <Section flexDirection="row" alignItems="center" gap={0} width="fit">
-            <div className="p-2">
-              <Content
-                icon={SvgListTree}
-                title={t("add.savedAccounts.label", {
-                  count: credentials?.length ?? 0,
-                })}
-                sizePreset="main-ui"
-                variant="body"
-                color="muted"
-                width="fit"
-              />
-            </div>
-            <Button
-              icon={accountsExpanded ? SvgFold : SvgExpand}
-              prominence="tertiary"
-              aria-label={
-                accountsExpanded
-                  ? t("add.savedAccounts.collapseButton.ariaLabel")
-                  : t("add.savedAccounts.expandButton.ariaLabel")
-              }
-              aria-expanded={accountsExpanded}
-              onClick={() => {
-                if (accountsExpanded) close();
-                setAccountsExpanded(!accountsExpanded);
-              }}
-            />
-          </Section>
+          <Button
+            icon={SvgListTree}
+            prominence="internal"
+            // Held in its hover look while the list is open.
+            interaction={showSavedAccounts ? "hover" : "rest"}
+            aria-expanded={showSavedAccounts}
+            onClick={() => setShowSavedAccounts((shown) => !shown)}
+          >
+            {t("add.savedAccounts.label", {
+              count: credentials?.length ?? 0,
+            })}
+          </Button>
         }
       />
 
@@ -466,9 +433,16 @@ export default function AuthenticationAccountSection({
       the types honest. */}
       {!credentials ? null : (
         <Section gap={6} alignItems="stretch" width="full">
-          {accountsExpanded ? (
+          <Section gap={0} alignItems="stretch" width="full" height="fit">
+            {/* Hidden accounts animate away, then leave the page. The fold
+            holds the cards' gap, so a closed one leaves no space behind. A
+            div, as Section's own padding would override the bottom one. */}
+            <Fold open={showSavedAccounts && credentials.length > 0}>
+              <div className="flex flex-col gap-2 pb-2">
+                {credentials.map(renderSavedCard)}
+              </div>
+            </Fold>
             <Section gap={2} alignItems="stretch" width="full">
-              {credentials.map(renderSavedCard)}
               {canAuthorize && (
                 <Section flexDirection="row" justifyContent="start" gap={1}>
                   <Button
@@ -486,26 +460,7 @@ export default function AuthenticationAccountSection({
               )}
               {newAccountCard}
             </Section>
-          ) : pickedSavedCredential ? (
-            <ExistingAccountSummaryCard
-              credential={pickedSavedCredential}
-              source={connector}
-              sourceName={displayName}
-              onExpand={() => setAccountsExpanded(true)}
-            />
-          ) : chosenDraft ? (
-            <DraftAccountSummaryCard
-              draft={chosenDraft}
-              source={connector}
-              sourceName={displayName}
-              onEdit={() => {
-                setAccountsExpanded(true);
-                selectMethod(defaultMethod);
-              }}
-            />
-          ) : (
-            newAccountCard
-          )}
+          </Section>
 
           <CredentialChecksCard
             source={connector}

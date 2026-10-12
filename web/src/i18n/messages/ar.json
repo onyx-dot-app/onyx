@@ -2689,20 +2689,8 @@
         "retryButton": {
           "label": "إعادة المحاولة"
         },
-        "draftSummary": {
-          "newAccountSuffix": "(حساب جديد)",
-          "editButton": {
-            "label": "تعديل الحساب"
-          }
-        },
         "savedAccounts": {
-          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}",
-          "expandButton": {
-            "ariaLabel": "إظهار الحسابات المحفوظة"
-          },
-          "collapseButton": {
-            "ariaLabel": "إخفاء الحسابات المحفوظة"
-          }
+          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}"
         },
         "timeout": {
           "toast": "انتهت مهلة العملية بعد {seconds} ثانية. هل تتحقق من إعداداتك بحثًا عن أخطاء؟"

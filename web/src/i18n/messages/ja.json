@@ -2689,20 +2689,8 @@
         "retryButton": {
           "label": "再試行"
         },
-        "draftSummary": {
-          "newAccountSuffix": "(新しいアカウント)",
-          "editButton": {
-            "label": "アカウントを編集"
-          }
-        },
         "savedAccounts": {
-          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}",
-          "expandButton": {
-            "ariaLabel": "保存済みアカウントを表示"
-          },
-          "collapseButton": {
-            "ariaLabel": "保存済みアカウントを非表示"
-          }
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
         },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
