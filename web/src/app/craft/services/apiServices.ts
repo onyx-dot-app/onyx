@@ -481,7 +481,11 @@ export async function fetchActiveTurn(
   );
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch active turn: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch active turn: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return await res.json();
@@ -495,7 +499,11 @@ export async function fetchKnownTurn(
     `${BUILD_API_BASE}/sessions/${sessionId}/turns/${turnId}`
   );
   if (!res.ok) {
-    throw new Error(`Failed to fetch turn: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch turn: ${res.status}`,
+      res.status,
+      null
+    );
   }
   return res.json();
 }
@@ -514,7 +522,11 @@ export async function fetchTurnEventStream(
     if (res.status === 404 || res.status === 409) {
       return null;
     }
-    throw new Error(`Failed to stream turn: ${res.status}`);
+    throw new FetchError(
+      `Failed to stream turn: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return res;
@@ -524,10 +536,17 @@ export async function fetchTurnEventStream(
  * Interrupt the in-flight agent turn for a session. The backend interrupts the
  * sandbox turn; any attached live stream then terminates normally.
  */
-export async function interruptMessageStream(sessionId: string): Promise<void> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/interrupt`, {
-    method: "POST",
-  });
+export async function interruptMessageStream(
+  sessionId: string,
+  turnId?: string
+): Promise<void> {
+  const query = turnId ? `?turn_id=${encodeURIComponent(turnId)}` : "";
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/interrupt${query}`,
+    {
+      method: "POST",
+    }
+  );
 
   if (!res.ok) {
     throw new Error(`Failed to interrupt message: ${res.status}`);
@@ -541,7 +560,11 @@ export async function fetchScheduledRunContext(
     `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-context`
   );
   if (!res.ok)
-    throw new Error(await errorDetail(res, "Failed to fetch scheduled run"));
+    throw new FetchError(
+      await errorDetail(res, "Failed to fetch scheduled run"),
+      res.status,
+      null
+    );
   return res.json();
 }
 
@@ -559,7 +582,11 @@ export async function fetchScheduledRunEventStream(
   }
 
   if (!res.ok) {
-    throw new Error(`Failed to stream scheduled run: ${res.status}`);
+    throw new FetchError(
+      `Failed to stream scheduled run: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return res;

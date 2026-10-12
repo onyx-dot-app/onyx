@@ -346,8 +346,8 @@ sharing code with it.
 ```
 POST /build/sessions/{id}/interrupt        session/messages.py:interrupt_message
   └─ SessionManager.interrupt_message       session/manager.py:1019
-       ├─ request_interrupt(session_id)      session/interrupt_signal.py  (cache fence)
-       └─ abort_opencode_session (thread)     best-effort direct sandbox abort
+       ├─ request_interrupt(turn_id)      session/interrupt_signal.py  (cache fence)
+       └─ abort_opencode_session              best-effort direct sandbox abort
 ```
 
 Two complementary signals, by design (`manager.py:interrupt_message`
@@ -360,6 +360,12 @@ replica). The executor checks `is_interrupt_requested` both before starting
 a prompt and inside the event-streaming loop
 (`interactive_turns/executor.py:_drive_interactive_turn.interrupt_requested`),
 which also doubles as the hard-cap deadline check.
+
+Stop accepts an optional `turn_id`. The admission lock protects target validation and the direct abort.
+A completed or replaced target is a no-op. Fences belong to individual turns, so late requests cannot cancel successors.
+Without a target, Stop selects the current active turn. It never leaves a fence for future work.
+The direct abort finishes before the lock releases; its HTTP timeout is two seconds per phase.
+
 
 **Partial output is saved before the turn ends.** On every path that detects
 an interrupt, the executor calls `session_manager.finalize_persist(session_id,
@@ -379,6 +385,8 @@ A failed read preserves the local transcript and settlement identity. The retry 
 Interactive and scheduled observers reconnect after transport failures while their backend owner remains active.
 A failed start keeps ownership until its pending Stop request finishes. Discarding a failed queued start observes any accepted backend turn before dispatching another prompt.
 Connection loss alone never starts completion handling. Terminal packets or backend completion evidence start canonical reconciliation.
+Permanent access and missing-session errors stop observation and retain queued prompts without dispatching them.
+Interactive terminal errors reload saved history before releasing ownership, just like scheduled errors.
 Scheduled terminal error packets reconcile saved results through the existing run owner.
 Failed and skipped scheduled runs also reload saved history, but never grant queue permission.
 A failed history read preserves the displayed transcript and the existing retry action.
@@ -728,7 +736,7 @@ A directory scan reports current files, not exact per-turn provenance.
 |---|---|
 | changes the turn executor (`interactive_turns/executor.py`) | every streamed terminal path still calls `finalize_persist` before `finish_turn` (the prompt-slot rejection path persists an error row instead); the timeout-continuation loop's `MAX_TIMEOUT_CONTINUATIONS` cap; `[[craft-streaming]]`'s event shapes the executor switches on (`PromptResponse`, `ActivityTimeoutError`, `SandboxError`) |
 | changes locking (`prompt_slot`, `acquire_active_turn_lock`, `session_creation_lock`) | the CONFLICT-vs-silent-failure behavior at each acquisition site; whether a reclaim (`claim_turn_for_runner`) can still race a live runner; `[[craft-sandboxes]]`'s reaper, which also touches sandbox state under related locks |
-| changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's pending Stop request barrier and known-turn terminal outcome contract; whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` best-effort path staying best-effort (not blocking) |
+| changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's pending Stop request barrier and known-turn terminal outcome contract; whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` remaining best-effort, with a short HTTP timeout under the admission lock |
 | adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; `list_live_approvals`'s time-window filter; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_session_grant` can actually cover |
 | changes session state (`BuildSession` columns, `session_ready.py`) | `session_runtime_intact`'s fast-path check; `reconcile_session_llm_config`'s short-circuit comparison; any snapshot/restore path in `[[craft-sandboxes]]` that reads these columns |
 | changes artifact upsert or hashing | the FE artifact list/version display; `export_docx`/`download_artifact`, which read the live workspace, not the DB row's cached bytes |

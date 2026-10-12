@@ -1,3 +1,4 @@
+import { FetchError } from "@/lib/fetcher";
 import { act, renderHook } from "@testing-library/react";
 
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -1389,6 +1390,143 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
+  it.each([401, 403, 404])(
+    "ends observation when status lookup returns HTTP %s",
+    async (status) => {
+      jest.mocked(fetchTurnEventStream).mockResolvedValue(null);
+      jest
+        .mocked(fetchActiveTurn)
+        .mockRejectedValue(new FetchError("Session unavailable", status, null));
+      const { result } = renderHook(() => useBuildStreaming());
+      const controller = new AbortController();
+      let watching: Promise<void> | undefined;
+      act(() => {
+        watching = result.current.streamTurnEvents(
+          sessionId,
+          "unavailable",
+          controller.signal
+        );
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        status: "failed",
+        error: "Session unavailable",
+        activeTurnId: null,
+      });
+      expect(fetchActiveTurn).toHaveBeenCalledTimes(1);
+      expect(fetchMessages).not.toHaveBeenCalled();
+      controller.abort();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(1000);
+        await watching;
+      });
+    }
+  );
+
+  it.each(["stream", "status"])(
+    "ends scheduled observation after permanent %s rejection",
+    async (source) => {
+      const error = new FetchError("Permission revoked", 403, null);
+      if (source === "stream")
+        jest.mocked(fetchScheduledRunEventStream).mockRejectedValue(error);
+      else {
+        jest
+          .mocked(fetchScheduledRunEventStream)
+          .mockRejectedValue(new Error("Disconnected"));
+        jest.mocked(fetchScheduledRunContext).mockRejectedValue(error);
+      }
+      const { result } = renderHook(() => useBuildStreaming());
+      const controller = new AbortController();
+      let watching: Promise<void> | undefined;
+      act(() => {
+        watching = result.current.streamScheduledRunEvents(
+          sessionId,
+          "scheduled-run",
+          controller.signal
+        );
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(5000);
+      });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({ status: "failed", error: "Permission revoked" });
+      expect(fetchScheduledRunEventStream).toHaveBeenCalledTimes(1);
+      controller.abort();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(1000);
+        await watching;
+      });
+    }
+  );
+
+  it("restores missed history after a reconnected turn reports failure without dispatching its queue", async () => {
+    jest
+      .mocked(fetchActiveTurn)
+      .mockResolvedValueOnce({
+        session_id: sessionId,
+        turn_id: "turn-thinking",
+        status: "RUNNING",
+        turn_index: 0,
+      })
+      .mockResolvedValue(null);
+    jest.mocked(fetchKnownTurn).mockResolvedValue({
+      session_id: sessionId,
+      turn_id: "turn-thinking",
+      status: "FAILED",
+      turn_index: 0,
+      error_detail: "Provider failed",
+    });
+    jest.mocked(fetchMessages).mockResolvedValue([
+      {
+        id: "saved",
+        type: "assistant",
+        content: "Work missed while disconnected",
+        timestamp: new Date(),
+        turn_index: 0,
+        message_metadata: {
+          type: "agent_message",
+          content: { type: "text", text: "Work missed while disconnected" },
+        },
+      },
+    ]);
+    jest
+      .mocked(processSSEStream)
+      .mockRejectedValueOnce(new Error("Connection lost"))
+      .mockImplementationOnce(async (_response, onPacket) => {
+        const packet = { type: "error", message: "Provider failed" };
+        onPacket(packet);
+      });
+    const { result } = renderHook(() => useBuildStreaming());
+    let sending: Promise<void> | undefined;
+    act(() => {
+      sending = result.current.streamMessage(sessionId, "work");
+    });
+    act(() => {
+      useBuildSessionStore.getState().enqueueMessage(sessionId, "next", []);
+    });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1000);
+      await sending;
+    });
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session).toMatchObject({
+      status: "failed",
+      error: "Provider failed",
+      activeTurnId: null,
+      turnSettlement: null,
+    });
+    expect(session?.messages).toEqual([
+      expect.objectContaining({ content: "Work missed while disconnected" }),
+    ]);
+    expect(session?.queuedMessages).toHaveLength(1);
+    expect(createTurn).toHaveBeenCalledTimes(1);
+  });
+
   it("hands attach transport failure to authoritative completion", async () => {
     jest
       .mocked(fetchTurnEventStream)
@@ -1414,6 +1552,13 @@ describe("useBuildStreaming thinking packets", () => {
   });
 
   it("shows in-band turn errors and clears active turn metadata", async () => {
+    jest.mocked(fetchKnownTurn).mockResolvedValue({
+      session_id: sessionId,
+      turn_id: "turn-error",
+      status: "FAILED",
+      turn_index: 0,
+      error_detail: "provider model not found",
+    });
     jest
       .mocked(processSSEStream)
       .mockImplementationOnce(async (_response, onPacket) => {
@@ -1439,12 +1584,8 @@ describe("useBuildStreaming thinking packets", () => {
       activeTurnId: null,
       activeTurnLocalOwner: false,
     });
-    expect(session?.streamItems).toEqual([
-      expect.objectContaining({
-        type: "error",
-        content: "provider model not found",
-      }),
-    ]);
+    expect(fetchMessages).toHaveBeenCalledWith(sessionId);
+    expect(session?.turnSettlement).toBeNull();
   });
 
   it("surfaces a usage rate-limit 429 as an in-transcript banner item", async () => {
@@ -1782,7 +1923,7 @@ describe("useBuildStreaming thinking packets", () => {
       .filter((item) => item.type === "tool_call")
       .map((item) => item.toolCall.status);
 
-    expect(interruptMessageStream).toHaveBeenCalledWith(sessionId);
+    expect(interruptMessageStream).toHaveBeenCalledWith(sessionId, "tool-turn");
     expect(session?.isInterrupting).toBe(false);
     expect(session?.wasInterrupted).toBe(true);
     expect(toolStatuses).toEqual(["completed", "cancelled"]);

@@ -26,6 +26,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+    OPENCODE_SERVE_ABORT_TIMEOUT,
     OPENCODE_SERVE_CONNECT_TIMEOUT,
     OPENCODE_SERVE_EVENT_READ_TIMEOUT,
     OPENCODE_SERVE_REQUEST_TIMEOUT,
@@ -1304,6 +1305,7 @@ class OpencodeServeClient:
                 f"/session/{opencode_session_id}/abort",
                 params={"directory": directory},
                 json={},
+                timeout=OPENCODE_SERVE_ABORT_TIMEOUT,
             )
         except httpx.HTTPError as e:
             logger.warning(

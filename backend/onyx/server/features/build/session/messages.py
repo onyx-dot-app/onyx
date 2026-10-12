@@ -295,6 +295,7 @@ def send_subagent_message(
 @router.post("/sessions/{session_id}/interrupt", tags=PUBLIC_API_TAGS)
 def interrupt_message(
     session_id: UUID,
+    turn_id: UUID | None = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MessageInterruptResponse:
@@ -304,5 +305,5 @@ def interrupt_message(
     streams then terminate through their normal completion path.
     """
     session_manager = SessionManager(db_session)
-    interrupted = session_manager.interrupt_message(session_id, user.id)
+    interrupted = session_manager.interrupt_message(session_id, user.id, turn_id)
     return MessageInterruptResponse(interrupted=interrupted)

@@ -23,6 +23,7 @@ import {
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
 
 import {
   useBuildSessionStore,
@@ -216,7 +217,10 @@ export function useBuildStreaming({
         isInterrupting: true,
         wasInterrupted: true,
       });
-      const request = interruptMessageStream(sessionId)
+      const turnId = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId)?.activeTurnId;
+      const request = interruptMessageStream(sessionId, turnId ?? undefined)
         .catch((error: unknown) => {
           console.error("[Streaming] Failed to interrupt:", error);
           if (ownsRequest()) {
@@ -277,7 +281,7 @@ export function useBuildStreaming({
       options: {
         signal: AbortSignal;
         onPromptResponse?: () => void;
-        onTerminalError?: () => void;
+        onTerminalError: () => void;
         expectedTurnId?: string;
       }
     ) => {
@@ -857,8 +861,7 @@ export function useBuildStreaming({
           }
 
           case "error": {
-            // Safety net for an error arriving mid-interrupt: defer to reconcile rather than
-            // marking failed, which strands the queued auto-send and stalls reconcile.
+            // The observer resumes after the pending Stop and reads its outcome.
             if (
               useBuildSessionStore.getState().sessions.get(sessionId)
                 ?.isInterrupting
@@ -867,18 +870,7 @@ export function useBuildStreaming({
             }
             void finalizeOutputs();
             appendErrorItem(parsed.message);
-            if (options?.onTerminalError) {
-              options.onTerminalError();
-              break;
-            }
-            updateSessionData(sessionId, {
-              status: "failed",
-              error: parsed.message,
-              isInterrupting: false,
-              activeTurnId: null,
-              activeTurnIndex: null,
-              activeTurnLocalOwner: false,
-            });
+            options.onTerminalError();
             break;
           }
 
@@ -959,25 +951,25 @@ export function useBuildStreaming({
           current?.activeTurnId === turnId
         );
       };
-      let settledFromPromptResponse = false;
+      let settledFromTerminalPacket = false;
+      const settleFromTerminalPacket = (): void => {
+        settledFromTerminalPacket = true;
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (current && !current.isInterrupting)
+          void useBuildSessionStore
+            .getState()
+            .beginTurnSettlement(
+              sessionId,
+              { kind: "interactive", turnId },
+              existingSession?.turnGeneration ?? 0
+            );
+        onSettled?.();
+      };
       const processor = createStreamPacketProcessor(sessionId, {
         signal,
         expectedTurnId: turnId,
-        onPromptResponse: () => {
-          settledFromPromptResponse = true;
-          const current = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId);
-          if (current && !current.isInterrupting)
-            void useBuildSessionStore
-              .getState()
-              .beginTurnSettlement(
-                sessionId,
-                { kind: "interactive", turnId },
-                existingSession?.turnGeneration ?? 0
-              );
-          onSettled?.();
-        },
+        onPromptResponse: settleFromTerminalPacket,
+        onTerminalError: settleFromTerminalPacket,
       });
 
       try {
@@ -1002,6 +994,7 @@ export function useBuildStreaming({
               (error instanceof Error && error.name === "AbortError")
             )
               return;
+            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
             console.warn("[Streaming] Turn attach stream error:", error);
           }
           const current = useBuildSessionStore
@@ -1009,7 +1002,7 @@ export function useBuildStreaming({
             .sessions.get(sessionId);
           if (
             !ownsAttachment() ||
-            settledFromPromptResponse ||
+            settledFromTerminalPacket ||
             current?.error ||
             current?.isInterrupting
           )
@@ -1019,6 +1012,7 @@ export function useBuildStreaming({
             active = await fetchActiveTurn(sessionId);
           } catch (error) {
             if (!ownsAttachment()) return;
+            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
             console.warn("[Streaming] Failed to check attached turn:", error);
             await sleep(STREAM_RECONNECT_INTERVAL_MS);
             continue;
@@ -1037,10 +1031,19 @@ export function useBuildStreaming({
           }
           await sleep(STREAM_RECONNECT_INTERVAL_MS);
         }
+      } catch (error) {
+        if (ownsAttachment())
+          updateSessionData(sessionId, {
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+            activeTurnId: null,
+            activeTurnIndex: null,
+            activeTurnLocalOwner: false,
+          });
       } finally {
         processor.cancelOutputs();
         if (ownsAttachment()) {
-          if (!settledFromPromptResponse) {
+          if (!settledFromTerminalPacket) {
             onSettled?.();
           }
         }
@@ -1353,6 +1356,7 @@ export function useBuildStreaming({
               (error instanceof Error && error.name === "AbortError")
             )
               return;
+            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
             console.warn("[Streaming] Scheduled run stream error:", error);
           }
           if (!ownsScheduledStream() || settledFromTerminalPacket) return;
@@ -1361,6 +1365,7 @@ export function useBuildStreaming({
             run = await fetchScheduledRunContext(sessionId);
           } catch (error) {
             if (!ownsScheduledStream()) return;
+            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
             console.warn("[Streaming] Failed to check scheduled run:", error);
             await sleep(STREAM_RECONNECT_INTERVAL_MS);
             continue;
@@ -1378,6 +1383,15 @@ export function useBuildStreaming({
           }
           await sleep(STREAM_RECONNECT_INTERVAL_MS);
         }
+      } catch (error) {
+        if (ownsScheduledStream())
+          updateSessionData(sessionId, {
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+            activeTurnId: null,
+            activeTurnIndex: null,
+            activeTurnLocalOwner: false,
+          });
       } finally {
         processor.cancelOutputs();
         if (ownsScheduledStream() && !settledFromTerminalPacket) onSettled?.();
