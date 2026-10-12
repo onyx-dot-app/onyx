@@ -132,3 +132,14 @@ def test_embedding_detection_uses_mode() -> None:
     name heuristic — a missing mode silently misclassifies."""
     assert model_catalog.resolve_model_mode("text-embedding-3-large") == "embedding"
     assert model_catalog.resolve_model_mode("gpt-5") == "chat"
+
+
+def test_uncataloged_name_falls_back_to_chat(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A custom model with no catalog entry must stay in chat listings."""
+    monkeypatch.setattr(model_catalog, "build_model_map", dict)
+    assert model_catalog.resolve_model_mode("my-custom-local-model-v1") == "chat"
+    assert (
+        model_catalog.resolve_model_mode("my-custom-text-embedding-v1") == "embedding"
+    )
