@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useDirection } from "@radix-ui/react-direction";
 import { useReducedMotion } from "motion/react";
 import {
@@ -138,6 +144,21 @@ export default function ResourceTabStrip({
   const plus = useRef<HTMLElement>(null);
   const nodes = useRef(new Map<string, HTMLDivElement>());
   const suppressClick = useRef(false);
+  const closedTab = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (
+      !closedTab.current ||
+      tabs.some((tab) => panelTabId(tab) === closedTab.current)
+    )
+      return;
+    closedTab.current = null;
+    if (activeTabId)
+      nodes.current
+        .get(activeTabId)
+        ?.querySelector<HTMLElement>('[role="tab"]')
+        ?.focus();
+    else plus.current?.focus();
+  }, [tabs, activeTabId]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
@@ -297,20 +318,8 @@ export default function ResourceTabStrip({
                             aria-label={t("close.label", { name: label(tab) })}
                             onClick={(event) => {
                               event.stopPropagation();
+                              closedTab.current = id;
                               onClose(id);
-                              if (tabs.length === 1) plus.current?.focus();
-                              else {
-                                const neighbor = active
-                                  ? tabs[index > 0 ? index - 1 : 1]
-                                  : tabs.find(
-                                      (item) => panelTabId(item) === activeTabId
-                                    );
-                                if (neighbor)
-                                  nodes.current
-                                    .get(panelTabId(neighbor))
-                                    ?.querySelector<HTMLElement>('[role="tab"]')
-                                    ?.focus();
-                              }
                             }}
                           />
                         </Hoverable.Item>

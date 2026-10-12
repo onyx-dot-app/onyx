@@ -22,19 +22,6 @@ function storageKey(sessionId: string): string {
   return `${STORAGE_PREFIX}${sessionId}`;
 }
 
-export function clearAllOutputPanelPreferences(): void {
-  if (typeof window === "undefined") return;
-  try {
-    const storage = window.sessionStorage;
-    for (let index = storage.length - 1; index >= 0; index--) {
-      const key = storage.key(index);
-      if (key?.startsWith(STORAGE_PREFIX)) storage.removeItem(key);
-    }
-  } catch {
-    // Browser storage can be disabled.
-  }
-}
-
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Parses untrusted browser storage at the I/O boundary.
 function parseTab(value: unknown): PanelTab | null {
   if (typeof value !== "object" || value === null || !("kind" in value))

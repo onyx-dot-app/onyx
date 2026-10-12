@@ -276,9 +276,12 @@ function OutputResources({
     updateResource(active, { manualRefresh: true });
     if (active.kind === "outputs" && contentSessionId) {
       select(sessionId, requestedTabId);
-      void useBuildSessionStore
-        .getState()
-        .refreshOutputInventory(contentSessionId, { silent: true })
+      const store = useBuildSessionStore.getState();
+      const current = store.sessions.get(contentSessionId);
+      void store
+        .refreshOutputInventory(contentSessionId, {
+          silent: !current?.activeTurnId && current?.status !== "running",
+        })
         .finally(() => {
           if (scopeAlive.current)
             updateResource(active, { manualRefresh: false });

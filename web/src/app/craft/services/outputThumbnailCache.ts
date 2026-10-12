@@ -343,3 +343,9 @@ export function retainOutputThumbnailCache(
     thumbnails = { userId, cache };
   }
 }
+
+/** Retire pending preview writes before clearing browser storage on logout. */
+export function clearOutputThumbnailCache() {
+  thumbnails?.cache.retire();
+  thumbnails = undefined;
+}

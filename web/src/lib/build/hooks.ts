@@ -189,6 +189,7 @@ const WORKSPACE_LISTING_FRESHNESS_MS = 30_000;
 
 interface WorkspaceListingOptions<T> {
   isActive: boolean;
+  isVisible?: boolean;
   refreshGeneration: number;
   fallbackData?: T;
   merge?: (previous: T | undefined, next: T) => T;
@@ -207,6 +208,7 @@ export function useWorkspaceListing<T>(
   load: (signal: AbortSignal) => Promise<T>,
   {
     isActive,
+    isVisible = isActive,
     refreshGeneration,
     fallbackData,
     merge,
@@ -267,6 +269,7 @@ export function useWorkspaceListing<T>(
   const effectiveError =
     error?.name === "AbortError" ? result?.error : (error ?? result?.error);
   const validate = useEffectEvent(() => {
+    if (request.current) return;
     const fresh =
       result !== undefined &&
       !effectiveError &&
@@ -282,6 +285,9 @@ export function useWorkspaceListing<T>(
       setRequestPending(false);
     };
   }, [cacheKey, isActive, refreshGeneration, mutate]);
+  useEffect(() => {
+    if (isVisible && isActive) validate();
+  }, [isVisible, isActive]);
 
   return {
     data: result?.data,

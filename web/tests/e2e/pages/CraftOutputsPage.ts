@@ -37,6 +37,10 @@ export class CraftOutputsPage {
       await intro.getByRole("button", { name: "Close", exact: true }).click();
     await expect(this.toggle).toBeVisible();
   }
+  async exitFullMode() {
+    await this.page.keyboard.press("Escape");
+    await this.expectMode("medium");
+  }
   async expectMode(mode: "closed" | "medium" | "full") {
     await expect(this.workspace).toHaveAttribute("data-output-mode", mode);
     if (mode === "full") {

@@ -8,6 +8,12 @@ import {
   saveOutputPanelPreferences,
 } from "@/app/craft/services/outputPanelPreferences";
 
+import {
+  createOutputThumbnailCache,
+  readOutputThumbnailCache,
+  retainOutputThumbnailCache,
+} from "@/app/craft/services/outputThumbnailCache";
+
 jest.mock("swr", () => ({ mutate: jest.fn() }));
 
 beforeEach(() => {
@@ -24,6 +30,22 @@ beforeEach(() => {
     });
   }
   sessionStorage.setItem("unrelated-preference", "keep");
+  sessionStorage.setItem(
+    "onyx:craft:directories:v1:user:session",
+    "private names"
+  );
+  sessionStorage.setItem(
+    "onyx:craft:outputs:v1:user:session",
+    "private outputs"
+  );
+  sessionStorage.setItem(
+    "onyx:craft:output-thumbnails:v1:user",
+    "private bytes"
+  );
+  retainOutputThumbnailCache(
+    "user",
+    createOutputThumbnailCache(128, 16 * 1024 * 1024, "user")
+  );
 });
 
 afterEach(() => jest.restoreAllMocks());
@@ -37,6 +59,8 @@ test("successful logout removes all saved Craft tab names and preserves unrelate
   expect(readOutputPanelPreferences("first-session")).toBeUndefined();
   expect(readOutputPanelPreferences("second-session")).toBeUndefined();
   expect(sessionStorage.getItem("unrelated-preference")).toBe("keep");
+  expect(sessionStorage.length).toBe(1);
+  expect(readOutputThumbnailCache("user")).toBeUndefined();
   expect(mutate).toHaveBeenCalledWith(SWR_KEYS.me, null, { revalidate: false });
 });
 

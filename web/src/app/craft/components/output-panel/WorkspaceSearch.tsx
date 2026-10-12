@@ -8,7 +8,10 @@ import { Button, Text } from "@opal/components";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { getFileIcon } from "@/lib/utils";
-import { loadSearchInventory } from "@/app/craft/services/workspaceFiles";
+import {
+  loadSearchInventory,
+  MAX_SEARCH_ENTRIES,
+} from "@/app/craft/services/workspaceFiles";
 import type { SearchInventory } from "@/lib/build/types";
 
 interface WorkspaceSearchProps {
@@ -140,12 +143,15 @@ function mergeSearchInventory(
   const entries = new Map(
     previous.entries
       .filter((entry) =>
-        inventory.failedDirectories.some((directory) =>
-          entry.path.startsWith(`${directory}/`)
+        inventory.failedDirectories.some(
+          (directory) => !directory || entry.path.startsWith(`${directory}/`)
         )
       )
       .map((entry) => [entry.path, entry])
   );
   inventory.entries.forEach((entry) => entries.set(entry.path, entry));
-  return { ...inventory, entries: [...entries.values()] };
+  return {
+    ...inventory,
+    entries: [...entries.values()].slice(0, MAX_SEARCH_ENTRIES),
+  };
 }

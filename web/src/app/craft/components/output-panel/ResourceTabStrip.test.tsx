@@ -41,9 +41,12 @@ test("arrow navigation selects and focuses a tab while Alt reorders it", () => {
 test("closing the last tab focuses the plus action", async () => {
   const user = setupUser();
   const callbacks = props();
-  render(<ResourceTabStrip {...callbacks} tabs={[{ kind: "files" }]} />);
+  const { rerender } = render(
+    <ResourceTabStrip {...callbacks} tabs={[{ kind: "files" }]} />
+  );
   await user.click(screen.getByRole("button", { name: "Close All Files" }));
   expect(callbacks.onClose).toHaveBeenCalledWith("files");
+  rerender(<ResourceTabStrip {...callbacks} tabs={[]} activeTabId={null} />);
   expect(screen.getByRole("button", { name: "Open a tab" })).toHaveFocus();
 });
 
@@ -120,9 +123,15 @@ test("disabled resource tabs reject close, selection, and keyboard reorder", () 
 test("closing an inactive tab restores focus to the selected tab", async () => {
   const callbacks = props();
   const user = setupUser();
-  render(<ResourceTabStrip {...callbacks} />);
+  const { rerender } = render(<ResourceTabStrip {...callbacks} />);
   await user.click(screen.getByRole("button", { name: "Close notes.md" }));
   expect(callbacks.onClose).toHaveBeenCalledWith("file:outputs/notes.md");
+  rerender(
+    <ResourceTabStrip
+      {...callbacks}
+      tabs={tabs.filter((tab) => tab.kind !== "file")}
+    />
+  );
   expect(screen.getByRole("tab", { name: "All Files" })).toHaveFocus();
 });
 
@@ -382,4 +391,22 @@ test("closes its menu across panel mode changes without restoring an old open st
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Open a tab" }));
   expect(screen.getByRole("menu")).toBeVisible();
+});
+
+test("closing an active tab focuses the committed MRU selection instead of its neighbor", async () => {
+  const callbacks = props();
+  const user = setupUser();
+  const { rerender } = render(
+    <ResourceTabStrip {...callbacks} activeTabId="browser:one" />
+  );
+  await user.click(screen.getByRole("button", { name: "Close Apps" }));
+  rerender(
+    <ResourceTabStrip
+      {...callbacks}
+      tabs={tabs.slice(0, 2)}
+      activeTabId="files"
+    />
+  );
+  expect(screen.getByRole("tab", { name: "All Files" })).toHaveFocus();
+  expect(screen.getByRole("tab", { name: "notes.md" })).not.toHaveFocus();
 });

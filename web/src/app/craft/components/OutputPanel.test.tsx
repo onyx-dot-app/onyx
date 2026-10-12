@@ -990,41 +990,55 @@ it("opens output cards as file tabs and keeps All Files available", async () => 
   );
 });
 
-it("keeps output cards during manual reload and retains the selected overview", async () => {
-  const path = "outputs/report.md";
-  const inventory: OutputInventory = {
-    complete: true,
-    files: [{ path, size: 12, revision: "one" }],
-  };
-  jest.mocked(fetchOutputInventory).mockResolvedValue(inventory);
-  store().updateSessionData(sessionId, { status: "active" });
-  store().openOutputsTab(sessionId);
-  await store().refreshOutputInventory(sessionId, { silent: true });
-  render(<BuildOutputPanel panelMode="medium" />);
-  await screen.findByRole("button", { name: path });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled()
-  );
-  let finish = () => {};
-  jest.mocked(fetchOutputInventory).mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finish = () => resolve(inventory);
-      })
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-  expect(screen.getByRole("button", { name: path })).toBeVisible();
-  expect(screen.getByRole("button", { name: "Refresh" })).toHaveAttribute(
-    "data-user-refreshing",
-    "true"
-  );
-  await act(async () => finish());
-  expect(screen.getByRole("button", { name: "Refresh" })).toHaveAttribute(
-    "data-user-refreshing",
-    "false"
-  );
-  expect(store().sessions.get(sessionId)?.activePanelTabId).toBe("outputs");
-});
+it.each(["active", "running"] as const)(
+  "manual reload retains selection and discovers new task files (%s)",
+  async (status) => {
+    const path = "outputs/report.md";
+    const inventory: OutputInventory = {
+      complete: true,
+      files: [{ path, size: 12, revision: "one" }],
+    };
+    jest.mocked(fetchOutputInventory).mockResolvedValue(inventory);
+    store().updateSessionData(sessionId, { status: "active" });
+    store().openOutputsTab(sessionId);
+    await store().refreshOutputInventory(sessionId, { silent: true });
+    render(<BuildOutputPanel panelMode="medium" />);
+    await screen.findByRole("button", { name: path });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled()
+    );
+    store().updateSessionData(sessionId, { status });
+    const newPath = "outputs/new.md";
+    const refreshed = {
+      ...inventory,
+      files: [...inventory.files, { path: newPath, size: 8, revision: "two" }],
+    };
+    let finish = () => {};
+    jest.mocked(fetchOutputInventory).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve(refreshed);
+        })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(screen.getByRole("button", { name: path })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Refresh" })).toHaveAttribute(
+      "data-user-refreshing",
+      "true"
+    );
+    await act(async () => finish());
+    expect(screen.getByRole("button", { name: "Refresh" })).toHaveAttribute(
+      "data-user-refreshing",
+      "false"
+    );
+    expect(store().sessions.get(sessionId)?.activePanelTabId).toBe("outputs");
+    expect(
+      store()
+        .sessions.get(sessionId)
+        ?.panelTabs.some((tab) => tab.kind === "file" && tab.path === newPath)
+    ).toBe(status === "running");
+  }
+);
 
 it("keeps discovery polls separate from document reloads", async () => {
   const info = {

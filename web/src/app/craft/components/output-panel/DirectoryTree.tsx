@@ -38,6 +38,7 @@ interface DirectoryTreeProps {
   path: string;
   depth: number;
   isActive: boolean;
+  isVisible?: boolean;
   refreshGeneration: number;
   onStatusChange: (path: string, status: DirectoryStatus | undefined) => void;
   entry?: FileSystemEntry;
@@ -51,6 +52,7 @@ export function DirectoryTree({
   sessionId,
   path,
   isActive,
+  isVisible = isActive,
   refreshGeneration,
   onStatusChange,
   entry,
@@ -94,6 +96,7 @@ export function DirectoryTree({
       },
       {
         isActive: listingActive && Boolean(userId),
+        isVisible,
         refreshGeneration,
         fallbackData,
       }
@@ -220,6 +223,7 @@ export function DirectoryTree({
               path={child.path}
               depth={rowDepth}
               isActive={isActive}
+              isVisible={isVisible}
               refreshGeneration={refreshGeneration}
               onStatusChange={onStatusChange}
               expandedPaths={expandedPaths}

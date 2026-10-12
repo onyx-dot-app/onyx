@@ -30,8 +30,7 @@ test.describe("Craft outputs", () => {
     });
     await outputs.screenshot("craft-outputs-full");
     await outputs.expectHeaderStable(async () => {
-      await page.keyboard.press("Escape");
-      await outputs.expectMode("medium");
+      await outputs.exitFullMode();
     });
     await outputs.expectHeaderStable(() => outputs.close());
     await outputs.open();

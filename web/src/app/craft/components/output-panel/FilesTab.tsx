@@ -188,6 +188,7 @@ function WorkspaceBrowser({
               onReady={onListingReady}
               depth={0}
               isActive={canLoad && !searchQuery.trim()}
+              isVisible={isActive}
               refreshGeneration={refreshGeneration + refreshKey}
               onStatusChange={onStatusChange}
               expandedPaths={expandedPaths}

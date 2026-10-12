@@ -32,7 +32,8 @@ The current backend supplies one app registration per session; the UI accepts a 
 A serving app fills its Browser tab through the authorized session proxy route.
 Source edits use the existing dev server and HMR path.
 
-Browser tabs open only through user actions. Passive discoveries cannot reopen a closed panel or change its selection.
+User actions open Browser tabs. During a task, a newly discovered app can also open after readiness succeeds.
+The task selection lock prevents automatic selection after the user navigates or dismisses the panel. Passive inventory reads do not select resources.
 When no tabs are open, a heading and three compact, stacked Outputs, All Files, and Apps tiles offer the plus menu actions.
 Each Browser tab keeps its own selected app and stable resource identity.
 The panel retains app frames across tab switches, reorder, and medium/full/closed transitions.
@@ -45,7 +46,7 @@ Closing an inactive tab does not change selection. Drag order does not change vi
 History contains each open, viewed tab once. Older preferences without history use the adjacent tab as a fallback.
 Panel mode, ordered tabs, selected tab, viewing history, and split width survive hard reloads in the same browser tab.
 These preferences use session-scoped browser session storage. They exclude transcripts, file contents, and runtime state.
-Invalid saved preferences fall back to defaults. Deleting a session clears its saved preferences. Successful logout clears all saved panel preferences.
+Invalid saved preferences fall back to defaults. Deleting a session clears its saved preferences. Successful logout retires retained thumbnail writes and clears all Craft browser snapshots and preferences.
 
 Only the session owner can discover apps, because `get_webapp_info` verifies ownership.
 The proxy also admits any authenticated tenant user who
@@ -229,7 +230,7 @@ it through `FilePreviewContent.tsx` to the selected viewer. File activation in F
 These production callers make revision-based cache reuse active; explicit reload counters change independently of file revisions.
 Idle session entry and focus reconcile metadata without selecting files.
 The store validates output inventory after idle filesystem writes; streaming owns discovery during tasks.
-The Outputs view requests validation when activated or when a task ends, without mirroring inventory state.
+Session loading, task completion, file changes, and manual reloads refresh inventory. The Outputs view reads that inventory without starting another scan on activation.
 
 Output subscriptions select only runtime and inventory fields, excluding conversation and panel layout changes.
 Retained file viewers skip unrelated tab updates. Markdown and CSV content skip visibility-only renders.
@@ -267,7 +268,7 @@ Webapp iframes stay mounted across panel size transitions.
 A frame beneath an unavailable-app overlay is inert and hidden from assistive technology.
 
 Files owns workspace state. Directory and search listings use the shared SWR cache keyed by session and path.
-Fresh listings survive session switches and Files tab closure; stale listings refresh with previous rows visible.
+Fresh listings survive session switches and Files tab closure; reopening Files retries failures and checks freshness without cancelling background reads.
 `web/src/app/craft/services/workspaceDirectorySnapshots.ts` saves directory metadata in user-and-session-scoped browser session storage.
 Snapshots expire after 24 hours and are bounded to 32 directories and 256,000 characters per session.
 Hard reload uses validated snapshots as stale SWR fallback data, then reconciles with the server.
@@ -289,7 +290,9 @@ Root loading and failed reads have separate messages; failures can retain the la
 The Files reload control shows pending directory work and remains disabled until visible reads finish.
 `web/src/app/craft/services/workspaceFiles.ts` loads the workspace search inventory in bounded directory batches.
 The Files address row provides workspace search. Search matches names and session-relative paths case-insensitively.
-It reads accessible directory listings with bounded work and reports partial or failed discovery separately.
+It reads at most 128 directories and examines at most 10,000 entries per scan.
+It stops starting batches after ten seconds; in-flight directory requests retain their existing timeout.
+Budget exhaustion returns partial results through the same incomplete-inventory contract as failed directories.
 Partial refreshes preserve previous hits only beneath failed directories; successful reads remove deleted hits.
 Clearing search returns to the retained tree. File activation opens a resource tab.
 Folder expansion and saved scroll stay in session UI state; directory responses do not.
@@ -315,7 +318,7 @@ PDF callbacks reject results from retired document sources. Image load state bel
 PDF.js renders PDFs through React-PDF with selectable text, links, page arrows, a page count, zoom presets, and fit-width/fit-page controls.
 Thumbnail rendering is limited to nearby visible pages. Both sidebars support pointer and keyboard resizing, bounded to preserve document space.
 `web/tools/prepare-pdf-assets.cjs` copies versioned PDF.js assets before dev and production builds, including Docker builds.
-PDF assets are served from the same origin. Downloads remain in the URL bar. Width stays while the viewer remains mounted. Full image previews default to a neutral contrast backdrop; a toggle restores the normal panel background. Downloads preserve the original image. Thumbnails share a session-and-path SWR cache separate from full-file viewers. The cache retains at most 128 entries and 16 Mi characters of preview content, evicting the oldest updated entries. Matching revisions reuse cached payloads across tile remounts; changed revisions refresh them. Browser reload restores up to 64 user-scoped thumbnail payloads within 2 Mi characters and a 30-minute age limit. Metadata-only SWR updates do not write storage. Terminal errors and accepted inventory changes invalidate saved previews, including late responses. Partial scans invalidate changed revisions without deleting unseen files. The address row searches output names and paths. Breadcrumbs show output folders; extension filters and search match descendants of the current folder. The filter offers All, Folders, and the extensions present in that folder tree. Folders shows immediate directories. The default view shows immediate files and folders. It keeps cached cards visible during refresh and shows partial or failed reads separately. Session loading and manual reloads never open file tabs automatically. Opening Outputs reuses the session inventory.
+PDF assets are served from the same origin. Downloads remain in the URL bar. Width stays while the viewer remains mounted. Full image previews default to a neutral contrast backdrop; a toggle restores the normal panel background. Downloads preserve the original image. Thumbnails share a session-and-path SWR cache separate from full-file viewers. The cache retains at most 128 entries and 16 Mi characters of preview content, evicting the oldest updated entries. Matching revisions reuse cached payloads across tile remounts; changed revisions refresh them. Browser reload restores up to 64 user-scoped thumbnail payloads within 2 Mi characters and a 30-minute age limit. Metadata-only SWR updates do not write storage. Terminal errors and accepted inventory changes invalidate saved previews, including late responses. Partial scans invalidate changed revisions without deleting unseen files. The address row searches output names and paths. Breadcrumbs show output folders; extension filters and search match descendants of the current folder. The filter offers All, Folders, and the extensions present in that folder tree. Folders shows immediate directories. The default view shows immediate files and folders. It keeps cached cards visible during refresh and shows partial or failed reads separately. Session loading does not open file tabs automatically. During an active task, manual reloads discover new file tabs while preserving the user’s selection. Opening Outputs reuses the session inventory.
 During a task, newly created previewable outputs open file tabs. The first output is selected once per task, unless the user has changed the selection. A complete baseline prevents existing files from opening as new outputs.
 
 PowerPoint previews use LibreOffice and PDF rasterization to produce slide images.

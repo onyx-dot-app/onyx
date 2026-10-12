@@ -231,11 +231,11 @@ it("refreshes stale listings in the background while keeping their rows", async 
     })
     .mockReturnValueOnce(refresh.promise);
   try {
-    const { rerender } = render(<FilesTab sessionId="session" />);
+    const { rerender } = render(<FilesTab sessionId="session" canLoad />);
     await screen.findByRole("button", { name: "old.txt" });
-    rerender(<FilesTab sessionId="session" isActive={false} />);
+    rerender(<FilesTab sessionId="session" canLoad isActive={false} />);
     now += 30_001;
-    rerender(<FilesTab sessionId="session" isActive />);
+    rerender(<FilesTab sessionId="session" canLoad isActive />);
     await waitFor(() => expect(listing).toHaveBeenCalledTimes(2));
     expect(screen.getByRole("button", { name: "old.txt" })).toBeInTheDocument();
     await act(async () =>
@@ -269,14 +269,14 @@ it("bypasses freshness for explicit reload and hidden file changes", async () =>
 
 it("retries a failed listing on immediate reopen", async () => {
   listing.mockRejectedValueOnce(new Error("offline"));
-  const { rerender } = render(<FilesTab sessionId="session" />);
+  const { rerender } = render(<FilesTab sessionId="session" canLoad />);
   await screen.findByText("Error loading files");
   listing.mockResolvedValue({
     path: "",
     entries: [file("recovered.txt", "recovered.txt")],
   });
-  rerender(<FilesTab sessionId="session" isActive={false} />);
-  rerender(<FilesTab sessionId="session" isActive />);
+  rerender(<FilesTab sessionId="session" canLoad isActive={false} />);
+  rerender(<FilesTab sessionId="session" canLoad isActive />);
   await screen.findByRole("button", { name: "recovered.txt" });
   expect(listing).toHaveBeenCalledTimes(2);
 });
