@@ -454,7 +454,12 @@ export default function AuthenticationAccountSection({
                   : t("add.savedAccounts.expandButton.ariaLabel")
               }
               aria-expanded={accountsExpanded}
-              onClick={() => setAccountsExpanded(!accountsExpanded)}
+              onClick={() => {
+                // Folding also closes the new-account card; expanding leaves
+                // it closed.
+                if (accountsExpanded) close();
+                setAccountsExpanded(!accountsExpanded);
+              }}
             />
           </Section>
         }
