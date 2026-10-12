@@ -15,6 +15,7 @@ import {
   useSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import {
+  downloadArtifactFile,
   createSession,
   fetchDirectoryListing,
 } from "@/app/craft/services/apiServices";
@@ -26,6 +27,7 @@ import type {
 jest.mock("@/app/craft/services/apiServices", () => ({
   ...jest.requireActual("@/app/craft/services/apiServices"),
   fetchDirectoryListing: jest.fn(),
+  downloadArtifactFile: jest.fn(),
   createSession: jest.fn(),
 }));
 
@@ -347,7 +349,7 @@ describe("FilesTab", () => {
     ).toBe(120);
     rerender(<FilesTab sessionId={sessionId} />);
 
-    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(screen.getByRole("button", { name: "" }));
 
     expect(
       screen.getByRole("button", { name: /notes.md/ }).closest(".overflow-auto")
@@ -494,3 +496,15 @@ it.each([50, 250])(
     }
   }
 );
+
+it("downloads the original CSV from the welcome inline preview", async () => {
+  const entry = file("report.csv", "report.csv");
+  mockedFetchDirectoryListing.mockResolvedValue({ path: "", entries: [entry] });
+  render(<FilesTab sessionId="welcome-csv" isPreProvisioned />);
+  fireEvent.click(await screen.findByRole("button", { name: /report.csv/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Download file" }));
+  expect(downloadArtifactFile).toHaveBeenCalledWith(
+    "welcome-csv",
+    "report.csv"
+  );
+});

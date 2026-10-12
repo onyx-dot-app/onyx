@@ -8,7 +8,10 @@ import {
   useBuildSessionStore,
   useFilesTabState,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import { fetchDirectoryListing } from "@/app/craft/services/apiServices";
+import {
+  downloadArtifactFile,
+  fetchDirectoryListing,
+} from "@/app/craft/services/apiServices";
 import type { DirectoryListing } from "@/app/craft/types/streamingTypes";
 import { getFileIcon, formatBytes } from "@/lib/utils";
 import { cn } from "@opal/utils";
@@ -19,6 +22,7 @@ import {
   SvgFolderOpen,
   SvgChevronRight,
   SvgArrowLeft,
+  SvgDownload,
   SvgImage,
   SvgFileText,
   SvgLoader,
@@ -58,6 +62,7 @@ function WorkspaceBrowser({
   isActive = true,
 }: FilesTabProps) {
   const t = useTranslations("craft.filesTab");
+  const toolbarTranslations = useTranslations("craft.urlBar");
   const filesTabState = useFilesTabState(sessionId);
   const refreshGeneration = useBuildSessionStore((state) =>
     sessionId ? (state.sessions.get(sessionId)?.filesNeedsRefresh ?? 0) : 0
@@ -215,6 +220,14 @@ function WorkspaceBrowser({
           <Text font="secondary-body" color="text-04" maxLines={1}>
             {previewingFile.fileName}
           </Text>
+          <Button
+            icon={SvgDownload}
+            prominence="tertiary"
+            size="sm"
+            tooltip={toolbarTranslations("downloadFile.tooltip")}
+            aria-label={toolbarTranslations("downloadFile.tooltip")}
+            onClick={() => downloadArtifactFile(sessionId, previewingFile.path)}
+          />
         </div>
         <div className="flex-1 overflow-auto">
           <FilePreviewContent

@@ -21,18 +21,18 @@ const OTHER_WIKI_BASE = "https://other-example.atlassian.net/wiki";
 
 test.describe("Credentialed connector setup", () => {
   let credentialName: string;
+  let credentialId: number;
   // Every credential a test creates, deleted after the test.
   let credentialIds: number[] = [];
 
   test.beforeEach(async ({ page }) => {
     credentialName = `Confluence Credential E2E ${Date.now()}`;
     const apiClient = new OnyxApiClient(page.request);
-    credentialIds = [
-      await apiClient.createCredential(SOURCE, credentialName, {
-        confluence_username: "e2e@example.com",
-        confluence_access_token: "placeholder",
-      }),
-    ];
+    credentialId = await apiClient.createCredential(SOURCE, credentialName, {
+      confluence_username: "e2e@example.com",
+      confluence_access_token: "placeholder",
+    });
+    credentialIds = [credentialId];
   });
 
   test.afterEach(async ({ page }) => {
@@ -56,14 +56,14 @@ test.describe("Credentialed connector setup", () => {
 
     // Every section is on the page at once, but without a credential the
     // configuration is disabled and so is Connect.
-    await expect(setupPage.credentialRow(credentialName)).toBeVisible({
+    await expect(setupPage.credentialRow(credentialId)).toBeVisible({
       timeout: 10_000,
     });
     await expect(setupPage.connectorNameInput).toBeDisabled();
     await expect(setupPage.createConnectorButton).toBeDisabled();
     await expect(setupPage.startChecksButton).toBeDisabled();
 
-    await setupPage.selectCredential(credentialName);
+    await setupPage.selectCredential(credentialId);
 
     // A credential alone does not unlock the configuration: the site URL is a
     // credential-bound field and is still empty.
@@ -93,26 +93,36 @@ test.describe("Credentialed connector setup", () => {
     // An OAuth-style credential names the one site it was authorized for.
     const oauthCredentialName = `Confluence OAuth Credential E2E ${Date.now()}`;
     const apiClient = new OnyxApiClient(page.request);
-    credentialIds.push(
-      await apiClient.createCredential(SOURCE, oauthCredentialName, {
+    const oauthCredentialId = await apiClient.createCredential(
+      SOURCE,
+      oauthCredentialName,
+      {
         confluence_access_token: "placeholder",
         confluence_refresh_token: "placeholder",
         wiki_base: WIKI_BASE,
-      })
+      }
     );
+    credentialIds.push(oauthCredentialId);
 
     const setupPage = new ConnectorSetupPage(page, SOURCE);
     await setupPage.mockChecks();
     await setupPage.goto();
-    await expect(setupPage.credentialRow(oauthCredentialName)).toBeVisible({
+    await expect(setupPage.credentialRow(oauthCredentialId)).toBeVisible({
       timeout: 10_000,
     });
 
-    // A site entered before the credential is replaced by the authorized one.
+    // A site the account was not authorized for makes it unusable.
     const siteUrl = setupPage.textField("wiki_base");
     await siteUrl.fill(OTHER_WIKI_BASE);
     await siteUrl.blur();
-    await setupPage.selectCredential(oauthCredentialName);
+    await expect(setupPage.credentialRow(oauthCredentialId)).toContainText(
+      "Unsupported site domain"
+    );
+
+    // With the site cleared, picking the account fills in its site.
+    await siteUrl.fill("");
+    await siteUrl.blur();
+    await setupPage.selectCredential(oauthCredentialId);
 
     await expect(siteUrl).toHaveValue(WIKI_BASE);
     await expect(siteUrl).toBeDisabled();

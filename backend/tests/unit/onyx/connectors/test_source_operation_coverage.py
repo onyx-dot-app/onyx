@@ -18,6 +18,12 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
+from onyx.connectors.google_drive.models import (
+    GDriveMimeType,
+    GoogleDriveAuth,
+    GoogleGroupMember,
+)
+from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.jira.models import JiraGroupPage
 from onyx.connectors.source_operations import (
     SourceOperations,
@@ -44,6 +50,37 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
 
     spy.get_server_version.return_value = (9, 1)
     spy.get_space_permissions.side_effect = get_space_permissions
+
+
+def _configure_google_drive_spy(spy: MagicMock) -> None:
+    """A service account whose primary admin sees a Google Doc, a small
+    upload, a shared drive file and a folder whose permissions come only by
+    id, and one shared drive, organized through a group."""
+    admin = "admin@example.com"
+    sample = [
+        {"id": "doc", "name": "doc", "mimeType": GDriveMimeType.DOC.value},
+        {"id": "pdf", "name": "pdf", "mimeType": "application/pdf", "size": "10"},
+        {"id": "shared", "name": "shared", "permissionIds": ["permission"]},
+    ]
+    spy.authenticate.return_value = GoogleDriveAuth(
+        kind=GoogleCredentialKind.SERVICE_ACCOUNT, primary_admin_email=admin
+    )
+    spy.list_files.side_effect = lambda **_kwargs: iter(sample)
+    spy.list_drives.side_effect = lambda **_kwargs: iter(["drive"])
+    spy.list_drive_members.side_effect = lambda **_kwargs: iter(
+        [{"emailAddress": "team@example.com", "type": "group", "role": "organizer"}]
+    )
+    spy.list_group_members.side_effect = lambda **_kwargs: iter(
+        [GoogleGroupMember(email="organizer@example.com", type="USER")]
+    )
+    spy.list_user_emails.side_effect = lambda **_kwargs: iter([admin])
+    spy.can_list_drive.return_value = True
+    spy.list_folders_with_permissions.side_effect = lambda **_kwargs: iter(
+        [{"id": "folder", "name": "folder", "permissionIds": ["permission"]}]
+    )
+    spy.list_file_permissions.side_effect = lambda **_kwargs: iter(
+        [{"id": "permission"}]
+    )
 
 
 def _configure_jira_site(spy: MagicMock) -> None:
@@ -82,6 +119,7 @@ def _configure_jira_server_spy(spy: MagicMock) -> None:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.CONFLUENCE: [_configure_confluence_spy],
+    DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
 }
 

@@ -414,3 +414,80 @@ def test_failed_enqueue_marks_the_run_failed_to_run(
     assert (
         _run_status(db_session, slack_pair) == CapabilityReportRunStatus.FAILED_TO_RUN
     )
+
+
+def _start_draft_run_in_background(
+    harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> threading.Thread:
+    """Starts a create-form draft run of the slack form and runs its task in a
+    thread, as a worker would."""
+    start_draft_capability_check_run(
+        user_id=uuid4(),
+        credential=slack_pair.credential,
+        source=DocumentSource.SLACK,
+        config_class=SlackConnectorConfig,
+        access_type=AccessType.PUBLIC,
+        draft_key=uuid4().hex,
+        form_values={"channels": ["a"]},
+    )
+    task_kwargs = harness.send_task.call_args.kwargs["kwargs"]
+    harness.send_task.reset_mock()
+    worker = threading.Thread(
+        target=run_draft_capability_checks_task, kwargs=task_kwargs, daemon=True
+    )
+    worker.start()
+    return worker
+
+
+def _wait_until_started(harness: _Harness, check_id: str) -> None:
+    deadline = time.monotonic() + 10
+    while check_id not in harness.runs:
+        assert time.monotonic() < deadline, f"{check_id} never started"
+        time.sleep(0.05)
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_creation_awaits_a_check_the_draft_run_is_still_running(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    release = harness.make_slow(_CHANNELS)
+    worker = _start_draft_run_in_background(harness, slack_pair)
+    _wait_until_started(harness, _CHANNELS)
+    # The draft finishes the check while creation waits for it.
+    threading.Timer(0.3, release.set).start()
+
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+    worker.join(timeout=10)
+
+    # Creation used the draft's result instead of running the check again.
+    assert harness.runs.count(_CHANNELS) == 1
+    harness.send_task.assert_not_called()
+    assert _stored_statuses(db_session, slack_pair)[_CHANNELS] == "passed"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_background_run_awaits_a_draft_check_that_outlasts_the_budget(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    release = harness.make_slow(_CHANNELS)
+    worker = _start_draft_run_in_background(harness, slack_pair)
+    _wait_until_started(harness, _CHANNELS)
+
+    # The draft is still running the check when the budget ends.
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+    assert _run_status(db_session, slack_pair) == CapabilityReportRunStatus.RUNNING
+    task_kwargs = harness.send_task.call_args.kwargs["kwargs"]
+    assert task_kwargs["check_ids"] == [_CHANNELS]
+
+    # The background run waits for the draft's result instead of starting
+    # another copy.
+    threading.Timer(0.3, release.set).start()
+    run_capability_checks_task(**task_kwargs)
+    worker.join(timeout=10)
+
+    assert harness.runs.count(_CHANNELS) == 1
+    assert _stored_statuses(db_session, slack_pair) == {
+        _TOKEN: "passed",
+        _CHANNELS: "passed",
+        _PERM_SYNC: "skipped",
+    }

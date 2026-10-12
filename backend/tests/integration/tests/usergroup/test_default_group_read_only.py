@@ -1,5 +1,6 @@
-"""The seeded default groups (Admin/Basic) are visible, hold members and nothing else,
-and only a full admin may change that membership.
+"""The seeded default groups (Admin/Basic) are visible and hold members and nothing
+else. Only a full admin may change that membership or switch Basic's allowlisted
+permission toggles.
 
 The list endpoint still returns them to any READ_USER_GROUPS holder that asks — the
 service-account picker relies on that — so "full admins only" rides on the ``permissions``
@@ -44,8 +45,9 @@ def test_default_groups_are_listed_only_when_requested(admin_user: DATestUser) -
 @ENTERPRISE_SKIP
 def test_default_group_affordances_are_membership_only(admin_user: DATestUser) -> None:
     """Whole-map equality: a new action defaulting to True must fail here rather than
-    quietly render a control the routes reject."""
-    for name in ("Admin", "Basic"):
+    quietly render a control the routes reject. Basic alone offers its allowlisted
+    permission toggles."""
+    for name, edit_permissions in (("Admin", False), ("Basic", True)):
         group = UserGroupManager.get_default(
             user_performing_action=admin_user, name=name
         )
@@ -53,7 +55,7 @@ def test_default_group_affordances_are_membership_only(admin_user: DATestUser) -
             "manage": False,
             "manage_members": True,
             "delete": False,
-            "edit_permissions": False,
+            "edit_permissions": edit_permissions,
             "edit_token_limits": False,
         }, name
 
@@ -73,6 +75,7 @@ def test_default_group_rejects_every_non_membership_write(
             json={"id": group.id, "name": "Renamed"},
             headers=headers,
         ),
+        # outside the Basic allowlist, so still refused
         "permissions": client.put(
             f"{GROUP_URL}/{group.id}/permissions",
             json={"permissions": [Permission.MANAGE_LLMS.value]},

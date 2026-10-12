@@ -19,6 +19,8 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
+from pathlib import PurePosixPath
 from uuid import UUID
 
 from onyx.server.features.build.configs import TURN_BUDGET_FILE_NAME
@@ -54,19 +56,11 @@ from onyx.server.features.build.timeouts import (
     BULK_TRANSFER_TIMEOUT_SECONDS,
     TURN_FINAL_NOTICE_MARGIN_SECONDS,
 )
+from onyx.skills.built_in import BUILTIN_SKILLS_PATH
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-
-# In-sandbox paths shared by every backend implementation. Kept in sync with
-# the SESSIONS_ROOT constants the individual managers define (those exist
-# separately because the K8s manager emits exec scripts and the Docker
-# manager mounts via the named volume — both happen to land at the same
-# in-container path). The daemon's sandbox_daemon/snapshot.py also has its
-# own copy because it can't import from this package at runtime.
-BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
-BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
 
 # Internal sandbox-event protocol — the type contract between the agent
 # harness and everything downstream (session manager, SSE encoder,
@@ -82,6 +76,81 @@ SandboxEvent = (
     | Error
     | SSEKeepalive
 )
+
+
+_DOCUMENT_PREVIEW_FILES: FileSet = {
+    "preview.py": (BUILTIN_SKILLS_PATH / "pptx/scripts/preview.py").read_bytes(),
+    "office/soffice.py": (
+        BUILTIN_SKILLS_PATH / "pptx/scripts/office/soffice.py"
+    ).read_bytes(),
+}
+_DOCUMENT_PREVIEW_VERSION: str = sha256(
+    b"".join(
+        name.encode() + b"\0" + sha256(content).digest()
+        for name, content in sorted(_DOCUMENT_PREVIEW_FILES.items())
+    )
+).hexdigest()
+_DOCUMENT_PREVIEW_MOUNT: str = (
+    f"/workspace/managed/document-preview/{_DOCUMENT_PREVIEW_VERSION}"
+)
+
+
+def document_preview_command(
+    document_path: str,
+    cache_dir: str,
+    session_root: str,
+    *,
+    script_path: str = f"{_DOCUMENT_PREVIEW_MOUNT}/preview.py",
+    first_page_only: bool = False,
+) -> list[str]:
+    """Run the packaged converter without replacing the agent's managed skills."""
+    return [
+        "python",
+        script_path,
+        document_path,
+        cache_dir,
+        *(["--first-page"] if first_page_only else []),
+        "--session-root",
+        session_root,
+    ]
+
+
+def parse_document_preview_response(
+    output: str, session_root: str
+) -> tuple[list[str], bool]:
+    """Validate the converter protocol and return session-relative page paths."""
+    lines: list[str] = [line.strip() for line in output.splitlines() if line.strip()]
+    if not lines:
+        raise ValueError("Empty response from document conversion")
+    errors: dict[str, str] = {
+        "ERROR_NOT_FOUND": "Document not found",
+        "ERROR_ACCESS_DENIED": "Access denied: source escapes session workspace",
+        "ERROR_TOO_LARGE": "Document exceeds thumbnail size limit",
+        "ERROR_TIMEOUT": "Document thumbnail conversion timed out",
+        "ERROR_SOURCE_CHANGED": "Document changed while rendering; retry preview",
+        "ERROR_NO_PDF": "soffice did not produce a PDF file",
+        "ERROR_CONVERSION": "Document conversion failed",
+    }
+    if lines[0] in errors:
+        raise ValueError(errors[lines[0]])
+    if lines[0] not in {"CACHED", "GENERATED"}:
+        raise ValueError("Invalid document conversion status")
+    if len(lines) == 1:
+        raise ValueError("Document conversion produced no pages")
+    root: PurePosixPath = PurePosixPath(session_root)
+    paths: list[str] = []
+    for value in lines[1:]:
+        path: PurePosixPath = PurePosixPath(value)
+        if ".." in path.parts or not path.is_relative_to(root):
+            raise ValueError("Access denied: preview escapes session workspace")
+        if (
+            not path.name.startswith("slide-")
+            or path.suffix != ".jpg"
+            or not path.stem[6:].isdigit()
+        ):
+            raise ValueError("Invalid document preview page path")
+        paths.append(str(path.relative_to(root)))
+    return paths, lines[0] == "CACHED"
 
 
 class SandboxManager(_ServeMixin, ABC):
@@ -123,6 +192,30 @@ class SandboxManager(_ServeMixin, ABC):
     """
 
     supports_opencode_history_persistence: bool = False
+
+    def _ensure_document_preview_bundle(
+        self, sandbox_id: UUID, run_command: Callable[[list[str]], str]
+    ) -> None:
+        """Deploy a complete converter bundle without touching managed skills."""
+        probe: list[str] = [
+            "sh",
+            "-c",
+            'if test -r "$1/preview.py" && test -r "$1/office/soffice.py"; '
+            "then printf READY; else printf MISSING; fi",
+            "sh",
+            _DOCUMENT_PREVIEW_MOUNT,
+        ]
+        if run_command(probe).strip() == "READY":
+            return
+        result = self.push_to_sandbox(
+            sandbox_id=sandbox_id,
+            mount_path=_DOCUMENT_PREVIEW_MOUNT,
+            files=_DOCUMENT_PREVIEW_FILES,
+        )
+        if result.succeeded != result.targets:
+            raise RuntimeError("Document preview bundle deployment failed")
+        if run_command(probe).strip() != "READY":
+            raise RuntimeError("Document preview bundle deployment is incomplete")
 
     @abstractmethod
     def provision(
@@ -785,22 +878,24 @@ class SandboxManager(_ServeMixin, ABC):
         ...
 
     @abstractmethod
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
-        """Convert a PowerPoint file to slide JPEG images for preview, with caching.
+        """Convert a PDF or PowerPoint file to page JPEG images for preview, with caching.
 
-        Checks if cache_dir already has slides. If the presentation is newer than the
-        cached images (or no cache exists), runs soffice -> pdftoppm pipeline.
+        Reuses pages matching the source revision. Otherwise, converts PowerPoint
+        to PDF and rasterizes the PDF with pdftoppm.
 
         Args:
             sandbox_id: The sandbox ID
             session_id: The session ID
-            pptx_path: Relative path to the PowerPoint file within the session workspace
+            document_path: Relative path to a PDF or PowerPoint file within the session workspace
             cache_dir: Relative path for the cache directory
                        (e.g., "outputs/.pptx-preview/abc123")
 
@@ -808,6 +903,7 @@ class SandboxManager(_ServeMixin, ABC):
             Tuple of (slide_paths, cached) where slide_paths is a list of
             relative paths to slide JPEG images (within session workspace)
             and cached indicates whether the result was served from cache.
+            first_page_only limits rendering to a 640-pixel first-page thumbnail.
 
         Raises:
             ValueError: If file not found or conversion fails
