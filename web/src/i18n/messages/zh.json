@@ -5236,6 +5236,10 @@
         "orSeparator": {
           "label": "或"
         },
+        "quantizationOnly": {
+          "description": "仅更改了向量量化，因此 Onyx 会使用已存储的向量重建索引，无需重新嵌入。这比完整重新索引快得多。",
+          "title": "将重建索引。"
+        },
         "reindex": {
           "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "将运行完整的重新索引。"

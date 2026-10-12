@@ -5236,6 +5236,10 @@
         "orSeparator": {
           "label": "oder"
         },
+        "quantizationOnly": {
+          "description": "Nur die Vektorquantisierung hat sich geändert. Onyx baut den Index daher aus den gespeicherten Vektoren neu auf, ohne erneutes Embedding. Das geht viel schneller als eine vollständige Neuindizierung.",
+          "title": "Der Index wird neu aufgebaut."
+        },
         "reindex": {
           "description": "Die Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Eine vollständige Neuindexierung wird ausgeführt."

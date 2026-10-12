@@ -5236,6 +5236,10 @@
         "orSeparator": {
           "label": "ou"
         },
+        "quantizationOnly": {
+          "description": "Seule la quantification des vecteurs a changé : Onyx reconstruit donc l'index à partir des vecteurs stockés, sans recalculer les embeddings. C'est beaucoup plus rapide qu'une réindexation complète.",
+          "title": "L'index sera reconstruit."
+        },
         "reindex": {
           "description": "La réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Une réindexation complète va s’exécuter."

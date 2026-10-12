@@ -5236,6 +5236,10 @@
         "orSeparator": {
           "label": "または"
         },
+        "quantizationOnly": {
+          "description": "変更されたのはベクトル量子化のみのため、Onyx は保存済みのベクトルからインデックスを再構築し、再埋め込みは行いません。完全な再インデックスよりはるかに高速です。",
+          "title": "インデックスを再構築します。"
+        },
         "reindex": {
           "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "完全な再インデックスが実行されます。"

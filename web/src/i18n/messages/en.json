@@ -5236,6 +5236,10 @@
         "orSeparator": {
           "label": "or"
         },
+        "quantizationOnly": {
+          "description": "Only the vector quantization changed, so Onyx rebuilds the index from the stored vectors without re-embedding. This is much faster than a full re-index.",
+          "title": "The index will be rebuilt."
+        },
         "reindex": {
           "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "A full re-index will run."
