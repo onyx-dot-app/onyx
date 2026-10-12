@@ -1,10 +1,17 @@
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import create_autospec, patch
 
 import pytest
 
+from onyx.connectors.hubspot.config import HubSpotObjectType
 from onyx.connectors.hubspot.connector import AVAILABLE_OBJECT_TYPES, HubSpotConnector
+from onyx.connectors.hubspot.models import (
+    HubSpotRecord,
+)
+from onyx.connectors.hubspot.source_operations import (
+    HubSpotSourceOperations,
+)
 from onyx.connectors.models import (
     ConnectorMissingCredentialError,
     Document,
@@ -30,18 +37,14 @@ class TestHubSpotConnector:
         return {"hubspot_access_token": test_secrets[TestSecret.HUBSPOT_ACCESS_TOKEN]}
 
     def test_credentials_properties_raise_exception_when_none(self) -> None:
-        """Test that access_token and portal_id properties raise exceptions when not set."""
+        """The gateway and the portal id need credentials first."""
         connector = HubSpotConnector()
 
-        # access_token should raise exception when not set
-        with pytest.raises(ConnectorMissingCredentialError) as exc_info:
-            _ = connector.access_token
-        assert "HubSpot access token not set" in str(exc_info.value)
+        with pytest.raises(ConnectorMissingCredentialError, match="HubSpot"):
+            _ = connector.ops
 
-        # portal_id should raise exception when not set
-        with pytest.raises(ConnectorMissingCredentialError) as exc_info:
+        with pytest.raises(ConnectorMissingCredentialError, match="HubSpot"):
             _ = connector.portal_id
-        assert "HubSpot portal ID not set" in str(exc_info.value)
 
     @pytest.mark.secrets(TestSecret.HUBSPOT_ACCESS_TOKEN)
     def test_load_credentials(
@@ -51,7 +54,6 @@ class TestHubSpotConnector:
         result = connector.load_credentials(credentials)
 
         assert result is None  # Should return None on success
-        assert connector.access_token == credentials["hubspot_access_token"]
         assert connector.portal_id is not None
         assert isinstance(connector.portal_id, str)
 
@@ -531,60 +533,53 @@ class TestHubSpotConnector:
     def test_url_generation(self) -> None:
         """Test that URLs are generated correctly for different object types."""
         connector = HubSpotConnector()
-        connector.portal_id = "12345"  # Mock portal ID
+        connector._portal_id = "12345"
 
         # Test URL generation for each object type
-        ticket_url = connector._get_object_url("tickets", "67890")
+        ticket_url = connector._record_url(HubSpotObjectType.TICKETS, "67890")
         expected_ticket_url = "https://app.hubspot.com/contacts/12345/record/0-5/67890"
         assert ticket_url == expected_ticket_url
 
-        company_url = connector._get_object_url("companies", "11111")
+        company_url = connector._record_url(HubSpotObjectType.COMPANIES, "11111")
         expected_company_url = "https://app.hubspot.com/contacts/12345/record/0-2/11111"
         assert company_url == expected_company_url
 
-        deal_url = connector._get_object_url("deals", "22222")
+        deal_url = connector._record_url(HubSpotObjectType.DEALS, "22222")
         expected_deal_url = "https://app.hubspot.com/contacts/12345/record/0-3/22222"
         assert deal_url == expected_deal_url
 
-        contact_url = connector._get_object_url("contacts", "33333")
+        contact_url = connector._section_url("contacts", "33333")
         expected_contact_url = "https://app.hubspot.com/contacts/12345/record/0-1/33333"
         assert contact_url == expected_contact_url
 
-        note_url = connector._get_object_url("notes", "44444")
+        note_url = connector._section_url("notes", "44444")
         expected_note_url = "https://app.hubspot.com/contacts/12345/objects/0-4/44444"
         assert note_url == expected_note_url
 
     def test_ticket_with_none_content(self) -> None:
         """Test that tickets with None content are handled gracefully."""
         connector = HubSpotConnector(object_types=["tickets"], batch_size=10)
-        connector._access_token = "mock_token"
+        connector._ops = create_autospec(HubSpotSourceOperations, instance=True)
         connector._portal_id = "mock_portal_id"
 
-        # Create a mock ticket with None content
-        mock_ticket = MagicMock()
-        mock_ticket.id = "12345"
-        mock_ticket.properties = {
-            "subject": "Test Ticket",
-            "content": None,  # This is the key test case
-            "hs_ticket_priority": "HIGH",
-        }
-        mock_ticket.updated_at = datetime.now(timezone.utc)
+        ticket = HubSpotRecord(
+            id="12345",
+            properties={
+                "subject": "Test Ticket",
+                "content": None,  # This is the key test case
+                "hs_ticket_priority": "HIGH",
+            },
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
 
-        # Mock the HubSpot API client
-        mock_api_client = MagicMock()
-
-        # Mock the API calls and associated object methods
         with (
-            patch("onyx.connectors.hubspot.connector.HubSpot") as MockHubSpot,
-            patch.object(connector, "_paginated_results") as mock_paginated,
+            patch.object(connector, "_list_all_records", return_value=iter([ticket])),
             patch.object(connector, "_get_associated_objects", return_value=[]),
             patch.object(connector, "_get_associated_notes", return_value=[]),
         ):
-            MockHubSpot.return_value = mock_api_client
-            mock_paginated.return_value = iter([mock_ticket])
-
             # This should not raise a validation error
-            document_batches = connector._process_tickets()
+            document_batches = connector.load_from_state()
             first_batch = next(document_batches, None)
 
             # Verify the document was created successfully
