@@ -269,7 +269,7 @@ export default function EditUserModal({
                         rightChildren={
                           <Tooltip
                             tooltip={t("editModal.removeGroupButton.tooltip")}
-                            side="left"
+                            side="start"
                           >
                             <SvgLogOut height={16} width={16} />
                           </Tooltip>

@@ -166,7 +166,7 @@ function CloudDisabled({
     : tooltipProp;
 
   return (
-    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="right">
+    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="end">
       {children}
     </Disabled>
   );

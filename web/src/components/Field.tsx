@@ -12,7 +12,7 @@ import {
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import * as Yup from "yup";
 import { FormBodyBuilder } from "./admin/connectors/types";
-import { InputSingleSelect } from "@opal/components";
+import { InputSingleSelect, type TooltipSide } from "@opal/components";
 import { FiInfo, FiX } from "react-icons/fi";
 import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
@@ -707,7 +707,7 @@ interface BooleanFormFieldProps {
   optional?: boolean;
   tooltip?: string;
   disabledTooltip?: string;
-  disabledTooltipSide?: "top" | "bottom" | "left" | "right";
+  disabledTooltipSide?: TooltipSide;
   onChange?: (checked: boolean) => void;
 }
 

@@ -14,8 +14,9 @@ import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
 import { useUser } from "@/providers/UserProvider";
-import { Divider, InputTypeIn, SidebarTab } from "@opal/components";
+import { InputTypeIn, SidebarTab } from "@opal/components";
 import { SvgSearch, SvgX } from "@opal/icons";
+import { Disabled } from "@opal/core";
 import {
   useBillingInformation,
   useLicense,
@@ -163,42 +164,38 @@ export default function AdminSidebar() {
           </React.Fragment>
         ))}
 
+        {disabledGroups.length > 0 && <SidebarLayouts.Divider />}
         {disabledGroups.length > 0 && (
-          <>
-            <Divider paddingPerpendicular={0} />
-            {/* Empty div here just to add spacing (via the `gap` property on `SidebarLayouts.Body`) */}
-            <div />
-          </>
+          <Disabled
+            disabled
+            // One tooltip over a tall block: it stays level with the pointer.
+            tooltipAlign="follow"
+            tooltip={markdown(
+              disabled.every((item) => item.requiredTier === Tier.ENTERPRISE)
+                ? t("adminSidebar.enterpriseOnly.tooltip")
+                : t("adminSidebar.businessOrEnterpriseOnly.tooltip")
+            )}
+          >
+            {disabledGroups.map((group, groupIndex) => (
+              <SidebarLayouts.Section
+                key={`disabled-${groupIndex}`}
+                title={
+                  group.sectionId ? sectionLabels[group.sectionId] : undefined
+                }
+              >
+                {group.items.map(({ link, icon, nameId }) => (
+                  <SidebarTab key={link} icon={icon}>
+                    {navLabels[nameId]}
+                  </SidebarTab>
+                ))}
+              </SidebarLayouts.Section>
+            ))}
+          </Disabled>
         )}
-        {disabledGroups.map((group, groupIndex) => (
-          <React.Fragment key={`disabled-${groupIndex}`}>
-            <SidebarLayouts.Section
-              title={
-                group.sectionId ? sectionLabels[group.sectionId] : undefined
-              }
-              disabled
-            >
-              {group.items.map(({ link, icon, nameId, requiredTier }) => (
-                <SidebarTab
-                  key={link}
-                  disabled
-                  icon={icon}
-                  tooltip={markdown(
-                    requiredTier === Tier.ENTERPRISE
-                      ? t("adminSidebar.enterpriseOnly.tooltip")
-                      : t("adminSidebar.businessOrEnterpriseOnly.tooltip")
-                  )}
-                >
-                  {navLabels[nameId]}
-                </SidebarTab>
-              ))}
-            </SidebarLayouts.Section>
-          </React.Fragment>
-        ))}
       </SidebarLayouts.Body>
 
       <SidebarLayouts.Footer>
-        {!folded && <Divider paddingPerpendicular={2} />}
+        {!folded && <SidebarLayouts.Divider />}
         <SidebarTab
           icon={SvgX}
           href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
