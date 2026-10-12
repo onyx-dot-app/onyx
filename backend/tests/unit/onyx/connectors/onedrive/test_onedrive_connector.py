@@ -16,6 +16,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckStatus,
+    CheckAdvisory,
     CheckFinding,
     CheckFindingKey,
     CheckOutput,
@@ -88,6 +89,18 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "tenant_spike.json"
 def _findings(output: CheckOutput | None) -> list[CheckFinding]:
     assert output is not None
     return output.findings
+
+
+def _advisories(output: CheckOutput | None) -> list[CheckAdvisory]:
+    return [] if output is None else output.advisories
+
+
+def _group_members_check() -> CapabilityCheck:
+    return next(
+        check
+        for check in build_onedrive_group_sync_checks()
+        if check.check_id == "onedrive_group_members"
+    )
 
 
 def _run_step(
@@ -1365,7 +1378,7 @@ def test_onedrive_permission_and_group_checks_use_gateway() -> None:
         build_onedrive_doc_permission_sync_checks() + build_onedrive_group_sync_checks()
     )
     for check in checks:
-        check.run(context)
+        assert _advisories(check.run(context)) == []
 
     gateway.list_permissions.assert_called_once_with(
         drive_id="drive-1", item_id="raw-item-id"
@@ -1416,8 +1429,15 @@ def test_onedrive_permission_check_accepts_empty_drive_at_end_cursor() -> None:
         source_operations=gateway,
     )
 
-    build_onedrive_doc_permission_sync_checks()[0].run(context)
+    (result,) = run_capability_checks(
+        build_onedrive_doc_permission_sync_checks(), context
+    )
 
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "did not read item permissions" in advisory.message
+    # The admin must know which drives the check samples.
+    assert "first 20 configured users" in advisory.message
     gateway.get_delta_page.assert_called_once()
     gateway.list_permissions.assert_not_called()
 
@@ -1446,8 +1466,9 @@ def test_onedrive_permission_check_probes_past_empty_drive() -> None:
         source_operations=gateway,
     )
 
-    build_onedrive_doc_permission_sync_checks()[0].run(context)
+    output = build_onedrive_doc_permission_sync_checks()[0].run(context)
 
+    assert _advisories(output) == []
     assert gateway.get_delta_page.call_count == 2
     gateway.list_permissions.assert_called_once_with(
         drive_id="populated-drive", item_id="raw-item-id"
@@ -1492,14 +1513,29 @@ def test_onedrive_hidden_group_check_does_not_require_optional_scope() -> None:
         credential_json={},
         source_operations=gateway,
     )
-    check = next(
-        check
-        for check in build_onedrive_group_sync_checks()
-        if check.check_id == "onedrive_group_members"
+    (result,) = run_capability_checks([_group_members_check()], context)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "did not read transitive group members" in advisory.message
+    gateway.list_transitive_group_members.assert_not_called()
+
+
+def test_onedrive_group_check_reports_tenant_without_groups() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_groups.return_value = OneDriveGroupPage(items=[])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        source_operations=gateway,
     )
 
-    check.run(context)
+    (result,) = run_capability_checks([_group_members_check()], context)
 
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "did not read transitive group members" in advisory.message
+    gateway.list_groups.assert_called_once()
     gateway.list_transitive_group_members.assert_not_called()
 
 
@@ -1593,8 +1629,9 @@ def test_onedrive_group_check_bounds_hidden_group_discovery() -> None:
         if check.check_id == "onedrive_group_members"
     )
 
-    check.run(context)
+    output = check.run(context)
 
+    assert len(_advisories(output)) == 1
     assert gateway.list_groups.call_count == 20
     gateway.list_transitive_group_members.assert_not_called()
 

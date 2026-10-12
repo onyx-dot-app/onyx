@@ -7,6 +7,7 @@ from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
     CheckFindingKey,
     CheckOutput,
     CountFinding,
@@ -54,6 +55,25 @@ _COUNT_PAGES = 20
 
 T = TypeVar("T")
 _HIDDEN_MEMBERSHIP_VISIBILITY = "HiddenMembership"
+
+_EMPTY_DRIVE_ADVISORY = CheckAdvisory(
+    message=(
+        "The check found no item in the OneDrives it sampled. "
+        "It did not read item permissions. "
+        f"The check samples the drives of the first {_CANDIDATE_PAGES} configured "
+        f"users, or of the users on the first {_CANDIDATE_PAGES} pages of the "
+        "user list. Add a file to one of those drives and run the check again "
+        "to verify this access."
+    )
+)
+_NO_VISIBLE_GROUP_ADVISORY = CheckAdvisory(
+    message=(
+        "The check found no Entra group with visible membership "
+        f"in the first {_CANDIDATE_PAGES} groups. "
+        "It did not read transitive group members. "
+        "The check skips groups with hidden membership."
+    )
+)
 
 
 class _NoCandidateFound(ConnectorValidationError):
@@ -410,7 +430,7 @@ class _PermissionCheck(CapabilityCheck[OneDriveConnectorConfig]):
             docs_link=_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway = _gateway(context)
         host = _config(context).graph_api_host.rstrip("/")
         found_empty_drive = False
@@ -433,11 +453,12 @@ class _PermissionCheck(CapabilityCheck[OneDriveConnectorConfig]):
                 "No readable OneDrive was found among the first users.",
             )
         except _NoCandidateFound:
-            if found_empty_drive:
-                return
-            raise
+            if not found_empty_drive:
+                raise
+            return CheckOutput(advisories=[_EMPTY_DRIVE_ADVISORY])
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot read OneDrive permissions.")
+        return None
 
 
 class _GroupListCheck(CapabilityCheck):
@@ -469,16 +490,17 @@ class _GroupMembershipCheck(CapabilityCheck):
             docs_link=_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         gateway = _gateway(context)
         try:
             group = _group_membership_probe_group(gateway)
             if group is None:
-                return
+                return CheckOutput(advisories=[_NO_VISIBLE_GROUP_ADVISORY])
             gateway.list_transitive_group_members(group_id=group.id)
         except OneDriveGraphError as error:
             denied = "The app cannot expand transitive Entra group members."
             raise_for_graph_error(error, denied)
+        return None
 
 
 def build_onedrive_indexing_checks() -> list[CapabilityCheck]:
