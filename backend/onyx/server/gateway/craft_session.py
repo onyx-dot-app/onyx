@@ -30,21 +30,25 @@ def resolve_craft_session_id(
     malformed or foreign id is dropped, never trusted: the sandbox can edit its
     own config, so the header is an attribution hint, not an identity claim.
     """
-    raw = http_request.headers.get(CRAFT_SESSION_HEADER)
-    if not raw:
+    # ``db_session`` is the request's database connection; the Craft session
+    # is the build session row the header names.
+    claimed = http_request.headers.get(CRAFT_SESSION_HEADER)
+    if not claimed:
         return None
     try:
-        session_id = UUID(raw)
+        craft_session_id = UUID(claimed)
     except ValueError:
         logger.warning("Ignoring malformed %s header", CRAFT_SESSION_HEADER)
         return None
-    if get_build_session(session_id, user.id, db_session) is None:
+    # Ownership check only: the row is looked up, not created or changed.
+    owned = get_build_session(craft_session_id, user.id, db_session) is not None
+    if not owned:
         logger.warning(
-            "Ignoring %s header for a session the caller does not own",
+            "Ignoring %s header for a Craft session the caller does not own",
             CRAFT_SESSION_HEADER,
         )
         return None
-    return str(session_id)
+    return str(craft_session_id)
 
 
 def llm_gateway_trace(
