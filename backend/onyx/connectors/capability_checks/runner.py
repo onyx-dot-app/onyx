@@ -304,10 +304,11 @@ def run_capability_checks(
 
     results: list[CapabilityCheckResult] = []
     outcome_by_check_id: dict[str, _CheckOutcome] = {}
-    keep_findings: bool = check_findings_enabled()
 
     def record(check: CapabilityCheck, outcome: _CheckOutcome) -> None:
-        if not keep_findings:
+        # Read per result: a run can take minutes, and the setting can be
+        # turned off meanwhile.
+        if outcome.findings and not check_findings_enabled():
             outcome = outcome.model_copy(update={"findings": []})
         results.append(_build_result(check, outcome))
         if on_result is not None:

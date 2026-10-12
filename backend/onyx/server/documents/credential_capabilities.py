@@ -97,7 +97,7 @@ class CapabilityReportSnapshot(BaseModel):
 
     @classmethod
     def from_row(cls, row: CredentialCapabilityReportRow) -> "CapabilityReportSnapshot":
-        report = (
+        report: CredentialCapabilityReport | None = (
             CredentialCapabilityReport.model_validate(row.report)
             if row.report is not None
             else None
