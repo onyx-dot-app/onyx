@@ -420,7 +420,7 @@ it("shows a failed refresh instead of a cached empty directory message", async (
   expect(screen.queryByText("No files yet")).not.toBeInTheDocument();
 });
 
-it("initializes outputs from restored data instead of an inactive cached empty listing", async () => {
+it("keeps reconciled expansion state when a missing outputs folder returns", async () => {
   useBuildSessionStore.getState().createSession("other");
   listing.mockResolvedValue({ path: "", entries: [] });
   const { rerender } = render(<FilesTab sessionId="session" />);
@@ -433,11 +433,11 @@ it("initializes outputs from restored data instead of an inactive cached empty l
     entries: path ? [file("restored.txt", "outputs/restored.txt")] : [outputs],
   }));
   rerender(<FilesTab sessionId="session" isActive refreshKey={1} />);
+  expect(
+    await screen.findByRole("button", { name: "outputs" })
+  ).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(screen.getByRole("button", { name: "outputs" }));
   await screen.findByRole("button", { name: "restored.txt" });
-  expect(screen.getByRole("button", { name: "outputs" })).toHaveAttribute(
-    "aria-expanded",
-    "true"
-  );
 });
 
 it("reports a newly opened folder as loading before the fetch effect starts", async () => {
@@ -732,4 +732,20 @@ it("keeps the current folder request busy when an older request is canceled", as
       "aria-busy"
     )
   );
+});
+
+it("preserves an explicitly collapsed tree when the Files browser remounts", async () => {
+  listing.mockImplementation(async (_session, path) => ({
+    path: path ?? "",
+    entries: path ? [] : [outputs],
+  }));
+  const view = render(<FilesTab sessionId="session" onFileClick={jest.fn()} />);
+  const folder = await screen.findByRole("button", { name: "outputs" });
+  expect(folder).toHaveAttribute("aria-expanded", "true");
+  fireEvent.click(folder);
+  view.unmount();
+  render(<FilesTab sessionId="session" onFileClick={jest.fn()} />);
+  expect(
+    await screen.findByRole("button", { name: "outputs" })
+  ).toHaveAttribute("aria-expanded", "false");
 });

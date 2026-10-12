@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent,
@@ -53,6 +54,7 @@ export default function CraftWorkspace({
   );
   const workspace = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const chat = useRef<HTMLDivElement>(null);
   const controls = useRef<HTMLDivElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
   const resizeGesture = useRef<WorkspaceResize | null>(null);
@@ -85,6 +87,17 @@ export default function CraftWorkspace({
       );
   const mediumWidth = workspaceWidth * boundedProportion;
   const coversChat = open && (mode === "full" || narrow);
+
+  useLayoutEffect(() => {
+    const element = chat.current;
+    if (!element) return;
+    if (coversChat && element.contains(document.activeElement)) {
+      controls.current
+        ?.querySelector<HTMLButtonElement>("[data-output-toggle]")
+        ?.focus();
+    }
+    element.inert = coversChat;
+  }, [coversChat]);
 
   useOutputPanelPersistence();
 
@@ -227,7 +240,7 @@ export default function CraftWorkspace({
       data-output-mode={mode}
     >
       <div
-        inert={coversChat}
+        ref={chat}
         aria-hidden={coversChat}
         className={cn(
           "h-full overflow-hidden motion-reduce:transition-none",

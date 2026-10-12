@@ -1368,7 +1368,7 @@ const createInitialSessionData = (
     subagents: new Map(),
     viewedSubagentSessionId: null,
     filesTabState: {
-      expandedPaths: [],
+      expandedPaths: ["outputs"],
       scrollTop: 0,
     },
     outputInventory: null,
@@ -1522,6 +1522,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     initialData?: Partial<BuildSessionData>
   ) => {
     set((state) => {
+      const existingSession = state.sessions.get(sessionId);
       // Carry the welcome panel's visible tab into the conversation.
       const newSession = createInitialSessionData(sessionId, {
         ...(state.currentSessionId === null &&
@@ -1534,8 +1535,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             panelTabHistory: state.noSessionPanelTabHistory,
             mediumPanelProportion: state.noSessionMediumPanelProportion,
           }),
-        filesTabState:
-          state.sessions.get(sessionId)?.filesTabState ?? EMPTY_FILES_TAB_STATE,
+        ...(existingSession && {
+          filesTabState: existingSession.filesTabState,
+        }),
         ...initialData,
       });
       const newSessions = new Map(state.sessions);
@@ -3399,7 +3401,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 // Stable empty references for SSR hydration (prevents infinite loop)
 const EMPTY_PANEL_TABS: PanelTab[] = [];
 const EMPTY_FILES_TAB_STATE: FilesTabState = {
-  expandedPaths: [],
+  expandedPaths: ["outputs"],
   scrollTop: 0,
 };
 const EMPTY_SUBAGENTS: Map<string, SubagentState> = new Map();

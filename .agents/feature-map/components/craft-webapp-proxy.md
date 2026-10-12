@@ -279,7 +279,8 @@ Backend requests and data caches retain the actual session identity.
 a stalled directory cannot block another directory. Successful directory and search reads stay fresh for 30 seconds.
 Quick reopen and folder expansion reuse fresh listings. Stale activation refreshes in the background.
 Directory and file-preview reads pause while the sandbox restores. Restore completion invalidates directory listings and file previews.
-Only active, successful current-generation listings can reconcile expansion or consume initial folder expansion.
+New sessions expand `outputs` by default. Restored expansion state stays authoritative, including an empty collapsed tree.
+Only active, successful current-generation listings can prune missing folders from expansion state.
 Missing or invalidated directory data is pending before its fetch effect starts.
 Manual reload and file-change signals bypass freshness while retaining existing rows.
 Collapsing a directory, entering search, or leaving its workspace aborts its request. Tab and panel closure keep directory reads running. Cancellations stay silent.
@@ -335,6 +336,7 @@ selected slide, and scrolls it into view. Thumbnail images load lazily.
 Keyboard navigation only handles events within the slide toolbar.
 Inactive presentations ignore keyboard navigation. Closed output panels are inert,
 so their controls cannot receive focus or keyboard input.
+When the workspace covers chat, it moves focus from chat to the output toggle before making chat inert.
 Updated decks clamp the current slide to their new bounds.
 The saved slide initializes the viewer; parent updates do not reset local navigation.
 Each slide image owns its loading state and releases it when its source changes.

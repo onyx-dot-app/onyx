@@ -121,17 +121,9 @@ export function DirectoryTree({
     [path, onStatusChange]
   );
 
-  const initializedRoot = useRef(false);
   useEffect(() => {
     if (!listingActive || !isCurrentGeneration || !data || isLoading || error)
       return;
-    if (!path && !initializedRoot.current) {
-      initializedRoot.current = true;
-      const outputs = data.entries.find(
-        (child) => child.is_directory && child.name === "outputs"
-      );
-      if (outputs && expandedPaths.size === 0) onToggleFolder(outputs.path);
-    }
     const store = useBuildSessionStore.getState();
     const saved =
       store.sessions.get(sessionId)?.filesTabState.expandedPaths ?? [];

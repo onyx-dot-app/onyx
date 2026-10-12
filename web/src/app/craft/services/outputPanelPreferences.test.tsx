@@ -10,7 +10,7 @@ import {
 
 jest.mock("@/app/craft/components/ChatPanel", () => ({
   __esModule: true,
-  default: () => null,
+  default: () => <textarea aria-label="Composer" />,
 }));
 jest.mock("@/app/craft/components/OutputPanel", () => ({
   __esModule: true,
@@ -350,5 +350,67 @@ test("previews resizing locally and saves only on release", () => {
   } finally {
     resize.mockRestore();
     jest.useRealTimers();
+  }
+});
+
+test("restores an explicitly collapsed tree when creating local session state", () => {
+  saveOutputPanelPreferences("session-a", {
+    ...preferences,
+    filesTabState: { expandedPaths: [], scrollTop: 40 },
+  });
+  useBuildSessionStore.getState().createSession("session-a");
+  expect(
+    useBuildSessionStore.getState().sessions.get("session-a")?.filesTabState
+  ).toEqual({ expandedPaths: [], scrollTop: 40 });
+});
+
+test("moves focus out of chat before an automatic full-panel transition", () => {
+  useBuildSessionStore.getState().setCurrentSession("session-a");
+  render(<CraftWorkspace existingSessionId="session-a" />);
+  const composer = screen.getByRole("textbox", { name: "Composer" });
+  composer.focus();
+  act(() => useBuildSessionStore.getState().setCurrentOutputPanelMode("full"));
+  expect(screen.getByRole("button", { name: "Close outputs" })).toHaveFocus();
+  expect(composer.parentElement?.inert).toBe(true);
+});
+
+test("moves focus out of chat when resizing covers it", () => {
+  let measure = (_width: number) => {};
+  const resize = jest
+    .spyOn(global, "ResizeObserver")
+    .mockImplementation((callback) => {
+      const observer: ResizeObserver = {
+        observe: (target) => {
+          measure = (width) =>
+            callback(
+              [
+                {
+                  target,
+                  contentRect: new DOMRect(0, 0, width, 720),
+                  borderBoxSize: [],
+                  contentBoxSize: [],
+                  devicePixelContentBoxSize: [],
+                },
+              ],
+              observer
+            );
+        },
+        unobserve: () => {},
+        disconnect: () => {},
+      };
+      return observer;
+    });
+  try {
+    useBuildSessionStore.getState().setCurrentSession("session-a");
+    useBuildSessionStore.getState().openFilesTab("session-a");
+    render(<CraftWorkspace existingSessionId="session-a" />);
+    act(() => measure(1200));
+    const composer = screen.getByRole("textbox", { name: "Composer" });
+    composer.focus();
+    act(() => measure(500));
+    expect(screen.getByRole("button", { name: "Close outputs" })).toHaveFocus();
+    expect(composer.parentElement?.inert).toBe(true);
+  } finally {
+    resize.mockRestore();
   }
 });
