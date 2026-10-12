@@ -157,13 +157,13 @@ function CreateGroupPage() {
               searchIcon
             />
             <Table
-              data={allRows}
+              items={allRows}
               columns={memberColumns}
               getRowId={(row) => row.id ?? row.email}
               pageSize={PAGE_SIZE}
-              searchTerm={searchTerm}
+              query={searchTerm}
               selectionBehavior="multi-select"
-              onSelectionChange={setSelectedUserIds}
+              onSelectionChange={(values) => setSelectedUserIds([...values])}
               footer={{}}
               emptyState={
                 <IllustrationContent

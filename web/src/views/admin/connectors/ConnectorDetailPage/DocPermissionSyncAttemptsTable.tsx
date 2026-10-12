@@ -3,10 +3,10 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
-  createTableColumns,
   EmptyMessageCard,
   Pagination,
   Table,
+  type TableColumn,
   Text,
 } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
@@ -31,8 +31,6 @@ import type { DocPermissionSyncAttemptSnapshot } from "@/lib/connectors/types";
  * caller has decided this tab is applicable.
  */
 
-const tc = createTableColumns<DocPermissionSyncAttemptSnapshot>();
-
 // Weights are TanStack-relative; they sum to 100 here purely for
 // readability. `Time Started` is bumped to 28 so `localizeAndPrettify`
 // (e.g. "5/3/2026, 12:00:00 PM") stays on a single line at standard
@@ -51,53 +49,63 @@ function buildColumns(
   onErrorClick: (errorMessage: string) => void,
   headers: ColumnHeaders,
   locale: string
-) {
+): TableColumn<DocPermissionSyncAttemptSnapshot>[] {
   return [
-    tc.column("time_started", {
-      header: headers.timeStarted,
+    {
+      kind: "data",
+      field: "time_started",
+      title: headers.timeStarted,
       weight: 28,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
           {value ? localizeAndPrettify(value, locale) : "-"}
         </Text>
       ),
-    }),
-    tc.column("status", {
-      header: headers.status,
+    },
+    {
+      kind: "data",
+      field: "status",
+      title: headers.status,
       weight: 14,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <PermissionSyncStatusBadge
           status={value}
           errorMsg={row.error_message}
         />
       ),
-    }),
-    tc.column("total_docs_synced", {
-      header: headers.docsSynced,
+    },
+    {
+      kind: "data",
+      field: "total_docs_synced",
+      title: headers.docsSynced,
       weight: 12,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
           {String(value)}
         </Text>
       ),
-    }),
-    tc.column("docs_with_permission_errors", {
-      header: headers.permissionErrors,
+    },
+    {
+      kind: "data",
+      field: "docs_with_permission_errors",
+      title: headers.permissionErrors,
       weight: 18,
-      enableSorting: false,
+      sortable: false,
       cell: (value) => (
         <Text as="span" font="main-ui-body" color="text-04">
           {String(value)}
         </Text>
       ),
-    }),
-    tc.column("error_message", {
-      header: headers.errorMessage,
+    },
+    {
+      kind: "data",
+      field: "error_message",
+      title: headers.errorMessage,
       weight: 28,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <ErrorMessageCell
           errorMessage={value}
@@ -105,7 +113,7 @@ function buildColumns(
           onErrorClick={onErrorClick}
         />
       ),
-    }),
+    },
   ];
 }
 
@@ -216,7 +224,7 @@ export function DocPermissionSyncAttemptsTable({
 
       <Section gap={3} alignItems="stretch" height="auto">
         <Table
-          data={attempts}
+          items={attempts}
           columns={columns}
           getRowId={(row) => String(row.id)}
         />

@@ -84,7 +84,7 @@ def _setup_mock_connector(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync is enterprise only",
 )
 def test_mock_connector_initial_permission_sync(
@@ -151,7 +151,7 @@ def test_mock_connector_initial_permission_sync(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync attempt tracking is enterprise only",
 )
 def test_permission_sync_attempt_tracking_integration(
@@ -197,7 +197,7 @@ def test_permission_sync_attempt_tracking_integration(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission sync attempt tracking is enterprise only",
 )
 def test_permission_sync_attempt_status_success(

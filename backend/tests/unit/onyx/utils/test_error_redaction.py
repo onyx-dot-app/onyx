@@ -152,10 +152,9 @@ def test_chat_provider_tracebacks_only_reach_development_clients(
     setup = MagicMock()
     setup.incognito_record_mode = None
     setup.llms = [MagicMock()]
-    setup.llms[0].config.api_key = None
-    setup.llms[0].config.custom_config = None
     setup.llms[0].config.model_name = "test-model"
     setup.llms[0].config.model_provider = "test-provider"
+    setup.llms[0].redact_error.side_effect = lambda text: text
 
     def build_turn(**_kwargs: object) -> Generator[None, None, MagicMock]:
         yield from ()

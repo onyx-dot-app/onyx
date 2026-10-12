@@ -249,11 +249,7 @@ describe("SimpleModelSelector", () => {
       );
       await user.click(screen.getByRole("combobox"));
       // jsdom lays nothing out, so any scroll lands at the end of the rows.
-      fireEvent.scroll(
-        screen
-          .getByRole("listbox")
-          .querySelector(".opal-select-dropdown-scroll")!
-      );
+      fireEvent.scroll(screen.getByRole("listbox"));
       // One page request per scroll, for the providers whose rows are on show.
       expect(modelPaging.loadMore).toHaveBeenCalledTimes(1);
       expect(modelPaging.loadMore).toHaveBeenCalledWith([1]);

@@ -11,6 +11,7 @@ retire once the mark outlives its source's run ceiling.
 """
 
 from collections.abc import Sequence
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -21,6 +22,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_CHECK_TIMEOUT_SECONDS,
     DraftCheckStateKind,
+    DraftRunPairScope,
     DraftRunStatus,
     apply_check_result,
     cache_draft_result,
@@ -28,10 +30,7 @@ from onyx.connectors.capability_checks.draft_runs import (
     load_draft_run,
     save_draft_run,
 )
-from onyx.connectors.capability_checks.models import (
-    CapabilityCheckResult,
-    compute_connector_config_hash,
-)
+from onyx.connectors.capability_checks.models import CapabilityCheckResult
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
     CAPABILITY_CHECK_TIMEOUT_SECONDS,
@@ -40,6 +39,7 @@ from onyx.connectors.capability_checks.runner import (
     generate_capability_report,
     merge_capability_results,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -49,7 +49,10 @@ from onyx.db.credential_capability import (
     mark_stale_capability_runs_failed,
     upsert_completed_capability_report,
 )
-from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.credentials import (
+    delete_stale_draft_credentials,
+    fetch_credential_by_id,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
 
@@ -203,7 +206,8 @@ def run_draft_capability_checks_task(
     """Runs a draft run's PENDING checks and writes each result into the stored
     run as it lands. The task is the only writer of the run after its start.
     Before each next check it stops if a newer run for the same draft key
-    started."""
+    started. A dry run of a pair builds the connector with the pair's input
+    type, as creation does."""
     run = load_draft_run(UUID(run_id))
     if run is None:
         task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
@@ -263,10 +267,13 @@ def run_draft_capability_checks_task(
             return
         mark_next_running()
         save_draft_run(run)
+        pair_scope: DraftRunPairScope | None = run.pair_scope
         generate_capability_report(
             credential,
             source=snapshot.source,
             connector_specific_config=connector_specific_config,
+            connector_id=pair_scope.connector_id if pair_scope is not None else None,
+            input_type=pair_scope.input_type if pair_scope is not None else None,
             access_type=snapshot.access_type,
             on_result=on_result,
             check_ids=frozenset(check.check_id for check in pending),
@@ -318,3 +325,24 @@ def check_for_stale_capability_runs(
                 )
         # The accessors leave the transaction to the caller.
         db_session.commit()
+
+
+# Far longer than any form session: a draft is changed on every edit.
+DRAFT_CREDENTIAL_MAX_AGE = timedelta(days=7)
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLEANUP_STALE_DRAFT_CREDENTIALS, ignore_result=True, trail=False
+)
+def cleanup_stale_draft_credentials(*, tenant_id: str) -> None:
+    """Deletes draft credentials of connector forms that were never
+    submitted."""
+    with get_session_with_current_tenant() as db_session:
+        deleted = delete_stale_draft_credentials(
+            db_session,
+            updated_before=datetime.now(timezone.utc) - DRAFT_CREDENTIAL_MAX_AGE,
+        )
+    if deleted:
+        task_logger.info(
+            f"Deleted {deleted} stale draft credential(s) (tenant {tenant_id})."
+        )

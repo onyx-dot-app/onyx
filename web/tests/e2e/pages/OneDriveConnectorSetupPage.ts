@@ -1,4 +1,8 @@
 import { expect, type Page, type Request } from "@playwright/test";
+import {
+  mockPassingConnectorChecks,
+  runConnectorChecks,
+} from "@tests/e2e/utils/connectorChecks";
 
 export interface OneDriveConfigRequest {
   connector_specific_config: {
@@ -127,6 +131,7 @@ export class OneDriveConnectorSetupPage {
     await this.page.route("**/api/manage/connector/*/credential/*", (route) =>
       route.fulfill({ json: {} })
     );
+    await mockPassingConnectorChecks(this.page);
   }
 
   async goto() {
@@ -158,15 +163,19 @@ export class OneDriveConnectorSetupPage {
     await this.submitCredential();
   }
 
-  async expectConfigurationEnabled() {
-    await expect(this.connectorForm.getByTestId("name")).toBeEnabled();
+  /** Run the connector checks and wait for the configuration to unlock. */
+  async runChecks() {
+    await runConnectorChecks(this.page);
   }
 
   async selectSpecificScope(user?: string) {
     await this.page.getByRole("tab", { name: "Specific" }).click();
     if (!user) return;
-    await this.page.getByRole("button", { name: "Add" }).click();
-    await this.page.locator("#users").fill(user);
+    // The Excluded Paths list has its own add button outside the tab, so the
+    // users list is found inside the Specific tab's panel.
+    const panel = this.page.getByRole("tabpanel", { name: "Specific" });
+    await panel.getByRole("button", { name: "Add New" }).click();
+    await panel.getByRole("textbox").last().fill(user);
   }
 
   async selectGeneralScope() {
@@ -174,23 +183,23 @@ export class OneDriveConnectorSetupPage {
   }
 
   async submitConnector(name: string) {
-    await this.connectorForm.getByTestId("name").fill(name);
+    await this.page.getByTestId("connector-name").fill(name);
     const responsePromise = this.page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === "/api/manage/admin/connector"
     );
     await this.page
-      .getByRole("button", { name: "Connect", exact: true })
+      .getByRole("button", { name: "Create Connector", exact: true })
       .click();
     const response = await responsePromise;
     expect(response.status()).toBe(200);
   }
 
   async submitInvalidConnector(name: string, message: string) {
-    await this.connectorForm.getByTestId("name").fill(name);
+    await this.page.getByTestId("connector-name").fill(name);
     await expect(
-      this.page.getByRole("button", { name: "Connect", exact: true })
+      this.page.getByRole("button", { name: "Create Connector", exact: true })
     ).toBeDisabled();
     await expect(this.page.getByText(message)).toBeVisible();
   }
@@ -202,11 +211,6 @@ export class OneDriveConnectorSetupPage {
   /** The creation form, once its card is expanded. */
   private get credentialForm() {
     return this.page.getByTestId("credential-form");
-  }
-
-  /** The connector's own form. It has a name field too, so both are scoped. */
-  private get connectorForm() {
-    return this.page.getByTestId("connector-form");
   }
 
   private async openCredentialForm() {

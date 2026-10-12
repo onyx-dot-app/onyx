@@ -57,14 +57,14 @@ from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
     OutputsManifestResponse,
 )
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
-    FilesystemEntry,
     PromptAttachment,
     SandboxInfo,
     SnapshotResult,
@@ -118,7 +118,7 @@ class StubSandboxManager(SandboxManager):
     - ``list_directory_returns`` or ``list_directory_returns_by_path``,
       ``read_file_returns``, ``upload_file_returns``, ``delete_file_returns``,
       ``get_upload_stats_returns``, ``get_webapp_url_returns``,
-      ``generate_pptx_preview_returns``: return values for the matching
+      ``generate_document_preview_returns``: return values for the matching
       filesystem / utility methods. Use ``list_directory_returns_by_path`` for
       recursive directory-walk tests.
 
@@ -171,7 +171,7 @@ class StubSandboxManager(SandboxManager):
         self.dispose_opencode_instance_raises: Exception | None = None
         self.get_upload_stats_returns: tuple[int, int] | None = None
         self.get_webapp_url_returns: str | None = None
-        self.generate_pptx_preview_returns: tuple[list[str], bool] | None = None
+        self.generate_document_preview_returns: tuple[list[str], bool] | None = None
         # Preflight session id. Defaulted (not _not_configured) so send_message
         # tests don't each have to wire it; the real _ServeMixin override POSTs
         # /session over HTTP, which has no pod to reach under the stub.
@@ -228,7 +228,7 @@ class StubSandboxManager(SandboxManager):
         self.get_upload_stats_count: int = 0
         self.write_files_to_sandbox_count: int = 0
         self.get_webapp_url_count: int = 0
-        self.generate_pptx_preview_count: int = 0
+        self.generate_document_preview_count: int = 0
 
         self.last_provision_payload: dict[str, Any] | None = None
         self.last_terminate_sandbox_id: UUID | None = None
@@ -256,7 +256,7 @@ class StubSandboxManager(SandboxManager):
         self.last_get_upload_stats_payload: dict[str, Any] | None = None
         self.last_write_files_to_sandbox_payload: dict[str, Any] | None = None
         self.last_get_webapp_url_payload: dict[str, Any] | None = None
-        self.last_generate_pptx_preview_payload: dict[str, Any] | None = None
+        self.last_generate_document_preview_payload: dict[str, Any] | None = None
         self.last_prompt_slot: RecordingPromptSlot | None = None
         self.abort_calls: list[tuple[UUID, UUID, str]] = []
 
@@ -610,7 +610,9 @@ class StubSandboxManager(SandboxManager):
         return self.list_directory_returns
 
     def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
     ) -> OutputsManifestResponse:
         self.get_outputs_manifest_count += 1
         self.last_outputs_manifest_payload = {
@@ -755,20 +757,23 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("get_webapp_url")
         return self.get_webapp_url_returns
 
-    def generate_pptx_preview(
+    def generate_document_preview(
         self,
         sandbox_id: UUID,
         session_id: UUID,
-        pptx_path: str,
+        document_path: str,
         cache_dir: str,
+        *,
+        first_page_only: bool = False,
     ) -> tuple[list[str], bool]:
-        self.generate_pptx_preview_count += 1
-        self.last_generate_pptx_preview_payload = {
+        self.generate_document_preview_count += 1
+        self.last_generate_document_preview_payload = {
             "sandbox_id": sandbox_id,
             "session_id": session_id,
-            "pptx_path": pptx_path,
+            "document_path": document_path,
             "cache_dir": cache_dir,
+            "first_page_only": first_page_only,
         }
-        if self.generate_pptx_preview_returns is None:
-            raise _not_configured("generate_pptx_preview")
-        return self.generate_pptx_preview_returns
+        if self.generate_document_preview_returns is None:
+            raise _not_configured("generate_document_preview")
+        return self.generate_document_preview_returns

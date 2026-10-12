@@ -84,6 +84,7 @@ class AuditAction(str, Enum):
 
     # API activity (admin config + resource CRUD)
     CRAFT_DEFAULT_CHANGE = "settings.craft_default_change"
+    LLM_GATEWAY_ENABLED_CHANGE = "settings.llm_gateway_enabled_change"
     SECURITY_SETTINGS_CHANGE = "settings.security_settings_change"
     CONTEXTUAL_RAG_MODEL_UPDATE = "search_settings.contextual_rag_model_update"
     LLM_PROVIDER_CREATE = "llm_provider.create"
@@ -130,6 +131,7 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.USER_GROUP_PERMISSION_CHANGE: OCSFEventClass.GROUP_MANAGEMENT,
     AuditAction.USER_GROUP_MANAGER_CHANGE: OCSFEventClass.GROUP_MANAGEMENT,
     AuditAction.CRAFT_DEFAULT_CHANGE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.LLM_GATEWAY_ENABLED_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.SECURITY_SETTINGS_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.LLM_PROVIDER_CREATE: OCSFEventClass.API_ACTIVITY,

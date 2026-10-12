@@ -14,6 +14,7 @@ import {
   MessageCard,
   InputSwitch,
   Table,
+  type TableColumn,
 } from "@opal/components";
 import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
 import {
@@ -37,11 +38,10 @@ import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
-import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
+import type { MemberRow, TokenRateLimitDisplay } from "./types";
 import {
   makeBaseColumns,
   makeMemberTableColumns,
-  tc,
   PAGE_SIZE,
   type MemberColumnLabels,
 } from "./shared";
@@ -239,11 +239,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     return allRows.filter((r) => selected.has(r.id ?? r.email));
   }, [allRows, selectedUserIds]);
 
-  const currentRowSelection = useMemo(() => {
-    const sel: Record<string, boolean> = {};
-    for (const id of selectedUserIds) sel[id] = true;
-    return sel;
-  }, [selectedUserIds]);
+  const selectedValues = useMemo(
+    () => new Set(selectedUserIds),
+    [selectedUserIds]
+  );
 
   const handleRemoveMember = useCallback((userId: string) => {
     setSelectedUserIds((prev) => prev.filter((id) => id !== userId));
@@ -321,11 +320,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   );
 
   const memberColumns = useMemo(
-    () => [
+    (): TableColumn<MemberRow>[] => [
       ...makeBaseColumns(columnLabels, (row) =>
         managerIds.has(row.id ?? row.email)
       ),
-      tc.actions({
+      {
+        kind: "actions",
         showSorting: false,
         showColumnVisibility: false,
         cell: (row: MemberRow) => {
@@ -384,7 +384,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             </div>
           );
         },
-      }),
+      },
     ],
     [
       columnLabels,
@@ -413,9 +413,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   // Without this, TanStack fires onSelectionChange before all rows are loaded,
   // which overwrites selectedUserIds with a partial set.
   const handleSelectionChange = useCallback(
-    (ids: string[]) => {
+    (kept: ReadonlySet<string>) => {
       if (!initialized) return;
-      const kept = new Set(ids);
       // Both rules run: one deselection can strip your own row and a last-group
       // member at once, and returning after the first leaves the other removed.
       const forcedIds: string[] = [];
@@ -448,7 +447,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         forcedIds.push(...strandedIds);
       }
 
-      setSelectedUserIds([...forcedIds, ...ids, ...hiddenMemberIds]);
+      setSelectedUserIds([
+        ...new Set([...forcedIds, ...kept, ...hiddenMemberIds]),
+      ]);
     },
     [
       initialized,
@@ -628,9 +629,12 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 <MessageCard
                   variant="info"
                   title={t("edit.systemGroup.title")}
-                  description={t("edit.systemGroup.description", {
-                    appName: settings.appName,
-                  })}
+                  description={t(
+                    canEditPermissions
+                      ? "edit.systemGroup.basicDescription"
+                      : "edit.systemGroup.description",
+                    { appName: settings.appName }
+                  )}
                 />
               )}
 
@@ -703,13 +707,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 {isAddingMembers ? (
                   <Table
                     key="add-members"
-                    data={allRows as MemberRow[]}
+                    items={allRows as MemberRow[]}
                     columns={addModeColumns}
                     getRowId={(row) => row.id ?? row.email}
                     pageSize={PAGE_SIZE}
-                    searchTerm={searchTerm}
+                    query={searchTerm}
                     selectionBehavior="multi-select"
-                    initialRowSelection={currentRowSelection}
+                    values={selectedValues}
                     onSelectionChange={handleSelectionChange}
                     footer={{}}
                     emptyState={
@@ -722,11 +726,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   />
                 ) : (
                   <Table
-                    data={memberRows}
+                    items={memberRows}
                     columns={memberColumns}
                     getRowId={(row) => row.id ?? row.email}
                     pageSize={PAGE_SIZE}
-                    searchTerm={searchTerm}
+                    query={searchTerm}
                     footer={{}}
                     emptyState={
                       <IllustrationContent
@@ -743,6 +747,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 <GroupPermissionsSection
                   enabledPermissions={enabledPermissions}
                   onPermissionsChange={setEnabledPermissions}
+                  isDefaultGroup={isDefaultGroup}
                 />
               )}
 

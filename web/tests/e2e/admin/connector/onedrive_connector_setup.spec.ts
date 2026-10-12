@@ -10,7 +10,7 @@ test.describe("OneDrive connector setup", () => {
     await setup.mockRoutes();
     await setup.goto();
     await setup.createClientSecretCredential();
-    await setup.expectConfigurationEnabled();
+    await setup.runChecks();
     await setup.selectSpecificScope("owner@example.com");
     await setup.selectGeneralScope();
     await setup.submitConnector("General OneDrive");
@@ -38,7 +38,7 @@ test.describe("OneDrive connector setup", () => {
     await setup.mockRoutes();
     await setup.goto();
     await setup.createCertificateCredential();
-    await setup.expectConfigurationEnabled();
+    await setup.runChecks();
     await setup.selectSpecificScope("owner@example.com");
     await setup.submitConnector("Specific OneDrive");
     await setup.expectCreated();
@@ -68,7 +68,7 @@ test.describe("OneDrive connector setup", () => {
     await setup.mockRoutes();
     await setup.goto();
     await setup.createClientSecretCredential();
-    await setup.expectConfigurationEnabled();
+    await setup.runChecks();
     await setup.selectSpecificScope();
     await setup.submitInvalidConnector(
       "Empty Specific OneDrive",

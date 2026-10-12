@@ -42,6 +42,7 @@
           "image"
         ]
       },
+      "mode": "chat",
       "name": "Deep Research Max Preview (Apr-21-2026)",
       "open_weights": false,
       "reasoning": true,
@@ -90,6 +91,7 @@
           "image"
         ]
       },
+      "mode": "chat",
       "name": "Deep Research Preview (Apr-21-2026)",
       "open_weights": false,
       "reasoning": true,
@@ -99,17 +101,28 @@
     },
     "deep-research-pro-preview-12-2025": {
       "cost": {
-        "image": 0.134,
         "image_input": 0.0011,
         "input": 2.0,
         "output": 12.0
       },
       "limit": {
-        "context": 65536,
-        "output": 32768
+        "context": 1048576,
+        "output": 65536
       },
-      "mode": "image_generation",
-      "name": "deep-research-pro-preview-12-2025"
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "deep-research-pro-preview-12-2025",
+      "structured_output": true,
+      "tool_call": false
     },
     "gemini-2.0-flash-exp-image-generation": {
       "cost": {
@@ -146,8 +159,8 @@
       },
       "family": "gemini-pro",
       "limit": {
-        "context": 131072,
-        "output": 65536
+        "context": 128000,
+        "output": 64000
       },
       "modalities": {
         "input": [
@@ -271,7 +284,7 @@
         "output": 2.0
       },
       "limit": {
-        "context": 1048576,
+        "context": 131072,
         "output": 8192
       },
       "mode": "realtime",
@@ -449,7 +462,7 @@
       },
       "family": "gemini-pro",
       "limit": {
-        "context": 131072,
+        "context": 65536,
         "output": 32768
       },
       "modalities": {
@@ -473,6 +486,8 @@
     "gemini-3-pro-image-preview": {
       "attachment": true,
       "cost": {
+        "image": 0.134,
+        "image_input": 0.0011,
         "input": 2,
         "output": 120
       },
@@ -491,6 +506,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana Pro",
       "open_weights": false,
       "reasoning": true,
@@ -507,8 +523,8 @@
       },
       "family": "gemini-flash",
       "limit": {
-        "context": 65536,
-        "output": 65536
+        "context": 131072,
+        "output": 32768
       },
       "modalities": {
         "input": [
@@ -533,6 +549,7 @@
     "gemini-3.1-flash-image-preview": {
       "attachment": true,
       "cost": {
+        "image": 0.045,
         "input": 0.5,
         "output": 60
       },
@@ -552,6 +569,7 @@
           "image"
         ]
       },
+      "mode": "image_generation",
       "name": "Nano Banana 2",
       "open_weights": false,
       "reasoning": true,
@@ -604,7 +622,7 @@
       "family": "gemini-flash-lite",
       "limit": {
         "context": 65536,
-        "output": 65536
+        "output": 4096
       },
       "modalities": {
         "input": [
@@ -650,6 +668,7 @@
           "text"
         ]
       },
+      "mode": "chat",
       "name": "Gemini 3.1 Flash Lite Preview",
       "open_weights": false,
       "reasoning": true,
@@ -921,6 +940,10 @@
         "input": 2.0,
         "output": 12.0
       },
+      "limit": {
+        "context": 98304,
+        "output": 32768
+      },
       "mode": "audio_transcription",
       "name": "gemini-3.5-transcribe"
     },
@@ -928,6 +951,10 @@
       "cost": {
         "input": 3.5,
         "output": 21.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
       },
       "mode": "audio_transcription",
       "name": "gemini-3.5-transcribe-live"
@@ -1143,6 +1170,64 @@
       "temperature": false,
       "tool_call": false
     },
+    "gemini-embedding-2-preview": {
+      "cost": {
+        "input": 0.19999999999999998,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 8192
+      },
+      "mode": "embedding",
+      "name": "gemini-embedding-2-preview"
+    },
+    "gemini-exp-1114": {
+      "cost": {
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-exp-1114",
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gemini-exp-1206": {
+      "cost": {
+        "cache_read": 0.03,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 2097152,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-exp-1206",
+      "structured_output": true,
+      "tool_call": true
+    },
     "gemini-flash-latest": {
       "attachment": true,
       "cost": {
@@ -1210,6 +1295,50 @@
       "temperature": true,
       "tool_call": true
     },
+    "gemini-gemma-2-27b-it": {
+      "cost": {
+        "input": 0.35,
+        "output": 1.0499999999999998
+      },
+      "limit": {
+        "context": 8192,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-gemma-2-27b-it",
+      "tool_call": true
+    },
+    "gemini-gemma-2-9b-it": {
+      "cost": {
+        "input": 0.35,
+        "output": 1.0499999999999998
+      },
+      "limit": {
+        "context": 8192,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-gemma-2-9b-it",
+      "tool_call": true
+    },
     "gemini-live-2.5-flash-preview-native-audio-09-2025": {
       "cost": {
         "input": 0.5,
@@ -1221,6 +1350,41 @@
       },
       "mode": "realtime",
       "name": "gemini-live-2.5-flash-preview-native-audio-09-2025"
+    },
+    "gemini-nano-banana-2.1": {
+      "cost": {
+        "image": 0.0336,
+        "input": 1.5,
+        "output": 7.5
+      },
+      "limit": {
+        "context": 131072,
+        "output": 32768
+      },
+      "mode": "image_generation",
+      "name": "gemini-nano-banana-2.1"
+    },
+    "gemini-omni-1.1-flash": {
+      "cost": {
+        "input": 1.5,
+        "output": 9.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-omni-1.1-flash",
+      "reasoning": true
     },
     "gemini-omni-flash-preview": {
       "attachment": true,
@@ -1250,6 +1414,105 @@
       "release_date": "2026-06-30",
       "temperature": true,
       "tool_call": false
+    },
+    "gemini-pro-latest": {
+      "cost": {
+        "cache_read": 0.19999999999999998,
+        "input": 2.0,
+        "output": 12.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-pro-latest",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gemini-robotics-er-2-preview": {
+      "cost": {
+        "cache_read": 0.09999999999999999,
+        "input": 1.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-robotics-er-2-preview",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gemini-robotics-er-2-streaming-preview": {
+      "cost": {
+        "input": 1.0,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemini-robotics-er-2-streaming-preview",
+      "reasoning": true,
+      "tool_call": true
+    },
+    "gemma-3-27b-it": {
+      "cost": {
+        "image_input": 0.0,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gemma-3-27b-it",
+      "structured_output": true,
+      "tool_call": true
     },
     "gemma-4-26b-a4b-it": {
       "attachment": true,
@@ -1323,6 +1586,30 @@
       "mode": "image_generation",
       "name": "imagen-3.0-generate-001"
     },
+    "learnlm-1.5-pro-experimental": {
+      "cost": {
+        "image_input": 0.0,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 32767,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "learnlm-1.5-pro-experimental",
+      "structured_output": true,
+      "tool_call": true
+    },
     "lyria-3-clip-preview": {
       "attachment": true,
       "cost": {
@@ -1383,6 +1670,98 @@
       "release_date": "2026-03-25",
       "structured_output": false,
       "temperature": true,
+      "tool_call": false
+    },
+    "lyria-3.5": {
+      "cost": {
+        "image": 0.08,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "lyria-3.5",
+      "structured_output": false,
+      "tool_call": false
+    },
+    "lyria-3.5-clip-preview": {
+      "cost": {
+        "image": 0.04,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "lyria-3.5-clip-preview",
+      "structured_output": false,
+      "tool_call": false
+    },
+    "lyria-3.5-pro-preview": {
+      "cost": {
+        "image": 0.08,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 131072,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "lyria-3.5-pro-preview",
+      "structured_output": false,
+      "tool_call": false
+    },
+    "lyria-realtime-exp": {
+      "cost": {
+        "image": 0.08,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "limit": {
+        "context": 1048576,
+        "output": 65536
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "lyria-realtime-exp",
+      "structured_output": false,
       "tool_call": false
     },
     "nano-banana-pro-preview": {

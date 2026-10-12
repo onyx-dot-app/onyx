@@ -24,6 +24,8 @@ from ee.onyx.configs.app_configs import (
     SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY,
+    ZOOM_PERMISSION_DOC_SYNC_FREQUENCY,
+    ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY,
 )
 from ee.onyx.external_permissions.perm_sync_types import (
     CensoringFuncType,
@@ -207,6 +209,18 @@ def _load_teams_group_sync() -> GroupSyncFuncType:
     return teams_group_sync
 
 
+def _load_zoom_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.zoom.doc_sync import zoom_doc_sync
+
+    return zoom_doc_sync
+
+
+def _load_zoom_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.zoom.group_sync import zoom_group_sync
+
+    return zoom_group_sync
+
+
 class DocSyncConfig(BaseModel):
     doc_sync_frequency: int
     doc_sync_func: DocSyncFuncType
@@ -232,7 +246,7 @@ class SyncConfig(BaseModel):
     censoring_config: CensoringConfig | None = None
 
 
-# No-op doc sync: these sources set permissions while indexing instead.
+# No-op doc sync: the mock connector sets permissions while indexing instead.
 def mock_doc_sync(
     cc_pair: "ConnectorCredentialPair",  # noqa: ARG001
     fetch_all_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
@@ -338,14 +352,17 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             chunk_censoring_func=_lazy_censoring(_load_censor_salesforce_chunks),
         ),
     ),
-    # No group sync: a meeting or webinar can only be shared with individual
-    # people, since a Zoom Group provisions licences and cannot be granted one.
-    # Checked for meetings and webinars, so re-check it if Zoom Docs land here.
+    # Domain sign-in rules: groups filled from the account's user roster.
     DocumentSource.ZOOM: SyncConfig(
         doc_sync_config=DocSyncConfig(
-            doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=mock_doc_sync,
+            doc_sync_frequency=ZOOM_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_zoom_doc_sync),
             initial_index_should_sync=True,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_zoom_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
         ),
     ),
     DocumentSource.MOCK_CONNECTOR: SyncConfig(

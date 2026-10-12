@@ -50,6 +50,8 @@ Interactive.Stateless              <- always variant="default" / prominence="ter
 | `target`   | `string`            | —                | Anchor target (e.g. `"_blank"`). Only meaningful with `href`                             |
 | `disabled` | `boolean`           | `false`          | Applies disabled styling + suppresses clicks/navigation                                  |
 
+`passive` keeps resting colors and removes hover and pressed styles. Click handlers remain enabled.
+
 ## Usage
 
 ```tsx

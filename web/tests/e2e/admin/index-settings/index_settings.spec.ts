@@ -983,9 +983,29 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
     await loginAs(page, "admin");
   });
 
-  test("a quantization change re-indexes with the chosen level", async ({
-    page,
-  }) => {
+  test("the vector quantization control is hidden", async ({ page }) => {
+    const indexSettings = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expectVectorQuantizationHidden();
+  });
+
+  test("a re-index keeps the saved quantization level", async ({ page }) => {
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const servedSettings: TestSearchSettings = {
+      ...current,
+      vector_quantization: "scalar_1_bit",
+    };
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
     const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
       void page.route(SET_NEW_SETTINGS_API, async (route) => {
         resolve(
@@ -1000,14 +1020,9 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
 
     const indexSettings = new IndexSettingsPage(page);
     await indexSettings.goto();
-    await indexSettings.selectVectorQuantization("1-bit");
-
-    // Quantization is part of the index mapping, so only the re-index
-    // strategies are offered.
-    await indexSettings.expectStrategy(/re-index all connectors/i);
-    await indexSettings.expectStrategyOptionAbsent("Do Not Re-index");
-
+    await stageNonCurrentSelfHostedModel(page);
     await indexSettings.applyReindex();
+
     const body = await bodyPromise;
     expect(body.vector_quantization).toBe("scalar_1_bit");
   });

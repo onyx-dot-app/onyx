@@ -22,7 +22,7 @@ export interface ConnectorSourceCardProps {
  * "Add Provider" cards on the Language Models page. The whole card is the
  * target; the add button repeats it for discoverability.
  */
-export function ConnectorSourceCard({
+export default function ConnectorSourceCard({
   sourceMetadata,
   description,
   navigationUrl,

@@ -10,6 +10,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
+import pytest
+
 from onyx.server.features.build.sandbox import nextjs_dev
 from onyx.server.features.build.sandbox.nextjs_dev import (
     WEBAPP_ABSENT_SENTINEL,
@@ -62,7 +64,7 @@ def test_start_script_port_is_env_driven_not_a_dup_flag() -> None:
     script = build_nextjs_start_script(_SESSION_PATH, 3010)
 
     assert "export ONYX_WEBAPP_PORT=3010" in script
-    assert "bun run dev -- -H 0.0.0.0 $PORT_FLAG >" in script
+    assert 'bun run dev -- -H "${SANDBOX_LISTEN_HOST:-0.0.0.0}" $PORT_FLAG >' in script
 
 
 def test_start_script_writes_naive_path_port_file() -> None:
@@ -178,6 +180,67 @@ def _assert_valid_bash(script: str) -> None:
 def test_bootstrap_script_is_valid_bash() -> None:
     script = build_webapp_bootstrap_script(_SESSION_PATH, 3010)
     _assert_valid_bash(script)
+
+
+@pytest.mark.parametrize(
+    ("listen_host", "expected_host", "probe_host"),
+    [
+        (None, "0.0.0.0", "127.0.0.1"),
+        ("::", "::", "[::1]"),
+        ("::1", "::1", "[::1]"),
+    ],
+)
+def test_bootstrap_uses_matching_listener_and_readiness_address(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    listen_host: str | None,
+    expected_host: str,
+    probe_host: str,
+) -> None:
+    """Execute the generated script with launch and HTTP commands recorded."""
+    commands: Path = tmp_path / "bin"
+    commands.mkdir()
+    web_dir: Path = tmp_path / "outputs" / "web"
+    web_dir.mkdir(parents=True)
+    (web_dir / "node_modules").mkdir()
+    (web_dir / "package.json").write_text('{"scripts":{"dev":"ONYX_WEBAPP_PORT"}}')
+    launch_args: Path = tmp_path / "launch.args"
+    probe_args: Path = tmp_path / "probe.args"
+    # flock is not available on every host; this test checks network arguments.
+    command_bodies: dict[str, str] = {
+        "flock": "exit 0\n",
+        "bun": f'printf "%s\\n" "$@" > "{launch_args}"\n',
+        "curl": (
+            f'printf "%s\\n" "$@" > "{probe_args}"\n'
+            # Wait for the background launch before the fixture removes its files.
+            f'for i in $(seq 1 100); do [ -f "{launch_args}" ] && exit 0; sleep 0.01; done\n'
+            "exit 1\n"
+        ),
+    }
+    for command, body in command_bodies.items():
+        executable: Path = commands / command
+        executable.write_text("#!/bin/bash\n" + body)
+        executable.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{commands}:/usr/bin:/bin")
+    if listen_host is None:
+        monkeypatch.delenv("SANDBOX_LISTEN_HOST", raising=False)
+    else:
+        monkeypatch.setenv("SANDBOX_LISTEN_HOST", listen_host)
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ["bash", "-c", build_webapp_bootstrap_script(str(tmp_path), 3010)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert launch_args.read_text().splitlines() == [
+        "run",
+        "dev",
+        "--",
+        "-H",
+        expected_host,
+    ]
+    assert probe_args.read_text().splitlines()[-1] == f"http://{probe_host}:3010/"
 
 
 def test_bootstrap_script_embeds_port_write_and_env_exports() -> None:

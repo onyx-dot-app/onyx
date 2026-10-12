@@ -70,6 +70,17 @@ class SandboxStatusResponse(BaseModel):
     status: SandboxStatus | None
 
 
+class OutputFileResponse(BaseModel):
+    path: str
+    revision: str
+    size: int
+
+
+class OutputInventoryResponse(BaseModel):
+    files: list[OutputFileResponse]
+    complete: bool
+
+
 class ArtifactResponse(BaseModel):
     """Artifact metadata in session response."""
 

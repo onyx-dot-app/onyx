@@ -6,7 +6,8 @@ readable by the organizer and the people the meeting record lists."""
 
 import re
 import time
-from collections.abc import Callable, Generator, Iterator
+from collections import defaultdict
+from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime, timezone
 from typing import Any
 
@@ -33,6 +34,7 @@ from onyx.connectors.models import (
 from onyx.connectors.teams.organizers import (
     Organizer,
     OrganizerSource,
+    fetch_organizer,
     organizer_expert,
 )
 from onyx.connectors.teams.refusals import (
@@ -71,6 +73,13 @@ ACCESS_POLICY_MESSAGES = (
     "application access policy",
     "not allowed to perform operations on the user",
 )
+# Graph names a missing grant in the message, so a 403 without such words is
+# not a permissions problem.
+PERMISSION_MESSAGES = (
+    "missing role permissions",
+    "insufficient privileges",
+    "insufficient permissions",
+)
 
 TRANSCRIPT_PAGE_SIZE = 50
 # Graph walks the listing newest first in slices of about 35 days, about 2
@@ -85,6 +94,19 @@ def transcript_document_id(organizer_id: str, transcript_id: str) -> str:
     """Transcripts are listed per organizer, so an id says which listing it
     came from."""
     return f"{TRANSCRIPT_DOCUMENT_ID_PREFIX}{organizer_id}:{transcript_id}"
+
+
+def parse_transcript_document_id(document_id: str) -> tuple[str, str] | None:
+    """The organizer and transcript ids a transcript document id carries, or
+    None for any other document."""
+    if not document_id.startswith(TRANSCRIPT_DOCUMENT_ID_PREFIX):
+        return None
+    organizer_id, separator, transcript_id = document_id.removeprefix(
+        TRANSCRIPT_DOCUMENT_ID_PREFIX
+    ).partition(":")
+    if not separator or not organizer_id or not transcript_id:
+        return None
+    return organizer_id, transcript_id
 
 
 class Transcript(BaseModel):
@@ -134,10 +156,29 @@ def transcripts_disabled(error: requests.HTTPError) -> bool:
     return graph_inner_error_code(error) == TRANSCRIPT_ACCESS_DISABLED_CODE
 
 
+def _message_names(error: requests.HTTPError, markers: tuple[str, ...]) -> bool:
+    message = graph_error_message(error).lower()
+    return any(marker in message for marker in markers)
+
+
 def access_policy_missing(error: requests.HTTPError) -> bool:
     """The organizer is outside the application access policy naming this app."""
-    message = graph_error_message(error).lower()
-    return any(marker in message for marker in ACCESS_POLICY_MESSAGES)
+    return _message_names(error, ACCESS_POLICY_MESSAGES)
+
+
+def permission_missing(error: requests.HTTPError) -> bool:
+    """Graph says the app lacks a grant."""
+    return status(error) == 403 and _message_names(error, PERMISSION_MESSAGES)
+
+
+def unexplained_refusal(error: requests.HTTPError) -> bool:
+    """A 403 that names no cause. A missing grant, access policy or tenant
+    setting each name themselves, so this one is Microsoft's to fix."""
+    return status(error) == 403 and not (
+        transcripts_disabled(error)
+        or access_policy_missing(error)
+        or permission_missing(error)
+    )
 
 
 def _graph_timestamp(moment: SecondsSinceUnixEpoch) -> str:
@@ -257,10 +298,56 @@ def transcript_access(
 # setup check asks for recent transcripts only.
 _TRANSCRIPT_PROBE_WINDOW_S = 30 * 24 * 60 * 60
 
+# Only a transcript's own read is retried from the errors list, so only its
+# failure says so.
+_RETRY_FROM_ERRORS = (
+    " Retry it from the connector's errors list once Microsoft serves it again."
+)
+_NOT_A_TRANSCRIPT = (
+    "Only meeting transcripts are read again from the errors list. A thread or "
+    "file is read again by a full re-index of the connector."
+)
+_NO_LONGER_LISTED = (
+    "Graph no longer lists this transcript: it is older than the lookback or "
+    "was deleted."
+)
+
+_UNEXPLAINED_REFUSAL = (
+    "Microsoft Graph refused the call without naming a cause. The problem is on "
+    "Microsoft's side: a missing permission, access policy or tenant setting "
+    "gets a refusal that names it."
+)
+
 _TRANSCRIPTS_DISABLED = (
     "Include Meeting Transcripts needs the tenant setting that allows Graph API "
     "access to transcripts, which a Teams administrator has turned off."
 )
+
+
+def _failure_text(error: Exception) -> str:
+    """A refusal's admin-facing cause, or the error itself when Graph did not
+    answer at all."""
+    if isinstance(error, requests.HTTPError):
+        return _transcript_refusal(error)
+    return str(error)
+
+
+def _listing_failure_message(who: str | None, error: Exception) -> str:
+    return f"Could not list the meeting transcripts of {who}: {_failure_text(error)}"
+
+
+def _transcript_failure_message(
+    organizer: Organizer, transcript: Transcript, error: Exception
+) -> str:
+    retry = (
+        _RETRY_FROM_ERRORS
+        if isinstance(error, requests.HTTPError) and unexplained_refusal(error)
+        else ""
+    )
+    return (
+        f"Transcript of meeting {transcript.meeting_id} organized by "
+        f"{organizer.email}: {_failure_text(error)}{retry}"
+    )
 
 
 def _transcript_refusal(error: requests.HTTPError) -> str:
@@ -273,11 +360,13 @@ def _transcript_refusal(error: requests.HTTPError) -> str:
             "An application access policy naming this app must be granted to the "
             "organizer (or the whole tenant) for meeting transcripts."
         )
-    if status(error) == 403:
+    if permission_missing(error):
         return (
             "Include Meeting Transcripts needs the OnlineMeetingTranscript.Read.All "
             f"and OnlineMeetings.Read.All application permissions. {graph_said(error)}"
         )
+    if status(error) == 403:
+        return f"{_UNEXPLAINED_REFUSAL} {graph_said(error)}"
     return f"Graph answered {status(error)}. {graph_said(error)}"
 
 
@@ -304,6 +393,7 @@ class TranscriptSource(OrganizerSource):
                 "covers."
             )
         graph_client = self._session.graph()
+        transcript: Transcript | None = None
         try:
             probe_start = time.time() - _TRANSCRIPT_PROBE_WINDOW_S
             transcript = next(
@@ -317,6 +407,14 @@ class TranscriptSource(OrganizerSource):
         except requests.HTTPError as e:
             if transcripts_disabled(e) or access_policy_missing(e):
                 raise ConnectorValidationError(_transcript_refusal(e))
+            if unexplained_refusal(e):
+                if transcript is None:
+                    raise UnexpectedValidationError(_transcript_refusal(e))
+                # The listing answered, so setup is fine. Indexing records a
+                # refused transcript as a failed document and a refused meeting
+                # as organizer-only.
+                logger.warning(_transcript_refusal(e))
+                return
             if status(e) in (401, 403):
                 raise InsufficientPermissionsError(_transcript_refusal(e))
             raise UnexpectedValidationError(f"Could not read a transcript: {e}")
@@ -348,10 +446,7 @@ class TranscriptSource(OrganizerSource):
                 raise
             yield ConnectorFailure(
                 failed_entity=EntityFailure(entity_id=organizer.id),
-                failure_message=(
-                    f"Could not list the meeting transcripts of {organizer.email}: "
-                    f"{_transcript_refusal(e)}"
-                ),
+                failure_message=_listing_failure_message(organizer.email, e),
                 exception=e,
             )
 
@@ -393,10 +488,7 @@ class TranscriptSource(OrganizerSource):
                     document_id=transcript_document_id(organizer.id, transcript.id),
                     document_link=link,
                 ),
-                failure_message=(
-                    f"Transcript of meeting {transcript.meeting_id} organized by "
-                    f"{organizer.email}: {_transcript_refusal(e)}"
-                ),
+                failure_message=_transcript_failure_message(organizer, transcript, e),
                 exception=e,
             )
         when = (
@@ -424,6 +516,81 @@ class TranscriptSource(OrganizerSource):
             },
             external_access=transcript_access(organizer, meeting),
         )
+
+    def reindex(
+        self, failed: Iterable[DocumentFailure]
+    ) -> Iterator[Document | ConnectorFailure]:
+        """The failed transcripts read again through one listing per
+        organizer. One Graph no longer lists is reported rather than read."""
+        by_organizer: dict[str, list[tuple[DocumentFailure, str]]] = defaultdict(list)
+        for failure in failed:
+            ids = parse_transcript_document_id(failure.document_id)
+            if ids is None:
+                yield ConnectorFailure(
+                    failed_document=failure, failure_message=_NOT_A_TRANSCRIPT
+                )
+                continue
+            organizer_id, transcript_id = ids
+            by_organizer[organizer_id].append((failure, transcript_id))
+        graph_client = self._session.graph()
+        for organizer_id, wanted in by_organizer.items():
+            try:
+                organizer = fetch_organizer(graph_client, organizer_id)
+            except (requests.RequestException, GraphRetriesExhausted) as e:
+                for failure, _ in wanted:
+                    yield ConnectorFailure(
+                        failed_document=failure,
+                        failure_message=(
+                            f"Could not read the organizer {organizer_id}: "
+                            f"{_failure_text(e)}"
+                        ),
+                        exception=e,
+                    )
+                continue
+            wanted_ids: set[str] = {transcript_id for _, transcript_id in wanted}
+            listed: dict[str, Transcript] = {}
+            listing_error: requests.RequestException | GraphRetriesExhausted | None = (
+                None
+            )
+            try:
+                # Graph pages the listing, so it stops once every wanted
+                # transcript is found rather than holding the whole lookback.
+                for transcript in fetch_transcripts(
+                    graph_client, organizer_id, None, None
+                ):
+                    if transcript.id in wanted_ids:
+                        listed[transcript.id] = transcript
+                    if len(listed) == len(wanted_ids):
+                        break
+            except (requests.RequestException, GraphRetriesExhausted) as e:
+                # Transcripts found before the refused page are still read.
+                listing_error = e
+            for failure, transcript_id in wanted:
+                transcript = listed.get(transcript_id)
+                if transcript is None and listing_error is not None:
+                    yield ConnectorFailure(
+                        failed_document=failure,
+                        failure_message=_listing_failure_message(
+                            organizer.email, listing_error
+                        ),
+                        exception=listing_error,
+                    )
+                    continue
+                if transcript is None:
+                    yield ConnectorFailure(
+                        failed_document=failure, failure_message=_NO_LONGER_LISTED
+                    )
+                    continue
+                try:
+                    yield self._document(organizer, transcript)
+                except (requests.RequestException, GraphRetriesExhausted) as e:
+                    yield ConnectorFailure(
+                        failed_document=failure,
+                        failure_message=_transcript_failure_message(
+                            organizer, transcript, e
+                        ),
+                        exception=e,
+                    )
 
     def slim(self, organizer: Organizer, walk: SlimWalk) -> Iterator[SlimDocument]:
         """One organizer's transcripts. A refused organizer lists nothing and
@@ -453,7 +620,9 @@ class TranscriptSource(OrganizerSource):
         except requests.HTTPError as e:
             if transcripts_disabled(e):
                 raise ConnectorValidationError(_TRANSCRIPTS_DISABLED) from e
-            if not listing.lost_access(e):
+            # A refusal with no cause is Microsoft's and passes lost_access, so
+            # the walk fails rather than prune transcripts the app can still read.
+            if unexplained_refusal(e) or not listing.lost_access(e):
                 raise
             logger.warning(
                 "Could not list the transcripts of %s, so their indexed "

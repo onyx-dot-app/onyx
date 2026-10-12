@@ -12,6 +12,7 @@ export const SWR_KEYS = {
 
   // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
+  opensearchResourceHealth: "/api/manage/admin/opensearch-health",
   version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ export const SWR_KEYS = {
   adminLlmProvidersPaged: "/api/admin/llm/provider?page_models=true",
   adminLlmProvider: (providerId: number) =>
     `/api/admin/llm/provider/${providerId}`,
+  llmRouterModels: "/api/admin/llm/router-models",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
   wellKnownLlmProviders: "/api/admin/llm/built-in/options",
@@ -77,6 +79,21 @@ export const SWR_KEYS = {
   adminConnectorStatus: "/api/manage/admin/connector/status",
   federatedConnectors: "/api/federated",
   connectorGroupRestrictions: "/api/manage/connector-group-restrictions",
+  // The add-connector form's check session, client state shared by the
+  // checks card, the configuration lock and the Connect button.
+  connectorCheckSession: (source: string) => [
+    "connector-check-session",
+    source,
+  ],
+  // The checks a run would hold for an unsaved connector form (a POST).
+  connectorCheckPlan: (
+    source: string,
+    accessType: string | null,
+    form: string
+  ) => ["connector-check-plan", source, accessType, form],
+  // One capability-check run for an unsaved connector form.
+  connectorCheckRun: (runId: string) =>
+    `/api/manage/admin/connector-checks/runs/${runId}`,
 
   // ── Google Connectors ─────────────────────────────────────────────────────
   googleConnectorCredentials: (service: "gmail" | "google-drive") =>
@@ -102,6 +119,9 @@ export const SWR_KEYS = {
   userProjects: "/api/user/projects",
   recentFiles: "/api/user/files/recent",
   userPats: "/api/user/pats",
+  oauthProviderGrants: "/api/oauth-provider/grants",
+  oauthProviderConsent: (requestId: string): string =>
+    `/api/oauth-provider/consent?request=${encodeURIComponent(requestId)}`,
   userPatScopes: "/api/user/pats/scopes",
   notifications: "/api/notifications",
   notificationsSummary: "/api/notifications/summary",
@@ -171,8 +191,6 @@ export const SWR_KEYS = {
   buildUserLibraryTree: "/api/build/user-library/tree",
   buildSessionFiles: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/files?path=`,
-  buildSessionOutputFiles: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/files?path=outputs`,
   buildSessionWebappInfo: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/webapp-info`,
   buildSessionArtifacts: (sessionId: string) =>

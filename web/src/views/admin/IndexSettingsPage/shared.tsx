@@ -27,14 +27,16 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 
 interface ApiKeyFieldProps {
   provider: EmbeddingProvider;
+  optional?: boolean;
 }
 
-export function ApiKeyField({ provider }: ApiKeyFieldProps) {
+export function ApiKeyField({ provider, optional = false }: ApiKeyFieldProps) {
   const t = useTranslations("admin.indexSettings");
 
   return (
     <InputVertical
       title={t("fields.apiKey.title")}
+      suffix={optional ? t("fields.optional.suffix") : undefined}
       withLabel="apiKey"
       subDescription={markdown(
         t("fields.apiKey.description", {
@@ -104,6 +106,7 @@ interface TextFieldProps {
   suffix?: string;
   placeholder?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  readOnly?: boolean;
 }
 
 export function TextField({
@@ -113,6 +116,7 @@ export function TextField({
   suffix,
   placeholder,
   inputMode,
+  readOnly = false,
 }: TextFieldProps) {
   return (
     <InputVertical
@@ -125,6 +129,7 @@ export function TextField({
         name={name}
         placeholder={placeholder}
         inputMode={inputMode}
+        variant={readOnly ? "readOnly" : undefined}
       />
     </InputVertical>
   );

@@ -157,7 +157,6 @@ def test_include_all(
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
-        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
@@ -205,18 +204,11 @@ def test_include_shared_drives_only_with_size_threshold(
     for name in retrieved_file_names - expected_file_names:
         print(f"retrieved but did not expect: {name}")
 
-    # 2 extra files from shared drive owned by non-admin and not shared with admin
-    # TODO: added a file in a "restricted" folder, which the connector sometimes succeeds at finding
-    # and adding. Specifically, our shared drive retrieval logic currently assumes that
-    # "having access to a shared drive" means that the connector has access to all files in the shared drive.
-    # therefore when a user successfully retrieves a shared drive, we mark it as "done". If that user's
-    # access is restricted for a folder in the shared drive, the connector will not retrieve that folder.
-    # If instead someone with FULL access to the shared drive retrieves it, the connector will retrieve
-    # the folder and all its files. There is currently no consistency to the order of assignment of users
-    # to shared drives, so this is a heisenbug. When we guarantee that restricted folders are retrieved,
-    # we can change this to 55
-    # Includes the group-organizer drive sentinel and the folder_1 shortcut target.
-    assert len(output.documents) in (54, 55)
+    # 2 extra files from shared drive owned by non-admin and not shared with admin.
+    # Each drive is listed by an organizer, so the restricted-folder file is
+    # always included. Also includes the group-organizer drive sentinel and the
+    # folder_1 shortcut target.
+    assert len(output.documents) == 55
 
 
 @patch(
@@ -258,11 +250,10 @@ def test_include_shared_drives_only(
         expected_file_ids=expected_file_ids,
     )
 
-    # 2 extra files from shared drive owned by non-admin and not shared with admin
-    # another one flaky for unknown reasons
-    # TODO: switch to 56 when restricted access issue is resolved
-    # Includes the group-organizer drive sentinel and the folder_1 shortcut target.
-    assert len(output.documents) in (55, 56)
+    # 2 extra files from shared drive owned by non-admin and not shared with admin,
+    # the restricted-folder file (listed by the organizer), the group-organizer
+    # drive sentinel, and the folder_1 shortcut target.
+    assert len(output.documents) == 56
 
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
@@ -280,14 +271,13 @@ def test_include_shared_drives_only(
             TEST_USER_1_EXTRA_DRIVE_2_ID,
             RESTRICTED_ACCESS_FOLDER_ID,
             GROUP_ORGANIZER_DRIVE_ID,
+            # No organizer, so its content manager lists it as a fallback.
+            NO_ORGANIZER_DRIVE_ID,
         )
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
-        # The no-organizer drive is only reached when the connector happens to
-        # assign its lone content manager to it, so its presence is not stable.
-        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID, NO_ORGANIZER_DRIVE_ID},
     )
 
 
@@ -386,12 +376,11 @@ def test_drive_one_only(
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
         include_drive_2=False,
-        include_restricted_folder=False,
+        include_restricted_folder=True,
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
-        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 
@@ -435,13 +424,12 @@ def test_folder_and_shared_drive(
     expected_nodes = get_expected_hierarchy_for_shared_drives(
         include_drive_1=True,
         include_drive_2=True,
-        include_restricted_folder=False,
+        include_restricted_folder=True,
     )
     expected_nodes.pop(SECTIONS_FOLDER_ID, None)
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,
-        ignorable_node_ids={RESTRICTED_ACCESS_FOLDER_ID},
     )
 
 

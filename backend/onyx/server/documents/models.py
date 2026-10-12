@@ -19,6 +19,7 @@ from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
+from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
@@ -159,6 +160,8 @@ class CredentialSnapshot(CredentialBase):
     id: int
     user_id: UUID | None
     user_email: str | None = None
+    # The creator's display name; None when they never set one.
+    user_personal_name: str | None = None
     time_created: datetime
     time_updated: datetime
 
@@ -200,6 +203,9 @@ class CredentialSnapshot(CredentialBase):
             credential_json=credential_json_value,
             user_id=credential.user_id,
             user_email=credential.user.email if credential.user else None,
+            user_personal_name=(
+                credential.user.personal_name if credential.user else None
+            ),
             admin_public=credential.admin_public,
             time_created=credential.time_created,
             time_updated=credential.time_updated,
@@ -240,6 +246,9 @@ class IndexAttemptSnapshot(BaseModel):
     time_updated: str
     poll_range_start: datetime | None = None
     poll_range_end: datetime | None = None
+    # A one-off run over poll_range_start..poll_range_end outside the pair's
+    # incremental cursor; it does not drive the pair's status.
+    is_backfill: bool = False
 
     @classmethod
     def from_index_attempt_db_model(
@@ -263,6 +272,7 @@ class IndexAttemptSnapshot(BaseModel):
             time_updated=index_attempt.time_updated.isoformat(),
             poll_range_start=index_attempt.poll_range_start,
             poll_range_end=index_attempt.poll_range_end,
+            is_backfill=index_attempt.is_backfill,
         )
 
 
@@ -484,6 +494,32 @@ class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
     total_items: int
 
 
+class PendingBackfillSnapshot(BaseModel):
+    """A backfill an applied edit requested, until an attempt of it succeeds.
+    The beat retries a failed one after ``retry_after``."""
+
+    window_start: datetime
+    window_end: datetime
+    requested_at: datetime
+    # It runs with a config other than the saved one.
+    scoped: bool
+    attempt_id: int | None
+    failure_count: int
+    retry_after: datetime | None
+
+    @classmethod
+    def from_pending(cls, pending: PendingBackfill) -> "PendingBackfillSnapshot":
+        return cls(
+            window_start=pending.backfill.window_start,
+            window_end=pending.backfill.window_end,
+            requested_at=pending.requested_at,
+            scoped=pending.backfill.connector_config_override is not None,
+            attempt_id=pending.attempt_id,
+            failure_count=pending.failure_count,
+            retry_after=pending.retry_after,
+        )
+
+
 class CCPairFullInfo(BaseModel):
     id: int
     name: str
@@ -532,6 +568,7 @@ class CCPairFullInfo(BaseModel):
 
     # Set while the first index attempt waits on the capability checks.
     indexing_hold: IndexingHold | None = None
+    pending_backfills: list[PendingBackfillSnapshot]
 
     @classmethod
     def _get_last_full_permission_sync(
@@ -661,6 +698,10 @@ class CCPairFullInfo(BaseModel):
             auto_sync_options=cc_pair_model.auto_sync_options,
             processing_mode=cc_pair_model.processing_mode,
             indexing_hold=indexing_hold,
+            pending_backfills=[
+                PendingBackfillSnapshot.from_pending(pending)
+                for pending in cc_pair_model.pending_backfills
+            ],
         )
 
 
@@ -784,6 +825,26 @@ def manage_access_by_group(
     return {entry.group_id: entry.role for entry in entries}
 
 
+NAMES_A_CREDENTIAL = "Give credential_id, credential_json or both."
+
+
+def names_a_credential(
+    credential_id: int | None, credential_json: dict[str, Any] | None
+) -> bool:
+    """A connector form's request names a saved credential or draft, a new
+    account's values, or both (see onyx/server/documents/draft_credentials.py)."""
+    return credential_id is not None or credential_json is not None
+
+
+class CredentialSharing(BaseModel):
+    """Who may reuse a new credential: ``CredentialBase``'s sharing fields."""
+
+    admin_public: bool = True
+    curator_public: bool = False
+    groups: list[int] = Field(default_factory=list)
+    name: str | None = None
+
+
 class ConnectorCredentialPairMetadata(BaseModel):
     name: str
     access_type: AccessType
@@ -808,6 +869,28 @@ class ConnectorCredentialPairMetadata(BaseModel):
         if self.manage_access:
             return manage_access_by_group(self.manage_access)
         return dict.fromkeys(self.groups, ConnectorManageRole.EDITOR)
+
+
+class ConnectorWithCredentialCreateRequest(BaseModel):
+    """Creates a connector and pairs it with a credential in one request: a
+    saved credential, or a new account that this request saves (see
+    onyx/server/documents/draft_credentials.py)."""
+
+    connector: ConnectorUpdateRequest
+    pairing: ConnectorCredentialPairMetadata
+    # A saved credential or the user's draft, a new account's values, or a
+    # draft with its changed values.
+    credential_id: int | None = None
+    credential_json: dict[str, Any] | None = None
+    # How a new account (a draft) is shared once saved. Rejected for a saved
+    # credential.
+    credential_sharing: CredentialSharing | None = None
+
+    @model_validator(mode="after")
+    def _names_a_credential(self) -> Self:
+        if not names_a_credential(self.credential_id, self.credential_json):
+            raise ValueError(NAMES_A_CREDENTIAL)
+        return self
 
 
 class CCStatusUpdateRequest(BaseModel):

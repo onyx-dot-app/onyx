@@ -45,7 +45,7 @@ export type SelectOptions = (SelectOption | SelectDivider)[];
  * ComboBoxes); a `"button"` trigger has nothing to type and is pressed to
  * open the full set, like a native `<select>` (the Selects).
  */
-export type DropdownTrigger = "type-in" | "button";
+export type FieldTrigger = "type-in" | "button";
 
 // ---------------------------------------------------------------------------
 // Single arity
@@ -140,7 +140,7 @@ export type InputSingleSelectProps = InputSingleBaseProps & {
 };
 
 /** The internal single implementation: either public prop set plus its trigger. */
-export type SingleDropdownProps =
+export type SingleSelectFieldProps =
   | (InputSingleComboBoxProps & { trigger: "type-in" })
   | (InputSingleSelectProps & { trigger: "button" });
 
@@ -199,6 +199,6 @@ export type InputMultiSelectProps = InputMultiBaseProps & {
 };
 
 /** The internal multi implementation: either public prop set plus its trigger. */
-export type MultiDropdownProps =
+export type MultiSelectFieldProps =
   | (InputMultiComboBoxProps & { trigger: "type-in" })
   | (InputMultiSelectProps & { trigger: "button" });

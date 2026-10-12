@@ -14,6 +14,7 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import (
     DISABLE_INDEX_UPDATE_ON_SWAP,
     DISABLE_VECTOR_DB,
+    ENABLE_CONTEXTUAL_RAG,
     OLD_INDEX_RECLAIM_ENABLED,
 )
 from onyx.context.search.models import (
@@ -41,6 +42,7 @@ from onyx.db.llm import (
     update_default_contextual_model,
     update_no_default_contextual_rag_provider,
 )
+from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import IndexModelStatus, SearchSettings, User
 from onyx.db.port_attempt import (
     ReindexErrorRow,
@@ -79,8 +81,10 @@ from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     update_unstructured_api_key,
 )
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
+from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.server.manage.models import (
     FullModelVersionResponse,
     UnstructuredApiKeyRequest,
@@ -94,8 +98,13 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import ALT_INDEX_SUFFIX, MULTI_TENANT
+from shared_configs.configs import (
+    ALT_INDEX_SUFFIX,
+    MULTI_TENANT,
+    PRESERVED_SEARCH_FIELDS,
+)
 from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.enums import EmbeddingProvider
 
 router = APIRouter(prefix="/search-settings")
 logger = setup_logger()
@@ -130,10 +139,13 @@ def set_new_search_settings(
         )
 
         if cloud_provider is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                f"No embedding provider exists for cloud embedding type {search_settings_new.provider_type}",
             )
+
+        if search_settings_new.provider_type == EmbeddingProvider.BIFROST:
+            _validate_gateway_embedding_model(search_settings_new, cloud_provider)
 
     validate_contextual_rag_model(
         model_configuration_id=search_settings_new.contextual_rag_model_configuration_id,
@@ -273,6 +285,36 @@ def set_new_search_settings(
     # Atomic: FUTURE row, its seeds, and the reclaim intent become visible together.
     db_session.commit()
     return IdReturn(id=new_search_settings.id)
+
+
+def _validate_gateway_embedding_model(
+    search_settings_new: SearchSettingsCreationRequest,
+    cloud_provider: CloudEmbeddingProviderModel,
+) -> None:
+    """A gateway accepts any model ID, so prove the model embeds at the set dimension.
+
+    Rejects a chat model or a wrong dimension before indexing starts.
+    """
+    api_key: str | None = (
+        cloud_provider.api_key.get_value(apply_mask=False)
+        if cloud_provider.api_key is not None
+        else None
+    )
+    dimension: int = probe_embedding_dimension(
+        provider_type=cloud_provider.provider_type,
+        api_key=api_key,
+        api_url=cloud_provider.api_url,
+        model_name=search_settings_new.model_name,
+        auth=build_embedding_auth(cloud_provider.provider_type, api_key),
+        reduced_dimension=search_settings_new.reduced_dimension,
+    )
+    if dimension != search_settings_new.final_embedding_dim:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"The model {search_settings_new.model_name} returns {dimension}-dimension "
+            f"vectors, but the search settings expect "
+            f"{search_settings_new.final_embedding_dim}.",
+        )
 
 
 def _validate_vector_quantization_supported(
@@ -641,28 +683,35 @@ def get_all_search_settings(
     )
 
 
-def _validate_contextual_model_only_update(
+def _validate_forward_only_update(
     current: SearchSettings,
     requested: SavedSearchSettings,
-) -> int:
-    model_configuration_id = requested.contextual_rag_model_configuration_id
-    if model_configuration_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Select a Contextual Retrieval model.",
-        )
+) -> None:
+    """Rejects anything but the one change PRESENT takes without a re-index: a
+    new Contextual Retrieval model, or Contextual Retrieval turned off with
+    its model left as it is."""
+    if requested.enable_contextual_rag:
+        if requested.contextual_rag_model_configuration_id is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "Select a Contextual Retrieval model.",
+            )
+        model_configuration_id = requested.contextual_rag_model_configuration_id
+    else:
+        model_configuration_id = current.contextual_rag_model_configuration_id
 
     expected = SavedSearchSettings.from_db_model(current).model_copy(
         update={
+            "enable_contextual_rag": requested.enable_contextual_rag,
             "contextual_rag_model_configuration_id": model_configuration_id,
         }
     )
     if requested != expected:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Only the Contextual Retrieval model can be updated without re-indexing.",
+            "Only the Contextual Retrieval model can be changed, or Contextual "
+            "Retrieval turned off, without re-indexing.",
         )
-    return model_configuration_id
 
 
 @router.post("/update-inference-settings")
@@ -671,6 +720,9 @@ def update_saved_search_settings(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> ContextualRagModelUpdateResponse:
+    """Applies a Contextual Retrieval change to PRESENT without a re-index: a
+    new model, or off. Documents already indexed keep their generated context
+    until they are updated or re-indexed."""
     # Disallow contextual RAG for cloud deployments
     if MULTI_TENANT and search_settings.enable_contextual_rag:
         raise OnyxError(
@@ -678,43 +730,59 @@ def update_saved_search_settings(
             "Contextual RAG disabled in Onyx Cloud",
         )
 
+    # Locked before the guards, so a re-index submitted meanwhile (it locks
+    # PRESENT too) cannot slip between the check and the write.
+    current = get_current_search_settings(db_session, for_update=True)
     if (
         get_secondary_search_settings(db_session) is not None
         or _active_port_settings(db_session) is not None
     ):
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
-            "A re-index is in progress. Wait for it to finish before updating the "
-            "Contextual Retrieval model.",
+            "A re-index is in progress. Wait for it to finish before changing "
+            "Contextual Retrieval.",
         )
 
-    current = get_current_search_settings(db_session)
     if not current.enable_contextual_rag:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Contextual Retrieval must be enabled before its model can be updated "
+            "Contextual Retrieval must be enabled before it can be changed "
             "without re-indexing.",
         )
 
-    model_configuration_id = _validate_contextual_model_only_update(
-        current, search_settings
-    )
-    validate_contextual_rag_model(
-        model_configuration_id=model_configuration_id,
-        db_session=db_session,
-        enable_contextual_rag=True,
-    )
+    _validate_forward_only_update(current, search_settings)
+    if search_settings.enable_contextual_rag:
+        validate_contextual_rag_model(
+            model_configuration_id=search_settings.contextual_rag_model_configuration_id,
+            db_session=db_session,
+            enable_contextual_rag=True,
+        )
+    elif ENABLE_CONTEXTUAL_RAG:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The ENABLE_CONTEXTUAL_RAG environment variable keeps Contextual "
+            "Retrieval on. Unset it and restart to turn Contextual Retrieval off.",
+        )
 
     previous_model_configuration_id = current.contextual_rag_model_configuration_id
     update_current_search_settings(
-        search_settings=search_settings, db_session=db_session
+        search_settings=search_settings,
+        db_session=db_session,
+        # The flag is normally fixed for the life of an index. Turning it off
+        # is the one change this endpoint applies to it.
+        preserved_fields=[
+            field
+            for field in PRESERVED_SEARCH_FIELDS
+            if field != "enable_contextual_rag"
+        ],
     )
     _sync_default_contextual_model(db_session)
 
     logger.info(
-        "Updated current contextual retrieval model from %s to %s",
+        "Updated current contextual retrieval: enabled=%s model %s -> %s",
+        search_settings.enable_contextual_rag,
         previous_model_configuration_id,
-        model_configuration_id,
+        search_settings.contextual_rag_model_configuration_id,
     )
     emit_audit_event(
         AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE,
@@ -724,11 +792,16 @@ def update_saved_search_settings(
         resource_id=current.id,
         extra={
             "previous_model_configuration_id": previous_model_configuration_id,
-            "model_configuration_id": model_configuration_id,
+            "model_configuration_id": search_settings.contextual_rag_model_configuration_id,
+            **(
+                {}
+                if search_settings.enable_contextual_rag
+                else {"enable_contextual_rag": False}
+            ),
         },
     )
     return ContextualRagModelUpdateResponse(
-        contextual_rag_model_configuration_id=model_configuration_id
+        contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id
     )
 
 

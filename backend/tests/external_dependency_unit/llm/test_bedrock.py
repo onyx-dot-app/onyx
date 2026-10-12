@@ -58,7 +58,6 @@ def test_nova_streaming_does_not_leak_thinking_tags(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Solve this step by step. Wrap your reasoning in "
                 "<thinking>...</thinking> tags first, then give the final "

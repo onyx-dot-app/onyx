@@ -9,9 +9,9 @@ import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
 async function setAutoScroll(page: Page, enabled: boolean) {
   // Open user dropdown menu (same pattern as other tests)
   await page.locator("#onyx-user-dropdown").click();
-  await page.getByText("Settings").first().click();
-  // Wait for dialog to appear
-  await page.waitForSelector('[role="dialog"]', { state: "visible" });
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+  // The settings page is up.
+  await expect(page.getByText("Full Name")).toBeVisible();
 
   // Navigate to Chat Preferences tab
   await page

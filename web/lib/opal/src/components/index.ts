@@ -124,6 +124,31 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Fold */
+export { Fold, type FoldProps } from "@opal/components/fold/components";
+
+/* IconTooltip */
+export {
+  IconTooltip,
+  type IconTooltipProps,
+  type IconTooltipStatus,
+} from "@opal/components/icon-tooltip/components";
+
+/* OverflowText */
+export {
+  OverflowText,
+  type OverflowTextProps,
+} from "@opal/components/overflow-text/components";
+
+/* Log */
+export {
+  Log,
+  type LogProps,
+  type LogStatus,
+  type LogVariant,
+  type LogWeight,
+} from "@opal/components/log/components";
+
 /* Divider */
 export {
   Divider,
@@ -200,8 +225,16 @@ export {
 
 /* Table */
 export { Table } from "@opal/components/table/components";
-export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
+export type {
+  TableColumn,
+  TableQualifierColumn,
+  TableFieldColumn,
+  TableValueColumn,
+  TableDisplayColumn,
+  TableActionsColumn,
+  TableCellValue,
+} from "@opal/components/table/types";
 
 /* ShadowDiv */
 export {
@@ -209,6 +242,7 @@ export {
   type ShadowDivProps,
   type ShadowDirection,
   type ShadowDivVariant,
+  type ShadowDivVariants,
 } from "@opal/components/shadow-div/components";
 
 /* Popover */
@@ -256,6 +290,38 @@ export {
   InputDatePicker,
   type InputDatePickerProps,
 } from "@opal/components/inputs/chrono/input-date-picker/components";
+
+/* Dropdown */
+export {
+  Dropdown,
+  type DropdownProps,
+  type DropdownAnchorProps,
+  type DropdownTriggerProps,
+  type DropdownDataProps,
+  type DropdownTriggerBehavior,
+  type DropdownTabKey,
+  type DropdownVirtualAnchor,
+} from "@opal/components/dropdown/components";
+export {
+  type DropdownItem,
+  type DropdownMenuItem,
+  type DropdownRow,
+  type DropdownMenuRow,
+  type DropdownOption,
+  type DropdownAction,
+  type DropdownToggle,
+  type DropdownCustom,
+  type DropdownGroup,
+  type DropdownRowState,
+  type DropdownRowProps,
+  type DropdownSearch,
+  type DropdownView,
+  type DropdownViews,
+  type DropdownWidth,
+  type DropdownAlign,
+  type DropdownSide,
+} from "@opal/components/dropdown/types";
+export { useDropdownViews } from "@opal/components/dropdown/context";
 
 /* Dropdowns: Select (pick only) and ComboBox (type to filter), single and multi */
 export { InputSingleSelect } from "@opal/components/inputs/dropdowns/input-single-select/components";

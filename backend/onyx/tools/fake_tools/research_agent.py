@@ -7,7 +7,6 @@ from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import create_tool_call_failure_messages
 from onyx.chat.citation_processor import (
     CitationMapping,
-    CitationMode,
     DynamicCitationProcessor,
 )
 from onyx.chat.citation_utils import (
@@ -17,27 +16,33 @@ from onyx.chat.citation_utils import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.llm_loop import construct_message_history
 from onyx.chat.llm_step import run_llm_step, run_llm_step_pkt_generator
-from onyx.chat.models import ChatMessageSimple, LlmStepResult, ToolCallSimple
+from onyx.chat.models import (
+    ChatMessageSimple,
+    CitationMode,
+    LlmStepResult,
+    ToolCallSimple,
+)
 from onyx.chat.prompt_utils import build_language_section, with_language_section
 from onyx.configs.chat_configs import DR_REPORT_LLM_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.dr_mock_tools import (
-    RESEARCH_AGENT_TASK_KEY,
-    THINK_TOOL_RESPONSE_MESSAGE,
-    THINK_TOOL_RESPONSE_TOKEN_COUNT,
-    get_research_agent_additional_tool_definitions,
-)
 from onyx.deep_research.models import (
     CombinedResearchAgentCallResult,
     ResearchAgentCallFailure,
     ResearchAgentCallResult,
+)
+from onyx.deep_research.tool_definitions import (
+    RESEARCH_AGENT_TASK_KEY,
+    THINK_TOOL_RESPONSE_MESSAGE,
+    THINK_TOOL_RESPONSE_TOKEN_COUNT,
+    get_research_agent_additional_tool_definitions,
 )
 from onyx.deep_research.utils import (
     check_special_tool_calls,
     create_think_tool_token_processor,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_request import serialize_tools
 from onyx.llm.models import ReasoningEffort, ToolChoiceOptions
 from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION,
@@ -378,8 +383,10 @@ def run_research_agent_call(
                 llm_step_result, has_reasoned = run_llm_step(
                     emitter=emitter,
                     history=constructed_history,
-                    tool_definitions=[tool.tool_definition() for tool in current_tools]
-                    + research_agent_tools,
+                    tool_definitions=serialize_tools(
+                        [tool.tool_definition() for tool in current_tools]
+                        + research_agent_tools
+                    ),
                     tool_choice=ToolChoiceOptions.REQUIRED,
                     llm=llm,
                     placement=Placement(
@@ -602,7 +609,11 @@ def run_research_agent_call(
                             or most_recent_reasoning,
                             tool_call_arguments=tc.tool_args,
                             tool_call_response=tool_response.llm_facing_response,
-                            search_docs=displayed_docs or search_docs,
+                            search_docs=(
+                                displayed_docs
+                                if displayed_docs is not None
+                                else search_docs
+                            ),
                             generated_images=None,
                         )
                         state_container.add_tool_call(tool_call_info)
@@ -753,6 +764,7 @@ if __name__ == "__main__":
     from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
     from onyx.db.models import User
     from onyx.db.persona import get_default_behavior_persona
+    from onyx.db.tools import capture_persona_tool_configuration
     from onyx.llm.factory import get_default_llm, get_llm_token_counter
     from onyx.llm.model_capabilities import model_is_reasoning_model
     from onyx.server.query_and_chat.placement import Placement
@@ -787,7 +799,7 @@ if __name__ == "__main__":
         # No chat session exists here, so skip the tools that write
         # session-scoped generated files.
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=emitter,
             user=user,

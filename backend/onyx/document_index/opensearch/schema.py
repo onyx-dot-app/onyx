@@ -1,7 +1,7 @@
 import hashlib
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, Self
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -40,6 +40,8 @@ from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 TITLE_FIELD_NAME = "title"
+# No longer written or mapped. Indices created before its removal still store
+# it, so searches keep excluding it from _source.
 TITLE_VECTOR_FIELD_NAME = "title_vector"
 CONTENT_FIELD_NAME = "content"
 CONTENT_VECTOR_FIELD_NAME = "content_vector"
@@ -381,7 +383,6 @@ class DocumentChunk(DocumentChunkWithoutVectors):
 
     model_config = {"frozen": True}
 
-    title_vector: list[float] | None = None
     content_vector: list[float]
 
     def __str__(self) -> str:
@@ -390,15 +391,6 @@ class DocumentChunk(DocumentChunkWithoutVectors):
             f"content length={len(self.content)}, content vector length={len(self.content_vector)}, "
             f"tenant_id={self.tenant_id.tenant_id})"
         )
-
-    @model_validator(mode="after")
-    def check_title_and_title_vector_are_consistent(self) -> Self:
-        # title and title_vector should both either be None or not.
-        if self.title is not None and self.title_vector is None:
-            raise ValueError("Bug: Title vector must not be None if title is not None.")
-        if self.title_vector is not None and self.title is None:
-            raise ValueError("Bug: Title must not be None if title vector is not None.")
-        return self
 
 
 class DocumentSchema:
@@ -420,10 +412,14 @@ class DocumentSchema:
         parameters: dict[str, Any] = {"ef_construction": EF_CONSTRUCTION, "m": M}
         lucene_scalar_quantization = LUCENE_SCALAR_QUANTIZATION.get(vector_quantization)
         if lucene_scalar_quantization is not None:
-            parameters["encoder"] = {
-                "name": "sq",
-                "parameters": {"bits": lucene_scalar_quantization.bits},
+            encoder_parameters: dict[str, Any] = {
+                "bits": lucene_scalar_quantization.bits
             }
+            if lucene_scalar_quantization.confidence_interval is not None:
+                encoder_parameters["confidence_interval"] = (
+                    lucene_scalar_quantization.confidence_interval
+                )
+            parameters["encoder"] = {"name": "sq", "parameters": encoder_parameters}
         return {
             "name": "hnsw",
             "space_type": "cosinesimil",
@@ -502,13 +498,6 @@ class DocumentSchema:
                     "store": True,
                     "analyzer": OPENSEARCH_TEXT_ANALYZER,
                     "index_options": "offsets",
-                },
-                TITLE_VECTOR_FIELD_NAME: {
-                    "type": "knn_vector",
-                    "dimension": vector_dimension,
-                    "method": DocumentSchema._get_knn_vector_method(
-                        vector_quantization
-                    ),
                 },
                 CONTENT_VECTOR_FIELD_NAME: {
                     "type": "knn_vector",

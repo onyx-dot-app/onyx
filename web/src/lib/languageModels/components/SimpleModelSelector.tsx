@@ -7,7 +7,7 @@ import type {
   SelectOption,
   SelectOptions,
 } from "@opal/components/inputs/dropdowns/types";
-import { optionMatchesSearch } from "@opal/components/inputs/dropdowns/shared";
+import { optionMatchesSearch } from "@opal/components/dropdown/model";
 import {
   buildModelSelectOptions,
   fromSelectValue,

@@ -12,56 +12,8 @@
   @apply flex flex-col w-full;
 }
 
-/* The bottom section animates its height open and closed. The 0.25rem above
-   it lives inside, so it collapses with the section instead of jumping. */
-.opal-message-card-bottom {
-  display: grid;
-  grid-template-rows: 1fr;
-}
-
-.opal-message-card-bottom[data-state="closed"] {
-  grid-template-rows: 0fr;
-}
-
-/* No padding on the clipped box: a grid row at 0fr shrinks an item only down
-   to its padding, so the space sits one level in. */
-.opal-message-card-bottom-inner {
-  min-height: 0;
-  overflow: hidden;
-}
-
+/* The 0.25rem above the bottom section lives inside its fold, so it closes
+   with the section. */
 .opal-message-card-bottom-content {
   @apply pt-1;
-}
-
-.opal-message-card-bottom[data-animate][data-state="open"] {
-  animation: opal-message-card-bottom-open 200ms ease-out;
-}
-
-.opal-message-card-bottom[data-animate][data-state="closed"] {
-  animation: opal-message-card-bottom-close 200ms ease-in;
-}
-
-@keyframes opal-message-card-bottom-open {
-  from {
-    grid-template-rows: 0fr;
-  }
-  to {
-    grid-template-rows: 1fr;
-  }
-}
-
-@keyframes opal-message-card-bottom-close {
-  from {
-    grid-template-rows: 1fr;
-  }
-  to {
-    grid-template-rows: 0fr;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .opal-message-card-bottom[data-animate] {
-    animation: none;
-  }
 }

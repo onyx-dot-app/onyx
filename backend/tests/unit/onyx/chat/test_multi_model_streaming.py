@@ -40,7 +40,7 @@ CONTENT_FILTER_FINISH_REASON = "content_filter"
 def _restore_ee_version() -> Generator[None, None, None]:
     """Reset EE global state after each test.
 
-    Importing onyx.chat.process_message triggers set_is_ee_based_on_env_variable()
+    Importing onyx.chat.process_message triggers set_is_ee_if_available()
     (via the celery client import chain).  Without this fixture, the EE flag stays
     True for the rest of the session and breaks unrelated tests that mock Confluence
     or other connectors and assume EE is disabled.
@@ -258,6 +258,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     # Real int so the min() over model windows in _persist_model_outcome works.
     for mock_llm in setup.llms:
         mock_llm.config.max_input_tokens = 32_000
+        mock_llm.redact_error.side_effect = lambda text: text
     setup.model_display_names = [f"model-{i}" for i in range(n_models)]
     setup.check_is_connected = MagicMock(return_value=True)
     setup.reserved_messages = [MagicMock() for _ in range(n_models)]
@@ -1031,8 +1032,6 @@ class TestRunModels:
 def test_worker_traceback_only_reaches_development_clients() -> None:
     for dev_mode in (False, True):
         setup = _make_setup()
-        setup.llms[0].config.api_key = None
-        setup.llms[0].config.custom_config = None
         setup.llms[0].config.model_name = "test-model"
         setup.llms[0].config.model_provider = "test-provider"
         with (

@@ -624,7 +624,8 @@ class GithubConnector(
         branch: str | None = None,
     ) -> None:
         self.repo_owner = repo_owner
-        self.repositories = repositories
+        # None means every repository of the owner.
+        self.repositories = (repositories or "").strip() or None
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues

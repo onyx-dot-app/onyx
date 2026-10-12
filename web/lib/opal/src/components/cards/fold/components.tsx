@@ -2,11 +2,8 @@
 
 import "@opal/components/cards/shared.css";
 import "@opal/components/cards/fold/styles.css";
-import { useEffect, useState } from "react";
+import { Fold } from "@opal/components/fold/components";
 import type { BorderVariants, StatusVariants } from "@opal/types";
-
-/** Matches the fold transition in `styles.css`. */
-const FOLD_DURATION_MS = 200;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,45 +71,32 @@ function CardFold({
   contentHeight = 80,
   children,
 }: CardFoldProps) {
-  // True from the moment the fold opens until its closing animation ends,
-  // which is the window where the children must stay mounted even though
-  // `expanded` has already gone false.
-  const [closing, setClosing] = useState(false);
-  const mounted = expanded || closing;
-
-  useEffect(() => {
-    if (expanded) {
-      setClosing(true);
-      return;
-    }
-    const timeout = setTimeout(() => setClosing(false), FOLD_DURATION_MS);
-    return () => clearTimeout(timeout);
-  }, [expanded]);
+  const frameStyle: React.CSSProperties & Record<"--opal-card-radius", string> =
+    { "--opal-card-radius": radius };
 
   return (
-    <div
-      className="opal-card-fold"
-      data-expanded={expanded ? "true" : "false"}
-      // The fold itself stays, so the grid row has something to animate.
-      // While it closes it must not be reachable either.
-      aria-hidden={!expanded || undefined}
-      inert={!expanded || undefined}
-    >
-      <div className="opal-card-fold-inner">
+    // The bordered body is the fold's frame: it grows with the height and
+    // stays visible, and only the content inside it fades.
+    <Fold
+      open={expanded}
+      frame={(content) => (
         <div
           className="opal-card-fold-body"
-          style={{
-            borderBottomLeftRadius: radius,
-            borderBottomRightRadius: radius,
-          }}
+          style={frameStyle}
           data-border={border}
           data-opal-status-border={borderColor}
-          data-content-height={contentHeight}
         >
-          {mounted ? children : null}
+          <div
+            className="opal-card-fold-scroll"
+            data-content-height={contentHeight}
+          >
+            {content}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    >
+      {children}
+    </Fold>
   );
 }
 

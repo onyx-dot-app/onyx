@@ -9,6 +9,7 @@ from onyx.context.search.models import SearchDocsResponse
 from onyx.context.search.utils import convert_inference_sections_to_search_docs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
@@ -16,6 +17,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
 )
+from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ToolCallException,
@@ -83,7 +85,7 @@ def _normalize_queries_input(raw: Any) -> list[str]:
 
 
 class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
-    NAME = "web_search"
+    NAME = WEB_SEARCH_TOOL_NAME
     DESCRIPTION = "Search the web for information."
     DISPLAY_NAME = "Web Search"
 
@@ -144,27 +146,22 @@ class WebSearchTool(Tool[WebSearchToolOverrideKwargs]):
             provider = fetch_active_web_search_provider(session)
             return provider is not None
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": (
-                    "Search the web for information. Returns a list of search results with titles, metadata, and snippets."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        QUERIES_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "One or more queries to look up on the web. Must contain only printable characters",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description="Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    QUERIES_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "One or more queries to look up on the web. Must contain only printable characters",
                     },
-                    "required": [QUERIES_FIELD],
                 },
+                "required": [QUERIES_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(

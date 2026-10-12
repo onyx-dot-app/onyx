@@ -87,6 +87,7 @@ from onyx.federated_connectors.federated_retrieval import (
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolDefinition
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import (
@@ -107,6 +108,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
 )
+from onyx.tools.constants import INTERNAL_SEARCH_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatMinimalTextMessage,
@@ -223,7 +225,7 @@ def _estimate_section_tokens(
     return content_tokens + METADATA_TOKEN_ESTIMATE
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
@@ -269,7 +271,7 @@ def _trim_sections_by_tokens(
 
 
 class SearchTool(Tool[SearchToolOverrideKwargs]):
-    NAME = "internal_search"
+    NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
     DESCRIPTION = "Search connected applications for information."
 
@@ -560,30 +562,27 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     """For explicit tool calling"""
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        QUERIES_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": (
-                                "List of search queries to execute, typically a single query. "
-                                "Query expansion and filter extraction steps will be run "
-                                "automatically downstream, do not include time or source type "
-                                "scoping details in your query."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    QUERIES_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of search queries to execute, typically a single query. "
+                            "Query expansion and filter extraction steps will be run "
+                            "automatically downstream, do not include time or source type "
+                            "scoping details in your query."
+                        ),
                     },
-                    "required": [QUERIES_FIELD],
                 },
+                "required": [QUERIES_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
@@ -595,7 +594,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @log_function_time(
         func_name="Search tool - query expansion + scope decision",
-        print_only=True,
         debug_only=True,
     )
     def _expand_queries_and_decide_scope(
@@ -658,7 +656,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             time_filter=self._time_filter,
         )
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     def run(
         self,
         placement: Placement,

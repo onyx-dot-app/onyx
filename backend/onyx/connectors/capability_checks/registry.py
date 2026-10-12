@@ -14,6 +14,7 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.confluence.capability_checks import (
     build_confluence_indexing_checks,
 )
+from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
 from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
 from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
 from onyx.connectors.slack.capability_checks import build_slack_indexing_checks
@@ -28,6 +29,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.CONFLUENCE: build_confluence_indexing_checks(),
     DocumentSource.ONEDRIVE: build_onedrive_indexing_checks(),
     DocumentSource.OUTLOOK: build_outlook_indexing_checks(),
+    DocumentSource.JIRA: build_jira_indexing_checks(),
 }
 
 

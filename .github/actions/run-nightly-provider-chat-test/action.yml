@@ -59,7 +59,6 @@ runs:
       run: |
         cat <<EOF2 > deployment/docker_compose/.env
         COMPOSE_PROFILES=s3-filestore
-        ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
         AUTH_TYPE=basic
         POSTGRES_POOL_PRE_PING=true
         POSTGRES_USE_NULL_POOL=true

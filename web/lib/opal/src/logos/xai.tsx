@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgXai = ({ size, ...props }: IconProps) => (
+const SvgXAI = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -14,4 +14,4 @@ const SvgXai = ({ size, ...props }: IconProps) => (
     />
   </svg>
 );
-export default SvgXai;
+export default SvgXAI;

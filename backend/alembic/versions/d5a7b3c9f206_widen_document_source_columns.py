@@ -1,7 +1,7 @@
 """Widen source columns for Jira Service Management.
 
 Revision ID: d5a7b3c9f206
-Revises: b3e7c1d9a4f2
+Revises: b6d920407aa6
 """
 
 from collections.abc import Sequence
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "d5a7b3c9f206"
-down_revision: str | None = "b3e7c1d9a4f2"
+down_revision: str | None = "b6d920407aa6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

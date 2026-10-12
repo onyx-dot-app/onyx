@@ -110,7 +110,8 @@ const CONTENT_MD_PRESETS: Record<ContentMdSizePreset, ContentMdPresetConfig> = {
     iconSize: "1.25rem",
     editButtonSize: "sm",
     editButtonPadding: "p-0",
-    optionalFont: "main-content-muted",
+    // A step smaller than the title, the same suffix font as main-ui.
+    optionalFont: "main-ui-muted",
     auxIconSize: "1.25rem",
     descriptionIndent: "1.625rem",
   },

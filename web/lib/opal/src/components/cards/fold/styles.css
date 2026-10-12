@@ -4,33 +4,13 @@
    Card fold — the animating body of an expandable card.
 
    Structure:
-     .opal-card-fold            (grid 0fr↔1fr, opacity fade, overflow clip)
-       .opal-card-fold-inner    (min-height:0, clips the grid child)
-         .opal-card-fold-body   (border minus its top edge, bottom rounding)
+     .opal-fold                 (the animation; see components/fold/)
+       .opal-card-fold-body     (the frame: the edge, bottom rounding)
+         .opal-card-fold-scroll (the height cap)
+           .opal-fold-grid
 
-   Shared by Card and SelectCard. Pure CSS: no JS state machine, no Radix.
+   Shared by Card and SelectCard.
 ============================================================================ */
-
-.opal-card-fold {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  overflow: hidden;
-  transition:
-    grid-template-rows 200ms ease-out,
-    opacity 200ms ease-out;
-}
-
-.opal-card-fold[data-expanded="true"] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-}
-
-/* Clips the grid child so it collapses to zero cleanly. */
-.opal-card-fold-inner {
-  @apply overflow-hidden;
-  min-height: 0;
-}
 
 /* The background stays transparent so the page shows through the fold and
    keeps it distinct from the header. */
@@ -38,21 +18,52 @@
   @apply w-full bg-transparent;
 }
 
-.opal-card-fold-body[data-content-height="80"] {
+/* Scrolls inside the body, so the scroll box does not clip the edge. */
+.opal-card-fold-scroll {
+  border-bottom-left-radius: var(--opal-card-radius);
+  border-bottom-right-radius: var(--opal-card-radius);
+}
+
+.opal-card-fold-scroll[data-content-height="80"] {
   @apply max-h-80 overflow-y-auto;
 }
 
 /* "full" = no constraint; natural height, no scroll. */
 
-/* The top edge is the header's bottom border, so the body never draws one. */
-.opal-card-fold-body[data-border="none"] {
-  border: none;
+/* The edge is drawn by `::before`, not the body's own border. It reaches up
+   by one corner radius over the header, so its bottom corners keep their
+   round shape at any height. A short box would flatten them: at zero height
+   it lines up with the header's own corners instead of drawing a flat line
+   under them. The body pads in by the border width, so the content keeps its
+   place, and moves up by it, so a closed fold adds no height. `relative`
+   paints the edge above the header. */
+.opal-card-fold-body {
+  @apply relative;
+  border-bottom-left-radius: var(--opal-card-radius);
+  border-bottom-right-radius: var(--opal-card-radius);
 }
 
-.opal-card-fold-body[data-border="dashed"] {
-  @apply border border-t-0 border-dashed;
+.opal-card-fold-body:not([data-border="none"]) {
+  margin-top: -1px;
+  padding: 0 1px 1px;
 }
 
-.opal-card-fold-body[data-border="solid"] {
-  @apply border border-t-0;
+.opal-card-fold-body:not([data-border="none"])::before {
+  @apply pointer-events-none absolute inset-x-0 bottom-0 border border-t-0;
+  content: "";
+  top: calc(1px - var(--opal-card-radius));
+  border-color: inherit;
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+
+.opal-card-fold-body[data-border="dashed"]::before {
+  @apply border-dashed;
+}
+
+/* The top edge is the header's bottom border, so the edge never draws one.
+   A fully closed fold shows no edge. `!important` wins over the status and
+   selected border colours, which the edge inherits. */
+.opal-fold[data-mounted="false"] > .opal-card-fold-body {
+  border-color: transparent !important;
 }

@@ -6,7 +6,7 @@ import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { SvgGlobe, SvgLoader } from "@opal/icons";
-import { type WebappState } from "@/app/craft/components/output-panel/interfaces";
+import { type WebappState } from "@/app/craft/components/output-panel/types";
 
 interface PreviewTabProps {
   webappUrl: string | null;

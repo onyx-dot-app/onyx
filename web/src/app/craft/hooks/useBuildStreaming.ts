@@ -42,6 +42,57 @@ import {
 const INTERRUPT_RECONCILE_INTERVAL_MS = 1000;
 const INTERRUPT_RECONCILE_MAX_ATTEMPTS = 30;
 
+/** Coalesce tool completions. Turn completion queues its final read immediately. */
+function createOutputRefreshQueue(refresh: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: boolean = false;
+  let cancelled: boolean = false;
+  let running: Promise<void> | null = null;
+
+  function clearTimer() {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+  }
+
+  async function drain(): Promise<void> {
+    while (pending && !cancelled) {
+      pending = false;
+      await refresh();
+    }
+  }
+
+  function flush(): Promise<void> {
+    clearTimer();
+    running ??= drain().finally(() => {
+      running = null;
+    });
+    return running;
+  }
+
+  function schedule() {
+    if (cancelled) return;
+    pending = true;
+    timer ??= setTimeout(() => {
+      timer = null;
+      void flush();
+    }, 400);
+  }
+
+  function cancel() {
+    cancelled = true;
+    pending = false;
+    clearTimer();
+  }
+
+  function finish(): Promise<void> {
+    // Replace pending tool reads with one final read, ahead of later focus reads.
+    cancel();
+    return refresh();
+  }
+
+  return { schedule, finish, cancel };
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -107,9 +158,6 @@ export function useBuildStreaming() {
   const setAbortController = useBuildSessionStore(
     (state) => state.setAbortController
   );
-  const abortCurrentSession = useBuildSessionStore(
-    (state) => state.abortCurrentSession
-  );
   const updateSessionData = useBuildSessionStore(
     (state) => state.updateSessionData
   );
@@ -141,9 +189,6 @@ export function useBuildStreaming() {
   );
   const triggerFilesRefresh = useBuildSessionStore(
     (state) => state.triggerFilesRefresh
-  );
-  const openMarkdownPreview = useBuildSessionStore(
-    (state) => state.openMarkdownPreview
   );
 
   const reconcileInterruptedTurn = useCallback(
@@ -249,11 +294,10 @@ export function useBuildStreaming() {
 
       if (isWebFile) triggerWebappRefresh(sid);
       if (isOutputFile) {
-        if (filePath.endsWith(".md")) openMarkdownPreview(sid, filePath);
         triggerFilesRefresh(sid);
       }
     },
-    [triggerWebappRefresh, triggerFilesRefresh, openMarkdownPreview]
+    [triggerWebappRefresh, triggerFilesRefresh]
   );
 
   const createStreamPacketProcessor = useCallback(
@@ -267,6 +311,25 @@ export function useBuildStreaming() {
       const currentItems =
         useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems ??
         [];
+      const outputTurnGeneration = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId)?.turnGeneration;
+      const outputRefresh = createOutputRefreshQueue(async () => {
+        const store = useBuildSessionStore.getState();
+        const current = store.sessions.get(sessionId);
+        if (current?.turnGeneration !== outputTurnGeneration) return;
+        if (
+          current?.activeTurnId &&
+          options?.expectedTurnId &&
+          current.activeTurnId !== options.expectedTurnId
+        )
+          return;
+        await store.refreshOutputInventory(sessionId);
+      });
+      let finalOutputs: Promise<void> | null = null;
+      // Live events are not replayed. Always reconcile after a turn settles.
+      const finalizeOutputs = (): Promise<void> =>
+        (finalOutputs ??= outputRefresh.finish());
       let needsTurnCompletionFileRefresh = currentItems.some(
         (item) =>
           item.type === "tool_call" &&
@@ -357,7 +420,7 @@ export function useBuildStreaming() {
 
       // Raw SSE frame straight off the wire; parsePacket is the decoder.
       // oxlint-disable-next-line anti-slop/no-unknown-parameters
-      return (rawPacket: unknown) => {
+      const processPacket = (rawPacket: unknown) => {
         const parsed = parsePacket(rawPacket);
         if (options?.expectedTurnId && parsed.type !== "approval_requested") {
           const currentTurnId = useBuildSessionStore
@@ -510,6 +573,12 @@ export function useBuildStreaming() {
           }
 
           case "tool_call_progress": {
+            if (
+              parsed.status === "completed" &&
+              (parsed.kind === "execute" || parsed.kind === "edit")
+            ) {
+              outputRefresh.schedule();
+            }
             if (parsed.status === "completed" && parsed.kind === "execute") {
               needsTurnCompletionFileRefresh = true;
             }
@@ -643,6 +712,7 @@ export function useBuildStreaming() {
               updated_at: new Date(),
             };
             addArtifactToSession(sessionId, newArtifact);
+            outputRefresh.schedule();
 
             const isWebapp =
               newArtifact.type === "nextjs_app" ||
@@ -663,6 +733,7 @@ export function useBuildStreaming() {
           }
 
           case "prompt_response": {
+            void finalizeOutputs();
             if (needsTurnCompletionFileRefresh) {
               // Shell commands and scripts can mutate the workspace without
               // emitting structured file paths. Reconcile once when the turn ends.
@@ -787,6 +858,11 @@ export function useBuildStreaming() {
             break;
         }
       };
+      return {
+        processPacket,
+        finalizeOutputs,
+        cancelOutputs: outputRefresh.cancel,
+      };
     },
     [
       updateSessionData,
@@ -837,6 +913,10 @@ export function useBuildStreaming() {
             ? existingSession.isInterrupting
             : false,
         activeTurnId: turnId,
+        ...(existingSession?.activeTurnId !== turnId && {
+          outputSelectionLocked: false,
+          wasInterrupted: false,
+        }),
       });
       if (existingSession?.activeTurnId !== turnId) {
         clearStreamItems(sessionId);
@@ -875,13 +955,15 @@ export function useBuildStreaming() {
       try {
         const response = await fetchTurnEventStream(sessionId, turnId, signal);
         if (!response) {
+          void processor.finalizeOutputs();
           clearTurnIfCurrent({
             status: "active",
             isInterrupting: false,
           });
           return;
         }
-        await processSSEStream(response, processor);
+        await processSSEStream(response, processor.processPacket);
+        void processor.finalizeOutputs();
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           const currentSession = useBuildSessionStore
@@ -905,6 +987,7 @@ export function useBuildStreaming() {
           });
         }
       } finally {
+        processor.cancelOutputs();
         if (!signal.aborted) {
           const currentSession = useBuildSessionStore
             .getState()
@@ -972,6 +1055,7 @@ export function useBuildStreaming() {
         error: null,
         isInterrupting: false,
         wasInterrupted: false,
+        outputSelectionLocked: false,
         turnGeneration: (existingSession?.turnGeneration ?? 0) + 1,
         activeTurnId: null,
         activeTurnIndex: null,
@@ -1094,21 +1178,21 @@ export function useBuildStreaming() {
       signal: AbortSignal,
       onSettled?: () => void
     ): Promise<void> => {
+      // A scheduled run owns one session; reattaching does not start a new turn.
       updateSessionData(sessionId, { status: "running" });
       clearStreamItems(sessionId);
       let settledFromPromptResponse = false;
+      const processor = createStreamPacketProcessor(sessionId, {
+        onPromptResponse: () => {
+          settledFromPromptResponse = true;
+          onSettled?.();
+        },
+      });
 
       try {
         const response = await fetchScheduledRunEventStream(sessionId, signal);
-        await processSSEStream(
-          response,
-          createStreamPacketProcessor(sessionId, {
-            onPromptResponse: () => {
-              settledFromPromptResponse = true;
-              onSettled?.();
-            },
-          })
-        );
+        await processSSEStream(response, processor.processPacket);
+        void processor.finalizeOutputs();
       } catch (err) {
         if ((err as Error).name === "AbortError") {
           return;
@@ -1120,6 +1204,7 @@ export function useBuildStreaming() {
           error: (err as Error).message,
         });
       } finally {
+        processor.cancelOutputs();
         if (!signal.aborted) {
           // Only settle to "active" if the stream is still in-flight. An
           // in-band "error" packet (or a thrown error) already moved the status
@@ -1146,14 +1231,12 @@ export function useBuildStreaming() {
       interruptStreaming,
       streamScheduledRunEvents,
       streamTurnEvents,
-      abortStream: abortCurrentSession,
     }),
     [
       streamMessage,
       interruptStreaming,
       streamScheduledRunEvents,
       streamTurnEvents,
-      abortCurrentSession,
     ]
   );
 }

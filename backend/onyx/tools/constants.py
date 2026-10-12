@@ -19,3 +19,12 @@ CODING_AGENT_TOOL_ID = "CodingAgentTool"
 
 # Tool names as referenced by tool results / tool calls (read_file)
 FILE_READER_TOOL_NAME = "read_file"
+
+INTERNAL_SEARCH_TOOL_NAME = "internal_search"
+WEB_SEARCH_TOOL_NAME = "web_search"
+
+CITEABLE_TOOLS_NAMES: list[str] = [
+    INTERNAL_SEARCH_TOOL_NAME,
+    WEB_SEARCH_TOOL_NAME,
+    OPEN_URL_TOOL_NAME,
+]

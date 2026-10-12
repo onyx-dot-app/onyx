@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import type { RichStr } from "@opal/types";
 import { ContentAction } from "@opal/layouts";
 import { Button, type TagProps } from "@opal/components";
+import { Fold } from "@opal/components/fold/components";
 import { SvgExpand, SvgFold } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
@@ -101,13 +102,11 @@ function Collapsible({
           }
         />
       </div>
-      <div id={bodyId} className="opal-collapsible-body" inert={!open}>
-        <div className="opal-collapsible-body-inner">
-          <div className="opal-collapsible-body-content">
-            {hasOpened && children}
-          </div>
+      <Fold open={open} keepMounted id={bodyId}>
+        <div className="opal-collapsible-body-content">
+          {hasOpened && children}
         </div>
-      </div>
+      </Fold>
     </div>
   );
 }

@@ -1,30 +1,36 @@
 """Outlook connector: Microsoft 365 mail and calendar over Graph.
 
-One document per conversation per mailbox, and with calendars on, one per event
-or recurring series. Every Graph call goes through ``OutlookSourceOperations``.
-The walk is mailbox by mailbox, folder by folder, then the calendar view, one
-delta page per checkpoint step, so a large tenant survives worker restarts.
+One document per mail thread by the header rules in ``threads.py``, and with
+calendars on, one per event or recurring series per mailbox. Every Graph call
+goes through ``OutlookSourceOperations``.
+
+Each mailbox is walked on its own, a few side by side. Its folders are read
+through delta pages of message metadata, headers included, one page per
+checkpoint step, and the rows are held in memory until the last folder is
+done. Each conversation is then decided from that copy alone and the bodies
+of the messages its documents need are read.
 
 Incremental runs come from the poll window rather than saved delta links: an
 index attempt starts from a fresh checkpoint, so each folder's delta round
 opens with ``receivedDateTime ge start`` and any conversation that gained a
-message in the window is rebuilt whole.
+message in the window is read whole through its outline and rebuilt.
 
 Pruning walks the same mailboxes, folders and calendar windows but reads only
-conversation and event ids, so a conversation whose every message was deleted
-leaves the index without a full re-index. A conversation that lost one message
-keeps the stale text until it gains a message or a full re-index rebuilds it.
+metadata, so a thread deleted from every mailbox leaves the index without a
+full re-index. A thread that lost one message keeps the stale text until it
+gains a message or a full re-index rebuilds it.
 """
 
 from collections import deque
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from typing import Any
+from typing import Any, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from babel.core import get_global
+from pydantic import model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
@@ -33,6 +39,9 @@ from onyx.configs.app_configs import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
+    RateLimitTriedTooManyTimesError,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -49,6 +58,7 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_GRAPH_API_HOST,
 )
 from onyx.connectors.microsoft_utils.drive_items import SizeCapExceeded
+from onyx.connectors.microsoft_utils.entra import EntraGroup
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftAuthError as OutlookAuthError,
@@ -63,7 +73,6 @@ from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
-    DocumentFailure,
     EntityFailure,
     HierarchyNode,
     SlimDocument,
@@ -76,26 +85,45 @@ from onyx.connectors.outlook.config import (
 from onyx.connectors.outlook.errors import (
     CALENDAR_READ_REMEDIATION,
     EXCHANGE_SCOPE_REMEDIATION,
+    GROUP_UNAVAILABLE_REMEDIATION,
     MAILBOX_UNAVAILABLE_REMEDIATION,
     raise_for_graph_error,
 )
 from onyx.connectors.outlook.mailboxes import (
+    clean_names,
+    describe_group_mismatch,
+    describe_unavailable_groups,
     describe_unavailable_mailboxes,
+    raise_if_groups_unavailable,
     raise_if_unavailable,
 )
 from onyx.connectors.outlook.models import (
     EVENT_OCCURRENCE,
+    DocumentPlan,
+    MailboxCursor,
+    MailboxStep,
     OutlookAttachment,
+    OutlookDeltaPage,
     OutlookEvent,
     OutlookFolder,
     OutlookMailbox,
+    OutlookMailboxPage,
     OutlookMessage,
+    OutlookMessageChange,
+    OutlookMessageIdentity,
     OutlookRecipient,
+    ThreadListing,
 )
 from onyx.connectors.outlook.source_operations import (
     CONFIG_AUTHORITY_HOST,
     CONFIG_GRAPH_API_HOST,
     OutlookSourceOperations,
+)
+from onyx.connectors.outlook.threads import (
+    Roster,
+    listing_row,
+    plan_documents,
+    roster_of,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import (
@@ -106,6 +134,10 @@ from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.process_isolation import run_in_isolated_process
+from onyx.utils.threadpool_concurrency import (
+    parallel_yield,
+    run_functions_tuples_in_parallel,
+)
 
 logger = setup_logger()
 
@@ -116,20 +148,35 @@ SLIM_BATCH_SIZE = 500
 # names are localized and an admin's exclusion list is not.
 DEFAULT_EXCLUDED_WELL_KNOWN_FOLDERS = ("junkemail", "deleteditems", "drafts", "outbox")
 
-# A conversation longer than this keeps only its newest indexable messages.
-MAX_MESSAGES_PER_CONVERSATION = 100
-
-# Raw messages read per conversation while looking for indexable ones, so a
-# thread that is mostly drafts or trashed replies stays bounded.
+# Indexable messages an outline reads per conversation, so a thread that is
+# mostly drafts or trashed replies stays bounded.
 CONVERSATION_FETCH_LIMIT = 500
+# Raw messages read while outlining a copy and fetching the chosen ones. Wide
+# enough that the window is the newest indexable messages, not the raw ones.
+COMPARED_FETCH_LIMIT = CONVERSATION_FETCH_LIMIT * 10
 
-# Conversation ids a mailbox remembers this attempt so a thread is rebuilt once
-# however many of its messages the delta lists. The checkpoint is written after
-# every step, so past this many the oldest ids are forgotten first.
-MAX_TRACKED_CONVERSATIONS_PER_MAILBOX = 20_000
+# Conversations of one mailbox built at a time. Exchange throttles per mailbox,
+# so the parallelism that pays is across mailboxes, not within one.
+CONVERSATION_BUILD_WORKERS = 4
+# Conversations per mailbox per build step, so a step stays short and its
+# checkpoint cheap.
+CONVERSATIONS_PER_STEP = 25
 
-# Pages of the tenant's user listing one step may read. No tenant has this many
-# users, so running past it means the paging never ends.
+# Mailboxes walked side by side. Exchange throttles per app and mailbox, so
+# separate mailboxes do not slow one another.
+MAILBOX_WORKERS = 8
+# Listing rows one mailbox may hold in memory, a few hundred megabytes at
+# most across the mailboxes in flight. A mailbox past it is skipped by
+# indexing and fails a slim walk, since its threads cannot be decided whole.
+MAX_LISTING_ROWS_PER_MAILBOX = 250_000
+
+# Series ids the checkpoint carries across all active mailboxes. It is
+# written after every step, so the per-mailbox cap shrinks as more mailboxes run.
+TRACKED_SERIES_PER_STEP = 5_000
+
+# Pages of a mailbox listing, the tenant's users or a group's members, one
+# step may read. No tenant has this many users, so running past it means the
+# paging never ends.
 MAX_MAILBOX_LISTING_PAGES = 10_000
 
 # Attachment bytes come from whoever sent the mail, so what one message and
@@ -149,8 +196,13 @@ ATTACHMENT_EXTRACTION_TIMEOUT_SECONDS = 120
 # cap, and the poll window is applied to each entry here instead.
 FILTERED_DELTA_CAP = 5000
 
+THROTTLED_STATUS = 429
+THROTTLED_MESSAGE = (
+    "Microsoft Graph is rate limiting this connector. It resumes from its "
+    "checkpoint on the next run."
+)
+
 MAILBOX_NODE_PREFIX = "outlook-mailbox:"
-DOCUMENT_ID_PREFIX = "outlook:"
 CALENDAR_NODE_PREFIX = "outlook-calendar:"
 EVENT_DOCUMENT_ID_PREFIX = "outlook-event:"
 
@@ -160,56 +212,73 @@ MAX_ATTENDEES_LISTED = 50
 # Series ids a mailbox remembers this attempt so each master is read once.
 # Past this many, later series are read again per occurrence instead of
 # growing the checkpoint with the size of the calendar.
-MAX_TRACKED_SERIES_PER_MAILBOX = 5000
+MAX_TRACKED_SERIES_PER_MAILBOX = TRACKED_SERIES_PER_STEP // MAILBOX_WORKERS
 # Private hides an event's details from anyone the calendar is shared with,
 # and confidential flags it as not for wider eyes. Neither belongs in a shared
 # index.
 SKIPPED_EVENT_SENSITIVITIES = frozenset({"private", "confidential"})
 
 
+class _MailboxListing:
+    """One mailbox's listing rows while its folders are read, then its
+    conversations in listing order once they are. Lives in the process that
+    listed the mailbox, never in the checkpoint, so its size is bounded by
+    one mailbox, not the tenant."""
+
+    def __init__(self) -> None:
+        self.rows: list[ThreadListing] = []
+        self.conversations: list[list[ThreadListing]] = []
+        self.grouped = False
+
+    def group(self) -> None:
+        by_conversation: dict[str, list[ThreadListing]] = {}
+        for row in self.rows:
+            by_conversation.setdefault(row.conversation_id, []).append(row)
+        self.conversations = list(by_conversation.values())
+        self.rows = []
+        self.grouped = True
+
+
 class OutlookCheckpoint(ConnectorCheckpoint):
-    # None until enumerated, then the mailboxes still to walk, popped from the end.
+    # None until enumerated, then the mailboxes not yet started, popped from the end.
     mailboxes: list[OutlookMailbox] | None = None
-    current_mailbox: OutlookMailbox | None = None
-    # None until the current mailbox's tree is listed, then folders left to walk.
-    folders: list[OutlookFolder] | None = None
-    # Every folder id under an excluded root, so a conversation message filed
-    # deep inside Deleted Items is dropped like one at its top.
-    excluded_folder_ids: list[str] = []
-    current_folder: OutlookFolder | None = None
-    delta_next_link: str | None = None
-    # Entries seen in the current folder's delta round, to detect the cap.
-    folder_change_count: int = 0
-    # True once the current folder is being re-read without the server filter.
-    folder_unfiltered: bool = False
-    # Conversations already rebuilt for the current mailbox in this attempt,
-    # oldest first, the newest MAX_TRACKED_CONVERSATIONS_PER_MAILBOX kept.
-    seen_conversation_ids: dict[str, None] = {}
-    # The calendar view round of the current mailbox, one page per step after
-    # its folders.
-    calendar_next_link: str | None = None
-    calendar_done: bool = False
-    # Recurring series already resolved for the current mailbox in this
-    # attempt, written or not, capped at MAX_TRACKED_SERIES_PER_MAILBOX.
-    seen_series_ids: set[str] = set()
+    # The mailboxes being walked, at most MAILBOX_WORKERS of them.
+    active: list[MailboxCursor] = []
 
-
-def _remember_conversation(seen: dict[str, None], conversation_id: str) -> None:
-    """Records a rebuilt conversation, forgetting the oldest past the cap, so a
-    busy thread stays deduplicated while the checkpoint stays bounded."""
-    seen[conversation_id] = None
-    if len(seen) > MAX_TRACKED_CONVERSATIONS_PER_MAILBOX:
-        del seen[next(iter(seen))]
+    @model_validator(mode="before")
+    @classmethod
+    def _adopt_single_mailbox_shape(cls, data: Any) -> Any:
+        """A checkpoint saved with one current mailbox at the top level, the
+        shape before cursors, loads as one active cursor, so an attempt in
+        flight across a deploy resumes without losing progress."""
+        if not isinstance(data, dict):
+            return data
+        # The table-based shape kept its listing in a store this connector
+        # no longer reads, so such an attempt starts over.
+        if "listing_pages" in data:
+            return {"has_more": True}
+        if not data.get("current_mailbox"):
+            return data
+        cursor: dict[str, Any] = {
+            name: data[name] for name in MailboxCursor.model_fields if name in data
+        }
+        cursor["mailbox"] = data["current_mailbox"]
+        cursor["opened"] = True
+        cursor["folders"] = data.get("folders") or []
+        # The old shape tracked a whole step's worth per mailbox. Keep the
+        # newest within the per-mailbox cap so the cursor is not oversized.
+        seen_series: list[str] = list(data.get("seen_series_ids") or [])
+        cursor["seen_series_ids"] = set(seen_series[-MAX_TRACKED_SERIES_PER_MAILBOX:])
+        kept: dict[str, Any] = {
+            name: value
+            for name, value in data.items()
+            if name in ("has_more", "mailboxes")
+        }
+        return kept | {"active": [cursor]}
 
 
 def mailbox_node_id(mailbox: OutlookMailbox) -> str:
     return f"{MAILBOX_NODE_PREFIX}{mailbox.id}"
-
-
-def conversation_document_id(mailbox: OutlookMailbox, conversation_id: str) -> str:
-    """Keyed by mailbox because the same conversation has a different readership
-    in every mailbox it sits in."""
-    return f"{DOCUMENT_ID_PREFIX}{mailbox.id}:{conversation_id}"
 
 
 def calendar_node_id(mailbox: OutlookMailbox) -> str:
@@ -238,6 +307,18 @@ def _mailbox_failure(
         failure_message=message,
         exception=exception,
     )
+
+
+def _oversized_mailbox_message(mailbox: OutlookMailbox) -> str:
+    return (
+        f"Mailbox {mailbox.address} holds more than "
+        f"{MAX_LISTING_ROWS_PER_MAILBOX} messages, more than the connector "
+        "decides in memory. Exclude its largest folders or leave it out."
+    )
+
+
+def _oversized_mailbox_failure(mailbox: OutlookMailbox) -> ConnectorFailure:
+    return _mailbox_failure(mailbox.address, _oversized_mailbox_message(mailbox))
 
 
 def _format_recipient(recipient: OutlookRecipient) -> str:
@@ -299,15 +380,38 @@ def _owners(
     )
 
 
+T = TypeVar("T", bound=OutlookMessageIdentity)
+
+
+def _conversation_pages(
+    fetch: Callable[[str | None], tuple[list[T], str | None]],
+    limit: int,
+) -> Generator[list[T], None, None]:
+    """A conversation's pages, newest first, until the next link runs out or
+    ``limit`` raw messages have been read. The budget applies to raw messages,
+    so a final page is cut to what is left of it."""
+    fetched = 0
+    next_link: str | None = None
+    while fetched < limit:
+        items, next_link = fetch(next_link)
+        within_budget = items[: limit - fetched]
+        fetched += len(within_budget)
+        yield within_budget
+        if next_link is None:
+            return
+
+
+def is_indexable(
+    message: OutlookMessageIdentity, excluded_folder_ids: set[str]
+) -> bool:
+    """False for drafts and messages in excluded folders."""
+    return not message.is_draft and message.parent_folder_id not in excluded_folder_ids
+
+
 def indexable_messages(
     messages: list[OutlookMessage], excluded_folder_ids: set[str]
 ) -> list[OutlookMessage]:
-    """Drop drafts and messages sitting in excluded folders."""
-    return [
-        message
-        for message in messages
-        if not message.is_draft and message.parent_folder_id not in excluded_folder_ids
-    ]
+    return [m for m in messages if is_indexable(m, excluded_folder_ids)]
 
 
 def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
@@ -347,8 +451,29 @@ def _user_access(emails: set[str]) -> ExternalAccess:
 
 def owner_access(mailbox: OutlookMailbox) -> ExternalAccess:
     """The mailbox's owner reads everything in it. A shared mailbox has no owner
-    who signs in, so its conversations stay hidden."""
+    who signs in, so its folders stay hidden."""
     return _user_access({mailbox.address.lower()})
+
+
+def readers_access(readers: Iterable[OutlookMailbox]) -> ExternalAccess:
+    """Read access for the owners of the given mailboxes."""
+    return _user_access({reader.address.lower() for reader in readers})
+
+
+def slim_documents(
+    plans: Iterable[DocumentPlan], include_permissions: bool
+) -> list[SlimDocument]:
+    """The ids indexing writes for a copy's plans, with their readers when
+    permissions are wanted."""
+    return [
+        SlimDocument(
+            id=plan.document_id,
+            external_access=(
+                readers_access(plan.readers) if include_permissions else None
+            ),
+        )
+        for plan in plans
+    ]
 
 
 def event_access(mailbox: OutlookMailbox, event: OutlookEvent) -> ExternalAccess:
@@ -493,17 +618,17 @@ def extract_attachment_text(data: bytes, name: str, cap: int) -> str:
     return text.strip()[:cap]
 
 
-def build_conversation_document(
+def build_thread_document(
+    document_id: str,
     mailbox: OutlookMailbox,
-    conversation_id: str,
+    readers: list[OutlookMailbox],
     messages: list[OutlookMessage],
     attachment_sections: dict[str, list[TextSection]] | None = None,
     include_permissions: bool = False,
 ) -> Document | None:
-    """Assemble indexable messages of one conversation into a document, oldest
-    first, each message followed by the text of its attachments. None when
-    there is nothing to index."""
-    kept = sorted(messages, key=_message_sort_key)[-MAX_MESSAGES_PER_CONVERSATION:]
+    """Assemble the messages of one document, oldest first, each followed by
+    the text of its attachments. None when there is nothing to index."""
+    kept: list[OutlookMessage] = sorted(messages, key=_message_sort_key)
     if not kept:
         return None
 
@@ -516,7 +641,7 @@ def build_conversation_document(
     primary_owners, secondary_owners = _owners(kept)
     newest = kept[-1]
     return Document(
-        id=conversation_document_id(mailbox, conversation_id),
+        id=document_id,
         sections=sections,
         source=DocumentSource.OUTLOOK,
         semantic_identifier=subject,
@@ -525,10 +650,14 @@ def build_conversation_document(
         doc_updated_at=_message_sort_key(newest),
         primary_owners=primary_owners,
         secondary_owners=secondary_owners,
-        metadata={"mailbox": mailbox.address, "message_count": str(len(kept))},
+        metadata={
+            "mailbox": mailbox.address,
+            "mailbox_count": str(len(readers)),
+            "message_count": str(len(kept)),
+        },
         parent_hierarchy_raw_node_id=newest.parent_folder_id
         or mailbox_node_id(mailbox),
-        external_access=owner_access(mailbox) if include_permissions else None,
+        external_access=(readers_access(readers) if include_permissions else None),
     )
 
 
@@ -541,6 +670,7 @@ class OutlookConnector(
     def __init__(
         self,
         mailboxes: list[str] | None = None,
+        mailbox_groups: list[str] | None = None,
         excluded_folders: list[str] | None = None,
         include_attachments: bool = False,
         include_calendar: bool = False,
@@ -550,8 +680,10 @@ class OutlookConnector(
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
-        # An empty list means every mailbox the app may open.
-        self.mailboxes = [a.strip() for a in mailboxes or [] if a.strip()]
+        # Addresses, then Entra groups by display name or object id whose
+        # members are walked. Both empty means every mailbox the app may open.
+        self.mailboxes = clean_names(mailboxes)
+        self.mailbox_groups = clean_names(mailbox_groups)
         self.include_attachments = include_attachments
         self.include_calendar = include_calendar
         if calendar_past_days < 0 or calendar_future_days < 0:
@@ -566,6 +698,14 @@ class OutlookConnector(
         resolve_microsoft_environment(self.graph_api_host, self.authority_host)
         self.batch_size = batch_size
         self._ops: OutlookSourceOperations | None = None
+        # The listings of the mailboxes in flight, by mailbox id.
+        self._listings: dict[str, _MailboxListing] = {}
+        # Whether each probed mailbox can be opened, so a thread's builder is
+        # one that will build. Filled as mailboxes open and as builders are
+        # probed, once per mailbox per process.
+        self._available: dict[str, bool] = {}
+        # The run's mailboxes by address, resolved again by a resuming process.
+        self._roster: Roster | None = None
 
     @property
     def ops(self) -> OutlookSourceOperations:
@@ -600,7 +740,7 @@ class OutlookConnector(
         except OutlookGraphError as e:
             raise_for_graph_error(e, "Microsoft's token endpoint refused the request.")
 
-        if not self.mailboxes:
+        if not self.mailboxes and not self.mailbox_groups:
             try:
                 self.ops.list_mailbox_users(page_size=1)
             except OutlookGraphError as e:
@@ -609,6 +749,9 @@ class OutlookConnector(
                 )
             return
         raise_if_unavailable(describe_unavailable_mailboxes(self.ops, self.mailboxes))
+        raise_if_groups_unavailable(
+            describe_unavailable_groups(self.ops, self.mailbox_groups)
+        )
 
     def build_dummy_checkpoint(self) -> OutlookCheckpoint:
         return OutlookCheckpoint(has_more=True)
@@ -622,8 +765,10 @@ class OutlookConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: OutlookCheckpoint,
     ) -> CheckpointOutput[OutlookCheckpoint]:
-        """One unit of work per call: enumerate, open a mailbox, or read one
-        delta page. The checkpoint records where to resume."""
+        """One unit of work per call: enumerate the mailboxes, or advance each
+        active mailbox (open it, list one delta page, build a few of its
+        conversations, or read one calendar page). The checkpoint records
+        where to resume."""
         return self._load_from_checkpoint(
             start, end, checkpoint, include_permissions=False
         )
@@ -647,52 +792,205 @@ class OutlookConnector(
         checkpoint: OutlookCheckpoint,
         include_permissions: bool,
     ) -> CheckpointOutput[OutlookCheckpoint]:
+        try:
+            return (yield from self._step(checkpoint, start, end, include_permissions))
+        except OutlookGraphError as e:
+            if e.status != THROTTLED_STATUS:
+                raise
+            # The client already backed off and retried. The attempt's error
+            # is what the admin reads, so say what happened in plain words.
+            raise RateLimitTriedTooManyTimesError(THROTTLED_MESSAGE) from e
+
+    def _step(
+        self,
+        checkpoint: OutlookCheckpoint,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        include_permissions: bool,
+    ) -> CheckpointOutput[OutlookCheckpoint]:
         if checkpoint.mailboxes is None:
             yield from self._enumerate_mailboxes(checkpoint)
             return checkpoint
-
-        if checkpoint.current_mailbox is None:
-            if not checkpoint.mailboxes:
-                checkpoint.has_more = False
-                return checkpoint
-            yield from self._open_mailbox(
-                checkpoint, checkpoint.mailboxes[-1], include_permissions
-            )
-            # Popped only once opened or skipped, so a raised Graph error
-            # leaves the mailbox queued for the retry.
-            checkpoint.mailboxes.pop()
+        if checkpoint.mailboxes or checkpoint.active:
+            yield from self._listing_step(checkpoint, start, end, include_permissions)
             return checkpoint
-
-        if checkpoint.current_folder is None:
-            if not checkpoint.folders:
-                if self.include_calendar and not checkpoint.calendar_done:
-                    yield from self._read_calendar_page(
-                        checkpoint, start, include_permissions
-                    )
-                    return checkpoint
-                self._finish_mailbox(checkpoint)
-                return checkpoint
-            checkpoint.current_folder = checkpoint.folders.pop()
-            self._reset_folder_cursor(checkpoint)
-
-        yield from self._read_folder_page(checkpoint, start, end, include_permissions)
+        checkpoint.has_more = False
         return checkpoint
 
-    def _reset_folder_cursor(self, checkpoint: OutlookCheckpoint) -> None:
-        checkpoint.delta_next_link = None
-        checkpoint.folder_change_count = 0
-        checkpoint.folder_unfiltered = False
+    def _listing_step(
+        self,
+        checkpoint: OutlookCheckpoint,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        include_permissions: bool,
+    ) -> Generator[HierarchyNode | Document | ConnectorFailure, None, None]:
+        """One unit of work in each active mailbox, side by side.
 
-    def _finish_mailbox(self, checkpoint: OutlookCheckpoint) -> None:
-        checkpoint.current_mailbox = None
-        checkpoint.folders = None
-        checkpoint.current_folder = None
-        checkpoint.excluded_folder_ids = []
-        checkpoint.seen_conversation_ids = {}
-        checkpoint.calendar_next_link = None
-        checkpoint.calendar_done = False
-        checkpoint.seen_series_ids = set()
-        self._reset_folder_cursor(checkpoint)
+        Worked on copies and written back only once every mailbox finished
+        its unit, so a raise in one leaves the whole step to be retried.
+        """
+        queued: list[OutlookMailbox] = list(checkpoint.mailboxes or [])
+        cursors: list[MailboxCursor] = [
+            self._resumable(cursor.model_copy(deep=True))
+            for cursor in checkpoint.active
+        ]
+        while len(cursors) < MAILBOX_WORKERS and queued:
+            cursors.append(MailboxCursor(mailbox=queued.pop()))
+        roster: Roster = self._run_roster()
+        results: list[MailboxStep] = run_functions_tuples_in_parallel(
+            [
+                (
+                    self._advance_mailbox,
+                    (cursor, roster, start, end, include_permissions),
+                )
+                for cursor in cursors
+            ],
+            max_workers=MAILBOX_WORKERS,
+        )
+        for cursor, result in zip(cursors, results, strict=True):
+            listing: _MailboxListing = self._listings.setdefault(
+                cursor.mailbox.id, _MailboxListing()
+            )
+            listing.rows.extend(result.rows)
+            yield from result.items
+            if len(listing.rows) > MAX_LISTING_ROWS_PER_MAILBOX:
+                yield _oversized_mailbox_failure(cursor.mailbox)
+                cursor.finished = True
+                continue
+            if cursor.listed and not listing.grouped:
+                listing.group()
+                cursor.to_build = len(listing.conversations)
+        for cursor in cursors:
+            if cursor.finished:
+                self._listings.pop(cursor.mailbox.id, None)
+        checkpoint.mailboxes = queued
+        checkpoint.active = [cursor for cursor in cursors if not cursor.finished]
+
+    def _resumable(self, cursor: MailboxCursor) -> MailboxCursor:
+        """The cursor as this process can continue it. A mailbox part way
+        through its listing or its build in another process is walked again
+        from the start, since its listing lived there."""
+        needs_listing: bool = cursor.opened and not (
+            cursor.listed and cursor.built >= cursor.to_build
+        )
+        if not needs_listing or cursor.mailbox.id in self._listings:
+            return cursor
+        logger.info(
+            "Outlook: walking %s again from the start, its listing is not in "
+            "this process",
+            cursor.mailbox.address,
+        )
+        return MailboxCursor(mailbox=cursor.mailbox)
+
+    def _mailbox_available(self, mailbox: OutlookMailbox) -> bool:
+        """Whether the run can open the mailbox, probed once per process. A
+        refusal is permanent for the run; anything else raises, since
+        guessing would hand the thread to a builder that never builds."""
+        known: bool | None = self._available.get(mailbox.id)
+        if known is not None:
+            return known
+        try:
+            self.ops.probe_mailbox(mailbox_id=mailbox.id)
+        except OutlookGraphError as e:
+            if not e.is_permanent_refusal:
+                raise
+            logger.info(
+                "Outlook: %s cannot be opened (%s), it builds no thread",
+                mailbox.address,
+                e.code,
+            )
+            self._available[mailbox.id] = False
+            return False
+        self._available[mailbox.id] = True
+        return True
+
+    def _run_roster(self) -> Roster:
+        """The run's mailboxes by address. Resolved when the run starts and
+        again by a process that resumes it."""
+        if self._roster is None:
+            mailboxes, _ = self._resolve_mailboxes()
+            self._roster = roster_of(mailboxes)
+        return self._roster
+
+    def _build_step(
+        self,
+        cursor: MailboxCursor,
+        start: SecondsSinceUnixEpoch,
+        include_permissions: bool,
+    ) -> list[Document | ConnectorFailure]:
+        """Builds the next CONVERSATIONS_PER_STEP conversations of the
+        mailbox's listing, side by side."""
+        conversations: list[list[ThreadListing]] = self._listings[
+            cursor.mailbox.id
+        ].conversations
+        batch: list[list[ThreadListing]] = conversations[
+            cursor.built : cursor.built + CONVERSATIONS_PER_STEP
+        ]
+        excluded: set[str] = set(cursor.excluded_folder_ids)
+        results: list[list[Document | ConnectorFailure]] = (
+            run_functions_tuples_in_parallel(
+                [
+                    (
+                        self._build_conversation,
+                        (
+                            cursor.mailbox,
+                            excluded,
+                            rows,
+                            self._listed_from_the_beginning(start),
+                            include_permissions,
+                        ),
+                    )
+                    for rows in batch
+                ],
+                max_workers=CONVERSATION_BUILD_WORKERS,
+            )
+        )
+        cursor.built += len(batch)
+        return [item for items in results for item in items]
+
+    def _listed_from_the_beginning(self, start: SecondsSinceUnixEpoch) -> bool:
+        """True when the listing window has no lower bound, so the listing
+        holds every indexable message of each copy and no outline needs to be
+        read."""
+        return _poll_bound(start) is None
+
+    def _advance_mailbox(
+        self,
+        cursor: MailboxCursor,
+        roster: Roster,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        include_permissions: bool,
+    ) -> MailboxStep:
+        """One unit of work in one mailbox: open it, list one delta page,
+        build a few conversations, or read one calendar page."""
+        if not cursor.opened:
+            return MailboxStep(
+                items=list(self._open_mailbox(cursor, include_permissions))
+            )
+        if not cursor.listed:
+            if cursor.current_folder is None:
+                if not cursor.folders:
+                    cursor.listed = True
+                    return MailboxStep()
+                cursor.current_folder = cursor.folders.pop()
+                self._reset_folder_cursor(cursor)
+            return self._read_folder_page(cursor, roster, start, end)
+        if cursor.built < cursor.to_build:
+            return MailboxStep(
+                items=self._build_step(cursor, start, include_permissions)
+            )
+        if self.include_calendar and not cursor.calendar_done:
+            return MailboxStep(
+                items=list(self._read_calendar_page(cursor, start, include_permissions))
+            )
+        cursor.finished = True
+        return MailboxStep()
+
+    def _reset_folder_cursor(self, cursor: MailboxCursor) -> None:
+        cursor.delta_next_link = None
+        cursor.folder_change_count = 0
+        cursor.folder_unfiltered = False
 
     def _unavailable(
         self, entity_id: str, message: str, error: OutlookGraphError
@@ -730,51 +1028,81 @@ class OutlookConnector(
     def _resolve_mailboxes(
         self,
     ) -> tuple[list[OutlookMailbox], list[ConnectorFailure]]:
-        """The mailboxes to walk, in configured order, plus a failure per
-        configured address that matches no user."""
+        """The mailboxes to walk: the configured addresses, then the members
+        of the configured groups, or every mailbox when neither is set. Comes
+        with a failure per configured address or group that cannot be resolved."""
         found: list[OutlookMailbox] = []
         failures: list[ConnectorFailure] = []
-        if self.mailboxes:
-            for address in self.mailboxes:
-                # Resolution reads the directory, never the mailbox, so a Graph
-                # error here is about the app or the service and fails the
-                # attempt instead of dropping the address.
-                mailbox = self.ops.resolve_mailbox(address=address)
-                if mailbox is None:
-                    failures.append(
-                        _mailbox_failure(
-                            address,
-                            f"No user matches {address}. "
-                            f"{MAILBOX_UNAVAILABLE_REMEDIATION}",
-                        )
+        # Resolution reads the directory, never a mailbox, so a Graph error
+        # here is about the app or the service and fails the attempt instead
+        # of dropping the address or the group.
+        for address in self.mailboxes:
+            mailbox = self.ops.resolve_mailbox(address=address)
+            if mailbox is None:
+                failures.append(
+                    _mailbox_failure(
+                        address,
+                        f"No user matches {address}. {MAILBOX_UNAVAILABLE_REMEDIATION}",
                     )
-                    continue
-                found.append(mailbox)
-        else:
-            # TODO(nmgarza5): list across checkpoint steps and carry compact
-            # mailbox records, so a huge tenant survives a failure mid-listing.
-            next_link: str | None = None
-            for _ in range(MAX_MAILBOX_LISTING_PAGES):
-                page = self.ops.list_mailbox_users(next_link=next_link)
-                found.extend(page.mailboxes)
-                next_link = page.next_link
-                if next_link is None:
-                    break
-            if next_link is not None:
-                raise RuntimeError(
-                    "Outlook: the user listing ran past "
-                    f"{MAX_MAILBOX_LISTING_PAGES} pages without ending"
                 )
+                continue
+            found.append(mailbox)
+        for identifier in self.mailbox_groups:
+            groups: list[EntraGroup] = self.ops.resolve_groups(identifier=identifier)
+            if len(groups) != 1:
+                failures.append(
+                    _mailbox_failure(
+                        identifier,
+                        f"{describe_group_mismatch(identifier, len(groups))}. "
+                        f"{GROUP_UNAVAILABLE_REMEDIATION}",
+                    )
+                )
+                continue
+            found.extend(self._group_mailboxes(groups[0].id))
+        if not self.mailboxes and not self.mailbox_groups:
+            found.extend(
+                self._listed_mailboxes(
+                    lambda next_link: self.ops.list_mailbox_users(next_link=next_link)
+                )
+            )
         # A UPN and a primary SMTP address, or two listing pages, can name the
         # same mailbox. The dict keeps the first occurrence in order.
         unique = list({mailbox.id: mailbox for mailbox in found}.values())
         logger.info("Outlook: %s mailboxes to walk", len(unique))
         return unique, failures
 
+    def _listed_mailboxes(
+        self, fetch_page: Callable[[str | None], OutlookMailboxPage]
+    ) -> list[OutlookMailbox]:
+        """Every mailbox of a paged mailbox listing."""
+        # TODO(nmgarza5): list across checkpoint steps and carry compact
+        # mailbox records, so a huge tenant survives a failure mid-listing.
+        mailboxes: list[OutlookMailbox] = []
+        next_link: str | None = None
+        for _ in range(MAX_MAILBOX_LISTING_PAGES):
+            page = fetch_page(next_link)
+            mailboxes.extend(page.mailboxes)
+            next_link = page.next_link
+            if next_link is None:
+                return mailboxes
+        raise RuntimeError(
+            "Outlook: the mailbox listing ran past "
+            f"{MAX_MAILBOX_LISTING_PAGES} pages without ending"
+        )
+
+    def _group_mailboxes(self, group_id: str) -> list[OutlookMailbox]:
+        # Bound per group here, since a lambda in the loop above late-binds.
+        return self._listed_mailboxes(
+            lambda next_link: self.ops.list_group_mailbox_users(
+                group_id=group_id, next_link=next_link
+            )
+        )
+
     def _enumerate_mailboxes(
         self, checkpoint: OutlookCheckpoint
     ) -> Generator[ConnectorFailure, None, None]:
         mailboxes, failures = self._resolve_mailboxes()
+        self._roster = roster_of(mailboxes)
         # Popped from the end, so reverse to keep the configured order.
         checkpoint.mailboxes = list(reversed(mailboxes))
         # Yielded once the checkpoint is complete, so a lookup that raises
@@ -787,8 +1115,8 @@ class OutlookConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """Every conversation and event document id the walk would produce
-        today, so pruning drops the ones that vanished.
+        """Every thread and event document id the walk would produce today,
+        so pruning drops the ones that vanished.
 
         Reads folder and delta metadata only, never a body. A mailbox whose
         probe answers 404 is gone and contributes nothing, so its documents go
@@ -804,8 +1132,9 @@ class OutlookConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        """The pruning walk with each document's readers attached: the owner on
-        every node and conversation, plus the organizer and attendees on an event."""
+        """The pruning walk with each document's readers attached: the owner
+        on every node, every holder on a thread, and the owner plus the
+        organizer and attendees on an event."""
         del start, end
         yield from self._slim_docs(callback, include_permissions=True)
 
@@ -813,46 +1142,95 @@ class OutlookConnector(
         self, callback: IndexingHeartbeatInterface | None, include_permissions: bool
     ) -> GenerateSlimDocumentOutput:
         mailboxes, failures = self._resolve_mailboxes()
-        # An address that matches no user is a configuration problem, not a
-        # verdict on the mailbox behind it, so the walk stops here rather than
-        # list that mailbox as empty.
+        # An address or a group that cannot be resolved is a configuration
+        # problem, not a verdict on the mailboxes behind it, so the walk stops
+        # here rather than list those mailboxes as empty.
         if failures:
-            addresses = ", ".join(
+            names = ", ".join(
                 failure.failed_entity.entity_id
                 for failure in failures
                 if failure.failed_entity is not None
             )
             raise ConnectorValidationError(
-                f"These mailboxes match no user: {addresses}. Fix or remove them "
-                "from the mailbox list before pruning or permission sync."
+                f"These mailboxes or groups cannot be resolved: {names}. Fix or "
+                "remove them from the connector before pruning or permission sync."
             )
-        for mailbox in mailboxes:
+        self._roster = roster_of(mailboxes)
+        # Each worker drains the shared queue one mailbox at a time, so the
+        # walk's threads stay busy until it is empty. The heartbeat and the
+        # yields live on this thread.
+        queue: deque[OutlookMailbox] = deque(mailboxes)
+        workers: list[Iterator[list[SlimDocument | HierarchyNode]]] = [
+            self._slim_worker_pages(queue, include_permissions)
+            for _ in range(min(MAILBOX_WORKERS, len(mailboxes)))
+        ]
+        yield from self._slim_batches(
+            parallel_yield(workers, max_workers=MAILBOX_WORKERS), callback
+        )
+
+    def _slim_worker_pages(
+        self, queue: deque[OutlookMailbox], include_permissions: bool
+    ) -> Generator[list[SlimDocument | HierarchyNode], None, None]:
+        while queue:
             try:
-                self.ops.probe_mailbox(mailbox_id=mailbox.id)
-            except OutlookGraphError as e:
-                if e.status == 404:
-                    logger.info(
-                        "Outlook: %s is gone, listing nothing for it", mailbox.address
-                    )
-                    continue
-                raise
-            # A 404 past the probe is a folder that vanished mid-walk, not the
-            # mailbox, so it aborts the walk like any other error.
-            excluded = self._excluded_well_known_folder_ids(mailbox)
-            tree = list(self._walk_folder_tree(mailbox, excluded))
-            access = owner_access(mailbox) if include_permissions else None
-            yield list(self._hierarchy_nodes(mailbox, tree, access))
-            yield from self._slim_batches(
-                self._conversation_slim_pages(mailbox, tree, access), callback
-            )
-            if self.include_calendar:
-                yield from self._slim_batches(
-                    self._event_slim_pages(mailbox, include_permissions), callback
+                mailbox = queue.popleft()
+            except IndexError:
+                return
+            yield from self._slim_mailbox_pages(mailbox, include_permissions)
+
+    def _slim_mailbox_pages(
+        self, mailbox: OutlookMailbox, include_permissions: bool
+    ) -> Generator[list[SlimDocument | HierarchyNode], None, None]:
+        """One mailbox's part of the slim walk: its folder nodes, an empty
+        page per delta page read so the caller's heartbeat keeps up, its
+        thread documents once every folder is listed, then its events.
+        Nothing for a mailbox that is gone."""
+        try:
+            self.ops.probe_mailbox(mailbox_id=mailbox.id)
+            self._available[mailbox.id] = True
+        except OutlookGraphError as e:
+            # Past the probe a 404 is a vanished folder, which aborts the walk.
+            if e.status == 404:
+                self._available[mailbox.id] = False
+                logger.info(
+                    "Outlook: %s is gone, listing nothing for it", mailbox.address
                 )
+                return
+            raise
+        excluded = self._excluded_well_known_folder_ids(mailbox)
+        tree = list(self._walk_folder_tree(mailbox, excluded))
+        access = owner_access(mailbox) if include_permissions else None
+        yield list(self._hierarchy_nodes(mailbox, tree, access))
+        # A copy's documents are decided across its folders, so the mailbox's
+        # listing is held whole. One mailbox per worker at a time.
+        listing: _MailboxListing = _MailboxListing()
+        for rows in self._thread_listing_pages(mailbox, tree):
+            listing.rows.extend(rows)
+            if len(listing.rows) > MAX_LISTING_ROWS_PER_MAILBOX:
+                # Listing nothing for it would prune its documents.
+                raise ConnectorValidationError(_oversized_mailbox_message(mailbox))
+            yield []
+        listing.group()
+        documents: list[SlimDocument | HierarchyNode] = []
+        for rows in listing.conversations or []:
+            documents.extend(
+                slim_documents(
+                    plan_documents(rows, mailbox, self._mailbox_available),
+                    include_permissions,
+                )
+            )
+            if len(documents) >= SLIM_BATCH_SIZE:
+                yield documents
+                documents = []
+        if documents:
+            yield documents
+        if self.include_calendar:
+            for events in self._event_slim_pages(mailbox, include_permissions):
+                yield [*events]
 
     def _slim_batches(
         self,
-        pages: Iterable[list[SlimDocument]],
+        pages: Iterable[list[SlimDocument | HierarchyNode]],
         callback: IndexingHeartbeatInterface | None,
     ) -> GenerateSlimDocumentOutput:
         """Documents batched across pages, each page reported to the heartbeat."""
@@ -867,16 +1245,13 @@ class OutlookConnector(
         if batch:
             yield batch
 
-    def _conversation_slim_pages(
-        self,
-        mailbox: OutlookMailbox,
-        tree: list[tuple[OutlookFolder, str]],
-        access: ExternalAccess | None,
-    ) -> Generator[list[SlimDocument], None, None]:
-        """Conversation documents of every folder in the tree, one list per
-        delta page and deduplicated within it. The parent is left unset so
-        pruning keeps the folder indexing chose. Any Graph error raises, since
-        pruning and permission sync must both see the whole mailbox or nothing."""
+    def _thread_listing_pages(
+        self, mailbox: OutlookMailbox, tree: list[tuple[OutlookFolder, str]]
+    ) -> Generator[list[ThreadListing], None, None]:
+        """The messages of every folder in the tree, one list per delta page.
+        Any Graph error raises, since pruning and permission sync must both
+        see the whole mailbox or nothing."""
+        roster: Roster = self._run_roster()
         for folder, _ in tree:
             next_link: str | None = None
             while True:
@@ -886,17 +1261,10 @@ class OutlookConnector(
                 page = self.ops.fetch_folder_delta_page(
                     mailbox_id=mailbox.id, folder_id=folder.id, next_link=next_link
                 )
-                conversation_ids = dict.fromkeys(
-                    change.conversation_id
-                    for change in page.changes
-                    if not change.removed and change.conversation_id
-                )
                 yield [
-                    SlimDocument(
-                        id=conversation_document_id(mailbox, conversation_id),
-                        external_access=access,
-                    )
-                    for conversation_id in conversation_ids
+                    row
+                    for change in page.changes
+                    if (row := listing_row(change, roster)) is not None
                 ]
                 next_link = page.next_link
                 if next_link is None:
@@ -989,38 +1357,33 @@ class OutlookConnector(
         return readers
 
     def _open_mailbox(
-        self,
-        checkpoint: OutlookCheckpoint,
-        mailbox: OutlookMailbox,
-        include_permissions: bool,
+        self, cursor: MailboxCursor, include_permissions: bool
     ) -> Generator[HierarchyNode | ConnectorFailure, None, None]:
         """Probe the mailbox, then list its whole folder tree.
 
         Nothing is yielded until the tree is known, so a listing that fails
         part way leaves nothing behind for the retry to repeat.
         """
+        mailbox = cursor.mailbox
         try:
             self.ops.probe_mailbox(mailbox_id=mailbox.id)
+            self._available[mailbox.id] = True
             excluded = self._excluded_well_known_folder_ids(mailbox)
             tree = list(self._walk_folder_tree(mailbox, excluded))
         except OutlookGraphError as e:
             if not e.is_permanent_refusal:
                 raise
+            self._available[mailbox.id] = False
             yield from self._mailbox_unavailable(mailbox, e)
+            cursor.finished = True
             return
 
         access = owner_access(mailbox) if include_permissions else None
         yield from self._hierarchy_nodes(mailbox, tree, access)
 
-        checkpoint.current_mailbox = mailbox
-        checkpoint.folders = list(reversed([folder for folder, _ in tree]))
-        checkpoint.excluded_folder_ids = sorted(excluded)
-        checkpoint.current_folder = None
-        checkpoint.seen_conversation_ids = {}
-        checkpoint.calendar_next_link = None
-        checkpoint.calendar_done = False
-        checkpoint.seen_series_ids = set()
-        self._reset_folder_cursor(checkpoint)
+        cursor.opened = True
+        cursor.folders = list(reversed([folder for folder, _ in tree]))
+        cursor.excluded_folder_ids = sorted(excluded)
 
     def _hierarchy_nodes(
         self,
@@ -1101,29 +1464,30 @@ class OutlookConnector(
 
     def _read_folder_page(
         self,
-        checkpoint: OutlookCheckpoint,
+        cursor: MailboxCursor,
+        roster: Roster,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-        include_permissions: bool,
-    ) -> Generator[Document | ConnectorFailure, None, None]:
-        mailbox = checkpoint.current_mailbox
-        folder = checkpoint.current_folder
-        assert mailbox is not None and folder is not None
+    ) -> MailboxStep:
+        mailbox = cursor.mailbox
+        folder = cursor.current_folder
+        if folder is None:
+            raise ValueError("Cannot read a folder page without a current folder")
 
         window_start = _poll_bound(start)
         try:
             page = self.ops.fetch_folder_delta_page(
                 mailbox_id=mailbox.id,
                 folder_id=folder.id,
-                received_after=None if checkpoint.folder_unfiltered else window_start,
-                next_link=checkpoint.delta_next_link,
+                received_after=None if cursor.folder_unfiltered else window_start,
+                next_link=cursor.delta_next_link,
             )
         except OutlookGraphError as e:
             # Graph drops delta state with 410. Start the folder's round over.
-            if e.status == 410 and checkpoint.delta_next_link is not None:
-                checkpoint.delta_next_link = None
-                checkpoint.folder_change_count = 0
-                return
+            if e.status == 410 and cursor.delta_next_link is not None:
+                cursor.delta_next_link = None
+                cursor.folder_change_count = 0
+                return MailboxStep()
             # The folder disappeared mid-run. Nothing left to index in it.
             if e.status == 404:
                 logger.info(
@@ -1131,21 +1495,19 @@ class OutlookConnector(
                     folder.display_name,
                     mailbox.address,
                 )
-                checkpoint.current_folder = None
-                return
+                cursor.current_folder = None
+                return MailboxStep()
             # Access to the whole mailbox is gone, so stop walking it rather
             # than record one failure per remaining folder.
             if e.status == 403:
-                yield from self._mailbox_unavailable(mailbox, e)
-                self._finish_mailbox(checkpoint)
-                return
+                cursor.finished = True
+                return MailboxStep(items=list(self._mailbox_unavailable(mailbox, e)))
             raise
 
         end_at = _poll_bound(end)
-        excluded = set(checkpoint.excluded_folder_ids)
+        # Keyed by message so a copy the page lists twice is recorded once.
+        rows: dict[str, ThreadListing] = {}
         for change in page.changes:
-            if change.removed or not change.conversation_id:
-                continue
             # Read-state entries arrive for old messages whatever the filter
             # says, so the window is applied again here.
             if (
@@ -1156,27 +1518,20 @@ class OutlookConnector(
                 continue
             if end_at and change.received_at and change.received_at > end_at:
                 continue
-            if change.conversation_id in checkpoint.seen_conversation_ids:
-                continue
-            result = self._rebuild_conversation(
-                mailbox, change.conversation_id, excluded, include_permissions
-            )
-            _remember_conversation(
-                checkpoint.seen_conversation_ids, change.conversation_id
-            )
-            if result is not None:
-                yield result
+            row: ThreadListing | None = listing_row(change, roster)
+            if row is not None:
+                rows.setdefault(row.message_id, row)
 
         # Committed with the cursor, so a page replayed after a failure part
         # way through is counted once.
-        checkpoint.folder_change_count += len(page.changes)
-        checkpoint.delta_next_link = page.next_link
+        cursor.folder_change_count += len(page.changes)
+        cursor.delta_next_link = page.next_link
         if page.next_link is not None:
-            return
+            return MailboxStep(rows=list(rows.values()))
         filled_cap = (
             window_start is not None
-            and not checkpoint.folder_unfiltered
-            and checkpoint.folder_change_count >= FILTERED_DELTA_CAP
+            and not cursor.folder_unfiltered
+            and cursor.folder_change_count >= FILTERED_DELTA_CAP
         )
         if filled_cap:
             logger.info(
@@ -1185,10 +1540,11 @@ class OutlookConnector(
                 folder.display_name,
                 mailbox.address,
             )
-            self._reset_folder_cursor(checkpoint)
-            checkpoint.folder_unfiltered = True
-            return
-        checkpoint.current_folder = None
+            self._reset_folder_cursor(cursor)
+            cursor.folder_unfiltered = True
+            return MailboxStep(rows=list(rows.values()))
+        cursor.current_folder = None
+        return MailboxStep(rows=list(rows.values()))
 
     def _calendar_window(self) -> tuple[datetime, datetime]:
         """The event times the calendar view covers, around the moment of the call."""
@@ -1200,12 +1556,11 @@ class OutlookConnector(
 
     def _read_calendar_page(
         self,
-        checkpoint: OutlookCheckpoint,
+        cursor: MailboxCursor,
         start: SecondsSinceUnixEpoch,
         include_permissions: bool,
     ) -> Generator[Document | ConnectorFailure, None, None]:
-        mailbox = checkpoint.current_mailbox
-        assert mailbox is not None
+        mailbox = cursor.mailbox
 
         window_start, window_end = self._calendar_window()
         try:
@@ -1213,16 +1568,16 @@ class OutlookConnector(
                 mailbox_id=mailbox.id,
                 window_start=window_start,
                 window_end=window_end,
-                next_link=checkpoint.calendar_next_link,
+                next_link=cursor.calendar_next_link,
             )
         except OutlookGraphError as e:
             # Graph drops delta state with 410. Start the round over.
-            if e.status == 410 and checkpoint.calendar_next_link is not None:
-                checkpoint.calendar_next_link = None
+            if e.status == 410 and cursor.calendar_next_link is not None:
+                cursor.calendar_next_link = None
                 return
             if e.is_permanent_refusal:
                 yield from self._calendar_unavailable(mailbox, e)
-                checkpoint.calendar_done = True
+                cursor.calendar_done = True
                 return
             raise
 
@@ -1232,13 +1587,13 @@ class OutlookConnector(
                 mailbox,
                 event,
                 modified_after,
-                checkpoint.seen_series_ids,
+                cursor.seen_series_ids,
                 include_permissions,
             )
             if document is not None:
                 yield document
-        checkpoint.calendar_next_link = page.next_link
-        checkpoint.calendar_done = page.next_link is None
+        cursor.calendar_next_link = page.next_link
+        cursor.calendar_done = page.next_link is None
 
     def _event_document(
         self,
@@ -1316,65 +1671,164 @@ class OutlookConnector(
             )
             return None
 
-    def _rebuild_conversation(
+    def _build_conversation(
         self,
         mailbox: OutlookMailbox,
-        conversation_id: str,
         excluded_folder_ids: set[str],
+        rows: list[ThreadListing],
+        listing_complete: bool,
         include_permissions: bool,
-    ) -> Document | ConnectorFailure | None:
-        document_id = conversation_document_id(mailbox, conversation_id)
-        # Pages arrive newest first, so the walk stops at the newest indexable
-        # messages however many drafts or trashed replies sit among them.
-        kept: list[OutlookMessage] = []
-        fetched = 0
-        next_link: str | None = None
+    ) -> list[Document | ConnectorFailure]:
+        """The documents one conversation of the mailbox yields, by the rules
+        in ``threads.py``. A poll lists only the messages of the window, so
+        the copy is read whole through its outline first."""
+        conversation_id: str = rows[0].conversation_id
         try:
-            while True:
-                page = self.ops.fetch_conversation_messages_page(
-                    mailbox_id=mailbox.id,
-                    conversation_id=conversation_id,
-                    next_link=next_link,
+            if not listing_complete:
+                rows = self._conversation_outline(
+                    mailbox, conversation_id, excluded_folder_ids
                 )
-                # The budget applies to raw messages, so a final page is cut
-                # to what is left of it before filtering.
-                within_budget = page.messages[: CONVERSATION_FETCH_LIMIT - fetched]
-                fetched += len(within_budget)
-                kept.extend(indexable_messages(within_budget, excluded_folder_ids))
-                next_link = page.next_link
-                if (
-                    next_link is None
-                    or len(kept) >= MAX_MESSAGES_PER_CONVERSATION
-                    or fetched >= CONVERSATION_FETCH_LIMIT
-                ):
-                    break
-            # Cut here so attachments are read only for the messages the
-            # document keeps.
-            kept = kept[:MAX_MESSAGES_PER_CONVERSATION]
-            attachments: dict[str, list[TextSection]] = {}
-            budget = AttachmentBudget()
-            for message in kept:
-                if not (self.include_attachments and message.has_attachments):
-                    continue
-                attachments[message.id] = self._attachment_sections(
-                    mailbox, message, budget
+            plans: list[DocumentPlan] = plan_documents(
+                rows, mailbox, self._mailbox_available
+            )
+            if not plans:
+                return []
+            wanted: set[str] = {
+                message_id for plan in plans for message_id in plan.message_ids
+            }
+            messages: list[OutlookMessage] = self._copy_messages(
+                mailbox, conversation_id, excluded_folder_ids, wanted
+            )
+            attachments: dict[str, list[TextSection]] = self._conversation_attachments(
+                mailbox, messages
+            )
+            by_id: dict[str, OutlookMessage] = {m.match_id: m for m in messages}
+            documents: list[Document | ConnectorFailure] = []
+            for plan in plans:
+                document: Document | None = build_thread_document(
+                    plan.document_id,
+                    mailbox,
+                    plan.readers,
+                    [by_id[m] for m in plan.message_ids if m in by_id],
+                    attachments,
+                    include_permissions,
                 )
+                if document is not None:
+                    documents.append(document)
+            return documents
         except OutlookGraphError as e:
             # A recorded failure lets the poll window move past the mail, so a
             # transient failure raises and keeps the checkpoint for the retry.
             if e.fails_the_attempt:
                 raise
-            return ConnectorFailure(
-                failed_document=DocumentFailure(document_id=document_id),
-                failure_message=(
-                    f"Failed to fetch conversation {conversation_id} in "
-                    f"{mailbox.address}: {e}"
-                ),
-                exception=e,
+            # The copy, not the thread document: another mailbox may own that.
+            return [
+                ConnectorFailure(
+                    failed_entity=EntityFailure(
+                        entity_id=f"{mailbox.address}:{conversation_id}"
+                    ),
+                    failure_message=(
+                        f"Failed to read conversation {conversation_id} in "
+                        f"{mailbox.address}: {e}"
+                    ),
+                    exception=e,
+                )
+            ]
+
+    def _conversation_outline(
+        self,
+        mailbox: OutlookMailbox,
+        conversation_id: str,
+        excluded_folder_ids: set[str],
+    ) -> list[ThreadListing]:
+        """The copy's newest CONVERSATION_FETCH_LIMIT indexable messages as
+        listing rows, no bodies. The outline reads newest first, so a copy
+        longer than that is asked for its oldest message as well: the first
+        message chooses the builder, and a full listing would have it."""
+        roster: Roster = self._run_roster()
+
+        def fetch(
+            next_link: str | None,
+        ) -> tuple[list[OutlookMessageChange], str | None]:
+            page = self.ops.fetch_conversation_outline_page(
+                mailbox_id=mailbox.id,
+                conversation_id=conversation_id,
+                next_link=next_link,
             )
-        return build_conversation_document(
-            mailbox, conversation_id, kept, attachments, include_permissions
-        )
+            return page.changes, page.next_link
+
+        rows: list[ThreadListing] = []
+        for changes in _conversation_pages(fetch, COMPARED_FETCH_LIMIT):
+            for change in changes:
+                if not is_indexable(change, excluded_folder_ids):
+                    continue
+                outline_row: ThreadListing | None = listing_row(change, roster)
+                if outline_row is not None:
+                    rows.append(outline_row)
+            if len(rows) >= CONVERSATION_FETCH_LIMIT:
+                break
+        if rows and not any(row.is_root for row in rows):
+            oldest: OutlookDeltaPage = self.ops.fetch_conversation_outline_page(
+                mailbox_id=mailbox.id,
+                conversation_id=conversation_id,
+                oldest_first=True,
+            )
+            first: OutlookMessageChange | None = next(
+                (c for c in oldest.changes if is_indexable(c, excluded_folder_ids)),
+                None,
+            )
+            root: ThreadListing | None = (
+                listing_row(first, roster) if first is not None else None
+            )
+            if root is not None and root.is_root:
+                rows.append(root)
+        return rows
+
+    def _copy_messages(
+        self,
+        mailbox: OutlookMailbox,
+        conversation_id: str,
+        excluded_folder_ids: set[str],
+        wanted: set[str],
+    ) -> list[OutlookMessage]:
+        """The ``wanted`` messages of one copy with bodies, read over the
+        same pages the listing or the outline covered."""
+
+        def fetch(next_link: str | None) -> tuple[list[OutlookMessage], str | None]:
+            page = self.ops.fetch_conversation_messages_page(
+                mailbox_id=mailbox.id,
+                conversation_id=conversation_id,
+                next_link=next_link,
+            )
+            return page.messages, page.next_link
+
+        # Pages arrive newest first, so the walk stops once every wanted
+        # message is in hand however many drafts or trashed replies sit among them.
+        kept: list[OutlookMessage] = []
+        for messages in _conversation_pages(fetch, COMPARED_FETCH_LIMIT):
+            kept.extend(
+                m
+                for m in indexable_messages(messages, excluded_folder_ids)
+                if m.match_id in wanted
+            )
+            if len(kept) >= len(wanted):
+                break
+        return kept
+
+    def _conversation_attachments(
+        self, mailbox: OutlookMailbox, messages: list[OutlookMessage]
+    ) -> dict[str, list[TextSection]]:
+        """The attachment sections of a conversation's messages by message
+        id, read once however many documents share a message."""
+        attachments: dict[str, list[TextSection]] = {}
+        budget = AttachmentBudget()
+        for message in messages:
+            if not (self.include_attachments and message.has_attachments):
+                continue
+            attachments[message.id] = self._attachment_sections(
+                mailbox, message, budget
+            )
+        return attachments
 
     def _attachment_sections(
         self, mailbox: OutlookMailbox, message: OutlookMessage, budget: AttachmentBudget

@@ -4,6 +4,7 @@ else fails the attempt so it is retried."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from enum import Enum
 from typing import Any
 
 import requests
@@ -25,6 +26,38 @@ def status(error: requests.RequestException) -> int | None:
 def is_permanent(error: requests.RequestException) -> bool:
     """Teams' name for the shared Graph classifier."""
     return is_permanent_refusal(error)
+
+
+# Graph meters the export API for some tenants and refuses it to them with
+# 402.
+_PAYMENT_REQUIRED = 402
+
+
+def is_export_refusal(error: requests.RequestException) -> bool:
+    """Graph refuses the export API to an app without the approval, and with
+    402 to a tenant it meters. Anything else is an outage."""
+    return is_permanent(error) or status(error) == _PAYMENT_REQUIRED
+
+
+class ExportProbe(Enum):
+    """What one probe of the export API says."""
+
+    ANSWERS = "answers"
+    # 403 or 402: every probe of this tenant would say the same.
+    REFUSED_TO_APP = "refused_to_app"
+    # 404 or 423: the probed team or user is gone or locked, nothing more.
+    REFUSED_FOR_ITEM = "refused_for_item"
+
+
+def is_metered_refusal(error: requests.RequestException) -> bool:
+    """402 applies to the whole tenant, not to the team or user it came from."""
+    return status(error) == _PAYMENT_REQUIRED
+
+
+def export_probe_refusal(error: requests.RequestException) -> ExportProbe:
+    if status(error) in (403, _PAYMENT_REQUIRED):
+        return ExportProbe.REFUSED_TO_APP
+    return ExportProbe.REFUSED_FOR_ITEM
 
 
 @contextmanager

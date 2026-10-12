@@ -1,6 +1,8 @@
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict
+
+from onyx.connectors.field_policy import FieldClass, FieldPolicy
 
 
 class CredentialBinding(BaseModel):
@@ -22,7 +24,7 @@ class CredentialBinding(BaseModel):
 class BaseUrlCredentialBinding(CredentialBinding):
     """For sources whose only credential-bound field is the site URL."""
 
-    base_url: str
+    base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
 
 
 class ConnectorConfig(BaseModel):

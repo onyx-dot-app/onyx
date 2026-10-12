@@ -32,7 +32,13 @@ from onyx.db.index_attempt import (
     get_recent_completed_attempts_for_cc_pair,
 )
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import ConnectorCredentialPair, IndexAttempt, TargetedReindexJob
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+    SearchSettings,
+    TargetedReindexJob,
+)
 from onyx.db.search_settings import get_current_search_settings
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from tests.external_dependency_unit.indexing_helpers import (
@@ -50,6 +56,9 @@ def cc_pair(
     try:
         yield pair
     finally:
+        db_session.query(IndexAttemptError).filter(
+            IndexAttemptError.connector_credential_pair_id == pair.id
+        ).delete(synchronize_session="fetch")
         db_session.query(IndexAttempt).filter(
             IndexAttempt.connector_credential_pair_id == pair.id
         ).delete(synchronize_session="fetch")
@@ -546,6 +555,77 @@ def test_count_unique_active_cc_pairs_skips_targeted(
 
     assert count == len(distinct_ids_before)
     assert cc_pair.id not in distinct_ids_before
+
+
+def test_get_last_successful_poll_range_end_counts_completed_with_errors(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """An attempt that completed with errors moves the cursor, a failed one
+    does not."""
+    from datetime import datetime, timezone
+
+    settings: SearchSettings = get_current_search_settings(db_session)
+    ends: dict[IndexingStatus, datetime] = {
+        IndexingStatus.SUCCESS: datetime(2026, 1, 1, tzinfo=timezone.utc),
+        IndexingStatus.COMPLETED_WITH_ERRORS: datetime(2026, 2, 1, tzinfo=timezone.utc),
+        IndexingStatus.FAILED: datetime(2026, 3, 1, tzinfo=timezone.utc),
+    }
+    for status, end in ends.items():
+        attempt: IndexAttempt = _make_attempt(
+            db_session, cc_pair.id, settings.id, status=status
+        )
+        attempt.poll_range_end = end
+    db_session.commit()
+
+    result: float = get_last_successful_attempt_poll_range_end(
+        cc_pair_id=cc_pair.id,
+        earliest_index=0.0,
+        search_settings=settings,
+        db_session=db_session,
+    )
+
+    assert result == ends[IndexingStatus.COMPLETED_WITH_ERRORS].timestamp()
+
+
+def test_get_last_successful_poll_range_end_holds_for_entity_error(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """An unresolved entity error (a mailbox the run could not read) keeps
+    the cursor where it was. A document error does not."""
+    from datetime import datetime, timezone
+
+    settings: SearchSettings = get_current_search_settings(db_session)
+    clean_end: datetime = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    clean: IndexAttempt = _make_attempt(
+        db_session, cc_pair.id, settings.id, status=IndexingStatus.SUCCESS
+    )
+    clean.poll_range_end = clean_end
+    errored: IndexAttempt = _make_attempt(
+        db_session,
+        cc_pair.id,
+        settings.id,
+        status=IndexingStatus.COMPLETED_WITH_ERRORS,
+    )
+    errored.poll_range_end = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    db_session.add(
+        IndexAttemptError(
+            index_attempt_id=errored.id,
+            connector_credential_pair_id=cc_pair.id,
+            entity_id="mailbox",
+            failure_message="403",
+            is_resolved=False,
+        )
+    )
+    db_session.commit()
+
+    result: float = get_last_successful_attempt_poll_range_end(
+        cc_pair_id=cc_pair.id,
+        earliest_index=0.0,
+        search_settings=settings,
+        db_session=db_session,
+    )
+
+    assert result == clean_end.timestamp()
 
 
 def test_get_last_successful_poll_range_end_skips_targeted(

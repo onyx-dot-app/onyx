@@ -6,8 +6,6 @@ from inspect import signature
 from typing import Any, TypeVar, cast
 
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import RecordType, optional_telemetry
-from shared_configs.contextvars import get_current_user_id
 
 logger = setup_logger()
 
@@ -15,26 +13,8 @@ F = TypeVar("F", bound=Callable)
 FG = TypeVar("FG", bound=Callable[..., Generator | Iterator])
 
 
-def _telemetry_user_id(kwargs: dict[str, Any]) -> str:
-    """User id for a latency record.
-
-    Prefer an explicit ``user`` keyword argument. Otherwise use the request's
-    user contextvar, which the auth dependencies set for every API call.
-    Never raises: telemetry must not break the decorated function.
-    """
-    try:
-        user = kwargs.get("user")
-        if user is not None:
-            return str(user.id)
-        return get_current_user_id() or "Unknown"
-    except Exception:
-        logger.warning("Failed to resolve user id for latency telemetry", exc_info=True)
-        return "Unknown"
-
-
 def log_function_time(
     func_name: str | None = None,
-    print_only: bool = False,
     debug_only: bool = False,
     include_args: bool = False,
     include_args_subset: dict[str, Callable[[Any], Any]] | None = None,
@@ -44,8 +24,6 @@ def log_function_time(
     Args:
         func_name: The name of the function to log. If None uses func.__name__.
             Defaults to None.
-        print_only: If False, also sends the log to telemetry. Defaults to
-            False.
         debug_only: If True, logs at the debug level. If False, logs at the
             notice level. Defaults to False.
         include_args: Whether to include the full args and kwargs in the log.
@@ -79,13 +57,6 @@ def log_function_time(
             else:
                 logger.notice(final_log)
 
-            if not print_only:
-                optional_telemetry(
-                    record_type=RecordType.LATENCY,
-                    data={"function": log_name, "latency": str(elapsed_time_str)},
-                    user_id=_telemetry_user_id(kwargs),
-                )
-
         if inspect.iscoroutinefunction(func):
 
             @wraps(func)
@@ -109,14 +80,11 @@ def log_function_time(
     return decorator
 
 
-def log_generator_function_time(
-    func_name: str | None = None, print_only: bool = False
-) -> Callable[[FG], FG]:
+def log_generator_function_time(func_name: str | None = None) -> Callable[[FG], FG]:
     def decorator(func: FG) -> FG:
         @wraps(func)
         def wrapped_func(*args: Any, **kwargs: Any) -> Any:
             start_time = time.monotonic()
-            user_id = _telemetry_user_id(kwargs)
             try:
                 # `yield from` delegates send/throw/close to the inner generator,
                 # so its own finally (cleanup) runs synchronously when an exception
@@ -127,12 +95,6 @@ def log_generator_function_time(
                 elapsed_time_str = f"{time.monotonic() - start_time:.3f}"
                 log_name = func_name or func.__name__  # ty: ignore[unresolved-attribute]
                 logger.info("%s took %s seconds", log_name, elapsed_time_str)
-                if not print_only:
-                    optional_telemetry(
-                        record_type=RecordType.LATENCY,
-                        data={"function": log_name, "latency": str(elapsed_time_str)},
-                        user_id=user_id,
-                    )
 
         return cast(FG, wrapped_func)
 
