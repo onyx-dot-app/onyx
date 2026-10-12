@@ -376,7 +376,7 @@ Only confirmed persistence permits canonical history replacement. Neither path l
 A failed read preserves the local transcript and settlement identity. The retry action resumes that same settlement.
 Only confirmed completion with persisted history permits the next queued prompt.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
-`web/src/providers/CraftStreamingProvider.tsx` owns that hook inside the authenticated app provider.
+`CraftStreamingProvider` owns that hook and is mounted by `web/src/providers/AppProvider.tsx` inside the authenticated app provider.
 Queued prompts continue after the user leaves Craft. Logout and account changes clear the previous user’s sessions.
 The queue retains each prompt, its attachments, and its explicit model choice until the server accepts it.
 Sandbox restoration keeps the composer draft and disables submission until ready. Pending interactive starts still accept queued prompts.
