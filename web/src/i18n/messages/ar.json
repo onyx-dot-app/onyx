@@ -2097,11 +2097,6 @@
           "title": "خطأ في مزامنة أذونات المستندات"
         }
       },
-      "docsLink": {
-        "checkOutDocs": {
-          "text": "راجع <link>مستنداتنا</link> لمزيد من المعلومات حول إعداد هذا الموصّل."
-        }
-      },
       "errorsModal": {
         "columns": {
           "documentId": "معرّف الفشل",
@@ -2689,17 +2684,8 @@
         "newAccountButton": {
           "label": "حساب {source} جديد"
         },
-        "oauthRedirectFailed": {
-          "message": "تعذّر تحويلك لتسجيل الدخول عبر {source}. يرجى المحاولة مرة أخرى."
-        },
         "oauthStartFailed": {
           "toast": "تعذّر بدء OAuth"
-        },
-        "oauthUrlFailed": {
-          "toast": "فشل جلب عنوان URL الخاص بـ OAuth"
-        },
-        "retryButton": {
-          "label": "إعادة المحاولة"
         },
         "savedAccountsButton": {
           "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}"

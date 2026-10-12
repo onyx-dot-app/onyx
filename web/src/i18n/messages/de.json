@@ -2097,11 +2097,6 @@
           "title": "Fehler bei der Synchronisierung der Dokumentberechtigungen"
         }
       },
-      "docsLink": {
-        "checkOutDocs": {
-          "text": "In <link>unserer Dokumentation</link> findest du weitere Informationen zur Konfiguration dieses Konnektors."
-        }
-      },
       "errorsModal": {
         "columns": {
           "documentId": "Fehler-ID",
@@ -2689,17 +2684,8 @@
         "newAccountButton": {
           "label": "Neues {source}-Konto"
         },
-        "oauthRedirectFailed": {
-          "message": "Wir konnten Sie nicht zur Anmeldung bei {source} weiterleiten. Bitte versuchen Sie es erneut."
-        },
         "oauthStartFailed": {
           "toast": "OAuth kann nicht gestartet werden"
-        },
-        "oauthUrlFailed": {
-          "toast": "Die OAuth-URL konnte nicht abgerufen werden"
-        },
-        "retryButton": {
-          "label": "Erneut versuchen"
         },
         "savedAccountsButton": {
           "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}"

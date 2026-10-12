@@ -2097,11 +2097,6 @@
           "title": "ドキュメント権限の同期エラー"
         }
       },
-      "docsLink": {
-        "checkOutDocs": {
-          "text": "このコネクタの設定について詳しくは<link>ドキュメント</link>をご覧ください。"
-        }
-      },
       "errorsModal": {
         "columns": {
           "documentId": "失敗 ID",
@@ -2689,17 +2684,8 @@
         "newAccountButton": {
           "label": "新しい {source} アカウント"
         },
-        "oauthRedirectFailed": {
-          "message": "{source} でのサインイン画面にリダイレクトできませんでした。もう一度お試しください。"
-        },
         "oauthStartFailed": {
           "toast": "OAuth を開始できません"
-        },
-        "oauthUrlFailed": {
-          "toast": "OAuth URL を取得できませんでした"
-        },
-        "retryButton": {
-          "label": "再試行"
         },
         "savedAccountsButton": {
           "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"

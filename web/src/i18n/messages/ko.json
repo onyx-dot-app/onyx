@@ -2097,11 +2097,6 @@
           "title": "문서 권한 동기화 오류"
         }
       },
-      "docsLink": {
-        "checkOutDocs": {
-          "text": "이 커넥터 구성에 대한 자세한 내용은 <link>문서</link>를 참조하세요."
-        }
-      },
       "errorsModal": {
         "columns": {
           "documentId": "실패 ID",
@@ -2689,17 +2684,8 @@
         "newAccountButton": {
           "label": "새 {source} 계정"
         },
-        "oauthRedirectFailed": {
-          "message": "{source} 로그인 페이지로 이동하지 못했습니다. 다시 시도하세요."
-        },
         "oauthStartFailed": {
           "toast": "OAuth를 시작할 수 없습니다"
-        },
-        "oauthUrlFailed": {
-          "toast": "OAuth URL을 가져오지 못했습니다"
-        },
-        "retryButton": {
-          "label": "다시 시도"
         },
         "savedAccountsButton": {
           "label": "{count, plural, one {저장된 계정 #개} other {저장된 계정 #개}}"

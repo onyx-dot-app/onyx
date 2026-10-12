@@ -2097,11 +2097,6 @@
           "title": "Erreur de synchronisation des autorisations des documents"
         }
       },
-      "docsLink": {
-        "checkOutDocs": {
-          "text": "Consultez <link>notre documentation</link> pour plus d'informations sur la configuration de ce connecteur."
-        }
-      },
       "errorsModal": {
         "columns": {
           "documentId": "ID de l’échec",
@@ -2689,17 +2684,8 @@
         "newAccountButton": {
           "label": "Nouveau compte {source}"
         },
-        "oauthRedirectFailed": {
-          "message": "Nous n'avons pas pu vous rediriger pour vous connecter avec {source}. Veuillez réessayer."
-        },
         "oauthStartFailed": {
           "toast": "Impossible de démarrer OAuth"
-        },
-        "oauthUrlFailed": {
-          "toast": "Échec de la récupération de l'URL OAuth"
-        },
-        "retryButton": {
-          "label": "Réessayer"
         },
         "savedAccountsButton": {
           "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}"
