@@ -328,8 +328,15 @@ export default function AuthenticationAccountSection({
         sourceName={displayName}
         selected={credential.id === selectedSavedId}
         selectable={isSelectable(credential)}
+        // Folded, the pick is the only card shown: it keeps a light look,
+        // and a click opens the section rather than dropping the pick.
+        quietSelection={!accountsExpanded}
         onSelect={() => onSwap(credential)}
-        onDeselect={() => onCredentialChange(null)}
+        onDeselect={() =>
+          accountsExpanded
+            ? onCredentialChange(null)
+            : setAccountsExpanded(true)
+        }
         onDelete={() => onDeleteCredential(credential)}
         checkReport={checkReports.reportFor(credential.id)}
         onRerunChecks={() => checkReports.rerun(credential.id)}
