@@ -142,6 +142,6 @@ describe("CraftInputBar queued attachments", () => {
     fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
 
     expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
-    expect(mockClearFiles).toHaveBeenCalledWith({ suppressRefetch: true });
+    expect(mockClearFiles).toHaveBeenCalledWith();
   });
 });

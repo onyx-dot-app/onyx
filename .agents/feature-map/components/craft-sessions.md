@@ -498,6 +498,19 @@ Drive file), inserted `PENDING` before the action executes
 `UNKNOWN` (`sweep_stale_pending_receipts`) so a crashed recorder never looks
 like a silently-still-in-progress send.
 
+Frontend attachments in `web/src/app/craft/contexts/UploadFilesContext.tsx` use a separate scope for each session visit.
+The composer owns draft selections, not the persisted session directory.
+Opening a session starts an empty draft; directory listings never select attachments.
+Removing a chip or clearing a sent draft leaves stored files available to earlier messages.
+Only explicit selections enter the current turn’s attachment context. Stored files do not become new selections. Subagent follow-ups carry an empty current selection while retaining references to earlier attachments.
+Uploads hold the session row lock through quota checks and file writes, so concurrent requests share one session limit.
+URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
+Replacing that destination preserves selected source files and uploads them into the replacement.
+New Build, another session, or visit end clears the previous draft.
+Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
+Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
+ChatPanel owns its UploadFilesProvider. Unmounting chat releases its draft, including pending welcome files and navigation to Craft apps.
+
 ### 4.8 User library
 
 Upload/CRUD lives in `user_library/api.py` (thin HTTP layer) over
