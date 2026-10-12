@@ -25,6 +25,10 @@ from onyx.connectors.google_drive.models import (
 )
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.jira.models import JiraGroupPage
+from onyx.connectors.slack.source_operations import (
+    SlackChannelMembersPage,
+    SlackChannelsPage,
+)
 from onyx.connectors.source_operations import (
     SourceOperations,
     registered_source_operations,
@@ -50,6 +54,17 @@ def _configure_confluence_spy(spy: MagicMock) -> None:
 
     spy.get_server_version.return_value = (9, 1)
     spy.get_space_permissions.side_effect = get_space_permissions
+
+
+def _configure_slack_spy(spy: MagicMock) -> None:
+    """A workspace where the bot sees one channel with one member, so the
+    checks that read a channel after they find one run."""
+    spy.list_channels.side_effect = lambda **_kwargs: iter(
+        [SlackChannelsPage(channels=[{"id": "C1", "name": "general"}])]
+    )
+    spy.list_channel_members.side_effect = lambda **_kwargs: iter(
+        [SlackChannelMembersPage(members=["U1"])]
+    )
 
 
 def _configure_google_drive_spy(spy: MagicMock) -> None:
@@ -121,6 +136,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.CONFLUENCE: [_configure_confluence_spy],
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
+    DocumentSource.SLACK: [_configure_slack_spy],
 }
 
 
