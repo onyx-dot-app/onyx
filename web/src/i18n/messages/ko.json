@@ -9056,14 +9056,11 @@
       "failedToRun": "검사를 실행하지 못했습니다. 다시 시도하세요.",
       "failedToRunCard": {
         "title": "검사를 실행할 수 없습니다",
-        "description": "이 계정의 검사를 시작하는 중에 문제가 발생했습니다.",
-        "retryButton": {
-          "label": "다시 시도"
-        }
+        "description": "이 계정의 검사를 시작하는 중에 문제가 발생했습니다."
       },
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
       "state": {
-        "completed": "검사가 완료되었습니다",
+        "completed": "검사가 완료되었습니다.",
         "inProgress": "검사 진행 중…"
       }
     }

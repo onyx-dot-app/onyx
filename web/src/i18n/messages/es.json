@@ -9056,14 +9056,11 @@
       "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
       "failedToRunCard": {
         "title": "No se pudieron ejecutar las comprobaciones",
-        "description": "Algo salió mal al iniciar las comprobaciones de esta cuenta.",
-        "retryButton": {
-          "label": "Reintentar"
-        }
+        "description": "Algo salió mal al iniciar las comprobaciones de esta cuenta."
       },
       "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}",
       "state": {
-        "completed": "Comprobaciones completadas",
+        "completed": "Comprobaciones completadas.",
         "inProgress": "Comprobaciones en curso…"
       }
     }

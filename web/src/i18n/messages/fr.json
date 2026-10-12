@@ -9056,14 +9056,11 @@
       "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
       "failedToRunCard": {
         "title": "Les vérifications n'ont pas pu s'exécuter",
-        "description": "Une erreur s'est produite au lancement des vérifications de ce compte.",
-        "retryButton": {
-          "label": "Réessayer"
-        }
+        "description": "Une erreur s'est produite au lancement des vérifications de ce compte."
       },
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
-        "completed": "Vérifications terminées",
+        "completed": "Vérifications terminées.",
         "inProgress": "Vérifications en cours…"
       }
     }

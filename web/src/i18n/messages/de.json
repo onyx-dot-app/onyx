@@ -9056,14 +9056,11 @@
       "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
       "failedToRunCard": {
         "title": "Prüfungen konnten nicht ausgeführt werden",
-        "description": "Beim Starten der Prüfungen für dieses Konto ist ein Fehler aufgetreten.",
-        "retryButton": {
-          "label": "Erneut versuchen"
-        }
+        "description": "Beim Starten der Prüfungen für dieses Konto ist ein Fehler aufgetreten."
       },
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
       "state": {
-        "completed": "Prüfungen abgeschlossen",
+        "completed": "Prüfungen abgeschlossen.",
         "inProgress": "Prüfungen laufen…"
       }
     }

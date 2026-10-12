@@ -409,15 +409,7 @@ function CheckCardView({
                   variant="error"
                   title={t("failedToRunCard.title")}
                   description={t("failedToRunCard.description")}
-                  rightChildren={
-                    <Button
-                      prominence="secondary"
-                      disabled={isRunning}
-                      onClick={onRerun}
-                    >
-                      {t("failedToRunCard.retryButton.label")}
-                    </Button>
-                  }
+                  innerPadding={1}
                 />
               </div>
             )}
