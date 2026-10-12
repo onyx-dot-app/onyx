@@ -1025,19 +1025,34 @@ class SessionManager:
             )
             if turn_id is not None and (active is None or active.turn_id != turn_id):
                 return False
+            selected_turn_id = active.turn_id if active is not None else None
             if active is not None:
                 request_interrupt(active.turn_id, cache)
-            aborted = False
-            if session.opencode_session_id:
-                if sandbox is not None and sandbox.status.is_active():
-                    # Finish the abort before admission can publish a successor.
-                    self._sandbox_manager.abort_opencode_session(
-                        sandbox.id, session_id, session.opencode_session_id
-                    )
-                    aborted = True
-            return active is not None or aborted
         finally:
             lock.release()
+
+        if (
+            not session.opencode_session_id
+            or sandbox is None
+            or not sandbox.status.is_active()
+        ):
+            return selected_turn_id is not None
+        with self._sandbox_manager.prepare_opencode_abort(
+            sandbox.id, session_id, session.opencode_session_id
+        ) as abort:
+            if abort is None:
+                return selected_turn_id is not None
+            lock = acquire_active_turn_lock(cache, session_id)
+            try:
+                active = get_active_turn(
+                    cache=cache, session_id=session_id, user_id=user_id
+                )
+                if (active.turn_id if active is not None else None) != selected_turn_id:
+                    return selected_turn_id is not None
+                abort()
+                return True
+            finally:
+                lock.release()
 
     def subscribe_to_existing_session_events(
         self,

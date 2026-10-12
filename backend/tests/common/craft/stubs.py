@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable, Generator, Iterable, Sequence
+from contextlib import contextmanager
 from typing import Any, cast
 from uuid import UUID
 
@@ -562,6 +563,14 @@ class StubSandboxManager(SandboxManager):
             raise _not_configured("send_message")
         # Iterate over the snapshot — re-driveable across calls.
         yield from self._send_message_events
+
+    @contextmanager
+    def prepare_opencode_abort(
+        self, sandbox_id: UUID, session_id: UUID, opencode_session_id: str
+    ) -> Generator[Callable[[], None] | None, None, None]:
+        yield lambda: self.abort_opencode_session(
+            sandbox_id, session_id, opencode_session_id
+        )
 
     def abort_opencode_session(
         self,

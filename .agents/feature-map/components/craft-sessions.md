@@ -361,7 +361,8 @@ a prompt and inside the event-streaming loop
 (`interactive_turns/executor.py:_drive_interactive_turn.interrupt_requested`),
 which also doubles as the hard-cap deadline check.
 
-Stop accepts an optional `turn_id`. The admission lock protects target validation and the direct abort.
+Stop accepts an optional `turn_id`. A short admission lock selects the target and sets its cancellation fence.
+Transport preparation runs outside that lock. A second lock checks the same target before the direct abort.
 A completed or replaced target is a no-op. Fences belong to individual turns, so late requests cannot cancel successors.
 Without a target, Stop selects the current active turn. It never leaves a fence for future work.
 The direct abort finishes before the lock releases; its HTTP timeout is two seconds per phase.
@@ -386,6 +387,7 @@ Interactive and scheduled observers reconnect after transport failures while the
 A failed start keeps ownership until its pending Stop request finishes. Discarding a failed queued start observes any accepted backend turn before dispatching another prompt.
 Connection loss alone never starts completion handling. Terminal packets or backend completion evidence start canonical reconciliation.
 Permanent access and missing-session errors stop observation and retain queued prompts without dispatching them.
+They use the existing session-load recovery notice, which blocks submission until an explicit reload succeeds.
 Interactive terminal errors reload saved history before releasing ownership, just like scheduled errors.
 Scheduled terminal error packets reconcile saved results through the existing run owner.
 Failed and skipped scheduled runs also reload saved history, but never grant queue permission.
@@ -396,6 +398,7 @@ An existing session also blocks ordinary submission before its first load comple
 Only confirmed completion with persisted history permits the next queued prompt.
 Stop is available only for an active backend turn or a pending local start. History reconciliation alone is not interruptible.
 Stop owns only the interrupt request. The stream owner handles backend completion after that request finishes.
+A targeted no-op response clears the stopped notice; a pre-accept no-op retains cancellation intent until creation finishes.
 Overlapping Stop requests for a pending local start are serialized before the accepted turn resumes observation.
 Local stream ownership ends when its stream function exits. The provider then watches visible or queued turns.
 Session deletion stops local observation only after the server confirms deletion. A rejected delete preserves the live owner.

@@ -308,8 +308,8 @@ describe("CraftStreamingProvider", () => {
     "serializes a preaccept Stop that %s before repeating it for the accepted turn",
     async (outcome) => {
       const accepted = deferred<Awaited<ReturnType<typeof createTurn>>>();
-      const firstStop = deferred<void>();
-      const acceptedStop = deferred<void>();
+      const firstStop = deferred<boolean>();
+      const acceptedStop = deferred<boolean>();
       const queuedStream = deferred<void>();
       jest.mocked(createTurn).mockReturnValueOnce(accepted.promise);
       jest
@@ -358,7 +358,7 @@ describe("CraftStreamingProvider", () => {
         await act(async () => {
           if (outcome === "failed")
             firstStop.reject(new Error("First Stop failed"));
-          else firstStop.resolve();
+          else firstStop.resolve(true);
         });
         expect(interruptMessageStream).toHaveBeenCalledTimes(2);
         expect(
@@ -366,7 +366,7 @@ describe("CraftStreamingProvider", () => {
         ).toMatchObject({ isInterrupting: true, wasInterrupted: true });
         expect(fetchTurnEventStream).not.toHaveBeenCalled();
         expect(createTurn).toHaveBeenCalledTimes(1);
-        await act(async () => acceptedStop.resolve());
+        await act(async () => acceptedStop.resolve(true));
         await waitFor(() => expect(createTurn).toHaveBeenCalledTimes(2));
         expect(jest.mocked(createTurn).mock.calls[1]?.[1]).toBe(
           "queued prompt"
@@ -388,7 +388,7 @@ describe("CraftStreamingProvider", () => {
       const firstStream = deferred<void>();
       const activeCheck =
         deferred<Awaited<ReturnType<typeof fetchActiveTurn>>>();
-      const stop = deferred<void>();
+      const stop = deferred<boolean>();
       const successorStream = deferred<void>();
       const queuedStream = deferred<void>();
       let endFirst: (() => void) | undefined;
@@ -470,7 +470,7 @@ describe("CraftStreamingProvider", () => {
           status: "RUNNING",
           turn_index: 1,
         });
-        await act(async () => stop.resolve());
+        await act(async () => stop.resolve(true));
         await waitFor(() => expect(endSuccessor).toBeDefined());
         expect(jest.mocked(fetchTurnEventStream).mock.calls[2]?.[1]).toBe(
           "external-turn"
@@ -504,7 +504,7 @@ describe("CraftStreamingProvider", () => {
       const first = deferred<void>();
       const resumed = deferred<void>();
       const queued = deferred<void>();
-      const stop = deferred<void>();
+      const stop = deferred<boolean>();
       let completeResumed: (() => void) | undefined;
       jest.mocked(interruptMessageStream).mockReturnValueOnce(stop.promise);
       jest.mocked(fetchActiveTurn).mockResolvedValue({

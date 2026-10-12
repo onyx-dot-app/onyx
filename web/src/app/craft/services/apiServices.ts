@@ -539,7 +539,7 @@ export async function fetchTurnEventStream(
 export async function interruptMessageStream(
   sessionId: string,
   turnId?: string
-): Promise<void> {
+): Promise<boolean> {
   const query = turnId ? `?turn_id=${encodeURIComponent(turnId)}` : "";
   const res = await fetch(
     `${BUILD_API_BASE}/sessions/${sessionId}/interrupt${query}`,
@@ -551,6 +551,8 @@ export async function interruptMessageStream(
   if (!res.ok) {
     throw new Error(`Failed to interrupt message: ${res.status}`);
   }
+  const result: { interrupted: boolean } = await res.json();
+  return result.interrupted;
 }
 
 export async function fetchScheduledRunContext(

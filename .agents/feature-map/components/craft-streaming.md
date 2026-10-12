@@ -537,7 +537,7 @@ A failed presentation image displays an error. Changing the slide starts a new i
 
 Live text parts retain their OpenCode part ID across stream attachments. Delta packets append to that part. Authoritative snapshots replace its text in place. Text and thinking parts keep their position relative to tool events. Durable worker events retain delta text and the part ID. Persistence splits text at part or routing boundaries. Restoration combines segments of the same part before live snapshots replace them. Older saved rows without IDs retain their existing display behavior.
 
-Transport failures retain the visible transcript and reconnect while the backend owner remains active. Permanent access and missing-session failures stop observation and show an error. Terminal packets, including interactive errors, reconcile saved history before clearing the turn. A failed completion read shows the existing retry action. Successful completion starts an authoritative output inventory read before it permits queued work.
+Transport failures retain the visible transcript and reconnect while the backend owner remains active. Permanent access and missing-session failures stop observation and use session-load recovery, which blocks submission until a reload succeeds. Terminal packets, including interactive errors, reconcile saved history before clearing the turn. A failed completion read shows the existing retry action. Successful completion starts an authoritative output inventory read before it permits queued work.
 
 Restored child text parts own the child transcript. Parent task completion settles those parts without inserting their combined text again.
 The parent task result supplies a fallback only when no child response was saved.

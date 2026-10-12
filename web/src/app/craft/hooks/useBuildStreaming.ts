@@ -221,6 +221,11 @@ export function useBuildStreaming({
         .getState()
         .sessions.get(sessionId)?.activeTurnId;
       const request = interruptMessageStream(sessionId, turnId ?? undefined)
+        .then((interrupted) => {
+          // An untargeted no-op must retain intent until creation is accepted.
+          if (turnId && !interrupted && ownsRequest())
+            updateSessionData(sessionId, { wasInterrupted: false });
+        })
         .catch((error: unknown) => {
           console.error("[Streaming] Failed to interrupt:", error);
           if (ownsRequest()) {
@@ -1035,7 +1040,7 @@ export function useBuildStreaming({
         if (ownsAttachment())
           updateSessionData(sessionId, {
             status: "failed",
-            error: error instanceof Error ? error.message : String(error),
+            loadError: error instanceof Error ? error.message : String(error),
             activeTurnId: null,
             activeTurnIndex: null,
             activeTurnLocalOwner: false,
@@ -1387,7 +1392,7 @@ export function useBuildStreaming({
         if (ownsScheduledStream())
           updateSessionData(sessionId, {
             status: "failed",
-            error: error instanceof Error ? error.message : String(error),
+            loadError: error instanceof Error ? error.message : String(error),
             activeTurnId: null,
             activeTurnIndex: null,
             activeTurnLocalOwner: false,

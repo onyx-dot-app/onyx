@@ -31,13 +31,18 @@ it.each([
   await expect(read()).rejects.toMatchObject({ status: 403 });
 });
 
-it("targets Stop at the accepted turn", async () => {
-  jest
-    .mocked(fetch)
-    .mockResolvedValue(new Response(JSON.stringify({ interrupted: true })));
-  await interruptMessageStream("session", "turn");
-  expect(fetch).toHaveBeenCalledWith(
-    "/api/build/sessions/session/interrupt?turn_id=turn",
-    { method: "POST" }
-  );
-});
+it.each([true, false])(
+  "returns the targeted Stop result (%s)",
+  async (interrupted) => {
+    jest
+      .mocked(fetch)
+      .mockResolvedValue(new Response(JSON.stringify({ interrupted })));
+    await expect(interruptMessageStream("session", "turn")).resolves.toBe(
+      interrupted
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/build/sessions/session/interrupt?turn_id=turn",
+      { method: "POST" }
+    );
+  }
+);

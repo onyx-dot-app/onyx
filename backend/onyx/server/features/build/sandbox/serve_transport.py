@@ -657,33 +657,56 @@ class _ServeMixin:
         finally:
             client.close()
 
-    def abort_opencode_session(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        opencode_session_id: str,
-    ) -> None:
-        """Best-effort abort of the in-flight opencode prompt. Lock-agnostic
-        by design: any API process may stop running work (abort is
-        idempotent); only *starting* work is serialized by the prompt slot."""
+    @contextlib.contextmanager
+    def prepare_opencode_abort(
+        self, sandbox_id: UUID, session_id: UUID, opencode_session_id: str
+    ) -> Generator[Callable[[], None] | None, None, None]:
+        """Prepare transport before a caller locks admission for the abort."""
         session_path = self._session_directory(session_id)
         try:
             client = self._build_serve_client(
-                sandbox_id,
-                session_path,
-                with_event_bus=False,
+                sandbox_id, session_path, with_event_bus=False
             )
-            try:
-                client.abort(opencode_session_id, directory=session_path)
-            finally:
-                client.close()
         except Exception:
             logger.warning(
-                "[SANDBOX-SERVE] abort failed for sandbox=%s session=%s",
+                "[SANDBOX-SERVE] abort preparation failed for sandbox=%s session=%s",
                 sandbox_id,
                 session_id,
                 exc_info=True,
             )
+            yield None
+            return
+
+        def abort() -> None:
+            try:
+                client.abort(opencode_session_id, directory=session_path)
+            except Exception:
+                logger.warning(
+                    "[SANDBOX-SERVE] abort failed for sandbox=%s session=%s",
+                    sandbox_id,
+                    session_id,
+                    exc_info=True,
+                )
+
+        try:
+            yield abort
+        finally:
+            try:
+                client.close()
+            except Exception:
+                logger.warning(
+                    "[SANDBOX-SERVE] abort client close failed", exc_info=True
+                )
+
+    def abort_opencode_session(
+        self, sandbox_id: UUID, session_id: UUID, opencode_session_id: str
+    ) -> None:
+        """Best-effort abort for callers that already own the prompt lifecycle."""
+        with self.prepare_opencode_abort(
+            sandbox_id, session_id, opencode_session_id
+        ) as abort:
+            if abort is not None:
+                abort()
 
     def delete_opencode_session(
         self,

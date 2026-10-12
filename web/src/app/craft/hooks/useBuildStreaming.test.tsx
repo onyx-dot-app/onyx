@@ -107,7 +107,7 @@ describe("useBuildStreaming thinking packets", () => {
       turn_index: 0,
     });
     jest.mocked(fetchTurnEventStream).mockResolvedValue({} as Response);
-    jest.mocked(interruptMessageStream).mockResolvedValue();
+    jest.mocked(interruptMessageStream).mockResolvedValue(true);
     jest
       .mocked(processSSEStream)
       .mockImplementation(async (_response, onPacket) => {
@@ -1414,7 +1414,8 @@ describe("useBuildStreaming thinking packets", () => {
         useBuildSessionStore.getState().sessions.get(sessionId)
       ).toMatchObject({
         status: "failed",
-        error: "Session unavailable",
+        loadError: "Session unavailable",
+        error: null,
         activeTurnId: null,
       });
       expect(fetchActiveTurn).toHaveBeenCalledTimes(1);
@@ -1454,7 +1455,11 @@ describe("useBuildStreaming thinking packets", () => {
       });
       expect(
         useBuildSessionStore.getState().sessions.get(sessionId)
-      ).toMatchObject({ status: "failed", error: "Permission revoked" });
+      ).toMatchObject({
+        status: "failed",
+        loadError: "Permission revoked",
+        error: null,
+      });
       expect(fetchScheduledRunEventStream).toHaveBeenCalledTimes(1);
       controller.abort();
       await act(async () => {
@@ -2281,7 +2286,7 @@ describe("useBuildStreaming thinking packets", () => {
     jest.mocked(interruptMessageStream).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          finishStop = resolve;
+          finishStop = () => resolve(true);
         })
     );
     const { result } = renderHook(() => useBuildStreaming());
@@ -2316,7 +2321,23 @@ describe("useBuildStreaming thinking packets", () => {
     });
   });
 
+  it("does not show a stopped notice when the targeted turn already finished", async () => {
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "finished-turn",
+    });
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(false);
+    const { result } = renderHook(() => useBuildStreaming());
+    await act(async () => {
+      await result.current.interruptStreaming(sessionId);
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({ wasInterrupted: false, isInterrupting: false });
+  });
+
   it("keeps Stop intent until a pending POST accepts, then stops that accepted turn", async () => {
+    jest.mocked(interruptMessageStream).mockResolvedValueOnce(false);
     let accept:
       | ((turn: Awaited<ReturnType<typeof createTurn>>) => void)
       | undefined;
@@ -2488,7 +2509,7 @@ describe("useBuildStreaming thinking packets", () => {
     );
     jest
       .mocked(interruptMessageStream)
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(true)
       .mockRejectedValueOnce(new Error("Stop unavailable"));
     jest
       .mocked(processSSEStream)
@@ -2927,7 +2948,7 @@ describe("useBuildStreaming thinking packets", () => {
       jest.mocked(interruptMessageStream).mockImplementationOnce(
         () =>
           new Promise((resolve, reject) => {
-            resolveStop = resolve;
+            resolveStop = () => resolve(true);
             rejectStop = reject;
           })
       );
@@ -3447,7 +3468,7 @@ describe("useBuildStreaming thinking packets", () => {
       .mockRejectedValueOnce(new Error("First Stop rejected"))
       .mockReturnValueOnce(
         new Promise((resolve) => {
-          acceptNext = resolve;
+          acceptNext = () => resolve(true);
         })
       );
     jest.mocked(fetchActiveTurn).mockResolvedValue({
