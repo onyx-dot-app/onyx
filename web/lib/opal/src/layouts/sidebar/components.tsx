@@ -190,7 +190,7 @@ function SidebarHeader({
         prominence="tertiary"
         aria-label={foldLabel}
         tooltip={foldLabel}
-        tooltipSide={folded ? "right" : "bottom"}
+        tooltipSide={folded ? "end" : "bottom"}
         size="md"
         onClick={toggleFolded}
       />
@@ -206,7 +206,7 @@ function SidebarHeader({
   // sidebar can still be opened where there is no hover to reveal anything —
   // touch devices and keyboard navigation.
   const foldedLogoButton = (
-    <Tooltip tooltip={foldLabel} side="right">
+    <Tooltip tooltip={foldLabel} side="end">
       <Interactive.Stateless
         prominence="tertiary"
         type="button"

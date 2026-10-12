@@ -168,6 +168,8 @@ export default function AdminSidebar() {
         {disabledGroups.length > 0 && (
           <Disabled
             disabled
+            // One tooltip over a tall block: it stays level with the pointer.
+            tooltipAlign="follow"
             tooltip={markdown(
               disabled.every((item) => item.requiredTier === Tier.ENTERPRISE)
                 ? t("adminSidebar.enterpriseOnly.tooltip")

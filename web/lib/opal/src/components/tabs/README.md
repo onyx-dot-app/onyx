@@ -164,7 +164,7 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 | `value`       | `string`                                 | **required** | Tab value                              |
 | `icon`        | `FunctionComponent<IconProps>`           | —            | Icon before the label                  |
 | `tooltip`     | `string`                                 | —            | Tooltip on hover                       |
-| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"top"`      | Tooltip placement                      |
+| `tooltipSide` | `"top" \| "bottom" \| "start" \| "end"` | `"top"`      | Tooltip placement; `start`/`end` follow the text direction |
 | `disabled`    | `boolean`                                | —            | Disables the tab (tooltip still shows) |
 | `isLoading`   | `boolean`                                | —            | Shows a spinner after the label        |
 

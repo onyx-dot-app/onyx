@@ -22,7 +22,8 @@ disabled: screen readers read the reason in the region and announce it when it c
 | `disabled`    | `boolean`                                | `false`   | Applies disabled styling when truthy                                                |
 | `allowClick`  | `boolean`                                | `false`   | Re-enables pointer events and keyboard input while keeping disabled visuals         |
 | `tooltip`     | `string \| RichStr`                      | —         | Tooltip shown on hover when disabled (implies `allowClick`). Supports `markdown()`. |
-| `tooltipSide` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on                                                   |
+| `tooltipSide` | `"top" \| "bottom" \| "start" \| "end"` | `"end"` | Which side the tooltip appears on                                                   |
+| `tooltipAlign` | `TooltipAlign` | `"center"` | Where the tooltip sits along its side; `"follow"` keeps it level with the pointer. See `Tooltip`'s `align` |
 
 ## CSS behavior
 

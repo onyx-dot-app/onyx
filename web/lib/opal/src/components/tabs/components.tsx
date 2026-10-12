@@ -14,7 +14,7 @@ import { spacingToRem } from "@opal/shared";
 // instead of the barrel's RTL-mirrored wrappers.
 import SvgChevronLeft from "@opal/icons/chevron-left";
 import SvgChevronRight from "@opal/icons/chevron-right";
-import { Tooltip, Button } from "@opal/components";
+import { Tooltip, Button, type TooltipSide } from "@opal/components";
 import { Content } from "@opal/layouts";
 import {
   TabsContext,
@@ -250,7 +250,7 @@ interface TabsTriggerProps extends WithoutStyles<
   /** Tooltip shown on hover. */
   tooltip?: string;
   /** Side where the tooltip appears. @default "top" */
-  tooltipSide?: "top" | "bottom" | "left" | "right";
+  tooltipSide?: TooltipSide;
   /** Icon rendered before the label. */
   icon?: IconFunctionComponent;
   /** Show a loading spinner after the label. */
