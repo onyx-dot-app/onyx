@@ -622,6 +622,8 @@ class GithubConnector(
         include_issues: bool = False,
         include_files: bool = False,
         branch: str | None = None,
+        # Checked against the credential by the binding; unused here.
+        github_base_url: str | None = None,  # noqa: ARG002
     ) -> None:
         self.repo_owner = repo_owner
         # None means every repository of the owner.
