@@ -12,15 +12,13 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.findings import (
-    MAX_FINDING_OPTIONS,
-    CheckFindingKey,
-    CountFinding,
-)
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckFindingKey,
+    CountFinding,
     CredentialCapability,
     compute_capability_verdicts,
 )

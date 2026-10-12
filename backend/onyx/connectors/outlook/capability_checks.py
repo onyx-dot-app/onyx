@@ -25,16 +25,15 @@ from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
 from typing import TypeVar
 
-from onyx.connectors.capability_checks.findings import (
-    MAX_FINDING_OPTIONS,
-    CheckFinding,
-    CheckFindingKey,
-    bounded_count,
-)
+from onyx.connectors.capability_checks.findings import bounded_count
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckFinding,
+    CheckFindingKey,
+    CountFinding,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
@@ -323,7 +322,7 @@ def _tenant_mailboxes(
     """The tenant's mailbox users, read one page at a time."""
     next_link: str | None = None
     for _ in range(_COUNT_PAGES):
-        page = gateway.list_mailbox_users(next_link=next_link)
+        page: OutlookMailboxPage = gateway.list_mailbox_users(next_link=next_link)
         yield from page.mailboxes
         next_link = page.next_link
         if next_link is None:
@@ -358,12 +357,12 @@ class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
         )
 
     def applies(self, form_state: FormState[OutlookConnectorConfig]) -> bool:
-        config = form_state.config
+        config: OutlookConnectorConfig = form_state.config
         return not configured_addresses(config) and not configured_groups(config)
 
     def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
         try:
-            finding = bounded_count(
+            finding: CountFinding = bounded_count(
                 _tenant_mailboxes(_gateway(context)),
                 key=CheckFindingKey.READABLE_MAILBOXES,
                 cap=MAX_FINDING_OPTIONS,

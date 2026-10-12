@@ -1,16 +1,15 @@
 from collections.abc import Callable, Generator
 from typing import TypeVar
 
-from onyx.connectors.capability_checks.findings import (
-    MAX_FINDING_OPTIONS,
-    CheckFinding,
-    CheckFindingKey,
-    bounded_count,
-)
+from onyx.connectors.capability_checks.findings import bounded_count
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckFinding,
+    CheckFindingKey,
+    CountFinding,
     CredentialCapability,
     form_config,
 )
@@ -263,7 +262,7 @@ def _tenant_users(
     """The tenant's enabled member users, read one page at a time."""
     next_link: str | None = None
     for _ in range(_COUNT_PAGES):
-        page = gateway.list_users(next_link=next_link)
+        page: OneDriveUserPage = gateway.list_users(next_link=next_link)
         yield from page.users
         next_link = page.next_link
         if next_link is None:
@@ -298,7 +297,7 @@ class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
 
     def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
         try:
-            finding = bounded_count(
+            finding: CountFinding = bounded_count(
                 _tenant_users(_gateway(context)),
                 key=CheckFindingKey.READABLE_DRIVES,
                 cap=MAX_FINDING_OPTIONS,
