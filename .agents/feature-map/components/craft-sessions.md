@@ -390,6 +390,8 @@ Discarding a rejected queue head checks server completion and saved history befo
 
 ### 4.5 History durability
 
+If the post-history turn check finds a different turn, loading rereads history before attaching to include its prompt.
+
 Session loading reads persisted messages before waiting for runtime discovery or sandbox restoration.
 It checks the active turn again after history loads, so another tab’s start is not missed.
 A completed second check retains the first observed turn for canonical settlement.

@@ -2001,8 +2001,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
       if (!isCurrentRuntimeLoad()) return;
       // Server completion follows the final transcript commit. Observe it before reading messages.
-      const messages: BuildMessage[] = await fetchMessages(sessionId);
+      let messages: BuildMessage[] = await fetchMessages(sessionId);
       if (!isCurrentRuntimeLoad()) return;
+      const historyTurnId = activeTurn?.turn_id;
       try {
         // A second tab can start while history loads. Keep the first owner if it completed during the read.
         activeTurn = (await fetchActiveTurn(sessionId)) ?? activeTurn;
@@ -2010,6 +2011,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         console.warn("Failed to recheck active turn:", err);
       }
       if (!isCurrentRuntimeLoad()) return;
+      if (activeTurn && activeTurn.turn_id !== historyTurnId) {
+        // The new turn may have committed its prompt after our history read.
+        messages = await fetchMessages(sessionId);
+        if (!isCurrentRuntimeLoad()) return;
+      }
 
       // Preserve optimistic messages if actively streaming (pre-provisioned flow).
       const currentSession: BuildSessionData | undefined =

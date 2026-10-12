@@ -1625,6 +1625,46 @@ describe("session history races and discarded queued starts", () => {
   });
   afterEach(() => jest.useRealTimers());
 
+  it.each([null, "previous-turn"])(
+    "loads the new prompt before adopting a turn that replaced %s",
+    async (previousTurnId) => {
+      const latestHistory =
+        deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+      jest
+        .mocked(api.fetchMessages)
+        .mockResolvedValueOnce([])
+        .mockReturnValueOnce(latestHistory.promise);
+      jest
+        .mocked(api.fetchActiveTurn)
+        .mockResolvedValueOnce(
+          previousTurnId ? { ...active, turn_id: previousTurnId } : null
+        )
+        .mockResolvedValueOnce(active);
+      const loading = useBuildSessionStore.getState().loadSession(sessionId);
+      await waitFor(() => expect(api.fetchMessages).toHaveBeenCalledTimes(2));
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.activeTurnId
+      ).toBeNull();
+      latestHistory.resolve([
+        {
+          id: "external-user",
+          type: "user",
+          content: "New external prompt",
+          timestamp: new Date(),
+          turn_index: 0,
+        },
+      ]);
+      await loading;
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        activeTurnId: active.turn_id,
+        messages: [{ content: "New external prompt" }],
+      });
+      expect(api.fetchActiveTurn).toHaveBeenCalledTimes(2);
+    }
+  );
+
   it.each(["starts", "completes"] as const)(
     "retains an external turn that %s during the history read",
     async (transition) => {
