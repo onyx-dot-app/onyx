@@ -361,7 +361,7 @@ it("finishes turn discovery before an idle focus refresh can consume its files",
 });
 
 it.each(["aborted", "superseded"] as const)(
-  "skips a queued inventory read when its turn is %s",
+  "skips a queued inventory read when its runtime is %s",
   async (reason) => {
     await refresh([]);
     let finishFirst: ((inventory: OutputInventory) => void) | undefined;
@@ -376,7 +376,7 @@ it.each(["aborted", "superseded"] as const)(
       signal: controller.signal,
     });
     if (reason === "aborted") controller.abort();
-    else store().updateSessionData(sessionId, { turnGeneration: 1 });
+    else store().updateSessionData(sessionId, { instanceId: "replacement" });
     finishFirst?.({ files: [], complete: true });
     await Promise.all([first, queued]);
     expect(fetchOutputInventory).toHaveBeenCalledTimes(2);
@@ -706,4 +706,24 @@ it("bounds stalled requests and preserves the inventory after retries fail", asy
   });
   warn.mockRestore();
   jest.useRealTimers();
+});
+
+it("rejects an inventory response from a replaced session runtime", async () => {
+  await refresh([]);
+  let finish: ((inventory: OutputInventory) => void) | undefined;
+  jest.mocked(fetchOutputInventory).mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    })
+  );
+  const reading = store().refreshOutputInventory(sessionId);
+  store().createSession(sessionId, {
+    status: "active",
+    outputInventory: {},
+    outputBaselinePending: false,
+  });
+  finish?.({ files: [slides], complete: true });
+  await reading;
+  expect(session()?.outputInventory).toEqual({});
+  expect(session()?.panelTabs).toEqual([]);
 });

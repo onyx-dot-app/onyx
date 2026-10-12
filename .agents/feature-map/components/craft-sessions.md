@@ -375,6 +375,8 @@ Interactive settlement checks the active turn. Scheduled settlement checks the e
 Only confirmed persistence permits canonical history replacement. Neither path loads runtime metadata or changes navigation.
 A failed read preserves the local transcript and settlement identity. The retry action resumes that same settlement.
 Scheduled transport errors also reconcile the worker’s persisted result through its existing run owner.
+Failed and skipped scheduled runs also reload saved history, but never grant queue permission.
+A failed history read preserves the displayed transcript and the existing retry action.
 Failed settlement or queued-start recovery disables ordinary submission until the user retries or discards it.
 Only confirmed completion with persisted history permits the next queued prompt.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
@@ -625,6 +627,11 @@ The response sets `complete=False` when scan limits, unreadable entries, or an u
 An existing workspace with no outputs directory returns a complete empty inventory.
 Callers must preserve unseen files when the response is incomplete.
 The endpoint does not store an index or create artifact records.
+
+Output inventory data belongs to the session runtime. An active read can update files after the next queued turn starts.
+Tabs and automatic selection still require the captured turn. Passive reads retain their turn guard to protect discovery.
+Inventory reads stay ordered and do not block queued prompts. Old-turn failures do not replace the new turn’s inventory status.
+A directory scan reports current files, not exact per-turn provenance.
 
 ## 5. Contracts and invariants
 

@@ -27,14 +27,29 @@ function sleepingSession(): Record<string, unknown> {
 
 function runningSession(
   nextjsPort: number | null = null
-): Record<string, unknown> {
+): Awaited<ReturnType<typeof api.fetchSession>> {
   return {
     id: SESSION_ID,
+    user_id: null,
+    name: null,
     status: "active",
+    created_at: "2026-10-10T00:00:00Z",
+    last_activity_at: "2026-10-10T00:00:00Z",
+    artifacts: [],
+    sharing_scope: "private",
+    origin: "INTERACTIVE",
+    agent_provider: null,
+    agent_model: null,
     skills_stale: false,
     nextjs_port: nextjsPort,
     session_loaded_in_sandbox: true,
-    sandbox: { id: "sb1", status: "running" },
+    sandbox: {
+      id: "sb1",
+      status: "running",
+      container_id: null,
+      created_at: "2026-10-10T00:00:00Z",
+      last_heartbeat: null,
+    },
   };
 }
 
@@ -449,6 +464,135 @@ describe("loadSession restore status", () => {
       ],
     });
   });
+
+  it.each([true, false])(
+    "restores child transcript with task fallback (child events: %s)",
+    async (hasChildEvents) => {
+      mockedApi.fetchSession.mockResolvedValue(runningSession());
+      const childMessages = hasChildEvents
+        ? [
+            {
+              id: "child-prefix",
+              type: "assistant" as const,
+              content: "",
+              timestamp: new Date(),
+              message_metadata: {
+                type: "agent_message",
+                content: { type: "text", text: "First part." },
+                _meta: {
+                  sessionId: "child-session-1",
+                  parentSessionId: SESSION_ID,
+                  partId: "first-part",
+                },
+              },
+            },
+            {
+              id: "child-tool",
+              type: "assistant" as const,
+              content: "",
+              timestamp: new Date(),
+              message_metadata: {
+                type: "tool_call_progress",
+                tool_call_id: "child-tool-1",
+                kind: "read",
+                status: "completed",
+                raw_input: {},
+                raw_output: {},
+                _meta: {
+                  sessionId: "child-session-1",
+                  parentSessionId: SESSION_ID,
+                },
+              },
+            },
+            {
+              id: "child-final",
+              type: "assistant" as const,
+              content: "",
+              timestamp: new Date(),
+              message_metadata: {
+                type: "agent_message",
+                content: { type: "text", text: "Final part." },
+                _meta: {
+                  sessionId: "child-session-1",
+                  parentSessionId: SESSION_ID,
+                  partId: "final-part",
+                },
+              },
+            },
+          ]
+        : [];
+      mockedApi.fetchMessages.mockResolvedValue([
+        ...childMessages,
+        {
+          id: "parent-task",
+          type: "assistant",
+          content: "",
+          timestamp: new Date(),
+          message_metadata: {
+            type: "tool_call_progress",
+            tool_call_id: "task-1",
+            kind: "task",
+            status: "completed",
+            raw_input: { prompt: "Inspect files" },
+            raw_output: {
+              output:
+                "task_id: child-session-1\n\n<task_result>Final part.</task_result>",
+            },
+          },
+        },
+        {
+          id: "parent-task-repeated",
+          type: "assistant",
+          content: "",
+          timestamp: new Date(),
+          message_metadata: {
+            type: "tool_call_progress",
+            tool_call_id: "task-1",
+            kind: "task",
+            status: "completed",
+            raw_input: { prompt: "Inspect files" },
+            raw_output: {
+              output:
+                "task_id: child-session-1\n\n<task_result>Final part.</task_result>",
+            },
+          },
+        },
+      ]);
+      await useBuildSessionStore.getState().loadSession(SESSION_ID);
+      const turn = useBuildSessionStore
+        .getState()
+        .sessions.get(SESSION_ID)
+        ?.subagents.get("child-session-1")?.turns[0];
+      expect(turn?.response).toBe(
+        hasChildEvents ? "First part.Final part." : "Final part."
+      );
+      expect(turn?.streamItems).toEqual(
+        hasChildEvents
+          ? [
+              expect.objectContaining({
+                type: "text",
+                partId: "first-part",
+                content: "First part.",
+                isStreaming: false,
+              }),
+              expect.objectContaining({ type: "tool_call" }),
+              expect.objectContaining({
+                type: "text",
+                partId: "final-part",
+                content: "Final part.",
+                isStreaming: false,
+              }),
+            ]
+          : [
+              expect.objectContaining({
+                type: "text",
+                content: "Final part.",
+                isStreaming: false,
+              }),
+            ]
+      );
+    }
+  );
 
   it("restores subagent prompt and logs when parent task output carries the child id", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
@@ -1325,6 +1469,86 @@ describe("completed transcript handoff", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it.each(["FAILED", "SKIPPED"] as const)(
+    "hydrates %s scheduled history without permitting queued work",
+    async (status) => {
+      const store = useBuildSessionStore.getState();
+      store.updateSessionData(SESSION_ID, {
+        activeTurnId: null,
+        activeTurnLocalOwner: false,
+        messages: [user],
+      });
+      store.enqueueMessage(SESSION_ID, "next prompt", []);
+      mockedApi.fetchScheduledRunContext.mockResolvedValue({
+        run_id: "scheduled-run",
+        task_id: "task",
+        task_name: "Report",
+        status,
+        started_at: "2026-10-10T00:00:00Z",
+        finished_at: "2026-10-10T00:01:00Z",
+      });
+      mockedApi.fetchMessages.mockResolvedValue([user, answer]);
+      await store.beginTurnSettlement(
+        SESSION_ID,
+        { kind: "scheduled", runId: "scheduled-run" },
+        0
+      );
+      expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1);
+      expect(mockedApi.fetchActiveTurn).not.toHaveBeenCalled();
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+      ).toMatchObject({
+        messages: [user, answer],
+        status: "failed",
+        turnSettlement: null,
+      });
+      expect(store.claimQueuedMessage(SESSION_ID)).toBeNull();
+    }
+  );
+
+  it("retains failed scheduled history recovery until its canonical read succeeds", async () => {
+    const store = useBuildSessionStore.getState();
+    store.updateSessionData(SESSION_ID, {
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+      messages: [user],
+    });
+    store.enqueueMessage(SESSION_ID, "next prompt", []);
+    mockedApi.fetchScheduledRunContext.mockResolvedValue({
+      run_id: "scheduled-run",
+      task_id: "task",
+      task_name: "Report",
+      status: "FAILED",
+      started_at: "2026-10-10T00:00:00Z",
+      finished_at: "2026-10-10T00:01:00Z",
+    });
+    mockedApi.fetchMessages.mockRejectedValueOnce(
+      new Error("History unavailable")
+    );
+    await store.beginTurnSettlement(
+      SESSION_ID,
+      { kind: "scheduled", runId: "scheduled-run" },
+      0
+    );
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      messages: [user],
+      turnSettlement: { phase: "failed", error: "History unavailable" },
+    });
+    expect(store.claimQueuedMessage(SESSION_ID)).toBeNull();
+    mockedApi.fetchMessages.mockResolvedValue([user, answer]);
+    await store.retryTurnSettlement(SESSION_ID);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      messages: [user, answer],
+      status: "failed",
+      turnSettlement: null,
+    });
+    expect(store.claimQueuedMessage(SESSION_ID)).toBeNull();
   });
 
   it("waits for the scheduled worker to commit completion before reading history", async () => {

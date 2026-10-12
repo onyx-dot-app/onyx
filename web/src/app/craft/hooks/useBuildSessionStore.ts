@@ -474,10 +474,11 @@ function buildSubagentsFromMessages(
         ...firstTurn,
         prompt: firstTurn.prompt || packet.command,
         response,
-        streamItems: replaceOrAppendSettledTextItem(
-          firstTurn.streamItems,
-          response
-        ),
+        // Child rows own the transcript; response can contain several parts.
+        streamItems:
+          firstTurn.response !== null
+            ? settleStreamItems(firstTurn.streamItems)
+            : replaceOrAppendSettledTextItem(firstTurn.streamItems, response),
       };
       subagents.set(cls.subagentSessionId, {
         ...sa,
@@ -638,6 +639,17 @@ export type PreProvisioningState =
 let provisioningPromise: Promise<string | null> | null = null;
 const webappReadinessChecks = new Map<string, Promise<boolean>>();
 const outputInventoryRequests = new Map<string, Promise<void>>();
+
+function sameSessionRuntime(
+  first: BuildSessionData,
+  second: BuildSessionData
+): boolean {
+  return (
+    first.instanceId === second.instanceId &&
+    first.sandbox?.id === second.sandbox?.id &&
+    first.sandbox?.status === second.sandbox?.status
+  );
+}
 
 // Monotonic id for queued messages (kept out of Zustand state for simplicity).
 let nextQueuedMessageId = 1;
@@ -1166,19 +1178,14 @@ function reconcileCompletedTranscript(
         if (!owner) return;
         let waiting: boolean;
         let approvalPause = false;
+        let scheduledFailure = false;
         let successor: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
         if (owner.kind === "scheduled") {
           const run = await fetchScheduledRunContext(sessionId);
           if (!ownsCompletion()) return;
           if (run.run_id !== owner.runId) return;
-          if (run.status === "FAILED" || run.status === "SKIPPED") {
-            useBuildSessionStore.getState().updateSessionData(sessionId, {
-              status: "failed",
-              isInterrupting: false,
-              turnSettlement: null,
-            });
-            return;
-          }
+          scheduledFailure =
+            run.status === "FAILED" || run.status === "SKIPPED";
           waiting = run.status === "RUNNING" || run.status === "QUEUED";
           approvalPause = run.status === "AWAITING_APPROVAL";
         } else {
@@ -1210,7 +1217,11 @@ function reconcileCompletedTranscript(
           streamItems: [],
           subagents: buildSubagentsFromMessages(messages),
           contextUsage: deriveContextUsage(messages),
-          status: successor ? "running" : "active",
+          status: scheduledFailure
+            ? "failed"
+            : successor
+              ? "running"
+              : "active",
           isInterrupting: false,
           activeTurnId: successor?.turn_id ?? null,
           activeTurnIndex: successor?.turn_index ?? null,
@@ -1221,7 +1232,7 @@ function reconcileCompletedTranscript(
             wasInterrupted: false,
           }),
           turnSettlement:
-            successor || approvalPause
+            successor || approvalPause || scheduledFailure
               ? null
               : { ...current.turnSettlement, phase: "ready" },
         });
@@ -2501,16 +2512,22 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return (
         !signal?.aborted &&
         current !== undefined &&
-        current.turnGeneration === started.turnGeneration &&
-        (!silent || current.activeTurnId === started.activeTurnId) &&
-        (!current.activeTurnId ||
-          !started.activeTurnId ||
-          current.activeTurnId === started.activeTurnId)
+        sameSessionRuntime(current, started) &&
+        (!silent ||
+          (current.turnGeneration === started.turnGeneration &&
+            current.activeTurnId === started.activeTurnId))
       );
     };
+    const ownsTurn = (session: BuildSessionData): boolean =>
+      session.turnGeneration === started.turnGeneration &&
+      (!session.activeTurnId ||
+        !started.activeTurnId ||
+        session.activeTurnId === started.activeTurnId);
     const readInventory = async (): Promise<void> => {
       for (let attempt = 0; attempt < 3; attempt++) {
-        if (!isCurrent()) return;
+        const current = get().sessions.get(sessionId);
+        if (!isCurrent() || !current || (attempt > 0 && !ownsTurn(current)))
+          return;
         const controller = new AbortController();
         const abort = (): void => controller.abort();
         signal?.addEventListener("abort", abort, { once: true });
@@ -2542,7 +2559,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
                 : 0),
           };
           // Unknown baselines still refresh previews, but cannot attribute files to this task.
-          if (previous === null || session.outputBaselinePending || silent) {
+          if (
+            previous === null ||
+            session.outputBaselinePending ||
+            silent ||
+            !ownsTurn(session)
+          ) {
             get().updateSessionData(sessionId, updates);
             return;
           }
@@ -2572,7 +2594,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           get().updateSessionData(sessionId, updates);
           return;
         } catch (error) {
-          if (!isCurrent()) return;
+          const current = get().sessions.get(sessionId);
+          if (!isCurrent() || !current || !ownsTurn(current)) return;
           if (attempt === 2) {
             get().updateSessionData(sessionId, {
               outputInventoryStatus: "error",

@@ -3280,7 +3280,10 @@ describe("useBuildStreaming thinking packets", () => {
       } else {
         expect(session?.status).toBe("failed");
         expect(session?.turnSettlement).toBeNull();
-        expect(fetchMessages).not.toHaveBeenCalled();
+        expect(fetchMessages).toHaveBeenCalledTimes(1);
+        expect(session?.messages).toEqual([
+          expect.objectContaining({ content: "Saved worker result" }),
+        ]);
       }
     }
   );
@@ -3492,4 +3495,78 @@ describe("useBuildStreaming thinking packets", () => {
       ]);
     }
   );
+  it("starts queued work while completion inventory is pending without losing files or stealing focus", async () => {
+    let completeFirst: (() => void) | undefined;
+    let finishFirst: (() => void) | undefined;
+    let finishNext: (() => void) | undefined;
+    let finishInventory:
+      | ((value: Awaited<ReturnType<typeof fetchOutputInventory>>) => void)
+      | undefined;
+    const firstStream = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const nextStream = new Promise<void>((resolve) => {
+      finishNext = resolve;
+    });
+    const finalInventory = new Promise<
+      Awaited<ReturnType<typeof fetchOutputInventory>>
+    >((resolve) => {
+      finishInventory = resolve;
+    });
+    const selected = {
+      kind: "file" as const,
+      path: "outputs/chosen.pdf",
+      fileName: "chosen.pdf",
+    };
+    useBuildSessionStore.getState().updateSessionData(sessionId, {
+      outputInventory: {},
+      outputBaselinePending: false,
+      panelTabs: [selected],
+      activePanelTabId: "file:outputs/chosen.pdf",
+    });
+    jest.mocked(fetchOutputInventory).mockReturnValueOnce(finalInventory);
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async () => {
+        completeFirst = () => finishFirst?.();
+        await firstStream;
+        throw new Error("Transport disconnected before terminal packet");
+      })
+      .mockImplementationOnce(async () => {
+        await nextStream;
+        throw new DOMException("Closed", "AbortError");
+      });
+    const { result } = renderHook(() => useBuildStreaming());
+    let sending: Promise<void> | undefined;
+    act(() => {
+      sending = result.current.streamMessage(sessionId, "first");
+    });
+    await act(async () => {});
+    act(() => {
+      useBuildSessionStore.getState().enqueueMessage(sessionId, "next", []);
+    });
+    await act(async () => {
+      completeFirst?.();
+      await sending;
+    });
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(1);
+    expect(createTurn).toHaveBeenCalledTimes(2);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.turnGeneration
+    ).toBe(2);
+    await act(async () => {
+      finishInventory?.({
+        files: [{ path: "outputs/completed.pdf", revision: "1", size: 10 }],
+        complete: true,
+      });
+    });
+    const session = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(session?.outputInventory?.["outputs/completed.pdf"]).toBeDefined();
+    expect(session?.panelTabs).toEqual([selected]);
+    expect(session?.activePanelTabId).toBe("file:outputs/chosen.pdf");
+    await act(async () => {
+      useBuildSessionStore.getState().abortSession(sessionId);
+      finishNext?.();
+    });
+  });
 });
