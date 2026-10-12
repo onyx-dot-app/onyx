@@ -6,13 +6,15 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from uuid import UUID
 
-from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.craft.conftest import SharedSession
 from tests.integration.tests.craft.user_library_http import multipart_headers
+
+# The Craft integration API configures this quota independently of pytest.
+CI_UPLOAD_FILE_COUNT_LIMIT: int = 5
 
 
 def _create_session_id(user: DATestUser) -> UUID:
@@ -58,8 +60,7 @@ def test_upload_over_per_file_cap_returns_400(
 def test_upload_at_count_cap_returns_429(admin_user: DATestUser) -> None:
     session_id = _create_session_id(admin_user)
 
-    # CI lowers BUILD_MAX_UPLOAD_FILES_PER_SESSION to 5.
-    for i in range(5):
+    for i in range(CI_UPLOAD_FILE_COUNT_LIMIT):
         BuildSessionManager.upload_file(
             admin_user,
             session_id,
@@ -174,7 +175,7 @@ def test_upload_endpoint_404_for_other_users_session(
 def test_concurrent_uploads_share_stored_file_quota(admin_user: DATestUser) -> None:
     session_id: UUID = _create_session_id(admin_user)
     try:
-        for index in range(MAX_UPLOAD_FILES_PER_SESSION - 1):
+        for index in range(CI_UPLOAD_FILE_COUNT_LIMIT - 1):
             BuildSessionManager.upload_file(
                 admin_user, session_id, filename=f"existing_{index}.txt", content=b"x"
             )
@@ -196,7 +197,7 @@ def test_concurrent_uploads_share_stored_file_quota(admin_user: DATestUser) -> N
         listing = BuildSessionManager.list_files(
             admin_user, session_id, path="attachments"
         )
-        assert len(listing.entries) == MAX_UPLOAD_FILES_PER_SESSION
+        assert len(listing.entries) == CI_UPLOAD_FILE_COUNT_LIMIT
     finally:
         response = client.delete(
             f"{API_SERVER_URL}/build/sessions/{session_id}",
