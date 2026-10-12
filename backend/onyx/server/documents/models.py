@@ -165,6 +165,9 @@ class CredentialSnapshot(CredentialBase):
     user_personal_name: str | None = None
     time_created: datetime
     time_updated: datetime
+    # Whether the requesting user owns the credential. None when the response
+    # does not say (snapshots nested in pair, group and document-set views).
+    is_owner: bool | None = None
 
     @classmethod
     def from_credential_db_model(
@@ -173,10 +176,17 @@ class CredentialSnapshot(CredentialBase):
         *,
         mask_credential_prefix: bool,
         view_source: DocumentSource | None = None,
+        viewer_id: UUID | None = None,
+        group_ids: list[int] | None = None,
     ) -> Self:
         """``view_source`` picks the keys ``credential_json`` is shown in: a
         family credential listed for another source of its family is shown in
-        that source's keys. Defaults to the credential's own source."""
+        that source's keys. Defaults to the credential's own source.
+
+        ``viewer_id`` fills ``is_owner``. ``group_ids`` are the groups the
+        credential is shared with (``fetch_credential_group_ids``); the
+        credential endpoints pass them, nested snapshots leave ``groups``
+        empty."""
         source = credential.source or DocumentSource.NOT_APPLICABLE
         stored_json = (
             credential.credential_json.get_value(apply_mask=False)
@@ -213,6 +223,12 @@ class CredentialSnapshot(CredentialBase):
             source=source,
             name=credential.name,
             curator_public=credential.curator_public,
+            groups=group_ids or [],
+            is_owner=(
+                None
+                if viewer_id is None
+                else credential.user_id is not None and credential.user_id == viewer_id
+            ),
         )
 
 
@@ -861,7 +877,12 @@ def names_a_credential(
 
 
 class CredentialSharing(BaseModel):
-    """Who may reuse a new credential: ``CredentialBase``'s sharing fields."""
+    """Who may reuse a credential: ``CredentialBase``'s sharing fields.
+
+    ``admin_public`` shares with every admin (global MANAGE_CONNECTORS).
+    ``groups`` (EE) shares with the users who hold Manage Connectors in one of
+    the groups: its managers, and members who hold the permission globally.
+    ``curator_public`` is kept for older clients and grants nothing."""
 
     admin_public: bool = True
     curator_public: bool = False

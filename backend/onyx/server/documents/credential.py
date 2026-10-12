@@ -1,7 +1,7 @@
 import json
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -14,19 +14,24 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.credentials import (
     CREDENTIAL_PERMISSIONS_TO_IGNORE,
+    CredentialAccessLevel,
     alter_credential,
     create_credential,
     delete_credential,
     delete_credential_for_user,
     fetch_credential_by_id_for_user,
+    fetch_credential_group_ids,
     fetch_credentials_for_user,
     fetch_credentials_usable_by_source_for_user,
+    fetch_editable_credential_ids,
+    lock_credential__no_commit,
     swap_credentials_connector,
     update_credential,
+    update_credential_sharing,
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import DocumentSource, User
+from onyx.db.models import Credential, DocumentSource, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.capability_check_runs import (
@@ -35,6 +40,7 @@ from onyx.server.documents.capability_check_runs import (
 from onyx.server.documents.models import (
     CredentialBase,
     CredentialDataUpdateRequest,
+    CredentialSharing,
     CredentialSnapshot,
     CredentialSwapRequest,
     CredentialUsage,
@@ -55,11 +61,51 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
 
 
 router = APIRouter(prefix="/manage", tags=PUBLIC_API_TAGS)
+
+
+def _credential_snapshot(
+    credential: Credential, user: User, db_session: Session
+) -> CredentialSnapshot:
+    return _credential_snapshots([credential], user, db_session)[0]
+
+
+def credential_ids_to_mask(
+    credentials: list[Credential], user: User, db_session: Session
+) -> set[int]:
+    """The credentials whose values the user must get masked: all of them when
+    the workspace masks credentials, else those they cannot edit (a credential
+    shared with their group, or the credential of a pair they only read or
+    operate). Reuse of an account never reveals its secret."""
+    credential_ids = {credential.id for credential in credentials}
+    if get_security_settings().mask_credential_prefix:
+        return credential_ids
+    return credential_ids - fetch_editable_credential_ids(
+        db_session, user, credential_ids
+    )
+
+
+def _credential_snapshots(
+    credentials: list[Credential], user: User, db_session: Session
+) -> list[CredentialSnapshot]:
+    group_ids = fetch_credential_group_ids(
+        db_session, [credential.id for credential in credentials]
+    )
+    masked_ids = credential_ids_to_mask(credentials, user, db_session)
+    return [
+        CredentialSnapshot.from_credential_db_model(
+            credential,
+            mask_credential_prefix=credential.id in masked_ids,
+            viewer_id=user.id,
+            group_ids=group_ids.get(credential.id),
+        )
+        for credential in credentials
+    ]
 
 
 """Admin-only endpoints"""
@@ -77,13 +123,7 @@ def list_credentials_admin(
         db_session=db_session,
         user=user,
     )
-    mask_credential_prefix = get_security_settings().mask_credential_prefix
-    return [
-        CredentialSnapshot.from_credential_db_model(
-            credential, mask_credential_prefix=mask_credential_prefix
-        )
-        for credential in credentials
-    ]
+    return _credential_snapshots(credentials, user, db_session)
 
 
 @router.get("/admin/similar-credentials/{source_type}")
@@ -121,14 +161,19 @@ def get_cc_source_full_info(
             )
         )
 
-    mask_credential_prefix = get_security_settings().mask_credential_prefix
+    group_ids = fetch_credential_group_ids(
+        db_session, [credential.id for credential in credentials]
+    )
+    masked_ids = credential_ids_to_mask(credentials, user, db_session)
     return [
         SimilarCredentialSnapshot(
             **dict(
                 CredentialSnapshot.from_credential_db_model(
                     credential,
-                    mask_credential_prefix=mask_credential_prefix,
+                    mask_credential_prefix=credential.id in masked_ids,
                     view_source=source_type,
+                    viewer_id=user.id,
+                    group_ids=group_ids.get(credential.id),
                 )
             ),
             usages=usages[credential.id],
@@ -210,18 +255,50 @@ def assert_credential_share_within_scope(
     credential_info: CredentialBase, user: User, db_session: Session
 ) -> None:
     """GATE 2 for both create paths — they build the same CredentialBase, so the gate
-    can't differ by transport. Only sharing needs bounding: an unshared credential is
-    private to its creator. CREDENTIAL_PERMISSIONS_TO_IGNORE sources (file, web, wiki)
-    carry no real secret and stay exempt."""
-    is_shared = bool(credential_info.groups) or credential_info.curator_public
-    if is_shared and credential_info.source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
+    can't differ by transport."""
+    assert_credential_sharing_allowed(
+        user,
+        db_session,
+        source=credential_info.source,
+        requested=CredentialSharing(
+            admin_public=credential_info.admin_public,
+            curator_public=credential_info.curator_public,
+            groups=credential_info.groups,
+        ),
+    )
+
+
+def assert_credential_sharing_allowed(
+    user: User,
+    db_session: Session,
+    *,
+    source: DocumentSource,
+    requested: CredentialSharing,
+    current_group_ids: list[int] | None = None,
+    currently_curator_public: bool = False,
+) -> None:
+    """Checks the groups (EE only; they must exist), then GATE 2. Only sharing
+    with groups or curators needs bounding: an unshared credential is private to
+    its creator, and ``admin_public`` shares only with global admins. On an
+    update, pass the current state read from the DB, never the client's.
+    CREDENTIAL_PERMISSIONS_TO_IGNORE sources (file, web, wiki) carry no real
+    secret and skip GATE 2."""
+    validate_group_ids = fetch_versioned_implementation(
+        "onyx.db.credentials", "validate_credential_group_ids"
+    )
+    validate_group_ids(db_session, requested.groups)
+
+    current_group_ids = current_group_ids or []
+    is_curator_public = requested.curator_public or currently_curator_public
+    is_shared = bool(requested.groups or current_group_ids) or is_curator_public
+    if is_shared and source not in CREDENTIAL_PERMISSIONS_TO_IGNORE:
         assert_within_scope(
             user,
             db_session,
             permission=Permission.MANAGE_CONNECTORS,
-            current_group_ids=[],
-            requested_group_ids=credential_info.groups,
-            is_non_public=not credential_info.curator_public,
+            current_group_ids=current_group_ids,
+            requested_group_ids=requested.groups,
+            is_non_public=not is_curator_public,
         )
 
 
@@ -247,10 +324,7 @@ def create_credential_from_model(
     start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
-        credential=CredentialSnapshot.from_credential_db_model(
-            credential,
-            mask_credential_prefix=get_security_settings().mask_credential_prefix,
-        ),
+        credential=_credential_snapshot(credential, user, db_session),
     )
 
 
@@ -273,18 +347,17 @@ def create_credential_with_private_key(
     try:
         credential_data = json.loads(credential_json)
     except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid JSON in credential_json: {str(e)}",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"Invalid JSON in credential_json: {str(e)}"
         )
 
     private_key_processor: ProcessPrivateKeyFileProtocol | None = (
         FILE_TYPE_TO_FILE_PROCESSOR.get(PrivateKeyFileTypes(type_definition_key))
     )
     if private_key_processor is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid type definition key for private key file",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Invalid type definition key for private key file",
         )
     private_key_content: str = private_key_processor(uploaded_file)
 
@@ -312,10 +385,7 @@ def create_credential_with_private_key(
     start_capability_checks_for_new_credential(db_session, credential)
     return ObjectCreationIdResponse(
         id=credential.id,
-        credential=CredentialSnapshot.from_credential_db_model(
-            credential,
-            mask_credential_prefix=get_security_settings().mask_credential_prefix,
-        ),
+        credential=_credential_snapshot(credential, user, db_session),
     )
 
 
@@ -328,13 +398,7 @@ def list_credentials(
     db_session: Session = Depends(get_session),
 ) -> list[CredentialSnapshot]:
     credentials = fetch_credentials_for_user(db_session=db_session, user=user)
-    mask_credential_prefix = get_security_settings().mask_credential_prefix
-    return [
-        CredentialSnapshot.from_credential_db_model(
-            credential, mask_credential_prefix=mask_credential_prefix
-        )
-        for credential in credentials
-    ]
+    return _credential_snapshots(credentials, user, db_session)
 
 
 @router.get("/credential/{credential_id}")
@@ -354,10 +418,7 @@ def get_credential_by_id(
             f"Credential {credential_id} does not exist or does not belong to user",
         )
 
-    return CredentialSnapshot.from_credential_db_model(
-        credential,
-        mask_credential_prefix=get_security_settings().mask_credential_prefix,
-    )
+    return _credential_snapshot(credential, user, db_session)
 
 
 @router.put("/admin/credential/{credential_id}")
@@ -381,10 +442,7 @@ def update_credential_data(
             f"Credential {credential_id} does not exist or does not belong to user",
         )
 
-    return CredentialSnapshot.from_credential_db_model(
-        credential,
-        mask_credential_prefix=get_security_settings().mask_credential_prefix,
-    )
+    return _credential_snapshot(credential, user, db_session)
 
 
 @router.put("/admin/credential/private-key/{credential_id}")
@@ -401,18 +459,17 @@ def update_credential_private_key(
     try:
         credential_data = json.loads(credential_json)
     except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid JSON in credential_json: {str(e)}",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"Invalid JSON in credential_json: {str(e)}"
         )
 
     private_key_processor: ProcessPrivateKeyFileProtocol | None = (
         FILE_TYPE_TO_FILE_PROCESSOR.get(PrivateKeyFileTypes(type_definition_key))
     )
     if private_key_processor is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid type definition key for private key file",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Invalid type definition key for private key file",
         )
     private_key_content: str = private_key_processor(uploaded_file)
     credential_data[field_key] = private_key_content
@@ -431,10 +488,63 @@ def update_credential_private_key(
             f"Credential {credential_id} does not exist or does not belong to user",
         )
 
-    return CredentialSnapshot.from_credential_db_model(
-        credential,
-        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+    return _credential_snapshot(credential, user, db_session)
+
+
+@router.put("/admin/credential/{credential_id}/sharing")
+def update_credential_sharing_endpoint(
+    credential_id: int,
+    sharing: CredentialSharing,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CredentialSnapshot:
+    """Changes who may reuse a saved credential. The owner, or an admin who can
+    edit it, may do this. ``name`` changes the name when set."""
+    # Held until update_credential_sharing commits: the current groups read
+    # below must still be the groups the write replaces.
+    lock_credential__no_commit(db_session, credential_id)
+    credential = fetch_credential_by_id_for_user(
+        credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
     )
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
+        )
+
+    assert_credential_sharing_allowed(
+        user,
+        db_session,
+        source=credential.source,
+        requested=sharing,
+        current_group_ids=fetch_credential_group_ids(db_session, [credential.id]).get(
+            credential.id, []
+        ),
+        currently_curator_public=credential.curator_public,
+    )
+
+    update_credential_sharing(
+        credential,
+        admin_public=sharing.admin_public,
+        curator_public=sharing.curator_public,
+        groups=sharing.groups,
+        name=sharing.name,
+        db_session=db_session,
+    )
+    emit_audit_event(
+        AuditAction.CREDENTIAL_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="credential",
+        resource_id=credential_id,
+        extra={
+            "admin_public": sharing.admin_public,
+            "groups": sorted(set(sharing.groups)),
+        },
+    )
+    return _credential_snapshot(credential, user, db_session)
 
 
 @router.patch("/credential/{credential_id}")
@@ -461,10 +571,7 @@ def update_credential_from_model(
         resource_id=credential_id,
     )
 
-    return CredentialSnapshot.from_credential_db_model(
-        updated_credential,
-        mask_credential_prefix=get_security_settings().mask_credential_prefix,
-    )
+    return _credential_snapshot(updated_credential, user, db_session)
 
 
 @router.delete("/credential/{credential_id}")
