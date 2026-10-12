@@ -25,9 +25,15 @@ from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
 from typing import TypeVar
 
+from onyx.connectors.capability_checks.findings import bounded_count
+from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckFinding,
+    CheckFindingKey,
+    CountFinding,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
@@ -87,6 +93,10 @@ _PROBE_PAGE_SIZE = 1
 # mailbox that opens. Graph may hand back empty continuation pages, so the
 # bound is on pages rather than users.
 _CANDIDATE_PAGES = 20
+
+# A bound on the pages the mailbox count reads. Pages hold up to 999 users, so
+# the count reaches its cap long before this unless Graph sends empty pages.
+_COUNT_PAGES = 20
 
 _TOKEN_ENDPOINT_DENIED = "Microsoft's token endpoint refused the request."
 
@@ -306,6 +316,62 @@ class _MailboxListingCheck(CapabilityCheck):
             raise_for_graph_error(e, USER_LISTING_DENIED)
 
 
+def _tenant_mailboxes(
+    gateway: OutlookSourceOperations,
+) -> Generator[OutlookMailbox, None, None]:
+    """The tenant's mailbox users, read one page at a time."""
+    next_link: str | None = None
+    for _ in range(_COUNT_PAGES):
+        page: OutlookMailboxPage = gateway.list_mailbox_users(next_link=next_link)
+        yield from page.mailboxes
+        next_link = page.next_link
+        if next_link is None:
+            return
+    raise UnexpectedValidationError(
+        f"The tenant's user listing did not end within {_COUNT_PAGES} pages."
+    )
+
+
+class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
+    """Counts the enabled users with a mail address: the mailboxes indexing
+    walks in every-mailbox mode. It does not probe each mailbox, so a mailbox
+    outside the app's Exchange scope still counts. Separate from
+    ``outlook_mailbox_listing``, which reads one user to validate. A config
+    that lists mailboxes or groups walks only those, so the tenant count does
+    not apply to it."""
+
+    config_class = OutlookConnectorConfig
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="outlook_mailbox_count",
+            display_name="Counts the tenant's mailboxes",
+            requires_connector_instance=False,
+            remediation=(
+                "Grant the `User.Read.All` application permission to the app "
+                "registration and admin-consent it."
+            ),
+            docs_link=_OUTLOOK_DOCS_LINK,
+            discovery=True,
+        )
+
+    def applies(self, form_state: FormState[OutlookConnectorConfig]) -> bool:
+        config: OutlookConnectorConfig = form_state.config
+        return not configured_addresses(config) and not configured_groups(config)
+
+    def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
+        try:
+            finding: CountFinding = bounded_count(
+                _tenant_mailboxes(_gateway(context)),
+                key=CheckFindingKey.READABLE_MAILBOXES,
+                cap=MAX_FINDING_OPTIONS,
+            )
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, USER_LISTING_DENIED)
+        return [finding]
+
+
 class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Reads folders, one delta page, one message body and, when that message
     has any, its attachment records. Proves ``Mail.Read`` and that the mailbox
@@ -515,6 +581,7 @@ def build_outlook_indexing_checks() -> list[CapabilityCheck]:
     return [
         _TokenAuthCheck(),
         _MailboxListingCheck(),
+        _MailboxCountCheck(),
         _MailReadCheck(),
         _CalendarReadCheck(),
         _ConfiguredMailboxesCheck(),

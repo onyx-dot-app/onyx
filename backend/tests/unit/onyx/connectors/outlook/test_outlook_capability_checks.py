@@ -13,9 +13,12 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckFindingKey,
+    CountFinding,
     CredentialCapability,
     compute_capability_verdicts,
 )
@@ -179,6 +182,119 @@ def test_listing_check_maps_401_to_expired_and_429_to_indeterminate() -> None:
     gateway.list_mailbox_users.side_effect = graph_error(429, "TooManyRequests")
     with pytest.raises(UnexpectedValidationError):
         _run("outlook_mailbox_listing", _context(gateway))
+
+
+# ---------------------------------------------------------------------------
+# outlook_mailbox_count
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "config, applies",
+    [
+        (None, True),
+        ({}, True),
+        ({"mailboxes": [" "]}, True),
+        ({"mailboxes": ["a@x.com"]}, False),
+        ({"mailbox_groups": ["Sales"]}, False),
+    ],
+    ids=["no-config", "every-mailbox", "blank-entry", "mailboxes", "groups"],
+)
+def test_mailbox_count_applies_only_when_every_mailbox_is_walked(
+    config: dict[str, Any] | None, applies: bool
+) -> None:
+    result = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mailbox_count"]], _context(_gateway(), config)
+    )[0]
+
+    assert result.applicable is applies
+    if applies:
+        assert result.findings
+    else:
+        assert result.status == CapabilityCheckStatus.SKIPPED
+        assert result.findings == []
+
+
+def test_mailbox_count_counts_every_page_of_the_listing() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = [
+        OutlookMailboxPage(
+            mailboxes=[mailbox(id="a"), mailbox(id="b")], next_link="https://next"
+        ),
+        OutlookMailboxPage(mailboxes=[], next_link="https://next-2"),
+        OutlookMailboxPage(mailboxes=[mailbox(id="c")]),
+    ]
+
+    findings = _CHECKS_BY_ID["outlook_mailbox_count"].run(_context(gateway))
+
+    assert findings == [CountFinding(key=CheckFindingKey.READABLE_MAILBOXES, count=3)]
+    assert [
+        call.kwargs["next_link"] for call in gateway.list_mailbox_users.call_args_list
+    ] == [None, "https://next", "https://next-2"]
+
+
+def test_mailbox_count_stops_at_the_cap() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[mailbox(id=str(number)) for number in range(999)],
+        next_link="https://next",
+    )
+
+    findings = _CHECKS_BY_ID["outlook_mailbox_count"].run(_context(gateway))
+
+    assert findings == [
+        CountFinding(
+            key=CheckFindingKey.READABLE_MAILBOXES,
+            count=MAX_FINDING_OPTIONS,
+            at_least=True,
+        )
+    ]
+    assert gateway.list_mailbox_users.call_count == 2
+
+
+def test_mailbox_count_is_indeterminate_when_the_listing_does_not_end() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.return_value = OutlookMailboxPage(
+        mailboxes=[], next_link="https://next"
+    )
+
+    with pytest.raises(UnexpectedValidationError, match="did not end"):
+        _run("outlook_mailbox_count", _context(gateway))
+
+
+def test_mailbox_count_403_fails_and_leaves_the_verdict_alone() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = graph_error(
+        403, "Authorization_RequestDenied"
+    )
+
+    with pytest.raises(InsufficientPermissionsError, match="User.Read.All"):
+        _run("outlook_mailbox_count", _context(gateway))
+    assert _CHECKS_BY_ID["outlook_mailbox_count"].discovery is True
+    assert _CHECKS_BY_ID["outlook_mailbox_count"].required is False
+
+
+def test_mailbox_count_maps_401_to_expired_and_429_to_indeterminate() -> None:
+    gateway = _gateway()
+    gateway.list_mailbox_users.side_effect = graph_error(
+        401, "InvalidAuthenticationToken"
+    )
+    with pytest.raises(CredentialExpiredError):
+        _run("outlook_mailbox_count", _context(gateway))
+
+    gateway.list_mailbox_users.side_effect = graph_error(429, "TooManyRequests")
+    with pytest.raises(UnexpectedValidationError):
+        _run("outlook_mailbox_count", _context(gateway))
+
+
+def test_only_the_mailbox_count_is_a_discovery_check() -> None:
+    checks = (
+        build_outlook_indexing_checks() + build_outlook_doc_permission_sync_checks()
+    )
+
+    assert {check.check_id for check in checks if check.discovery} == {
+        "outlook_mailbox_count"
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -566,7 +682,12 @@ def test_healthy_tenant_passes_indexing() -> None:
         _context(_gateway(), {"mailboxes": [MAILBOX_ADDRESS]}),
     )
 
-    assert all(result.status is CapabilityCheckStatus.PASSED for result in results)
+    # The tenant mailbox count does not apply to a config that lists mailboxes.
+    assert all(
+        result.status is CapabilityCheckStatus.PASSED
+        for result in results
+        if result.applicable
+    )
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
     assert verdicts[CredentialCapability.INDEXING] is CapabilityVerdict.PASSED
 
