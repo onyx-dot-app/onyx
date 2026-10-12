@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Button, SelectCard } from "@opal/components";
+import { Button } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgPlusCircle, SvgUserEdit } from "@opal/icons";
 import type { DraftCredential } from "@/lib/credentials/types";
@@ -20,7 +20,7 @@ interface AccountSummaryProps {
 /**
  * One row that names the new account: its display name, else its first value
  * that is not a secret (such as its email). The new-account card shows it as
- * its closed header; `AccountSummaryCard` wraps it for the folded section.
+ * its closed header once the account is usable.
  */
 export function AccountSummary({
   draft,
@@ -57,34 +57,5 @@ export function AccountSummary({
         {t("accountSummary.editButton.label")}
       </Button>
     </Section>
-  );
-}
-
-interface AccountSummaryCardProps extends AccountSummaryProps {
-  /** Opens the account section again. */
-  onExpand: () => void;
-}
-
-/**
- * The new account while the account section is folded. Clicking it opens the
- * section.
- */
-export default function AccountSummaryCard({
-  draft,
-  source,
-  sourceName,
-  onExpand,
-}: AccountSummaryCardProps) {
-  return (
-    <SelectCard
-      state="filled"
-      border="solid"
-      rounding={4}
-      padding={2}
-      data-testid="account-summary"
-      onClick={onExpand}
-    >
-      <AccountSummary draft={draft} source={source} sourceName={sourceName} />
-    </SelectCard>
   );
 }
