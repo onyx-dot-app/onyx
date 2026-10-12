@@ -180,7 +180,9 @@ test("scopes files and apps to a turn and switches back to all turns", async () 
   expect(
     screen.queryByRole("button", { name: "Show outputs" })
   ).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "All outputs" }));
+  await user.click(
+    screen.getByRole("button", { name: "Remove Turn 1 outputs" })
+  );
   expect(onTurnChange).toHaveBeenCalledWith(null);
   rerender(<OutputsTab {...props} turnIndex={null} />);
   expect(

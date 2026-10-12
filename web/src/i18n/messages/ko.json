@@ -13809,6 +13809,7 @@
         "placeholder": "출력 검색"
       },
       "scope": {
+        "turn": "턴 {turn, number} 출력",
         "all": "모든 출력"
       },
       "unseen": "새 항목 또는 업데이트됨"

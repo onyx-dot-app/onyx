@@ -13809,6 +13809,7 @@
         "placeholder": "出力を検索"
       },
       "scope": {
+        "turn": "ターン {turn, number} の出力",
         "all": "すべての出力"
       },
       "unseen": "新規または更新済み"

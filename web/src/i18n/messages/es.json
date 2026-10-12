@@ -13809,6 +13809,7 @@
         "placeholder": "Buscar resultados"
       },
       "scope": {
+        "turn": "Resultados del turno {turn, number}",
         "all": "Todos los resultados"
       },
       "unseen": "Nuevo o actualizado"

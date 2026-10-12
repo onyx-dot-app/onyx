@@ -13809,6 +13809,7 @@
         "placeholder": "搜索输出"
       },
       "scope": {
+        "turn": "第 {turn, number} 轮输出",
         "all": "所有输出"
       },
       "unseen": "新增或已更新"

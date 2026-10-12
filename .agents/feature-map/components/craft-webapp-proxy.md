@@ -36,7 +36,9 @@ When no tabs are open, a heading and three compact, stacked Outputs, All Files, 
 Folders in Outputs show an unread marker while any descendant output has an unseen revision.
 Mark all viewed acknowledges the currently loaded session-wide revisions, independent of the folder or type filter.
 The action stays disabled while saving or when no loaded outputs are unread. Failed saves retain markers and show an error.
-The Outputs page has no turn picker. Chat overflow links can scope it to one turn; All outputs clears that scope.
+The Outputs page has no turn picker. Chat overflow links can scope it to one turn.
+A colored “Turn 4 outputs” pill appears below the Outputs and file-type controls when a turn filter applies.
+Its remove button clears only the turn filter; folder, search, and file-type filters stay unchanged.
 Each Browser tab keeps its own selected app and stable resource identity.
 The panel retains app frames across tab switches, reorder, and medium/full/closed transitions.
 A transient discovery failure preserves the accepted frame while showing an unavailable state.

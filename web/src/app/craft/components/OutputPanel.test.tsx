@@ -209,6 +209,31 @@ it("clears all collection filters when opening the same turn again", () => {
   });
 });
 
+it("clears only the turn filter from the colored Outputs pill", async () => {
+  mockRenderActualResources = true;
+  store().openOutputsTab(sessionId, 3);
+  store().updateOutputsTabState(sessionId, {
+    searchQuery: "report",
+    folder: "reports",
+    fileType: "extension:pdf",
+  });
+  render(<BuildOutputPanel panelMode="medium" />);
+  expect(
+    screen.getByText("Turn 4 outputs").closest("[data-color]")
+  ).toHaveAttribute("data-color", "purple");
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove Turn 4 outputs" })
+  );
+  expect(screen.queryByText("Turn 4 outputs")).not.toBeInTheDocument();
+  expect(store().sessions.get(sessionId)?.outputsTabState).toEqual({
+    turnIndex: null,
+    searchQuery: "report",
+    folder: "reports",
+    fileType: "extension:pdf",
+  });
+  await act(async () => {});
+});
+
 it.each([false, true])(
   "disables reload while a Files read is pending (welcome: %s)",
   async (isWelcome) => {

@@ -13809,6 +13809,7 @@
         "placeholder": "Ergebnisse suchen"
       },
       "scope": {
+        "turn": "Ausgaben aus Runde {turn, number}",
         "all": "Alle Ausgaben"
       },
       "unseen": "Neu oder aktualisiert"

@@ -10,7 +10,7 @@ import {
 } from "@/app/craft/services/outputThumbnailCache";
 import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Button, Dropdown, Text } from "@opal/components";
+import { Button, Dropdown, Tag, Text } from "@opal/components";
 import { toast } from "@opal/layouts";
 import { SvgLoader, SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
@@ -288,15 +288,6 @@ function OutputsBrowser({
               {t("markAllViewed.label")}
             </Button>
           )}
-          {onTurnChange && turnIndex !== null && (
-            <Button
-              prominence="tertiary"
-              size="xs"
-              onClick={() => onTurnChange(null)}
-            >
-              {t("scope.all")}
-            </Button>
-          )}
           <Dropdown align="end">
             <Dropdown.Trigger asChild>
               <Button
@@ -323,6 +314,16 @@ function OutputsBrowser({
           </Dropdown>
         </div>
       </div>
+      {turnIndex !== null && (
+        <div className="flex items-center pb-3">
+          <Tag
+            title={t("scope.turn", { turn: turnIndex + 1 })}
+            color="purple"
+            size="md"
+            onRemove={onTurnChange ? () => onTurnChange(null) : undefined}
+          />
+        </div>
+      )}
       {visibleFiles.length === 0 &&
       folders.length === 0 &&
       apps.length === 0 ? (

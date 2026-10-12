@@ -593,9 +593,12 @@ function OutputResources({
                   outputCards={outputCards}
                   onMarkAllViewed={markAllViewed}
                   turnIndex={outputsTurnIndex}
-                  onTurnChange={(turnIndex) =>
-                    openOutputs(sessionId, turnIndex)
-                  }
+                  onTurnChange={(turnIndex) => {
+                    if (contentSessionId)
+                      useBuildSessionStore
+                        .getState()
+                        .updateOutputsTabState(contentSessionId, { turnIndex });
+                  }}
                   onAppOpen={(card) => {
                     openBrowser(sessionId, contentSessionId ?? undefined);
                     void markViewed(card);

@@ -13809,6 +13809,7 @@
         "placeholder": "Rechercher des résultats"
       },
       "scope": {
+        "turn": "Résultats du tour {turn, number}",
         "all": "Toutes les sorties"
       },
       "unseen": "Nouveau ou mis à jour"
