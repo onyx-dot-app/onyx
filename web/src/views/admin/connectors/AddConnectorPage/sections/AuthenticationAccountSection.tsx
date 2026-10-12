@@ -371,7 +371,8 @@ export default function AuthenticationAccountSection({
       // interactive half is focusable, so a role here folds no other
       // control into that name.
       role="button"
-      aria-label={newAccountLabel}
+      // Showing a summary, the card is named by it (its visible text).
+      aria-label={!isCreating && chosenDraft ? undefined : newAccountLabel}
       aria-expanded={isCreating}
       tabIndex={0}
       expandedContent={
@@ -440,7 +441,7 @@ export default function AuthenticationAccountSection({
         padding={0}
         rightChildren={
           <Section flexDirection="row" alignItems="center" gap={0} width="fit">
-            <div className="p-2">
+            <Section padding={2} width="fit">
               <Content
                 icon={SvgListTree}
                 title={t("add.savedAccounts.label", {
@@ -451,7 +452,7 @@ export default function AuthenticationAccountSection({
                 color="muted"
                 width="fit"
               />
-            </div>
+            </Section>
             <Button
               icon={accountsExpanded ? SvgFold : SvgExpand}
               prominence="tertiary"
