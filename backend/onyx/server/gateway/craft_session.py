@@ -54,8 +54,12 @@ def resolve_craft_session_id(
 def llm_gateway_trace(
     flow: LLMFlow, model: str, craft_session_id: str | None = None
 ) -> Trace:
-    """One trace per gateway call; grouped by Craft session when known."""
+    """One trace per gateway call, tagged with the Craft session when known.
+
+    The id travels in the trace metadata, which every tracing processor
+    exports, so a session's calls are one filter on ``craft_session_id``.
+    """
     metadata: dict[str, str] = {"flow": flow.value, "model": model}
     if craft_session_id is not None:
         metadata["craft_session_id"] = craft_session_id
-    return trace("llm_gateway", group_id=craft_session_id, metadata=metadata)
+    return trace("llm_gateway", metadata=metadata)

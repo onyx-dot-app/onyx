@@ -12,7 +12,6 @@ from onyx.server.gateway.craft_session import (
     resolve_craft_session_id,
 )
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.traces import TraceImpl
 
 
 def _request(header: str | None) -> Request:
@@ -58,17 +57,15 @@ def test_owned_session_is_returned() -> None:
 
 def test_trace_carries_session_when_known() -> None:
     with llm_gateway_trace(LLMFlow.CRAFT_LLM_GENERATION, "m", "sess-1") as active:
-        assert isinstance(active, TraceImpl)
-        assert active.metadata == {
+        exported = active.export() or {}
+        assert exported["metadata"] == {
             "flow": LLMFlow.CRAFT_LLM_GENERATION.value,
             "model": "m",
             "craft_session_id": "sess-1",
         }
-        assert active.group_id == "sess-1"
 
 
 def test_trace_without_session_is_unchanged() -> None:
     with llm_gateway_trace(LLMFlow.LLM_GATEWAY, "m") as active:
-        assert isinstance(active, TraceImpl)
-        assert active.metadata == {"flow": LLMFlow.LLM_GATEWAY.value, "model": "m"}
-        assert active.group_id is None
+        exported = active.export() or {}
+        assert exported["metadata"] == {"flow": LLMFlow.LLM_GATEWAY.value, "model": "m"}

@@ -690,8 +690,7 @@ def test_stream_worker_tags_trace_with_craft_session() -> None:
 
     assert frames[-1] == "data: [DONE]\n\n"
     (active,) = traces
-    assert active.metadata["craft_session_id"] == "sess-1"
-    assert active.group_id == "sess-1"
+    assert (active.export() or {})["metadata"]["craft_session_id"] == "sess-1"
 
 
 def test_stream_worker_opens_trace_before_generation_span() -> None:
