@@ -5236,6 +5236,10 @@
         "orSeparator": {
           "label": "또는"
         },
+        "quantizationOnly": {
+          "description": "벡터 양자화만 변경되었으므로 Onyx는 저장된 벡터로 인덱스를 다시 구축하며, 다시 임베딩하지 않습니다. 전체 재인덱싱보다 훨씬 빠릅니다.",
+          "title": "인덱스를 다시 구축합니다."
+        },
         "reindex": {
           "description": "재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "전체 재인덱싱이 실행됩니다."
@@ -5456,7 +5460,9 @@
         "cancelButton": {
           "label": "재인덱싱 취소 및 되돌리기"
         },
+        "copyTitle": "인덱스를 다시 구축하는 중…",
         "description": {
+          "copy": "Onyx가 저장된 벡터로 인덱스를 다시 구축하고 있으며, 다시 임베딩하지 않습니다. 다시 임베딩하는 것보다 훨씬 빠릅니다.",
           "withModel": "재인덱싱이 진행되면서 새 embedding 설정(**{model}**)이 적용됩니다. 문서 규모에 따라 **몇 시간에서 며칠**이 걸릴 수 있습니다.",
           "withoutModel": "재인덱싱이 진행되면서 새 embedding 설정이 적용됩니다. 문서 규모에 따라 **몇 시간에서 며칠**이 걸릴 수 있습니다."
         },

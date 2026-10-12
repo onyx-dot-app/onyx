@@ -1021,6 +1021,10 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
     await indexSettings.goto();
     await indexSettings.selectVectorQuantization("1-bit");
 
+    // Only quantization changed, so the banner says the index is rebuilt from
+    // the stored vectors rather than fully re-indexed.
+    await indexSettings.expectQuantizationRebuildBanner();
+
     // Quantization is part of the index mapping, so only the re-index
     // strategies are offered.
     await indexSettings.expectStrategy(/re-index all connectors/i);

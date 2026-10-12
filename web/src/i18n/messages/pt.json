@@ -5236,6 +5236,10 @@
         "orSeparator": {
           "label": "ou"
         },
+        "quantizationOnly": {
+          "description": "Somente a quantização de vetores mudou, então o Onyx reconstrói o índice a partir dos vetores armazenados, sem gerar embeddings novamente. Isso é muito mais rápido do que uma reindexação completa.",
+          "title": "O índice será reconstruído."
+        },
         "reindex": {
           "description": "A reindexação pode levar *horas ou dias* dependendo do tamanho do corpus. [Saiba mais](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Uma reindexação completa será executada."
@@ -5456,7 +5460,9 @@
         "cancelButton": {
           "label": "Cancelar reindexação e reverter"
         },
+        "copyTitle": "Reconstruindo o índice…",
         "description": {
+          "copy": "O Onyx está reconstruindo o índice a partir dos vetores armazenados, sem gerar embeddings novamente. Isso é muito mais rápido do que gerar os embeddings de novo.",
           "withModel": "As novas configurações de embedding (**{model}**) são aplicadas conforme a reindexação avança. Isso pode levar **horas ou dias** dependendo do tamanho do corpus.",
           "withoutModel": "As novas configurações de embedding são aplicadas conforme a reindexação avança. Isso pode levar **horas ou dias** dependendo do tamanho do corpus."
         },

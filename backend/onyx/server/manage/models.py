@@ -20,6 +20,7 @@ from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
+from onyx.db.port_attempt import ReindexProgressCounts
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
@@ -604,3 +605,10 @@ class AllVersions(BaseModel):
 
 class UnstructuredApiKeyRequest(BaseModel):
     unstructured_api_key: str = Field(min_length=1, pattern=r"\S")
+
+
+class ReindexProgress(ReindexProgressCounts):
+    """Port progress, and whether the port re-embeds chunks or copies their
+    stored vectors."""
+
+    reembeds: bool
