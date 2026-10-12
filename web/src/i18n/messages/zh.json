@@ -9054,6 +9054,13 @@
         "successful": "{count} 项成功"
       },
       "failedToRun": "检查未能运行。请重试。",
+      "failedToRunCard": {
+        "title": "无法运行检查",
+        "description": "为此账户启动检查时出错。",
+        "retryButton": {
+          "label": "重试"
+        }
+      },
       "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
       "state": {
         "completed": "检查已完成",

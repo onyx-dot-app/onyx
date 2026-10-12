@@ -13,6 +13,7 @@ import {
   IconTooltip,
   Log,
   type LogVariant,
+  MessageCard,
   OverflowText,
   SelectCard,
   Tag,
@@ -403,9 +404,22 @@ function CheckCardView({
             className="pt-1"
           >
             {notice && (
-              <Text font="main-ui-body" color="status-error-05" role="alert">
-                {notice}
-              </Text>
+              <div role="alert">
+                <MessageCard
+                  variant="error"
+                  title={t("failedToRunCard.title")}
+                  description={t("failedToRunCard.description")}
+                  rightChildren={
+                    <Button
+                      prominence="secondary"
+                      disabled={isRunning}
+                      onClick={onRerun}
+                    >
+                      {t("failedToRunCard.retryButton.label")}
+                    </Button>
+                  }
+                />
+              </div>
             )}
 
             {hasResults || openChecks.length > 0 ? (

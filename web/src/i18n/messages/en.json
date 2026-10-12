@@ -9054,6 +9054,13 @@
         "successful": "{count} successful"
       },
       "failedToRun": "Checks failed to run. Try again.",
+      "failedToRunCard": {
+        "title": "Checks couldn't run",
+        "description": "Something went wrong while starting the checks for this account.",
+        "retryButton": {
+          "label": "Try Again"
+        }
+      },
       "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
       "state": {
         "completed": "Checks completed",
