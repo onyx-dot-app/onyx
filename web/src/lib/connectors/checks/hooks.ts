@@ -393,11 +393,15 @@ export function useConnectorChecks({
       )
     : plan !== undefined &&
       !applicable.some((check) => check.validates_binding);
+  // A current run of this form that started fine. It need not be finished:
+  // `createReady` waits only on required checks (see `blocks`), so a slow
+  // optional check such as discovery does not hold Create back.
   const ranThisForm: boolean =
     !!session &&
     !session.requesting &&
     session.ranWithForm === formKey &&
-    snapshot?.status === "completed";
+    snapshot !== null &&
+    snapshot.status !== "failed_to_run";
   const createReady: boolean =
     formUnlocked &&
     (!applicable.some((check) => check.required) ||
