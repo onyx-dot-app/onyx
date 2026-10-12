@@ -4,7 +4,10 @@ import json
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+import requests
 from office365.graph_client import GraphClient
+from office365.runtime.client_request import ClientRequestException
 from requests.structures import CaseInsensitiveDict
 
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
@@ -168,38 +171,111 @@ def _graph_page(body: dict[str, Any]) -> MagicMock:
     return response
 
 
+def _graph_error_page(status: int, code: str) -> MagicMock:
+    """A Graph refusal as the SDK sees it: raise_for_status fails."""
+    response: MagicMock = _graph_page({"error": {"code": code, "message": code}})
+    response.status_code = status
+    response.raise_for_status.side_effect = requests.HTTPError(response=response)
+    return response
+
+
+PARENT_ID = "11111111-1111-1111-1111-111111111111"
+SECOND_ID = "33333333-3333-3333-3333-333333333333"
+MEMBERS_URL = f"{GRAPH_API_BASE}/groups/{PARENT_ID}/members/microsoft.graph.group"
+FIRST_PAGE: dict[str, Any] = {
+    "value": [
+        {"id": NESTED_GROUP_ID, "displayName": "Platform", "securityEnabled": True}
+    ],
+    "@odata.nextLink": f"{MEMBERS_URL}?$skiptoken=next",
+}
+SECOND_PAGE: dict[str, Any] = {
+    "value": [{"id": SECOND_ID, "displayName": "Infra", "securityEnabled": True}]
+}
+BOTH_GROUPS: set[ResolvedEntraGroup] = {
+    ResolvedEntraGroup(id=NESTED_GROUP_ID, name=f"Platform_{NESTED_GROUP_ID}"),
+    ResolvedEntraGroup(id=SECOND_ID, name=f"Infra_{SECOND_ID}"),
+}
+
+
+def _graph_client() -> GraphClient:
+    return GraphClient(lambda: {"access_token": "token", "token_type": "Bearer"})
+
+
 def test_nested_groups_are_listed_through_the_group_cast() -> None:
     """Only member groups are requested and every page is read, so a large
     group's users are never paged."""
-    parent_id: str = "11111111-1111-1111-1111-111111111111"
-    second_id: str = "33333333-3333-3333-3333-333333333333"
-    members_url: str = (
-        f"{GRAPH_API_BASE}/groups/{parent_id}/members/microsoft.graph.group"
-    )
-    pages: list[MagicMock] = [
-        _graph_page(
-            {
-                "value": [{"id": NESTED_GROUP_ID, "displayName": "Platform"}],
-                "@odata.nextLink": f"{members_url}?$skiptoken=next",
-            }
-        ),
-        _graph_page({"value": [{"id": second_id, "displayName": "Infra"}]}),
-    ]
-    client: GraphClient = GraphClient(
-        lambda: {"access_token": "token", "token_type": "Bearer"}
-    )
+    pages: list[MagicMock] = [_graph_page(FIRST_PAGE), _graph_page(SECOND_PAGE)]
 
     with patch(
         "office365.runtime.client_request.requests.get", side_effect=pages
     ) as mock_get:
-        groups = list_nested_entra_groups(client, parent_id)
+        groups = list_nested_entra_groups(_graph_client(), PARENT_ID)
 
     requested: list[str] = [call.kwargs["url"] for call in mock_get.call_args_list]
     assert requested == [
-        f"{members_url}?$select=id,displayName",
-        f"{members_url}?$skiptoken=next",
+        f"{MEMBERS_URL}?$select=id,displayName,securityEnabled",
+        f"{MEMBERS_URL}?$skiptoken=next",
     ]
-    assert groups == {
-        ResolvedEntraGroup(id=NESTED_GROUP_ID, name=f"Platform_{NESTED_GROUP_ID}"),
-        ResolvedEntraGroup(id=second_id, name=f"Infra_{second_id}"),
+    assert groups == BOTH_GROUPS
+
+
+def test_nested_distribution_lists_are_left_out() -> None:
+    """SharePoint grants nothing to a distribution list, so its members
+    must not become readers through the parent group."""
+    page: dict[str, Any] = {
+        "value": [
+            {"id": NESTED_GROUP_ID, "displayName": "Platform", "securityEnabled": True},
+            {"id": SECOND_ID, "displayName": "Announce", "securityEnabled": False},
+        ]
     }
+
+    with patch(
+        "office365.runtime.client_request.requests.get",
+        side_effect=[_graph_page(page)],
+    ):
+        groups = list_nested_entra_groups(_graph_client(), PARENT_ID)
+
+    assert groups == {
+        ResolvedEntraGroup(id=NESTED_GROUP_ID, name=f"Platform_{NESTED_GROUP_ID}")
+    }
+
+
+def test_a_group_kind_that_cannot_nest_groups_has_none() -> None:
+    """Graph documents the group cast as unsupported on Microsoft 365
+    groups; that answer means no nested groups, not a failed document."""
+    with patch(
+        "office365.runtime.client_request.requests.get",
+        side_effect=[_graph_error_page(400, "Request_UnsupportedQuery")],
+    ):
+        groups = list_nested_entra_groups(_graph_client(), PARENT_ID)
+
+    assert groups == set()
+
+
+def test_other_refusals_of_the_group_cast_are_raised() -> None:
+    with patch(
+        "office365.runtime.client_request.requests.get",
+        side_effect=[_graph_error_page(403, "Authorization_RequestDenied")],
+    ):
+        with pytest.raises(ClientRequestException):
+            list_nested_entra_groups(_graph_client(), PARENT_ID)
+
+
+@patch("onyx.connectors.microsoft_utils.graph_client.time.sleep")
+def test_a_retried_listing_reads_every_page(_mock_sleep: MagicMock) -> None:
+    """A throttled page must not leave the group with a partial result that
+    the permission cache then keeps for the whole run."""
+    pages: list[MagicMock] = [
+        _graph_page(FIRST_PAGE),
+        _graph_error_page(429, "TooManyRequests"),
+        _graph_page(FIRST_PAGE),
+        _graph_page(SECOND_PAGE),
+    ]
+
+    with patch(
+        "office365.runtime.client_request.requests.get", side_effect=pages
+    ) as mock_get:
+        groups = list_nested_entra_groups(_graph_client(), PARENT_ID)
+
+    assert mock_get.call_count == 4
+    assert groups == BOTH_GROUPS
