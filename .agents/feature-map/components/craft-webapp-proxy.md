@@ -29,9 +29,6 @@ agent edits files. The user never runs a command to see this; the dev server
 starts the first time the agent (or the user, via a documented fallback
 script) needs it.
 
-The managed Next.js scaffold disables the development React debug channel, keeping hydration data in the document.
-Startup migrates the old managed empty-config declaration without replacing custom settings.
-
 Automatic panel opening waits for `webapp-info` to report a serving webapp.
 A URL or source-file edit alone cannot open Preview or its Files fallback.
 Concurrent opening requests share one readiness check per session with a 30-second deadline.
@@ -169,6 +166,9 @@ friendly offline page (`templates/webapp_offline.html`) instead of a raw
 gateway error.
 
 ### 4.4 Proxying the HMR websocket
+
+The managed Next.js scaffold disables the development React debug channel, keeping hydration data in the document.
+Startup migrates the old managed empty-config declaration without replacing custom settings.
 
 `websocket_webapp_hmr` requires an authenticated user
 (`current_user_from_websocket_cookie`, `onyx/auth/users.py`). That dependency
@@ -349,10 +349,10 @@ Use manual reproduction for the cache and hot-reload behaviour below.
 
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
 2. In a Craft session, ask the agent to scaffold a simple Next.js page.
-3. Open the Preview tab. Confirm a button or dropdown responds after the document loads.
-   With `experimental.reactDebugChannel: false`, block the HMR WebSocket and reload; controls should still respond.
-   Restore the connection, then edit visible component text and confirm it updates without a manual refresh.
-   If live updates fail, check `_next/hmr` (or `_next/webpack-hmr`) for a failed upgrade.
+3. Open the session app preview. Confirm the app renders and its controls respond.
+   If `experimental.reactDebugChannel` is false, block the HMR WebSocket and reload; controls should still respond.
+   Unblock the WebSocket. Ask the agent to change visible text and confirm hot reload without a manual refresh.
+   If edits do not appear, check `/_next/hmr` or `/_next/webpack-hmr` for a failed WebSocket upgrade.
 4. Open the same session URL as a second, unrelated user account (or in an
    incognito window with no session). Confirm the second user gets a 404
    and the logged-out window is redirected to `/auth/login`, not rendered.
