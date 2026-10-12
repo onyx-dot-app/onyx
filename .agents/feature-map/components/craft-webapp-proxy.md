@@ -311,7 +311,9 @@ The root user context supplies the cache owner outside private SWR scopes.
 Cache ownership changes after React commits; render and hydration do not write shared state.
 In-flight preview validation coalesces repeated activation for the same request identity.
 Retries require the current committed identity and an active viewer.
-Each directory owns its folder row and loading status. A hook tracks pending directory paths and exposes aggregate loading to Files.
+Each directory spinner follows its own pending request, without a minimum display timer.
+A hook tracks all pending directory paths, including the root, and exposes aggregate loading to Files.
+A stable Files callback keeps manual refresh active until that aggregate becomes idle.
 Directory, search, and webapp cache keys include the authenticated user ID.
 Partial search responses merge accepted cached entries at the fetch boundary.
  It restores user-and-session-scoped metadata snapshots as display hints while sandbox discovery and inventory validation run. Snapshots expire after 24 hours and hold at most 2000 files or 256000 characters. Cached hints never enter the store or establish task baselines. Complete inventories replace snapshots; transient failures retain hints, while terminal errors clear them. A live result always replaces the hint, including an empty inventory. Preview fetching waits for live inventory revisions. `OutputTile.tsx` owns lightweight image and text previews plus hover downloads. Visible eligible tiles fetch previews; large files and unsupported formats use file icons. PDF and PowerPoint cards use the shared first-page thumbnail endpoint. Markdown uses the same safe renderer as file previews, scaled into a clipped paper thumbnail. Image backdrops improve transparent-image contrast. Pending thumbnails keep a quiet placeholder; cached images display without a mount animation. Failed previews fall back to file icons. PDF and PowerPoint use shared navigation controls and thumbnail sidebars.

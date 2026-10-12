@@ -233,6 +233,14 @@ function OutputResources({
     [updateResource]
   );
 
+  const filesResourceTab = entries.files?.tab;
+  const onFilesLoading = useCallback(
+    (pending: boolean) => {
+      if (filesResourceTab) onResourceLoading(filesResourceTab, pending);
+    },
+    [filesResourceTab, onResourceLoading]
+  );
+
   const {
     apps,
     accessRevoked,
@@ -538,9 +546,7 @@ function OutputResources({
                       : undefined
                   }
                   refreshKey={resource.refreshKey}
-                  onRefreshingChange={(pending) =>
-                    onResourceLoading(tab, pending)
-                  }
+                  onRefreshingChange={onFilesLoading}
                   isProvisioning={!sessionId && isProvisioning}
                   isActive={visible && runtimeReady}
                   canLoad={runtimeReady}

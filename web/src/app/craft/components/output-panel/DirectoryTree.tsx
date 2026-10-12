@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useUser } from "@/providers/UserProvider";
 import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
@@ -267,26 +267,7 @@ function WorkspaceEntryRow({
   onClick: () => void;
 }) {
   const t = useTranslations("craft.filesTab");
-  const loadingStartedAt = useRef(0);
-  const [holdLoadingIcon, setHoldLoadingIcon] = useState(false);
-  useEffect(() => {
-    if (status === "loading") {
-      loadingStartedAt.current = Date.now();
-      setHoldLoadingIcon(true);
-      return;
-    }
-    const remaining = 150 - (Date.now() - loadingStartedAt.current);
-    if (remaining <= 0 || !expanded || status === "error") {
-      setHoldLoadingIcon(false);
-      return;
-    }
-    const timer = setTimeout(() => setHoldLoadingIcon(false), remaining);
-    return () => clearTimeout(timer);
-  }, [status, expanded]);
-  // The visual minimum never delays rows or keeps the reload control busy.
-  const showLoadingIcon =
-    expanded &&
-    (status === "loading" || (holdLoadingIcon && status !== "error"));
+  const showLoadingIcon = expanded && status === "loading";
   const Icon = entry.is_directory
     ? showLoadingIcon
       ? IconLoader

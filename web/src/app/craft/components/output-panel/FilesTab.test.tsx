@@ -645,7 +645,7 @@ it("retains failed-folder search hits after the search component was remounted",
 
 // Directory loading indicators.
 it.each([50, 250])(
-  "keeps a folder loading icon steady without delaying rows after a %ims request",
+  "stops the folder loading icon when its %ims request finishes",
   async (requestDuration) => {
     jest.useFakeTimers();
     const pending = deferred<DirectoryListing>();
@@ -670,18 +670,6 @@ it.each([50, 250])(
       expect(screen.getByText("ready.txt")).toBeInTheDocument();
       expect(onRefreshingChange).toHaveBeenLastCalledWith(false);
       expect(folder).not.toHaveAttribute("aria-busy");
-      if (requestDuration < 150) {
-        expect(
-          folder.querySelector(".motion-safe\\:animate-spin")
-        ).not.toBeNull();
-        await act(async () =>
-          jest.advanceTimersByTimeAsync(149 - requestDuration)
-        );
-        expect(
-          folder.querySelector(".motion-safe\\:animate-spin")
-        ).not.toBeNull();
-        await act(async () => jest.advanceTimersByTimeAsync(1));
-      }
       expect(folder.querySelector(".motion-safe\\:animate-spin")).toBeNull();
     } finally {
       view.unmount();
@@ -749,3 +737,61 @@ it("preserves an explicitly collapsed tree when the Files browser remounts", asy
     await screen.findByRole("button", { name: "outputs" })
   ).toHaveAttribute("aria-expanded", "false");
 });
+
+it.each(["root", "folder"])(
+  "keeps aggregate refresh busy until the final %s request finishes",
+  async (lastRequest) => {
+    const root = deferred<DirectoryListing>();
+    const folder = deferred<DirectoryListing>();
+    const initialRoot = { path: "", entries: [outputs] };
+    const initialFolder = {
+      path: "outputs",
+      entries: [file("ready.txt", "outputs/ready.txt")],
+    };
+    listing.mockImplementation(async (_session, path) =>
+      path ? initialFolder : initialRoot
+    );
+    const onRefreshingChange = jest.fn();
+    const view = render(
+      <FilesTab sessionId="session" onRefreshingChange={onRefreshingChange} />
+    );
+    await screen.findByText("ready.txt");
+    await waitFor(() =>
+      expect(onRefreshingChange).toHaveBeenLastCalledWith(false)
+    );
+    listing.mockImplementation((_session, path) =>
+      path ? folder.promise : root.promise
+    );
+    view.rerender(
+      <FilesTab
+        sessionId="session"
+        refreshKey={1}
+        onRefreshingChange={onRefreshingChange}
+      />
+    );
+    await waitFor(() => expect(listing).toHaveBeenCalledTimes(4));
+    expect(onRefreshingChange).toHaveBeenLastCalledWith(true);
+    const row = screen.getByRole("button", { name: "outputs" });
+    expect(row).toHaveAttribute("aria-busy", "true");
+    await act(async () => {
+      if (lastRequest === "root") folder.resolve(initialFolder);
+      else root.resolve(initialRoot);
+    });
+    expect(onRefreshingChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByText("ready.txt")).toBeInTheDocument();
+    if (lastRequest === "root") {
+      expect(row).not.toHaveAttribute("aria-busy");
+      expect(row.querySelector(".motion-safe\\:animate-spin")).toBeNull();
+    } else {
+      expect(row).toHaveAttribute("aria-busy", "true");
+    }
+    await act(async () => {
+      root.resolve(initialRoot);
+      folder.resolve(initialFolder);
+    });
+    await waitFor(() =>
+      expect(onRefreshingChange).toHaveBeenLastCalledWith(false)
+    );
+    expect(row).not.toHaveAttribute("aria-busy");
+  }
+);

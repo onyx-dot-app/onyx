@@ -658,6 +658,47 @@ describe("Files integration", () => {
   beforeEach(() => {
     mockRenderActualResources = true;
   });
+  it("keeps the manual reload spinner until every directory read finishes", async () => {
+    const rootListing = {
+      path: "",
+      entries: [
+        {
+          name: "outputs",
+          path: "outputs",
+          is_directory: true,
+          size: null,
+          mime_type: null,
+        },
+      ],
+    };
+    const childListing = { path: "outputs", entries: [] };
+    jest
+      .mocked(fetchDirectoryListing)
+      .mockImplementation(async (_id, path) =>
+        path === "outputs" ? childListing : rootListing
+      );
+    render(<BuildOutputPanel panelMode="medium" />);
+    const reload = screen.getByRole("button", { name: "Refresh files" });
+    await waitFor(() => expect(fetchDirectoryListing).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(reload).toBeEnabled());
+    const root = deferred<Awaited<ReturnType<typeof fetchDirectoryListing>>>();
+    const child = deferred<Awaited<ReturnType<typeof fetchDirectoryListing>>>();
+    jest
+      .mocked(fetchDirectoryListing)
+      .mockImplementation((_id, path) =>
+        path === "outputs" ? child.promise : root.promise
+      );
+    fireEvent.click(reload);
+    await waitFor(() => expect(fetchDirectoryListing).toHaveBeenCalledTimes(4));
+    expect(reload.querySelector(".motion-safe\\:animate-spin")).not.toBeNull();
+    await act(async () => child.resolve(childListing));
+    expect(reload).toBeDisabled();
+    expect(reload.querySelector(".motion-safe\\:animate-spin")).not.toBeNull();
+    await act(async () => root.resolve(rootListing));
+    await waitFor(() => expect(reload).toBeEnabled());
+    expect(reload.querySelector(".motion-safe\\:animate-spin")).toBeNull();
+  });
+
   it("warms directories after readiness and keeps an in-flight read through tab closure", async () => {
     store().updateSessionData(sessionId, {
       sandbox: null,
