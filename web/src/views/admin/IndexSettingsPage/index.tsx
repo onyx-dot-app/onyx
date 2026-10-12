@@ -743,6 +743,7 @@ type BannerCopy =
   | "contextualDisableOnly"
   | "contextualModelOnly"
   | "doNotReindex"
+  | "quantizationOnly"
   | "reindex"
   | "default";
 
@@ -750,11 +751,17 @@ type BannerCopy =
 function bannerCopyFor(
   contextualRagModelMissing: boolean,
   mode: BannerMode,
-  strategyCopy: "doNotReindex" | "reindex" | null
+  strategyCopy: "doNotReindex" | "reindex" | null,
+  quantizationOnly: boolean
 ): BannerCopy {
   if (contextualRagModelMissing) return "contextualModelMissing";
   if (mode === "contextualDisableOnly" || mode === "contextualModelOnly") {
     return mode;
+  }
+  // A quantization-only change copies the stored vectors instead of
+  // re-embedding, so it gets its own, faster wording.
+  if (strategyCopy === "reindex" && quantizationOnly) {
+    return "quantizationOnly";
   }
   return strategyCopy ?? "default";
 }
@@ -1309,10 +1316,17 @@ export default function IndexSettingsPage() {
               // them. Do Not Re-index touches no index, so it reads as info
               // rather than as the warning the re-index strategies carry.
               const stagedVariant = saveOnly ? "info" : "warning";
+              const quantizationOnlyChange: boolean =
+                changes.quantizationChanged &&
+                !changes.embeddingChanged &&
+                !changes.contextualToggleChanged &&
+                !changes.contextualModelChanged &&
+                !changes.imageChanged;
               const bannerCopy = bannerCopyFor(
                 contextualRagModelMissing,
                 bannerMode,
-                strategyCopy
+                strategyCopy,
+                quantizationOnlyChange
               );
               const forwardModalKey = contextualDisableOnlyChange
                 ? "disableForwardModal"
