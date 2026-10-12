@@ -313,6 +313,16 @@ Explicit file clicks still open their preview. The inventory keeps updating whil
 is suppressed, so old changes do not appear as new files later.
 Selecting the current history entry preserves Back and Forward history instead of adding a duplicate entry.
 
+Text, image, Markdown, and PDF viewers retain accepted payloads during refreshes and transient failures.
+Retained viewers show refresh progress and failure feedback.
+Welcome inline image and Markdown previews fill a bounded viewer; plain text grows with its content.
+Authorization and not-found responses purge accepted payloads from the viewer cache.
+Within a retained cache, preview remounts reuse matching revisions and reload changed revisions.
+Closing or evicting a viewer releases its cache. Reopening it reads the file again.
+Later transient failures cannot restore invalidated content without a successful read.
+Hidden viewers defer scheduled retries until activation.
+Presentation viewers hide cached slides during conversion because conversion replaces slide files.
+
 CSV files display a sticky-header table limited to 1,000 rows, 100 columns, and 5,000 cells.
 CSV viewers report malformed quoted fields and offer a raw download through the preview toolbar.
 The CSV preview uses the shared parser directly. Parser tests live with the shared utility.
@@ -514,6 +524,12 @@ work against the default Kubernetes backend, follow
   make the attach endpoint wait rather than force a restart; this is
   deliberate (avoids double-driving a healthy turn) but reads as latency if
   you don't know the constant.
+
+Access-loss results stay in the file cache across remounts. Transient failures cannot restore revoked bytes.
+
+Preview retries stop when a viewer unmounts or its requested revision changes. Development effect replay reuses the pending request.
+
+A scheduled preview retry runs only while its failure remains current. Activation recovery makes the old retry obsolete.
 
 Welcome inline previews offer an original-file download. Presentation slide images own loading state by their URL.
 
