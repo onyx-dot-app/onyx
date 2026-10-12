@@ -185,7 +185,13 @@ func TestRunUpdateBaseDigests_cachedOnlyNeedsACache(t *testing.T) {
 
 	_, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, CachedOnly: true})
 	if err == nil || err.Error() != "--cached-only needs --cache-file." {
-		t.Fatalf("expected the missing cache file to be refused, got %v", err)
+		t.Fatalf("expected the missing cache flag to be refused, got %v", err)
+	}
+
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	_, err = runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, CachedOnly: true, CacheFile: missing})
+	if err == nil || !strings.HasPrefix(err.Error(), "Could not read the cache: ") || !strings.Contains(err.Error(), missing) {
+		t.Fatalf("expected the absent cache file to be refused, got %v", err)
 	}
 }
 

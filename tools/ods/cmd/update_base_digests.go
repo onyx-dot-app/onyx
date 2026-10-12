@@ -122,6 +122,10 @@ func runUpdateBaseDigests(opts *UpdateBaseDigestsOptions) (string, error) {
 		if opts.CacheFile == "" {
 			return out.String(), fatalErrorf("--cached-only needs --cache-file.")
 		}
+		// An absent cache would read as empty and quietly touch nothing.
+		if _, err := os.Stat(opts.CacheFile); err != nil {
+			return out.String(), fatalErrorf("Could not read the cache: %v", err)
+		}
 		resolved, err = readCache(opts.CacheFile)
 		if err != nil {
 			return out.String(), fatalErrorf("Could not read the cache: %v", err)
