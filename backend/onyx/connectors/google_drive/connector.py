@@ -857,7 +857,7 @@ class GoogleDriveConnector(
             user_email,
             self._is_service_account,
         )
-        all_drive_ids = set(
+        all_drive_ids: set[str] = set(
             self.ops.list_drives(
                 user_email=user_email,
                 use_domain_admin_access=self._is_service_account,

@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.interfaces import ConnectorCheckpoint, SecondsSinceUnixEpoch
 from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
@@ -405,3 +406,24 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
                 {k: ThreadSafeSet(set(vals)) for k, vals in v.items()}
             )
         return ThreadSafeDict()
+
+
+class GoogleDriveAuth(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: GoogleCredentialKind
+    primary_admin_email: str
+    # The credential to store when loading it refreshed the OAuth token, else
+    # None.
+    refreshed_credential_json: dict[str, str] | None = None
+
+
+class GoogleDirectoryUser(BaseModel):
+    is_admin: bool
+    is_delegated_admin: bool
+
+
+class GoogleGroupMember(BaseModel):
+    email: str | None
+    # USER, GROUP or CUSTOMER.
+    type: str | None

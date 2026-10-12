@@ -25,7 +25,6 @@ from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError
 from googleapiclient.http import BatchHttpRequest, MediaIoBaseDownload
-from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
@@ -36,7 +35,10 @@ from onyx.connectors.google_drive.constants import (
 )
 from onyx.connectors.google_drive.models import (
     DriveBatchResult,
+    GoogleDirectoryUser,
+    GoogleDriveAuth,
     GoogleDriveFileType,
+    GoogleGroupMember,
 )
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import (
@@ -132,27 +134,6 @@ class DriveCorpus(str, Enum):
     DRIVE = "drive"
     # Every drive the user can see.
     ALL_DRIVES = "allDrives"
-
-
-class GoogleDriveAuth(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: GoogleCredentialKind
-    primary_admin_email: str
-    # The credential to store when loading it refreshed the OAuth token, else
-    # None.
-    refreshed_credential_json: dict[str, str] | None = None
-
-
-class GoogleDirectoryUser(BaseModel):
-    is_admin: bool
-    is_delegated_admin: bool
-
-
-class GoogleGroupMember(BaseModel):
-    email: str | None
-    # USER, GROUP or CUSTOMER.
-    type: str | None
 
 
 def _error_reasons(error_details: object) -> tuple[str, ...]:
@@ -335,7 +316,15 @@ class GoogleDriveSourceOperations(SourceOperations):
         return self._cached_creds
 
     def _drive(self, user_email: str) -> Any:
-        return get_drive_service(self._creds(), user_email)
+        """One Drive client per thread and user. A build is not free, and a
+        client is not thread-safe."""
+        local: threading.local = vars(self).setdefault(
+            "_drive_clients", threading.local()
+        )
+        clients: dict[str, Any] = vars(local).setdefault("by_user", {})
+        if user_email not in clients:
+            clients[user_email] = get_drive_service(self._creds(), user_email)
+        return clients[user_email]
 
     def _directory(self) -> Any:
         """The Admin SDK directory service, acting as the primary admin."""

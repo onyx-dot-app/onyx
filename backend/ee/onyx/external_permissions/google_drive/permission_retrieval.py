@@ -1,3 +1,5 @@
+from typing import Any
+
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
@@ -32,7 +34,7 @@ def get_permissions_by_ids(
 
     Returns:
         A list of GoogleDrivePermission objects matching the provided permission
-        IDs. Empty when the user cannot read the permissions (403 or 404).
+        IDs. A 403 or 404 ends the listing early.
     """
     if not permission_ids:
         return []
@@ -40,9 +42,12 @@ def get_permissions_by_ids(
     # Create a set for faster lookup
     permission_id_set = set(permission_ids)
 
-    # Fetch all permissions for the document
+    # Fetch all permissions for the document. A 403 or 404 stops the listing
+    # but keeps the pages already read.
+    fetched_permissions: list[dict[str, Any]] = []
     try:
-        fetched_permissions = list(
+        # extend() keeps the items it added before the iterator raises.
+        fetched_permissions.extend(
             ops.list_file_permissions(
                 user_email=user_email, file_id=doc_id, fields=_PERMISSION_FIELDS
             )
@@ -51,7 +56,6 @@ def get_permissions_by_ids(
         if e.status_code not in (403, 404):
             raise
         logger.debug("Cannot read the permissions of %s: %s", doc_id, e)
-        fetched_permissions = []
 
     # Filter permissions by ID and convert to GoogleDrivePermission objects
     filtered_permissions = []
