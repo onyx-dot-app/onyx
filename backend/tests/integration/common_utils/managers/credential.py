@@ -60,26 +60,6 @@ class CredentialManager:
         response.raise_for_status()
 
     @staticmethod
-    def update_sharing(
-        credential_id: int,
-        user_performing_action: DATestUser,
-        admin_public: bool,
-        groups: list[int] | None = None,
-        name: str | None = None,
-    ) -> CredentialSnapshot:
-        response = client.patch(
-            url=f"{API_SERVER_URL}/manage/admin/credential/{credential_id}/sharing",
-            json={
-                "admin_public": admin_public,
-                "groups": groups or [],
-                "name": name,
-            },
-            headers=user_performing_action.headers,
-        )
-        response.raise_for_status()
-        return CredentialSnapshot(**response.json())
-
-    @staticmethod
     def delete(
         credential: DATestCredential,
         user_performing_action: DATestUser,

@@ -2760,12 +2760,6 @@
           },
           "rerunFailed": {
             "toast": "无法启动检查，请重试。"
-          },
-          "renameFailed": {
-            "toast": "无法重命名账户。请重试。"
-          },
-          "shareFailed": {
-            "toast": "无法更改可使用该账户的人员。请重试。"
           }
         }
       },

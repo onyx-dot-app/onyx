@@ -34,7 +34,6 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
-import { updateCredentialSharing } from "@/lib/credentials/svc";
 import { getIn, useFormikContext } from "formik";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -347,15 +346,6 @@ export default function AuthenticationAccountSection({
         onDelete={() => onDeleteCredential(credential)}
         checkReport={checkReports.reportFor(credential.id)}
         onRerunChecks={() => checkReports.rerun(credential.id)}
-        canShare={businessTier}
-        onUpdateSharing={async (sharing) => {
-          const response = await updateCredentialSharing(
-            credential.id,
-            sharing
-          );
-          if (!response.ok) throw new Error(await response.text());
-          refresh();
-        }}
       />
     );
   }

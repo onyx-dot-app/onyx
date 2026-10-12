@@ -2760,12 +2760,6 @@
           },
           "rerunFailed": {
             "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
-          },
-          "renameFailed": {
-            "toast": "Das Konto konnte nicht umbenannt werden. Versuchen Sie es erneut."
-          },
-          "shareFailed": {
-            "toast": "Die Freigabe des Kontos konnte nicht geändert werden. Versuchen Sie es erneut."
           }
         }
       },

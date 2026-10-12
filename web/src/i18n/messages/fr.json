@@ -2760,12 +2760,6 @@
           },
           "rerunFailed": {
             "toast": "Impossible de lancer les vérifications. Réessayez."
-          },
-          "renameFailed": {
-            "toast": "Impossible de renommer le compte. Réessayez."
-          },
-          "shareFailed": {
-            "toast": "Impossible de modifier qui peut utiliser le compte. Réessayez."
           }
         }
       },

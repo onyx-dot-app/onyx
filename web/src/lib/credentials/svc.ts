@@ -170,18 +170,6 @@ export function updateCredential(credentialId: number, newDetails: any) {
   });
 }
 
-/** Renames a saved credential and sets who may reuse it. */
-export function updateCredentialSharing(
-  credentialId: number,
-  sharing: CredentialSharing
-): Promise<Response> {
-  return fetch(`/api/manage/admin/credential/${credentialId}/sharing`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(sharing),
-  });
-}
-
 export function updateCredentialWithPrivateKey(
   credentialId: number,
   newDetails: any,
