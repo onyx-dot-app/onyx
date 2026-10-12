@@ -1302,7 +1302,10 @@ export function useBuildStreaming({
         // (signal mismatch) and hangs the FE while the backend completes.
         const session = useBuildSessionStore.getState().sessions.get(sessionId);
         if (session?.abortController === controller) {
-          setAbortController(sessionId, new AbortController());
+          updateSessionData(sessionId, {
+            abortController: new AbortController(),
+            activeTurnLocalOwner: false,
+          });
         }
       }
     },

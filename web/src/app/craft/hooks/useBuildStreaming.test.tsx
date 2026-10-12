@@ -211,6 +211,13 @@ describe("useBuildStreaming thinking packets", () => {
       useBuildSessionStore
         .getState()
         .setAbortController(sessionId, newerController);
+      const current = useBuildSessionStore.getState().sessions.get(sessionId);
+      if (!current) throw new Error("Missing stream fixture session");
+      useBuildSessionStore.getState().updateSessionData(sessionId, {
+        turnGeneration: current.turnGeneration + 1,
+        activeTurnId: "newer-turn",
+        activeTurnLocalOwner: true,
+      });
     });
     const { result } = renderHook(() => useBuildStreaming());
 
@@ -223,6 +230,10 @@ describe("useBuildStreaming thinking packets", () => {
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)?.abortController
     ).toBe(newerController);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+        ?.activeTurnLocalOwner
+    ).toBe(true);
   });
 
   it("refreshes files only when an output write completes", async () => {
@@ -2313,7 +2324,7 @@ describe("useBuildStreaming thinking packets", () => {
       await Promise.resolve();
     });
 
-    expect(fetchActiveTurn).toHaveBeenCalledTimes(3);
+    expect(fetchActiveTurn).toHaveBeenCalledTimes(4);
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)
     ).toMatchObject({
@@ -2365,7 +2376,7 @@ describe("useBuildStreaming thinking packets", () => {
       await Promise.resolve();
     });
 
-    expect(fetchActiveTurn).toHaveBeenCalledTimes(3);
+    expect(fetchActiveTurn).toHaveBeenCalledTimes(4);
     expect(fetchOutputInventory).toHaveBeenCalledWith(
       sessionId,
       expect.any(AbortSignal)

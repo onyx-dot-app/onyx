@@ -230,6 +230,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       ? (session.turnSettlement.error ?? t("settlementError.description"))
       : null;
   const submissionNeedsRecovery =
+    session?.loadError != null ||
     session?.turnSettlement?.phase === "failed" ||
     sessionQueue[0]?.phase === "failed";
   const recoverableError =

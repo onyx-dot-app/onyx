@@ -1204,8 +1204,28 @@ function reconcileCompletedTranscript(
           await new Promise<void>((resolve) => setTimeout(resolve, 1000));
           continue;
         }
-        const messages = await fetchMessages(sessionId);
+        let messages = await fetchMessages(sessionId);
         if (!ownsCompletion()) return;
+        if (owner.kind === "interactive") {
+          const historyTurnId = successor?.turn_id;
+          const activeTurn = await fetchActiveTurn(sessionId);
+          if (!ownsCompletion()) return;
+          if (activeTurn) {
+            if (owner.turnId === null || activeTurn.turn_id === owner.turnId) {
+              await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+              continue;
+            }
+            successor = activeTurn;
+          }
+          if (successor && successor.turn_id !== historyTurnId) {
+            messages = await fetchMessages(sessionId);
+            if (!ownsCompletion()) return;
+          }
+        }
+        const restored = splitActiveTurnTranscript(
+          consolidateMessagesIntoTurns(messages),
+          successor?.turn_index ?? null
+        );
         const current = useBuildSessionStore.getState().sessions.get(sessionId);
         if (!current?.turnSettlement) return;
         if (!successor)
@@ -1213,8 +1233,8 @@ function reconcileCompletedTranscript(
             .getState()
             .refreshOutputInventory(sessionId);
         useBuildSessionStore.getState().updateSessionData(sessionId, {
-          messages: consolidateMessagesIntoTurns(messages),
-          streamItems: [],
+          messages: restored.messages,
+          streamItems: restored.streamItems,
           subagents: buildSubagentsFromMessages(messages),
           contextUsage: deriveContextUsage(messages),
           status: scheduledFailure
@@ -1975,7 +1995,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       get().sessions.get(sessionId);
     if (!loadingSession) return;
     const loadGeneration: number = loadingSession.loadGeneration + 1;
-    updateSessionData(sessionId, { loadGeneration, loadError: null });
+    updateSessionData(sessionId, { loadGeneration });
     const isCurrentRuntimeLoad: () => boolean = () => {
       const current: BuildSessionData | undefined =
         get().sessions.get(sessionId);
@@ -2131,6 +2151,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             agentModel: sessionData.agent_model,
           }),
         isLoaded: true,
+        loadError: null,
         ...(canApplySkillsStale() && { skillsStale: sessionData.skills_stale }),
         origin: sessionData.origin,
       });

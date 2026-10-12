@@ -17,6 +17,7 @@ import {
   fetchMessages,
   fetchOutputInventory,
   fetchTurnEventStream,
+  interruptMessageStream,
   processSSEStream,
 } from "@/app/craft/services/apiServices";
 import type { UserResolution } from "@/providers/UserProvider";
@@ -43,17 +44,21 @@ jest.mock("@/app/craft/services/apiServices", () => ({
   fetchMessages: jest.fn(),
   fetchOutputInventory: jest.fn(),
   fetchTurnEventStream: jest.fn(),
+  interruptMessageStream: jest.fn(),
   processSSEStream: jest.fn(),
 }));
 
 const sessionId = "background-session";
 
 function CraftPage() {
-  const { streamMessage } = useCraftStreaming();
+  const { streamMessage, interruptStreaming } = useCraftStreaming();
   return (
-    <button onClick={() => void streamMessage(sessionId, "first prompt")}>
-      Start
-    </button>
+    <>
+      <button onClick={() => void streamMessage(sessionId, "first prompt")}>
+        Start
+      </button>
+      <button onClick={() => void interruptStreaming(sessionId)}>Stop</button>
+    </>
   );
 }
 
@@ -291,4 +296,100 @@ describe("CraftStreamingProvider", () => {
     });
     expect(createTurn).toHaveBeenCalledTimes(2);
   });
+  it.each(["local", "external"] as const)(
+    "resumes %s live ownership after failed Stop and follows completion beyond the monitor deadline",
+    async (ownership) => {
+      jest.useFakeTimers();
+      const first = deferred<void>();
+      const resumed = deferred<void>();
+      const queued = deferred<void>();
+      const stop = deferred<void>();
+      let completeResumed: (() => void) | undefined;
+      jest.mocked(interruptMessageStream).mockReturnValueOnce(stop.promise);
+      jest.mocked(fetchActiveTurn).mockResolvedValue({
+        session_id: sessionId,
+        turn_id: "second-turn",
+        status: "RUNNING",
+        turn_index: 1,
+      });
+      jest
+        .mocked(processSSEStream)
+        .mockImplementationOnce(async () => {
+          await first.promise;
+        })
+        .mockImplementationOnce(async (_response, onPacket) => {
+          completeResumed = () => {
+            onPacket({ type: "prompt_response" });
+            resumed.resolve();
+          };
+          await resumed.promise;
+        })
+        .mockImplementationOnce(async () => {
+          await queued.promise;
+          throw new DOMException("Closed", "AbortError");
+        });
+      const store = useBuildSessionStore.getState();
+      store.setCurrentSession(sessionId);
+      if (ownership === "external")
+        store.updateSessionData(sessionId, {
+          status: "running",
+          activeTurnId: "second-turn",
+          activeTurnLocalOwner: false,
+        });
+      const view = render(
+        <CraftStreamingProvider>
+          <CraftPage />
+        </CraftStreamingProvider>
+      );
+      try {
+        if (ownership === "local")
+          fireEvent.click(screen.getByRole("button", { name: "Start" }));
+        await act(async () => {});
+        expect(fetchTurnEventStream).toHaveBeenCalledTimes(1);
+        act(() => {
+          store.enqueueMessage(sessionId, "queued prompt", []);
+          fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+        });
+        await act(async () => first.resolve());
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+        ).toMatchObject({
+          isInterrupting: true,
+          activeTurnId: "second-turn",
+          activeTurnLocalOwner: false,
+        });
+        expect(fetchTurnEventStream).toHaveBeenCalledTimes(1);
+        await act(async () => stop.reject(new Error("Stop request rejected")));
+        expect(fetchTurnEventStream).toHaveBeenCalledTimes(2);
+        expect(completeResumed).toBeDefined();
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(31000);
+        });
+        expect(fetchTurnEventStream).toHaveBeenCalledTimes(2);
+        expect(createTurn).toHaveBeenCalledTimes(ownership === "local" ? 1 : 0);
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+        ).toMatchObject({
+          status: "running",
+          activeTurnId: "second-turn",
+          activeTurnLocalOwner: false,
+        });
+        jest.mocked(fetchActiveTurn).mockResolvedValue(null);
+        await act(async () => completeResumed?.());
+        expect(createTurn).toHaveBeenCalledTimes(ownership === "local" ? 2 : 1);
+        expect(fetchTurnEventStream).toHaveBeenCalledTimes(3);
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+            ?.activeTurnLocalOwner
+        ).toBe(true);
+        await act(async () => {
+          store.abortSession(sessionId);
+          queued.resolve();
+        });
+      } finally {
+        view.unmount();
+        jest.useRealTimers();
+      }
+    }
+  );
 });

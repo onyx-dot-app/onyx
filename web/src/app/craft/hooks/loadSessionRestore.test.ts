@@ -1849,6 +1849,165 @@ describe("session history races and discarded queued starts", () => {
   });
   afterEach(() => jest.useRealTimers());
 
+  it("adopts a successor found after history and keeps its partial answer active", async () => {
+    const latestHistory =
+      deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+    jest
+      .mocked(api.fetchActiveTurn)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(active);
+    jest
+      .mocked(api.fetchMessages)
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(latestHistory.promise);
+    const store = useBuildSessionStore.getState();
+    store.createSession(sessionId);
+    store.updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "completed-turn",
+      turnGeneration: 1,
+    });
+    store.enqueueMessage(sessionId, "Waiting prompt", []);
+    const settling = store.beginTurnSettlement(
+      sessionId,
+      { kind: "interactive", turnId: "completed-turn" },
+      1
+    );
+    await act(async () => {});
+    expect(store.claimQueuedMessage(sessionId)).toBeNull();
+    latestHistory.resolve([
+      {
+        id: "successor-user",
+        type: "user",
+        content: "External question",
+        timestamp: new Date(),
+        turn_index: 0,
+      },
+      {
+        id: "successor-answer",
+        type: "assistant",
+        content: "Partial answer",
+        timestamp: new Date(),
+        turn_index: 0,
+        message_metadata: {
+          streamItems: [
+            {
+              id: "answer-part",
+              partId: "answer-part",
+              type: "text",
+              content: "Partial answer",
+              isStreaming: false,
+            },
+          ],
+        },
+      },
+    ]);
+    await settling;
+    const restored = useBuildSessionStore.getState().sessions.get(sessionId);
+    expect(restored).toMatchObject({
+      activeTurnId: active.turn_id,
+      turnGeneration: 2,
+      status: "running",
+      turnSettlement: null,
+    });
+    expect(restored?.messages).toEqual([
+      expect.objectContaining({ id: "successor-user" }),
+    ]);
+    expect(restored?.streamItems).toEqual([
+      expect.objectContaining({
+        partId: "answer-part",
+        content: "Partial answer",
+      }),
+    ]);
+    expect(store.claimQueuedMessage(sessionId)).toBeNull();
+  });
+
+  it("does not install a successor when the completion owner changes during its history reread", async () => {
+    const latestHistory =
+      deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+    jest
+      .mocked(api.fetchActiveTurn)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue(active);
+    jest
+      .mocked(api.fetchMessages)
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(latestHistory.promise);
+    const store = useBuildSessionStore.getState();
+    store.createSession(sessionId);
+    store.updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "completed-turn",
+      turnGeneration: 1,
+    });
+    const settling = store.beginTurnSettlement(
+      sessionId,
+      { kind: "interactive", turnId: "completed-turn" },
+      1
+    );
+    await act(async () => {});
+    store.updateSessionData(sessionId, {
+      turnGeneration: 2,
+      activeTurnId: "local-successor",
+      activeTurnLocalOwner: true,
+      turnSettlement: null,
+    });
+    latestHistory.resolve([]);
+    await settling;
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      activeTurnId: "local-successor",
+      activeTurnLocalOwner: true,
+      turnGeneration: 2,
+    });
+  });
+
+  it("retains a successor observed before history when the next lookup is empty", async () => {
+    jest
+      .mocked(api.fetchActiveTurn)
+      .mockResolvedValueOnce(active)
+      .mockResolvedValueOnce(null);
+    const store = useBuildSessionStore.getState();
+    store.createSession(sessionId);
+    store.updateSessionData(sessionId, {
+      status: "running",
+      activeTurnId: "completed-turn",
+      turnGeneration: 1,
+    });
+    await store.beginTurnSettlement(
+      sessionId,
+      { kind: "interactive", turnId: "completed-turn" },
+      1
+    );
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      activeTurnId: active.turn_id,
+      status: "running",
+      turnSettlement: null,
+    });
+    expect(api.fetchMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a failed load disabled until the retry installs its runtime", async () => {
+    const history = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+    jest.mocked(api.fetchMessages).mockReturnValueOnce(history.promise);
+    const store = useBuildSessionStore.getState();
+    store.createSession(sessionId);
+    store.updateSessionData(sessionId, { loadError: "Previous load failed" });
+    const loading = store.loadSession(sessionId);
+    await act(async () => {});
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.loadError
+    ).toBe("Previous load failed");
+    history.resolve([]);
+    await loading;
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.loadError
+    ).toBeNull();
+  });
+
   it.each([null, "previous-turn"])(
     "loads the new prompt before adopting a turn that replaced %s",
     async (previousTurnId) => {

@@ -559,3 +559,39 @@ it.each([
       ).not.toBeInTheDocument();
   }
 );
+
+it("blocks sends after history load failure until explicit recovery succeeds", async () => {
+  const store = useBuildSessionStore.getState();
+  const original = store.loadSession;
+  const retry = deferred<void>();
+  const loadSession = jest.fn(async () => {
+    await retry.promise;
+    store.updateSessionData(SESSION_ID, { loadError: null });
+  });
+  useBuildSessionStore.setState({ loadSession });
+  store.updateSessionData(SESSION_ID, {
+    loadError: "History unavailable",
+    messages: [],
+    status: "active",
+  });
+  try {
+    render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("History unavailable");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(streamMessage).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    });
+    expect(loadSession).toHaveBeenCalledWith(SESSION_ID, { force: true });
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(streamMessage).not.toHaveBeenCalled();
+    await act(async () => retry.resolve());
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(streamMessage).toHaveBeenCalledTimes(1);
+  } finally {
+    useBuildSessionStore.setState({ loadSession: original });
+  }
+});

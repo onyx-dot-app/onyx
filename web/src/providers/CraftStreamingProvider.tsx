@@ -91,12 +91,22 @@ function CraftTurnAttachment({ sessionId }: { sessionId: string }) {
   const generation = useBuildSessionStore(
     (state) => state.sessions.get(sessionId)?.turnGeneration
   );
+  const isInterrupting = useBuildSessionStore(
+    (state) => state.sessions.get(sessionId)?.isInterrupting
+  );
   useEffect(() => {
-    if (!turnId) return;
+    if (!turnId || isInterrupting) return;
     const controller = new AbortController();
     void streamTurnEvents(sessionId, turnId, controller.signal);
     return () => controller.abort();
-  }, [sessionId, turnId, instanceId, generation, streamTurnEvents]);
+  }, [
+    sessionId,
+    turnId,
+    instanceId,
+    generation,
+    isInterrupting,
+    streamTurnEvents,
+  ]);
   return null;
 }
 
