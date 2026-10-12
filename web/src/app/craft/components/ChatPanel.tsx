@@ -20,7 +20,7 @@ import {
   useQueuedMessages,
   useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
+import { useCraftStreaming } from "@/providers/CraftStreamingProvider";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
 import { BuildMessageAttachment } from "@/app/craft/types/streamingTypes";
 import {
@@ -213,7 +213,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     streamScheduledRunEvents,
     streamTurnEvents,
     retryQueuedMessage,
-  } = useBuildStreaming();
+  } = useCraftStreaming();
   const isInterrupting = useIsInterrupting();
   const sessionQueue = useQueuedMessages();
   const queuedMessages = useMemo(

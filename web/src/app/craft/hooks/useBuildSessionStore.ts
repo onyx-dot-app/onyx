@@ -1,5 +1,7 @@
 "use client";
 
+import type { TextPartUpdate } from "@/app/craft/utils/packetTypes";
+
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
 import { create } from "zustand";
@@ -266,8 +268,37 @@ function upsertToolStreamItem(
 function appendStreamingSubagentChunk(
   items: StreamItem[],
   type: "text" | "thinking",
-  text: string
+  text: string,
+  part?: TextPartUpdate
 ): StreamItem[] {
+  if (part) {
+    const existing = items.find(
+      (item) => item.type === type && item.partId === part.partId
+    );
+    if (
+      existing &&
+      (existing.type === "text" || existing.type === "thinking")
+    ) {
+      return items.map((item) =>
+        item === existing
+          ? {
+              ...existing,
+              content: part.snapshotText ?? existing.content + text,
+            }
+          : item
+      );
+    }
+    return [
+      ...settleStreamItems(items),
+      {
+        type,
+        id: genId(type),
+        partId: part.partId,
+        content: part.snapshotText ?? text,
+        isStreaming: true,
+      },
+    ];
+  }
   const last = items[items.length - 1];
   if (last?.type === type) {
     return items.map((item, i) =>
@@ -1054,13 +1085,15 @@ interface BuildSessionStore {
   appendSubagentResponseChunk: (
     sessionId: string,
     subagentSessionId: string,
-    text: string
+    text: string,
+    part?: TextPartUpdate
   ) => void;
   /** Append streamed thinking text to the LAST turn's thinking stream. */
   appendSubagentThinkingChunk: (
     sessionId: string,
     subagentSessionId: string,
-    text: string
+    text: string,
+    part?: TextPartUpdate
   ) => void;
 
   // Tab Navigation History Actions
@@ -1160,6 +1193,10 @@ function reconcileCompletedTranscript(
         if (!ownsCompletion()) return;
         const current = useBuildSessionStore.getState().sessions.get(sessionId);
         if (!current?.turnSettlement) return;
+        if (!successor)
+          void useBuildSessionStore
+            .getState()
+            .refreshOutputInventory(sessionId);
         useBuildSessionStore.getState().updateSessionData(sessionId, {
           messages: consolidateMessagesIntoTurns(messages),
           streamItems: [],
@@ -1842,20 +1879,44 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   removeQueuedMessage: (sessionId: string, messageId: number) => {
+    let discardedStart: BuildSessionData | undefined;
     set((state) => {
       const session = state.sessions.get(sessionId);
       if (!session) return state;
+      const head = session.queuedMessages[0];
+      const discardsFailedStart =
+        head?.id === messageId &&
+        head.phase === "failed" &&
+        (session.status === "failed" || session.status === "active") &&
+        session.error !== null &&
+        session.activeTurnId === null &&
+        !session.activeTurnLocalOwner &&
+        session.turnSettlement === null;
       const updatedSession: BuildSessionData = {
         ...session,
         queuedMessages: session.queuedMessages.filter(
           (message) => message.id !== messageId || message.phase === "starting"
         ),
+        ...(discardsFailedStart && {
+          status: "running" as const,
+          error: null,
+          isInterrupting: false,
+          turnSettlement: {
+            owner: { kind: "interactive" as const, turnId: null },
+            turnGeneration: session.turnGeneration,
+            phase: "reconciling" as const,
+          },
+        }),
         lastAccessed: new Date(),
       };
+      if (discardsFailedStart) discardedStart = updatedSession;
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
       return { sessions: newSessions };
     });
+    // A lost start response can hide an accepted turn. Reconcile before dispatch.
+    if (discardedStart)
+      void reconcileCompletedTranscript(sessionId, discardedStart);
   },
 
   // ===========================================================================
@@ -1933,6 +1994,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       if (!isCurrentRuntimeLoad()) return;
       // Server completion follows the final transcript commit. Observe it before reading messages.
       const messages: BuildMessage[] = await fetchMessages(sessionId);
+      if (!isCurrentRuntimeLoad()) return;
+      try {
+        // A second tab can start while history loads. Keep the first owner if it completed during the read.
+        activeTurn = (await fetchActiveTurn(sessionId)) ?? activeTurn;
+      } catch (err) {
+        console.warn("Failed to recheck active turn:", err);
+      }
       if (!isCurrentRuntimeLoad()) return;
 
       // Preserve optimistic messages if actively streaming (pre-provisioned flow).
@@ -2842,7 +2910,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   appendSubagentResponseChunk: (
     sessionId: string,
     subagentSessionId: string,
-    text: string
+    text: string,
+    part?: TextPartUpdate
   ) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
@@ -2862,14 +2931,21 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
       const last = turns[turns.length - 1] ?? emptyTurn();
+      const streamItems = appendStreamingSubagentChunk(
+        last.streamItems,
+        "text",
+        text,
+        part
+      );
       turns[turns.length - 1] = {
         ...last,
-        response: (last.response ?? "") + text,
-        streamItems: appendStreamingSubagentChunk(
-          last.streamItems,
-          "text",
-          text
-        ),
+        response: part
+          ? streamItems
+              .filter((item) => item.type === "text")
+              .map((item) => (item.type === "text" ? item.content : ""))
+              .join("")
+          : (last.response ?? "") + text,
+        streamItems,
       };
 
       const subagents = new Map(session.subagents);
@@ -2889,7 +2965,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   appendSubagentThinkingChunk: (
     sessionId: string,
     subagentSessionId: string,
-    text: string
+    text: string,
+    part?: TextPartUpdate
   ) => {
     set((state) => {
       const session = state.sessions.get(sessionId);
@@ -2909,14 +2986,21 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
       const last = turns[turns.length - 1] ?? emptyTurn();
+      const streamItems = appendStreamingSubagentChunk(
+        last.streamItems,
+        "thinking",
+        text,
+        part
+      );
       turns[turns.length - 1] = {
         ...last,
-        thinking: (last.thinking ?? "") + text,
-        streamItems: appendStreamingSubagentChunk(
-          last.streamItems,
-          "thinking",
-          text
-        ),
+        thinking: part
+          ? streamItems
+              .filter((item) => item.type === "thinking")
+              .map((item) => (item.type === "thinking" ? item.content : ""))
+              .join("")
+          : (last.thinking ?? "") + text,
+        streamItems,
       };
 
       const subagents = new Map(session.subagents);

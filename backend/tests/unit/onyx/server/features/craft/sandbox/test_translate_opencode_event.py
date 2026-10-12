@@ -675,6 +675,119 @@ def test_duplicate_session_error_silenced_after_first() -> None:
 # ───────────────────────── gap-fill reconciliation ────────────────
 
 
+@pytest.mark.parametrize("part_type", ["text", "reasoning"])
+@pytest.mark.parametrize("post_reconnect_delta", ["", " world"])
+def test_live_reconnect_preserves_part_identity_and_full_snapshot(
+    part_type: str,
+    post_reconnect_delta: str,
+) -> None:
+    fetch_message, calls = _fetch_from(
+        {
+            "msg_assistant": {
+                "info": {"role": "assistant"},
+                "parts": [{"id": "p1", "type": part_type}],
+            }
+        }
+    )
+
+    def delta(state: _TurnState, text: str) -> list[Any]:
+        return _drain(
+            translate_opencode_event(
+                {
+                    "type": "message.part.delta",
+                    "properties": {
+                        "sessionID": SESS,
+                        "messageID": "msg_assistant",
+                        "partID": "p1",
+                        "field": "text",
+                        "delta": text,
+                    },
+                },
+                state,
+                fetch_message=fetch_message,
+            )
+        )
+
+    first = _assistant_state()
+    first.emit_part_snapshots = True
+    first.part_types["p1"] = part_type
+    first_events = delta(first, "Hello")
+    assert first_events[0].field_meta == {"partId": "p1"}
+    reconnect = _state()
+    reconnect.emit_part_snapshots = True
+    if post_reconnect_delta:
+        reconnect_event = delta(reconnect, post_reconnect_delta)[0]
+        assert reconnect_event.field_meta == {"partId": "p1"}
+        assert isinstance(
+            reconnect_event,
+            AgentThoughtChunk if part_type == "reasoning" else AgentMessageChunk,
+        )
+    events = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "sessionID": SESS,
+                    "part": {
+                        "id": "p1",
+                        "messageID": "msg_assistant",
+                        "type": part_type,
+                        "text": "Hello world",
+                    },
+                },
+            },
+            reconnect,
+            fetch_message=fetch_message,
+        )
+    )
+    assert len(events) == 1
+    assert isinstance(
+        events[0], AgentThoughtChunk if part_type == "reasoning" else AgentMessageChunk
+    )
+    assert events[0].field_meta == {"partId": "p1", "snapshotText": "Hello world"}
+    assert calls == ["msg_assistant"]
+    repeated = _drain(
+        translate_opencode_event(
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "sessionID": SESS,
+                    "part": {
+                        "id": "p1",
+                        "messageID": "msg_assistant",
+                        "type": part_type,
+                        "text": "Hello world",
+                    },
+                },
+            },
+            reconnect,
+        )
+    )
+    assert repeated[0].content.text == ""
+    assert repeated[0].field_meta == events[0].field_meta
+
+
+def test_durable_text_translation_keeps_delta_only_contract() -> None:
+    state = _assistant_state()
+    state.local_text["p1"] = "Hello"
+    packet = {
+        "type": "message.part.updated",
+        "properties": {
+            "sessionID": SESS,
+            "part": {
+                "id": "p1",
+                "messageID": "msg_assistant",
+                "type": "text",
+                "text": "Hello world",
+            },
+        },
+    }
+    events = _drain(translate_opencode_event(packet, state))
+    assert events[0].content.text == " world"
+    assert events[0].field_meta is None
+    assert _drain(translate_opencode_event(packet, state)) == []
+
+
 def test_message_part_updated_text_with_more_text_fills_gap() -> None:
     """If part.text is longer than what we've yielded as deltas, emit the
     missing tail."""

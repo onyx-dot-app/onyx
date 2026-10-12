@@ -1578,3 +1578,161 @@ describe("completed transcript handoff", () => {
     });
   });
 });
+
+describe("session history races and discarded queued starts", () => {
+  const sessionId = "ownership-race";
+  const active: NonNullable<Awaited<ReturnType<typeof api.fetchActiveTurn>>> = {
+    session_id: sessionId,
+    turn_id: "external-turn",
+    status: "RUNNING",
+    turn_index: 0,
+  };
+  beforeEach(() => {
+    jest.resetAllMocks();
+    useBuildSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
+    });
+    jest.mocked(api.fetchActiveTurn).mockResolvedValue(null);
+    jest.mocked(api.fetchMessages).mockResolvedValue([]);
+    jest.mocked(api.fetchArtifacts).mockResolvedValue([]);
+    jest
+      .mocked(api.fetchOutputInventory)
+      .mockResolvedValue({ files: [], complete: true });
+    jest.mocked(api.fetchSession).mockResolvedValue({
+      id: sessionId,
+      user_id: "user",
+      name: "History",
+      status: "active",
+      created_at: "2026-10-12",
+      last_activity_at: "2026-10-12",
+      nextjs_port: null,
+      sandbox: {
+        id: "sandbox",
+        status: "running",
+        container_id: null,
+        created_at: "2026-10-12",
+        last_heartbeat: null,
+      },
+      artifacts: [],
+      sharing_scope: "private",
+      origin: "INTERACTIVE",
+      agent_provider: null,
+      agent_model: null,
+      skills_stale: false,
+      session_loaded_in_sandbox: true,
+    });
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it.each(["starts", "completes"] as const)(
+    "retains an external turn that %s during the history read",
+    async (transition) => {
+      const history = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+      jest.mocked(api.fetchMessages).mockReturnValueOnce(history.promise);
+      jest
+        .mocked(api.fetchActiveTurn)
+        .mockResolvedValueOnce(transition === "starts" ? null : active)
+        .mockResolvedValueOnce(transition === "starts" ? active : null);
+      const loading = useBuildSessionStore.getState().loadSession(sessionId);
+      await waitFor(() => expect(api.fetchMessages).toHaveBeenCalled());
+      expect(api.fetchActiveTurn).toHaveBeenCalledTimes(1);
+      history.resolve([
+        {
+          id: "external-user",
+          type: "user",
+          content: "External task",
+          timestamp: new Date(),
+          turn_index: 0,
+        },
+      ]);
+      await loading;
+      expect(api.fetchActiveTurn).toHaveBeenCalledTimes(2);
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        isLoaded: true,
+        status: "running",
+        activeTurnId: active.turn_id,
+        activeTurnIndex: 0,
+      });
+    }
+  );
+
+  it("reconciles a discarded failed start before releasing the next queued prompt", async () => {
+    jest.useFakeTimers();
+    const history = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+    jest.mocked(api.fetchMessages).mockReturnValueOnce(history.promise);
+    jest
+      .mocked(api.fetchActiveTurn)
+      .mockResolvedValueOnce(active)
+      .mockResolvedValue(null);
+    const store = useBuildSessionStore.getState();
+    store.createSession(sessionId);
+    store.enqueueMessage(sessionId, "Failed head", []);
+    store.enqueueMessage(sessionId, "Next prompt", []);
+    const queued =
+      useBuildSessionStore.getState().sessions.get(sessionId)?.queuedMessages ??
+      [];
+    store.updateSessionData(sessionId, {
+      status: "failed",
+      error: "Lost start response",
+      turnGeneration: 3,
+      queuedMessages: queued.map((item, index) =>
+        index === 0 ? { ...item, phase: "failed" } : item
+      ),
+    });
+    if (!queued[0]) throw new Error("Missing failed queue head");
+    store.removeQueuedMessage(sessionId, queued[0].id);
+    expect(store.claimQueuedMessage(sessionId)).toBeNull();
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      error: null,
+      status: "running",
+      turnSettlement: {
+        phase: "reconciling",
+        owner: { kind: "interactive", turnId: null },
+      },
+    });
+    expect(api.fetchMessages).not.toHaveBeenCalled();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1000);
+    });
+    expect(api.fetchMessages).toHaveBeenCalledTimes(1);
+    expect(store.claimQueuedMessage(sessionId)).toBeNull();
+    history.resolve([]);
+    await act(async () => {});
+    expect(store.claimQueuedMessage(sessionId)).toMatchObject({
+      text: "Next prompt",
+      phase: "waiting",
+    });
+  });
+
+  it("does not release an unrelated failure when removing a waiting queue tail", () => {
+    const store = useBuildSessionStore.getState();
+    store.createSession(sessionId);
+    store.enqueueMessage(sessionId, "Failed head", []);
+    store.enqueueMessage(sessionId, "Waiting tail", []);
+    const queued =
+      useBuildSessionStore.getState().sessions.get(sessionId)?.queuedMessages ??
+      [];
+    store.updateSessionData(sessionId, {
+      status: "failed",
+      error: "Start failed",
+      queuedMessages: queued.map((item, index) =>
+        index === 0 ? { ...item, phase: "failed" } : item
+      ),
+    });
+    if (!queued[1]) throw new Error("Missing waiting queue tail");
+    store.removeQueuedMessage(sessionId, queued[1].id);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      error: "Start failed",
+      status: "failed",
+      turnSettlement: null,
+    });
+    expect(api.fetchActiveTurn).not.toHaveBeenCalled();
+  });
+});

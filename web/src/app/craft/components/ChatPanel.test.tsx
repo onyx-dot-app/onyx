@@ -27,8 +27,8 @@ jest.mock("@/lib/analytics/utils", () => ({
   track: jest.fn(),
   AnalyticsEvent: { SENT_CRAFT_MESSAGE: "send" },
 }));
-jest.mock("@/app/craft/hooks/useBuildStreaming", () => ({
-  useBuildStreaming: () => ({
+jest.mock("@/providers/CraftStreamingProvider", () => ({
+  useCraftStreaming: () => ({
     streamMessage,
     retryQueuedMessage,
     interruptStreaming: idle,

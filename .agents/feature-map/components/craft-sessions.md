@@ -376,14 +376,19 @@ Only confirmed persistence permits canonical history replacement. Neither path l
 A failed read preserves the local transcript and settlement identity. The retry action resumes that same settlement.
 Only confirmed completion with persisted history permits the next queued prompt.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
+`web/src/providers/CraftStreamingProvider.tsx` owns that hook inside the authenticated app provider.
+Queued prompts continue after the user leaves Craft. Logout and account changes clear the previous user’s sessions.
 The queue retains each prompt, its attachments, and its explicit model choice until the server accepts it.
 Sandbox restoration keeps the composer draft and disables submission until ready. Pending interactive starts still accept queued prompts.
 Rejected queued starts require an explicit retry of that failed queue entry. An unrelated prompt error cannot authorize that retry.
 Retries reuse the queued prompt's request identity, so a lost response does not create another turn.
+Discarding a rejected queue head checks server completion and saved history before the next prompt starts.
 
 ### 4.5 History durability
 
 Session loading reads persisted messages before waiting for runtime discovery or sandbox restoration.
+It checks the active turn again after history loads, so another tab’s start is not missed.
+A completed second check retains the first observed turn for canonical settlement.
 Runtime failures keep the loaded transcript and permit another load when the user revisits.
 History renders before session metadata is ready; the model picker waits for the saved model.
 Existing-session sends omit the model unless the user explicitly selects one, preserving the server-owned session model.

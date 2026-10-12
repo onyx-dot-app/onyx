@@ -148,7 +148,9 @@ function findParentTaskToolCall(
  * - Text/thinking chunks are merged when consecutive
  * - Tool calls are interleaved with text in the exact order they arrive
  */
-export function useBuildStreaming() {
+export function useBuildStreaming({
+  isEnabled = true,
+}: { isEnabled?: boolean } = {}) {
   const { mutate: globalMutate } = useSWRConfig();
   const appendMessageToSession = useBuildSessionStore(
     (state) => state.appendMessageToSession
@@ -341,7 +343,7 @@ export function useBuildStreaming() {
         await store.refreshOutputInventory(sessionId);
       });
       let finalOutputs: Promise<void> | null = null;
-      // Live events are not replayed. Always reconcile after a turn settles.
+      // Terminal observations reconcile live discovery before passive focus reads.
       const finalizeOutputs = (): Promise<void> =>
         (finalOutputs ??= outputRefresh.finish());
       let needsTurnCompletionFileRefresh = currentItems.some(
@@ -454,7 +456,7 @@ export function useBuildStreaming() {
 
         switch (parsed.type) {
           case "text_chunk": {
-            if (!parsed.text) break;
+            if (!parsed.text && parsed.part?.snapshotText === undefined) break;
 
             if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
               finalizeStreaming();
@@ -465,8 +467,35 @@ export function useBuildStreaming() {
               appendSubagentResponseChunk(
                 sessionId,
                 parsed.sessionId,
-                parsed.text
+                parsed.text,
+                parsed.part
               );
+              break;
+            }
+
+            if (parsed.part) {
+              const store = useBuildSessionStore.getState();
+              const items = store.sessions.get(sessionId)?.streamItems ?? [];
+              const existing = items.find(
+                (item) =>
+                  item.type === "text" && item.partId === parsed.part?.partId
+              );
+              if (existing?.type === "text") {
+                store.updateStreamItem(sessionId, existing.id, {
+                  content:
+                    parsed.part.snapshotText ?? existing.content + parsed.text,
+                });
+              } else {
+                finalizeStreaming();
+                store.appendStreamItem(sessionId, {
+                  type: "text",
+                  id: genId("text"),
+                  partId: parsed.part.partId,
+                  content: parsed.part.snapshotText ?? parsed.text,
+                  isStreaming: true,
+                });
+              }
+              lastItemType = null;
               break;
             }
 
@@ -490,7 +519,7 @@ export function useBuildStreaming() {
           }
 
           case "thinking_chunk": {
-            if (!parsed.text) break;
+            if (!parsed.text && parsed.part?.snapshotText === undefined) break;
 
             if (parsed.parentSessionId !== null && parsed.sessionId !== null) {
               finalizeStreaming();
@@ -501,8 +530,36 @@ export function useBuildStreaming() {
               appendSubagentThinkingChunk(
                 sessionId,
                 parsed.sessionId,
-                parsed.text
+                parsed.text,
+                parsed.part
               );
+              break;
+            }
+
+            if (parsed.part) {
+              const store = useBuildSessionStore.getState();
+              const items = store.sessions.get(sessionId)?.streamItems ?? [];
+              const existing = items.find(
+                (item) =>
+                  item.type === "thinking" &&
+                  item.partId === parsed.part?.partId
+              );
+              if (existing?.type === "thinking") {
+                store.updateStreamItem(sessionId, existing.id, {
+                  content:
+                    parsed.part.snapshotText ?? existing.content + parsed.text,
+                });
+              } else {
+                finalizeStreaming();
+                store.appendStreamItem(sessionId, {
+                  type: "thinking",
+                  id: genId("thinking"),
+                  partId: parsed.part.partId,
+                  content: parsed.part.snapshotText ?? parsed.text,
+                  isStreaming: true,
+                });
+              }
+              lastItemType = null;
               break;
             }
 
@@ -1026,26 +1083,11 @@ export function useBuildStreaming() {
         }
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          const currentSession = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId);
-          if (currentSession?.activeTurnId === turnId) {
-            updateSessionData(sessionId, { isInterrupting: false });
-          }
           return;
         }
 
         transportError = true;
         console.warn("[Streaming] Turn attach stream error:", err);
-        const currentSession = useBuildSessionStore
-          .getState()
-          .sessions.get(sessionId);
-        if (currentSession?.activeTurnId === turnId) {
-          updateSessionData(sessionId, {
-            status: "running",
-            isInterrupting: false,
-          });
-        }
       } finally {
         processor.cancelOutputs();
         if (ownsAttachment()) {
@@ -1059,7 +1101,11 @@ export function useBuildStreaming() {
             if (transportError) {
               await useBuildSessionStore
                 .getState()
-                .loadSession(sessionId, { force: true });
+                .beginTurnSettlement(
+                  sessionId,
+                  { kind: "interactive", turnId },
+                  existingSession?.turnGeneration ?? 0
+                );
             }
           }
           if (!settledFromPromptResponse) {
@@ -1285,6 +1331,7 @@ export function useBuildStreaming() {
   );
 
   useEffect(() => {
+    if (!isEnabled) return;
     const dispatch = () => {
       const state = useBuildSessionStore.getState();
       for (const sessionId of state.sessions.keys()) {
@@ -1302,7 +1349,7 @@ export function useBuildStreaming() {
     const unsubscribe = useBuildSessionStore.subscribe(dispatch);
     dispatch();
     return unsubscribe;
-  }, [streamMessage]);
+  }, [isEnabled, streamMessage]);
 
   /**
    * Interrupt the in-flight turn for a session. The open SSE stream terminates
@@ -1331,6 +1378,12 @@ export function useBuildStreaming() {
           session.instanceId
         );
       } catch (err) {
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
+        if (
+          current?.instanceId !== session.instanceId ||
+          current.turnGeneration !== generation
+        )
+          return;
         console.error("[Streaming] Failed to interrupt:", err);
         updateSessionData(sessionId, {
           isInterrupting: false,

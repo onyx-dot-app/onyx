@@ -287,7 +287,8 @@ revisions. Completed shell and edit tools, including child-agent tools,
 schedule a refresh. The private queue in `useBuildStreaming.ts` combines rapid
 completions and reconciles when the stream settles, even if it missed every tool packet.
 Tool completions during a read coalesce into one pending refresh.
-Settlement replaces that pending work with one final read, queued immediately.
+A terminal stream observation replaces pending work with a final read.
+Canonical completion also starts an authoritative read. This covers recovery without a terminal packet.
 The store serializes all inventory reads per session, including focus and panel reads.
 A silent read cannot consume new files before pending turn discovery selects them.
 An already-settled turn also triggers reconciliation when the attach returns no stream.
@@ -532,3 +533,8 @@ work against the default Kubernetes backend, follow
 Welcome inline previews offer an original-file download. Presentation slide images own loading state by their URL.
 
 A failed presentation image displays an error. Changing the slide starts a new image load.
+
+
+Live text parts retain their OpenCode part ID across stream attachments. Delta packets append to that part. Authoritative snapshots replace its text in place. Text and thinking parts keep their position relative to tool events. Durable worker events retain their existing delta format.
+
+A transport failure transfers the interactive owner to completion reconciliation. This path retains the visible transcript and waits for server completion. It does not resume live events. A failed completion read shows the existing retry action. Successful completion starts an authoritative output inventory read before it permits queued work.

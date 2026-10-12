@@ -810,7 +810,7 @@ class _ServeMixin:
         its session store per-directory, so the hydrate REST call needs it.
         """
         bus = self._get_or_create_event_bus(sandbox_id, directory)
-        state = _TurnState(session_id=opencode_session_id)
+        state = _TurnState(session_id=opencode_session_id, emit_part_snapshots=True)
         client = self._build_serve_client(sandbox_id, directory)
 
         def fetch_message(mid: str) -> dict[str, Any] | None:
@@ -910,7 +910,14 @@ def _merge_text_chunk(
 ) -> SandboxEvent | None:
     if type(pending) is not type(incoming):
         return None
-    if not isinstance(pending, (AgentMessageChunk, AgentThoughtChunk)):
+    if not isinstance(
+        pending, (AgentMessageChunk, AgentThoughtChunk)
+    ) or not isinstance(incoming, (AgentMessageChunk, AgentThoughtChunk)):
+        return None
+
+    if pending.field_meta != incoming.field_meta:
+        return None
+    if pending.field_meta and "snapshotText" in pending.field_meta:
         return None
 
     pending_content = pending.content

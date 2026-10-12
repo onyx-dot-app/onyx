@@ -48,6 +48,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentThoughtChunk,
     Error,
     PromptResponse,
+    TextPartMetadata,
     ToolCallProgress,
     ToolCallStart,
 )
@@ -109,11 +110,12 @@ class ClientTimeouts:
 class _TurnState:
     """Mutable per-turn state used by the translator.
 
-    Lives only for the duration of one ``send_message`` call. Not exposed
-    outside this module.
+    Each prompt driver or live subscriber owns one instance.
     """
 
     session_id: str
+    # Live readers replace identified parts; durable writers consume deltas.
+    emit_part_snapshots: bool = False
     # ToolCallStart is emitted only on the FIRST sighting of a callID.
     seen_tool_calls: set[str] = field(default_factory=set)
     # PromptResponse is yielded at most once per turn; subsequent backstop
@@ -418,6 +420,11 @@ def _emit_text_delta(
             {
                 "sessionUpdate": "agent_thought_chunk",
                 "content": {"type": "text", "text": delta},
+                **(
+                    {"_meta": TextPartMetadata(partId=part_id)}
+                    if state.emit_part_snapshots
+                    else {}
+                ),
             }
         )
     elif part_type == "text":
@@ -426,6 +433,11 @@ def _emit_text_delta(
             {
                 "sessionUpdate": "agent_message_chunk",
                 "content": {"type": "text", "text": delta},
+                **(
+                    {"_meta": TextPartMetadata(partId=part_id)}
+                    if state.emit_part_snapshots
+                    else {}
+                ),
             }
         )
     # Other part types (step-start, step-finish, tool, ...) don't carry
@@ -463,7 +475,9 @@ def _state_for_session(state: _TurnState, session_id: str) -> _TurnState:
         return state
     child_state = state.child_states.get(session_id)
     if child_state is None:
-        child_state = _TurnState(session_id=session_id)
+        child_state = _TurnState(
+            session_id=session_id, emit_part_snapshots=state.emit_part_snapshots
+        )
         state.child_states[session_id] = child_state
     return child_state
 
@@ -810,14 +824,23 @@ def _reconcile_part_text(
     if not isinstance(expected, str):
         return
     local = state.local_text.get(part_id, "")
-    if len(expected) > len(local):
+    if len(expected) >= len(local):
         tail = expected[len(local) :]
         state.local_text[part_id] = expected
-        if tail:
+        if tail or (state.emit_part_snapshots and expected):
             yield emit_class.model_validate(
                 {
                     "sessionUpdate": session_update,
                     "content": {"type": "text", "text": tail},
+                    **(
+                        {
+                            "_meta": TextPartMetadata(
+                                partId=part_id, snapshotText=expected
+                            )
+                        }
+                        if state.emit_part_snapshots
+                        else {}
+                    ),
                 }
             )
     elif len(expected) < len(local):

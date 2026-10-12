@@ -21,9 +21,10 @@ import {
   type ParsedToolCallProgress,
   type ParsedArtifact,
   type ToolName,
+  type TextPartUpdate,
   type ToolKind,
   type ToolStatus,
-} from "./packetTypes";
+} from "@/app/craft/utils/packetTypes";
 import type { TodoItem, TodoStatus } from "../types/displayTypes";
 
 export function parsePacket(raw: unknown): ParsedPacket {
@@ -41,6 +42,7 @@ export function parsePacket(raw: unknown): ParsedPacket {
         type: "text_chunk",
         text: extractText(p.content),
         ...extractRoutingMeta(p),
+        ...extractTextPart(p),
       };
 
     case "agent_thought_chunk": // Live SSE
@@ -49,6 +51,7 @@ export function parsePacket(raw: unknown): ParsedPacket {
         type: "thinking_chunk",
         text: extractText(p.content),
         ...extractRoutingMeta(p),
+        ...extractTextPart(p),
       };
 
     case "tool_call_start":
@@ -759,4 +762,22 @@ function parseToolCallProgress(
     parentSessionId,
     subagentSessionId,
   };
+}
+
+function extractTextPart(p: Record<string, unknown>): {
+  part?: TextPartUpdate;
+} {
+  const meta = p._meta;
+  if (
+    !meta ||
+    typeof meta !== "object" ||
+    !("partId" in meta) ||
+    typeof meta.partId !== "string"
+  )
+    return {};
+  const part: TextPartUpdate = { partId: meta.partId };
+  if ("snapshotText" in meta && typeof meta.snapshotText === "string") {
+    part.snapshotText = meta.snapshotText;
+  }
+  return { part };
 }
