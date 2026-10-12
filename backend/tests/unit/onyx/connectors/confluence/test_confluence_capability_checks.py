@@ -19,17 +19,16 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckStateKind,
     decide_draft_check_state,
 )
-from onyx.connectors.capability_checks.findings import (
-    MAX_FINDING_OPTIONS,
-    CheckFindingKey,
-    FindingOption,
-    OptionsFinding,
-)
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityVerdict,
+    CheckFinding,
+    CheckFindingKey,
     CredentialCapability,
+    FindingOption,
+    OptionsFinding,
     compute_capability_verdicts,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
@@ -351,7 +350,9 @@ def test_space_listing_finds_the_visible_spaces_as_space_options() -> None:
         [{"key": "KB", "name": "Knowledge Base"}, {"key": "~ada"}]
     )
 
-    findings = _CHECKS_BY_ID["confluence_space_listing"].run(_context(gateway, _form()))
+    findings: list[CheckFinding] | None = _CHECKS_BY_ID["confluence_space_listing"].run(
+        _context(gateway, _form())
+    )
 
     assert findings == [
         OptionsFinding(
@@ -371,10 +372,12 @@ def test_space_listing_stops_at_the_option_cap() -> None:
         {"key": f"S{number}", "name": f"Space {number}"} for number in range(5000)
     )
 
-    findings = _CHECKS_BY_ID["confluence_space_listing"].run(_context(gateway, _form()))
+    findings: list[CheckFinding] | None = _CHECKS_BY_ID["confluence_space_listing"].run(
+        _context(gateway, _form())
+    )
 
     assert findings is not None
-    listing = findings[0]
+    listing: CheckFinding = findings[0]
     assert isinstance(listing, OptionsFinding)
     assert len(listing.options) == MAX_FINDING_OPTIONS
     assert listing.truncated is True
@@ -766,7 +769,7 @@ def test_user_names_without_an_author_pass() -> None:
 
 
 def test_optional_checks_are_the_approved_ones() -> None:
-    checks = build_confluence_indexing_checks()
+    checks: list[CapabilityCheck] = build_confluence_indexing_checks()
     optional = {
         check.check_id for check in checks if not check.required and not check.discovery
     }

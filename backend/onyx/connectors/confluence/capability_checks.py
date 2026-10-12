@@ -30,16 +30,15 @@ import requests
 from requests import HTTPError
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
-from onyx.connectors.capability_checks.findings import (
-    CheckFinding,
-    CheckFindingKey,
-    bounded_options,
-)
+from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckFinding,
+    CheckFindingKey,
     CredentialCapability,
+    OptionsFinding,
 )
 from onyx.connectors.confluence.config import (
     ConfluenceConnectorConfig,
@@ -410,7 +409,7 @@ class _SpaceListingCheck(_ConfluenceCheck):
 
     def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
         try:
-            finding = bounded_options(
+            finding: OptionsFinding = bounded_options(
                 _gateway(context).list_spaces(limit=_SPACE_LISTING_PAGE_SIZE),
                 key=CheckFindingKey.VISIBLE_SPACES,
                 field_name=_SPACE_FIELD,
