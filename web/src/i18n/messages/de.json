@@ -2690,7 +2690,28 @@
           "label": "Erneut versuchen"
         },
         "savedAccounts": {
-          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}"
+          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}",
+          "expandButton": {
+            "ariaLabel": "Gespeicherte Konten anzeigen"
+          },
+          "collapseButton": {
+            "ariaLabel": "Gespeicherte Konten ausblenden"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Neues Konto)",
+          "editButton": {
+            "label": "Konto bearbeiten"
+          },
+          "changeButton": {
+            "label": "Konto wechseln"
+          },
+          "nothingChosen": {
+            "title": "Kein Konto ausgewählt",
+            "chooseButton": {
+              "label": "Konto auswählen"
+            }
+          }
         },
         "timeout": {
           "toast": "Zeitüberschreitung des Vorgangs nach {seconds} Sekunden. Prüfen Sie Ihre Konfiguration auf Fehler."

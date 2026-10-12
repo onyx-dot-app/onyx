@@ -2690,7 +2690,28 @@
           "label": "إعادة المحاولة"
         },
         "savedAccounts": {
-          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}"
+          "label": "{count, plural, one {حساب محفوظ واحد} other {# حسابات محفوظة}}",
+          "expandButton": {
+            "ariaLabel": "إظهار الحسابات المحفوظة"
+          },
+          "collapseButton": {
+            "ariaLabel": "إخفاء الحسابات المحفوظة"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(حساب جديد)",
+          "editButton": {
+            "label": "تعديل الحساب"
+          },
+          "changeButton": {
+            "label": "تغيير الحساب"
+          },
+          "nothingChosen": {
+            "title": "لم يتم اختيار حساب",
+            "chooseButton": {
+              "label": "اختيار حساب"
+            }
+          }
         },
         "timeout": {
           "toast": "انتهت مهلة العملية بعد {seconds} ثانية. هل تتحقق من إعداداتك بحثًا عن أخطاء؟"

@@ -2690,7 +2690,28 @@
           "label": "重试"
         },
         "savedAccounts": {
-          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}"
+          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}",
+          "expandButton": {
+            "ariaLabel": "显示已保存的账户"
+          },
+          "collapseButton": {
+            "ariaLabel": "隐藏已保存的账户"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(新账户)",
+          "editButton": {
+            "label": "编辑账户"
+          },
+          "changeButton": {
+            "label": "更换账户"
+          },
+          "nothingChosen": {
+            "title": "未选择账户",
+            "chooseButton": {
+              "label": "选择账户"
+            }
+          }
         },
         "timeout": {
           "toast": "操作在 {seconds} 秒后超时。请检查配置是否有误。"

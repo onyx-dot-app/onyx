@@ -2690,7 +2690,28 @@
           "label": "Tentar novamente"
         },
         "savedAccounts": {
-          "label": "{count, plural, one {# conta salva} other {# contas salvas}}"
+          "label": "{count, plural, one {# conta salva} other {# contas salvas}}",
+          "expandButton": {
+            "ariaLabel": "Mostrar contas salvas"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar contas salvas"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Nova conta)",
+          "editButton": {
+            "label": "Editar conta"
+          },
+          "changeButton": {
+            "label": "Trocar conta"
+          },
+          "nothingChosen": {
+            "title": "Nenhuma conta escolhida",
+            "chooseButton": {
+              "label": "Escolher conta"
+            }
+          }
         },
         "timeout": {
           "toast": "A operação expirou após {seconds} segundos. Verifique se há erros na sua configuração."
