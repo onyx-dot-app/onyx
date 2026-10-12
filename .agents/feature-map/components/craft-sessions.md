@@ -377,6 +377,7 @@ A failed read preserves the local transcript and settlement identity. The retry 
 Only confirmed completion with persisted history permits the next queued prompt.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
 The queue retains each prompt, its attachments, and its explicit model choice until the server accepts it.
+Sandbox restoration keeps the composer draft and disables submission until ready. Pending interactive starts still accept queued prompts.
 Rejected queued starts require an explicit retry of that failed queue entry. An unrelated prompt error cannot authorize that retry.
 Retries reuse the queued prompt's request identity, so a lost response does not create another turn.
 

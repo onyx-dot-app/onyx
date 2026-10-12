@@ -70,6 +70,59 @@ describe("loadSession restore status", () => {
     );
   });
 
+  it.each([false, true])(
+    "loads saved model metadata after an early send unless an accepted selection changed it (%s)",
+    async (changedSelection) => {
+      const runtime = deferred<Awaited<ReturnType<typeof api.fetchSession>>>();
+      mockedApi.fetchSession.mockReturnValueOnce(runtime.promise);
+      const loading = useBuildSessionStore.getState().loadSession(SESSION_ID);
+      await waitFor(() => expect(mockedApi.fetchMessages).toHaveBeenCalled());
+      useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+        status: "running",
+        turnGeneration: 1,
+        activeTurnId: "early-turn",
+        ...(changedSelection && {
+          agentProvider: "selected-provider",
+          agentModel: "selected-model",
+        }),
+      });
+      runtime.resolve({
+        ...runningSession(),
+        agent_provider: "saved-provider",
+        agent_model: "saved-model",
+      } as never);
+      await loading;
+      expect(
+        useBuildSessionStore.getState().sessions.get(SESSION_ID)
+      ).toMatchObject({
+        isLoaded: true,
+        activeTurnId: "early-turn",
+        status: "running",
+        agentProvider: changedSelection
+          ? "selected-provider"
+          : "saved-provider",
+        agentModel: changedSelection ? "selected-model" : "saved-model",
+      });
+    }
+  );
+
+  it("rejects a queued handoff during restoration without an interactive owner", () => {
+    const store = useBuildSessionStore.getState();
+    store.createSession(SESSION_ID, {
+      status: "creating",
+      activeTurnId: null,
+      activeTurnLocalOwner: false,
+    });
+    expect(store.enqueueMessage(SESSION_ID, "keep this draft", [])).toBe(false);
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages
+    ).toEqual([]);
+    store.updateSessionData(SESSION_ID, { activeTurnLocalOwner: true });
+    expect(store.enqueueMessage(SESSION_ID, "real pending turn", [])).toBe(
+      true
+    );
+  });
+
   it("loads the session while its inventory is still pending", async () => {
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     const inventory =

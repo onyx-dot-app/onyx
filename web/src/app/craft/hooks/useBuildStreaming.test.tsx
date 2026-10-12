@@ -2277,6 +2277,10 @@ describe("useBuildStreaming thinking packets", () => {
 
   it("keeps polling until the interrupted backend turn is gone", async () => {
     jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      complete: true,
+      files: [{ path: "outputs/stopped.pdf", revision: "1", size: 100 }],
+    });
     jest
       .mocked(fetchActiveTurn)
       .mockResolvedValueOnce({
@@ -2320,10 +2324,18 @@ describe("useBuildStreaming thinking packets", () => {
       isInterrupting: false,
     });
     expect(fetchMessages).toHaveBeenCalledWith(sessionId);
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+        ?.outputInventory?.["outputs/stopped.pdf"]
+    ).toBeDefined();
   });
 
   it("reconciles interrupts before the local active turn id is known", async () => {
     jest.mocked(interruptMessageStream).mockResolvedValueOnce(undefined);
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      files: [{ path: "outputs/stopped.pdf", revision: "1", size: 100 }],
+      complete: true,
+    });
     jest
       .mocked(fetchActiveTurn)
       .mockResolvedValueOnce({
@@ -2355,6 +2367,14 @@ describe("useBuildStreaming thinking packets", () => {
     });
 
     expect(fetchActiveTurn).toHaveBeenCalledTimes(3);
+    expect(fetchOutputInventory).toHaveBeenCalledWith(
+      sessionId,
+      expect.any(AbortSignal)
+    );
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+        ?.outputInventory?.["outputs/stopped.pdf"]
+    ).toBeDefined();
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)
     ).toMatchObject({
@@ -2655,6 +2675,8 @@ describe("useBuildStreaming thinking packets", () => {
     store.updateSessionData(sessionId, {
       status: "running",
       turnGeneration: 1,
+      outputSelectionLocked: true,
+      wasInterrupted: true,
     });
     jest.mocked(fetchActiveTurn).mockResolvedValue({
       session_id: sessionId,
@@ -2676,6 +2698,8 @@ describe("useBuildStreaming thinking packets", () => {
       status: "running",
       activeTurnId: "other-tab-turn",
       turnGeneration: 2,
+      outputSelectionLocked: false,
+      wasInterrupted: false,
       turnSettlement: null,
     });
     expect(createTurn).not.toHaveBeenCalled();
@@ -2823,4 +2847,126 @@ describe("useBuildStreaming thinking packets", () => {
       expect(fetchScheduledRunContext).not.toHaveBeenCalled();
     }
   );
+
+  it.each(["resolve", "reject"] as const)(
+    "ignores an old repeated Stop that later %ss after queued ownership advances",
+    async (outcome) => {
+      let accept:
+        | ((turn: Awaited<ReturnType<typeof createTurn>>) => void)
+        | undefined;
+      let completeStop: (() => void) | undefined;
+      let failStop: ((error: Error) => void) | undefined;
+      jest.mocked(createTurn).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            accept = resolve;
+          })
+      );
+      jest
+        .mocked(interruptMessageStream)
+        .mockResolvedValueOnce(undefined)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              completeStop = resolve;
+              failStop = reject;
+            })
+        );
+      jest
+        .mocked(processSSEStream)
+        .mockImplementation(() => new Promise(() => {}));
+      const { result } = renderHook(() => useBuildStreaming());
+      let oldStart: Promise<void> | undefined;
+      act(() => {
+        oldStart = result.current.streamMessage(sessionId, "old request");
+      });
+      act(() => {
+        useBuildSessionStore
+          .getState()
+          .enqueueMessage(sessionId, "queued successor", []);
+      });
+      await act(async () => {
+        await result.current.interruptStreaming(sessionId);
+      });
+      await act(async () => {
+        accept?.({
+          session_id: sessionId,
+          turn_id: "old-turn",
+          status: "QUEUED",
+          turn_index: 0,
+        });
+      });
+      expect(interruptMessageStream).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(1000);
+      });
+      expect(createTurn).toHaveBeenCalledTimes(2);
+      act(() => {
+        useBuildSessionStore.getState().updateSessionData(sessionId, {
+          isInterrupting: true,
+          wasInterrupted: true,
+        });
+        useBuildSessionStore.getState().appendStreamItem(sessionId, {
+          type: "text",
+          id: "successor-text",
+          content: "New output",
+          isStreaming: true,
+        });
+      });
+      const successor = useBuildSessionStore.getState().sessions.get(sessionId);
+      await act(async () => {
+        if (outcome === "resolve") completeStop?.();
+        else failStop?.(new Error("Late Stop failure"));
+        await oldStart;
+      });
+      expect(useBuildSessionStore.getState().sessions.get(sessionId)).toBe(
+        successor
+      );
+      expect(fetchTurnEventStream).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("keeps output discovery alive across a nonterminal EOF", async () => {
+    jest.mocked(fetchActiveTurn).mockResolvedValue({
+      session_id: sessionId,
+      turn_id: "turn-thinking",
+      status: "RUNNING",
+      turn_index: 0,
+    });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async () => {})
+      .mockImplementationOnce(async (_response, onPacket) => {
+        jest.mocked(fetchOutputInventory).mockResolvedValue({
+          complete: true,
+          files: [{ path: "outputs/late.pdf", revision: "1", size: 100 }],
+        });
+        onPacket({
+          type: "tool_call_progress",
+          tool_call_id: "late-write",
+          kind: "edit",
+          status: "completed",
+          raw_input: { filePath: "outputs/late.pdf" },
+          raw_output: null,
+          _meta: { toolName: "write" },
+        } as never);
+        onPacket({ type: "prompt_response" } as never);
+      });
+    const { result } = renderHook(() => useBuildStreaming());
+    let streaming: Promise<void> | undefined;
+    act(() => {
+      streaming = result.current.streamMessage(sessionId, "late deliverable");
+    });
+    await act(async () => {});
+    expect(fetchOutputInventory).not.toHaveBeenCalled();
+    jest.mocked(fetchActiveTurn).mockResolvedValue(null);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1000);
+      await streaming;
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+        ?.outputInventory?.["outputs/late.pdf"]
+    ).toBeDefined();
+  });
 });

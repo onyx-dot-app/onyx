@@ -215,6 +215,7 @@ export function useBuildStreaming() {
       let turnId = interruptedTurnId;
       const settle = async (): Promise<void> => {
         if (!ownsInterrupt(null)) return;
+        void useBuildSessionStore.getState().refreshOutputInventory(sessionId);
         await useBuildSessionStore
           .getState()
           .beginTurnSettlement(
@@ -852,6 +853,7 @@ export function useBuildStreaming() {
             ) {
               break;
             }
+            void finalizeOutputs();
             appendErrorItem(parsed.message);
             updateSessionData(sessionId, {
               status: "failed",
@@ -987,7 +989,6 @@ export function useBuildStreaming() {
             return;
           }
           await processSSEStream(response, processor.processPacket);
-          void processor.finalizeOutputs();
           const current = useBuildSessionStore
             .getState()
             .sessions.get(sessionId);
@@ -1011,6 +1012,7 @@ export function useBuildStreaming() {
           )
             return;
           if (!active || active.turn_id !== turnId) {
+            void processor.finalizeOutputs();
             void useBuildSessionStore
               .getState()
               .beginTurnSettlement(
@@ -1090,11 +1092,14 @@ export function useBuildStreaming() {
       }
 
       const generation = (existingSession?.turnGeneration ?? 0) + 1;
-      const ownsTurn = () => {
+      const ownsTurn = (acceptedTurnId?: string) => {
         const current = useBuildSessionStore.getState().sessions.get(sessionId);
         return (
+          !controller.signal.aborted &&
           current?.instanceId === existingSession?.instanceId &&
-          current?.turnGeneration === generation
+          current?.turnGeneration === generation &&
+          (acceptedTurnId === undefined ||
+            current.activeTurnId === acceptedTurnId)
         );
       };
       const controller = new AbortController();
@@ -1163,6 +1168,7 @@ export function useBuildStreaming() {
         if (currentSession?.isInterrupting) {
           try {
             await interruptMessageStream(sessionId);
+            if (!ownsTurn(turn.turn_id)) return;
             void reconcileInterruptedTurn(
               sessionId,
               turn.turn_id,
@@ -1170,6 +1176,7 @@ export function useBuildStreaming() {
               currentSession.instanceId
             );
           } catch (error) {
+            if (!ownsTurn(turn.turn_id)) return;
             console.error(
               "[Streaming] Failed to interrupt accepted turn:",
               error
@@ -1180,6 +1187,7 @@ export function useBuildStreaming() {
             });
           }
         }
+        if (!ownsTurn(turn.turn_id)) return;
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
       } catch (err) {
         if (!ownsTurn()) return;

@@ -117,6 +117,10 @@ export default function BuildChatPanel({
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
+  const isRestoring: boolean =
+    session?.status === "creating" &&
+    !session.activeTurnLocalOwner &&
+    !session.activeTurnId;
   const hasInterruptibleTurn = session?.status === "running";
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
@@ -893,6 +897,7 @@ export default function BuildChatPanel({
                       }
                       disabled={
                         isViewingSubagent ||
+                        isRestoring ||
                         scheduledRunInFlight ||
                         !hasProvider
                       }

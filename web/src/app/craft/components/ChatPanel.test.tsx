@@ -93,7 +93,10 @@ jest.mock("@/app/craft/components/CraftInputBar", () => ({
       <button disabled={disabled} onClick={() => onSubmit("prompt", [])}>
         Send
       </button>
-      <button onClick={() => onQueueMessage?.("queued prompt", [])}>
+      <button
+        disabled={disabled}
+        onClick={() => onQueueMessage?.("queued prompt", [])}
+      >
         Queue
       </button>
       {queuedMessages.map((message, index) => (
@@ -380,4 +383,35 @@ it("does not offer queue retry for a different prompt's failure", () => {
   expect(
     useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages[0]
   ).toMatchObject({ text: "waiting prompt", phase: "waiting" });
+});
+
+it("holds submission during restoration and enables it when the sandbox is ready", async () => {
+  const store = useBuildSessionStore.getState();
+  store.updateSessionData(SESSION_ID, { status: "creating" });
+  render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Queue" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Queue" }));
+  expect(
+    useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages
+  ).toHaveLength(0);
+  await act(async () =>
+    store.updateSessionData(SESSION_ID, { status: "active" })
+  );
+  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(streamMessage).toHaveBeenCalledWith(SESSION_ID, "prompt", null, []);
+});
+
+it("keeps queueing available while an interactive start is pending", () => {
+  useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+    status: "creating",
+    activeTurnLocalOwner: true,
+  });
+  render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  expect(screen.getByRole("button", { name: "Queue" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Queue" }));
+  expect(
+    useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages
+  ).toHaveLength(1);
 });

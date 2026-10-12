@@ -1170,7 +1170,11 @@ function reconcileCompletedTranscript(
           activeTurnId: successor?.turn_id ?? null,
           activeTurnIndex: successor?.turn_index ?? null,
           activeTurnLocalOwner: false,
-          ...(successor && { turnGeneration: current.turnGeneration + 1 }),
+          ...(successor && {
+            turnGeneration: current.turnGeneration + 1,
+            outputSelectionLocked: false,
+            wasInterrupted: false,
+          }),
           turnSettlement:
             successor || approvalPause
               ? null
@@ -1729,7 +1733,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     let accepted = false;
     set((state) => {
       const session = state.sessions.get(sessionId);
-      if (!session || session.queuedMessages.length >= MAX_QUEUED_MESSAGES) {
+      if (
+        !session ||
+        session.queuedMessages.length >= MAX_QUEUED_MESSAGES ||
+        (session.status === "creating" &&
+          !session.activeTurnLocalOwner &&
+          session.activeTurnId === null)
+      ) {
         return state;
       }
       accepted = true;
@@ -2022,8 +2032,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           needsRestore && sessionData.sandbox
             ? { ...sessionData.sandbox, status: "restoring" }
             : sessionData.sandbox,
-        ...(runtimeSession.turnGeneration === loadingSession.turnGeneration &&
-          runtimeSession.agentProvider === loadingSession.agentProvider &&
+        ...(runtimeSession.agentProvider === loadingSession.agentProvider &&
           runtimeSession.agentModel === loadingSession.agentModel && {
             agentProvider: sessionData.agent_provider,
             agentModel: sessionData.agent_model,
