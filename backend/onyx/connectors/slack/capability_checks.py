@@ -28,8 +28,14 @@ Scope-to-capability mapping (see also the OAuth scope list in
 - ``users:read.email`` -> DOC_PERMISSION_SYNC (member-to-email resolution)
 """
 
+from collections.abc import Iterator
 from typing import Any, NoReturn
 
+from onyx.connectors.capability_checks.findings import (
+    CheckFinding,
+    CheckFindingKey,
+    bounded_options,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -79,6 +85,9 @@ _EMAIL_PROBE_PAGE_SIZE = 100
 # gateway's redis-coordinated client also serves any concurrently running
 # indexing job's rate-limit backoff.
 _CHANNEL_ENUMERATION_TIMEOUT_SECONDS = 1800.0
+
+# The config field that holds the channel names to index.
+_CHANNELS_FIELD = "channels"
 
 
 def _slack_client(context: CapabilityCheckContext) -> SlackSourceOperations:
@@ -660,6 +669,65 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
             )
 
 
+def _iter_public_channels(
+    slack_client: SlackSourceOperations,
+) -> Iterator[dict[str, Any]]:
+    """Every unarchived public channel, read page by page. On Enterprise Grid,
+    lists each workspace in turn, as the connector does."""
+    team_ids: list[str | None] = (
+        [*list_grid_team_ids(slack_client)]
+        if _auth_test(slack_client).enterprise_id
+        else [None]
+    )
+    seen: set[str] = set()
+    for team_id in team_ids:
+        for page in slack_client.list_channels(
+            variant=SlackChannelVariant.PUBLIC,
+            channel_types=["public_channel"],
+            exclude_archived=True,
+            team_id=team_id,
+        ):
+            for channel in page.channels:
+                if channel["id"] in seen:
+                    continue
+                seen.add(channel["id"])
+                yield channel
+
+
+class _ReadableChannelListingCheck(CapabilityCheck):
+    """Lists the public channels the bot can index, as options for the channels
+    field. Separate from ``slack_public_channel_listing``, which reads one
+    channel to validate."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="slack_readable_channel_listing",
+            display_name="Lists the readable public channels",
+            requires_connector_instance=False,
+            remediation=_ADD_SCOPE_REMEDIATION.format(scope="channels:read"),
+            docs_link=_SLACK_DOCS_LINK,
+            discovery=True,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
+        try:
+            # The connector matches ``channels`` against bare channel names.
+            finding = bounded_options(
+                _iter_public_channels(_slack_client(context)),
+                key=CheckFindingKey.READABLE_CHANNELS,
+                field_name=_CHANNELS_FIELD,
+                value=lambda channel: channel["name"],
+                label=lambda channel: channel["name"],
+            )
+        except SlackApiError as e:
+            _raise_for_slack_api_error(
+                e,
+                "The bot token cannot list public channels (`conversations.list`).",
+            )
+        return [finding]
+
+
 class _PermSyncChannelListingCheck(CapabilityCheck):
     """Lists one channel under the permission-sync capability.
 
@@ -894,6 +962,7 @@ def build_slack_indexing_checks() -> list[CapabilityCheck]:
         _UserProfileReadCheck(),
         _ChannelPatternsCheck(),
         _ConfiguredChannelsVisibleCheck(),
+        _ReadableChannelListingCheck(),
     ]
 
 

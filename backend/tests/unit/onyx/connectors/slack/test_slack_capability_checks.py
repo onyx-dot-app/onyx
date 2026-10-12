@@ -12,6 +12,12 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings import (
+    MAX_FINDING_OPTIONS,
+    CheckFindingKey,
+    FindingOption,
+    OptionsFinding,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
@@ -780,6 +786,113 @@ def test_configured_channels_regex_mode_skips_probe() -> None:
     gateway.list_channels.assert_not_called()
 
 
+# slack_readable_channel_listing
+
+
+def test_readable_channel_listing_finds_channel_names_as_channel_options() -> None:
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_channels.side_effect = lambda **_: iter(
+        [
+            SlackChannelsPage(channels=[{"id": "C1", "name": "general"}]),
+            SlackChannelsPage(channels=[{"id": "C2", "name": "random"}]),
+        ]
+    )
+
+    # Under test.
+    findings = _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+
+    # Postcondition.
+    assert findings == [
+        OptionsFinding(
+            key=CheckFindingKey.READABLE_CHANNELS,
+            field_name="channels",
+            options=[
+                FindingOption(value="general", label="general"),
+                FindingOption(value="random", label="random"),
+            ],
+        )
+    ]
+    gateway.list_channels.assert_called_once_with(
+        variant=SlackChannelVariant.PUBLIC,
+        channel_types=["public_channel"],
+        exclude_archived=True,
+        team_id=None,
+    )
+
+
+def test_readable_channel_listing_lists_each_grid_workspace() -> None:
+    # Precondition.
+    gateway = _gateway()
+    gateway.check_auth.return_value = _auth_response(enterprise_id="E1")
+    gateway.list_teams.side_effect = _pages(
+        SlackTeamsPage(teams=[{"id": "T1"}, {"id": "T2"}])
+    )
+    channels_by_team = {
+        "T1": [{"id": "C1", "name": "general"}],
+        # A shared channel appears in both workspaces.
+        "T2": [{"id": "C1", "name": "general"}, {"id": "C2", "name": "eng"}],
+    }
+    gateway.list_channels.side_effect = lambda **kwargs: iter(
+        [SlackChannelsPage(channels=channels_by_team[kwargs["team_id"]])]
+    )
+
+    # Under test.
+    findings = _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+
+    # Postcondition.
+    assert findings is not None
+    listing = findings[0]
+    assert isinstance(listing, OptionsFinding)
+    assert [option.value for option in listing.options] == ["general", "eng"]
+
+
+def test_readable_channel_listing_stops_at_the_option_cap() -> None:
+    # Precondition.
+    gateway = _gateway()
+    pages_read: list[int] = []
+
+    def list_channels(**kwargs: Any) -> Any:
+        del kwargs
+        for page_number in range(50):
+            pages_read.append(page_number)
+            yield SlackChannelsPage(
+                channels=[
+                    {"id": f"C{page_number}-{n}", "name": f"c{page_number}-{n}"}
+                    for n in range(100)
+                ]
+            )
+
+    gateway.list_channels.side_effect = list_channels
+
+    # Under test.
+    findings = _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+
+    # Postcondition.
+    assert findings is not None
+    listing = findings[0]
+    assert isinstance(listing, OptionsFinding)
+    assert len(listing.options) == MAX_FINDING_OPTIONS
+    assert listing.truncated is True
+    # The listing stops one page past the cap instead of reading every page.
+    assert len(pages_read) == MAX_FINDING_OPTIONS // 100 + 1
+
+
+def test_readable_channel_listing_missing_scope_fails_only_this_check() -> None:
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_channels.side_effect = _slack_error(
+        "missing_scope", needed="channels:read"
+    )
+
+    # Under test and postcondition.
+    with pytest.raises(InsufficientPermissionsError, match="channels:read"):
+        _run("slack_readable_channel_listing", _context(gateway))
+    check = _CHECKS_BY_ID["slack_readable_channel_listing"]
+    assert check.discovery is True
+    assert check.required is False
+
+
 def test_channel_patterns_rejects_a_malformed_exclude_regex() -> None:
     # Precondition.
     context = _context(
@@ -815,7 +928,9 @@ def test_check_metadata_is_pinned() -> None:
         "slack_channel_patterns",
         "slack_configured_channels_visible",
     }
-    optional = {check.check_id for check in checks if not check.required}
+    optional = {
+        check.check_id for check in checks if not check.required and not check.discovery
+    }
     assert optional == {
         "slack_private_channel_listing",
         "slack_perm_sync_private_channel_listing",
@@ -824,6 +939,9 @@ def test_check_metadata_is_pinned() -> None:
         # Not required (a fully invited bot works without ``channels:join``),
         # but the warning text demands action in most setups.
         "slack_channel_join_scope",
+    }
+    assert {check.check_id for check in checks if check.discovery} == {
+        "slack_readable_channel_listing"
     }
     assert all(check.remediation for check in checks)
     assert all(check.docs_link for check in checks)
