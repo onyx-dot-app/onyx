@@ -23,11 +23,11 @@
 }
 
 .opal-log[data-opal-log-weight="heavy"][data-opal-log-status="success"] {
-  @apply bg-status-success-01;
+  @apply bg-status-success-00;
 }
 .opal-log[data-opal-log-weight="heavy"][data-opal-log-status="warning"] {
-  @apply bg-theme-amber-01;
+  @apply bg-status-warning-00;
 }
 .opal-log[data-opal-log-weight="heavy"][data-opal-log-status="error"] {
-  @apply bg-status-error-01;
+  @apply bg-status-error-00;
 }

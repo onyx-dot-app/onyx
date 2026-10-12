@@ -9040,9 +9040,6 @@
       "required": {
         "label": "Erforderlich"
       },
-      "running": {
-        "label": "Prüfungen laufen…"
-      },
       "empty": {
         "label": "Es wurden noch keine Prüfungen ausgeführt."
       },
@@ -9066,7 +9063,8 @@
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
       "state": {
         "completed": "Prüfungen abgeschlossen.",
-        "inProgress": "Prüfungen laufen…"
+        "inProgress": "Prüfungen laufen...",
+        "waiting": "Warten auf Connector-Einstellungen..."
       }
     }
   },

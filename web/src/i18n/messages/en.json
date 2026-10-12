@@ -9040,9 +9040,6 @@
       "required": {
         "label": "Required"
       },
-      "running": {
-        "label": "Running checks…"
-      },
       "empty": {
         "label": "No checks have run yet."
       },
@@ -9066,7 +9063,8 @@
       "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
       "state": {
         "completed": "Checks completed.",
-        "inProgress": "Checks in progress…"
+        "inProgress": "Checks in progress...",
+        "waiting": "Waiting for connector settings..."
       }
     }
   },

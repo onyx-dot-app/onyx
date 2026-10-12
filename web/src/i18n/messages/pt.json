@@ -9040,9 +9040,6 @@
       "required": {
         "label": "Obrigatória"
       },
-      "running": {
-        "label": "Executando verificações…"
-      },
       "empty": {
         "label": "Nenhuma verificação foi executada ainda."
       },
@@ -9066,7 +9063,8 @@
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
       "state": {
         "completed": "Verificações concluídas.",
-        "inProgress": "Verificações em andamento…"
+        "inProgress": "Verificações em andamento...",
+        "waiting": "Aguardando as configurações do conector..."
       }
     }
   },
