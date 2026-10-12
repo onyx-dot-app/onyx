@@ -1,4 +1,6 @@
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
+import { withoutFormOnlyFields } from "@/lib/connectors/utils";
 
 type ConfigField = ConnectionConfiguration["values"][number];
 
@@ -13,11 +15,12 @@ function configFieldNames(fields: ConfigField[]): string[] {
 }
 
 /**
- * The connector config an unsaved form holds, for a draft check run. It
- * takes only the configuration's own fields, and drops blank list entries
- * as the create request does.
+ * The connector config an unsaved form holds, for a draft check run or plan.
+ * It takes only the configuration's own fields without the form-only ones
+ * (the realm), and drops blank list entries as the create request does.
  */
 export function connectorFormState(
+  source: ValidSources,
   configuration: ConnectionConfiguration,
   values: Record<string, unknown>
 ): Record<string, unknown> {
@@ -25,7 +28,7 @@ export function connectorFormState(
     ...configuration.values,
     ...configuration.advanced_values,
   ]);
-  return Object.fromEntries(
+  const state: Record<string, unknown> = Object.fromEntries(
     names
       .filter((name) => values[name] !== undefined)
       .map((name) => {
@@ -40,4 +43,5 @@ export function connectorFormState(
         ];
       })
   );
+  return withoutFormOnlyFields(source, state);
 }

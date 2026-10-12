@@ -30,7 +30,8 @@ export interface CredentialFieldOptions {
   /**
    * Where the account works: its site, host or subdomain. Checks need it
    * before anything else, so the add-connector page asks for it first, above
-   * the account.
+   * the account, under the same key. It is a form-only field there: it stays
+   * in the credential and never goes into the connector config.
    */
   realm?: boolean;
   /** For an optional field: what the backend uses when it is left blank. */

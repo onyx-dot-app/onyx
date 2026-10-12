@@ -9,6 +9,7 @@ import useCCPairs from "@/hooks/useCCPairs";
 import { checkCredentialBinding } from "@/lib/connectors/svc";
 import { useSavedDraftCredential } from "@/lib/credentials/hooks";
 import { bindingCheckCredentialId } from "@/lib/credentials/utils";
+import { formOnlyFieldNames } from "@/lib/connectors/utils";
 import {
   bindingCheckInput,
   decideBindingGate,
@@ -275,7 +276,14 @@ export function useBoundFieldsGate({
   // values are part of it: a draft keeps its id when they change.
   const credentialKey: string | null =
     credentialId === null ? null : JSON.stringify([credential, credentialId]);
+  // Form-only bound fields (the realm) are never sent, so a source with only
+  // those has nothing for the backend to check.
+  const formOnly: ReadonlySet<string> = new Set(formOnlyFieldNames(source));
+  const checksBinding: boolean = boundFieldNames.some(
+    (name) => !formOnly.has(name)
+  );
   const { key: inputKey, config } = bindingCheckInput(
+    source,
     credentialKey,
     boundFieldNames,
     values
@@ -284,6 +292,7 @@ export function useBoundFieldsGate({
   // stale too.
   const key = JSON.stringify({ source, inputKey, credentialUpdatedAt });
   const ready =
+    checksBinding &&
     boundFields.length > 0 &&
     credentialId !== null &&
     boundFields.every((field) => !field.missing && !field.invalid);
@@ -368,11 +377,13 @@ export function useBoundFieldsGate({
   const binding: BindingCheckState =
     credential === null
       ? { kind: credentialSelected ? "unavailable" : "idle" }
-      : awaitingRun
-        ? { kind: "awaitingRun" }
-        : result !== null && result.key === key
-          ? result.state
-          : { kind: "idle" };
+      : !checksBinding
+        ? { kind: "notNeeded" }
+        : awaitingRun
+          ? { kind: "awaitingRun" }
+          : result !== null && result.key === key
+            ? result.state
+            : { kind: "idle" };
   const gate = decideBindingGate({
     hasBoundFields: boundFields.length > 0,
     credentialSelected,
