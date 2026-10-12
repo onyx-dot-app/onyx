@@ -20,6 +20,26 @@ import type {
 import type { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 
+/**
+ * The kind of a Google credential, read from its keys: the client sees the
+ * credential JSON masked. Mirrors `google_credential_kind` in the backend.
+ */
+export function googleCredentialKind(
+  credential: Credential<unknown> | null
+): "service_account" | "oauth" | undefined {
+  const credentialJson = credential?.credential_json;
+  if (typeof credentialJson !== "object" || credentialJson === null) {
+    return undefined;
+  }
+  if ("google_service_account_key" in credentialJson) {
+    return "service_account";
+  }
+  if ("google_tokens" in credentialJson) {
+    return "oauth";
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Credential specs
 // ---------------------------------------------------------------------------

@@ -52,7 +52,7 @@ from tests.external_dependency_unit.indexing_helpers import (
 def blocking_validation(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[tuple[ConnectorCredentialPair, MagicMock], None, None]:
-    """A Google Drive cc-pair plus a mocked connector behind the blocking
+    """A Box cc-pair plus a mocked connector behind the blocking
     validation. The source has no named checks, so creation keeps the legacy
     validation and its fallback-shaped record.
 
@@ -60,7 +60,7 @@ def blocking_validation(
     which cannot see this session's uncommitted rows. Teardown removes the pair;
     report rows cascade with the credential.
     """
-    cc_pair = make_cc_pair(db_session, source=DocumentSource.GOOGLE_DRIVE)
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.BOX)
     connector_mock = MagicMock(spec=BaseConnector)
     monkeypatch.setattr(
         factory, "instantiate_connector", MagicMock(return_value=connector_mock)
@@ -96,7 +96,7 @@ def test_success_records_a_fallback_shaped_passed_report(
     assert row.report is not None
     assert row.report["verdicts"]["indexing"] == "passed"
     (check_result,) = row.report["check_results"]
-    assert check_result["check_id"] == "google_drive_connector_settings"
+    assert check_result["check_id"] == "box_connector_settings"
     assert check_result["is_fallback"] is True
     assert check_result["status"] == "passed"
 
@@ -248,9 +248,9 @@ def test_sync_success_mirrors_the_outcome_onto_perm_sync(
         for result in row.report["check_results"]
     )
     assert rows == [
-        ("google_drive_connector_settings", "indexing"),
-        ("google_drive_perm_sync", "doc_permission_sync"),
-        ("google_drive_perm_sync", "external_group_sync"),
+        ("box_connector_settings", "indexing"),
+        ("box_perm_sync", "doc_permission_sync"),
+        ("box_perm_sync", "external_group_sync"),
     ]
     assert row.report["verdicts"]["doc_permission_sync"] == "passed"
 
@@ -267,7 +267,7 @@ def test_no_clobber_of_a_granular_report(
     cc_pair, _ = blocking_validation
     granular = CredentialCapabilityReport(
         credential_id=cc_pair.credential_id,
-        source=DocumentSource.GOOGLE_DRIVE,
+        source=DocumentSource.BOX,
         connector_id=cc_pair.connector_id,
         checked_at=datetime.now(timezone.utc),
         trigger=CapabilityCheckTrigger.MANUAL,
@@ -275,7 +275,7 @@ def test_no_clobber_of_a_granular_report(
         check_results=[
             CapabilityCheckResult(
                 capability=CredentialCapability.INDEXING,
-                check_id="google_drive_named_check",
+                check_id="box_named_check",
                 display_name="Bot token is valid",
                 required=True,
                 status=CapabilityCheckStatus.FAILED,
@@ -287,7 +287,7 @@ def test_no_clobber_of_a_granular_report(
         db_session,
         credential_id=cc_pair.credential_id,
         connector_id=cc_pair.connector_id,
-        source=DocumentSource.GOOGLE_DRIVE,
+        source=DocumentSource.BOX,
         trigger=CapabilityCheckTrigger.MANUAL,
         report=granular,
         # Connector-scoped writes must carry the config hash they ran with.
@@ -310,7 +310,7 @@ def test_no_clobber_of_a_granular_report(
     assert row.trigger == CapabilityCheckTrigger.MANUAL
     assert row.report is not None
     (check_result,) = row.report["check_results"]
-    assert check_result["check_id"] == "google_drive_named_check"
+    assert check_result["check_id"] == "box_named_check"
 
 
 @pytest.mark.usefixtures("tenant_context")
