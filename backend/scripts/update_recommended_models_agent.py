@@ -52,6 +52,7 @@ from update_recommended_models import (  # ty: ignore[unresolved-import]  # noqa
     load_catalog_file,
     load_previous,
     load_rules,
+    matches_rule,
     sections_equal,
     serialize,
     visible_models,
@@ -135,9 +136,16 @@ Selection rules:
   even if it is still sold.
 - Do not recommend models released more than ~12 months ago unless the vendor
   still sells them as the current model for that tier.
-- Cover tiers per vendor where they exist: the flagship (this becomes
-  default_model), plus cheaper/faster current-tier options. Keep each list
-  tight: about 3-5 models.
+- default_model is the vendor's balanced general-purpose tier: strong, current,
+  and mid-priced (e.g. OpenAI Sol, Anthropic Opus, Gemini Pro, GLM). It MUST
+  fall in the family the curation rules below mark `is_default_source`. Never
+  make a premium tier (OpenAI Astra, Anthropic Fable, "-pro" variants, anything
+  priced several times the balanced tier) the default: it becomes the default
+  for every Auto-mode deployment, so cost matters more than peak capability.
+  Premium tiers may still appear in additional_visible_models.
+- Cover tiers per vendor where they exist: the default, cheaper/faster
+  current-tier options, and optionally one premium tier. Keep each list tight:
+  about 3-5 models.
 - Skip free tiers (":free" ids / $0 pricing), image/audio/embedding-only
   models, models without text output, and expired models.
 - display_name: emit for anthropic, vertex_ai, and openrouter sections only —
@@ -349,10 +357,29 @@ def _build_provider_section(
     # default_model first
     deduped.sort(key=lambda m: m.name != default_name)
 
-    # Soft checks: recommend, don't reject
     catalog_by_native: dict[str, CatalogModel] = {
         derive_native_name(m, section_rules): m for m in catalog
     }
+
+    # The default ships to every Auto-mode deployment: premium tiers (Astra,
+    # Fable) cost too much, so it must sit in the is_default_source family.
+    default_rule = next((r for r in section_rules.rules if r.is_default_source), None)
+    default_entry = catalog_by_native.get(default_name)
+    if default_rule is not None and default_name:
+        if default_entry is None:
+            warnings.append(
+                f"{section_name}: default '{default_name}' is not in the catalog; "
+                f"cannot verify it is in the '{default_rule.label}' family"
+            )
+        elif not matches_rule(default_rule, default_entry):
+            errors.append(
+                f"{section_name}: default_model '{default_name}' is outside the "
+                f"default family '{default_rule.label}' "
+                f"({default_rule.include_regex}, excluding {default_rule.exclude_regex}); "
+                "premium tiers may only be additional visible models"
+            )
+
+    # Soft checks: recommend, don't reject
     for model in deduped:
         entry = catalog_by_native.get(model.name)
         if entry is None:
