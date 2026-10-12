@@ -37,10 +37,14 @@ logger = setup_logger()
 # a finding informs, for a form that offers the finding's options in that field.
 # Findings stay conservative: names and ids of containers (drives, spaces,
 # channels, mailboxes) and counts. Never document content, and never lists of
-# people: users are a count.
+# users: users are a count. A container name can still name a person, for
+# example a personal Confluence space.
 
 # TODO(evan-onyx): a search endpoint for sources whose listings exceed this.
 MAX_FINDING_OPTIONS: int = 1000
+# Longest option value, label or detail. Bounds the stored report and every
+# draft snapshot write.
+MAX_FINDING_TEXT_LENGTH: int = 500
 
 
 class CheckFindingKey(str, Enum):
@@ -68,11 +72,11 @@ class CountFinding(BaseModel):
 
 class FindingOption(BaseModel):
     # What a form puts in the config field: an id or a URL.
-    value: str
+    value: str = Field(max_length=MAX_FINDING_TEXT_LENGTH)
     # What the admin reads.
-    label: str
+    label: str = Field(max_length=MAX_FINDING_TEXT_LENGTH)
     # An optional second line.
-    detail: str | None = None
+    detail: str | None = Field(default=None, max_length=MAX_FINDING_TEXT_LENGTH)
 
 
 class OptionsFinding(BaseModel):
@@ -89,12 +93,12 @@ CheckFinding = Annotated[CountFinding | OptionsFinding, Field(discriminator="typ
 _CHECK_FINDING_ADAPTER: TypeAdapter[CheckFinding] = TypeAdapter(CheckFinding)
 
 
-def parse_known_findings(raw: Any) -> Any:
+def parse_known_findings(raw: Any) -> list[CheckFinding]:
     """Keeps the findings this version understands. A stored finding with a
     newer type or key is dropped, not an error, so a report written by a newer
     version still reads."""
     if not isinstance(raw, list):
-        return raw
+        return []
     known: list[CheckFinding] = []
     for item in raw:
         try:

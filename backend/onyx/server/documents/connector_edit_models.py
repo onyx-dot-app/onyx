@@ -53,17 +53,19 @@ class ConnectorEditPlanResponse(BaseModel):
 
     @classmethod
     def from_stored(cls, stored: StoredEditPlan) -> "ConnectorEditPlanResponse":
-        hide_findings_if_disabled(stored.plan.dry_run_results)
-        if stored.plan.validation is not None:
-            hide_findings_if_disabled(stored.plan.validation.check_results)
+        # A copy: hiding findings must not change the caller's stored plan.
+        plan: EditPlan = stored.plan.model_copy(deep=True)
+        hide_findings_if_disabled(plan.dry_run_results)
+        if plan.validation is not None:
+            hide_findings_if_disabled(plan.validation.check_results)
         return cls(
             plan_id=stored.plan_id,
             cc_pair_id=stored.cc_pair_id,
             created_at=stored.created_at,
             expires_at=stored.created_at + timedelta(seconds=EDIT_PLAN_TTL_SECONDS),
             proposed=stored.proposed,
-            plan=stored.plan,
-            validation_blocks_apply=stored.plan.validation_blocks_apply,
+            plan=plan,
+            validation_blocks_apply=plan.validation_blocks_apply,
             dry_run_checks_path=(
                 f"/manage/admin/cc-pair/{stored.cc_pair_id}/edit/checks"
             ),
