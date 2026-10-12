@@ -461,3 +461,63 @@ it("keeps queueing available while an interactive start is pending", () => {
     useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages
   ).toHaveLength(1);
 });
+
+it.each(["settlement", "queued start"] as const)(
+  "retains the draft and recovery owner after a failed %s",
+  async (failure) => {
+    const store = useBuildSessionStore.getState();
+    if (failure === "settlement") {
+      store.updateSessionData(SESSION_ID, {
+        status: "idle",
+        turnSettlement: {
+          owner: { kind: "interactive", turnId: "completed" },
+          turnGeneration: 0,
+          phase: "failed",
+          error: "History unavailable",
+        },
+      });
+    } else {
+      store.enqueueMessage(SESSION_ID, "rejected prompt", []);
+      store.updateSessionData(SESSION_ID, {
+        status: "failed",
+        error: "Start rejected",
+        queuedMessages:
+          useBuildSessionStore
+            .getState()
+            .sessions.get(SESSION_ID)
+            ?.queuedMessages.map((message) => ({
+              ...message,
+              phase: "failed",
+            })) ?? [],
+      });
+    }
+    const before = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+    fireEvent.click(screen.getByRole("button", { name: "Attach draft" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("draft-count")).toHaveTextContent("1")
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Queue" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(streamMessage).not.toHaveBeenCalled();
+    const after = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+    expect(after?.turnSettlement).toBe(before?.turnSettlement);
+    expect(after?.queuedMessages).toEqual(before?.queuedMessages);
+    expect(after?.messages).toEqual(before?.messages);
+    expect(after?.error).toBe(before?.error);
+    expect(screen.getByTestId("draft-count")).toHaveTextContent("1");
+  }
+);
+
+it("allows a new submission after an ordinary direct start fails", () => {
+  useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+    status: "failed",
+    error: "Direct start rejected",
+  });
+  render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(streamMessage).toHaveBeenCalledWith(SESSION_ID, "prompt", null, []);
+});

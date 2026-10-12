@@ -420,11 +420,7 @@ def _emit_text_delta(
             {
                 "sessionUpdate": "agent_thought_chunk",
                 "content": {"type": "text", "text": delta},
-                **(
-                    {"_meta": TextPartMetadata(partId=part_id)}
-                    if state.emit_part_snapshots
-                    else {}
-                ),
+                "_meta": TextPartMetadata(partId=part_id),
             }
         )
     elif part_type == "text":
@@ -433,11 +429,7 @@ def _emit_text_delta(
             {
                 "sessionUpdate": "agent_message_chunk",
                 "content": {"type": "text", "text": delta},
-                **(
-                    {"_meta": TextPartMetadata(partId=part_id)}
-                    if state.emit_part_snapshots
-                    else {}
-                ),
+                "_meta": TextPartMetadata(partId=part_id),
             }
         )
     # Other part types (step-start, step-finish, tool, ...) don't carry
@@ -828,19 +820,14 @@ def _reconcile_part_text(
         tail = expected[len(local) :]
         state.local_text[part_id] = expected
         if tail or (state.emit_part_snapshots and expected):
+            metadata = TextPartMetadata(partId=part_id)
+            if state.emit_part_snapshots:
+                metadata["snapshotText"] = expected
             yield emit_class.model_validate(
                 {
                     "sessionUpdate": session_update,
                     "content": {"type": "text", "text": tail},
-                    **(
-                        {
-                            "_meta": TextPartMetadata(
-                                partId=part_id, snapshotText=expected
-                            )
-                        }
-                        if state.emit_part_snapshots
-                        else {}
-                    ),
+                    "_meta": metadata,
                 }
             )
     elif len(expected) < len(local):

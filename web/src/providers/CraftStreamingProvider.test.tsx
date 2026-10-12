@@ -23,6 +23,9 @@ import type { UserResolution } from "@/providers/UserProvider";
 
 let mockUserId: string | null = "user-one";
 let mockUserResolution: UserResolution = "resolved";
+let mockPathname = "/craft/v1";
+const mockMutate = jest.fn();
+jest.mock("next/navigation", () => ({ usePathname: () => mockPathname }));
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({
@@ -31,7 +34,7 @@ jest.mock("@/providers/UserProvider", () => ({
   }),
 }));
 jest.mock("swr", () => ({
-  useSWRConfig: () => ({ mutate: jest.fn() }),
+  useSWRConfig: () => ({ mutate: mockMutate }),
 }));
 jest.mock("@/app/craft/services/apiServices", () => ({
   RateLimitedError: class RateLimitedError extends Error {},
@@ -59,6 +62,7 @@ describe("CraftStreamingProvider", () => {
     jest.clearAllMocks();
     mockUserId = "user-one";
     mockUserResolution = "resolved";
+    mockPathname = "/craft/v1";
     useBuildSessionStore.setState({
       currentSessionId: null,
       sessions: new Map(),
@@ -123,6 +127,7 @@ describe("CraftStreamingProvider", () => {
         .getState()
         .enqueueMessage(sessionId, "queued prompt", []);
     });
+    mockPathname = "/app";
     rerender(
       <CraftStreamingProvider>
         <div>Another page</div>
@@ -175,24 +180,115 @@ describe("CraftStreamingProvider", () => {
     expect(createTurn).not.toHaveBeenCalled();
   });
 
-  it("clears the old queue before a different account can claim it", () => {
+  it.each([false, true])(
+    "reloads a different account without claiming old work (logout: %s)",
+    (logoutFirst) => {
+      const navigationError = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      try {
+        const { rerender } = render(
+          <CraftStreamingProvider>
+            <div />
+          </CraftStreamingProvider>
+        );
+        if (logoutFirst) {
+          mockUserId = null;
+          rerender(
+            <CraftStreamingProvider>
+              <div />
+            </CraftStreamingProvider>
+          );
+          expect(navigationError).not.toHaveBeenCalled();
+        }
+        mockUserId = "user-two";
+        rerender(
+          <CraftStreamingProvider>
+            <div />
+          </CraftStreamingProvider>
+        );
+        expect(navigationError).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: expect.stringContaining("Not implemented: navigation"),
+          })
+        );
+        expect(createTurn).not.toHaveBeenCalled();
+      } finally {
+        navigationError.mockRestore();
+      }
+    }
+  );
+
+  it("follows an adopted successor offpage before dispatching the queued prompt once", async () => {
+    const first = deferred<void>();
+    const successor = deferred<void>();
+    const queued = deferred<void>();
+    let completeFirst: (() => void) | undefined;
+    let completeSuccessor: (() => void) | undefined;
+    jest.mocked(createTurn).mockResolvedValueOnce({
+      session_id: sessionId,
+      turn_id: "first-turn",
+      status: "QUEUED",
+      turn_index: 0,
+    });
+    jest.mocked(fetchActiveTurn).mockResolvedValueOnce({
+      session_id: sessionId,
+      turn_id: "external-turn",
+      status: "RUNNING",
+      turn_index: 1,
+    });
+    jest
+      .mocked(processSSEStream)
+      .mockImplementationOnce(async (_response, onPacket) => {
+        completeFirst = () => {
+          onPacket({ type: "prompt_response" });
+          first.resolve();
+        };
+        await first.promise;
+      })
+      .mockImplementationOnce(async (_response, onPacket) => {
+        completeSuccessor = () => {
+          onPacket({ type: "prompt_response" });
+          successor.resolve();
+        };
+        await successor.promise;
+      })
+      .mockImplementationOnce(async () => {
+        await queued.promise;
+        throw new DOMException("Closed", "AbortError");
+      });
     const { rerender } = render(
       <CraftStreamingProvider>
-        <div />
+        <CraftPage />
       </CraftStreamingProvider>
     );
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(completeFirst).toBeDefined());
     act(() => {
       useBuildSessionStore
         .getState()
-        .enqueueMessage(sessionId, "old account prompt", []);
+        .enqueueMessage(sessionId, "queued prompt", []);
     });
-    mockUserId = "user-two";
+    mockPathname = "/app";
     rerender(
       <CraftStreamingProvider>
-        <div />
+        <div>Another page</div>
       </CraftStreamingProvider>
     );
-    expect(useBuildSessionStore.getState().sessions.size).toBe(0);
-    expect(createTurn).not.toHaveBeenCalled();
+    await act(async () => completeFirst?.());
+    await waitFor(() => expect(completeSuccessor).toBeDefined());
+    expect(createTurn).toHaveBeenCalledTimes(1);
+    expect(fetchTurnEventStream).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(fetchTurnEventStream).mock.calls[1]?.[1]).toBe(
+      "external-turn"
+    );
+    await act(async () => completeSuccessor?.());
+    await waitFor(() => expect(createTurn).toHaveBeenCalledTimes(2));
+    expect(jest.mocked(createTurn).mock.calls[1]?.[1]).toBe("queued prompt");
+    await act(async () => {
+      useBuildSessionStore.getState().abortSession(sessionId);
+      queued.resolve();
+    });
+    expect(createTurn).toHaveBeenCalledTimes(2);
   });
 });

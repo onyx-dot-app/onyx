@@ -535,6 +535,6 @@ Welcome inline previews offer an original-file download. Presentation slide imag
 A failed presentation image displays an error. Changing the slide starts a new image load.
 
 
-Live text parts retain their OpenCode part ID across stream attachments. Delta packets append to that part. Authoritative snapshots replace its text in place. Text and thinking parts keep their position relative to tool events. Durable worker events retain their existing delta format.
+Live text parts retain their OpenCode part ID across stream attachments. Delta packets append to that part. Authoritative snapshots replace its text in place. Text and thinking parts keep their position relative to tool events. Durable worker events retain delta text and the part ID. Persistence splits text at part or routing boundaries. Restoration combines segments of the same part before live snapshots replace them. Older saved rows without IDs retain their existing display behavior.
 
 A transport failure transfers the interactive owner to completion reconciliation. This path retains the visible transcript and waits for server completion. It does not resume live events. A failed completion read shows the existing retry action. Successful completion starts an authoritative output inventory read before it permits queued work.

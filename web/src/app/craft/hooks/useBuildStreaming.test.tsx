@@ -3216,4 +3216,280 @@ describe("useBuildStreaming thinking packets", () => {
       successor
     );
   });
+  it.each(["SUCCEEDED", "FAILED"] as const)(
+    "reconciles worker %s after a scheduled transport failure",
+    async (workerStatus) => {
+      jest
+        .mocked(fetchScheduledRunEventStream)
+        .mockRejectedValueOnce(new Error("Transient proxy failure"));
+      const run = {
+        run_id: "scheduled-run",
+        task_id: "task",
+        task_name: "Task",
+        started_at: "2026-10-10T00:00:00Z",
+        finished_at: null,
+      };
+      jest
+        .mocked(fetchScheduledRunContext)
+        .mockResolvedValueOnce({ ...run, status: "RUNNING" })
+        .mockResolvedValue({ ...run, status: workerStatus });
+      const saved = [
+        {
+          id: "saved-result",
+          type: "assistant" as const,
+          content: "Saved worker result",
+          timestamp: new Date(),
+          message_metadata: {
+            type: "agent_message",
+            content: {
+              type: "text",
+              text: "Saved worker result",
+            },
+          },
+        },
+      ];
+      jest.mocked(fetchMessages).mockResolvedValue(saved);
+      const { result } = renderHook(() => useBuildStreaming());
+      let streaming: Promise<void> | undefined;
+      act(() => {
+        streaming = result.current.streamScheduledRunEvents(
+          sessionId,
+          "scheduled-run",
+          new AbortController().signal
+        );
+      });
+      await act(async () => {});
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        status: "running",
+        error: null,
+        turnSettlement: { phase: "reconciling" },
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(1000);
+        await streaming;
+      });
+      const session = useBuildSessionStore.getState().sessions.get(sessionId);
+      expect(session?.error).toBeNull();
+      if (workerStatus === "SUCCEEDED") {
+        expect(session?.turnSettlement?.phase).toBe("ready");
+        expect(session?.messages).toEqual([
+          expect.objectContaining({ content: "Saved worker result" }),
+        ]);
+      } else {
+        expect(session?.status).toBe("failed");
+        expect(session?.turnSettlement).toBeNull();
+        expect(fetchMessages).not.toHaveBeenCalled();
+      }
+    }
+  );
+  it.each(["text", "thinking"] as const)(
+    "restores an identified child %s prefix before applying its live snapshot",
+    async (type) => {
+      useBuildSessionStore.setState({ loadSession: originalLoadSession });
+      jest.mocked(fetchSession).mockResolvedValue({
+        id: sessionId,
+        user_id: null,
+        name: null,
+        status: "active",
+        created_at: "2026-10-12T00:00:00Z",
+        last_activity_at: "2026-10-12T00:00:00Z",
+        nextjs_port: null,
+        sandbox: null,
+        artifacts: [],
+        sharing_scope: "private",
+        origin: "INTERACTIVE",
+        agent_provider: null,
+        agent_model: null,
+        skills_stale: false,
+        session_loaded_in_sandbox: true,
+      });
+      jest.mocked(fetchArtifacts).mockResolvedValue([]);
+      jest.mocked(fetchActiveTurn).mockResolvedValue({
+        session_id: sessionId,
+        turn_id: "restored",
+        turn_index: 0,
+        status: "RUNNING",
+      });
+      const packets: Awaited<ReturnType<typeof fetchMessages>> = [
+        {
+          id: "user",
+          type: "user",
+          content: "Run parallel agents",
+          timestamp: new Date(),
+          turn_index: 0,
+        },
+        ...["Hello", " world"].map((text, index) => ({
+          id: `child-prefix-${index}`,
+          type: "assistant" as const,
+          content: "",
+          timestamp: new Date(),
+          turn_index: 0,
+          message_metadata: {
+            type: type === "text" ? "agent_message" : "agent_thought",
+            content: { type: "text", text },
+            _meta: {
+              partId: "part-a",
+              sessionId: "child-a",
+              parentSessionId: "parent",
+            },
+          },
+        })),
+      ];
+      jest.mocked(fetchMessages).mockResolvedValue(packets);
+      await act(async () => {
+        await useBuildSessionStore
+          .getState()
+          .loadSession(sessionId, { force: true });
+      });
+      const child = () =>
+        useBuildSessionStore
+          .getState()
+          .sessions.get(sessionId)
+          ?.subagents.get("child-a")?.turns[0];
+      expect(child()?.streamItems).toEqual([
+        expect.objectContaining({
+          type,
+          partId: "part-a",
+          content: "Hello world",
+        }),
+      ]);
+      jest
+        .mocked(processSSEStream)
+        .mockImplementationOnce(async (_response, onPacket) => {
+          const snapshot = {
+            type:
+              type === "text" ? "agent_message_chunk" : "agent_thought_chunk",
+            content: { type: "text", text: "Hello world!" },
+            _meta: {
+              partId: "part-a",
+              snapshotText: "Hello world!",
+              sessionId: "child-a",
+              parentSessionId: "parent",
+            },
+          };
+          onPacket(snapshot);
+          throw Object.assign(new Error("fixture disconnect"), {
+            name: "AbortError",
+          });
+        });
+      const { result } = renderHook(() => useBuildStreaming());
+      await act(async () => {
+        await result.current.streamTurnEvents(
+          sessionId,
+          "restored",
+          new AbortController().signal
+        );
+      });
+      expect(child()?.streamItems).toEqual([
+        expect.objectContaining({
+          type,
+          partId: "part-a",
+          content: "Hello world!",
+        }),
+      ]);
+      expect(type === "text" ? child()?.response : child()?.thinking).toBe(
+        "Hello world!"
+      );
+    }
+  );
+  it.each(["text", "thinking"] as const)(
+    "restores an identified parent %s prefix before applying its live snapshot",
+    async (type) => {
+      useBuildSessionStore.setState({ loadSession: originalLoadSession });
+      jest.mocked(fetchSession).mockResolvedValue({
+        id: sessionId,
+        user_id: null,
+        name: null,
+        status: "active",
+        created_at: "2026-10-12T00:00:00Z",
+        last_activity_at: "2026-10-12T00:00:00Z",
+        nextjs_port: null,
+        sandbox: null,
+        artifacts: [],
+        sharing_scope: "private",
+        origin: "INTERACTIVE",
+        agent_provider: null,
+        agent_model: null,
+        skills_stale: false,
+        session_loaded_in_sandbox: true,
+      });
+      jest.mocked(fetchArtifacts).mockResolvedValue([]);
+      jest.mocked(fetchActiveTurn).mockResolvedValue({
+        session_id: sessionId,
+        turn_id: "restored",
+        turn_index: 0,
+        status: "RUNNING",
+      });
+      const packets: Awaited<ReturnType<typeof fetchMessages>> = [
+        {
+          id: "user",
+          type: "user",
+          content: "Run parallel agents",
+          timestamp: new Date(),
+          turn_index: 0,
+        },
+        ...["Hello", " world"].map((text, index) => ({
+          id: `child-prefix-${index}`,
+          type: "assistant" as const,
+          content: "",
+          timestamp: new Date(),
+          turn_index: 0,
+          message_metadata: {
+            type: type === "text" ? "agent_message" : "agent_thought",
+            content: { type: "text", text },
+            _meta: { partId: "part-a" },
+          },
+        })),
+      ];
+      jest.mocked(fetchMessages).mockResolvedValue(packets);
+      await act(async () => {
+        await useBuildSessionStore
+          .getState()
+          .loadSession(sessionId, { force: true });
+      });
+      const items = () =>
+        useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems;
+      expect(items()).toEqual([
+        expect.objectContaining({
+          type,
+          partId: "part-a",
+          content: "Hello world",
+        }),
+      ]);
+      jest
+        .mocked(processSSEStream)
+        .mockImplementationOnce(async (_response, onPacket) => {
+          const snapshot = {
+            type:
+              type === "text" ? "agent_message_chunk" : "agent_thought_chunk",
+            content: { type: "text", text: "Hello world!" },
+            _meta: {
+              partId: "part-a",
+              snapshotText: "Hello world!",
+            },
+          };
+          onPacket(snapshot);
+          throw Object.assign(new Error("fixture disconnect"), {
+            name: "AbortError",
+          });
+        });
+      const { result } = renderHook(() => useBuildStreaming());
+      await act(async () => {
+        await result.current.streamTurnEvents(
+          sessionId,
+          "restored",
+          new AbortController().signal
+        );
+      });
+      expect(items()).toEqual([
+        expect.objectContaining({
+          type,
+          partId: "part-a",
+          content: "Hello world!",
+        }),
+      ]);
+    }
+  );
 });

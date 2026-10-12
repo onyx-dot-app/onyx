@@ -1450,11 +1450,14 @@ export function useBuildStreaming({
           return;
         }
 
-        console.error("[Streaming] Scheduled run stream error:", err);
-        updateSessionData(sessionId, {
-          status: "failed",
-          error: (err as Error).message,
-        });
+        console.warn("[Streaming] Scheduled run stream error:", err);
+        await useBuildSessionStore
+          .getState()
+          .beginTurnSettlement(
+            sessionId,
+            { kind: "scheduled", runId },
+            owner.turnGeneration
+          );
       } finally {
         processor.cancelOutputs();
         if (ownsScheduledStream()) {

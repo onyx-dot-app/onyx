@@ -784,7 +784,7 @@ def test_durable_text_translation_keeps_delta_only_contract() -> None:
     }
     events = _drain(translate_opencode_event(packet, state))
     assert events[0].content.text == " world"
-    assert events[0].field_meta is None
+    assert events[0].field_meta == {"partId": "p1"}
     assert _drain(translate_opencode_event(packet, state)) == []
 
 

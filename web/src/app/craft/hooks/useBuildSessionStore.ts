@@ -72,7 +72,7 @@ import {
  * This function converts agent messages to StreamItem[] for rendering.
  */
 function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
-  const items: StreamItem[] = [];
+  let items: StreamItem[] = [];
 
   for (const message of messages) {
     if (message.type === "user") continue;
@@ -94,7 +94,11 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         if (packet.sessionId && packet.parentSessionId) {
           break;
         }
-        if (packet.text) {
+        if (packet.text && packet.part) {
+          items = settleStreamItems(
+            appendStreamingChunk(items, "text", packet.text, packet.part)
+          );
+        } else if (packet.text) {
           items.push({
             type: "text",
             id: message.id || genId("text"),
@@ -108,7 +112,11 @@ function convertMessagesToStreamItems(messages: BuildMessage[]): StreamItem[] {
         if (packet.sessionId && packet.parentSessionId) {
           break;
         }
-        if (packet.text) {
+        if (packet.text && packet.part) {
+          items = settleStreamItems(
+            appendStreamingChunk(items, "thinking", packet.text, packet.part)
+          );
+        } else if (packet.text) {
           items.push({
             type: "thinking",
             id: message.id || genId("thinking"),
@@ -265,7 +273,7 @@ function upsertToolStreamItem(
   return [...items, { type: "tool_call", id: toolCall.id, toolCall }];
 }
 
-function appendStreamingSubagentChunk(
+function appendStreamingChunk(
   items: StreamItem[],
   type: "text" | "thinking",
   text: string,
@@ -337,9 +345,7 @@ function replaceOrAppendSettledTextItem(
   });
 
   if (lastTextIndex === -1) {
-    return settleStreamItems(
-      appendStreamingSubagentChunk(settled, "text", text)
-    );
+    return settleStreamItems(appendStreamingChunk(settled, "text", text));
   }
 
   return settled.map((item, index) =>
@@ -411,10 +417,11 @@ function buildSubagentsFromMessages(
             ...last,
             response: (last.response ?? "") + packet.text,
             streamItems: settleStreamItems(
-              appendStreamingSubagentChunk(
+              appendStreamingChunk(
                 last.streamItems,
                 "text",
-                packet.text
+                packet.text,
+                packet.part
               )
             ),
           };
@@ -423,10 +430,11 @@ function buildSubagentsFromMessages(
             ...last,
             thinking: (last.thinking ?? "") + packet.text,
             streamItems: settleStreamItems(
-              appendStreamingSubagentChunk(
+              appendStreamingChunk(
                 last.streamItems,
                 "thinking",
-                packet.text
+                packet.text,
+                packet.part
               )
             ),
           };
@@ -2931,7 +2939,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
       const last = turns[turns.length - 1] ?? emptyTurn();
-      const streamItems = appendStreamingSubagentChunk(
+      const streamItems = appendStreamingChunk(
         last.streamItems,
         "text",
         text,
@@ -2986,7 +2994,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
       const last = turns[turns.length - 1] ?? emptyTurn();
-      const streamItems = appendStreamingSubagentChunk(
+      const streamItems = appendStreamingChunk(
         last.streamItems,
         "thinking",
         text,

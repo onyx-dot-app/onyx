@@ -211,7 +211,6 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     streamMessage,
     interruptStreaming,
     streamScheduledRunEvents,
-    streamTurnEvents,
     retryQueuedMessage,
   } = useCraftStreaming();
   const isInterrupting = useIsInterrupting();
@@ -228,20 +227,16 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     session?.turnSettlement?.phase === "failed"
       ? (session.turnSettlement.error ?? t("settlementError.description"))
       : null;
+  const submissionNeedsRecovery =
+    session?.turnSettlement?.phase === "failed" ||
+    sessionQueue[0]?.phase === "failed";
   const recoverableError =
     settlementError ?? queuedSendError ?? session?.loadError;
   const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
   );
-  const attachedTurnRef = useRef<{
-    turnId: string;
-    controller: AbortController;
-  } | null>(null);
-  const attachCleanupTimerRef = useRef<{
-    turnId: string;
-    timer: ReturnType<typeof setTimeout>;
-  } | null>(null);
+  const activeTurnId = session?.activeTurnId ?? null;
   const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -306,71 +301,6 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     shouldStreamScheduledRun,
     streamScheduledRunEvents,
     mutateScheduledRunContext,
-  ]);
-
-  const activeTurnId = session?.activeTurnId ?? null;
-  const activeTurnLocalOwner = session?.activeTurnLocalOwner ?? false;
-  useEffect(() => {
-    const pendingCleanup = attachCleanupTimerRef.current;
-    if (pendingCleanup?.turnId === activeTurnId) {
-      clearTimeout(pendingCleanup.timer);
-      attachCleanupTimerRef.current = null;
-    }
-
-    if (
-      !scheduledSessionId ||
-      !activeTurnId ||
-      activeTurnLocalOwner ||
-      scheduledRunInFlight
-    ) {
-      return;
-    }
-
-    const scheduleCleanup = (attachment: {
-      turnId: string;
-      controller: AbortController;
-    }) => {
-      attachCleanupTimerRef.current = {
-        turnId: attachment.turnId,
-        timer: setTimeout(() => {
-          attachment.controller.abort();
-          if (attachedTurnRef.current === attachment) {
-            attachedTurnRef.current = null;
-          }
-          if (attachCleanupTimerRef.current?.turnId === attachment.turnId) {
-            attachCleanupTimerRef.current = null;
-          }
-        }, 0),
-      };
-    };
-
-    const existingAttachment = attachedTurnRef.current;
-    if (existingAttachment?.turnId === activeTurnId) {
-      return () => scheduleCleanup(existingAttachment);
-    }
-
-    existingAttachment?.controller.abort();
-    const controller = new AbortController();
-    const attachment = { turnId: activeTurnId, controller };
-    attachedTurnRef.current = attachment;
-    void streamTurnEvents(
-      scheduledSessionId,
-      activeTurnId,
-      controller.signal,
-      () => {
-        if (attachedTurnRef.current === attachment) {
-          attachedTurnRef.current = null;
-        }
-      }
-    );
-
-    return () => scheduleCleanup(attachment);
-  }, [
-    scheduledSessionId,
-    activeTurnId,
-    activeTurnLocalOwner,
-    scheduledRunInFlight,
-    streamTurnEvents,
   ]);
 
   useEffect(() => {
@@ -488,6 +418,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
+      if (submissionNeedsRecovery) return;
       if (scheduledRunInFlight) {
         toast.error(t("toast.scheduledRunWait"));
         return;
@@ -609,6 +540,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       sessionId,
       isRunning,
       scheduledRunInFlight,
+      submissionNeedsRecovery,
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
@@ -893,6 +825,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
                       disabled={
                         isViewingSubagent ||
                         isRestoring ||
+                        submissionNeedsRecovery ||
                         scheduledRunInFlight ||
                         !hasProvider
                       }
