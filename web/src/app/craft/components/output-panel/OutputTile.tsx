@@ -4,6 +4,8 @@ import { useState, useRef, type ReactNode, type Ref } from "react";
 import { useInView } from "motion/react";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard, Text } from "@opal/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import type { RichStr } from "@opal/types";
 import { Hoverable } from "@opal/core";
 import { SvgDownloadCloud, SvgFolder } from "@opal/icons";
 import { MarkdownContent } from "@/app/craft/components/output-panel/MarkdownFilePreview";
@@ -144,13 +146,13 @@ export function OutputFolderTile({
   name,
   onOpen,
 }: {
-  name: string;
+  name: string | RichStr;
   onOpen: () => void;
 }) {
   return (
     <SelectCard
       role="button"
-      aria-label={name}
+      aria-label={toPlainString(name)}
       tabIndex={0}
       state="empty"
       padding={3}
@@ -175,7 +177,7 @@ export function OutputFolderTile({
 interface OutputTileFrameProps {
   ref?: Ref<HTMLDivElement>;
   label: string;
-  name: string;
+  name: string | RichStr;
   preview: ReactNode;
   onOpen: () => void;
   onDownload?: () => void;
