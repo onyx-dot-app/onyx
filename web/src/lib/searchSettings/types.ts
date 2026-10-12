@@ -205,14 +205,15 @@ export interface LLMContextualCost {
   cost: number;
 }
 
-/** Mirrors backend `ReindexProgressCounts`; buckets partition `total`. */
+/** Mirrors backend `ReindexProgress`; buckets partition `total`. */
 export interface ReindexProgress {
   total: number;
   waiting: number;
   in_progress: number;
   completed: number;
   failed: number;
-  paused: number; // False when the port copies the stored vectors instead of re-embedding.
+  paused: number;
+  /** False when the port copies the stored vectors instead of re-embedding. */
   reembeds: boolean;
 }
 

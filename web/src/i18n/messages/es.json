@@ -5462,7 +5462,7 @@
         },
         "copyTitle": "Reconstruyendo el índice…",
         "description": {
-          "copy": "Onyx está reconstruyendo el índice a partir de los vectores almacenados, sin volver a generar embeddings. Esto es mucho más rápido que volver a generarlos. El índice actual sigue atendiendo las búsquedas hasta que termine la reconstrucción.",
+          "copy": "Onyx está reconstruyendo el índice a partir de los vectores almacenados, sin volver a generar embeddings. Esto es mucho más rápido que volver a generarlos.",
           "withModel": "La nueva configuración de embeddings (**{model}**) se aplica a medida que avanza la reindexación. Esto puede tardar **horas o días** según el tamaño del corpus.",
           "withoutModel": "La nueva configuración de embeddings se aplica a medida que avanza la reindexación. Esto puede tardar **horas o días** según el tamaño del corpus."
         },

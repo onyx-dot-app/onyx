@@ -34,6 +34,16 @@ describe("ReindexProgressBanner", () => {
     expect(screen.queryByText("Rebuilding the index…")).toBeNull();
   });
 
+  it("keeps the re-index text when the flag is missing", () => {
+    const { reembeds: _omitted, ...counts } = progress(true).data;
+    mockUseReindexProgress.mockReturnValue({ data: counts });
+
+    render(<ReindexProgressBanner secondaryModelName="intfloat/e5-base-v2" />);
+
+    expect(screen.getByText("Re-indexing in progress…")).toBeVisible();
+    expect(screen.queryByText("Rebuilding the index…")).toBeNull();
+  });
+
   it("says the index is rebuilt without re-embedding when the port copies", () => {
     mockUseReindexProgress.mockReturnValue(progress(false));
 

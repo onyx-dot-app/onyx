@@ -51,11 +51,13 @@ export default function ReindexProgressBanner({
 
   // A copy-only port (e.g. a quantization change) rebuilds from the stored
   // vectors, so the slow re-embedding wording does not apply.
-  const title: string = reembeds
-    ? t("progressBanner.title")
-    : t("progressBanner.copyTitle");
+  // Only an explicit false means a copy; an unknown flag keeps the re-index text.
+  const title: string =
+    reembeds === false
+      ? t("progressBanner.copyTitle")
+      : t("progressBanner.title");
   const description = markdown(
-    !reembeds
+    reembeds === false
       ? t("progressBanner.description.copy")
       : secondaryModelName
         ? t("progressBanner.description.withModel", {

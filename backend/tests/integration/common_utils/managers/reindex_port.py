@@ -7,7 +7,7 @@ from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.db.enums import ConnectorCredentialPairStatus, SwitchoverType
 from onyx.db.port_attempt import ReindexErrorRow
 from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.server.manage.search_settings import ReindexProgress
+from onyx.server.manage.models import ReindexProgress
 from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager

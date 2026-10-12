@@ -89,6 +89,7 @@ from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.server.manage.models import (
     FullModelVersionResponse,
+    ReindexProgress,
     UnstructuredApiKeyRequest,
 )
 from onyx.server.models import IdReturn
@@ -592,13 +593,6 @@ def _active_port_settings(db_session: Session) -> SearchSettings | None:
     ):
         return present
     return None
-
-
-class ReindexProgress(ReindexProgressCounts):
-    """Port progress, and whether the port re-embeds chunks or copies their
-    stored vectors."""
-
-    reembeds: bool
 
 
 def _port_reembeds(db_session: Session, target: SearchSettings) -> bool:

@@ -5462,7 +5462,7 @@
         },
         "copyTitle": "Reconstruction de l'index…",
         "description": {
-          "copy": "Onyx reconstruit l'index à partir des vecteurs stockés, sans recalculer les embeddings. C'est beaucoup plus rapide qu'un nouveau calcul des embeddings. L'index actuel continue de répondre aux recherches jusqu'à la fin de la reconstruction.",
+          "copy": "Onyx reconstruit l'index à partir des vecteurs stockés, sans recalculer les embeddings. C'est beaucoup plus rapide qu'un nouveau calcul des embeddings.",
           "withModel": "Les nouveaux paramètres d'embedding (**{model}**) sont appliqués au fur et à mesure de la réindexation. Cela peut prendre **des heures ou des jours** selon la taille du corpus.",
           "withoutModel": "Les nouveaux paramètres d'embedding sont appliqués au fur et à mesure de la réindexation. Cela peut prendre **des heures ou des jours** selon la taille du corpus."
         },
