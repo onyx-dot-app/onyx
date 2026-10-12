@@ -138,6 +138,7 @@ def _safe_run_single_tool(
     with function_span(tool.name) as span_fn:
         span_fn.span_data.input = str(tool_call.tool_args)
         try:
+            tool.emitter.tool_started(is_search=isinstance(tool, SearchTool))
             tool_response = tool.run(
                 placement=tool_call.placement,
                 override_kwargs=override_kwargs,
