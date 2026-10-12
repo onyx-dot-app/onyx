@@ -177,7 +177,7 @@
     "deepseek-ai/DeepSeek-V4.1-Flash-Fast": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.14,
+        "cache_read": 0.014,
         "input": 0.6,
         "output": 2.4
       },
@@ -196,7 +196,7 @@
         ]
       },
       "mode": "chat",
-      "name": "deepseek-ai/DeepSeek-V4.1-Flash-Fast",
+      "name": "DeepSeek V4.1 Flash Fast",
       "open_weights": true,
       "reasoning": true,
       "release_date": "2026-09-10",

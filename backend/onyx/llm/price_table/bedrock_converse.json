@@ -744,7 +744,7 @@
     "anthropic.claude-sonnet-5-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
+        "cache_read": 0.1,
         "cache_write": 2.5,
         "input": 2,
         "output": 10
@@ -1281,8 +1281,8 @@
         "output": 0.0
       },
       "limit": {
-        "context": 32000,
-        "output": 32000
+        "context": 4096,
+        "output": 4096
       },
       "mode": "rerank",
       "name": "cohere.rerank-v3-5:0"
@@ -1901,7 +1901,7 @@
     "eu.anthropic.claude-sonnet-5-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.22,
+        "cache_read": 0.11,
         "cache_write": 2.75,
         "input": 2.2,
         "output": 11
@@ -2452,7 +2452,7 @@
     "global.anthropic.claude-sonnet-5-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.2,
+        "cache_read": 0.1,
         "cache_write": 2.5,
         "input": 2,
         "output": 10
@@ -5308,7 +5308,7 @@
     },
     "us-gov-west-1/amazon.titan-embed-text-v2:0": {
       "cost": {
-        "input": 0.19999999999999998,
+        "input": 0.11,
         "output": 0.0
       },
       "limit": {
@@ -6009,7 +6009,7 @@
     "us.anthropic.claude-sonnet-5-5": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.22,
+        "cache_read": 0.11,
         "cache_write": 2.75,
         "input": 2.2,
         "output": 11
