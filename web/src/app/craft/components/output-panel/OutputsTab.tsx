@@ -162,7 +162,7 @@ function OutputsBrowser({
   const files = Object.values(indexedFiles)
     .filter((file) =>
       turnIndex === null
-        ? !fileCards.get(file.path)?.deleted
+        ? !!liveInventory?.[file.path] || !fileCards.get(file.path)?.deleted
         : fileCards.get(file.path)?.turn_index === turnIndex
     )
     .sort((first, second) => first.path.localeCompare(second.path));
@@ -388,7 +388,7 @@ function OutputsBrowser({
               )}
               {visibleFiles.map((file) => {
                 const card = fileCards.get(file.path);
-                return card?.deleted ? (
+                return card?.deleted && !liveInventory?.[file.path] ? (
                   <OutputUnavailableTile
                     key={file.path}
                     card={card}
@@ -402,7 +402,9 @@ function OutputsBrowser({
                     showPath={filtered}
                     isActive={isActive && !!liveInventory?.[file.path]}
                     isUnseen={
-                      !!card && (card.viewed_revision ?? 0) < card.revision
+                      !!card &&
+                      !card.deleted &&
+                      (card.viewed_revision ?? 0) < card.revision
                     }
                     onFileOpen={onFileOpen}
                   />

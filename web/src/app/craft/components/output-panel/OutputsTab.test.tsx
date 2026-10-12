@@ -85,6 +85,39 @@ test("includes unavailable overflow outputs only in their turn's collection", ()
   ).not.toBeInTheDocument();
 });
 
+test.each([null, 0])(
+  "opens recreated files despite a stale deleted card in scope %s",
+  async (turnIndex) => {
+    const restored = {
+      ...file,
+      path: "outputs/summary.md",
+      revision: "restored",
+    };
+    store().updateSessionData("session", {
+      outputInventory: { [restored.path]: restored },
+      outputInventoryStatus: "complete",
+    });
+    const onFileOpen = jest.fn();
+    render(
+      <OutputsTab
+        sessionId="session"
+        isActive={false}
+        turnIndex={turnIndex}
+        outputCards={[{ ...outputCard, path: restored.path, deleted: true }]}
+        onFileOpen={onFileOpen}
+      />
+    );
+    await setupUser().click(
+      screen.getByRole("button", { name: restored.path })
+    );
+    expect(onFileOpen).toHaveBeenCalledWith(restored.path, "summary.md");
+    expect(screen.queryByText("No longer available")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "New or updated" })
+    ).not.toBeInTheDocument();
+  }
+);
+
 test("shows persisted output cards before the sandbox inventory loads", () => {
   render(
     <OutputsTab

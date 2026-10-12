@@ -87,8 +87,8 @@ export function useOutputCards(sessionId: string | null) {
     async (card: OutputCard) => {
       try {
         await saveViewed([card]);
-      } catch {
-        // Opening remains usable on failure; retain the unread marker for retry.
+      } catch (error) {
+        console.warn("Failed to save output viewed revision", error);
       }
     },
     [saveViewed]

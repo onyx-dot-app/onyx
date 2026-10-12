@@ -188,13 +188,13 @@ export function OutputAppTile({
   isUnseen,
   onOpen,
 }: {
-  name: string;
+  name: string | RichStr;
   isUnseen: boolean;
   onOpen: () => void;
 }) {
   return (
     <OutputTileFrame
-      label={name}
+      label={toPlainString(name)}
       name={name}
       isUnseen={isUnseen}
       onOpen={onOpen}

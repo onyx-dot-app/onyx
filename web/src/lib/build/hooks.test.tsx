@@ -31,6 +31,35 @@ jest.mock("@/app/craft/services/apiServices", () => ({
   markOutputsViewed: jest.fn(),
 }));
 
+it("reports a failed viewed save and retains the unread revision", async () => {
+  const card: OutputCard = {
+    id: "failed",
+    kind: "file",
+    path: "outputs/report.md",
+    name: "report.md",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 10,
+    deleted: false,
+    viewed_revision: null,
+  };
+  const error = new Error("offline");
+  const warning = jest.spyOn(console, "warn").mockImplementation(() => {});
+  jest.mocked(fetchOutputCards).mockResolvedValue([card]);
+  jest.mocked(markOutputViewed).mockRejectedValueOnce(error);
+  const { result } = renderHook(() => useOutputCards("failed-save"));
+  await waitFor(() => expect(result.current.cards).toEqual([card]));
+  await act(async () => {
+    await result.current.markViewed(card);
+  });
+  expect(result.current.cards).toEqual([card]);
+  expect(warning).toHaveBeenCalledWith(
+    "Failed to save output viewed revision",
+    error
+  );
+  warning.mockRestore();
+});
+
 // Persisted output ownership and viewed revisions.
 it("applies a delayed viewed acknowledgement to its original session without reverting a newer revision", async () => {
   const cache = new Map<string, State>();

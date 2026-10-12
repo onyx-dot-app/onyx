@@ -269,7 +269,10 @@ Settlement checks run every 250ms for the first second, then every second for th
 Each card belongs to the latest indexed producing turn and opens the current resource.
 Three cards appear inline; the overflow action opens Outputs filtered to that turn.
 Unread dots compare artifact version with the owner’s saved viewed revision.
+An explicit output open acknowledges the captured card revision, even if its preview cannot render.
+This records user acknowledgement, not successful content delivery. Newer revisions retain their unread state.
 Opening the overview or loading a thumbnail does not mark an output viewed.
+Live inventory determines file availability when a saved card still records a prior deletion.
 Reload retrieves card metadata without reconstructing attribution from sandbox files.
 See [[craft-sessions]] §4.7 for capture and persistence boundaries.
 
