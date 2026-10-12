@@ -404,7 +404,8 @@ jobs:
               echo "=== MON $(date -u +%T)"
               free -m | sed -n 2,3p
               df -h / | tail -1
-              ps -eo rss,pid,args --sort=-rss | head -10 | cut -c1-180
+              ps -eo rss=,args= | awk '{r=$1; $1=""; k=substr($0,2,110); s[k]+=r; c[k]++} END {for (k in s) printf "%7dM x%-3d %s\n", s[k]/1024, c[k], k}' | sort -rn | head -14
+              echo "python procs: $(pgrep -c python) postgres procs: $(pgrep -c postgres)"
               sleep 20
             done) &
             MON_PID=$!
