@@ -313,6 +313,33 @@ class JiraSourceOperations(SourceOperations):
         return raw_issues
 
     @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+    )
+    def get_service_desk_request(self, *, issue_key: str) -> dict[str, Any] | None:
+        """Jira Service Management: the customer request for an issue key
+        (``rest/servicedeskapi/request/{issueKey}``). The SDK does not expose
+        the Service Desk API, so this goes through the client's session.
+
+        Returns ``None`` on a 404, i.e. the issue exists but is not a
+        service-desk request. Raises ``JiraApiError`` for every other
+        failure so auth problems surface rather than silently dropping
+        fields."""
+        client: JIRA = self._client()
+        url = f"{self._api_url()}/rest/servicedeskapi/request/{issue_key}"
+        try:
+            with _translate_errors():
+                response: requests.Response = client._session.get(  # ty: ignore[unresolved-attribute]
+                    url
+                )
+                response.raise_for_status()
+                return response.json()
+        except JiraApiError as e:
+            if e.status_code == 404:
+                return None
+            raise
+
+    @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
     )

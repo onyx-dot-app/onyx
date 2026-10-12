@@ -438,6 +438,9 @@ class JiraConnector(
     SlimConnectorWithPermSync,
 ):
     slim_listing_honors_indexing_start = True
+    # DocumentSource the connector reports; subclasses (e.g. Jira Service
+    # Management) set their own so docs and credentials key to the right source.
+    _SOURCE: DocumentSource = DocumentSource.JIRA
 
     def __init__(
         self,
@@ -605,7 +608,7 @@ class JiraConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._source_operations = JiraSourceOperations(
             credentials_provider=OnyxStaticCredentialsProvider(
-                None, DocumentSource.JIRA.value, credentials
+                None, self._SOURCE.value, credentials
             ),
             connector_specific_config={
                 "jira_base_url": self.jira_base,
@@ -613,6 +616,19 @@ class JiraConnector(
             },
         )
         return None
+
+    def _process_issue(
+        self, issue: JiraIssue, parent_hierarchy_raw_node_id: str | None
+    ) -> Document | None:
+        """Turns one raw issue into a ``Document``. Subclasses override this
+        seam to add source-specific fields (e.g. Service Desk request data)."""
+        return process_jira_issue(
+            jira_base_url=self.jira_base,
+            issue=issue,
+            comment_email_blacklist=self.comment_email_blacklist,
+            labels_to_skip=self.labels_to_skip,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+        )
 
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
@@ -738,13 +754,7 @@ class JiraConnector(
                     else None
                 )
 
-                if document := process_jira_issue(
-                    jira_base_url=self.jira_base,
-                    issue=issue,
-                    comment_email_blacklist=self.comment_email_blacklist,
-                    labels_to_skip=self.labels_to_skip,
-                    parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
-                ):
+                if document := self._process_issue(issue, parent_hierarchy_raw_node_id):
                     # Add permission information to the document if requested
                     if include_permissions:
                         document.external_access = self._get_project_permissions(
