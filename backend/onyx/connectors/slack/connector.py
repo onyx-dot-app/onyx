@@ -214,6 +214,31 @@ def _channel_history_variant(channel: ChannelType) -> SlackChannelVariant:
     )
 
 
+def _ensure_channel_membership(
+    slack_client: SlackSourceOperations, channel: ChannelType
+) -> bool:
+    """Join the channel when the bot is not a member; False when Slack refuses.
+
+    A refused join (archived, Slack Connect, join restricted, or no
+    `channels:join` scope) skips that one channel rather than failing the run.
+    Token validity and channel listing are verified by
+    `validate_connector_settings` before any channel is read.
+    """
+    if channel["is_member"]:
+        return True
+    try:
+        slack_client.join_channel(channel_id=channel["id"])
+    except SlackApiError as e:
+        logger.warning(
+            "Cannot join channel %s (%s). Skipping.",
+            channel["name"],
+            e.response["error"],
+        )
+        return False
+    logger.info("Successfully joined '%s'", channel["name"])
+    return True
+
+
 def get_channel_messages(
     slack_client: SlackSourceOperations,
     channel: ChannelType,
@@ -222,10 +247,8 @@ def get_channel_messages(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[list[MessageType], None, None]:
     """Get all messages in a channel"""
-    # join so that the bot can access messages
-    if not channel["is_member"]:
-        slack_client.join_channel(channel_id=channel["id"])
-        logger.info("Successfully joined '%s'", channel["name"])
+    if not _ensure_channel_membership(slack_client, channel):
+        return
 
     for result in slack_client.fetch_channel_history(
         variant=_channel_history_variant(channel),
@@ -540,18 +563,8 @@ def _get_messages(
 ) -> tuple[list[MessageType], bool]:
     """Slack goes from newest to oldest."""
 
-    # have to be in the channel in order to read messages
-    if not channel["is_member"]:
-        try:
-            slack_client.join_channel(channel_id=channel["id"])
-        except SlackApiError as e:
-            if e.response["error"] == "is_archived":
-                logger.warning("Channel %s is archived. Skipping.", channel["name"])
-                return [], False
-
-            logger.exception("Error joining channel %s", channel["name"])
-            raise
-        logger.info("Successfully joined '%s'", channel["name"])
+    if not _ensure_channel_membership(slack_client, channel):
+        return [], False
 
     # Single page: the gateway paginator is lazy, so taking one yield makes
     # exactly one request, and the page still carries the cursor metadata.
