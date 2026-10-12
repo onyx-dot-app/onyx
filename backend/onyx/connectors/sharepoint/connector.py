@@ -3,36 +3,27 @@ import fnmatch
 import html
 import os
 import re
-import time
 from collections import deque
 from collections.abc import Generator, Iterable
 from datetime import datetime, timezone
 from typing import Any, cast
 from urllib.parse import quote, unquote, urlsplit
 
-import msal
-import requests
-from office365.graph_client import GraphClient
-from office365.onedrive.drives.drive import Drive
-from office365.onedrive.lists.list import List as GraphList
-from office365.onedrive.sites.site import Site
-from office365.onedrive.sites.sites_with_root import SitesWithRoot
-from office365.runtime.client_request import ClientRequestException
-from office365.sharepoint.client_context import ClientContext
 from pydantic import AliasChoices, BaseModel, Field
-from requests.exceptions import HTTPError
 from typing_extensions import override
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
-    SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
     SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
+    CredentialsConnector,
+    CredentialsProviderInterface,
     GenerateSlimDocumentOutput,
     IndexingHeartbeatInterface,
     Resolver,
@@ -45,47 +36,21 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_GRAPH_API_HOST,
     DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
 )
-from onyx.connectors.microsoft_utils.drive_delta import (
-    build_delta_start_url,
-    fetch_drive_delta_checkpoint_page,
-)
+from onyx.connectors.microsoft_utils.drive_delta import build_delta_start_url
 from onyx.connectors.microsoft_utils.drive_items import (
-    DRIVE_ITEM_SELECT_FIELDS,
     DriveFolderReference,
     DriveItemContentError,
     DriveItemData,
     build_item_relative_path,
-    extract_drive_item_content,
     extract_folder_path_from_parent_reference,
     is_path_excluded,
     iter_delta_page_files,
-    iter_drive_items_delta,
-    iter_drive_items_paged,
     parse_graph_datetime,
-    resolve_drive_folder,
     timestamp_in_window,
 )
-from onyx.connectors.microsoft_utils.entra import (
-    ENTRA_GROUP_ID_SELECT,
-    EntraGroup,
-    fetch_entra_page,
-)
-from onyx.connectors.microsoft_utils.graph_auth import (
-    MicrosoftAuthMethod,
-    acquire_graph_token,
-    acquire_token_for_rest,
-    build_msal_app,
-)
-from onyx.connectors.microsoft_utils.graph_client import (
-    GraphApiClient,
-    graph_error_code,
-    is_permanent_refusal,
-)
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
-from onyx.connectors.microsoft_utils.sharepoint_rest import (
-    SharepointPermissionReader,
-    SharepointRestReads,
-)
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
@@ -103,6 +68,15 @@ from onyx.connectors.sharepoint.connector_utils import (
     SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
+    validate_site_url_host,
+)
+from onyx.connectors.sharepoint.models import SharepointDrive
+from onyx.connectors.sharepoint.source_operations import (
+    CONFIG_AUTHORITY_HOST,
+    CONFIG_GRAPH_API_HOST,
+    CONFIG_SITES,
+    GRAPH_API_VERSION,
+    SharepointSourceOperations,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -114,9 +88,6 @@ from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
-DRIVE_LIST_PROPERTY = "list"
-DRIVE_SELECT_FIELDS = ["id", "name", "webUrl", "driveType"]
-DRIVE_EXPAND_FIELDS = [f"{DRIVE_LIST_PROPERTY}($select=id)"]
 
 
 SHARED_DOCUMENTS_MAP = {
@@ -144,21 +115,11 @@ def _is_site_excluded(site_url: str, excluded_site_patterns: list[str]) -> bool:
     return False
 
 
-# OneDrive sites live on '<tenant>-my.<suffix>' instead of '<tenant>.<suffix>'.
-_ONEDRIVE_HOST_SUFFIX = "-my"
-
 # Cap how many configured sites the perm-sync RoleAssignments probe checks at
 # validation time. Each probe is one HTTP round-trip, so we trade exhaustive
 # coverage for keeping connector creation responsive on tenants with many
 # configured sites.
 ROLE_ASSIGNMENTS_PROBE_MAX_SITES = 5
-
-
-# The office365 library's ClientContext caches the access token from its
-# first request and never re-invokes the token callback.  Microsoft access
-# tokens live ~60-75 minutes, so we recreate the cached ClientContext every
-# 30 minutes to let MSAL transparently handle token refresh.
-_REST_CTX_MAX_AGE_S = 30 * 60
 
 
 class SiteDescriptor(BaseModel):
@@ -219,7 +180,9 @@ def _drive_url_name(drive_web_url: str | None) -> str | None:
     return unquote(urlsplit(drive_web_url).path.rstrip("/").rsplit("/", 1)[-1])
 
 
-def _drives_matching_url_name(drives: Iterable[Drive], url_name: str) -> list[Drive]:
+def _drives_matching_url_name(
+    drives: Iterable[SharepointDrive], url_name: str
+) -> list[SharepointDrive]:
     """Match drives by the library segment of their URL, case-insensitively.
 
     A site URL scoped to a library carries the URL segment, which can differ from
@@ -288,44 +251,30 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
 GRAPH_INVALID_REQUEST_CODE = "invalidRequest"
 
 
-def _is_graph_invalid_request(response: requests.Response) -> bool:
-    """Return True if the response body is the generic Graph API
-    ``{"error": {"code": "invalidRequest", "message": "Invalid request"}}``
-    shape. This particular error has no actionable inner error code and is
-    returned by the site-pages endpoint when a page has a corrupt canvas layout
-    (e.g. duplicate web-part IDs — see SharePoint/sp-dev-docs#8822)."""
-    try:
-        body = response.json()
-    except Exception:
-        return False
-    error = body.get("error", {})
-    return error.get("code") == GRAPH_INVALID_REQUEST_CODE
+def _is_graph_invalid_request(error: MicrosoftGraphError) -> bool:
+    """True for the generic Graph ``invalidRequest`` 400, which has no
+    actionable inner code. The site-pages endpoint answers it when a page has
+    a corrupt canvas layout (duplicate web-part ids, SharePoint/sp-dev-docs#8822)."""
+    return error.status == 400 and error.code == GRAPH_INVALID_REQUEST_CODE
 
 
-def _probe_site_role_assignments_authorized(
-    site_url: str, headers: dict[str, str]
-) -> bool:
-    """Issue a single RoleAssignments REST probe against `site_url`.
-
-    Returns True if the SharePoint REST surface accepts the call (any non-401/403
-    status), False if SP rejected it as unauthorized. Transport-level errors are
-    swallowed and treated as authorized so a transient network blip doesn't fail
-    validation; the runtime perm-sync code will surface real failures.
-
-    Designed to be called via run_functions_tuples_in_parallel — keep it side-
-    effect free aside from logging.
-    """
-    probe_url = f"{site_url.rstrip('/')}/_api/web/roleassignments?$top=1"
-    try:
-        resp = requests.get(probe_url, headers=headers, timeout=10)
-    except Exception as e:
-        logger.warning(
-            "RoleAssignments permission probe failed for %s (non-blocking): %s",
-            site_url,
-            e,
+def _validate_credential_fields(credentials: dict[str, Any]) -> None:
+    auth_method = MicrosoftAuthMethod.parse(credentials.get("authentication_method"))
+    if not credentials.get("sp_client_id"):
+        raise ConnectorValidationError("Client ID is required")
+    if not credentials.get("sp_directory_id"):
+        raise ConnectorValidationError("Directory (tenant) ID is required")
+    if auth_method is MicrosoftAuthMethod.CERTIFICATE and not (
+        credentials.get("sp_private_key") and credentials.get("sp_certificate_password")
+    ):
+        raise ConnectorValidationError(
+            "Private key and certificate password are required for certificate authentication"
         )
-        return True
-    return resp.status_code not in (401, 403)
+
+
+def _probe_rest_access(ops: SharepointSourceOperations, site_url: str) -> bool:
+    # The parallel runner passes positionals and the operation is keyword-only.
+    return ops.probe_rest_access(site_url=site_url)
 
 
 def _create_document_failure(
@@ -364,12 +313,10 @@ def _create_entity_failure(
 def _convert_driveitem_to_document_with_permissions(
     driveitem: DriveItemData,
     drive: SiteDrive,
-    reader: SharepointPermissionReader | None,
+    ops: SharepointSourceOperations,
     site_url: str,
-    graph_api_base: str,
     include_permissions: bool = False,
     parent_hierarchy_raw_node_id: str | None = None,
-    access_token: str | None = None,
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
     permission_cache: SharepointPermissionCache | None = None,
@@ -377,18 +324,10 @@ def _convert_driveitem_to_document_with_permissions(
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
 
-    if include_permissions and reader is None:
-        raise ValueError("A permission reader is required for permissions")
     permission_cache = permission_cache or SharepointPermissionCache()
 
     try:
-        content = extract_drive_item_content(
-            driveitem,
-            size_threshold=SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
-            graph_api_base=graph_api_base,
-            access_token=access_token,
-            raw_file_callback=raw_file_callback,
-        )
+        content = ops.download_item(item=driveitem, raw_file_callback=raw_file_callback)
     except DriveItemContentError as e:
         cause = e.__cause__ if isinstance(e.__cause__, Exception) else None
         return _create_document_failure(driveitem, str(e), cause)
@@ -399,10 +338,10 @@ def _convert_driveitem_to_document_with_permissions(
     sections = content.sections
     staged_file_id = content.staged_file_id
 
-    if include_permissions and reader is not None:
+    if include_permissions:
         logger.info("Getting external access for %s", driveitem.name)
         external_access = get_sharepoint_external_access(
-            reader=reader,
+            reader=ops,
             site_url=site_url,
             permission_cache=permission_cache,
             drive_item=driveitem,
@@ -437,7 +376,7 @@ def _convert_driveitem_to_document_with_permissions(
 def _convert_sitepage_to_document(
     site_page: dict[str, Any],
     site_name: str | None,
-    reader: SharepointPermissionReader | None,
+    ops: SharepointSourceOperations,
     site_url: str,
     permission_cache: SharepointPermissionCache,
     include_permissions: bool = False,
@@ -550,10 +489,8 @@ def _convert_sitepage_to_document(
     semantic_identifier = semantic_identifier.removesuffix(ASPX_EXTENSION)
 
     if include_permissions:
-        if reader is None:
-            raise ValueError("A permission reader is required for permissions")
         external_access = get_sharepoint_external_access(
-            reader=reader,
+            reader=ops,
             site_url=site_url,
             permission_cache=permission_cache,
             site_page=site_page,
@@ -587,14 +524,14 @@ def _convert_sitepage_to_document(
 def _convert_driveitem_to_slim_document(
     driveitem: DriveItemData,
     drive: SiteDrive,
-    reader: SharepointPermissionReader,
+    ops: SharepointSourceOperations,
     site_url: str,
     permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
     treat_sharing_link_as_public: bool = False,
 ) -> SlimDocument:
     external_access = get_sharepoint_external_access(
-        reader=reader,
+        reader=ops,
         site_url=site_url,
         permission_cache=permission_cache,
         drive_item=driveitem,
@@ -612,7 +549,7 @@ def _convert_driveitem_to_slim_document(
 
 def _convert_sitepage_to_slim_document(
     site_page: dict[str, Any],
-    reader: SharepointPermissionReader,
+    ops: SharepointSourceOperations,
     site_url: str,
     permission_cache: SharepointPermissionCache,
     parent_hierarchy_raw_node_id: str | None = None,
@@ -624,7 +561,7 @@ def _convert_sitepage_to_slim_document(
         raise ValueError("Site page ID is required")
 
     external_access = get_sharepoint_external_access(
-        reader=reader,
+        reader=ops,
         site_url=site_url,
         permission_cache=permission_cache,
         site_page=site_page,
@@ -643,6 +580,7 @@ class SharepointConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
     CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
+    CredentialsConnector,
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
@@ -677,22 +615,14 @@ class SharepointConnector(
         self.site_descriptors: list[SiteDescriptor] = self._extract_site_and_drive_info(
             sites
         )
-        self._graph_client: GraphClient | None = None
-        self.msal_app: msal.ConfidentialClientApplication | None = None
-        self.auth_method: MicrosoftAuthMethod | None = None
+        self._ops: SharepointSourceOperations | None = None
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
-        self.sp_tenant_domain: str | None = None
-        self._credential_json: dict[str, Any] | None = None
-        self._cached_rest_ctx: ClientContext | None = None
-        self._cached_rest_ctx_url: str | None = None
-        self._cached_rest_ctx_created_at: float = 0.0
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
-        self._azure_environment = resolved_env.environment
         self.authority_host = resolved_env.authority_host
         self.graph_api_host = resolved_env.graph_host
-        self.graph_api_base = f"{self.graph_api_host}/v1.0"
+        self.graph_api_base = f"{self.graph_api_host}/{GRAPH_API_VERSION}"
         self.sharepoint_domain_suffix = resolved_env.sharepoint_domain_suffix
         if sharepoint_domain_suffix != resolved_env.sharepoint_domain_suffix:
             logger.warning(
@@ -729,39 +659,13 @@ class SharepointConnector(
                 ) from e
             self._validate_site_url_host(site_url)
 
-    def _expected_site_hostnames(self) -> set[str] | None:
-        """Hosts the REST token is valid for, or None before credentials load.
-
-        ``acquire_token_for_rest`` mints the token for
-        ``{sp_tenant_domain}.{suffix}``. OneDrive lives on the ``-my`` sibling of
-        that host, so both forms of the tenant label are accepted.
-        """
-        if not self.sp_tenant_domain:
-            return None
-        tenant = self.sp_tenant_domain.lower().removesuffix(_ONEDRIVE_HOST_SUFFIX)
-        suffix = self.sharepoint_domain_suffix.lower()
-        return {f"{tenant}.{suffix}", f"{tenant}{_ONEDRIVE_HOST_SUFFIX}.{suffix}"}
-
     def _validate_site_url_host(self, site_url: str) -> None:
-        """Reject a site URL the REST token must not be sent to.
-
-        The token is minted for one tenant, so a host like
-        'tenant.attacker.example/sites/x' would leak it to the attacker, and
-        another tenant under the same cloud suffix would receive a token it has
-        no claim to.
-        """
-        suffix = self.sharepoint_domain_suffix.lower()
-        hostname = (urlsplit(site_url).hostname or "").lower()
-        if hostname != suffix and not hostname.endswith(f".{suffix}"):
-            raise ConnectorValidationError(
-                f"Site URL '{site_url}' must be on the '{suffix}' domain."
-            )
-        expected = self._expected_site_hostnames()
-        if expected is not None and hostname not in expected:
-            raise ConnectorValidationError(
-                f"Site URL '{site_url}' is not on this tenant's SharePoint host "
-                f"(expected one of: {', '.join(sorted(expected))})."
-            )
+        """The tenant host is known once credentials are loaded. Before that
+        only the cloud suffix is checked."""
+        tenant_domain = (
+            self._ops.resolve_tenant_domain() if self._ops is not None else None
+        )
+        validate_site_url_host(site_url, self.sharepoint_domain_suffix, tenant_domain)
 
     def probe_role_assignments_permission(self) -> None:
         """Verify the Azure AD app can read SharePoint RoleAssignments.
@@ -772,15 +676,15 @@ class SharepointConnector(
         Probes up to the first ROLE_ASSIGNMENTS_PROBE_MAX_SITES configured
         sites in parallel and fails if any of them rejects the request, so
         per-site permission gaps surface at validation time rather than
-        mid-index. The credential check needs only the auth method. The site
-        probe also needs the MSAL app, the tenant domain and configured sites.
+        mid-index. Both checks need loaded credentials. The site probe also
+        needs configured sites.
         """
+        if self._ops is None:
+            return
+
         # No permission grant can make a credential work that SharePoint REST
         # will not accept a token from.
-        if (
-            self.auth_method is not None
-            and not self.auth_method.supports_sharepoint_rest
-        ):
+        if not self.ops.get_auth_method().supports_sharepoint_rest:
             raise ConnectorValidationError(
                 "Permission sync needs the SharePoint REST API, which only accepts "
                 "app-only tokens from certificate authentication. This credential "
@@ -789,28 +693,14 @@ class SharepointConnector(
                 "Certificate Authentication, or turn permission sync off."
             )
 
-        if not (self.msal_app and self.sp_tenant_domain and self.sites):
-            return
-
-        try:
-            token_response = acquire_token_for_rest(
-                self.msal_app,
-                self.sp_tenant_domain,
-                self.sharepoint_domain_suffix,
-            )
-        except Exception as e:
-            logger.warning(
-                "RoleAssignments permission probe failed (non-blocking): %s", e
-            )
+        if not self.sites:
             return
 
         sites_to_probe = self.sites[:ROLE_ASSIGNMENTS_PROBE_MAX_SITES]
-        headers = {"Authorization": f"Bearer {token_response.accessToken}"}
+        # A probe that raised (a token Azure AD would not issue) answers None,
+        # which is not a refusal: the sync surfaces a real failure.
         results = run_functions_tuples_in_parallel(
-            [
-                (_probe_site_role_assignments_authorized, (site_url, headers))
-                for site_url in sites_to_probe
-            ],
+            [(_probe_rest_access, (self.ops, site_url)) for site_url in sites_to_probe],
             allow_failures=True,
         )
         unauthorized_sites: list[str] = [
@@ -842,19 +732,12 @@ class SharepointConnector(
         here reliably predicts a 403 on the members call. Only runs when
         credentials have been loaded.
         """
-        if not self.msal_app:
+        if self._ops is None:
             return
         try:
-            fetch_entra_page(
-                self.graph_api.get_json,
-                url=f"{self.graph_api_base}/groups",
-                item_model=EntraGroup,
-                select_fields=ENTRA_GROUP_ID_SELECT,
-                page_size=1,
-            )
-        except requests.HTTPError as error:
-            status = error.response.status_code if error.response is not None else None
-            if status in (401, 403):
+            self.ops.list_entra_groups(page_size=1)
+        except MicrosoftGraphError as error:
+            if error.status in (401, 403):
                 raise ConnectorValidationError(
                     "The Azure AD app registration is missing the required Microsoft Graph "
                     "permission to enumerate Azure AD group members. Please grant "
@@ -871,103 +754,11 @@ class SharepointConnector(
                 "Group members permission probe failed (non-blocking): %s", e
             )
 
-    def _extract_tenant_domain_from_sites(self) -> str | None:
-        """Extract the tenant domain from configured site URLs.
-
-        Site URLs look like https://{tenant}.sharepoint.com/sites/... so the
-        tenant domain is the first label of the hostname.
-        """
-        for site_url in self.sites:
-            try:
-                hostname = urlsplit(site_url.strip()).hostname
-            except ValueError:
-                continue
-            if not hostname:
-                continue
-            tenant = hostname.split(".")[0]
-            if tenant:
-                return tenant
-        logger.warning("No tenant domain found from %s sites", len(self.sites))
-        return None
-
-    def _resolve_tenant_domain_from_root_site(self) -> str:
-        """Resolve tenant domain via GET /v1.0/sites/root which only requires
-        Sites.Read.All (a permission the connector already needs)."""
-        root_site = self.graph_client.sites.root.get().execute_query()
-        hostname = root_site.site_collection.hostname
-        if not hostname:
-            raise ConnectorValidationError(
-                "Could not determine tenant domain from root site"
-            )
-        tenant_domain = hostname.split(".")[0]
-        logger.info(
-            "Resolved tenant domain '%s' from root site hostname '%s'",
-            tenant_domain,
-            hostname,
-        )
-        return tenant_domain
-
-    def _resolve_tenant_domain(self) -> str:
-        """Determine the tenant domain, preferring site URLs over a Graph API
-        call to avoid needing extra permissions."""
-        from_sites = self._extract_tenant_domain_from_sites()
-        if from_sites:
-            logger.info(
-                "Resolved tenant domain '%s' from site URLs",
-                from_sites,
-            )
-            return from_sites
-
-        logger.info("No site URLs available; resolving tenant domain from root site")
-        return self._resolve_tenant_domain_from_root_site()
-
     @property
-    def graph_client(self) -> GraphClient:
-        if self._graph_client is None:
+    def ops(self) -> SharepointSourceOperations:
+        if self._ops is None:
             raise ConnectorMissingCredentialError("Sharepoint")
-
-        return self._graph_client
-
-    def _create_rest_client_context(self, site_url: str) -> ClientContext:
-        """Return a ClientContext for SharePoint REST API calls, with caching.
-
-        The office365 library's ClientContext caches the access token from its
-        first request and never re-invokes the token callback.  We cache the
-        context and recreate it when the site URL changes or after
-        ``_REST_CTX_MAX_AGE_S``.  On recreation we also call
-        ``load_credentials`` to build a fresh MSAL app with an empty token
-        cache, guaranteeing a brand-new token from Azure AD."""
-        # Re-checked here because callers reach this without validation.
-        self._validate_site_url_host(site_url)
-
-        elapsed = time.monotonic() - self._cached_rest_ctx_created_at
-        if (
-            self._cached_rest_ctx is not None
-            and self._cached_rest_ctx_url == site_url
-            and elapsed <= _REST_CTX_MAX_AGE_S
-        ):
-            return self._cached_rest_ctx
-
-        if self._credential_json:
-            logger.info(
-                "Rebuilding SharePoint REST client context (elapsed=%.0fs, site_changed=%s)",
-                elapsed,
-                self._cached_rest_ctx_url != site_url,
-            )
-            self.load_credentials(self._credential_json)
-
-        if not self.msal_app or not self.sp_tenant_domain:
-            raise RuntimeError("MSAL app or tenant domain is not set")
-
-        msal_app = self.msal_app
-        sp_tenant_domain = self.sp_tenant_domain
-        sp_domain_suffix = self.sharepoint_domain_suffix
-        self._cached_rest_ctx = ClientContext(site_url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
-        )
-        self._cached_rest_ctx_url = site_url
-        self._cached_rest_ctx_created_at = time.monotonic()
-        return self._cached_rest_ctx
+        return self._ops
 
     @staticmethod
     def _strip_share_link_tokens(path: str) -> list[str]:
@@ -1057,7 +848,7 @@ class SharepointConnector(
         self,
         site_descriptor: SiteDescriptor,
         configured_url_name: str,
-        drives: Iterable[Drive],
+        drives: Iterable[SharepointDrive],
     ) -> SiteDrive | None:
         drives = list(drives)
         matched = _drives_matching_url_name(drives, configured_url_name)
@@ -1089,21 +880,14 @@ class SharepointConnector(
         return self._site_drive_from_graph(drive)
 
     @staticmethod
-    def _site_drive_from_graph(drive: Drive) -> SiteDrive:
-        drive_id = drive.id
-        display_name = SHARED_DOCUMENTS_MAP.get(drive.name, drive.name)
-        web_url = drive.web_url
-        if not drive_id or not display_name or not web_url:
+    def _site_drive_from_graph(drive: SharepointDrive) -> SiteDrive:
+        if not drive.id or not drive.name or not drive.web_url:
             raise ValueError("Graph drive is missing required traversal metadata")
-
-        expanded_list = drive.properties.get(DRIVE_LIST_PROPERTY)
-        if expanded_list is not None and not isinstance(expanded_list, GraphList):
-            raise ValueError("Graph drive list relationship has an unexpected type")
         return SiteDrive(
-            drive_id=drive_id,
-            list_id=expanded_list.id if expanded_list is not None else None,
-            display_name=display_name,
-            web_url=web_url,
+            drive_id=drive.id,
+            list_id=drive.list_id,
+            display_name=SHARED_DOCUMENTS_MAP.get(drive.name, drive.name),
+            web_url=drive.web_url,
         )
 
     def _fetch_driveitems(
@@ -1115,11 +899,11 @@ class SharepointConnector(
         """Yield items and hierarchy context lazily for all drives in a site."""
         try:
             drives = self._list_drives_for_site(site_descriptor.url)
-        # The SDK's ClientRequestException is a RequestException subclass. The
-        # site read and its drive listing run together here, before any item is
-        # yielded, so a refusal of either is the whole site, never a partial one.
-        except requests.RequestException as e:
-            if not is_permanent_refusal(e):
+        # The site read and its drive listing run together here, before any
+        # item is yielded, so a refusal of either is the whole site, never a
+        # partial one.
+        except MicrosoftGraphError as e:
+            if not e.is_permanent_refusal:
                 raise
             logger.warning(
                 "Skipping site %s, Graph refused it for good: %s",
@@ -1142,24 +926,18 @@ class SharepointConnector(
         for drive in site_drives:
             configured_folder = None
             if site_descriptor.folder_path:
-                configured_folder = resolve_drive_folder(
-                    self.graph_api,
-                    drive.drive_id,
-                    site_descriptor.folder_path,
+                configured_folder = self.ops.resolve_folder(
+                    drive_id=drive.drive_id, folder_path=site_descriptor.folder_path
                 )
-                item_iter = iter_drive_items_paged(
-                    self.graph_api,
+                item_iter = self.ops.iter_folder_items(
                     drive_id=drive.drive_id,
                     folder_id=configured_folder.id,
                     start=start,
                     end=end,
                 )
             else:
-                item_iter = iter_drive_items_delta(
-                    self.graph_api,
-                    drive_id=drive.drive_id,
-                    start=start,
-                    end=end,
+                item_iter = self.ops.iter_delta_items(
+                    drive_id=drive.drive_id, start=start, end=end
                 )
 
             for item in item_iter:
@@ -1168,16 +946,6 @@ class SharepointConnector(
                     drive=drive,
                     configured_folder=configured_folder,
                 )
-
-    def _handle_paginated_sites(
-        self, sites: SitesWithRoot
-    ) -> Generator[Site, None, None]:
-        while sites:
-            if sites.current_page:
-                yield from sites.current_page
-            if not sites.has_next:
-                break
-            sites = sites._get_next().execute_query()
 
     def _is_driveitem_excluded(self, driveitem: DriveItemData) -> bool:
         """Check if a drive item should be excluded based on excluded_paths patterns."""
@@ -1203,20 +971,16 @@ class SharepointConnector(
         return result
 
     def fetch_sites(self) -> list[SiteDescriptor]:
-        sites = self.graph_client.sites.get_all_sites().execute_query()
+        site_urls = self.ops.list_site_urls()
 
-        if not sites:
+        if not site_urls:
             raise RuntimeError("No sites found in the tenant")
 
         # OneDrive personal sites should not be indexed with SharepointConnector
         site_descriptors = [
-            SiteDescriptor(
-                url=site.web_url or "",
-                drive_name=None,
-                folder_path=None,
-            )
-            for site in self._handle_paginated_sites(sites)
-            if "-my.sharepoint" not in site.web_url
+            SiteDescriptor(url=site_url, drive_name=None, folder_path=None)
+            for site_url in site_urls
+            if "-my.sharepoint" not in site_url
         ]
         return self._filter_excluded_sites(site_descriptors)
 
@@ -1232,43 +996,33 @@ class SharepointConnector(
         API page arrives, so memory stays bounded regardless of total page count.
         Time-window filtering is applied per-item before yielding.
         """
-        site = self.graph_client.sites.get_by_url(site_descriptor.url)
-        site.execute_query()
-        site_id = site.id
+        site_id = self.ops.get_site_id(site_url=site_descriptor.url)
 
-        site_pages_base = (
-            f"{self.graph_api_base}/sites/{site_id}/pages/microsoft.graph.sitePage"
-        )
-        page_url: str | None = site_pages_base
-        params: dict[str, str] | None = {"$expand": "canvasLayout"}
+        next_link: str | None = None
         total_yielded = 0
         yielded_ids: set[str] = set()
 
-        while page_url:
+        while True:
             try:
-                data = self.graph_api.get_json(page_url, params)
-            except HTTPError as e:
-                if e.response is not None and e.response.status_code == 404:
-                    logger.warning("Site page not found: %s", page_url)
+                listing = self.ops.list_site_pages(
+                    site_id=site_id, next_link=next_link, expand_canvas=True
+                )
+            except MicrosoftGraphError as e:
+                if e.status == 404:
+                    logger.warning("Site page not found: %s", next_link or site_id)
                     break
-                if (
-                    e.response is not None
-                    and e.response.status_code == 400
-                    and _is_graph_invalid_request(e.response)
-                ):
+                if _is_graph_invalid_request(e):
                     logger.warning(
                         "$expand=canvasLayout on the LIST endpoint returned 400 for site %s. Falling back to per-page expansion.",
                         site_descriptor.url,
                     )
                     yield from self._fetch_site_pages_individually(
-                        site_pages_base, start, end, skip_ids=yielded_ids
+                        site_id, start, end, skip_ids=yielded_ids
                     )
                     return
                 raise
 
-            params = None  # nextLink already embeds query params
-
-            for page in data.get("value", []):
+            for page in listing.pages:
                 if not _site_page_in_time_window(page, start, end):
                     continue
                 total_yielded += 1
@@ -1277,13 +1031,15 @@ class SharepointConnector(
                     yielded_ids.add(page_id)
                 yield page
 
-            page_url = data.get("@odata.nextLink")
+            next_link = listing.next_link
+            if next_link is None:
+                break
 
         logger.debug("Yielded %s site pages for %s", total_yielded, site_descriptor.url)
 
     def _fetch_site_pages_individually(
         self,
-        site_pages_base: str,
+        site_id: str,
         start: datetime | None = None,
         end: datetime | None = None,
         skip_ids: set[str] | None = None,
@@ -1293,8 +1049,8 @@ class SharepointConnector(
 
         The Graph API's LIST endpoint can return 400 when $expand=canvasLayout
         is used and *any* page in the site has a corrupt canvas layout (e.g.
-        duplicate web part IDs — see SharePoint/sp-dev-docs#8822). Since the
-        LIST expansion is all-or-nothing, a single bad page poisons the entire
+        duplicate web part IDs, SharePoint/sp-dev-docs#8822). Since the LIST
+        expansion is all-or-nothing, a single bad page poisons the entire
         response. This method works around it by fetching metadata first, then
         expanding each page individually so only the broken page loses its
         canvas content.
@@ -1302,19 +1058,21 @@ class SharepointConnector(
         ``skip_ids`` contains page IDs already yielded by the caller before the
         fallback was triggered, preventing duplicates.
         """
-        page_url: str | None = site_pages_base
+        next_link: str | None = None
         total_yielded = 0
         _skip_ids = skip_ids or set()
 
-        while page_url:
+        while True:
             try:
-                data = self.graph_api.get_json(page_url)
-            except HTTPError as e:
-                if e.response is not None and e.response.status_code == 404:
+                listing = self.ops.list_site_pages(
+                    site_id=site_id, next_link=next_link, expand_canvas=False
+                )
+            except MicrosoftGraphError as e:
+                if e.status == 404:
                     break
                 raise
 
-            for page in data.get("value", []):
+            for page in listing.pages:
                 if not _site_page_in_time_window(page, start, end):
                     continue
 
@@ -1327,11 +1085,13 @@ class SharepointConnector(
                     yield page
                     continue
 
-                expanded = self._try_expand_single_page(site_pages_base, page_id, page)
+                expanded = self._try_expand_single_page(site_id, page_id, page)
                 total_yielded += 1
                 yield expanded
 
-            page_url = data.get("@odata.nextLink")
+            next_link = listing.next_link
+            if next_link is None:
+                break
 
         logger.debug(
             "Yielded %s site pages (per-page expansion fallback)", total_yielded
@@ -1339,23 +1099,19 @@ class SharepointConnector(
 
     def _try_expand_single_page(
         self,
-        site_pages_base: str,
+        site_id: str,
         page_id: str,
         fallback_page: dict[str, Any],
     ) -> dict[str, Any]:
         """Try to GET a single page with $expand=canvasLayout. On 400, return
         the metadata-only fallback so the page is still indexed (without canvas
         content)."""
-        pages_collection = site_pages_base.removesuffix("/microsoft.graph.sitePage")
-        single_url = f"{pages_collection}/{page_id}/microsoft.graph.sitePage"
         try:
-            return self.graph_api.get_json(single_url, {"$expand": "canvasLayout"})
-        except HTTPError as e:
-            if (
-                e.response is not None
-                and e.response.status_code == 400
-                and _is_graph_invalid_request(e.response)
-            ):
+            return self.ops.get_site_page(
+                site_id=site_id, page_id=page_id, expand_canvas=True
+            )
+        except MicrosoftGraphError as e:
+            if _is_graph_invalid_request(e):
                 page_name = fallback_page.get("name", page_id)
                 logger.warning(
                     "$expand=canvasLayout failed for page '%s' (%s). Indexing metadata only.",
@@ -1372,38 +1128,10 @@ class SharepointConnector(
         fallback if expansion 400s on a corrupt page. Mirrors a single iteration
         of ``_fetch_site_pages`` for the targeted-reindex path.
         """
-        pages_collection = f"{self.graph_api_base}/sites/{site_id}/pages"
-        site_pages_base = f"{pages_collection}/microsoft.graph.sitePage"
-        metadata = self.graph_api.get_json(
-            f"{pages_collection}/{page_id}/microsoft.graph.sitePage"
+        metadata = self.ops.get_site_page(
+            site_id=site_id, page_id=page_id, expand_canvas=False
         )
-        return self._try_expand_single_page(site_pages_base, page_id, metadata)
-
-    def _acquire_token(self) -> dict[str, Any]:
-        """
-        Acquire token via MSAL
-        """
-        if self.msal_app is None:
-            raise RuntimeError("MSAL app is not initialized")
-
-        return acquire_graph_token(self.msal_app, self.graph_api_host)
-
-    def _get_graph_access_token(self) -> str:
-        token_data = self._acquire_token()
-        access_token = token_data.get("access_token")
-        if not access_token:
-            raise RuntimeError("Failed to acquire Graph API access token")
-        return access_token
-
-    @property
-    def graph_api(self) -> GraphApiClient:
-        """The raw Graph REST surface, bound to this connector's token source."""
-        return GraphApiClient(self._get_graph_access_token, self.graph_api_base)
-
-    def permission_reader(self) -> SharepointRestReads:
-        return SharepointRestReads(
-            self._create_rest_client_context, self.graph_client, self.graph_api
-        )
+        return self._try_expand_single_page(site_id, page_id, metadata)
 
     @staticmethod
     def _clear_drive_checkpoint_state(
@@ -1504,10 +1232,9 @@ class SharepointConnector(
             and site.folder_path
             and not checkpoint.current_folder
         ):
-            checkpoint.current_folder = resolve_drive_folder(
-                self.graph_api,
-                checkpoint.current_drive.drive_id,
-                site.folder_path,
+            checkpoint.current_folder = self.ops.resolve_folder(
+                drive_id=checkpoint.current_drive.drive_id,
+                folder_path=site.folder_path,
             )
 
     def _fetch_slim_documents_from_sharepoint(
@@ -1592,7 +1319,7 @@ class SharepointConnector(
                                 _convert_driveitem_to_slim_document(
                                     driveitem,
                                     drive,
-                                    self.permission_reader(),
+                                    self.ops,
                                     site_descriptor.url,
                                     temp_checkpoint.permission_cache,
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
@@ -1633,7 +1360,7 @@ class SharepointConnector(
                                 doc_batch.append(
                                     _convert_sitepage_to_slim_document(
                                         site_page,
-                                        self.permission_reader(),
+                                        self.ops,
                                         site_descriptor.url,
                                         temp_checkpoint.permission_cache,
                                         parent_hierarchy_raw_node_id=site_descriptor.url,
@@ -1669,15 +1396,12 @@ class SharepointConnector(
                     # Broadened from per-site Graph 4xx to any Exception.
                     # Slim retrieval can't yield ConnectorFailure, so
                     # log-and-skip to keep perm sync alive for other sites.
-                    if (
-                        isinstance(e, (ClientRequestException, HTTPError))
-                        and e.response is not None
-                    ):
+                    if isinstance(e, MicrosoftGraphError):
                         logger.warning(
                             "Skipping slim site pages for %s: Graph returned %s (%s)",
                             site_descriptor.url,
-                            e.response.status_code,
-                            graph_error_code(e.response),
+                            e.status,
+                            e.code,
                             exc_info=True,
                         )
                     else:
@@ -1690,46 +1414,28 @@ class SharepointConnector(
         yield doc_batch
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        self._credential_json = credentials
-        auth_method = MicrosoftAuthMethod.parse(
-            credentials.get("authentication_method")
+        self.set_credentials_provider(
+            OnyxStaticCredentialsProvider(
+                None, DocumentSource.SHAREPOINT.value, credentials
+            )
         )
-        sp_client_id = credentials.get("sp_client_id")
-        sp_directory_id = credentials.get("sp_directory_id")
-        if not sp_client_id:
-            raise ConnectorValidationError("Client ID is required")
-        if not sp_directory_id:
-            raise ConnectorValidationError("Directory (tenant) ID is required")
-
-        auth = build_msal_app(
-            client_id=sp_client_id,
-            directory_id=sp_directory_id,
-            authority_host=self.authority_host,
-            auth_method=auth_method,
-            client_secret=credentials.get("sp_client_secret"),
-            private_key_b64=credentials.get("sp_private_key"),
-            certificate_password=credentials.get("sp_certificate_password"),
-        )
-        self.msal_app = auth.app
-        self.auth_method = auth.method
-
-        def _acquire_token_for_graph() -> dict[str, Any]:
-            """
-            Acquire token via MSAL
-            """
-            if self.msal_app is None:
-                raise ConnectorValidationError("MSAL app is not initialized")
-
-            token = acquire_graph_token(self.msal_app, self.graph_api_host)
-            if token is None:
-                raise ConnectorValidationError("Failed to acquire token for graph")
-            return token
-
-        self._graph_client = GraphClient(
-            _acquire_token_for_graph, environment=self._azure_environment
-        )
-        self.sp_tenant_domain = self._resolve_tenant_domain()
         return None
+
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        # Checked here, on both credential paths, so a bad credential fails
+        # pairing as a ConnectorValidationError instead of a MicrosoftAuthError
+        # on the first Graph call.
+        _validate_credential_fields(credentials_provider.get_credentials())
+        self._ops = SharepointSourceOperations(
+            credentials_provider=credentials_provider,
+            connector_specific_config={
+                CONFIG_AUTHORITY_HOST: self.authority_host,
+                CONFIG_GRAPH_API_HOST: self.graph_api_host,
+                CONFIG_SITES: self.sites,
+            },
+        )
 
     def _get_drives_for_site(
         self,
@@ -1744,15 +1450,8 @@ class SharepointConnector(
             cache[site_url] = result
         return result
 
-    def _list_drives_for_site(self, site_url: str) -> list[Drive]:
-        site = self.graph_client.sites.get_by_url(site_url)
-        drives = (
-            site.drives.select(DRIVE_SELECT_FIELDS)
-            .expand(DRIVE_EXPAND_FIELDS)
-            .get_all(page_loaded=lambda _: None)
-            .execute_query()
-        )
-        return list(drives)
+    def _list_drives_for_site(self, site_url: str) -> list[SharepointDrive]:
+        return self.ops.list_drives(site_url=site_url)
 
     @staticmethod
     def _folder_url(
@@ -1805,7 +1504,7 @@ class SharepointConnector(
         external_access = None
         if include_permissions:
             external_access = get_sharepoint_hierarchy_node_external_access(
-                self.permission_reader(),
+                self.ops,
                 site_url,
                 checkpoint.permission_cache,
                 HierarchyNodeType.SITE,
@@ -1838,7 +1537,7 @@ class SharepointConnector(
         external_access = None
         if include_permissions:
             external_access = get_sharepoint_hierarchy_node_external_access(
-                self.permission_reader(),
+                self.ops,
                 site_url,
                 checkpoint.permission_cache,
                 HierarchyNodeType.DRIVE,
@@ -1883,7 +1582,7 @@ class SharepointConnector(
                 # external_access keeps the permissions it already has.
                 try:
                     external_access = get_sharepoint_hierarchy_node_external_access(
-                        self.permission_reader(),
+                        self.ops,
                         site_url,
                         checkpoint.permission_cache,
                         HierarchyNodeType.FOLDER,
@@ -1988,17 +1687,14 @@ class SharepointConnector(
         )
 
         try:
-            access_token = self._get_graph_access_token()
             doc_or_failure = _convert_driveitem_to_document_with_permissions(
                 driveitem,
                 drive,
-                self.permission_reader() if include_permissions else None,
+                self.ops,
                 site_url,
                 permission_cache=checkpoint.permission_cache,
                 include_permissions=include_permissions,
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
-                graph_api_base=self.graph_api_base,
-                access_token=access_token,
                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                 raw_file_callback=self.raw_file_callback,
             )
@@ -2046,7 +1742,7 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
-        if self._graph_client is None:
+        if self._ops is None:
             raise ConnectorMissingCredentialError("Sharepoint")
 
         checkpoint = copy.deepcopy(checkpoint)
@@ -2182,10 +1878,9 @@ class SharepointConnector(
 
             try:
                 if site_descriptor.folder_path:
-                    checkpoint.current_folder = resolve_drive_folder(
-                        self.graph_api,
-                        checkpoint.current_drive.drive_id,
-                        site_descriptor.folder_path,
+                    checkpoint.current_folder = self.ops.resolve_folder(
+                        drive_id=checkpoint.current_drive.drive_id,
+                        folder_path=site_descriptor.folder_path,
                     )
                 yield from self._yield_drive_hierarchy_node(
                     site_descriptor.url,
@@ -2228,11 +1923,9 @@ class SharepointConnector(
 
             if checkpoint.current_drive_delta_next_link:
                 try:
-                    result = fetch_drive_delta_checkpoint_page(
-                        self.graph_api,
-                        page_url=checkpoint.current_drive_delta_next_link,
+                    result = self.ops.get_delta_page(
                         drive_id=current_drive.drive_id,
-                        select_fields=DRIVE_ITEM_SELECT_FIELDS,
+                        page_url=checkpoint.current_drive_delta_next_link,
                         allow_full_resync=not (
                             checkpoint.current_drive_delta_resync_attempted
                         ),
@@ -2259,8 +1952,7 @@ class SharepointConnector(
                 has_more_delta_pages = result.next_checkpoint_url is not None
                 checkpoint.current_drive_delta_next_link = result.next_checkpoint_url
             else:
-                driveitems = iter_drive_items_paged(
-                    self.graph_api,
+                driveitems = self.ops.iter_folder_items(
                     drive_id=current_drive.drive_id,
                     folder_id=(
                         checkpoint.current_folder.id
@@ -2359,9 +2051,7 @@ class SharepointConnector(
                             _convert_sitepage_to_document(
                                 site_page,
                                 site_descriptor.drive_name,
-                                self.permission_reader()
-                                if include_permissions
-                                else None,
+                                self.ops,
                                 site_descriptor.url,
                                 permission_cache=checkpoint.permission_cache,
                                 include_permissions=include_permissions,
@@ -2408,15 +2098,12 @@ class SharepointConnector(
                 # _fetch_site_pages failures skip the site-pages stage
                 # instead of failing the attempt. Per-page errors are
                 # caught above.
-                if (
-                    isinstance(e, (ClientRequestException, HTTPError))
-                    and e.response is not None
-                ):
+                if isinstance(e, MicrosoftGraphError):
                     logger.warning(
                         "Skipping site pages for %s: Graph returned %s (%s)",
                         site_descriptor.url,
-                        e.response.status_code,
-                        graph_error_code(e.response),
+                        e.status,
+                        e.code,
                         exc_info=True,
                     )
                 else:
@@ -2519,19 +2206,13 @@ class SharepointConnector(
         site_url = descriptors[0].url
 
         for drive in self._get_drives_for_site(site_url, site_drives_cache):
-            item_url = (
-                f"{self.graph_api_base}/drives/{drive.drive_id}/items/{document_id}"
+            driveitem = self.ops.get_drive_item(
+                drive_id=drive.drive_id, item_id=document_id
             )
-            try:
-                item_json = self.graph_api.get_json(item_url)
-            except HTTPError as e:
-                if e.response is not None and e.response.status_code == 404:
-                    continue
-                raise
+            if driveitem is None:
+                continue
             return ResolvedDriveItem(
-                driveitem=DriveItemData.from_graph_json(item_json),
-                drive=drive,
-                site_url=site_url,
+                driveitem=driveitem, drive=drive, site_url=site_url
             )
 
         raise ValueError(
@@ -2586,10 +2267,9 @@ class SharepointConnector(
         site_descriptor = SiteDescriptor(
             url=descriptors[0].url, drive_name=None, folder_path=None
         )
-        site = self.graph_client.sites.get_by_url(site_descriptor.url)
-        site.execute_query()
+        site_id = self.ops.get_site_id(site_url=site_descriptor.url)
 
-        page = self._fetch_single_site_page(cast(str, site.id), document_id)
+        page = self._fetch_single_site_page(site_id, document_id)
 
         yield from self._yield_site_hierarchy_node(
             site_descriptor,
@@ -2600,7 +2280,7 @@ class SharepointConnector(
         yield _convert_sitepage_to_document(
             page,
             site_descriptor.drive_name,
-            self.permission_reader() if include_permissions else None,
+            self.ops,
             site_descriptor.url,
             permission_cache=dedup.permission_cache,
             include_permissions=include_permissions,
@@ -2621,7 +2301,7 @@ class SharepointConnector(
         recorded web URL (``document_link``). Targets with no usable link (e.g.
         admin-typed targets) yield an informative ConnectorFailure.
         """
-        if self._graph_client is None:
+        if self._ops is None:
             raise ConnectorMissingCredentialError("Sharepoint")
 
         # Throwaway checkpoint used purely as a dedup container for the shared
