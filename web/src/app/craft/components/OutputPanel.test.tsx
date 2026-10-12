@@ -220,7 +220,7 @@ it("clears only the turn filter from the colored Outputs pill", async () => {
   render(<BuildOutputPanel panelMode="medium" />);
   expect(
     screen.getByText("Turn 4 outputs").closest("[data-color]")
-  ).toHaveAttribute("data-color", "purple");
+  ).toHaveAttribute("data-color", "blue");
   fireEvent.click(
     screen.getByRole("button", { name: "Remove Turn 4 outputs" })
   );
