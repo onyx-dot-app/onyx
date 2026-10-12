@@ -14,18 +14,11 @@ const sandbox = {
   process: {env: JSON.parse(process.argv[3])},
   __dirname: path.dirname(process.argv[1]),
   require(name) {
-    if (name === 'node:fs') return {mkdirSync() {}, cpSync() {}};
-    if (name === 'node:path') return path;
-    if (name === 'pdfjs-dist/package.json') return {version: 'test'};
     if (name === '@sentry/nextjs') return {withSentryConfig: config => config};
     if (name === 'next/constants') return {PHASE_DEVELOPMENT_SERVER: 'phase-development-server'};
     if (name === 'next-intl/plugin') return () => config => config;
     throw new Error(`Unexpected config dependency: ${name}`);
   }
-};
-sandbox.require.resolve = name => {
-  if (name === 'pdfjs-dist/package.json') return '/pdfjs-dist/package.json';
-  throw new Error(`Unexpected config dependency: ${name}`);
 };
 vm.runInNewContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);
 const config = sandbox.module.exports(process.argv[2]);

@@ -233,6 +233,7 @@ browser cache when fetching artifacts. Unversioned PDF activation reads compare 
 with the displayed PDF. Identical bytes reuse its Blob and PDF.js document.
 Changed bytes replace the displayed PDF. React-PDF releases its loading tasks when the viewer unmounts.
 PDF workers, fonts, character maps, and rendering support files use versioned same-origin URLs.
+`web/tools/prepare-pdf-assets.cjs` copies these assets before dev and production builds, including Docker builds.
 PDF and presentation viewers share page controls and a resizable thumbnail sidebar.
 PDF controls provide page navigation, fit modes, zoom, and download.
 The file-preview caller shows loading feedback while PDF or presentation refreshes retain their accepted content.
