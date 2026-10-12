@@ -191,6 +191,32 @@ def test_listing_check_maps_401_to_expired_and_429_to_indeterminate() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    "config, applies",
+    [
+        (None, True),
+        ({}, True),
+        ({"mailboxes": [" "]}, True),
+        ({"mailboxes": ["a@x.com"]}, False),
+        ({"mailbox_groups": ["Sales"]}, False),
+    ],
+    ids=["no-config", "every-mailbox", "blank-entry", "mailboxes", "groups"],
+)
+def test_mailbox_count_applies_only_when_every_mailbox_is_walked(
+    config: dict[str, Any] | None, applies: bool
+) -> None:
+    result = run_capability_checks(
+        [_CHECKS_BY_ID["outlook_mailbox_count"]], _context(_gateway(), config)
+    )[0]
+
+    assert result.applicable is applies
+    if applies:
+        assert result.findings
+    else:
+        assert result.status == CapabilityCheckStatus.SKIPPED
+        assert result.findings == []
+
+
 def test_mailbox_count_counts_every_page_of_the_listing() -> None:
     gateway = _gateway()
     gateway.list_mailbox_users.side_effect = [
@@ -658,7 +684,12 @@ def test_healthy_tenant_passes_indexing() -> None:
         _context(_gateway(), {"mailboxes": [MAILBOX_ADDRESS]}),
     )
 
-    assert all(result.status is CapabilityCheckStatus.PASSED for result in results)
+    # The tenant mailbox count does not apply to a config that lists mailboxes.
+    assert all(
+        result.status is CapabilityCheckStatus.PASSED
+        for result in results
+        if result.applicable
+    )
     verdicts = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
     assert verdicts[CredentialCapability.INDEXING] is CapabilityVerdict.PASSED
 

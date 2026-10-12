@@ -31,6 +31,7 @@ from onyx.connectors.capability_checks.findings import (
     CheckFindingKey,
     bounded_count,
 )
+from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -332,11 +333,15 @@ def _tenant_mailboxes(
     )
 
 
-class _MailboxCountCheck(CapabilityCheck):
+class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Counts the enabled users with a mail address: the mailboxes indexing
     walks in every-mailbox mode. It does not probe each mailbox, so a mailbox
     outside the app's Exchange scope still counts. Separate from
-    ``outlook_mailbox_listing``, which reads one user to validate."""
+    ``outlook_mailbox_listing``, which reads one user to validate. A config
+    that lists mailboxes or groups walks only those, so the tenant count does
+    not apply to it."""
+
+    config_class = OutlookConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -351,6 +356,10 @@ class _MailboxCountCheck(CapabilityCheck):
             docs_link=_OUTLOOK_DOCS_LINK,
             discovery=True,
         )
+
+    def applies(self, form_state: FormState[OutlookConnectorConfig]) -> bool:
+        config = form_state.config
+        return not configured_addresses(config) and not configured_groups(config)
 
     def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
         try:

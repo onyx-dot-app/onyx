@@ -7,6 +7,7 @@ from onyx.connectors.capability_checks.findings import (
     CheckFindingKey,
     bounded_count,
 )
+from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -272,11 +273,14 @@ def _tenant_users(
     )
 
 
-class _DriveCountCheck(CapabilityCheck):
+class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
     """Counts the enabled member users: the owners of the OneDrives indexing
     walks in every-user mode. It does not open each drive, so a user without a
     OneDrive still counts. Separate from ``onedrive_users``, which reads one
-    user to validate."""
+    user to validate. A config that lists users walks only those, so the
+    tenant count does not apply to it."""
+
+    config_class = OneDriveConnectorConfig
 
     def __init__(self) -> None:
         super().__init__(
@@ -288,6 +292,9 @@ class _DriveCountCheck(CapabilityCheck):
             docs_link=_DOCS_LINK,
             discovery=True,
         )
+
+    def applies(self, form_state: FormState[OneDriveConnectorConfig]) -> bool:
+        return not [user for user in form_state.config.users or [] if user.strip()]
 
     def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
         try:

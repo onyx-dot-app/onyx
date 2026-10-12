@@ -1044,6 +1044,34 @@ def _drive_count_check() -> CapabilityCheck[Any]:
     )
 
 
+@pytest.mark.parametrize(
+    "config, applies",
+    [
+        (None, True),
+        ({}, True),
+        ({"users": [" "]}, True),
+        ({"users": ["a@x.com"]}, False),
+    ],
+    ids=["no-config", "every-user", "blank-entry", "users"],
+)
+def test_onedrive_drive_count_applies_only_when_every_user_is_walked(
+    config: dict[str, Any] | None, applies: bool
+) -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_users.return_value = OneDriveUserPage(users=[_user("a@x.com")])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config=config,
+        source_operations=gateway,
+    )
+
+    result = run_capability_checks([_drive_count_check()], context)[0]
+
+    assert result.applicable is applies
+    assert bool(result.findings) is applies
+
+
 def test_onedrive_drive_count_counts_every_page_of_the_listing() -> None:
     gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
     gateway.list_users.side_effect = [
