@@ -967,7 +967,11 @@ def associate_credential_to_connector(
 
     try:
         validate_ccpair_for_user(
-            connector_id, credential_id, metadata.access_type, db_session
+            connector_id,
+            credential_id,
+            metadata.access_type,
+            db_session,
+            user=user,
         )
 
         response = add_credential_to_connector(

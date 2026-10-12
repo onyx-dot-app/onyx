@@ -189,6 +189,7 @@ def swap_credentials_for_connector(
         new_credential_id,
         credential_swap_req.access_type,
         db_session,
+        user=user,
     )
 
     connector_credential_pair = swap_credentials_connector(

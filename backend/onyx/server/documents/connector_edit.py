@@ -310,7 +310,7 @@ def start_cc_pair_edit_checks(
     try:
         return start_cc_pair_draft_check_run(
             db_session,
-            user_id=user.id,
+            user=user,
             cc_pair_id=cc_pair_id,
             proposed_credential=credential,
             access_type=request.access_type,

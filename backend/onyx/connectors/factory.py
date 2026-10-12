@@ -6,6 +6,7 @@ import pydantic
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -28,9 +29,17 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
-from onyx.db.credentials import backend_update_credential_json, fetch_credential_by_id
-from onyx.db.enums import AccessType, CapabilityCheckTrigger
-from onyx.db.models import Credential
+from onyx.db.connector_credential_pair import get_cc_pairs_using_credential
+from onyx.db.credentials import (
+    CREDENTIAL_PERMISSIONS_TO_IGNORE,
+    backend_update_credential_json,
+    fetch_credential_by_id,
+    fetch_credential_by_id_for_user,
+)
+from onyx.db.enums import AccessType, CapabilityCheckTrigger, Permission
+from onyx.db.models import ConnectorCredentialPair, Credential, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
@@ -281,6 +290,108 @@ def validate_credential_binding(
     )
 
 
+def _bound_values(
+    binding_class: type[CredentialBinding] | None,
+    connector_specific_config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """The config's credential-bound values as the binding model validates
+    them, so equal settings compare equal, without the fields derived from the
+    credential. None when they do not validate."""
+    if binding_class is None:
+        return {}
+    try:
+        return binding_class.model_validate(connector_specific_config).model_dump(
+            exclude=set(binding_class.credential_derived_fields)
+        )
+    except pydantic.ValidationError:
+        return None
+
+
+def assert_user_can_use_credential(
+    db_session: Session,
+    *,
+    user: User,
+    credential: Credential,
+    source: DocumentSource,
+    connector_specific_config: dict[str, Any] | None,
+    current_pair: ConnectorCredentialPair | None = None,
+) -> None:
+    """The rule for every use of a credential with a ``source`` config: a
+    pairing, a credential swap, an edit and every check run. Call it before
+    anything builds a connector with the credential.
+
+    The use is allowed when one of these is true:
+
+    - ``current_pair`` uses the credential with the same bound values. The
+      caller has authorized the user for that pair, so the use adds nothing.
+    - The user owns the credential, or it has no owner and the user holds
+      MANAGE_CONNECTORS globally (an admin).
+    - The user can see the credential (it is shared with them) and the bound
+      values equal those of a pair that uses it. The pairs record the values
+      the credential is used with; a shared credential with no pair is for its
+      owner only. A config of None (a config-less run) supplies no bound
+      values but still needs such a pair.
+    - The user can see the credential and its source has no real secret
+      (``CREDENTIAL_PERMISSIONS_TO_IGNORE``).
+
+    ``validate_credential_binding`` is a different check: it compares the
+    values with what the credential itself records.
+
+    Raises:
+        OnyxError: CREDENTIAL_NOT_FOUND when the user cannot see the
+            credential. INSUFFICIENT_PERMISSIONS when the bound values match
+            no pair.
+    """
+    binding_class = _credential_binding_class(source)
+
+    def _matches(pair: ConnectorCredentialPair) -> bool:
+        if connector_specific_config is None:
+            return True
+        requested = _bound_values(binding_class, connector_specific_config)
+        return requested is not None and requested == _bound_values(
+            binding_class, pair.connector.connector_specific_config
+        )
+
+    if (
+        current_pair is not None
+        and current_pair.credential_id == credential.id
+        and current_pair.connector.source == source
+        and _matches(current_pair)
+    ):
+        return
+
+    if (
+        fetch_credential_by_id_for_user(
+            credential.id, user, db_session, include_own_drafts=True
+        )
+        is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential.id} does not exist or is not accessible.",
+        )
+    if credential.user_id == user.id or (
+        credential.user_id is None
+        and has_global_permission(user, Permission.MANAGE_CONNECTORS)
+    ):
+        return
+    if credential.source in CREDENTIAL_PERMISSIONS_TO_IGNORE:
+        return
+    if any(
+        _matches(pair)
+        for pair in get_cc_pairs_using_credential(db_session, credential.id, source)
+    ):
+        return
+
+    bound_fields = sorted(binding_class.model_fields) if binding_class else []
+    raise OnyxError(
+        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+        f"Credential {credential.id} is shared with you. You can use it only "
+        "with the settings of a connector that already uses it"
+        + (f" ({', '.join(bound_fields)})." if bound_fields else "."),
+    )
+
+
 class CredentialBindingFieldErrorKind(str, Enum):
     MISSING = "missing"
     INVALID = "invalid"
@@ -340,14 +451,28 @@ def validate_connector_credential_bindings(
     source: DocumentSource,
     connector_specific_config: dict[str, Any],
     db_session: Session,
+    *,
+    user: User,
 ) -> None:
-    """Raises ``ConnectorValidationError`` if the config cannot be used with a
-    credential the connector is already paired with. Config edits call this;
-    pairing checks the binding in ``validate_ccpair_for_user``."""
+    """Checks a config edit against every credential the connector is already
+    paired with. Pairing checks the same in ``validate_ccpair_for_user``.
+
+    Raises:
+        OnyxError: ``assert_user_can_use_credential`` refuses the user.
+        ConnectorValidationError: The config cannot be used with a credential.
+    """
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
         return
     for cc_pair in connector.credentials:
+        assert_user_can_use_credential(
+            db_session,
+            user=user,
+            credential=cc_pair.credential,
+            source=source,
+            connector_specific_config=connector_specific_config,
+            current_pair=cc_pair,
+        )
         validate_credential_binding(
             source, connector_specific_config, cc_pair.credential
         )
@@ -472,11 +597,13 @@ def validate_ccpair_for_user(
     db_session: Session,
     enforce_creation: bool = True,
     trigger: CapabilityCheckTrigger = CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+    *,
+    user: User | None,
 ) -> bool:
-    if INTEGRATION_TESTS_MODE:
-        return True
-
-    # Validate the connector settings
+    """Validates pairing the connector with the credential. ``user`` is who
+    asks for the pairing, held to ``assert_user_can_use_credential`` before
+    anything builds the connector; None only for system work on an existing
+    pair (for example a perm-sync attempt)."""
     connector = fetch_connector_by_id(connector_id, db_session)
     credential = fetch_credential_by_id(
         credential_id,
@@ -485,12 +612,23 @@ def validate_ccpair_for_user(
 
     if not connector:
         raise ValueError("Connector not found")
-
-    if connector.source in _SOURCES_WITHOUT_PAIRING_VALIDATION:
-        return True
-
     if not credential:
         raise ValueError("Credential not found")
+
+    if user is not None:
+        assert_user_can_use_credential(
+            db_session,
+            user=user,
+            credential=credential,
+            source=connector.source,
+            connector_specific_config=connector.connector_specific_config,
+        )
+
+    if (
+        INTEGRATION_TESTS_MODE
+        or connector.source in _SOURCES_WITHOUT_PAIRING_VALIDATION
+    ):
+        return True
 
     return validate_and_record_pairing(
         db_session,

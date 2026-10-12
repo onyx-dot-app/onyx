@@ -81,7 +81,11 @@ def test_success_records_a_fallback_shaped_passed_report(
 
     # Under test.
     result = validate_ccpair_for_user(
-        cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        AccessType.PUBLIC,
+        db_session,
+        user=None,
     )
 
     # Postcondition.
@@ -120,6 +124,7 @@ def test_caller_supplied_trigger_lands_on_the_report_row(
         AccessType.PUBLIC,
         db_session,
         trigger=CapabilityCheckTrigger.PERM_SYNC_ATTEMPT,
+        user=None,
     )
 
     # Postcondition.
@@ -144,7 +149,11 @@ def test_validation_failure_records_failed_and_still_raises(
     # Under test.
     with pytest.raises(ConnectorValidationError, match="missing scope"):
         validate_ccpair_for_user(
-            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
         )
 
     # Postcondition.
@@ -178,7 +187,11 @@ def test_unexpected_failure_records_indeterminate(
     # Under test.
     with pytest.raises(UnexpectedValidationError):
         validate_ccpair_for_user(
-            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
         )
 
     # Postcondition.
@@ -206,7 +219,11 @@ def test_wrapped_creation_failure_records_the_original_exception(
     # Under test.
     with pytest.raises(ConnectorValidationError, match="boom"):
         validate_ccpair_for_user(
-            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
         )
 
     # Postcondition.
@@ -234,7 +251,11 @@ def test_sync_success_mirrors_the_outcome_onto_perm_sync(
 
     # Under test.
     validate_ccpair_for_user(
-        cc_pair.connector_id, cc_pair.credential_id, AccessType.SYNC, db_session
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        AccessType.SYNC,
+        db_session,
+        user=None,
     )
 
     # Postcondition.
@@ -299,7 +320,11 @@ def test_no_clobber_of_a_granular_report(
 
     # Under test.
     validate_ccpair_for_user(
-        cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        AccessType.PUBLIC,
+        db_session,
+        user=None,
     )
 
     # Postcondition.
@@ -330,7 +355,11 @@ def test_recorder_failure_never_breaks_validation(
     # Under test and postcondition.
     assert (
         validate_ccpair_for_user(
-            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
         )
         is True
     )

@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -12,6 +12,12 @@ class CredentialBinding(BaseModel):
     host. A connector config inherits its binding model, so the stored config
     stays flat. Validated on its own from a full config, it ignores the other keys.
     """
+
+    # Fields whose value the form takes from the credential itself and that
+    # ``validate_credential`` pins to it, e.g. the credential's kind. They name
+    # no place to send the credential, so the credential use rule
+    # (``factory.assert_user_can_use_credential``) does not compare them.
+    credential_derived_fields: ClassVar[frozenset[str]] = frozenset()
 
     def validate_credential(
         self,
