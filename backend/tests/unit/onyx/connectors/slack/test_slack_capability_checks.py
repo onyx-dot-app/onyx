@@ -72,6 +72,11 @@ def _findings(output: CheckOutput | None) -> list[CheckFinding]:
     return output.findings
 
 
+def _advisory_messages(output: CheckOutput | None) -> list[str]:
+    assert output is not None
+    return [advisory.message for advisory in output.advisories]
+
+
 def _slack_error(error: str, needed: str | None = None) -> SlackApiError:
     data: dict[str, Any] = {"ok": False, "error": error}
     if needed is not None:
@@ -115,8 +120,8 @@ def _context(
     )
 
 
-def _run(check_id: str, context: CapabilityCheckContext) -> None:
-    _CHECKS_BY_ID[check_id].run(context)
+def _run(check_id: str, context: CapabilityCheckContext) -> CheckOutput | None:
+    return _CHECKS_BY_ID[check_id].run(context)
 
 
 def _pages(page: Any) -> Any:
@@ -218,10 +223,12 @@ def test_public_channel_listing_empty_workspace_skips_info_probe() -> None:
     gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
 
     # Under test.
-    _run("slack_public_channel_listing", _context(gateway))
+    output = _run("slack_public_channel_listing", _context(gateway))
 
     # Postcondition.
     gateway.fetch_channel_info.assert_not_called()
+    (message,) = _advisory_messages(output)
+    assert "conversations.info" in message
 
 
 def test_private_channel_listing_missing_scope_mentions_silent_skip() -> None:
@@ -242,6 +249,50 @@ def test_private_channel_listing_missing_scope_mentions_silent_skip() -> None:
         channel_types=["private_channel"],
         limit=1,
     )
+
+
+@pytest.mark.parametrize(
+    "check_id",
+    ["slack_private_channel_listing", "slack_perm_sync_private_channel_listing"],
+)
+def test_private_channel_listing_without_channels_adds_advisory(
+    check_id: str,
+) -> None:
+    """
+    Verifies an empty private listing passes, but says no private channel was
+    found to read.
+    """
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
+
+    # Under test.
+    output = _run(check_id, _context(gateway))
+
+    # Postcondition.
+    (message,) = _advisory_messages(output)
+    assert "no private channel" in message
+
+
+@pytest.mark.parametrize(
+    "check_id",
+    ["slack_private_channel_listing", "slack_perm_sync_private_channel_listing"],
+)
+def test_private_channel_listing_with_a_channel_has_no_advisory(
+    check_id: str,
+) -> None:
+    """Verifies a private listing that returns a channel passes silently."""
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_channels.side_effect = _pages(
+        SlackChannelsPage(channels=[{"id": "C_PRIV", "name": "secret"}])
+    )
+
+    # Under test.
+    output = _run(check_id, _context(gateway))
+
+    # Postcondition.
+    assert output is None
 
 
 def test_message_history_prefers_member_channel() -> None:
@@ -276,8 +327,13 @@ def test_message_history_not_in_channel_counts_as_scope_proof() -> None:
     )
     gateway.fetch_channel_history.side_effect = _slack_error("not_in_channel")
 
-    # Under test and postcondition.
-    _run("slack_message_history_read", _context(gateway))
+    # Under test.
+    output = _run("slack_message_history_read", _context(gateway))
+
+    # Postcondition.
+    (message,) = _advisory_messages(output)
+    assert "not a member of the public channel" in message
+    gateway.fetch_thread_replies.assert_not_called()
 
 
 def test_message_history_missing_scope() -> None:
@@ -329,6 +385,25 @@ def test_message_history_probes_a_thread() -> None:
     )
 
 
+def test_message_history_read_thread_has_no_advisory() -> None:
+    """Verifies a full history and thread read passes without an advisory."""
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_channels.side_effect = _pages(
+        SlackChannelsPage(channels=[{"id": "C1", "name": "a", "is_member": True}])
+    )
+    gateway.fetch_channel_history.side_effect = _pages(
+        SlackHistoryPage(messages=[{"ts": "111.222"}])
+    )
+    gateway.fetch_thread_replies.side_effect = _pages(SlackHistoryPage())
+
+    # Under test.
+    output = _run("slack_message_history_read", _context(gateway))
+
+    # Postcondition.
+    assert output is None
+
+
 def test_message_history_empty_channel_skips_thread_probe() -> None:
     """Verifies an empty channel proves history access without a thread."""
     # Precondition.
@@ -339,10 +414,13 @@ def test_message_history_empty_channel_skips_thread_probe() -> None:
     gateway.fetch_channel_history.side_effect = _pages(SlackHistoryPage(messages=[]))
 
     # Under test.
-    _run("slack_message_history_read", _context(gateway))
+    output = _run("slack_message_history_read", _context(gateway))
 
     # Postcondition.
     gateway.fetch_thread_replies.assert_not_called()
+    (message,) = _advisory_messages(output)
+    assert "no messages" in message
+    assert "did not read a thread" in message
 
 
 def test_private_history_passes_when_no_private_channels_in_scope() -> None:
@@ -352,10 +430,12 @@ def test_private_history_passes_when_no_private_channels_in_scope() -> None:
     gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
 
     # Under test.
-    _run("slack_private_message_history_read", _context(gateway))
+    output = _run("slack_private_message_history_read", _context(gateway))
 
     # Postcondition.
     gateway.fetch_channel_history.assert_not_called()
+    (message,) = _advisory_messages(output)
+    assert "private-channel message reads" in message
 
 
 def test_private_history_leaves_listing_scope_failures_to_the_listing_check() -> None:
@@ -426,12 +506,13 @@ def test_private_history_probes_a_private_thread() -> None:
     gateway.fetch_thread_replies.side_effect = _pages(SlackHistoryPage())
 
     # Under test.
-    _run("slack_private_message_history_read", _context(gateway))
+    output = _run("slack_private_message_history_read", _context(gateway))
 
     # Postcondition.
     gateway.fetch_thread_replies.assert_called_once_with(
         variant=SlackChannelVariant.PRIVATE, channel_id="C_PRIV", thread_ts="333.444"
     )
+    assert output is None
 
 
 def test_channel_join_scope_present_passes() -> None:
@@ -520,6 +601,21 @@ def test_user_profile_read_on_grid_passes_team_id() -> None:
 
     # Postcondition.
     gateway.list_users.assert_called_once_with(limit=1, team_id="T1")
+
+
+def test_user_profile_read_without_users_adds_advisory() -> None:
+    """Verifies an empty user page passes, but says no profile was read."""
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_users.side_effect = _pages(SlackUsersPage(members=[]))
+
+    # Under test.
+    output = _run("slack_user_profile_read", _context(gateway))
+
+    # Postcondition.
+    gateway.fetch_user_info.assert_not_called()
+    (message,) = _advisory_messages(output)
+    assert "users.info" in message
 
 
 def test_user_profile_read_missing_scope() -> None:
@@ -670,10 +766,32 @@ def test_private_member_listing_vacuous_pass_without_private_channels() -> None:
     gateway.list_channels.side_effect = _pages(SlackChannelsPage(channels=[]))
 
     # Under test.
-    _run("slack_private_channel_member_listing", _context(gateway))
+    output = _run("slack_private_channel_member_listing", _context(gateway))
 
     # Postcondition.
     gateway.list_channel_members.assert_not_called()
+    (message,) = _advisory_messages(output)
+    assert "private-channel member listing" in message
+
+
+def test_private_member_listing_without_members_adds_advisory() -> None:
+    """Verifies an empty member page passes, but says no profile was read."""
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_channels.side_effect = _pages(
+        SlackChannelsPage(channels=[{"id": "C_PRIV", "name": "secret"}])
+    )
+    gateway.list_channel_members.side_effect = _pages(
+        SlackChannelMembersPage(members=[])
+    )
+
+    # Under test.
+    output = _run("slack_private_channel_member_listing", _context(gateway))
+
+    # Postcondition.
+    gateway.fetch_user_info.assert_not_called()
+    (message,) = _advisory_messages(output)
+    assert "users.info" in message
 
 
 def test_private_member_listing_missing_scope() -> None:
@@ -785,10 +903,12 @@ def test_configured_channels_regex_mode_skips_probe() -> None:
     )
 
     # Under test.
-    _run("slack_configured_channels_visible", context)
+    output = _run("slack_configured_channels_visible", context)
 
     # Postcondition.
     gateway.list_channels.assert_not_called()
+    (message,) = _advisory_messages(output)
+    assert "regular expressions" in message
 
 
 # slack_readable_channel_listing
