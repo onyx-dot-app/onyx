@@ -1,13 +1,18 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import ConnectorConfig, CredentialBinding
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
     ScopeDirection,
     ScopeInclude,
     ScopeToggle,
+)
+from onyx.connectors.google_utils.shared_constants import (
+    GoogleCredentialKind,
+    google_credential_kind,
 )
 from onyx.connectors.planning_rule import ConnectorChangeOverride
 
@@ -33,7 +38,28 @@ _SPECIFIC_REQUEST = FieldPolicy(
 )
 
 
-class GoogleDriveConnectorConfig(ConnectorConfig):
+class GoogleDriveCredentialBinding(CredentialBinding):
+    # The kind of the picked credential. The form sets it from the credential,
+    # so capability checks for one kind can apply before a run reads the
+    # credential. The connector reads the kind from the credential itself.
+    credential_kind: Annotated[GoogleCredentialKind | None, _COSMETIC] = None
+
+    def validate_credential(self, credential_json: dict[str, Any]) -> None:
+        actual_kind: GoogleCredentialKind | None = google_credential_kind(
+            credential_json
+        )
+        if (
+            self.credential_kind is not None
+            and actual_kind is not None
+            and actual_kind != self.credential_kind
+        ):
+            raise ConnectorValidationError(
+                f"The connector is set up for a {self.credential_kind.value} "
+                f"credential, but this credential is {actual_kind.value}."
+            )
+
+
+class GoogleDriveConnectorConfig(GoogleDriveCredentialBinding, ConnectorConfig):
     include_shared_drives: Annotated[bool, _GENERAL_TOGGLE] = False
     include_my_drives: Annotated[bool, _GENERAL_TOGGLE] = False
     include_files_shared_with_me: Annotated[bool, _GENERAL_TOGGLE] = False
@@ -58,7 +84,7 @@ class GoogleDriveConnectorConfig(ConnectorConfig):
     continue_on_failure: Annotated[bool | None, _COSMETIC] = None
 
 
-def _has_specific_requests(config: GoogleDriveConnectorConfig) -> bool:
+def has_specific_requests(config: GoogleDriveConnectorConfig) -> bool:
     return bool(
         config.shared_drive_urls or config.my_drive_emails or config.shared_folder_urls
     )
@@ -70,8 +96,8 @@ def google_drive_planning_rule(
     # A specific request turns the general toggles off. A change between
     # the general and the specific mode replaces one set of files with
     # another; inside the specific mode the toggles have no effect.
-    old_specific = _has_specific_requests(old)
-    new_specific = _has_specific_requests(new)
+    old_specific: bool = has_specific_requests(old)
+    new_specific: bool = has_specific_requests(new)
     if old_specific != new_specific:
         return ConnectorChangeOverride(
             scope_directions=dict.fromkeys(

@@ -708,6 +708,17 @@ def docfetching_proxy_task(
             result.exception_str = str(e)
         else:
             result.exception_str = traceback.format_exc()
+        # Stop the spawned process: no watchdog follows this one, and this thread
+        # takes the next task at once. A no-op when the process already exited.
+        try:
+            job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+        except Exception:
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - exception while terminating subprocess "
+                    "after a watchdog exception"
+                )
+            )
 
     # handle exit and reporting
     elapsed = time.monotonic() - start

@@ -10,7 +10,11 @@ import httplib2
 import pytest
 from googleapiclient.errors import HttpError
 
-from onyx.connectors.google_drive.drive_access import can_list_drive
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveSourceOperations,
+)
 
 _RATE_LIMIT_BODY = (
     b'{"error": {"errors": [{"reason": "userRateLimitExceeded"}], '
@@ -41,6 +45,14 @@ def _service(drives_get: list[object], files_list: list[object]) -> MagicMock:
     service.drives.return_value.get.return_value = _request(drives_get)
     service.files.return_value.list.return_value = _request(files_list)
     return service
+
+
+def can_list_drive(service: MagicMock, drive_id: str) -> bool:
+    ops = GoogleDriveSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(None, "google_drive", {})
+    )
+    with patch.object(GoogleDriveSourceOperations, "_drive", return_value=service):
+        return ops.can_list_drive(user_email="user@co.com", drive_id=drive_id)
 
 
 @pytest.fixture(autouse=True)
@@ -82,5 +94,6 @@ def test_transient_server_error_is_retried() -> None:
 def test_persistent_server_error_raises() -> None:
     service = _service([_error(503)] * 3, [{"files": []}])
 
-    with pytest.raises(HttpError):
+    with pytest.raises(GoogleDriveHttpError) as error:
         can_list_drive(service, "d")
+    assert error.value.status_code == 503
