@@ -20,8 +20,7 @@ class PatScopeOption(BaseModel):
     group_label: str
     label: str
     description: str
-    # Minimum license tier at which the FE offers this scope. Not enforced at
-    # minting time; the gated API surface itself rejects lower tiers.
+    # Minimum license tier at which this scope is listed and can be minted.
     min_tier: Tier = Tier.COMMUNITY
 
     @computed_field
