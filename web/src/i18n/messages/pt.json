@@ -9037,9 +9037,6 @@
       "docsLink": {
         "label": "Documentação"
       },
-      "rerunButton": {
-        "label": "Executar as verificações novamente"
-      },
       "foldButton": {
         "fold": "Recolher",
         "expand": "Expandir"
@@ -9054,10 +9051,6 @@
         "successful": "{count} bem-sucedidas"
       },
       "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
-      "failedToRunCard": {
-        "title": "Não foi possível executar as verificações",
-        "description": "Algo deu errado ao iniciar as verificações desta conta."
-      },
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
       "state": {
         "completed": "Verificações concluídas.",

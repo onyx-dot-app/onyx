@@ -9037,9 +9037,6 @@
       "docsLink": {
         "label": "ドキュメント"
       },
-      "rerunButton": {
-        "label": "チェックを再実行"
-      },
       "foldButton": {
         "fold": "折りたたむ",
         "expand": "展開"
@@ -9054,10 +9051,6 @@
         "successful": "成功 {count} 件"
       },
       "failedToRun": "チェックを実行できませんでした。もう一度お試しください。",
-      "failedToRunCard": {
-        "title": "チェックを実行できませんでした",
-        "description": "このアカウントのチェックを開始する際に問題が発生しました。"
-      },
       "requiredFailed": "{count, plural, one {必須チェック # 件が失敗} other {必須チェック # 件が失敗}}",
       "state": {
         "completed": "チェックが完了しました。",

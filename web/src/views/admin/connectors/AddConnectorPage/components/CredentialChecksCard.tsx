@@ -13,7 +13,6 @@ import {
   IconTooltip,
   Log,
   type LogVariant,
-  MessageCard,
   OverflowText,
   SelectCard,
   Tag,
@@ -30,8 +29,9 @@ import {
   SvgPlay,
   SvgRefreshCw,
   SvgXCircle,
+  SvgXOctagon,
 } from "@opal/icons";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
 import { escapeMarkdown, markdown } from "@opal/utils";
 import type {
   CapabilityCheckResult,
@@ -225,6 +225,19 @@ function CheckGroup({ label, checks }: CheckGroupProps) {
  * The ring and the title count every check, so a run fills them in as checks
  * finish.
  */
+/**
+ * A red stop sign, for a run that broke. Content colors its icon from its own
+ * stylesheet, so the red is an inline style; Content's sizing stays.
+ */
+function FailedToRunIcon({ style, ...props }: IconProps) {
+  return (
+    <SvgXOctagon
+      {...props}
+      style={{ ...style, color: "var(--status-error-05)" }}
+    />
+  );
+}
+
 interface CheckCardViewProps {
   status: ConnectorChecksStatus;
   /** The finished checks, in any order. */
@@ -249,6 +262,8 @@ function CheckCardView({
   onRerun,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
+  // The same "Re-run Checks" label the saved account cards use.
+  const tAccount = useTranslations("admin.connectorsList.add.account");
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -326,9 +341,8 @@ function CheckCardView({
   const header = (
     <ContentAction
       // A run that broke has no counts, so the ring would read as complete;
-      // it shows the failed-check icon instead.
-      icon={status === "failedToRun" ? SvgXCircle : progress.icon}
-      color={status === "failedToRun" ? "danger" : undefined}
+      // a red X stands in, without dimming the title.
+      icon={notice ? FailedToRunIcon : progress.icon}
       title={t("title")}
       suffix={progress.suffix}
       // Expanded, a short state line keeps the header's height steady while
@@ -346,15 +360,27 @@ function CheckCardView({
       padding={1.5}
       rightChildren={
         <Section flexDirection="row" width="fit" height="fit" gap={0}>
-          {!collapsed && (
+          {notice ? (
+            // The way to try again, so it says what it does.
             <Button
-              icon={SvgRefreshCw}
+              rightIcon={SvgRefreshCw}
               prominence="internal"
-              tooltip={t("rerunButton.label")}
-              aria-label={t("rerunButton.label")}
               disabled={isRunning}
               onClick={onRerun}
-            />
+            >
+              {tAccount("rerunButton.label")}
+            </Button>
+          ) : (
+            !collapsed && (
+              <Button
+                icon={SvgRefreshCw}
+                prominence="internal"
+                tooltip={tAccount("rerunButton.label")}
+                aria-label={tAccount("rerunButton.label")}
+                disabled={isRunning}
+                onClick={onRerun}
+              />
+            )
           )}
           {collapsed && requiredFailed > 0 && (
             <Tag
@@ -362,20 +388,25 @@ function CheckCardView({
               color="red"
             />
           )}
-          <Button
-            icon={collapsed ? SvgExpand : SvgFold}
-            // Folded, the card hovers grey itself; tertiary matches that
-            // grey, where internal would paint a white square on it.
-            prominence={collapsed ? "tertiary" : "internal"}
-            tooltip={collapsed ? t("foldButton.expand") : t("foldButton.fold")}
-            aria-label={
-              collapsed ? t("foldButton.expand") : t("foldButton.fold")
-            }
-            aria-expanded={!collapsed}
-            // Folded, it repeats the card's own action.
-            tabIndex={collapsed ? -1 : undefined}
-            onClick={() => setCollapsed((value) => !value)}
-          />
+          {/* A run that broke has no rows to fold. */}
+          {!notice && (
+            <Button
+              icon={collapsed ? SvgExpand : SvgFold}
+              // Folded, the card hovers grey itself; tertiary matches that
+              // grey, where internal would paint a white square on it.
+              prominence={collapsed ? "tertiary" : "internal"}
+              tooltip={
+                collapsed ? t("foldButton.expand") : t("foldButton.fold")
+              }
+              aria-label={
+                collapsed ? t("foldButton.expand") : t("foldButton.fold")
+              }
+              aria-expanded={!collapsed}
+              // Folded, it repeats the card's own action.
+              tabIndex={collapsed ? -1 : undefined}
+              onClick={() => setCollapsed((value) => !value)}
+            />
+          )}
         </Section>
       }
     />
@@ -407,20 +438,6 @@ function CheckCardView({
             gap={1}
             className="pt-1"
           >
-            {notice && (
-              <div role="alert">
-                <MessageCard
-                  variant="error"
-                  title={t("failedToRunCard.title")}
-                  description={t("failedToRunCard.description")}
-                  innerPadding={1}
-                  // Rounder than the checks card's radius less its padding
-                  // (2), which looked too tight beside it.
-                  rounding={3}
-                />
-              </div>
-            )}
-
             {hasResults || openChecks.length > 0 ? (
               <Section
                 justifyContent="start"

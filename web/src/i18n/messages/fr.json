@@ -9037,9 +9037,6 @@
       "docsLink": {
         "label": "Documentation"
       },
-      "rerunButton": {
-        "label": "Relancer les vérifications"
-      },
       "foldButton": {
         "fold": "Réduire",
         "expand": "Développer"
@@ -9054,10 +9051,6 @@
         "successful": "{count} réussies"
       },
       "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
-      "failedToRunCard": {
-        "title": "Les vérifications n'ont pas pu s'exécuter",
-        "description": "Une erreur s'est produite au lancement des vérifications de ce compte."
-      },
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
         "completed": "Vérifications terminées.",

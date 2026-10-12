@@ -9037,9 +9037,6 @@
       "docsLink": {
         "label": "التوثيق"
       },
-      "rerunButton": {
-        "label": "إعادة تشغيل الفحوصات"
-      },
       "foldButton": {
         "fold": "طي",
         "expand": "توسيع"
@@ -9054,10 +9051,6 @@
         "successful": "{count} نجحت"
       },
       "failedToRun": "تعذّر تشغيل عمليات التحقق. حاول مرة أخرى.",
-      "failedToRunCard": {
-        "title": "تعذّر تشغيل عمليات التحقق",
-        "description": "حدث خطأ أثناء بدء عمليات التحقق لهذا الحساب."
-      },
       "requiredFailed": "{count, plural, one {فشل فحص مطلوب واحد} other {فشل # فحوصات مطلوبة}}",
       "state": {
         "completed": "اكتملت عمليات التحقق.",
