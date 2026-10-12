@@ -12892,6 +12892,9 @@
       "preparing": {
         "description": "개발 환경을 설정하는 중",
         "title": "샌드박스 준비 중..."
+      },
+      "download": {
+        "label": "다운로드"
       }
     },
     "imagePreview": {
@@ -13064,6 +13067,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF 컨트롤"
+      },
+      "thumbnails": {
+        "toggle": "페이지 썸네일 표시 전환",
+        "resize": "페이지 썸네일 크기 조정",
+        "label": "페이지 썸네일"
+      },
+      "page": {
+        "previous": "이전 페이지",
+        "next": "다음 페이지",
+        "counter": "{current} / {total}",
+        "preview": "{page}페이지 미리보기",
+        "select": "{page}페이지로 이동"
+      },
+      "zoom": {
+        "out": "축소",
+        "in": "확대",
+        "label": "확대/축소",
+        "fitWidth": "너비에 맞추기",
+        "fitPage": "페이지에 맞추기"
+      },
       "error": {
         "description": "PDF 파일을 불러올 수 없습니다.",
         "title": "PDF를 미리 볼 수 없습니다"
@@ -13076,6 +13101,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "프레젠테이션 컨트롤"
+      },
+      "thumbnails": {
+        "toggle": "슬라이드 썸네일 표시 전환"
+      },
+      "resize": {
+        "ariaLabel": "슬라이드 썸네일 크기 조정"
+      },
       "slides": {
         "label": "슬라이드"
       },
@@ -13086,7 +13120,7 @@
         "label": "다음 슬라이드"
       },
       "converting": {
-        "label": "프레젠테이션 변환 중..."
+        "label": "미리보기 준비 중..."
       },
       "empty": {
         "label": "이 프레젠테이션에 슬라이드가 없습니다"
@@ -13099,9 +13133,6 @@
       },
       "slide": {
         "counter": "슬라이드 {current} / {total}"
-      },
-      "resize": {
-        "ariaLabel": "슬라이드 썸네일 크기 조정"
       }
     },
     "previewTab": {

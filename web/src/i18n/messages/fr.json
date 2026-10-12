@@ -12892,6 +12892,9 @@
       "preparing": {
         "description": "Configuration de votre environnement de développement",
         "title": "Préparation du bac à sable..."
+      },
+      "download": {
+        "label": "Télécharger"
       }
     },
     "imagePreview": {
@@ -13064,6 +13067,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "Commandes PDF"
+      },
+      "thumbnails": {
+        "toggle": "Afficher ou masquer les miniatures",
+        "resize": "Redimensionner les miniatures",
+        "label": "Miniatures des pages"
+      },
+      "page": {
+        "previous": "Page précédente",
+        "next": "Page suivante",
+        "counter": "{current} / {total}",
+        "preview": "Aperçu de la page {page}",
+        "select": "Aller à la page {page}"
+      },
+      "zoom": {
+        "out": "Zoom arrière",
+        "in": "Zoom avant",
+        "label": "Zoom",
+        "fitWidth": "Ajuster à la largeur",
+        "fitPage": "Ajuster à la page"
+      },
       "error": {
         "description": "Le fichier PDF n'a pas pu être chargé.",
         "title": "Impossible de prévisualiser le PDF"
@@ -13076,6 +13101,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Commandes de présentation"
+      },
+      "thumbnails": {
+        "toggle": "Afficher ou masquer les miniatures des diapositives"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionner les miniatures des diapositives"
+      },
       "slides": {
         "label": "Diapositives"
       },
@@ -13086,7 +13120,7 @@
         "label": "Diapositive suivante"
       },
       "converting": {
-        "label": "Conversion de la présentation..."
+        "label": "Préparation de l’aperçu..."
       },
       "empty": {
         "label": "Aucune diapositive dans cette présentation"
@@ -13099,9 +13133,6 @@
       },
       "slide": {
         "counter": "Diapositive {current} sur {total}"
-      },
-      "resize": {
-        "ariaLabel": "Redimensionner les miniatures des diapositives"
       }
     },
     "previewTab": {

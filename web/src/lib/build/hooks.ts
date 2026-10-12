@@ -11,6 +11,7 @@ interface FilePreviewOptions {
   revision?: string;
   refreshKey?: number;
   isActive?: boolean;
+  onRefreshingChange?: (refreshing: boolean) => void;
 }
 
 class FilePreviewError extends Error {
@@ -26,7 +27,12 @@ class FilePreviewError extends Error {
 export function useFilePreview<T>(
   key: string,
   load: () => Promise<T>,
-  { revision, refreshKey = 0, isActive = true }: FilePreviewOptions = {}
+  {
+    revision,
+    refreshKey = 0,
+    isActive = true,
+    onRefreshingChange,
+  }: FilePreviewOptions = {}
 ) {
   const identity = JSON.stringify([key, revision, refreshKey]);
   const lifecycle = useRef<{
@@ -126,9 +132,23 @@ export function useFilePreview<T>(
   const isLoading =
     (result?.identity !== identity || isValidating) && !currentError;
 
+  useOutputRefreshStatus(isActive && isLoading, onRefreshingChange);
+
   return {
     data: result?.data,
     error: currentError,
     isLoading,
   };
+}
+
+/** Updating a listener must not look like the request finished. */
+export function useOutputRefreshStatus(
+  refreshing: boolean,
+  onChange?: (refreshing: boolean) => void
+) {
+  const notify = useEffectEvent((value: boolean) => onChange?.(value));
+  useEffect(() => {
+    notify(refreshing);
+  }, [refreshing, onChange]);
+  useEffect(() => () => notify(false), []);
 }

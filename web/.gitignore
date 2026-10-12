@@ -50,3 +50,6 @@ next-env.d.ts
 
 # storybook
 storybook-static
+
+# Generated from the installed PDF.js package by Next configuration.
+/public/pdfjs/

@@ -1,3 +1,4 @@
+import PdfDocumentViewer from "@/app/craft/components/output-panel/PdfDocumentViewer";
 import type { State } from "swr";
 import {
   act,
@@ -33,6 +34,13 @@ jest.mock("@/app/craft/components/output-panel/PptxPreview", () => ({
       data-refresh-key={refreshKey}
     >{`PowerPoint preview for ${filePath} in session ${sessionId}`}</div>
   ),
+}));
+
+jest.mock("@/app/craft/components/output-panel/PdfDocumentViewer", () => ({
+  __esModule: true,
+  default: jest.fn(({ blob }: { blob: Blob }) => (
+    <div title="report.pdf" data-size={blob.size} />
+  )),
 }));
 
 describe("FilePreviewContent", () => {
@@ -149,12 +157,7 @@ describe("FilePreviewContent", () => {
   });
 });
 
-it("defers hidden PDF edits, retains its iframe, and releases bytes on eviction", async () => {
-  const originalCreateObjectURL = URL.createObjectURL;
-  const originalRevokeObjectURL = URL.revokeObjectURL;
-  let urlNumber = 0;
-  URL.createObjectURL = jest.fn(() => `blob:pdf-${++urlNumber}`);
-  URL.revokeObjectURL = jest.fn();
+it("defers hidden PDF edits and releases cached bytes on eviction", async () => {
   const fetch = jest
     .spyOn(globalThis, "fetch")
     .mockImplementation(async () => new Response("pdf"));
@@ -172,32 +175,25 @@ it("defers hidden PDF edits, retains its iframe, and releases bytes on eviction"
     const { rerender, unmount } = render(view("1"), {
       swrConfig: { provider: () => globalCache },
     });
-    const frame = await screen.findByTitle("report.pdf");
+    const body = await screen.findByTitle("report.pdf");
+    const displayed = () =>
+      jest.mocked(PdfDocumentViewer).mock.calls.at(-1)?.[0].blob;
+    const originalBlob = displayed();
     rerender(view("2", false));
     rerender(view("3", false, 1));
-    expect(screen.getByTitle("report.pdf")).toBe(frame);
+    expect(screen.getByTitle("report.pdf")).toBe(body);
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
     rerender(view("3", true, 1));
-    await waitFor(() =>
-      expect(screen.getByTitle("report.pdf")).toHaveAttribute(
-        "src",
-        "blob:pdf-2"
-      )
-    );
+    await waitFor(() => expect(displayed()).not.toBe(originalBlob));
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(globalCache.size).toBe(0);
     unmount();
-    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
-
     const reopened = render(view("3", true, 1));
     await screen.findByTitle("report.pdf");
     expect(fetch).toHaveBeenCalledTimes(3);
     reopened.unmount();
   } finally {
     fetch.mockRestore();
-    URL.createObjectURL = originalCreateObjectURL;
-    URL.revokeObjectURL = originalRevokeObjectURL;
   }
 });
 
