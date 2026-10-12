@@ -40,8 +40,8 @@ import {
   cleanTaskOutput,
 } from "@/app/craft/utils/subagentRouting";
 
-const INTERRUPT_RECONCILE_INTERVAL_MS = 1000;
-const INTERRUPT_RECONCILE_MAX_ATTEMPTS = 30;
+const STREAM_RECONNECT_INTERVAL_MS = 1000;
+const stopRequests = new Map<string, Promise<void>>();
 
 /** Coalesce tool completions. Turn completion queues its final read immediately. */
 function createOutputRefreshQueue(refresh: () => Promise<void>) {
@@ -194,91 +194,46 @@ export function useBuildStreaming({
     (state) => state.triggerFilesRefresh
   );
 
-  const reconcileInterruptedTurn = useCallback(
-    async (
+  const requestStop = useCallback(
+    (
       sessionId: string,
-      interruptedTurnId: string | null,
-      generation: number,
-      instanceId: string
+      instanceId: string,
+      generation: number
     ): Promise<void> => {
-      const stopping = useBuildSessionStore
-        .getState()
-        .sessions.get(sessionId)?.isInterrupting;
-      // Only act while this is still the interrupt we launched for; otherwise a
-      // newer turn (a queued auto-send bumps the generation) would be clobbered.
-      const ownsInterrupt = (turnId: string | null): boolean => {
-        const s = useBuildSessionStore.getState().sessions.get(sessionId);
+      const key = `${instanceId}:${generation}`;
+      const pending = stopRequests.get(key);
+      if (pending) return pending;
+      const ownsRequest = (): boolean => {
+        const current = useBuildSessionStore.getState().sessions.get(sessionId);
         return (
-          !!s &&
-          s.instanceId === instanceId &&
-          s.turnGeneration === generation &&
-          s.isInterrupting === stopping &&
-          s.status === "running" &&
-          (turnId === null || !s.activeTurnId || s.activeTurnId === turnId)
+          current?.instanceId === instanceId &&
+          current.turnGeneration === generation
         );
       };
-
-      let turnId = interruptedTurnId;
-      const settle = async (): Promise<void> => {
-        if (!ownsInterrupt(null)) return;
-        void useBuildSessionStore.getState().refreshOutputInventory(sessionId);
-        await useBuildSessionStore
-          .getState()
-          .beginTurnSettlement(
-            sessionId,
-            { kind: "interactive", turnId },
-            generation
-          );
-      };
-
-      for (let i = 0; i < INTERRUPT_RECONCILE_MAX_ATTEMPTS; i++) {
-        await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
-        if (!ownsInterrupt(turnId)) return;
-
-        let activeTurn: Awaited<ReturnType<typeof fetchActiveTurn>>;
-        try {
-          activeTurn = await fetchActiveTurn(sessionId);
-        } catch (err) {
-          console.warn(
-            "[Streaming] Failed to reconcile interrupted turn:",
-            err
-          );
-          continue;
-        }
-
-        if (!activeTurn) {
-          const current = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId);
-          if (current?.activeTurnLocalOwner && current.activeTurnId === null)
-            continue;
-          await settle();
-          return;
-        }
-        // turnId is null when the interrupt beat the local activeTurnId — adopt
-        // the backend's; a different id means the backend moved on, so bail.
-        if (turnId === null) turnId = activeTurn.turn_id;
-        else if (activeTurn.turn_id !== turnId) return;
-      }
-
-      // Timed out: settle if the turn is actually gone now (unblock the UI),
-      // otherwise it's genuinely still running — just clear the "stopping" state.
-      console.warn("[Streaming] Interrupted turn reconciliation timed out");
-      if (!ownsInterrupt(turnId)) return;
-      const turnGone = await fetchActiveTurn(sessionId)
-        .then((t) => t === null)
-        .catch(() => false);
-      if (!ownsInterrupt(turnId)) return;
-      const pendingStart = useBuildSessionStore
-        .getState()
-        .sessions.get(sessionId);
-      if (
-        pendingStart?.activeTurnLocalOwner &&
-        pendingStart.activeTurnId === null
-      )
-        return;
-      if (turnGone) await settle();
-      else updateSessionData(sessionId, { isInterrupting: false });
+      if (!ownsRequest()) return Promise.resolve();
+      updateSessionData(sessionId, {
+        isInterrupting: true,
+        wasInterrupted: true,
+      });
+      const request = interruptMessageStream(sessionId)
+        .catch((error: unknown) => {
+          console.error("[Streaming] Failed to interrupt:", error);
+          if (ownsRequest()) {
+            const current = useBuildSessionStore
+              .getState()
+              .sessions.get(sessionId);
+            if (current?.activeTurnId)
+              updateSessionData(sessionId, { wasInterrupted: false });
+          }
+        })
+        .finally(() => {
+          if (stopRequests.get(key) !== request) return;
+          stopRequests.delete(key);
+          if (ownsRequest())
+            updateSessionData(sessionId, { isInterrupting: false });
+        });
+      stopRequests.set(key, request);
+      return request;
     },
     [updateSessionData]
   );
@@ -1088,7 +1043,7 @@ export function useBuildStreaming({
               );
             return;
           }
-          await sleep(INTERRUPT_RECONCILE_INTERVAL_MS);
+          await sleep(STREAM_RECONNECT_INTERVAL_MS);
         }
       } catch (err) {
         if ((err as Error).name === "AbortError") {
@@ -1220,33 +1175,13 @@ export function useBuildStreaming({
           }),
         });
 
-        if (currentSession?.isInterrupting) {
-          try {
-            await interruptMessageStream(sessionId);
-            if (!ownsTurn(turn.turn_id)) return;
-            void reconcileInterruptedTurn(
-              sessionId,
-              turn.turn_id,
-              generation,
-              currentSession.instanceId
-            );
-          } catch (error) {
-            if (!ownsTurn(turn.turn_id)) return;
-            console.error(
-              "[Streaming] Failed to interrupt accepted turn:",
-              error
-            );
-            updateSessionData(sessionId, {
-              isInterrupting: false,
-              wasInterrupted: false,
-            });
-            void reconcileInterruptedTurn(
-              sessionId,
-              turn.turn_id,
-              generation,
-              currentSession.instanceId
-            );
-          }
+        if (currentSession?.wasInterrupted) {
+          const pendingStop = stopRequests.get(
+            `${currentSession.instanceId}:${generation}`
+          );
+          if (pendingStop) await pendingStop;
+          if (!ownsTurn(turn.turn_id)) return;
+          await requestStop(sessionId, currentSession.instanceId, generation);
         }
         if (!ownsTurn(turn.turn_id)) return;
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
@@ -1316,7 +1251,7 @@ export function useBuildStreaming({
       appendMessageToSession,
       clearStreamItems,
       streamTurnEvents,
-      reconcileInterruptedTurn,
+      requestStop,
     ]
   );
 
@@ -1385,46 +1320,10 @@ export function useBuildStreaming({
         return;
       }
 
-      const interruptedTurnId = session.activeTurnId;
-      const generation = session.turnGeneration;
-      updateSessionData(sessionId, {
-        isInterrupting: true,
-        wasInterrupted: true,
-      });
       cancelLatestInFlightToolCallStreamItem(sessionId);
-      try {
-        await interruptMessageStream(sessionId);
-        void reconcileInterruptedTurn(
-          sessionId,
-          interruptedTurnId,
-          generation,
-          session.instanceId
-        );
-      } catch (err) {
-        const current = useBuildSessionStore.getState().sessions.get(sessionId);
-        if (
-          current?.instanceId !== session.instanceId ||
-          current.turnGeneration !== generation
-        )
-          return;
-        console.error("[Streaming] Failed to interrupt:", err);
-        updateSessionData(sessionId, {
-          isInterrupting: false,
-          wasInterrupted: false,
-        });
-        void reconcileInterruptedTurn(
-          sessionId,
-          interruptedTurnId,
-          generation,
-          session.instanceId
-        );
-      }
+      await requestStop(sessionId, session.instanceId, session.turnGeneration);
     },
-    [
-      reconcileInterruptedTurn,
-      updateSessionData,
-      cancelLatestInFlightToolCallStreamItem,
-    ]
+    [requestStop, cancelLatestInFlightToolCallStreamItem]
   );
 
   const streamScheduledRunEvents = useCallback(

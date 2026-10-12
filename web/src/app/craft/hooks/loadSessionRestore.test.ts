@@ -4,6 +4,7 @@ import {
   useBuildSessionStore,
   waitForWebappReady,
 } from "@/app/craft/hooks/useBuildSessionStore";
+import { FetchError } from "@/lib/fetcher";
 import * as api from "@/app/craft/services/apiServices";
 
 jest.mock("@/app/craft/services/apiServices");
@@ -74,6 +75,12 @@ describe("loadSession restore status", () => {
     } as never);
     mockedApi.fetchMessages.mockResolvedValue([] as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null as never);
+    mockedApi.fetchKnownTurn.mockImplementation(async (sessionId, turnId) => ({
+      session_id: sessionId,
+      turn_id: turnId,
+      status: "SUCCEEDED",
+      turn_index: 0,
+    }));
     mockedApi.fetchArtifacts.mockResolvedValue([] as never);
     mockedApi.fetchOutputInventory.mockResolvedValue({
       files: [],
@@ -1406,6 +1413,12 @@ describe("completed transcript handoff", () => {
     });
     mockedApi.fetchSession.mockResolvedValue(runningSession() as never);
     mockedApi.fetchActiveTurn.mockResolvedValue(null);
+    mockedApi.fetchKnownTurn.mockImplementation(async (sessionId, turnId) => ({
+      session_id: sessionId,
+      turn_id: turnId,
+      status: "SUCCEEDED",
+      turn_index: 0,
+    }));
     mockedApi.fetchMessages.mockResolvedValue([user, answer]);
     mockedApi.fetchArtifacts.mockResolvedValue([]);
     mockedApi.fetchOutputInventory.mockResolvedValue({
@@ -1418,6 +1431,92 @@ describe("completed transcript handoff", () => {
       messages: [user, answer],
       activeTurnId: "completed-turn",
     });
+  });
+
+  it.each(["FAILED", "expired"] as const)(
+    "does not release queued work after %s completion",
+    async (outcome) => {
+      const store = useBuildSessionStore.getState();
+      store.enqueueMessage(SESSION_ID, "next task", []);
+      mockedApi.fetchKnownTurn.mockResolvedValue(
+        outcome === "expired"
+          ? null
+          : {
+              session_id: SESSION_ID,
+              turn_id: "completed-turn",
+              turn_index: 0,
+              status: outcome,
+              error_detail: outcome === "FAILED" ? "provider failed" : null,
+            }
+      );
+      await store.beginTurnSettlement(
+        SESSION_ID,
+        { kind: "interactive", turnId: "completed-turn" },
+        0
+      );
+      const session = useBuildSessionStore.getState().sessions.get(SESSION_ID);
+      expect(
+        useBuildSessionStore.getState().claimQueuedMessage(SESSION_ID)
+      ).toBeNull();
+      expect(session?.queuedMessages).toHaveLength(1);
+      if (outcome === "expired") {
+        expect(session?.turnSettlement?.phase).toBe("failed");
+      } else {
+        expect(session?.status).toBe("failed");
+        expect(session?.messages).toHaveLength(2);
+      }
+    }
+  );
+
+  it("adopts a running successor even when its predecessor failed", async () => {
+    mockedApi.fetchKnownTurn.mockResolvedValue({
+      session_id: SESSION_ID,
+      turn_id: "completed-turn",
+      turn_index: 0,
+      status: "FAILED",
+      error_detail: "old provider failed",
+    });
+    mockedApi.fetchActiveTurn.mockResolvedValue({
+      session_id: SESSION_ID,
+      turn_id: "other-tab-turn",
+      turn_index: 1,
+      status: "RUNNING",
+    });
+    await useBuildSessionStore
+      .getState()
+      .beginTurnSettlement(
+        SESSION_ID,
+        { kind: "interactive", turnId: "completed-turn" },
+        0
+      );
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: "other-tab-turn",
+      error: null,
+      turnSettlement: null,
+    });
+  });
+
+  it("releases queued work after confirmed cancellation from another client", async () => {
+    mockedApi.fetchKnownTurn.mockResolvedValue({
+      session_id: SESSION_ID,
+      turn_id: "completed-turn",
+      turn_index: 0,
+      status: "CANCELLED",
+    });
+    await useBuildSessionStore
+      .getState()
+      .beginTurnSettlement(
+        SESSION_ID,
+        { kind: "interactive", turnId: "completed-turn" },
+        0
+      );
+    expect(
+      useBuildSessionStore.getState().sessions.get(SESSION_ID)?.turnSettlement
+        ?.phase
+    ).toBe("ready");
   });
 
   it("holds the streamed response until the server turn completes", async () => {
@@ -1813,6 +1912,15 @@ describe("session history races and discarded queued starts", () => {
   };
   beforeEach(() => {
     jest.resetAllMocks();
+    jest
+      .mocked(api.fetchKnownTurn)
+      .mockImplementation(async (sessionId, turnId) => ({
+        session_id: sessionId,
+        turn_id: turnId,
+        status: "SUCCEEDED",
+        turn_index: 0,
+      }));
+
     useBuildSessionStore.setState({
       sessions: new Map(),
       currentSessionId: null,
@@ -2158,4 +2266,72 @@ describe("session history races and discarded queued starts", () => {
     });
     expect(api.fetchActiveTurn).not.toHaveBeenCalled();
   });
+});
+
+describe("deleting a live session", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useBuildSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: null,
+    });
+    jest.mocked(api.fetchSessionHistory).mockResolvedValue([]);
+  });
+
+  it.each([false, true])(
+    "aborts the live owner only after successful deletion (success: %s)",
+    async (success) => {
+      const store = useBuildSessionStore.getState();
+      const controller = new AbortController();
+      store.createSession("delete-live", {
+        status: "running",
+        activeTurnId: "live-turn",
+        activeTurnLocalOwner: true,
+        abortController: controller,
+      });
+      let resolve: (() => void) | undefined;
+      let reject: ((error: Error) => void) | undefined;
+      jest.mocked(api.deleteSession).mockReturnValueOnce(
+        new Promise<void>((complete, fail) => {
+          resolve = complete;
+          reject = fail;
+        })
+      );
+      const errorLog = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      try {
+        const deleting = store.deleteBuildSession("delete-live");
+        expect(controller.signal.aborted).toBe(false);
+        expect(
+          useBuildSessionStore.getState().sessions.get("delete-live")
+            ?.abortController
+        ).toBe(controller);
+        if (success) {
+          resolve?.();
+          await deleting;
+          expect(controller.signal.aborted).toBe(true);
+          expect(
+            useBuildSessionStore.getState().sessions.has("delete-live")
+          ).toBe(false);
+        } else {
+          const failure = new FetchError("Session busy", 409, null);
+          reject?.(failure);
+          await expect(deleting).rejects.toBe(failure);
+          const session = useBuildSessionStore
+            .getState()
+            .sessions.get("delete-live");
+          expect(controller.signal.aborted).toBe(false);
+          expect(session?.abortController).toBe(controller);
+          expect(session).toMatchObject({
+            activeTurnId: "live-turn",
+            activeTurnLocalOwner: true,
+            status: "running",
+          });
+        }
+      } finally {
+        errorLog.mockRestore();
+      }
+    }
+  );
 });

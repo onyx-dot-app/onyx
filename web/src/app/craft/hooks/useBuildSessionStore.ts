@@ -43,6 +43,7 @@ import {
   deleteSession as apiDeleteSession,
   fetchMessages,
   fetchActiveTurn,
+  fetchKnownTurn,
   fetchScheduledRunContext,
   fetchArtifacts,
   fetchOutputInventory,
@@ -1179,6 +1180,8 @@ function reconcileCompletedTranscript(
         let waiting: boolean;
         let approvalPause = false;
         let scheduledFailure = false;
+        let interactiveFailure: string | null = null;
+        let interactiveFailed = false;
         let successor: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
         if (owner.kind === "scheduled") {
           const run = await fetchScheduledRunContext(sessionId);
@@ -1203,6 +1206,23 @@ function reconcileCompletedTranscript(
         if (waiting) {
           await new Promise<void>((resolve) => setTimeout(resolve, 1000));
           continue;
+        }
+        if (owner.kind === "interactive" && owner.turnId !== null) {
+          const completedTurn = await fetchKnownTurn(sessionId, owner.turnId);
+          if (!ownsCompletion()) return;
+          if (!completedTurn) {
+            fail(null);
+            return;
+          }
+          if (
+            completedTurn.status === "QUEUED" ||
+            completedTurn.status === "RUNNING"
+          ) {
+            await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+            continue;
+          }
+          interactiveFailed = completedTurn.status === "FAILED";
+          interactiveFailure = completedTurn.error_detail ?? null;
         }
         let messages = await fetchMessages(sessionId);
         if (!ownsCompletion()) return;
@@ -1237,11 +1257,15 @@ function reconcileCompletedTranscript(
           streamItems: restored.streamItems,
           subagents: buildSubagentsFromMessages(messages),
           contextUsage: deriveContextUsage(messages),
-          status: scheduledFailure
-            ? "failed"
-            : successor
-              ? "running"
+          status: successor
+            ? "running"
+            : scheduledFailure || interactiveFailed
+              ? "failed"
               : "active",
+          error:
+            interactiveFailed && !successor
+              ? interactiveFailure
+              : current.error,
           isInterrupting: false,
           activeTurnId: successor?.turn_id ?? null,
           activeTurnIndex: successor?.turn_index ?? null,
@@ -1252,7 +1276,7 @@ function reconcileCompletedTranscript(
             wasInterrupted: false,
           }),
           turnSettlement:
-            successor || approvalPause || scheduledFailure
+            successor || approvalPause || scheduledFailure || interactiveFailed
               ? null
               : { ...current.turnSettlement, phase: "ready" },
         });
@@ -1874,6 +1898,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       !session ||
       session.turnGeneration !== generation ||
       session.error ||
+      session.isInterrupting ||
       session.turnSettlement
     )
       return;
@@ -2301,8 +2326,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const { currentSessionId, abortSession, refreshSessionHistory } = get();
 
     try {
-      abortSession(sessionId);
       await apiDeleteSession(sessionId);
+      abortSession(sessionId);
 
       // Remove session from local state
       set((state) => {

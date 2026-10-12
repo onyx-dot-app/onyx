@@ -487,6 +487,19 @@ export async function fetchActiveTurn(
   return await res.json();
 }
 
+export async function fetchKnownTurn(
+  sessionId: string,
+  turnId: string
+): Promise<ApiInteractiveTurnResponse | null> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/turns/${turnId}`
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to fetch turn: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchTurnEventStream(
   sessionId: string,
   turnId: string,

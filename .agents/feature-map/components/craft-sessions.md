@@ -110,6 +110,7 @@ protects.
 | POST | `/build/sessions/{id}/subagents/{subagent_id}/send-message` | `send_subagent_message` (`session/messages.py`) | Bypasses the interactive-turn queue entirely; streams synchronously via `SessionManager.send_subagent_message`. See §9. |
 | POST | `/build/sessions/{id}/interrupt` | `interrupt_message` (`session/messages.py`) | See §4.4. |
 | GET | `/build/sessions/{id}/turns/active` | `get_active_interactive_turn` (`interactive_turns/api.py`) | Poll for the current turn's id/status. |
+| GET | `/build/sessions/{id}/turns/{turn_id}` | `get_interactive_turn` (`interactive_turns/api.py`) | Read an owned turn's status, including its terminal outcome. |
 | GET | `/build/sessions/{id}/turns/{turn_id}/events` | `get_interactive_turn_events` (`interactive_turns/api.py`) | SSE attach/resume to a running turn; also (re)starts the runner if it stalled. |
 | GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/output-thumbnail/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
 | GET | `/build/approvals/sessions/{id}/live` | `list_live_approvals` (`approvals/api.py`) | |
@@ -367,9 +368,8 @@ state)` and commits **before** calling `finish_turn(..., CANCELLED)`
 `slot.lost` branch both do this). So at the backend/DB level, an interrupted
 turn's already-streamed content is durable; nothing rolls it back.
 
-On the frontend, `useBuildStreaming.ts:interruptStreaming` sets an
-`isInterrupting` flag and calls `reconcileInterruptedTurn` **after** posting
-the interrupt (`web/src/app/craft/hooks/useBuildStreaming.ts`).
+On the frontend, `useBuildStreaming.ts:interruptStreaming` holds `isInterrupting`
+only while the interrupt request is pending. The existing stream observer resumes after the request finishes.
 After the backend turn ends, the store owns transcript settlement for both interrupted and normally completed turns.
 Interactive settlement checks the active turn. Scheduled settlement checks the expected run and its saved status.
 Interactive settlement rechecks ownership after reading history. A changed owner triggers a history reread before adoption.
@@ -381,11 +381,16 @@ Failed and skipped scheduled runs also reload saved history, but never grant que
 A failed history read preserves the displayed transcript and the existing retry action.
 Failed settlement or queued-start recovery disables ordinary submission until the user retries or discards it.
 Initial history load failures also block submission. The existing load error remains until recovery succeeds.
+An existing session also blocks ordinary submission before its first load completes. Live turns can still receive queued prompts.
 Only confirmed completion with persisted history permits the next queued prompt.
 Stop is available only for an active backend turn or a pending local start. History reconciliation alone is not interruptible.
-A failed Stop request resumes completion checks. Those checks yield to a later Stop request for the same turn.
+Stop owns only the interrupt request. The stream owner handles backend completion after that request finishes.
+Overlapping Stop requests for a pending local start are serialized before the accepted turn resumes observation.
 Local stream ownership ends when its stream function exits. The provider then watches visible or queued turns.
+Session deletion stops local observation only after the server confirms deletion. A rejected delete preserves the live owner.
 Provider attachment pauses while Stop is pending and resumes when stopping clears, including after a failed request.
+Interactive settlement reads the known turn's terminal outcome before replacing history or granting queue permission.
+Backend failures block queued prompts even after stream disconnection. Unknown outcomes require explicit recovery.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
 `CraftStreamingProvider` owns that hook and is mounted by `web/src/providers/AppProvider.tsx` inside the authenticated app provider.
 The provider also watches external interactive turns for visible sessions and sessions with queued prompts.
@@ -719,7 +724,7 @@ A directory scan reports current files, not exact per-turn provenance.
 |---|---|
 | changes the turn executor (`interactive_turns/executor.py`) | every streamed terminal path still calls `finalize_persist` before `finish_turn` (the prompt-slot rejection path persists an error row instead); the timeout-continuation loop's `MAX_TIMEOUT_CONTINUATIONS` cap; `[[craft-streaming]]`'s event shapes the executor switches on (`PromptResponse`, `ActivityTimeoutError`, `SandboxError`) |
 | changes locking (`prompt_slot`, `acquire_active_turn_lock`, `session_creation_lock`) | the CONFLICT-vs-silent-failure behavior at each acquisition site; whether a reclaim (`claim_turn_for_runner`) can still race a live runner; `[[craft-sandboxes]]`'s reaper, which also touches sandbox state under related locks |
-| changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's `reconcileInterruptedTurn` polling contract (`fetchActiveTurn` going to `null`); whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` best-effort path staying best-effort (not blocking) |
+| changes interrupt (`interrupt_signal.py`, `interrupt_message`) | the FE's pending Stop request barrier and known-turn terminal outcome contract; whether partial output still commits before `finish_turn(CANCELLED)`; the direct `abort_opencode_session` best-effort path staying best-effort (not blocking) |
 | adds an approval point | `ApprovalRequestedPacket` plumbing through `[[craft-streaming]]`; `list_live_approvals`'s time-window filter; whether the new point's target maps to a `GatedApp (kind, target_id)` the session-grant matching in `submit_session_grant` can actually cover |
 | changes session state (`BuildSession` columns, `session_ready.py`) | `session_runtime_intact`'s fast-path check; `reconcile_session_llm_config`'s short-circuit comparison; any snapshot/restore path in `[[craft-sandboxes]]` that reads these columns |
 | changes artifact upsert or hashing | the FE artifact list/version display; `export_docx`/`download_artifact`, which read the live workspace, not the DB row's cached bytes |

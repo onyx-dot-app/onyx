@@ -229,7 +229,11 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     session?.turnSettlement?.phase === "failed"
       ? (session.turnSettlement.error ?? t("settlementError.description"))
       : null;
-  const submissionNeedsRecovery =
+  const submissionBlocked =
+    (!!existingSessionId &&
+      !session?.isLoaded &&
+      !session?.activeTurnId &&
+      !session?.activeTurnLocalOwner) ||
     session?.loadError != null ||
     session?.turnSettlement?.phase === "failed" ||
     sessionQueue[0]?.phase === "failed";
@@ -421,7 +425,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
-      if (submissionNeedsRecovery) return;
+      if (submissionBlocked) return;
       if (scheduledRunInFlight) {
         toast.error(t("toast.scheduledRunWait"));
         return;
@@ -543,7 +547,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       sessionId,
       isRunning,
       scheduledRunInFlight,
-      submissionNeedsRecovery,
+      submissionBlocked,
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
@@ -828,7 +832,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
                       disabled={
                         isViewingSubagent ||
                         isRestoring ||
-                        submissionNeedsRecovery ||
+                        submissionBlocked ||
                         scheduledRunInFlight ||
                         !hasProvider
                       }

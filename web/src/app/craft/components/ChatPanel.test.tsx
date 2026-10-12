@@ -200,18 +200,19 @@ beforeEach(() => {
   });
   useBuildSessionStore
     .getState()
-    .createSession(SESSION_ID, { status: "active", isLoaded: false });
+    .createSession(SESSION_ID, { status: "active", isLoaded: true });
   useBuildSessionStore.getState().setCurrentSession(SESSION_ID);
 });
 
-it("omits display defaults from existing-session sends while metadata loads", async () => {
+it("blocks initial existing-session sends until the first load installs metadata", async () => {
+  useBuildSessionStore
+    .getState()
+    .updateSessionData(SESSION_ID, { isLoaded: false });
   render(<BuildChatPanel existingSessionId={SESSION_ID} />);
-  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   expect(screen.queryByTestId("model-picker")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
-  await waitFor(() =>
-    expect(streamMessage).toHaveBeenCalledWith(SESSION_ID, "prompt", null, [])
-  );
+  expect(streamMessage).not.toHaveBeenCalled();
   await act(async () =>
     useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
       isLoaded: true,
@@ -219,7 +220,29 @@ it("omits display defaults from existing-session sends while metadata loads", as
       agentModel: "saved-model",
     })
   );
+  expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
   expect(screen.getByTestId("model-picker")).toHaveTextContent("saved-model");
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() =>
+    expect(streamMessage).toHaveBeenCalledWith(SESSION_ID, "prompt", null, [])
+  );
+});
+
+it.each([
+  { activeTurnId: "live-turn", activeTurnLocalOwner: false },
+  { activeTurnId: null, activeTurnLocalOwner: true },
+])("allows queueing for an unloaded live owner (%j)", (owner) => {
+  useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+    ...owner,
+    status: "running",
+    isLoaded: false,
+  });
+  render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  expect(screen.getByRole("button", { name: "Queue" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Queue" }));
+  expect(
+    useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages
+  ).toHaveLength(1);
 });
 
 it("shows a failed metadata load and retries the session explicitly", async () => {

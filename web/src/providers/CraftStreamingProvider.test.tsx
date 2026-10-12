@@ -14,6 +14,7 @@ import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import {
   createTurn,
   fetchActiveTurn,
+  fetchKnownTurn,
   fetchMessages,
   fetchOutputInventory,
   fetchTurnEventStream,
@@ -41,6 +42,7 @@ jest.mock("@/app/craft/services/apiServices", () => ({
   RateLimitedError: class RateLimitedError extends Error {},
   createTurn: jest.fn(),
   fetchActiveTurn: jest.fn(),
+  fetchKnownTurn: jest.fn(),
   fetchMessages: jest.fn(),
   fetchOutputInventory: jest.fn(),
   fetchTurnEventStream: jest.fn(),
@@ -78,6 +80,12 @@ describe("CraftStreamingProvider", () => {
       outputInventory: {},
     });
     jest.mocked(fetchActiveTurn).mockResolvedValue(null);
+    jest.mocked(fetchKnownTurn).mockImplementation(async (id, turnId) => ({
+      session_id: id,
+      turn_id: turnId,
+      status: "SUCCEEDED",
+      turn_index: 0,
+    }));
     jest.mocked(fetchMessages).mockResolvedValue([]);
     jest.mocked(fetchOutputInventory).mockResolvedValue({
       files: [],
@@ -296,8 +304,201 @@ describe("CraftStreamingProvider", () => {
     });
     expect(createTurn).toHaveBeenCalledTimes(2);
   });
+  it.each(["acknowledged", "failed"] as const)(
+    "serializes a preaccept Stop that %s before repeating it for the accepted turn",
+    async (outcome) => {
+      const accepted = deferred<Awaited<ReturnType<typeof createTurn>>>();
+      const firstStop = deferred<void>();
+      const acceptedStop = deferred<void>();
+      const queuedStream = deferred<void>();
+      jest.mocked(createTurn).mockReturnValueOnce(accepted.promise);
+      jest
+        .mocked(interruptMessageStream)
+        .mockReturnValueOnce(firstStop.promise)
+        .mockReturnValueOnce(acceptedStop.promise);
+      jest.mocked(fetchKnownTurn).mockImplementation(async (id, turnId) => ({
+        session_id: id,
+        turn_id: turnId,
+        status: turnId === "first-turn" ? "CANCELLED" : "SUCCEEDED",
+        turn_index: 0,
+      }));
+      jest
+        .mocked(processSSEStream)
+        .mockImplementationOnce(async (_response, onPacket) => {
+          onPacket({ type: "prompt_response" });
+        })
+        .mockImplementationOnce(async () => {
+          await queuedStream.promise;
+          throw new DOMException("Closed", "AbortError");
+        });
+      const store = useBuildSessionStore.getState();
+      store.setCurrentSession(sessionId);
+      const view = render(
+        <CraftStreamingProvider>
+          <CraftPage />
+        </CraftStreamingProvider>
+      );
+      try {
+        fireEvent.click(screen.getByRole("button", { name: "Start" }));
+        act(() => {
+          store.enqueueMessage(sessionId, "queued prompt", []);
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+        await act(async () => {
+          accepted.resolve({
+            session_id: sessionId,
+            turn_id: "first-turn",
+            status: "QUEUED",
+            turn_index: 0,
+          });
+        });
+        expect(interruptMessageStream).toHaveBeenCalledTimes(1);
+        expect(fetchTurnEventStream).not.toHaveBeenCalled();
+        expect(createTurn).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          if (outcome === "failed")
+            firstStop.reject(new Error("First Stop failed"));
+          else firstStop.resolve();
+        });
+        expect(interruptMessageStream).toHaveBeenCalledTimes(2);
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+        ).toMatchObject({ isInterrupting: true, wasInterrupted: true });
+        expect(fetchTurnEventStream).not.toHaveBeenCalled();
+        expect(createTurn).toHaveBeenCalledTimes(1);
+        await act(async () => acceptedStop.resolve());
+        await waitFor(() => expect(createTurn).toHaveBeenCalledTimes(2));
+        expect(jest.mocked(createTurn).mock.calls[1]?.[1]).toBe(
+          "queued prompt"
+        );
+        expect(interruptMessageStream).toHaveBeenCalledTimes(2);
+      } finally {
+        view.unmount();
+        store.abortSession(sessionId);
+        await act(async () => queuedStream.resolve());
+      }
+    }
+  );
+
+  it.each(["missing-response", "terminal-packet", "active-check"] as const)(
+    "keeps the Stop barrier on %s and adopts an external successor after acknowledgement",
+    async (ending) => {
+      const firstResponse =
+        deferred<Awaited<ReturnType<typeof fetchTurnEventStream>>>();
+      const firstStream = deferred<void>();
+      const activeCheck =
+        deferred<Awaited<ReturnType<typeof fetchActiveTurn>>>();
+      const stop = deferred<void>();
+      const successorStream = deferred<void>();
+      const queuedStream = deferred<void>();
+      let endFirst: (() => void) | undefined;
+      let endSuccessor: (() => void) | undefined;
+      jest.mocked(createTurn).mockResolvedValueOnce({
+        session_id: sessionId,
+        turn_id: "first-turn",
+        status: "QUEUED",
+        turn_index: 0,
+      });
+      jest
+        .mocked(fetchTurnEventStream)
+        .mockReturnValueOnce(firstResponse.promise)
+        .mockResolvedValueOnce(null);
+      jest.mocked(interruptMessageStream).mockReturnValueOnce(stop.promise);
+      if (ending === "active-check") {
+        jest.mocked(fetchActiveTurn).mockReturnValueOnce(activeCheck.promise);
+        jest.mocked(processSSEStream).mockImplementationOnce(async () => {});
+      }
+      if (ending === "terminal-packet")
+        jest
+          .mocked(processSSEStream)
+          .mockImplementationOnce(async (_response, onPacket) => {
+            endFirst = () => {
+              onPacket({ type: "prompt_response" });
+              firstStream.resolve();
+            };
+            await firstStream.promise;
+          });
+      jest
+        .mocked(processSSEStream)
+        .mockImplementationOnce(async (_response, onPacket) => {
+          endSuccessor = () => {
+            onPacket({ type: "prompt_response" });
+            successorStream.resolve();
+          };
+          await successorStream.promise;
+        })
+        .mockImplementationOnce(async () => {
+          await queuedStream.promise;
+          throw new DOMException("Closed", "AbortError");
+        });
+      const store = useBuildSessionStore.getState();
+      store.setCurrentSession(sessionId);
+      const view = render(
+        <CraftStreamingProvider>
+          <CraftPage />
+        </CraftStreamingProvider>
+      );
+      try {
+        fireEvent.click(screen.getByRole("button", { name: "Start" }));
+        await act(async () => {});
+        if (ending !== "missing-response") {
+          firstResponse.resolve(new Response());
+          await act(async () => {});
+        }
+        if (ending === "active-check")
+          expect(fetchActiveTurn).toHaveBeenCalledTimes(1);
+        act(() => {
+          store.enqueueMessage(sessionId, "queued prompt", []);
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+        await act(async () => {
+          if (ending === "terminal-packet") endFirst?.();
+          else if (ending === "active-check") activeCheck.resolve(null);
+          else firstResponse.resolve(null);
+        });
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+        ).toMatchObject({
+          isInterrupting: true,
+          turnSettlement: null,
+          activeTurnLocalOwner: false,
+        });
+        expect(createTurn).toHaveBeenCalledTimes(1);
+        jest.mocked(fetchActiveTurn).mockResolvedValue({
+          session_id: sessionId,
+          turn_id: "external-turn",
+          status: "RUNNING",
+          turn_index: 1,
+        });
+        await act(async () => stop.resolve());
+        await waitFor(() => expect(endSuccessor).toBeDefined());
+        expect(jest.mocked(fetchTurnEventStream).mock.calls[2]?.[1]).toBe(
+          "external-turn"
+        );
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+        ).toMatchObject({
+          isInterrupting: false,
+          activeTurnId: "external-turn",
+          status: "running",
+        });
+        expect(createTurn).toHaveBeenCalledTimes(1);
+        jest.mocked(fetchActiveTurn).mockResolvedValue(null);
+        await act(async () => endSuccessor?.());
+        await waitFor(() => expect(createTurn).toHaveBeenCalledTimes(2));
+        expect(jest.mocked(createTurn).mock.calls[1]?.[1]).toBe(
+          "queued prompt"
+        );
+      } finally {
+        view.unmount();
+        store.abortSession(sessionId);
+        await act(async () => queuedStream.resolve());
+      }
+    }
+  );
+
   it.each(["local", "external"] as const)(
-    "resumes %s live ownership after failed Stop and follows completion beyond the monitor deadline",
+    "resumes %s live ownership after failed Stop and follows completion beyond thirty seconds",
     async (ownership) => {
       jest.useFakeTimers();
       const first = deferred<void>();
