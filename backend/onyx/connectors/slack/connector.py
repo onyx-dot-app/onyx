@@ -214,28 +214,45 @@ def _channel_history_variant(channel: ChannelType) -> SlackChannelVariant:
     )
 
 
-def _ensure_channel_membership(
+# conversations.join errors that describe the channel or the bot's standing in
+# it. Anything else (auth, scope, transient) is about the run and propagates.
+_CHANNEL_JOIN_REFUSALS = frozenset(
+    {
+        "is_archived",
+        "channel_not_found",
+        "method_not_supported_for_channel_type",
+        "restricted_action",
+        "user_is_restricted",
+        "user_is_ultra_restricted",
+    }
+)
+
+
+def _join_channel(slack_client: SlackSourceOperations, channel: ChannelType) -> None:
+    """Join the channel when the bot is not a member."""
+    if channel["is_member"]:
+        return
+    slack_client.join_channel(channel_id=channel["id"])
+    logger.info("Successfully joined '%s'", channel["name"])
+
+
+def _join_channel_or_skip(
     slack_client: SlackSourceOperations, channel: ChannelType
 ) -> bool:
-    """Join the channel when the bot is not a member; False when Slack refuses.
+    """Indexing variant of `_join_channel`: False when Slack refuses this channel.
 
-    A refused join (archived, Slack Connect, join restricted, or no
-    `channels:join` scope) skips that one channel rather than failing the run.
-    Token validity and channel listing are verified by
-    `validate_connector_settings` before any channel is read.
+    A refused channel is skipped so one channel does not fail the run. Only
+    full indexing may skip: the slim listing feeds pruning, where a missing
+    channel reads as deleted history.
     """
-    if channel["is_member"]:
-        return True
     try:
-        slack_client.join_channel(channel_id=channel["id"])
+        _join_channel(slack_client, channel)
     except SlackApiError as e:
-        logger.warning(
-            "Cannot join channel %s (%s). Skipping.",
-            channel["name"],
-            e.response["error"],
-        )
+        error = e.response["error"]
+        if error not in _CHANNEL_JOIN_REFUSALS:
+            raise
+        logger.warning("Cannot join channel %s (%s). Skipping.", channel["name"], error)
         return False
-    logger.info("Successfully joined '%s'", channel["name"])
     return True
 
 
@@ -247,8 +264,8 @@ def get_channel_messages(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> Generator[list[MessageType], None, None]:
     """Get all messages in a channel"""
-    if not _ensure_channel_membership(slack_client, channel):
-        return
+    # A refused join propagates: pruning must see every channel or none.
+    _join_channel(slack_client, channel)
 
     for result in slack_client.fetch_channel_history(
         variant=_channel_history_variant(channel),
@@ -563,7 +580,7 @@ def _get_messages(
 ) -> tuple[list[MessageType], bool]:
     """Slack goes from newest to oldest."""
 
-    if not _ensure_channel_membership(slack_client, channel):
+    if not _join_channel_or_skip(slack_client, channel):
         return [], False
 
     # Single page: the gateway paginator is lazy, so taking one yield makes

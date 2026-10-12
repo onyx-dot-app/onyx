@@ -491,7 +491,7 @@ class _ChannelJoinScopeCheck(CapabilityCheck):
                 "The bot token lacks the `channels:join` scope, so Onyx cannot "
                 "automatically join public channels. This is a warning, but it "
                 "usually still requires action: every public channel the bot "
-                "has not been invited to is skipped during indexing. Either add the "
+                "has not been invited to WILL fail to index. Either add the "
                 "`channels:join` scope and reinstall the app, or manually "
                 "invite the bot (`/invite @<bot>`) to every channel that "
                 "should be indexed."
