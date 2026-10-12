@@ -742,7 +742,8 @@ class LitellmLLM(LLM):
         try:
             with get_session_with_current_tenant() as db_session:
                 input_cents, output_cents = compute_cost_cents(
-                    model=routed_model or self._model_version,
+                    model=self._model_version,
+                    served_model=routed_model,
                     provider=provider,
                     prompt_tokens=usage.prompt_tokens,
                     completion_tokens=usage.completion_tokens,

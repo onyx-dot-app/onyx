@@ -444,10 +444,10 @@ def test_routed_model_prices_the_call_but_keeps_router_as_ledger_key(
     processor: UserUsageTracingProcessor,
     recorded_calls: list[dict[str, Any]],
 ) -> None:
-    priced: list[str] = []
+    priced: list[tuple[str, str | None]] = []
 
     def _compute(**kwargs: Any) -> tuple[float, float]:
-        priced.append(kwargs["model"])
+        priced.append((kwargs["model"], kwargs["served_model"]))
         return 1.0, 2.0
 
     monkeypatch.setattr(proc_mod, "compute_cost_cents", _compute)
@@ -465,5 +465,5 @@ def test_routed_model_prices_the_call_but_keeps_router_as_ledger_key(
     finally:
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
-    assert priced == ["deepseek/deepseek-v4-flash"]
+    assert priced == [("openrouter/auto", "deepseek/deepseek-v4-flash")]
     assert recorded_calls[0]["usage"].model == "openrouter/auto"

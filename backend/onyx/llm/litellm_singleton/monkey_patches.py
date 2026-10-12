@@ -924,9 +924,7 @@ _original_openrouter_chunk_parser = (
 
 def _patch_openrouter_routed_model() -> None:
     if (
-        getattr(  # ods: ignore[getattr]
-            OpenRouterChatCompletionStreamingHandler.chunk_parser, "__name__", ""
-        )
+        OpenRouterChatCompletionStreamingHandler.chunk_parser.__name__
         == "_patched_openrouter_chunk_parser"
     ):
         return

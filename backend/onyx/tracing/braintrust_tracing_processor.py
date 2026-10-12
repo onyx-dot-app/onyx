@@ -176,7 +176,7 @@ class BraintrustTracingProcessor(TracingProcessor):
                 "cache_creation_input_tokens"
             ]
 
-        model_name = span.span_data.routed_model or span.span_data.model
+        model_name = span.span_data.model
         model_config = span.span_data.model_config or {}
         provider = model_config.get("model_provider")
         flow = model_config.get("flow")
@@ -191,6 +191,7 @@ class BraintrustTracingProcessor(TracingProcessor):
             output_tokens = int(completion_tokens or 0)
             input_cents, output_cents = compute_cost_cents(
                 model=model_name,
+                served_model=span.span_data.routed_model,
                 provider=provider,
                 prompt_tokens=input_tokens,
                 completion_tokens=output_tokens,

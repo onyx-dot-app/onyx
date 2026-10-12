@@ -3765,10 +3765,10 @@ def test_track_llm_cost_prices_routed_model(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         "onyx.db.engine.sql_engine.get_session_with_current_tenant", _fake_session
     )
-    priced: list[str] = []
+    priced: list[tuple[str, str | None]] = []
 
     def _compute(**kwargs: Any) -> tuple[float, float]:
-        priced.append(kwargs["model"])
+        priced.append((kwargs["model"], kwargs["served_model"]))
         return 1.0, 1.0
 
     monkeypatch.setattr("onyx.llm.multi_llm.compute_cost_cents", _compute)
@@ -3785,7 +3785,10 @@ def test_track_llm_cost_prices_routed_model(monkeypatch: pytest.MonkeyPatch) -> 
     llm._track_llm_cost(usage, "deepseek/deepseek-v4-flash")
     llm._track_llm_cost(usage)
 
-    assert priced == ["deepseek/deepseek-v4-flash", "openrouter/auto"]
+    assert priced == [
+        ("openrouter/auto", "deepseek/deepseek-v4-flash"),
+        ("openrouter/auto", None),
+    ]
 
 
 def test_invoke_raw_stream_reassembly_keeps_served_model() -> None:
