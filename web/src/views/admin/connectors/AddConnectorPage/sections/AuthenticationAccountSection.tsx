@@ -481,10 +481,11 @@ export default function AuthenticationAccountSection({
         <Section gap={6} alignItems="stretch" width="full">
           {!accountsExpanded ? (
             // Folded: the chosen account's summary, or the new-account card
-            // when nothing is chosen.
+            // when nothing is chosen. While that card is open, it stays, so
+            // the form is not swapped away as its values become valid.
             pickedSavedCredential ? (
               renderSavedCard(pickedSavedCredential, true)
-            ) : chosenDraft ? (
+            ) : chosenDraft && !isCreating ? (
               <AccountSummaryCard
                 draft={chosenDraft}
                 source={connector}
