@@ -11,6 +11,7 @@ from googleapiclient.errors import HttpError
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.google_drive import source_operations
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_drive.models import GoogleSharedDrive
 from onyx.connectors.google_drive.source_operations import (
     DriveCorpus,
     GoogleDriveHttpError,
@@ -186,6 +187,30 @@ def test_generator_operations_translate_errors_raised_while_iterating() -> None:
             next(listing)
 
     assert raised.value.status_code == 404
+
+
+def test_list_named_drives_reads_each_drive_id_and_name() -> None:
+    gateway = _gateway()
+    pages = [{"id": "d1", "name": "Engineering"}, {"id": "d2"}]
+
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations,
+            "execute_paginated_retrieval",
+            side_effect=lambda **_kwargs: iter(pages),
+        ) as retrieval,
+    ):
+        drives = list(
+            gateway.list_named_drives(user_email=_ADMIN, use_domain_admin_access=True)
+        )
+
+    assert drives == [
+        GoogleSharedDrive(id="d1", name="Engineering"),
+        GoogleSharedDrive(id="d2", name=""),
+    ]
+    assert retrieval.call_args.kwargs["fields"] == "drives(id, name),nextPageToken"
+    assert retrieval.call_args.kwargs["useDomainAdminAccess"] is True
 
 
 def test_get_file_reads_a_denied_file_as_missing() -> None:
