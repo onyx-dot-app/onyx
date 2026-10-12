@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { CraftChatOutputsPage } from "@tests/e2e/pages/CraftChatOutputsPage";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import type { Settings } from "@/lib/settings/types";
 import type {
   ApiMessageResponse,
   OutputCard,
@@ -12,6 +13,13 @@ test("restores output cards, moves updated files, and scopes overflow to their t
 }, testInfo) => {
   await page.context().clearCookies();
   await loginAsWorkerUser(page, testInfo.workerIndex);
+  const settingsResponse = await page.request.get("/api/settings");
+  expect(settingsResponse.ok()).toBe(true);
+  const settings: Settings = await settingsResponse.json();
+  test.skip(
+    settings.onyx_craft_enabled !== true,
+    "Onyx Craft is disabled in this environment"
+  );
   const api = new OnyxApiClient(page.request);
   const sessionId = await api.createCraftSession("E2E chat output cards");
   const chat = new CraftChatOutputsPage(page);
