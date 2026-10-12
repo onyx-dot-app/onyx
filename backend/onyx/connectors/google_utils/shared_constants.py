@@ -1,4 +1,5 @@
 from enum import Enum as PyEnum
+from typing import Any
 
 from onyx.configs.constants import DocumentSource
 
@@ -45,6 +46,23 @@ DB_CREDENTIALS_AUTHENTICATION_METHOD = "authentication_method"
 class GoogleOAuthAuthenticationMethod(str, PyEnum):
     OAUTH_INTERACTIVE = "oauth_interactive"
     UPLOADED = "uploaded"
+
+
+class GoogleCredentialKind(str, PyEnum):
+    SERVICE_ACCOUNT = "service_account"
+    OAUTH = "oauth"
+
+
+def google_credential_kind(
+    credential_json: dict[str, Any],
+) -> GoogleCredentialKind | None:
+    """The kind of a Google credential, read from its keys only. None when it
+    holds neither a token nor a service account key."""
+    if DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY in credential_json:
+        return GoogleCredentialKind.SERVICE_ACCOUNT
+    if DB_CREDENTIALS_DICT_TOKEN_KEY in credential_json:
+        return GoogleCredentialKind.OAUTH
+    return None
 
 
 USER_FIELDS = "nextPageToken, users(primaryEmail)"

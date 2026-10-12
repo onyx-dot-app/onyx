@@ -103,7 +103,13 @@ test.describe("Groups page — layout", () => {
     await expect(groupsPage.saveButton).toBeEnabled();
 
     await expect(groupsPage.deleteGroupButton).toHaveCount(0);
-    await expect(groupsPage.permissionsSectionHeader).toHaveCount(0);
+    // Basic offers its allowlisted toggle and nothing else. The switch state is
+    // left alone because the gating spec flips it from another worker.
+    await expect(groupsPage.permissionsSectionHeader).toBeVisible();
+    await expect(
+      groupsPage.permissionRow("Create User Access Token")
+    ).toBeVisible();
+    await expect(groupsPage.permissionSwitches).toHaveCount(1);
     await expect(groupsPage.sharedResourcesSectionHeader).toHaveCount(0);
   });
 

@@ -337,3 +337,18 @@ it.each(["md", "png", "txt"])(
     else expect(viewer).toHaveClass("h-full");
   }
 );
+
+it("renders CSV content as a table through the file preview", async () => {
+  jest.mocked(fetchFileContent).mockResolvedValue({
+    content: "name,value\nAlice,42",
+    mimeType: "text/csv",
+    isImage: false,
+  });
+  render(
+    <FilePreviewContent sessionId="csv-session" filePath="outputs/data.csv" />
+  );
+  expect(
+    await screen.findByRole("columnheader", { name: "name" })
+  ).toBeInTheDocument();
+  expect(screen.getByRole("cell", { name: "Alice" })).toBeInTheDocument();
+});

@@ -111,7 +111,7 @@ protects.
 | POST | `/build/sessions/{id}/interrupt` | `interrupt_message` (`session/messages.py`) | See §4.4. |
 | GET | `/build/sessions/{id}/turns/active` | `get_active_interactive_turn` (`interactive_turns/api.py`) | Poll for the current turn's id/status. |
 | GET | `/build/sessions/{id}/turns/{turn_id}/events` | `get_interactive_turn_events` (`interactive_turns/api.py`) | SSE attach/resume to a running turn; also (re)starts the runner if it stalled. |
-| GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
+| GET/PUT/POST/PATCH/DELETE | `/build/sessions/{id}/generate-name`, `/name`, `/public`, `/files`, `/pptx-preview/{path}`, `/output-thumbnail/{path}`, `/webapp-info`, `/webapp-download`, `/download-directory/{path}`, `/upload`, `/files/{path}`, `/scheduled-run-context`, `/scheduled-run-events` | `session/api.py` | Naming, sharing (`sharing_scope`), workspace file browse and upload, webapp info, and the scheduled-run banner and live events. |
 | GET | `/build/approvals/sessions/{id}/live` | `list_live_approvals` (`approvals/api.py`) | |
 | POST | `/build/approvals/{approval_id}/decision` | `submit_decision` (`approvals/api.py`) | |
 | POST | `/build/approvals/{approval_id}/session-grant` | `submit_session_grant` (`approvals/api.py`) | Pre-approval; see §4.6. |
@@ -798,3 +798,10 @@ processing and blocking sandbox egress during OpenCode startup.
   Craft-only table. A change to generic document/connector logic (deletion,
   metadata handling, permission sync) can silently affect Craft's user
   library, and vice versa.
+
+### Output document thumbnails
+
+`GET /build/sessions/{id}/output-thumbnail/{path}` returns a cached JPEG first page
+for an owned session’s PDF or PowerPoint file. The shared document converter
+checks workspace confinement and applies advisory size preflight before bounded rendering. Full PowerPoint
+previews still use the existing slide endpoint.

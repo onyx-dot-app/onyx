@@ -237,3 +237,6 @@ export type NavItem =
   | { kind: "row"; row: DropdownRow; group: RowGroup }
   | { kind: "group"; group: RowGroup }
   | { kind: "create"; text: string };
+
+/** Typography and spacing for built-in dropdown rows. */
+export type DropdownSizePreset = "main-ui" | "secondary";

@@ -1,6 +1,15 @@
 import os
 from enum import Enum
 
+# In-sandbox paths shared by every backend implementation. Kept in sync with
+# the SESSIONS_ROOT constants the individual managers define (those exist
+# separately because the K8s manager emits exec scripts and the Docker
+# manager mounts via the named volume — both happen to land at the same
+# in-container path). The daemon's sandbox_daemon/snapshot.py also has its
+# own copy because it can't import from this package at runtime.
+BUN_CACHE_DIR = "/workspace/sessions/.bun-cache"
+BUN_IMAGE_CACHE_DIR = "/home/sandbox/.bun/install/cache"
+
 
 class SandboxBackend(str, Enum):
     KUBERNETES = "kubernetes"

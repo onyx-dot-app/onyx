@@ -16,7 +16,7 @@ from pathlib import Path
 from uuid import UUID
 
 SESSIONS_ROOT = Path("/workspace/sessions")
-# Must match onyx.server.features.build.sandbox.base.BUN_CACHE_DIR -- the
+# Must match onyx.server.features.build.configs.BUN_CACHE_DIR -- the
 # daemon can't import from the main package at runtime, hence the copy.
 BUN_CACHE_DIR = SESSIONS_ROOT / ".bun-cache"
 BUN_IMAGE_CACHE_DIR = Path("/home/sandbox/.bun/install/cache")
@@ -92,6 +92,8 @@ def _is_excluded_snapshot_dir(relative_path: Path) -> bool:
     parts = relative_path.parts
     if len(parts) < 2 or parts[0] != "outputs":
         return False
+    if parts[1] == ".document-thumbnails":
+        return True
     if any(part in _SNAPSHOT_GENERATED_DIR_NAMES for part in parts[1:]):
         return True
     return relative_path.name in _SNAPSHOT_GENERATED_FILE_NAMES

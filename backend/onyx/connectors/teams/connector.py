@@ -1,6 +1,6 @@
 import copy
 import os
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from datetime import datetime, timezone
 from itertools import chain
 from typing import Any, cast
@@ -19,6 +19,7 @@ from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     GenerateSlimDocumentOutput,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
@@ -32,6 +33,8 @@ from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
+    HierarchyNode,
     SlimDocument,
 )
 from onyx.connectors.teams import groups, listing, threads
@@ -127,6 +130,7 @@ class TeamsConnector(
     CheckpointedConnectorWithPermSync[TeamsCheckpoint],
     SlimConnector,
     SlimConnectorWithPermSync,
+    Resolver,
 ):
     """Walks the teams, then each team's channels a page at a time. What a
     channel holds is read by one source per content type: its threads, and its
@@ -182,11 +186,14 @@ class TeamsConnector(
             if include_attachments
             else None
         )
+        self._transcripts: TranscriptSource | None = (
+            TranscriptSource(self, covers_every_user=not self.meeting_organizers)
+            if include_meeting_transcripts
+            else None
+        )
         organizer_sources: list[OrganizerSource] = []
-        if include_meeting_transcripts:
-            organizer_sources.append(
-                TranscriptSource(self, covers_every_user=not self.meeting_organizers)
-            )
+        if self._transcripts is not None:
+            organizer_sources.append(self._transcripts)
         if include_meeting_chats:
             organizer_sources.append(ChatSource(self, include_inline_images))
         self._organizers: OrganizerStage | None = (
@@ -208,6 +215,29 @@ class TeamsConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.open(credentials)
         return None
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,  # noqa: ARG002
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Reads failed transcripts again from the errors list. A transcript
+        always carries its readers, so the permissions flag changes nothing.
+        Other Teams documents are read again by a full re-index."""
+        failed: list[DocumentFailure] = [
+            error.failed_document for error in errors if error.failed_document
+        ]
+        if self._transcripts is None:
+            for failure in failed:
+                yield ConnectorFailure(
+                    failed_document=failure,
+                    failure_message=(
+                        "Include Meeting Transcripts is off, so this transcript is "
+                        "not read again."
+                    ),
+                )
+            return
+        yield from self._transcripts.reindex(failed)
 
     def validate_connector_settings(self) -> None:
         if self.graph_client is None:

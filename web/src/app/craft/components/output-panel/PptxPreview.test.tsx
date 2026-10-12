@@ -1,3 +1,4 @@
+import { SWRConfig } from "swr";
 import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
 import {
   render,
@@ -391,4 +392,113 @@ it("keeps a hidden deck intact and converts only the latest revision on activati
   );
   expect(screen.getByRole("img")).toHaveAttribute("alt", "Slide 3 of 3");
   expect(fetchPptxPreview).toHaveBeenCalledTimes(requests + 1);
+});
+
+it("resizes thumbnails with quick pointer release and keyboard limits", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 1,
+    slide_paths: ["slide-1.jpg"],
+    cached: false,
+  });
+  render(
+    <PptxPreview sessionId="resizable-deck" filePath="outputs/deck.pptx" />
+  );
+  const divider = await screen.findByRole("separator", {
+    name: "Resize slide thumbnails",
+  });
+  divider.setPointerCapture = jest.fn();
+  divider.hasPointerCapture = () => true;
+  divider.releasePointerCapture = jest.fn();
+  const pointer = (type: string, clientX: number) => {
+    const event = new MouseEvent(type, { bubbles: true, button: 0, clientX });
+    Object.defineProperty(event, "pointerId", { value: 1 });
+    fireEvent(divider, event);
+  };
+  pointer("pointerdown", 112);
+  pointer("pointerup", 180);
+  expect(divider).toHaveAttribute("aria-valuenow", "180");
+  expect(screen.getByRole("toolbar")).toHaveStyle({ width: "180px" });
+  fireEvent.keyDown(divider, { key: "ArrowRight" });
+  expect(divider).toHaveAttribute("aria-valuenow", "190");
+  fireEvent.keyDown(divider, { key: "End" });
+  expect(divider).toHaveAttribute("aria-valuenow", "320");
+  fireEvent.keyDown(divider, { key: "Home" });
+  expect(divider).toHaveAttribute("aria-valuenow", "88");
+  pointer("pointerdown", 88);
+  pointer("pointermove", 160);
+  pointer("pointercancel", 250);
+  expect(divider).toHaveAttribute("aria-valuenow", "160");
+});
+
+it("reattaches thumbnail sizing after a failed activation read recovers", async () => {
+  const observe = jest.spyOn(ResizeObserver.prototype, "observe");
+  const preview = {
+    slide_count: 1,
+    slide_paths: ["slide-1.jpg"],
+    cached: true,
+  };
+  jest
+    .mocked(fetchPptxPreview)
+    .mockResolvedValueOnce(preview)
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue(preview);
+  const view = (isActive = true) => (
+    <SWRConfig value={{ shouldRetryOnError: false }}>
+      <PptxPreview
+        sessionId="resize-recovery"
+        filePath="outputs/deck.pptx"
+        isActive={isActive}
+      />
+    </SWRConfig>
+  );
+  try {
+    const { rerender } = render(view());
+    await screen.findByRole("separator");
+    const firstCalls = observe.mock.calls.length;
+    rerender(view(false));
+    rerender(view());
+    await screen.findByText("Cannot preview presentation");
+    rerender(view(false));
+    rerender(view());
+    await screen.findByRole("separator");
+    expect(observe.mock.calls.length).toBeGreaterThan(firstCalls);
+  } finally {
+    observe.mockRestore();
+  }
+});
+
+it("owns loading readiness by slide image URL", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 2,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg"],
+    cached: true,
+  });
+  render(
+    <PptxPreview sessionId="image-readiness" filePath="outputs/deck.pptx" />
+  );
+  fireEvent.load(await screen.findByRole("img"));
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
+  fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 2" }));
+  expect(screen.getByRole("img")).toHaveClass("opacity-0");
+  fireEvent.load(screen.getByRole("img"));
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
+});
+
+it("shows an image error and clears it when another slide loads", async () => {
+  jest.mocked(fetchPptxPreview).mockResolvedValue({
+    slide_count: 2,
+    slide_paths: ["slide-1.jpg", "slide-2.jpg"],
+    cached: true,
+  });
+  render(<PptxPreview sessionId="failed-image" filePath="outputs/deck.pptx" />);
+  fireEvent.error(await screen.findByRole("img"));
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.getByText("Cannot preview presentation")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Slide 2 of 2" }));
+  expect(screen.getByRole("img")).toHaveClass("opacity-0");
+  expect(
+    screen.queryByText("Cannot preview presentation")
+  ).not.toBeInTheDocument();
+  fireEvent.load(screen.getByRole("img"));
+  expect(screen.getByRole("img")).toHaveClass("opacity-100");
 });

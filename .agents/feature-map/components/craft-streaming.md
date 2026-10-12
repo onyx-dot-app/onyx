@@ -323,6 +323,12 @@ Later transient failures cannot restore invalidated content without a successful
 Hidden viewers defer scheduled retries until activation.
 Presentation viewers hide cached slides during conversion because conversion replaces slide files.
 
+CSV files display a sticky-header table limited to 1,000 rows, 100 columns, and 5,000 cells.
+CSV viewers report malformed quoted fields and offer a raw download through the preview toolbar.
+The CSV preview uses the shared parser directly. Parser tests live with the shared utility.
+Image previews offer a contrast background toggle.
+Presentation thumbnails support pointer and keyboard resizing.
+
 ## 5. Contracts and invariants
 
 1. **Craft does not reuse chat's `Packet`/`Placement`.** It has its own two
@@ -524,3 +530,7 @@ Access-loss results stay in the file cache across remounts. Transient failures c
 Preview retries stop when a viewer unmounts or its requested revision changes. Development effect replay reuses the pending request.
 
 A scheduled preview retry runs only while its failure remains current. Activation recovery makes the old retry obsolete.
+
+Welcome inline previews offer an original-file download. Presentation slide images own loading state by their URL.
+
+A failed presentation image displays an error. Changing the slide starts a new image load.

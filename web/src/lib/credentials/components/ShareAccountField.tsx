@@ -1,14 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useFormikContext } from "formik";
+import { getIn, useFormikContext } from "formik";
 import {
   InputMultiSelect,
   InputSingleSelect,
   type TagItem,
 } from "@opal/components";
 import { InputHorizontal, Section } from "@opal/layouts";
-import { Disabled } from "@opal/core";
 import { SvgLock, SvgUserManage, SvgUsers } from "@opal/icons";
 import { useUserGroups } from "@/lib/hooks";
 
@@ -42,7 +41,12 @@ export function shareAccountPayload({ share, groups }: ShareAccountFormValues) {
 const ADMINS_TAG_ID = "admins";
 
 interface ShareAccountFieldProps {
-  /** Dims and locks the field, as while the account's fields are invalid. */
+  /** The Formik path `share` and `groups` live under, e.g. `new_account`. */
+  namePrefix?: string;
+  /**
+   * Locks the selects, as while the account's fields are invalid. The caller
+   * wraps the field in `Disabled` for the dimmed look.
+   */
   disabled: boolean;
 }
 
@@ -51,10 +55,19 @@ interface ShareAccountFieldProps {
  * user groups, or only its creator. With groups, a picker below lists them
  * after a fixed admins chip, since admins keep access either way.
  */
-export function ShareAccountField({ disabled }: ShareAccountFieldProps) {
+export function ShareAccountField({
+  disabled,
+  namePrefix,
+}: ShareAccountFieldProps) {
   const t = useTranslations("admin.credentials.create.share");
   const tGroups = useTranslations("common.groupsMultiSelect");
-  const { values, setFieldValue } = useFormikContext<ShareAccountFormValues>();
+  const { values: formValues, setFieldValue } =
+    useFormikContext<ShareAccountFormValues>();
+  const values: ShareAccountFormValues = namePrefix
+    ? getIn(formValues, namePrefix)
+    : formValues;
+  const path = (field: keyof ShareAccountFormValues): string =>
+    namePrefix ? `${namePrefix}.${field}` : field;
   const { data: userGroups } = useUserGroups();
 
   const groupNames = new Map(
@@ -72,69 +85,70 @@ export function ShareAccountField({ disabled }: ShareAccountFieldProps) {
   };
 
   return (
-    <Disabled disabled={disabled}>
-      <Section alignItems="stretch" gap={4}>
-        <InputHorizontal
-          // A bare label (no htmlFor) hands a click on the title to the select
-          // inside it, which opens the list.
-          withLabel
-          title={t("title")}
-          description={t("description")}
-          center
-        >
-          <InputSingleSelect
-            value={values.share}
-            onValueChange={(next) => {
-              if (isShareAudience(next)) setFieldValue("share", next);
-            }}
-            defaultOption={DEFAULT_SHARE_AUDIENCE}
-            placeholder={t("title")}
-            disabled={disabled}
-            options={[
-              {
-                value: "admins",
-                title: t("admins.label"),
-                suffix: t("admins.suffix"),
-                description: t("admins.description"),
-                icon: SvgUserManage,
-              },
-              {
-                value: "adminsAndGroups",
-                title: t("adminsAndGroups.label"),
-                description: t("adminsAndGroups.description"),
-                icon: SvgUsers,
-              },
-              {
-                options: [
-                  { value: "onlyMe", title: t("onlyMe.label"), icon: SvgLock },
-                ],
-              },
-            ]}
-          />
-        </InputHorizontal>
-
-        {values.share === "adminsAndGroups" && (
-          <InputMultiSelect
-            tags={[adminsTag, ...groupTags]}
-            options={(userGroups ?? []).map((group) => ({
-              value: String(group.id),
-              title: group.name,
+    <Section alignItems="stretch" gap={4}>
+      <InputHorizontal
+        // A bare label (no htmlFor) hands a click on the title to the select
+        // inside it, which opens the list.
+        withLabel
+        title={t("title")}
+        description={t("description")}
+        center
+      >
+        <InputSingleSelect
+          value={values.share}
+          onValueChange={(next) => {
+            if (isShareAudience(next)) setFieldValue(path("share"), next);
+          }}
+          defaultOption={DEFAULT_SHARE_AUDIENCE}
+          placeholder={t("title")}
+          disabled={disabled}
+          options={[
+            {
+              value: "admins",
+              title: t("admins.label"),
+              suffix: t("admins.suffix"),
+              description: t("admins.description"),
+              icon: SvgUserManage,
+            },
+            {
+              value: "adminsAndGroups",
+              title: t("adminsAndGroups.label"),
+              description: t("adminsAndGroups.description"),
               icon: SvgUsers,
-            }))}
-            onSelectOption={(option) =>
-              setFieldValue("groups", [...values.groups, Number(option.value)])
-            }
-            onRemoveTag={(id) =>
-              setFieldValue(
-                "groups",
-                values.groups.filter((group) => String(group) !== id)
-              )
-            }
-            placeholder={tGroups("userGroups.label")}
-            disabled={disabled}
-          />
-        )}
-      </Section>
-    </Disabled>
+            },
+            {
+              options: [
+                { value: "onlyMe", title: t("onlyMe.label"), icon: SvgLock },
+              ],
+            },
+          ]}
+        />
+      </InputHorizontal>
+
+      {values.share === "adminsAndGroups" && (
+        <InputMultiSelect
+          tags={[adminsTag, ...groupTags]}
+          options={(userGroups ?? []).map((group) => ({
+            value: String(group.id),
+            title: group.name,
+            icon: SvgUsers,
+          }))}
+          onSelectOption={(option) =>
+            setFieldValue(path("groups"), [
+              ...values.groups,
+              Number(option.value),
+            ])
+          }
+          onRemoveTag={(id) =>
+            setFieldValue(
+              path("groups"),
+              values.groups.filter((group) => String(group) !== id)
+            )
+          }
+          placeholder={tGroups("userGroups.label")}
+          disabled={disabled}
+        />
+      )}
+    </Section>
   );
 }

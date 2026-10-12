@@ -11,6 +11,7 @@ import { cn } from "@opal/utils";
 import { IconLoader } from "@opal/loaders";
 import { SvgFileText } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
+import { CsvPreview } from "@/app/craft/components/output-panel/CsvPreview";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
 import MarkdownFilePreview from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
@@ -137,6 +138,8 @@ function FetchedFilePreview({
   let viewer: ReactNode;
   if (data.isImage) {
     viewer = <ImagePreview src={data.content} fileName={fileName} />;
+  } else if (/\.csv$/i.test(filePath)) {
+    viewer = <CsvPreview content={data.content} isActive={isActive} />;
   } else if (/\.md$/i.test(filePath)) {
     viewer = (
       <MarkdownFilePreview
