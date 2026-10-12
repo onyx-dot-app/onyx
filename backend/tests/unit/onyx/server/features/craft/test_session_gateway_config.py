@@ -117,7 +117,7 @@ def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None
     assert config is not None
     assert config.provider == "onyx"
     assert config.model_name == "7/anthropic/claude-sonnet"
-    assert config.api_base == "https://onyx.test/api/gateway/v1"
+    assert config.api_base == "https://onyx.test/api/build/gateway/v1"
     assert config.models is not None
     assert {model.id for model in config.models} == {
         "3/claude-sonnet",
@@ -188,7 +188,7 @@ def test_gateway_config_can_target_direct_api_service() -> None:
         )
 
     assert config is not None
-    assert config.api_base == "http://api:8080/gateway/v1"
+    assert config.api_base == "http://api:8080/build/gateway/v1"
 
 
 def test_gateway_config_preserves_url_path_prefix() -> None:
@@ -198,7 +198,7 @@ def test_gateway_config_preserves_url_path_prefix() -> None:
         )
 
     assert config is not None
-    assert config.api_base == "https://onyx.example/api/gateway/v1"
+    assert config.api_base == "https://onyx.example/api/build/gateway/v1"
 
 
 def test_custom_azure_alias_renders_deployment_limits_for_opencode() -> None:
