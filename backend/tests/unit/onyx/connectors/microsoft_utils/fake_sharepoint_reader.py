@@ -62,7 +62,11 @@ class FakeSharepointReader(SharepointPermissionReader):
         self.calls: list[ReaderCall] = []
 
     def list_role_assignments(
-        self, *, site_url: str, securable: SharepointSecurable
+        self,
+        *,
+        site_url: str,
+        securable: SharepointSecurable,
+        max_rows: int | None = None,
     ) -> list[SharepointRoleAssignment]:
         self.calls.append(
             ReaderCall(
@@ -71,20 +75,25 @@ class FakeSharepointReader(SharepointPermissionReader):
                 securable=securable,
             )
         )
-        return self.role_assignments.get(site_url, [])
+        assignments: list[SharepointRoleAssignment] = self.role_assignments.get(
+            site_url, []
+        )
+        return assignments if max_rows is None else assignments[:max_rows]
 
     def list_site_group_users(
-        self, *, site_url: str, group_name: str
+        self, *, site_url: str, group_name: str, max_rows: int | None = None
     ) -> list[SharepointPrincipal]:
         self.calls.append(
             ReaderCall(
                 operation="list_site_group_users", site_url=site_url, key=group_name
             )
         )
-        users = self.site_group_users.get(group_name, [])
+        users: list[SharepointPrincipal] | Exception = self.site_group_users.get(
+            group_name, []
+        )
         if isinstance(users, Exception):
             raise users
-        return users
+        return users if max_rows is None else users[:max_rows]
 
     def get_folder_unique_id(self, *, site_url: str, server_relative_path: str) -> str:
         self.calls.append(
@@ -100,12 +109,14 @@ class FakeSharepointReader(SharepointPermissionReader):
         self.calls.append(ReaderCall(operation="get_list_item_id", key=item.id))
         return self.list_item_ids.get(item.id)
 
-    def list_sharing_link_scopes(self, *, item: DriveItemData) -> list[str]:
+    def list_sharing_link_scopes(
+        self, *, item: DriveItemData, max_rows: int | None = None
+    ) -> list[str]:
         self.calls.append(ReaderCall(operation="list_sharing_link_scopes", key=item.id))
-        scopes = self.link_scopes.get(item.id, [])
+        scopes: list[str] | Exception = self.link_scopes.get(item.id, [])
         if isinstance(scopes, Exception):
             raise scopes
-        return scopes
+        return scopes if max_rows is None else scopes[:max_rows]
 
     def find_entra_group_id(self, *, display_name: str) -> str | None:
         self.calls.append(ReaderCall(operation="find_entra_group_id", key=display_name))
@@ -115,19 +126,23 @@ class FakeSharepointReader(SharepointPermissionReader):
         self.calls.append(
             ReaderCall(operation="list_entra_group_members", key=group_id)
         )
-        members = self.entra_members.get(group_id, [])
+        members: list[EntraMember] | Exception = self.entra_members.get(group_id, [])
         if isinstance(members, Exception):
             raise members
         return members
 
-    def list_nested_entra_groups(self, *, group_id: str) -> list[EntraGroup]:
+    def list_nested_entra_groups(
+        self, *, group_id: str, max_rows: int | None = None
+    ) -> list[EntraGroup]:
         self.calls.append(
             ReaderCall(operation="list_nested_entra_groups", key=group_id)
         )
-        groups = self.nested_entra_groups.get(group_id, [])
+        groups: list[EntraGroup] | Exception = self.nested_entra_groups.get(
+            group_id, []
+        )
         if isinstance(groups, Exception):
             raise groups
-        return groups
+        return groups if max_rows is None else groups[:max_rows]
 
     def list_entra_groups(
         self, *, next_link: str | None = None

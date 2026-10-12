@@ -8,7 +8,6 @@ from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
     ResolvedEntraGroup,
     enumerate_entra_groups,
     expand_entra_group,
-    extract_guid,
     list_nested_entra_groups,
     normalize_email,
     resolve_entra_group_name,
@@ -20,9 +19,15 @@ from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.microsoft_utils.models import (
     SharepointPrincipal,
-    SharepointRoleAssignment,
     SharepointSecurable,
     SharepointSecurableKind,
+)
+from onyx.connectors.microsoft_utils.sharepoint_principals import (
+    GROUP_PRINCIPAL_TYPES,
+    SharepointPrincipalType,
+    extract_guid,
+    granting_members,
+    is_public_login_name,
 )
 from onyx.connectors.microsoft_utils.sharepoint_rest import (
     SharepointPermissionReader,
@@ -38,26 +43,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-# These values represent different types of SharePoint principals used in permission assignments
-USER_PRINCIPAL_TYPE = 1  # Individual user accounts
-ANONYMOUS_USER_PRINCIPAL_TYPE = 3  # Anonymous/unauthenticated users (public access)
-AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
-SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
 SHAREPOINT_GROUP_SCOPE_SEPARATOR = "::"
 GROUP_CACHE_KEY_SEPARATOR = ":"
-# PnP RoleType defines Guest=1 and RestrictedGuest=9:
-# https://github.com/pnp/pnpcore/blob/4e4f58fcac797f2957bfcd14fedcecd690dfe7ee/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
-LIMITED_ACCESS_ROLE_TYPES = frozenset({1, 9})
 PUBLIC_SHARING_LINK_SCOPES = frozenset({"anonymous", "organization"})
-_GROUP_PRINCIPAL_TYPES = frozenset(
-    {AZURE_AD_GROUP_PRINCIPAL_TYPE, SHAREPOINT_GROUP_PRINCIPAL_TYPE}
-)
-
-
-def _has_only_limited_access(assignment: SharepointRoleAssignment) -> bool:
-    return bool(assignment.role_type_kinds) and all(
-        kind in LIMITED_ACCESS_ROLE_TYPES for kind in assignment.role_type_kinds
-    )
 
 
 class GroupsResult(BaseModel):
@@ -91,21 +79,6 @@ def _is_public_item(
     return any(scope in PUBLIC_SHARING_LINK_SCOPES for scope in scopes)
 
 
-def _is_public_login_name(login_name: str) -> bool:
-    # Patterns that indicate public access
-    # This list is derived from the below link
-    # https://learn.microsoft.com/en-us/answers/questions/2085339/guid-in-the-loginname-of-site-user-everyone-except
-    public_login_patterns: list[str] = [
-        "c:0-.f|rolemanager|spo-grid-all-users/",
-        "c:0(.s|true",
-    ]
-    for pattern in public_login_patterns:
-        if pattern in login_name:
-            logger.info("Login name %s is public", login_name)
-            return True
-    return False
-
-
 def _get_site_scoped_group_name(site_url: str, group_name: str) -> str:
     return f"{site_url.rstrip('/')}{SHAREPOINT_GROUP_SCOPE_SEPARATOR}{group_name}"
 
@@ -116,7 +89,7 @@ def _assigned_group(
     principal: SharepointPrincipal,
 ) -> SharepointGroup:
     """A group principal, named the way its external group is stored."""
-    if principal.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
+    if principal.principal_type == SharepointPrincipalType.ENTRA_GROUP:
         name = resolve_entra_group_name(reader, principal.login_name, principal.title)
     else:
         name = _get_site_scoped_group_name(site_url, principal.title)
@@ -135,31 +108,16 @@ def _collect_principals(
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
     for principal in principals:
-        if principal.principal_type == USER_PRINCIPAL_TYPE:
+        if principal.principal_type == SharepointPrincipalType.USER:
             if principal.user_principal_name:
                 user_emails.add(normalize_email(principal.user_principal_name))
             else:
                 logger.warning(
                     "User don't have a user principal name: %s", principal.login_name
                 )
-        elif principal.principal_type in _GROUP_PRINCIPAL_TYPES:
+        elif principal.principal_type in GROUP_PRINCIPAL_TYPES:
             groups.add(_assigned_group(reader, site_url, principal))
     return _AssignedPrincipals(groups=groups, user_emails=user_emails)
-
-
-def _granting_members(
-    assignments: list[SharepointRoleAssignment],
-) -> list[SharepointPrincipal]:
-    """The members of assignments that grant more than Limited Access."""
-    members: list[SharepointPrincipal] = []
-    for assignment in assignments:
-        logger.debug("Assignment: %s", assignment)
-        if _has_only_limited_access(assignment):
-            logger.info("Skipping Limited Access-only assignment")
-            continue
-        if assignment.member:
-            members.append(assignment.member)
-    return members
 
 
 def _get_sharepoint_groups(
@@ -174,7 +132,7 @@ def _as_sharepoint_groups(groups: set[ResolvedEntraGroup]) -> set[SharepointGrou
     return {
         SharepointGroup(
             login_name=group.id,
-            principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
+            principal_type=SharepointPrincipalType.ENTRA_GROUP,
             name=group.name,
         )
         for group in groups
@@ -223,17 +181,17 @@ def _get_groups_and_members_recursively(
         logger.info(
             "Processing group: %s principal type: %s", group.name, group.principal_type
         )
-        if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+        if group.principal_type == SharepointPrincipalType.SHAREPOINT_GROUP:
             group_info, user_emails = _get_sharepoint_groups(
                 reader, site_url, group.login_name
             )
             visited_group_name_to_emails[group.name].update(user_emails)
             if group_info:
                 group_queue.extend(group_info)
-        if group.principal_type == AZURE_AD_GROUP_PRINCIPAL_TYPE:
+        if group.principal_type == SharepointPrincipalType.ENTRA_GROUP:
             try:
                 # if the site is public, we have default groups assigned to it, so we return early
-                if _is_public_login_name(group.login_name):
+                if is_public_login_name(group.login_name):
                     found_public_group = True
                     if not is_group_sync:
                         return GroupsResult(
@@ -263,7 +221,7 @@ def _get_groups_and_members_recursively(
 
 def _group_cache_key(site_url: str, group: SharepointGroup) -> str:
     identity = group.login_name
-    if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+    if group.principal_type == SharepointPrincipalType.SHAREPOINT_GROUP:
         identity = _get_site_scoped_group_name(site_url, identity)
     elif guid := extract_guid(identity):
         identity = guid
@@ -282,14 +240,17 @@ def _get_cached_group_expansion(
         return cached_expansion
 
     try:
-        if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+        if group.principal_type == SharepointPrincipalType.SHAREPOINT_GROUP:
             nested_groups, _ = _get_sharepoint_groups(
                 reader, site_url, group.login_name
             )
         else:
             nested_groups = _get_nested_azuread_groups(reader, group.login_name)
     except MicrosoftGraphError as e:
-        if group.principal_type != AZURE_AD_GROUP_PRINCIPAL_TYPE or e.status != 404:
+        if (
+            group.principal_type != SharepointPrincipalType.ENTRA_GROUP
+            or e.status != 404
+        ):
             raise
         logger.warning("Group %s not found", group.login_name)
         nested_groups = set()
@@ -311,7 +272,7 @@ def _resolve_document_groups(
 
     while group_queue:
         group = group_queue.popleft()
-        if _is_public_login_name(group.login_name):
+        if is_public_login_name(group.login_name):
             return DocumentGroupsResult(group_ids=set(), found_public_group=True)
 
         group_ids.add(group.name)
@@ -339,7 +300,7 @@ def _get_external_access_from_securable(
     add_prefix: bool = False,
 ) -> ExternalAccess:
     assignments = reader.list_role_assignments(site_url=site_url, securable=securable)
-    principals = _collect_principals(reader, site_url, _granting_members(assignments))
+    principals = _collect_principals(reader, site_url, granting_members(assignments))
 
     resolved_groups = _resolve_document_groups(
         reader,
@@ -462,8 +423,8 @@ def get_sharepoint_external_groups(
     )
     groups = {
         _assigned_group(reader, site_url, member)
-        for member in _granting_members(assignments)
-        if member.principal_type in _GROUP_PRINCIPAL_TYPES
+        for member in granting_members(assignments)
+        if member.principal_type in GROUP_PRINCIPAL_TYPES
     }
     groups_and_members: GroupsResult = _get_groups_and_members_recursively(
         reader, site_url, groups, is_group_sync=True
