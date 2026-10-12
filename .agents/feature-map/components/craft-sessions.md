@@ -556,6 +556,13 @@ when the resolved config actually changed, tracked via a
 disposing the stale opencode instance is retried on the next turn rather
 than silently leaving the instance on the old config until pod death.
 
+The generated config points opencode at `<ONYX_SERVER_URL>/build/gateway/v1`
+(`CRAFT_GATEWAY_PATH_PREFIX`), the Craft-only gateway mount that has no tier
+gate, so Craft works in Community Edition. The external `/gateway` mount stays
+separate and Business+ (see [[llm-gateway]]). A session created before this
+mount existed picks up the new URL when `reconcile_session_llm_config` runs on
+its next turn.
+
 **Session naming does not use this resolution at all.**
 `naming.py:generate_session_name` calls `get_default_llm()` (the workspace
 chat default, `onyx/llm/factory.py`), independent of the session's own
