@@ -199,6 +199,13 @@ out of those results after the fact except the EE field censoring above. The
 dedicated Slack lane receives none of these filters, only the pre-fetched Slack
 token and entity config (§5.8).
 
+When combined project and custom-agent files overflow the prompt budget,
+`SearchTool` passes both file scopes to the index. They join the agent's other
+knowledge scopes with OR; ACL checks still apply. These searches retain the
+agent's user-selected source, time, and tag filters. Only project-only searches
+ignore those filters. File selection and instruction rules belong to
+[[projects]] §4.4-4.5.
+
 There is **no reranking model in this path**. `RerankingModel`
 (`natural_language_processing/search_nlp_models.py:RerankingModel`) exists, but
 its only instantiation in the codebase is inside `warm_up_cross_encoder`, itself

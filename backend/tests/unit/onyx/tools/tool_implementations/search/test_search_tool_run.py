@@ -347,3 +347,23 @@ def test_auto_detect_disabled_keeps_user_selected_filters() -> None:
     for applied in filters:
         assert applied is not None
         assert applied.source_type == restriction
+
+
+def test_custom_agent_project_search_keeps_source_scope_and_both_file_filters() -> None:
+    tool: SearchTool = _make_tool(
+        BaseFilters(source_type=[DocumentSource.GITHUB]), auto_detect_filters=False
+    )
+    tool.project_id_filter = 42
+    tool.persona_id_filter = 7
+
+    search: MagicMock = _run(
+        tool, connected_sources=[DocumentSource.GITHUB, DocumentSource.GOOGLE_DRIVE]
+    )
+
+    assert search.call_count > 0
+    for call in search.call_args_list:
+        assert call.kwargs["project_id_filter"] == 42
+        assert call.kwargs["persona_id_filter"] == 7
+        assert call.kwargs[
+            "chunk_search_request"
+        ].user_selected_filters.source_type == [DocumentSource.GITHUB]

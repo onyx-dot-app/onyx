@@ -2075,3 +2075,75 @@ def test_head_prompts_byte_stable_across_citeable_tool_round() -> None:
     assert [m.message for m in first_head] == [m.message for m in second_head]
     for msg in first_head:
         assert REQUIRE_CITATION_GUIDANCE.strip() not in msg.message
+
+
+@pytest.mark.parametrize("replace_base", [False, True])
+@pytest.mark.parametrize("base_prompt", ["Base prompt", ""])
+def test_project_instructions_supplement_agent_prompt(
+    replace_base: bool, base_prompt: str
+) -> None:
+    from onyx.chat.chat_utils import get_custom_agent_prompt
+
+    persona: Mock = Mock(
+        id=1,
+        system_prompt="Answer tersely.",
+        task_prompt=None,
+        replace_base_system_prompt=replace_base,
+        datetime_aware=False,
+    )
+    session: Mock = Mock(project=Mock(instructions="Use the project glossary."))
+    llm: Mock = Mock()
+    llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-5.2",
+        temperature=0,
+        max_input_tokens=100000,
+    )
+    with (
+        patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+        patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+        patch(
+            "onyx.chat.llm_loop.get_session_with_current_tenant",
+            return_value=nullcontext(),
+        ),
+        patch(
+            "onyx.chat.llm_loop.get_default_base_system_prompt",
+            return_value=base_prompt,
+        ),
+        patch("onyx.chat.llm_loop.compute_all_tool_tokens", return_value=0),
+        patch("onyx.chat.llm_loop.select_reminder_text", return_value=None),
+        patch(
+            "onyx.chat.llm_loop.run_llm_step",
+            return_value=(
+                LlmStepResult(answer="Done", tool_calls=None, reasoning=None),
+                False,
+            ),
+        ) as step,
+    ):
+        run_llm_loop(
+            emitter=Mock(),
+            state_container=Mock(),
+            simple_chat_history=[create_message("Question", MessageType.USER, 5)],
+            tools=[],
+            custom_agent_prompt=get_custom_agent_prompt(persona, session),
+            context_files=create_context_files(),
+            persona=persona,
+            user_memory_context=None,
+            llm=llm,
+            token_counter=lambda _: 10,
+        )
+    history: list[ChatMessageSimple] = step.call_args.kwargs["history"]
+    text: str = "\n".join(message.message for message in history)
+    assert text.count("Answer tersely.") == 1
+    assert text.count("Use the project glossary.") == 1
+    assert history[-1].message == "Question"
+    if replace_base:
+        assert history[0].message_type == MessageType.SYSTEM
+        assert history[0].message == "Answer tersely."
+        assert history[1].message_type == MessageType.USER
+        assert history[1].message == "Use the project glossary."
+        assert "Base prompt" not in text
+    elif base_prompt:
+        assert history[1].message_type == MessageType.USER
+    else:
+        assert history[0].message_type == MessageType.SYSTEM

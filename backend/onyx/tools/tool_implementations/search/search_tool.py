@@ -321,6 +321,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         self._id = tool_id
 
+    @property
+    def _is_project_only_search(self) -> bool:
+        return self.project_id_filter is not None and self.persona_id_filter is None
+
     def _prefetch_slack_data(
         self, db_session: Session
     ) -> tuple[str | None, str | None, dict[str, Any]]:
@@ -506,9 +510,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             chunk_search_request=ChunkSearchRequest(
                 query=query,
                 hybrid_alpha=hybrid_alpha,
-                # For projects, the search scope is the project and has no other limits
+                # Project-only searches ignore user-selected filters.
                 user_selected_filters=(
-                    effective_filters if self.project_id_filter is None else None
+                    effective_filters if not self._is_project_only_search else None
                 ),
                 limit=num_hits,
             ),
@@ -678,10 +682,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # An explicitly empty source selection is a statement, not an absent
         # filter: the tool still runs (it may be forced), and it honestly
         # finds nothing. `None` keeps its meaning of "no source filter".
-        # Project mode ignores user filters entirely, so the guard must too.
+        # Project-only searches ignore user filters, so the guard must too.
         if (
             self.user_selected_filters is not None
-            and self.project_id_filter is None
+            and not self._is_project_only_search
             and self.user_selected_filters.source_type is not None
             and len(self.user_selected_filters.source_type) == 0
         ):
@@ -752,8 +756,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Federated retrieval functions (non-Slack; Slack is separate)
-            if self.project_id_filter is not None:
-                # Project mode ignores user filters → no federated sources
+            if self._is_project_only_search:
+                # Project-only searches ignore source selections.
                 prefetch_source_types = None
             else:
                 prefetch_source_types = (
@@ -772,8 +776,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 or []
             )
 
-            # Project mode ignores user filters, so source scoping doesn't apply.
-            if self.project_id_filter is None:
+            # Custom agents retain source selection inside projects.
+            if not self._is_project_only_search:
                 connected_sources = fetch_unique_document_sources(db_session)
 
             # Slack tokens and entity config — only prefetch when Slack
