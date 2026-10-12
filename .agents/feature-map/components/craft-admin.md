@@ -132,10 +132,10 @@ require_onyx_craft_enabled                  server/features/build/api.py
   └─ is_craft_enabled_for_user              server/features/build/utils.py
        ├─ User.craft_enabled override        (per-user; short-circuits if False)
        ├─ Settings.craft_default_enabled      (workspace default, when override is None)
-       └─ is_craft_available_for_deployment   (PostHog flag or ENABLE_CRAFT)
+       └─ is_craft_available_for_deployment   (PostHog flag or ENABLE_CRAFT, AND tier >= LLM_GATEWAY_MIN_TIER)
 ```
 
-`is_craft_enabled_for_user` (`build/utils.py:156`) is the single source of
+`is_craft_enabled_for_user` (`build/utils.py:177`) is the single source of
 truth: `AccountType.ANONYMOUS` users never get Craft (it is identity-bound: a
 per-user sandbox, library, and scheduled tasks), then the per-user override
 wins if set to `False`, then the workspace default gates `None`, and finally
@@ -321,9 +321,11 @@ not cover:
   entirely; per-user OAuth credentials for external apps depend on the acting
   user's identity.
 - [[editions-and-gating]]: `is_craft_available_for_deployment` reads a
-  PostHog feature flag (or `ENABLE_CRAFT`), a deployment-level switch distinct
-  from any billing-tier check; `requiredTier: null` on all three routes
-  confirms Craft admin visibility is not tier-gated at the nav level.
+  PostHog feature flag (or `ENABLE_CRAFT`) and also requires the deployment
+  tier to reach `LLM_GATEWAY_MIN_TIER` (Business), because every Craft turn
+  goes through the tier-gated `/gateway`; Community never gets Craft.
+  `requiredTier: null` on all three routes confirms Craft admin visibility is
+  not tier-gated at the nav level.
 - [[llm-providers]]: the Preferences default-model picker is the `CRAFT`
   `LLMModelFlowType`; see `llm-providers.md` §9 for why it is a pointer, not a
   capability check.
