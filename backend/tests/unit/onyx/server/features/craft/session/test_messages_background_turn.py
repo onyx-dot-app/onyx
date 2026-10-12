@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -18,6 +20,7 @@ from onyx.server.features.build.session import messages as messages_api
 from onyx.server.features.build.session.models import (
     MessageAttachment,
     MessageRequest,
+    SubagentMessageRequest,
 )
 from tests.unit.fakes import FakeCache
 
@@ -469,3 +472,36 @@ def test_send_message_blocked_when_over_token_budget(
 
     assert ei.value.error_code is OnyxErrorCode.RATE_LIMITED
     start_runner.assert_not_called()  # no turn scheduled when over budget
+
+
+def test_subagent_followup_uses_empty_current_attachment_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_id: UUID = uuid4()
+    user: User = User(id=uuid4())
+    db_session: MagicMock = MagicMock(spec=Session)
+    session_manager: MagicMock = MagicMock(spec=manager_module.SessionManager)
+    session_manager.send_subagent_message.return_value = iter(["data: done\n\n"])
+    monkeypatch.setattr(
+        messages_api, "get_session_with_current_tenant", lambda: nullcontext(db_session)
+    )
+    monkeypatch.setattr(messages_api, "get_sandbox_by_user_id", lambda *_: None)
+    monkeypatch.setattr(messages_api, "SessionManager", lambda _: session_manager)
+    request: SubagentMessageRequest = SubagentMessageRequest(
+        content="Continue the task"
+    )
+    response = messages_api.send_subagent_message(
+        session_id, "child-session", request, user
+    )
+
+    async def collect() -> list[str | bytes | memoryview[int]]:
+        return [chunk async for chunk in response.body_iterator]
+
+    assert asyncio.run(collect()) == ["data: done\n\n"]
+    session_manager.send_subagent_message.assert_called_once()
+    args = session_manager.send_subagent_message.call_args.args
+    assert args[:3] == (session_id, user.id, "child-session")
+    assert "Selected attachments for this task (read these files):\nNone." in args[3]
+    assert "replaces any instruction to read every file" in args[3]
+    assert "unless this task refers to earlier attachments" in args[3]
+    assert request.content == "Continue the task"

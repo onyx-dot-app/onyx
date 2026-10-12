@@ -524,7 +524,7 @@ Frontend attachments in `web/src/app/craft/contexts/UploadFilesContext.tsx` use 
 The composer owns draft selections, not the persisted session directory.
 Opening a session starts an empty draft; directory listings never select attachments.
 Removing a chip or clearing a sent draft leaves stored files available to earlier messages.
-Only explicit selections enter the current turn’s attachment context. Stored files do not become new selections.
+Only explicit selections enter the current turn’s attachment context. Stored files do not become new selections. Subagent follow-ups carry an empty current selection while retaining references to earlier attachments.
 Uploads hold the session row lock through quota checks and file writes, so concurrent requests share one session limit.
 URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
 Replacing that destination preserves selected source files and uploads them into the replacement.
