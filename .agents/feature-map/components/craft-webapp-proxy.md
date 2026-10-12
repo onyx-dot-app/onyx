@@ -29,6 +29,9 @@ agent edits files. The user never runs a command to see this; the dev server
 starts the first time the agent (or the user, via a documented fallback
 script) needs it.
 
+The managed Next.js scaffold disables the development React debug channel, keeping hydration data in the document.
+Startup migrates the old managed empty-config declaration without replacing custom settings.
+
 Automatic panel opening waits for `webapp-info` to report a serving webapp.
 A URL or source-file edit alone cannot open Preview or its Files fallback.
 Concurrent opening requests share one readiness check per session with a 30-second deadline.

@@ -342,3 +342,37 @@ def test_restore_script_rewrites_scripts_before_gated_autostart() -> None:
 
 def test_restore_script_is_valid_bash() -> None:
     _assert_valid_bash(build_webapp_restore_script(_SESSION_PATH, 3010))
+
+
+@pytest.mark.parametrize(
+    "declaration,migrates",
+    [
+        ("const nextConfig: NextConfig = {};", True),
+        (
+            "const nextConfig: NextConfig = { experimental: { reactDebugChannel: false } };",
+            False,
+        ),
+        ("const nextConfig: NextConfig = { trailingSlash: true };", False),
+    ],
+)
+def test_managed_config_migration_preserves_custom_settings(
+    declaration: str, migrates: bool
+) -> None:
+    script = build_nextjs_start_script(_SESSION_PATH, 3010)
+    migration = re.search(r"sed -i '([^']+)'", script)
+    assert migration is not None
+    custom_settings = "nextConfig.headers = async () => [];"
+    source = f"{declaration}\n{custom_settings}\n"
+    result = subprocess.run(
+        ["sed", migration.group(1)],
+        input=source,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
+    assert custom_settings in result
+    if migrates:
+        assert "reactDebugChannel: false" in result
+    else:
+        assert result == source
+    assert "reactDebugChannel: false" in _TEMPLATE_NEXT_CONFIG.read_text()
