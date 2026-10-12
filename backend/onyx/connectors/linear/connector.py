@@ -15,12 +15,15 @@ from onyx.configs.app_configs import (
     LINEAR_CLIENT_SECRET,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
     time_str_to_utc,
 )
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
+    CredentialsConnector,
+    CredentialsProviderInterface,
     GenerateDocumentsOutput,
     LoadConnector,
     NormalizationResult,
@@ -43,10 +46,14 @@ logger = setup_logger()
 _NUM_RETRIES = 5
 _TIMEOUT = 60
 _LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
+_LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token"
+_API_KEY = "linear_api_key"
 _ACCESS_TOKEN = "access_token"
 _EXPIRE_AT = "expire_at"
 _REFRESH_TOKEN = "refresh_token"
 _EXPIRES_IN = "expires_in"
+# An OAuth token this close to expiry is refreshed before its next use.
+_REFRESH_BUFFER_SECONDS: int = 300
 
 
 def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response:
@@ -80,13 +87,29 @@ def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response
     )
 
 
-def _run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str, Any]:
+class LinearGraphQLError(RuntimeError):
+    """Linear answered 200 with an `errors` list."""
+
+    def __init__(self, errors: list[dict[str, Any]]) -> None:
+        super().__init__(f"Linear GraphQL errors: {errors}")
+        self.errors = errors
+
+    @property
+    def is_not_found(self) -> bool:
+        """The queried entity does not exist or the token cannot see it."""
+        return all(
+            str(error.get("message", "")).startswith("Entity not found")
+            for error in self.errors
+        )
+
+
+def run_query(query: str, variables: dict[str, Any], api_key: str) -> dict[str, Any]:
     """The query's data. Linear answers 200 with an `errors` list for a bad
     query, so that is raised here rather than read as an empty result."""
     response = _make_query({"query": query, "variables": variables}, api_key)
     body: dict[str, Any] = response.json()
     if body.get("errors"):
-        raise RuntimeError(f"Linear GraphQL errors: {body['errors']}")
+        raise LinearGraphQLError(body["errors"])
     return body["data"]
 
 
@@ -95,7 +118,7 @@ _LISTING_PAGE_SIZE: int = 100
 # A walk still paging past this is a cursor cycling rather than ending.
 _MAX_PAGES: int = 100_000
 
-_PAGE_INFO: str = """
+PAGE_INFO: str = """
     pageInfo {
         hasNextPage
         endCursor
@@ -105,7 +128,7 @@ _TEAMS_BY_KEY_QUERY: str = f"""
     query TeamsByKey($keys: [String!], $first: Int, $after: String) {{
         teams(first: $first, after: $after, filter: {{ key: {{ in: $keys }} }}) {{
             nodes {{ key }}
-            {_PAGE_INFO}
+            {PAGE_INFO}
         }}
     }}
 """
@@ -113,7 +136,7 @@ _PROJECTS_QUERY: str = f"""
     query ProjectsInScope($filter: ProjectFilter, $first: Int, $after: String) {{
         projects(first: $first, after: $after, filter: $filter) {{
             nodes {{ name slugId }}
-            {_PAGE_INFO}
+            {PAGE_INFO}
         }}
     }}
 """
@@ -140,7 +163,55 @@ def _project_scope(entries: list[str] | None) -> tuple[list[str], list[str]]:
     return sorted(names), sorted(slug_ids)
 
 
-class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
+def refresh_oauth_token(credentials: dict[str, Any]) -> dict[str, Any]:
+    """The credential after one refresh. Per RFC 6749 section 6 the response
+    may omit the refresh token, in which case the stored one stays valid;
+    Linear rotates it on every refresh today."""
+    if _REFRESH_TOKEN not in credentials:
+        raise ConnectorMissingCredentialError("Linear")
+    response = request_with_retries(
+        method="POST",
+        url=_LINEAR_TOKEN_URL,
+        data={
+            _REFRESH_TOKEN: credentials[_REFRESH_TOKEN],
+            "client_id": LINEAR_CLIENT_ID,
+            "client_secret": LINEAR_CLIENT_SECRET,
+            "grant_type": _REFRESH_TOKEN,
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        backoff=0,
+        delay=0.1,
+    )
+    if not response.ok:
+        raise RuntimeError(f"Failed to refresh token: {response.text}")
+    token_data: dict[str, Any] = response.json()
+    return {
+        _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
+        _EXPIRE_AT: int(time.time() + token_data[_EXPIRES_IN]),
+        _REFRESH_TOKEN: token_data.get(_REFRESH_TOKEN, credentials[_REFRESH_TOKEN]),
+    }
+
+
+def is_expiring(credentials: dict[str, Any]) -> bool:
+    """An OAuth credential that must be refreshed before its next use."""
+    return (
+        _ACCESS_TOKEN in credentials
+        and _EXPIRE_AT in credentials
+        and credentials[_EXPIRE_AT] < time.time() + _REFRESH_BUFFER_SECONDS
+    )
+
+
+def _authorization(credentials: dict[str, Any]) -> str:
+    if _API_KEY in credentials:
+        return str(credentials[_API_KEY])
+    if _ACCESS_TOKEN in credentials:
+        return f"Bearer {credentials[_ACCESS_TOKEN]}"
+    raise ConnectorMissingCredentialError("Linear")
+
+
+class LinearConnector(
+    LoadConnector, PollConnector, OAuthConnector, CredentialsConnector
+):
     supports_manual_credentials = True
 
     def __init__(
@@ -153,14 +224,63 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         self.team_keys = sorted(
             {key.strip().upper() for key in team_keys or [] if key.strip()}
         )
+        # The entries as configured, for the permission sync twin built from
+        # an instance the factory made.
+        self.projects: list[str] = projects or []
         self.project_names, self.project_slug_ids = _project_scope(projects)
         self.batch_size = batch_size
-        self.linear_api_key: str | None = None
+        self._credentials_provider: CredentialsProviderInterface | None = None
+        self._authorization_cache: str | None = None
+        self._authorization_expires_at: float | None = None
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        """Manual credentials. An expiring OAuth token is refreshed here and
+        handed back so the caller can store it; the DB provider path refreshes
+        on first use instead."""
+        refreshed: dict[str, Any] | None = None
+        if is_expiring(credentials):
+            refreshed = refresh_oauth_token(credentials)
+            credentials = refreshed
+        self.set_credentials_provider(
+            OnyxStaticCredentialsProvider(
+                None, DocumentSource.LINEAR.value, credentials
+            )
+        )
+        return refreshed
+
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        self._credentials_provider = credentials_provider
+        self._authorization_cache = None
+        self._authorization_expires_at = None
+
+    @property
+    def credentials_provider(self) -> CredentialsProviderInterface:
+        if self._credentials_provider is None:
+            raise ConnectorMissingCredentialError("Linear")
+        return self._credentials_provider
 
     def _api_key(self) -> str:
-        if self.linear_api_key is None:
-            raise ConnectorMissingCredentialError("Linear")
-        return self.linear_api_key
+        """The Authorization header value, refreshing an expiring OAuth token
+        under the provider's lock so two syncs never both redeem it."""
+        now: float = time.time()
+        if self._authorization_cache is not None and (
+            self._authorization_expires_at is None
+            or self._authorization_expires_at >= now + _REFRESH_BUFFER_SECONDS
+        ):
+            return self._authorization_cache
+        provider: CredentialsProviderInterface = self.credentials_provider
+        credentials: dict[str, Any] = provider.get_credentials()
+        if is_expiring(credentials):
+            with provider:
+                credentials = provider.get_credentials()
+                if is_expiring(credentials):
+                    credentials = refresh_oauth_token(credentials)
+                    provider.set_credentials(credentials)
+        self._authorization_cache = _authorization(credentials)
+        self._authorization_expires_at = credentials.get(_EXPIRE_AT)
+        return self._authorization_cache
 
     def validate_connector_settings(self) -> None:
         """A team or project Linear does not answer for is misspelled or is in
@@ -243,12 +363,14 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
         path: tuple[str, ...],
         page_size: int = _LISTING_PAGE_SIZE,
     ) -> Iterator[dict[str, Any]]:
-        """Each page's data, following the connection at `path` to its end."""
-        api_key: str = self._api_key()
+        """Each page's data, following the connection at `path` to its end.
+        The key is read per page so a token expiring mid-walk is refreshed."""
         cursor: str | None = None
         for _ in range(_MAX_PAGES):
-            data: dict[str, Any] = _run_query(
-                query, {**variables, "first": page_size, "after": cursor}, api_key
+            data: dict[str, Any] = run_query(
+                query,
+                {**variables, "first": page_size, "after": cursor},
+                self._api_key(),
             )
             yield data
             connection: dict[str, Any] = data
@@ -326,64 +448,6 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
             _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
             _EXPIRE_AT: int(expire_at),
             _REFRESH_TOKEN: token_data[_REFRESH_TOKEN],
-        }
-
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        new_credentials = None
-
-        if "linear_api_key" in credentials:
-            self.linear_api_key = cast(str, credentials["linear_api_key"])
-        elif _ACCESS_TOKEN in credentials:
-            if _EXPIRE_AT not in credentials:
-                self.linear_api_key = "Bearer " + cast(str, credentials[_ACCESS_TOKEN])
-            elif credentials[_EXPIRE_AT] < time.time() + 300:  # 5-minute buffer
-                new_credentials = self.refresh_token(credentials)
-                self.linear_api_key = "Bearer " + cast(
-                    str, new_credentials[_ACCESS_TOKEN]
-                )
-            elif credentials[_EXPIRE_AT] >= time.time():
-                self.linear_api_key = "Bearer " + cast(str, credentials[_ACCESS_TOKEN])
-        else:
-            # May need to handle case in the future if the OAuth flow expires
-            raise ConnectorMissingCredentialError("Linear")
-
-        return new_credentials
-
-    def refresh_token(self, credentials: dict[str, Any]) -> dict[str, Any]:
-        if _REFRESH_TOKEN not in credentials:
-            raise ConnectorMissingCredentialError("Linear")
-
-        data = {
-            _REFRESH_TOKEN: credentials[_REFRESH_TOKEN],
-            "client_id": LINEAR_CLIENT_ID,
-            "client_secret": LINEAR_CLIENT_SECRET,
-            "grant_type": _REFRESH_TOKEN,
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-        response = request_with_retries(
-            method="POST",
-            url="https://api.linear.app/oauth/token",
-            data=data,
-            headers=headers,
-            backoff=0,
-            delay=0.1,
-        )
-        if not response.ok:
-            raise RuntimeError(f"Failed to refresh token: {response.text}")
-
-        token_data = response.json()
-
-        expire_at = time.time() + token_data[_EXPIRES_IN]
-
-        # Per RFC 6749 §6, the refresh response MAY omit refresh_token, in
-        # which case the existing one remains valid. Linear currently rotates
-        # refresh tokens on every refresh, but fall back defensively so a
-        # missing field doesn't force a full re-OAuth.
-        return {
-            _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
-            _EXPIRE_AT: int(expire_at),
-            _REFRESH_TOKEN: token_data.get(_REFRESH_TOKEN, credentials[_REFRESH_TOKEN]),
         }
 
     def _process_issues(

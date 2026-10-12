@@ -150,6 +150,21 @@ ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S = int(
 )
 
 #####
+# Linear
+#####
+
+# In seconds, default is 5 minutes
+LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+# In seconds, default is 1 hour: how long an issue moved between teams keeps
+# its old readers. A sync is one call per 250 issues against the 1,500 calls
+# per hour the indexing polls share.
+LINEAR_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("LINEAR_PERMISSION_DOC_SYNC_FREQUENCY") or 60 * 60
+)
+
+#####
 # Zoom
 #####
 # In seconds, default is 5 minutes

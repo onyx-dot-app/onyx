@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -8,7 +8,9 @@ from ee.onyx.connectors.perm_sync_valid import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.connector import CanvasConnector
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.zoom.connector import ZoomConnector
 
 
@@ -28,6 +30,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
             DocumentSource.GMAIL,
             DocumentSource.GOOGLE_DRIVE,
             DocumentSource.JIRA,
+            DocumentSource.LINEAR,
             DocumentSource.ONEDRIVE,
             DocumentSource.SHAREPOINT,
             DocumentSource.SLACK,
@@ -41,6 +44,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
         DocumentSource.CANVAS,
         DocumentSource.CONFLUENCE,
         DocumentSource.GOOGLE_DRIVE,
+        DocumentSource.LINEAR,
         DocumentSource.ONEDRIVE,
         DocumentSource.SHAREPOINT,
         DocumentSource.ZOOM,
@@ -79,3 +83,18 @@ def test_dispatch_is_a_noop_for_probeless_connectors() -> None:
     """Verifies connectors outside the dispatch table validate as a no-op."""
     # Under test and postcondition (nothing raises, nothing is probed).
     validate_perm_sync(MagicMock(spec=BaseConnector))
+
+
+def test_linear_probes_the_viewer_on_the_connectors_own_credential() -> None:
+    """The EE twin reads the factory-built connector's credential: a guest
+    token fails before a scheduled sync hides every issue outside its teams."""
+    connector = LinearConnector(team_keys=["ENG"])
+    connector.load_credentials({"linear_api_key": "lin_api_test"})
+    guest = MagicMock()
+    guest.json.return_value = {"data": {"viewer": {"guest": True}}}
+
+    with (
+        patch("onyx.connectors.linear.connector._make_query", return_value=guest),
+        pytest.raises(InsufficientPermissionsError, match="guest"),
+    ):
+        validate_perm_sync(connector)
