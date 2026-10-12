@@ -130,5 +130,5 @@ def test_local_providers_bill_zero() -> None:
 def test_embedding_detection_uses_mode() -> None:
     """Embedding detection must use the catalog's mode field, not just the
     name heuristic — a missing mode silently misclassifies."""
-    assert model_catalog.is_embedding_model_name("text-embedding-3-large") is True
-    assert model_catalog.is_embedding_model_name("gpt-5") is False
+    assert model_catalog.resolve_model_mode("text-embedding-3-large") == "embedding"
+    assert model_catalog.resolve_model_mode("gpt-5") == "chat"
