@@ -302,6 +302,9 @@ function CheckCardView({
   const notice: string | undefined =
     status === "failedToRun" ? t("failedToRun") : undefined;
   const hasResults: boolean = results.length > 0;
+  // A run that broke can still list checks: some finished first, or an
+  // earlier run's results stay after a failed re-run.
+  const hasRows: boolean = hasResults || openChecks.length > 0;
   const total: number = results.length + inProgressCount + expectedCount;
   const hasChecks: boolean = total > 0;
 
@@ -389,8 +392,8 @@ function CheckCardView({
               color="red"
             />
           )}
-          {/* A run that broke has no rows to fold. */}
-          {!notice && (
+          {/* Shown unless a run that broke left no rows to fold. */}
+          {(!notice || hasRows) && (
             <Button
               icon={collapsed ? SvgExpand : SvgFold}
               // Folded, the card hovers grey itself; tertiary matches that
@@ -428,6 +431,12 @@ function CheckCardView({
     >
       <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
         {header}
+        {/* The header shows the failure; this announces it. */}
+        {notice && (
+          <span role="alert" className="sr-only">
+            {notice}
+          </span>
+        )}
 
         <Fold open={!collapsed}>
           {/* The space below the header lives inside the fold, so a closed
@@ -439,7 +448,7 @@ function CheckCardView({
             gap={1}
             className="pt-1"
           >
-            {hasResults || openChecks.length > 0 ? (
+            {hasRows ? (
               <Section
                 justifyContent="start"
                 alignItems="stretch"
