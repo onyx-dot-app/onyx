@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_core import to_jsonable_python
 
 from onyx.cache.factory import get_cache_backend
@@ -30,7 +30,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckFinding,
     CredentialCapability,
+    parse_known_findings,
 )
 from onyx.connectors.capability_checks.runner import (
     CheckReadinessKind,
@@ -132,6 +134,13 @@ class DraftCheckState(BaseModel):
     from_cache: bool = False
     # The check proves the credential works with the credential-bound fields.
     validates_binding: bool = False
+    # What the check found, once it passed.
+    findings: list[CheckFinding] = []
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _known_findings(cls, findings: Any) -> Any:
+        return parse_known_findings(findings)
 
 
 class DraftCheckRunSnapshot(BaseModel):
@@ -188,6 +197,12 @@ class CachedDraftResult(BaseModel):
     message: str
     duration_ms: int | None
     error_type: str | None = None
+    findings: list[CheckFinding] = []
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _known_findings(cls, findings: Any) -> Any:
+        return parse_known_findings(findings)
 
 
 def decide_draft_check_state(
@@ -298,6 +313,7 @@ def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
         message=result.message,
         duration_ms=result.duration_ms,
         error_type=result.error_type,
+        findings=result.findings,
     )
     get_cache_backend().set(
         key, cached.model_dump_json(), ex=DRAFT_RESULT_CACHE_TTL_SECONDS
@@ -386,6 +402,7 @@ def cached_check_result(
         docs_link=check.docs_link,
         duration_ms=cached.duration_ms,
         validates_binding=check.validates_binding,
+        findings=cached.findings,
     )
 
 
@@ -395,6 +412,7 @@ def apply_check_result(
     check_state.state = _STATE_BY_STATUS[result.status]
     check_state.message = result.message
     check_state.duration_ms = result.duration_ms
+    check_state.findings = result.findings
 
 
 def apply_cached_result(
@@ -403,6 +421,7 @@ def apply_cached_result(
     check_state.state = cached.state
     check_state.message = cached.message
     check_state.duration_ms = cached.duration_ms
+    check_state.findings = cached.findings
     check_state.from_cache = True
 
 

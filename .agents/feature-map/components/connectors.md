@@ -471,6 +471,18 @@ without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
 
+A passing check may return *findings* (`capability_checks/models.py:CheckFinding`):
+structured information about what the credential and config reach, such as a
+count (`CountFinding`) or a list of named options for a config field
+(`OptionsFinding`, at most `MAX_FINDING_OPTIONS`). A finding has a closed `key`
+that the frontend turns into a localized label, and an optional `field_name`.
+The runner puts findings on `CapabilityCheckResult.findings`, so they are stored
+in the report JSON, in the draft-run snapshot (`DraftCheckState.findings`) and in
+the draft result cache, and creation copies cached findings into the new pair's
+report. A stored finding with a type or key this version does not know is
+dropped when read. Findings hold container names, ids and counts only: never
+document content, and users only as a count.
+
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See

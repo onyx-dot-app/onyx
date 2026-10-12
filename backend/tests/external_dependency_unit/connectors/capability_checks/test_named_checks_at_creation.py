@@ -22,10 +22,20 @@ from onyx.background.celery.tasks.capability_checks.tasks import (
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import factory
 from onyx.connectors.capability_checks import creation, runner
+from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckRunSnapshot,
+    StoredDraftRun,
+    load_draft_run,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckFinding,
+    CheckFindingKey,
     CredentialCapability,
+    CredentialCapabilityReport,
+    FindingOption,
+    OptionsFinding,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -39,7 +49,7 @@ from onyx.db.credential_capability import (
     mark_capability_report_running,
 )
 from onyx.db.enums import AccessType, CapabilityCheckTrigger, CapabilityReportRunStatus
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, CredentialCapabilityReportRow
 from onyx.server.documents import capability_check_runs
 from onyx.server.documents.capability_check_runs import (
     start_draft_capability_check_run,
@@ -72,12 +82,16 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
         )
         self._harness = harness
 
-    def run(self, context: CapabilityCheckContext) -> None:  # noqa: ARG002
+    def run(
+        self,
+        context: CapabilityCheckContext,  # noqa: ARG002
+    ) -> list[CheckFinding] | None:
         self._harness.runs.append(self.check_id)
         if (release := self._harness.slow.get(self.check_id)) is not None:
             release.wait(timeout=30)
         if (error := self._harness.errors.get(self.check_id)) is not None:
             raise error
+        return self._harness.findings.get(self.check_id)
 
 
 class _FakeConfigCheck(_FakeCheck):
@@ -88,6 +102,7 @@ class _Harness:
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.runs: list[str] = []
         self.errors: dict[str, Exception] = {}
+        self.findings: dict[str, list[CheckFinding]] = {}
         # A check in here waits until its event is set.
         self.slow: dict[str, threading.Event] = {}
         self.send_task = MagicMock()
@@ -282,6 +297,51 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
 
 
 @pytest.mark.usefixtures("tenant_context")
+def test_draft_findings_reach_the_run_and_the_created_pairs_report(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    channels: OptionsFinding = OptionsFinding(
+        key=CheckFindingKey.READABLE_CHANNELS,
+        field_name="channels",
+        options=[FindingOption(value="a", label="#a")],
+    )
+    harness.findings[_CHANNELS] = [channels]
+    snapshot: DraftCheckRunSnapshot = start_draft_capability_check_run(
+        user_id=uuid4(),
+        credential=slack_pair.credential,
+        source=DocumentSource.SLACK,
+        config_class=SlackConnectorConfig,
+        access_type=AccessType.PUBLIC,
+        draft_key=uuid4().hex,
+        form_values={"channels": ["a"]},
+    )
+    run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
+
+    stored_run: StoredDraftRun | None = load_draft_run(snapshot.run_id)
+    assert stored_run is not None
+    findings_by_check: dict[str, list[CheckFinding]] = {
+        state.check_id: state.findings for state in stored_run.snapshot.checks
+    }
+    assert findings_by_check[_CHANNELS] == [channels]
+    assert findings_by_check[_TOKEN] == []
+
+    # Creation reuses the cached results, findings included.
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+    db_session.expire_all()
+    row: CredentialCapabilityReportRow | None = get_capability_report_row(
+        db_session, slack_pair.credential_id, slack_pair.connector_id
+    )
+    assert row is not None and row.report is not None
+    report: CredentialCapabilityReport = CredentialCapabilityReport.model_validate(
+        row.report
+    )
+    stored_findings: dict[str, list[CheckFinding]] = {
+        result.check_id: result.findings for result in report.check_results
+    }
+    assert stored_findings[_CHANNELS] == [channels]
+
+
+@pytest.mark.usefixtures("tenant_context")
 def test_a_cached_draft_failure_runs_again_at_creation(
     db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
 ) -> None:
@@ -345,7 +405,7 @@ def test_failed_report_write_retires_the_running_mark(
         _validate(db_session, slack_pair, {"channels": ["a"]})
 
     db_session.expire_all()
-    row = get_capability_report_row(
+    row: CredentialCapabilityReportRow | None = get_capability_report_row(
         db_session, slack_pair.credential_id, slack_pair.connector_id
     )
     assert row is not None
