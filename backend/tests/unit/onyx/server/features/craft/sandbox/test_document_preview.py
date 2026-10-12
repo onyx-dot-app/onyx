@@ -280,9 +280,10 @@ def test_failed_bundle_push_stops_before_verification() -> None:
     assert runner.call_count == 1
 
 
+@pytest.mark.parametrize("lookup", [True, False])
 @pytest.mark.parametrize("transient", [True, False])
 def test_docker_bundle_writer_classifies_exec_failure(
-    monkeypatch: pytest.MonkeyPatch, transient: bool
+    monkeypatch: pytest.MonkeyPatch, transient: bool, lookup: bool
 ) -> None:
     from docker.errors import APIError
     from requests import Response
@@ -302,9 +303,16 @@ def test_docker_bundle_writer_classifies_exec_failure(
         except APIError as error:
             raise docker.ExecError("exec failed") from error
 
-    monkeypatch.setattr(
-        docker, "_stream_stdin_to_container_as_sandbox_user", fail_write
-    )
+    if lookup:
+        monkeypatch.setattr(
+            manager,
+            "_require_container",
+            MagicMock(side_effect=APIError("Engine error", response=response)),
+        )
+    else:
+        monkeypatch.setattr(
+            docker, "_stream_stdin_to_container_as_sandbox_user", fail_write
+        )
     with pytest.raises(RetriableWriteError if transient else FatalWriteError):
         manager.write_files_to_sandbox(
             sandbox_id=uuid4(),
@@ -313,11 +321,12 @@ def test_docker_bundle_writer_classifies_exec_failure(
         )
 
 
+@pytest.mark.parametrize("lookup", [True, False])
 @pytest.mark.parametrize(
     "failure", [OSError("socket closed"), TimeoutError("socket timeout")]
 )
 def test_docker_bundle_writer_marks_socket_failure_retriable(
-    monkeypatch: pytest.MonkeyPatch, failure: OSError
+    monkeypatch: pytest.MonkeyPatch, failure: OSError, lookup: bool
 ) -> None:
     from onyx.server.features.build.sandbox.docker import (
         docker_sandbox_manager as docker,
@@ -326,8 +335,10 @@ def test_docker_bundle_writer_marks_socket_failure_retriable(
     manager = docker.DockerSandboxManager.__new__(docker.DockerSandboxManager)
     monkeypatch.setattr(manager, "_require_container", MagicMock())
     monkeypatch.setattr(
-        docker,
-        "_stream_stdin_to_container_as_sandbox_user",
+        manager if lookup else docker,
+        "_require_container"
+        if lookup
+        else "_stream_stdin_to_container_as_sandbox_user",
         MagicMock(side_effect=failure),
     )
     with pytest.raises(RetriableWriteError):
@@ -336,3 +347,45 @@ def test_docker_bundle_writer_marks_socket_failure_retriable(
             mount_path="/workspace/managed/test",
             files={"file": b"content"},
         )
+
+
+@pytest.mark.parametrize("traversal", [False, True])
+def test_docker_cleanup_only_removes_direct_bundle_children(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, traversal: bool
+) -> None:
+    from onyx.server.features.build.sandbox.docker import (
+        docker_sandbox_manager as docker,
+    )
+
+    manager = docker.DockerSandboxManager.__new__(docker.DockerSandboxManager)
+    monkeypatch.setattr(manager, "_require_container", MagicMock())
+    mount = tmp_path / "converter"
+    previous = tmp_path / ".bundle-converter-old"
+    previous.mkdir()
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "user.txt").write_text("keep")
+    mount.symlink_to(f"{previous}/../sessions" if traversal else previous)
+
+    def execute_archive(_container: object, command: list[str], archive: bytes) -> None:
+        script = command[2]
+        if sys.platform == "darwin":
+            script = script.replace("mv -Tf", "mv -fh")
+        # Run cleanup immediately and synchronously to check its actual target.
+        script = script.replace(
+            '(sleep 60; rm -rf "$old_target") </dev/null >/dev/null 2>&1 &',
+            'rm -rf "$old_target"',
+        )
+        subprocess.run(
+            ["sh", "-c", script], input=archive, check=True, capture_output=True
+        )
+
+    monkeypatch.setattr(
+        docker, "_stream_stdin_to_container_as_sandbox_user", execute_archive
+    )
+    manager.write_files_to_sandbox(
+        sandbox_id=uuid4(), mount_path=str(mount), files={"preview.py": b"new"}
+    )
+    assert (sessions / "user.txt").read_text() == "keep"
+    assert previous.exists() is traversal
+    assert (mount / "preview.py").read_bytes() == b"new"

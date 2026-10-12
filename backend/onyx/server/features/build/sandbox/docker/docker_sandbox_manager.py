@@ -1999,7 +1999,6 @@ echo WRITE_OK"""
             raise ValueError("mount_path is required")
         if ".." in Path(mount_path).parts:
             raise ValueError("mount_path may not contain '..'")
-        container = self._require_container(sandbox_id)
 
         # Build a deterministic tar (sorted, fixed mtime) like the K8s push.
         buf = io.BytesIO()
@@ -2036,11 +2035,14 @@ echo WRITE_OK"""
             "trap - EXIT\n"
             # Readers can finish against the prior directory during the grace period.
             'case "$old_target" in "$bundle_prefix"*)\n'
-            '    (sleep 60; rm -rf "$old_target") </dev/null >/dev/null 2>&1 &\n'
+            '    case "${old_target#"$bundle_prefix"}" in ""|*/*) ;; *)\n'
+            '        (sleep 60; rm -rf "$old_target") </dev/null >/dev/null 2>&1 &\n'
+            "    ;; esac\n"
             ";; esac\n"
         )
 
         try:
+            container = self._require_container(sandbox_id)
             _stream_stdin_to_container_as_sandbox_user(
                 container,
                 ["/bin/sh", "-c", script],
@@ -2049,6 +2051,10 @@ echo WRITE_OK"""
         except ExecError as e:
             cause = e.__cause__
             if isinstance(cause, APIError) and not cause.is_client_error():
+                raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
+            raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
+        except APIError as e:
+            if not e.is_client_error():
                 raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
             raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
         except (OSError, RequestsConnectionError, Timeout) as e:

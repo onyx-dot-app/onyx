@@ -758,3 +758,7 @@ Rejected requests and failed extraction are permanent errors.
 Docker publishes bundles with a symlink swap, matching Kubernetes.
 Updates to an existing symlink are atomic. Replacing a legacy directory first removes that directory.
 Previous directories remain available for 60 seconds so active readers can finish.
+Cleanup accepts only direct bundle children, not paths with nested components.
+Container lookup uses the same retry classification as archive transfer.
+Concurrent publications can leave an unused bundle until the container is removed;
+publication remains atomic, but cleanup is best effort.
