@@ -28,6 +28,9 @@ from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_doc_permission_sync_checks,
     build_google_drive_group_sync_checks,
 )
+from onyx.connectors.hubspot.capability_checks import (
+    build_hubspot_doc_permission_sync_checks,
+)
 from onyx.connectors.jira.capability_checks import (
     build_jira_doc_permission_sync_checks,
     build_jira_group_sync_checks,
@@ -51,6 +54,7 @@ _DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck
     DocumentSource.CONFLUENCE: build_confluence_doc_permission_sync_checks(),
     DocumentSource.OUTLOOK: build_outlook_doc_permission_sync_checks(),
     DocumentSource.ONEDRIVE: build_onedrive_doc_permission_sync_checks(),
+    DocumentSource.HUBSPOT: build_hubspot_doc_permission_sync_checks(),
     DocumentSource.JIRA: build_jira_doc_permission_sync_checks(),
     DocumentSource.GOOGLE_DRIVE: build_google_drive_doc_permission_sync_checks(),
     DocumentSource.LINEAR: build_linear_doc_permission_sync_checks(),

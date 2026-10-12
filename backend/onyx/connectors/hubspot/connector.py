@@ -13,12 +13,15 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
     UnexpectedValidationError,
 )
-from onyx.connectors.hubspot.config import HUBSPOT_OBJECT_SPECS, HubSpotObjectType
+from onyx.connectors.hubspot.config import (
+    HUBSPOT_OBJECT_SPECS,
+    HubSpotConnectorConfig,
+    HubSpotObjectType,
+)
 from onyx.connectors.hubspot.models import (
     HubSpotAssociationIds,
     HubSpotDocumentParts,
     HubSpotObjectSpec,
-    HubSpotPage,
     HubSpotRecord,
 )
 from onyx.connectors.hubspot.permissions import HubSpotPermissionReader
@@ -173,18 +176,6 @@ def _utc(timestamp: SecondsSinceUnixEpoch | None) -> datetime | None:
         if timestamp is not None
         else None
     )
-
-
-def _probe_scope(call: Callable[[], object]) -> None:
-    try:
-        call()
-    except HubSpotApiError as e:
-        if e.status != 403:
-            raise
-        raise InsufficientPermissionsError(
-            f"HubSpot refused the {e.operation}. Permission sync needs the private "
-            "app to read users (settings.users.read) and the viewers of records."
-        ) from e
 
 
 def _clean_html(html_content: str) -> str:
@@ -440,13 +431,17 @@ class HubSpotConnector(
         self._portal_id = None
 
     def validate_connector_settings(self) -> None:
-        """Nothing else calls HubSpot at creation, so a dead token is refused here."""
+        """Refuses a dead token before an indexing or permission sync attempt."""
         try:
             self._portal_id = self.ops.get_portal_id()
         except HubSpotApiError as e:
-            if e.status in (401, 403):
+            if e.status == 401:
                 raise CredentialInvalidError(
-                    f"HubSpot refused the {e.operation}. Check the access token."
+                    f"HubSpot rejected the access token on the {e.operation}."
+                ) from e
+            if e.status == 403:
+                raise InsufficientPermissionsError(
+                    f"HubSpot refused the {e.operation}."
                 ) from e
             raise UnexpectedValidationError(str(e)) from e
 
@@ -866,30 +861,11 @@ class HubSpotConnector(
             _SLIM_BATCH_SIZE,
         )
 
-    def _sample_record(self) -> tuple[HubSpotObjectType, str] | None:
-        for object_type in self._configured_object_types():
-            page: HubSpotPage[HubSpotRecord] = self.ops.list_records(
-                variant=object_type, properties=[HS_OBJECT_ID_PROPERTY], limit=1
-            )
-            if page.items:
-                return object_type, page.items[0].id
-        return None
-
-    def probe_permission_sync_scopes(self) -> None:
-        """A 403 here is a missing private-app scope. Failing creation with the
-        refused operation named beats a sync that never succeeds while every
-        record stays hidden."""
-        _probe_scope(lambda: self.ops.list_users(limit=1))
-        sample: tuple[HubSpotObjectType, str] | None = self._sample_record()
-        if sample is None:
-            logger.warning(
-                "HubSpot has no records yet, so the viewer lookup stays "
-                "unchecked until one exists"
-            )
-            return
-        object_type, record_id = sample
-        reader: HubSpotPermissionReader = self._permission_reader()
-        _probe_scope(lambda: reader.viewers(object_type, [record_id]))
+    @property
+    def settings(self) -> HubSpotConnectorConfig:
+        return HubSpotConnectorConfig(
+            batch_size=self.batch_size, object_types=self._configured_object_types()
+        )
 
 
 if __name__ == "__main__":

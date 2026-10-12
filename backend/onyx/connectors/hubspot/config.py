@@ -19,21 +19,25 @@ HUBSPOT_OBJECT_SPECS: dict[HubSpotObjectType, HubSpotObjectSpec] = {
         type_id="0-5",
         document_noun="ticket",
         modified_date_property="hs_lastmodifieddate",
+        read_scope="tickets",
     ),
     HubSpotObjectType.COMPANIES: HubSpotObjectSpec(
         type_id="0-2",
         document_noun="company",
         modified_date_property="hs_lastmodifieddate",
+        read_scope="crm.objects.companies.read",
     ),
     HubSpotObjectType.DEALS: HubSpotObjectSpec(
         type_id="0-3",
         document_noun="deal",
         modified_date_property="hs_lastmodifieddate",
+        read_scope="crm.objects.deals.read",
     ),
     HubSpotObjectType.CONTACTS: HubSpotObjectSpec(
         type_id="0-1",
         document_noun="contact",
         modified_date_property="lastmodifieddate",
+        read_scope="crm.objects.contacts.read",
     ),
 }
 

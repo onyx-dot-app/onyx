@@ -80,7 +80,6 @@ _SDK_API_EXCEPTIONS = (
 )
 _RECORD_VARIANTS = tuple(object_type.value for object_type in HubSpotObjectType)
 _READ_VARIANTS = _RECORD_VARIANTS + (NOTES_OBJECT_TYPE,)
-_NOT_YET_PROBED = "No HubSpot capability check composes this operation yet."
 
 _T = TypeVar("_T")
 _M = TypeVar("_M", bound=BaseModel)
@@ -91,7 +90,7 @@ QueryParams = dict[str, str | int | list[str]]
 
 class HubSpotApiError(Exception):
     """A refused or failed HubSpot call. Carries the status and headers the
-    rate limiter reads, and the operation name for the permission probe's message."""
+    rate limiter reads, and the operation name for error messages."""
 
     def __init__(
         self,
@@ -247,7 +246,6 @@ class HubSpotSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_PROBED,
     )
     def get_portal_id(self) -> str:
         return str(
@@ -258,7 +256,6 @@ class HubSpotSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         variants=_RECORD_VARIANTS,
-        untested=_NOT_YET_PROBED,
     )
     def list_records(
         self,
@@ -287,7 +284,6 @@ class HubSpotSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         variants=_RECORD_VARIANTS,
-        untested=_NOT_YET_PROBED,
     )
     def search_records(
         self,
@@ -337,7 +333,6 @@ class HubSpotSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_PROBED,
     )
     def list_associations(
         self,
@@ -368,7 +363,6 @@ class HubSpotSourceOperations(SourceOperations):
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
         variants=_READ_VARIANTS,
-        untested=_NOT_YET_PROBED,
     )
     def read_records(
         self, *, variant: str, ids: list[str], properties: list[str]
@@ -398,7 +392,6 @@ class HubSpotSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_PROBED,
     )
     def list_users(
         self, *, after: str | None = None, limit: int = USERS_PAGE_SIZE
@@ -414,7 +407,6 @@ class HubSpotSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_PROBED,
     )
     def get_user(self, *, user_id: int) -> HubSpotUser | None:
         """None when HubSpot no longer knows the id."""
@@ -430,7 +422,6 @@ class HubSpotSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.DOC_PERMISSION_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_PROBED,
     )
     def get_record_viewers(
         self, *, portal_id: str, object_type: HubSpotObjectType, record_ids: list[str]
