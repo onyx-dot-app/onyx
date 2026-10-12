@@ -2065,14 +2065,6 @@
           "label": "عرض أقل"
         }
       },
-      "credentialForm": {
-        "errorToast": "خطأ: {detail}",
-        "successToast": "تم بنجاح!",
-        "updateButton": {
-          "ariaLabel": "تحديث بيانات الاعتماد",
-          "label": "تحديث"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "يؤدي حذف هذا الموصل إلى جدولة مهمة حذف تزيل مستنداته المفهرسة وتحذفه لجميع المستخدمين.",
         "entityType": "موصل"

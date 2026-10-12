@@ -2065,14 +2065,6 @@
           "label": "Mostrar menos"
         }
       },
-      "credentialForm": {
-        "errorToast": "Erro: {detail}",
-        "successToast": "Sucesso!",
-        "updateButton": {
-          "ariaLabel": "Atualizar credenciais",
-          "label": "Atualizar"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "Excluir este conector agenda uma tarefa de exclusão que remove os documentos indexados e o exclui para todos os usuários.",
         "entityType": "conector"

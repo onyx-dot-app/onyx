@@ -2065,14 +2065,6 @@
           "label": "Show less"
         }
       },
-      "credentialForm": {
-        "errorToast": "Error: {detail}",
-        "successToast": "Success!",
-        "updateButton": {
-          "ariaLabel": "Update credentials",
-          "label": "Update"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "Deleting this connector schedules a deletion job that removes its indexed documents and deletes it for every user.",
         "entityType": "connector"

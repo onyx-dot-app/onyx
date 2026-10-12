@@ -182,7 +182,7 @@ export function useCredentialLoad(
  * is a toast, a banner or inline text.
  */
 export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
-  const { credentials, oauthDetails, isLoading, error } =
+  const { credentials, oauthDetails, isLoading } =
     useCredentialLoad(sourceType);
   const { isGlobalHolder } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -294,7 +294,6 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
   return {
     displayName,
     credentials,
-    error,
     oauthDetails,
     isLoading,
     methods,

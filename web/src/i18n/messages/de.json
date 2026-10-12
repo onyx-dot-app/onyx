@@ -2065,14 +2065,6 @@
           "label": "Weniger anzeigen"
         }
       },
-      "credentialForm": {
-        "errorToast": "Fehler: {detail}",
-        "successToast": "Erfolgreich!",
-        "updateButton": {
-          "ariaLabel": "Zugangsdaten aktualisieren",
-          "label": "Aktualisieren"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "Beim Löschen dieses Konnektors wird ein Löschauftrag geplant, der seine indizierten Dokumente entfernt und ihn für alle Benutzer löscht.",
         "entityType": "Konnektor"

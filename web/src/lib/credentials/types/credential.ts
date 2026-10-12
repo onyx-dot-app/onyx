@@ -71,11 +71,6 @@ export interface CredentialSetup {
   displayName: string;
   /** Every credential this admin can see. Undefined until the first load. */
   credentials: AnyCredential[] | undefined;
-  /**
-   * Set when the credentials never loaded. A refresh that fails after a
-   * success does not count, and neither do OAuth details that fail to load.
-   */
-  error: Error | undefined;
   /** The source's OAuth capabilities, once known. */
   oauthDetails: OAuthDetails | undefined;
   /**

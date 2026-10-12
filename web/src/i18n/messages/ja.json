@@ -2065,14 +2065,6 @@
           "label": "表示を減らす"
         }
       },
-      "credentialForm": {
-        "errorToast": "エラー: {detail}",
-        "successToast": "成功しました！",
-        "updateButton": {
-          "ariaLabel": "認証情報を更新",
-          "label": "更新"
-        }
-      },
       "deleteModal": {
         "additionalDetails": "このコネクターを削除すると削除ジョブがスケジュールされ、インデックス済みのドキュメントが削除されます。また、すべてのユーザーからこのコネクターが削除されます。",
         "entityType": "コネクター"
