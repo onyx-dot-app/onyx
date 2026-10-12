@@ -104,6 +104,14 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
      are wrapped
    STATUS: STILL NEEDED - v1.93.0 gates on presence, not on the thinking type.
 
+9. OpenRouter Routed Model Lost In Streams (_patch_openrouter_routed_model):
+   - OpenRouter stream chunks carry the model a router (openrouter/auto) actually
+     served, but CustomStreamWrapper overwrites every chunk's `model` with the
+     requested name, so routed calls cannot be priced
+   - Our patch keeps the served name in provider_specific_fields["routed_model"],
+     which the wrapper copies through to the consumer
+   STATUS: STILL NEEDED - v1.93.0 only preserves chunk models for Azure.
+
 """
 
 import time
@@ -116,6 +124,9 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 )
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.llms.ollama.common_utils import OllamaError
+from litellm.llms.openrouter.chat.transformation import (
+    OpenRouterChatCompletionStreamingHandler,
+)
 from litellm.types.utils import ChatCompletionUsageBlock, ModelResponseStream
 
 # Original upstream chunk_parser, saved before any patching for fallback use
@@ -906,6 +917,34 @@ def _patch_anthropic_keeps_disabled_thinking() -> None:
         )
 
 
+_original_openrouter_chunk_parser = (
+    OpenRouterChatCompletionStreamingHandler.chunk_parser
+)
+
+
+def _patch_openrouter_routed_model() -> None:
+    if (
+        getattr(  # ods: ignore[getattr]
+            OpenRouterChatCompletionStreamingHandler.chunk_parser, "__name__", ""
+        )
+        == "_patched_openrouter_chunk_parser"
+    ):
+        return
+
+    def _patched_openrouter_chunk_parser(self: Any, chunk: dict) -> ModelResponseStream:
+        response: ModelResponseStream = _original_openrouter_chunk_parser(self, chunk)
+        served_model: Any = chunk.get("model")
+        if isinstance(served_model, str) and served_model:
+            fields: dict[str, Any] = dict(response.provider_specific_fields or {})
+            fields["routed_model"] = served_model
+            response.provider_specific_fields = fields
+        return response
+
+    OpenRouterChatCompletionStreamingHandler.chunk_parser = (  # type: ignore[method-assign]
+        _patched_openrouter_chunk_parser
+    )
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -920,6 +959,7 @@ def apply_monkey_patches() -> None:
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
     - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
     - Patching AnthropicConfig.transform_request to keep disabled thinking on tool turns
+    - Patching OpenRouterChatCompletionStreamingHandler.chunk_parser to keep the served model
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -929,3 +969,4 @@ def apply_monkey_patches() -> None:
     _patch_logging_assembled_streaming_response()
     _patch_responses_api_bridge_check()
     _patch_anthropic_keeps_disabled_thinking()
+    _patch_openrouter_routed_model()

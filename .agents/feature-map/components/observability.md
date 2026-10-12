@@ -337,7 +337,9 @@ questions:
   specific model call cost, computed per-token from the vendored price table (`llm/price_table/`), with
   admin-configurable overrides (`server/features/usage/api.py:upsert_cost_override`,
   backed by `llm/cost_overrides.py`). This is what `UserUsageTracingProcessor`
-  writes on every priced generation span.
+  writes on every priced generation span. When `GenerationSpanData.routed_model`
+  is set (a router such as `openrouter/auto` served another model), the span is
+  priced by that served model while `UserUsage.model` keeps the router name.
 - **Tenant usage limiting** (`db/usage.py`, `TenantUsage`): a cloud-only
   rolling-window counter (LLM cost, chunks indexed, API calls) checked against
   a hard limit via `db/usage.py:check_usage_limit`, independent of the

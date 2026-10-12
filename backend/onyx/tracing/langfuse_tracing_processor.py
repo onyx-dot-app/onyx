@@ -145,7 +145,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 return None
 
             input_cents, output_cents = compute_cost_cents(
-                model=data.model,
+                model=data.routed_model or data.model,
                 provider=provider,
                 prompt_tokens=input_tokens,
                 completion_tokens=output_tokens,

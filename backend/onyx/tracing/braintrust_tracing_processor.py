@@ -176,7 +176,7 @@ class BraintrustTracingProcessor(TracingProcessor):
                 "cache_creation_input_tokens"
             ]
 
-        model_name = span.span_data.model
+        model_name = span.span_data.routed_model or span.span_data.model
         model_config = span.span_data.model_config or {}
         provider = model_config.get("model_provider")
         flow = model_config.get("flow")
@@ -207,6 +207,8 @@ class BraintrustTracingProcessor(TracingProcessor):
             "model": span.span_data.model,
             "model_config": span.span_data.model_config,
         }
+        if span.span_data.routed_model:
+            metadata["routed_model"] = span.span_data.routed_model
 
         # Include reasoning in metadata if present
         if span.span_data.reasoning:

@@ -92,6 +92,7 @@ from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_request_params,
     record_llm_response,
+    record_llm_routed_model,
     record_llm_span_output,
 )
 from onyx.utils.encryption import mask_env_value_for_logging
@@ -583,6 +584,7 @@ class LitellmLLM(LLM):
         reasoning_effort_max: ReasoningEffort | None = None,
         supports_reasoning: bool = False,
         supports_images: bool | None = None,
+        is_router: bool = False,
     ):
         # No instance-level timeout: invoke() and stream() each take their own,
         # so an instance default would be a second source of truth.
@@ -590,6 +592,7 @@ class LitellmLLM(LLM):
 
         self._model_provider = model_provider
         self._model_version = model_name
+        self._is_router = is_router
         self._api_key = api_key
         self._deployment_name = deployment_name
         self._api_base = api_base
@@ -696,7 +699,22 @@ class LitellmLLM(LLM):
                 supports_images = any(vision_values)
         self._supports_images = supports_images
 
-    def _track_llm_cost(self, usage: Usage) -> None:
+    def _routed_model(self, response_model: str | None) -> str | None:
+        """Model a router served, when it differs from the configured name.
+        LiteLLM prefixes some responses with the provider (openrouter/x/y)."""
+        if not self._is_router or not response_model:
+            return None
+        model: str = response_model
+        for prefix in (self._model_provider, self._custom_llm_provider):
+            if (
+                prefix
+                and model.startswith(f"{prefix}/")
+                and model != self._model_version
+            ):
+                model = model[len(prefix) + 1 :]
+        return model if model != self._model_version else None
+
+    def _track_llm_cost(self, usage: Usage, routed_model: str | None = None) -> None:
         """
         Track LLM usage cost for Onyx-managed API keys.
 
@@ -724,7 +742,7 @@ class LitellmLLM(LLM):
         try:
             with get_session_with_current_tenant() as db_session:
                 input_cents, output_cents = compute_cost_cents(
-                    model=self._model_version,
+                    model=routed_model or self._model_version,
                     provider=provider,
                     prompt_tokens=usage.prompt_tokens,
                     completion_tokens=usage.completion_tokens,
@@ -1390,7 +1408,10 @@ class LitellmLLM(LLM):
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
 
-        from onyx.llm.model_response import from_litellm_model_response
+        from onyx.llm.model_response import (
+            from_litellm_model_response,
+            served_model_from_litellm_chunk,
+        )
 
         # HTTPHandler Threading & Connection Pool Notes:
         # =============================================
@@ -1471,14 +1492,24 @@ class LitellmLLM(LLM):
                         f"LLM {self.config.model_name} returned an empty stream"
                     )
                 response = cast(LiteLLMModelResponse, built)
+                # stream_chunk_builder reports the requested model; keep the served one
+                served_model: str | None = next(
+                    (m for m in map(served_model_from_litellm_chunk, chunks) if m),
+                    None,
+                )
+                if served_model:
+                    response.model = served_model
             else:
                 response = cast(LiteLLMModelResponse, raw_response)
 
             model_response = from_litellm_model_response(response)
 
+            routed_model: str | None = self._routed_model(model_response.model)
+            if routed_model:
+                record_llm_routed_model(routed_model)
             # Track LLM cost for Onyx-managed API keys
             if model_response.usage:
-                self._track_llm_cost(model_response.usage)
+                self._track_llm_cost(model_response.usage, routed_model)
 
             return model_response
         finally:
@@ -1577,12 +1608,17 @@ class LitellmLLM(LLM):
                     ),
                 )
 
+                routed_model: str | None = None
                 for chunk in response:
                     model_response = from_litellm_model_response_stream(chunk)
 
+                    chunk_routed: str | None = self._routed_model(model_response.model)
+                    if chunk_routed and chunk_routed != routed_model:
+                        routed_model = chunk_routed
+                        record_llm_routed_model(routed_model)
                     # Track LLM cost when usage info is available (typically in the last chunk)
                     if model_response.usage:
-                        self._track_llm_cost(model_response.usage)
+                        self._track_llm_cost(model_response.usage, routed_model)
 
                     yielded_any = True
                     yield model_response

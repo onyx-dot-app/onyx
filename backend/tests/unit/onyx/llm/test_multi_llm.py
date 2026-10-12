@@ -8,7 +8,7 @@ from unittest.mock import ANY, MagicMock, patch
 
 import litellm
 import pytest
-from litellm.types.utils import ChatCompletionDeltaToolCall, Delta
+from litellm.types.utils import ChatCompletionDeltaToolCall, Delta, StreamingChoices
 from litellm.types.utils import Function as LiteLLMFunction
 
 import onyx.llm.model_request
@@ -32,6 +32,7 @@ from onyx.llm.multi_llm import (
     _consume_stream_until_deadline,
     temporary_env_and_lock,
 )
+from onyx.tracing.framework.create import generation_span, trace
 
 VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS = [
     "claude-opus-4-5@20251101",
@@ -3717,3 +3718,98 @@ def test_track_llm_cost_prices_cache_creation_at_write_rate(
     )
 
     assert increment_usage.call_args.args[2] == pytest.approx(1.05)
+
+
+def _router_llm() -> LitellmLLM:
+    return LitellmLLM(
+        api_key="test_key",
+        model_provider=LlmProviderNames.OPENROUTER,
+        model_name="openrouter/auto",
+        max_input_tokens=100000,
+        is_router=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("response_model", "expected"),
+    [
+        ("deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash"),
+        ("openrouter/deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash"),
+        ("openrouter/auto", None),
+        (None, None),
+    ],
+)
+def test_routed_model_strips_provider_prefix_and_ignores_router_name(
+    response_model: str | None, expected: str | None
+) -> None:
+    assert _router_llm()._routed_model(response_model) == expected
+
+
+def test_routed_model_ignored_for_non_router_models(
+    default_multi_llm: LitellmLLM,
+) -> None:
+    assert default_multi_llm._routed_model("gpt-4o-2024-08-06") is None
+
+
+def test_track_llm_cost_prices_routed_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    @contextmanager
+    def _fake_session() -> Iterator[MagicMock]:
+        yield MagicMock()
+
+    monkeypatch.setattr(
+        "onyx.server.usage_limits.is_usage_limits_enabled", lambda: True
+    )
+    monkeypatch.setattr(
+        "onyx.server.usage_limits.is_onyx_managed_api_key", lambda _key: True
+    )
+    monkeypatch.setattr(
+        "onyx.db.engine.sql_engine.get_session_with_current_tenant", _fake_session
+    )
+    priced: list[str] = []
+
+    def _compute(**kwargs: Any) -> tuple[float, float]:
+        priced.append(kwargs["model"])
+        return 1.0, 1.0
+
+    monkeypatch.setattr("onyx.llm.multi_llm.compute_cost_cents", _compute)
+    monkeypatch.setattr("onyx.db.usage.increment_usage", MagicMock())
+    usage = Usage(
+        prompt_tokens=10,
+        completion_tokens=5,
+        total_tokens=15,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+
+    llm = _router_llm()
+    llm._track_llm_cost(usage, "deepseek/deepseek-v4-flash")
+    llm._track_llm_cost(usage)
+
+    assert priced == ["deepseek/deepseek-v4-flash", "openrouter/auto"]
+
+
+def test_invoke_raw_stream_reassembly_keeps_served_model() -> None:
+    chunk = litellm.ModelResponseStream(
+        id="gen-1",
+        created=1762544600,
+        model="openrouter/auto",
+        choices=[
+            StreamingChoices(
+                index=0,
+                delta=_create_delta(role="assistant", content="Hello"),
+                finish_reason="stop",
+            )
+        ],
+    )
+    chunk.provider_specific_fields = {"routed_model": "deepseek/deepseek-v4-flash"}
+
+    with (
+        patch("onyx.llm.multi_llm._env_injection_enabled", return_value=True),
+        patch("litellm.completion", return_value=[chunk]),
+        trace("test"),
+        generation_span(model="openrouter/auto") as span,
+    ):
+        result = _router_llm().invoke_raw([UserMessage(content="Hi")])
+
+    assert result.model == "deepseek/deepseek-v4-flash"
+    assert span.span_data.routed_model == "deepseek/deepseek-v4-flash"
