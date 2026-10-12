@@ -807,6 +807,7 @@ def test_anthropic_messages_endpoint_threads_authorized_flow_to_handler() -> Non
         provider=provider,
         model_config=model_config,
         flow=LLMFlow.LLM_GATEWAY,
+        craft_session_id=None,
     )
 
 

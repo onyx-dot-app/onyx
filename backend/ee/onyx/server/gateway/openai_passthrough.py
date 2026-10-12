@@ -34,6 +34,7 @@ from onyx.server.gateway.configs import (
     OPENAI_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
     OPENAI_PASSTHROUGH_READ_TIMEOUT_SECONDS,
 )
+from onyx.server.gateway.craft_session import llm_gateway_trace
 from onyx.server.gateway.models import (
     ResponsesErrorCode,
     ResponsesFailedEvent,
@@ -42,7 +43,6 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import trace
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 from onyx.utils.headers import build_llm_extra_headers
@@ -261,8 +261,8 @@ def _non_streaming_error_response(response: httpx.Response) -> JSONResponse:
     raise OnyxError(OnyxErrorCode.BAD_GATEWAY, _SANITIZED_ERROR)
 
 
-def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
+def _gateway_trace(flow: LLMFlow, model: str, craft_session_id: str | None) -> Trace:
+    return llm_gateway_trace(flow, model, craft_session_id)
 
 
 def handle_openai_responses_passthrough(
@@ -271,6 +271,7 @@ def handle_openai_responses_passthrough(
     model_config: ModelConfigurationView,
     flow: LLMFlow,
     user: User,
+    craft_session_id: str | None = None,
 ) -> JSONResponse | StreamingResponse:
     body = _build_upstream_request(
         request, model_config.name, str(user.id), request.stream
@@ -290,6 +291,7 @@ def handle_openai_responses_passthrough(
                 "body": body,
                 "llm": llm,
                 "flow": flow,
+                "craft_session_id": craft_session_id,
                 "input_messages": request.input,
                 "tools": request.tools,
                 "model": request.model,
@@ -297,7 +299,7 @@ def handle_openai_responses_passthrough(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        _gateway_trace(flow, llm.config.model_name, craft_session_id),
         llm_generation_span(
             llm, flow=flow, input_messages=request.input, tools=request.tools
         ) as span,
@@ -396,6 +398,7 @@ def _openai_passthrough_stream_worker(
     model: str,
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
+    craft_session_id: str | None = None,
 ) -> None:
     response_id = f"resp_{uuid.uuid4().hex}"
     response_created_at = int(time.time())
@@ -424,7 +427,7 @@ def _openai_passthrough_stream_worker(
     # Runs on its own thread after the endpoint returned, so the trace must be
     # opened here or the generation span sees no active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        _gateway_trace(flow, llm.config.model_name, craft_session_id),
         llm_generation_span(
             llm, flow=flow, input_messages=input_messages, tools=tools
         ) as span,

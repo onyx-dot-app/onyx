@@ -667,6 +667,33 @@ def _assert_gateway_trace(active: Any) -> None:
     }
 
 
+def test_stream_worker_tags_trace_with_craft_session() -> None:
+    traces: list[Any] = []
+    with _capture_trace_at_generation_span(traces):
+        frames = list(
+            stream_bridge._run_bridged_stream(
+                gateway_api._stream_worker,
+                {
+                    "llm": _reasoning_stream_llm(),
+                    "flow": LLMFlow.CRAFT_LLM_GENERATION,
+                    "craft_session_id": "sess-1",
+                    "messages": [UserMessage(content="hello")],
+                    "tools": None,
+                    "tool_choice": None,
+                    "structured_response_format": None,
+                    "max_tokens": None,
+                    "reasoning_effort": ReasoningEffort.AUTO,
+                    "model": "1/test",
+                },
+            )
+        )
+
+    assert frames[-1] == "data: [DONE]\n\n"
+    (active,) = traces
+    assert active.metadata["craft_session_id"] == "sess-1"
+    assert active.group_id == "sess-1"
+
+
 def test_stream_worker_opens_trace_before_generation_span() -> None:
     traces: list[Any] = []
     with _capture_trace_at_generation_span(traces):
@@ -1002,6 +1029,7 @@ def test_endpoint_threads_authorized_flow_to_handler() -> None:
         provider=provider,
         model_config=model_config,
         flow=LLMFlow.LLM_GATEWAY,
+        craft_session_id=None,
     )
 
 
@@ -2101,6 +2129,7 @@ def test_responses_endpoint_resolves_model_same_way_as_chat_route() -> None:
         provider=provider,
         model_config=model_config,
         flow=LLMFlow.LLM_GATEWAY,
+        craft_session_id=None,
     )
 
 

@@ -37,6 +37,7 @@ from onyx.server.gateway.configs import (
     ANTHROPIC_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
     ANTHROPIC_PASSTHROUGH_READ_TIMEOUT_SECONDS,
 )
+from onyx.server.gateway.craft_session import llm_gateway_trace
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicErrorEvent,
@@ -44,7 +45,6 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import trace
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 from onyx.utils.headers import build_llm_extra_headers
@@ -255,8 +255,8 @@ def _streaming_error_event(status_code: int, body: bytes) -> AnthropicErrorEvent
     return AnthropicErrorEvent.create(message=message, error_type=error_type)
 
 
-def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    return trace("llm_gateway", metadata={"flow": flow.value, "model": model})
+def _gateway_trace(flow: LLMFlow, model: str, craft_session_id: str | None) -> Trace:
+    return llm_gateway_trace(flow, model, craft_session_id)
 
 
 def handle_anthropic_passthrough(
@@ -266,6 +266,7 @@ def handle_anthropic_passthrough(
     flow: LLMFlow,
     http_request: Request,
     user: User,
+    craft_session_id: str | None = None,
 ) -> JSONResponse | StreamingResponse:
     body = _build_upstream_request(
         request, model_config.name, str(user.id), request.stream
@@ -285,6 +286,7 @@ def handle_anthropic_passthrough(
                 "body": body,
                 "llm": llm,
                 "flow": flow,
+                "craft_session_id": craft_session_id,
                 "input_messages": request.messages,
                 "tools": request.tools,
                 "model": request.model,
@@ -292,7 +294,7 @@ def handle_anthropic_passthrough(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        _gateway_trace(flow, llm.config.model_name, craft_session_id),
         llm_generation_span(
             llm, flow=flow, input_messages=request.messages, tools=request.tools
         ) as span,
@@ -375,6 +377,7 @@ def _passthrough_stream_worker(
     model: str,
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
+    craft_session_id: str | None = None,
 ) -> None:
     def emit(event: AnthropicErrorEvent) -> bool:
         payload = event.to_wire()
@@ -389,7 +392,7 @@ def _passthrough_stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name),
+        _gateway_trace(flow, llm.config.model_name, craft_session_id),
         llm_generation_span(
             llm, flow=flow, input_messages=input_messages, tools=tools
         ) as span,
