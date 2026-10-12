@@ -103,33 +103,40 @@ export class OneDriveConnectorSetupPage {
       );
       return route.fulfill({ json: this.credentialResponse(41) });
     });
-    await this.page.route("**/api/manage/admin/connector", async (route) => {
-      const request: unknown = route.request().postDataJSON();
-      if (!isRecord(request) || !isRecord(request.connector_specific_config)) {
-        throw new Error("Connector request must include its configuration");
-      }
-      const config = request.connector_specific_config;
-      if (
-        !Array.isArray(config.users) ||
-        !config.users.every((user) => typeof user === "string")
-      ) {
-        throw new Error("OneDrive scope configuration has invalid types");
-      }
-      this.connectorRequests.push({
-        connector_specific_config: {
-          users: config.users,
-        },
-      });
-      if (connectorError) {
+    // Create makes the connector and pairs it in one request.
+    await this.page.route(
+      "**/api/manage/admin/connector-with-credential",
+      async (route) => {
+        const request: unknown = route.request().postDataJSON();
+        const connector = isRecord(request) ? request.connector : undefined;
+        if (
+          !isRecord(connector) ||
+          !isRecord(connector.connector_specific_config)
+        ) {
+          throw new Error("Connector request must include its configuration");
+        }
+        const config = connector.connector_specific_config;
+        if (
+          !Array.isArray(config.users) ||
+          !config.users.every((user) => typeof user === "string")
+        ) {
+          throw new Error("OneDrive scope configuration has invalid types");
+        }
+        this.connectorRequests.push({
+          connector_specific_config: {
+            users: config.users,
+          },
+        });
+        if (connectorError) {
+          return route.fulfill({
+            status: 400,
+            json: { detail: connectorError },
+          });
+        }
         return route.fulfill({
-          status: 400,
-          json: { detail: connectorError },
+          json: { success: true, message: "", data: 71 },
         });
       }
-      return route.fulfill({ json: { id: 71 } });
-    });
-    await this.page.route("**/api/manage/connector/*/credential/*", (route) =>
-      route.fulfill({ json: {} })
     );
     await mockPassingConnectorChecks(this.page);
   }
@@ -187,7 +194,8 @@ export class OneDriveConnectorSetupPage {
     const responsePromise = this.page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
-        new URL(response.url()).pathname === "/api/manage/admin/connector"
+        new URL(response.url()).pathname ===
+          "/api/manage/admin/connector-with-credential"
     );
     await this.page
       .getByRole("button", { name: "Create Connector", exact: true })
@@ -213,10 +221,23 @@ export class OneDriveConnectorSetupPage {
     return this.page.getByTestId("credential-form");
   }
 
+  /**
+   * Opens the new-account card. It starts open when there is no saved
+   * account, so it is clicked only while closed; retried in case its starting
+   * state settles after the first look.
+   */
   private async openCredentialForm() {
-    await this.page
-      .getByRole("button", { name: "New OneDrive Account" })
-      .click();
+    const card = this.page.getByRole("button", {
+      name: "New OneDrive Account",
+    });
+    await expect(async () => {
+      if ((await card.getAttribute("aria-expanded")) !== "true") {
+        await card.click();
+      }
+      await expect(card).toHaveAttribute("aria-expanded", "true", {
+        timeout: 1_000,
+      });
+    }).toPass();
     await expect(this.page.getByTestId("onedrive_client_id")).toBeVisible();
   }
 

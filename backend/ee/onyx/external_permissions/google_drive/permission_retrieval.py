@@ -1,15 +1,25 @@
+from typing import Any
+
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from onyx.connectors.google_utils.resources import GoogleDriveService
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveSourceOperations,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
+_PERMISSION_FIELDS = (
+    "permissions(id, emailAddress, type, domain, allowFileDiscovery, "
+    "permissionDetails),nextPageToken"
+)
+
 
 @retry_builder(tries=3, delay=2, backoff=2)
 def get_permissions_by_ids(
-    drive_service: GoogleDriveService,
+    ops: GoogleDriveSourceOperations,
+    user_email: str,
     doc_id: str,
     permission_ids: list[str],
 ) -> list[GoogleDrivePermission]:
@@ -17,12 +27,14 @@ def get_permissions_by_ids(
     Fetches permissions for a document based on a list of permission IDs.
 
     Args:
-        drive_service: The Google Drive service instance
+        ops: The Google Drive source operations
+        user_email: The user to read the permissions as
         doc_id: The ID of the document to fetch permissions for
         permission_ids: A list of permission IDs to filter by
 
     Returns:
-        A list of GoogleDrivePermission objects matching the provided permission IDs
+        A list of GoogleDrivePermission objects matching the provided permission
+        IDs. A 403 or 404 ends the listing early.
     """
     if not permission_ids:
         return []
@@ -30,15 +42,20 @@ def get_permissions_by_ids(
     # Create a set for faster lookup
     permission_id_set = set(permission_ids)
 
-    # Fetch all permissions for the document
-    fetched_permissions = execute_paginated_retrieval(
-        retrieval_function=drive_service.permissions().list,  # ty: ignore[unresolved-attribute]
-        list_key="permissions",
-        fileId=doc_id,
-        fields="permissions(id, emailAddress, type, domain, allowFileDiscovery, permissionDetails),nextPageToken",
-        supportsAllDrives=True,
-        continue_on_404_or_403=True,
-    )
+    # Fetch all permissions for the document. A 403 or 404 stops the listing
+    # but keeps the pages already read.
+    fetched_permissions: list[dict[str, Any]] = []
+    try:
+        # extend() keeps the items it added before the iterator raises.
+        fetched_permissions.extend(
+            ops.list_file_permissions(
+                user_email=user_email, file_id=doc_id, fields=_PERMISSION_FIELDS
+            )
+        )
+    except GoogleDriveHttpError as e:
+        if e.status_code not in (403, 404):
+            raise
+        logger.debug("Cannot read the permissions of %s: %s", doc_id, e)
 
     # Filter permissions by ID and convert to GoogleDrivePermission objects
     filtered_permissions = []
