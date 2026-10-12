@@ -18,6 +18,15 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
+from onyx.connectors.github.models import (
+    GitHubGitTree,
+    GitHubIssue,
+    GitHubPullRequest,
+    GitHubRepository,
+    GitHubTokenInfo,
+    GitHubTokenKind,
+    GitHubTreeEntry,
+)
 from onyx.connectors.google_drive.models import (
     GDriveMimeType,
     GoogleDriveAuth,
@@ -187,6 +196,42 @@ def _configure_sharepoint_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_github_spy(spy: MagicMock) -> None:
+    """An organization with one repository that has a pull request, an issue
+    and a README."""
+    spy.get_token_info.return_value = GitHubTokenInfo(
+        login="octocat", kind=GitHubTokenKind.CLASSIC, scopes=["repo"]
+    )
+    spy.list_organization_repositories.return_value = [
+        GitHubRepository(
+            id=1,
+            name="docs",
+            full_name="acme/docs",
+            html_url="https://github.com/acme/docs",
+            default_branch="main",
+            raw_data={},
+        )
+    ]
+    spy.list_pull_requests.return_value = [
+        GitHubPullRequest(
+            number=1, title="PR", state="open", html_url="https://github.com/pr/1"
+        )
+    ]
+    spy.list_issues.return_value = [
+        GitHubIssue(
+            number=2,
+            title="Issue",
+            state="open",
+            html_url="https://github.com/issue/2",
+            updated_at="2024-01-01T00:00:00Z",
+            repo_full_name="acme/docs",
+        )
+    ]
+    spy.get_git_tree.return_value = GitHubGitTree(
+        entries=[GitHubTreeEntry(path="README.md", type="blob", size=10)]
+    )
+
+
 # A unit is covered when the checks exercise it under any one configuration:
 # a source whose credential picks the API family needs one per family.
 _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
@@ -194,6 +239,21 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
+    DocumentSource.GITHUB: [_configure_github_spy],
+}
+
+# The connector config the checks read, per source (default: empty). Every
+# spy configuration runs with every config listed here.
+_CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
+    DocumentSource.GITHUB: [
+        {
+            "repo_owner": "acme",
+            "include_issues": True,
+            "include_files": True,
+            "branch": "main",
+        },
+        {"repo_owner": "acme", "repositories": "docs"},
+    ],
 }
 
 
@@ -216,10 +276,16 @@ def test_every_operation_unit_is_exercised_by_a_check(
 
     # Under test.
     configurations = _SPY_CONFIGURATIONS.get(gateway_class.source) or [None]
+    connector_configs = _CONNECTOR_CONFIGS.get(gateway_class.source) or [None]
     uncovered = set.intersection(
         *(
-            set(compute_uncovered_units(gateway_class, checks, configure_spy))
+            set(
+                compute_uncovered_units(
+                    gateway_class, checks, configure_spy, connector_config
+                )
+            )
             for configure_spy in configurations
+            for connector_config in connector_configs
         )
     )
 

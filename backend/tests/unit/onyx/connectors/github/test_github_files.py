@@ -10,7 +10,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.connector import (
     GithubConnector,
     GithubConnectorStage,
-    _is_indexable_path,
+    is_indexable_path,
 )
 from onyx.connectors.github.models import (
     GitHubFileContent,
@@ -61,7 +61,7 @@ from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_con
     ],
 )
 def test_is_indexable_path(path: str, size: int | None, expected: bool) -> None:
-    assert _is_indexable_path(path, size) is expected
+    assert is_indexable_path(path, size) is expected
 
 
 class FakeRepoFiles:

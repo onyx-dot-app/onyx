@@ -38,6 +38,7 @@ from onyx.connectors.github.source_operations import (
 )
 from onyx.connectors.github.utils import (
     get_external_access_permission,
+    parse_repository_names,
     resolve_github_base_url,
 )
 from onyx.connectors.interfaces import (
@@ -122,7 +123,7 @@ _GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
 _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
 
 
-def _is_indexable_path(path: str, size: int | None) -> bool:
+def is_indexable_path(path: str, size: int | None) -> bool:
     """Pure predicate: should this repo file be indexed?
 
     Filters on a max size and path-segment denylist, then matches either a
@@ -233,7 +234,9 @@ def _paginate_until_error(
         raise
 
 
-def _is_cursor_pagination_required(error: GitHubApiError) -> bool:
+def is_cursor_pagination_required(error: GitHubApiError) -> bool:
+    """GitHub refuses offset pages for a large listing; indexing then
+    switches to cursor pages."""
     return error.status_code == 422 and "cursor" in (
         f"{error.github_message or ''} {error}"
     )
@@ -294,7 +297,7 @@ def _get_batch_rate_limited(
                 page_num,
             )
             return
-        if not _is_cursor_pagination_required(e):
+        if not is_cursor_pagination_required(e):
             raise
         # Fallback to a cursor-based pagination strategy
         # This can happen for "large datasets," but there's no documentation
@@ -582,9 +585,14 @@ class GithubConnector(
         include_files: bool = False,
         branch: str | None = None,
     ) -> None:
-        self.repo_owner = repo_owner
-        # None means every repository of the owner.
-        self.repositories = (repositories or "").strip() or None
+        self.repo_owner = repo_owner.strip()
+        # None means every repository of the owner, also for a list of only
+        # commas.
+        self.repositories = (
+            (repositories or "").strip()
+            if parse_repository_names(repositories)
+            else None
+        )
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues
@@ -649,25 +657,21 @@ class GithubConnector(
 
         try:
             repos = []
-            # Split repo_name by comma and strip whitespace
-            repo_names = [name.strip() for name in (self.repositories or "").split(",")]
-
-            for repo_name in repo_names:
-                if repo_name:  # Skip empty strings
-                    try:
-                        repo = self.source_operations.get_repository(
-                            owner=self.repo_owner, name=repo_name
-                        )
-                        repos.append(repo)
-                    except GitHubRateLimitError:
-                        raise
-                    except GitHubApiError as e:
-                        logger.warning(
-                            "Could not fetch repo %s/%s: %s",
-                            self.repo_owner,
-                            repo_name,
-                            e,
-                        )
+            for repo_name in parse_repository_names(self.repositories):
+                try:
+                    repo = self.source_operations.get_repository(
+                        owner=self.repo_owner, name=repo_name
+                    )
+                    repos.append(repo)
+                except GitHubRateLimitError:
+                    raise
+                except GitHubApiError as e:
+                    logger.warning(
+                        "Could not fetch repo %s/%s: %s",
+                        self.repo_owner,
+                        repo_name,
+                        e,
+                    )
 
             return repos
         except GitHubRateLimitError:
@@ -812,7 +816,7 @@ class GithubConnector(
                 element.path
                 for element in git_tree.entries
                 if element.type == "blob"
-                and _is_indexable_path(element.path, element.size)
+                and is_indexable_path(element.path, element.size)
             ]
             paths.sort()
             return paths, truncated
