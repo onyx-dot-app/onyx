@@ -8,19 +8,29 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckFindingKey,
+    CountFinding,
+    FindingOption,
+    OptionsFinding,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_indexing_checks,
+)
+from onyx.connectors.google_drive.connector import (
+    extract_ids_from_urls,
+    extract_str_list_from_comma_str,
 )
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.models import (
     GDriveMimeType,
     GoogleDriveAuth,
     GoogleGroupMember,
+    GoogleSharedDrive,
 )
 from onyx.connectors.google_drive.source_operations import (
     ExportSizeThresholdExceeded,
@@ -230,6 +240,32 @@ def test_specific_users_reports_the_users_onyx_cannot_act_as() -> None:
     assert _ADMIN not in result.message
 
 
+def test_specific_users_past_the_probe_limit_pass_with_a_count_advisory() -> None:
+    emails = [f"user{number}@{_DOMAIN}" for number in range(30)]
+
+    result = _run(
+        "google_drive_specific_users",
+        _ops(),
+        {"include_my_drives": True, "specific_user_emails": ",".join(emails)},
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "other 5 users" in advisory.message
+    assert _DOMAIN not in advisory.message
+
+
+def test_specific_users_within_the_probe_limit_have_no_advisory() -> None:
+    result = _run(
+        "google_drive_specific_users",
+        _ops(),
+        {"include_my_drives": True, "specific_user_emails": _ADMIN},
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.advisories == []
+
+
 def test_oauth_reports_ignored_per_user_settings() -> None:
     result = _run(
         "google_drive_oauth_user_settings",
@@ -242,10 +278,22 @@ def test_oauth_reports_ignored_per_user_settings() -> None:
     assert "My Drive emails" in result.message
 
 
-def test_no_shared_drive_is_indeterminate_not_failed() -> None:
+def test_no_shared_drive_passes_with_an_advisory() -> None:
     result = _run("google_drive_shared_drives", _ops(), {"include_shared_drives": True})
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "did not verify" in advisory.message
+
+
+def test_visible_shared_drive_passes_without_an_advisory() -> None:
+    ops = _ops()
+    ops.list_drives.side_effect = _listing("d1")
+
+    result = _run("google_drive_shared_drives", ops, {"include_shared_drives": True})
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.advisories == []
 
 
 def test_shared_drives_list_with_domain_admin_access_for_a_service_account() -> None:
@@ -466,3 +514,145 @@ def test_docs_api_passes_without_a_google_doc() -> None:
 
     assert _run("google_drive_docs_api", ops).status == CapabilityCheckStatus.PASSED
     ops.fetch_google_doc.assert_not_called()
+
+
+# google_drive_shared_drive_listing
+
+
+def test_shared_drive_listing_offers_each_drive_url_for_the_field() -> None:
+    ops = _ops()
+    ops.list_named_drives.side_effect = _listing(
+        GoogleSharedDrive(id="d1", name="Engineering"),
+        GoogleSharedDrive(id="d2", name=""),
+    )
+
+    result = _run("google_drive_shared_drive_listing", ops)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.findings == [
+        OptionsFinding(
+            key=CheckFindingKey.SHARED_DRIVES,
+            field_name="shared_drive_urls",
+            options=[
+                FindingOption(value=_FOLDER_URL.format("d1"), label="Engineering"),
+                FindingOption(value=_FOLDER_URL.format("d2"), label="d2"),
+            ],
+        )
+    ]
+    ops.list_named_drives.assert_called_once_with(
+        user_email=_ADMIN, use_domain_admin_access=True
+    )
+
+
+def test_shared_drive_listing_values_parse_back_to_the_drive_ids() -> None:
+    ops = _ops()
+    ops.list_named_drives.side_effect = _listing(GoogleSharedDrive(id="d1", name="A"))
+
+    (finding,) = _run("google_drive_shared_drive_listing", ops).findings
+
+    assert isinstance(finding, OptionsFinding)
+    urls = ",".join(option.value for option in finding.options)
+    assert extract_ids_from_urls(extract_str_list_from_comma_str(urls)) == ["d1"]
+
+
+def test_shared_drive_listing_lists_as_the_oauth_user() -> None:
+    ops = _ops(_OAUTH)
+    ops.list_named_drives.side_effect = _listing()
+
+    result = _run("google_drive_shared_drive_listing", ops, kind=_OAUTH)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    ops.list_named_drives.assert_called_once_with(
+        user_email=_ADMIN, use_domain_admin_access=False
+    )
+
+
+def test_shared_drive_listing_stops_at_the_option_cap() -> None:
+    ops = _ops()
+    ops.list_named_drives.side_effect = lambda **_: (
+        GoogleSharedDrive(id=f"d{number}", name=f"Drive {number}")
+        for number in range(5000)
+    )
+
+    (finding,) = _run("google_drive_shared_drive_listing", ops).findings
+
+    assert isinstance(finding, OptionsFinding)
+    assert len(finding.options) == MAX_FINDING_OPTIONS
+    assert finding.truncated is True
+
+
+def test_shared_drive_listing_403_fails_and_leaves_the_verdict_alone() -> None:
+    ops = _ops()
+    ops.list_named_drives.side_effect = _http_error(403)
+
+    result = _run("google_drive_shared_drive_listing", ops)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert "cannot list the shared drives" in result.message
+    assert result.discovery is True
+    assert result.required is False
+
+
+# google_drive_user_count
+
+
+def test_user_count_counts_the_listed_users() -> None:
+    result = _run("google_drive_user_count", _ops())
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert result.findings == [
+        CountFinding(key=CheckFindingKey.IMPERSONATABLE_USERS, count=2)
+    ]
+
+
+def test_user_count_stops_at_the_cap() -> None:
+    ops = _ops()
+    ops.list_user_emails.side_effect = lambda **_: (
+        f"user{number}@{_DOMAIN}" for number in range(5000)
+    )
+
+    result = _run("google_drive_user_count", ops)
+
+    assert result.findings == [
+        CountFinding(
+            key=CheckFindingKey.IMPERSONATABLE_USERS,
+            count=MAX_FINDING_OPTIONS,
+            at_least=True,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "config, kind",
+    [
+        ({"specific_user_emails": _ADMIN}, _SA),
+        ({}, _OAUTH),
+    ],
+    ids=["specific-users", "oauth"],
+)
+def test_user_count_applies_only_when_a_service_account_lists_every_user(
+    config: dict[str, Any], kind: GoogleCredentialKind
+) -> None:
+    result = _run("google_drive_user_count", _ops(kind), config, kind=kind)
+
+    assert result.applicable is False
+    assert result.findings == []
+
+
+def test_user_count_403_fails_and_leaves_the_verdict_alone() -> None:
+    ops = _ops()
+    ops.list_user_emails.side_effect = _http_error(403)
+
+    result = _run("google_drive_user_count", ops)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.discovery is True
+    assert result.required is False
+
+
+def test_discovery_checks_are_the_listing_and_the_count() -> None:
+    assert {
+        check.check_id
+        for check in build_google_drive_indexing_checks()
+        if check.discovery
+    } == {"google_drive_shared_drive_listing", "google_drive_user_count"}

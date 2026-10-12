@@ -26,11 +26,18 @@ from itertools import islice
 from typing import Any, NoReturn
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings import bounded_count, bounded_options
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
+    CheckFindingKey,
+    CheckOutput,
+    CountFinding,
     CredentialCapability,
+    OptionsFinding,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -62,6 +69,7 @@ from onyx.connectors.google_drive.models import (
     GoogleDirectoryUser,
     GoogleDriveAuth,
     GoogleDriveFileType,
+    GoogleSharedDrive,
 )
 from onyx.connectors.google_drive.source_operations import (
     DriveCorpus,
@@ -98,6 +106,9 @@ _MAX_PROBED_USERS = 25
 # Users read when a check needs the Workspace user list, as indexing reads it.
 _MAX_LISTED_USERS = 5000
 _ERROR_DETAIL_CHARS = 300
+_SHARED_DRIVE_FIELD = "shared_drive_urls"
+# The URL form of a shared drive or folder that the config fields take.
+_FOLDER_URL = "https://drive.google.com/drive/folders/{}"
 
 _DISABLED_API_REASONS = frozenset({"accessNotConfigured", "SERVICE_DISABLED"})
 _SCOPE_REASONS = frozenset(
@@ -320,6 +331,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_connector_config: bool = False,
         credential_kind: GoogleCredentialKind | None = None,
+        discovery: bool = False,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -335,6 +347,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
             ),
             remediation=remediation,
             docs_link=_DOCS_LINK,
+            discovery=discovery,
         )
         self._credential_kind = credential_kind
 
@@ -458,6 +471,25 @@ def _impersonation_failures(
     return failures
 
 
+def _unprobed_users_output(user_count: int) -> CheckOutput | None:
+    """An advisory for the users past ``_MAX_PROBED_USERS``, which
+    ``_impersonation_failures`` does not probe."""
+    unprobed: int = user_count - _MAX_PROBED_USERS
+    if unprobed <= 0:
+        return None
+    return CheckOutput(
+        advisories=[
+            CheckAdvisory(
+                message=(
+                    f"Onyx probed only the first {_MAX_PROBED_USERS} users. It "
+                    f"did not verify that it can act as the other {unprobed} "
+                    "users."
+                )
+            )
+        ]
+    )
+
+
 class _SpecificUsersCheck(_GoogleDriveCheck):
     def __init__(self) -> None:
         super().__init__(
@@ -475,7 +507,7 @@ class _SpecificUsersCheck(_GoogleDriveCheck):
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
         return bool(config.specific_user_emails)
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         emails: list[str] = extract_str_list_from_comma_str(
             self.config(context).specific_user_emails
         )
@@ -487,6 +519,7 @@ class _SpecificUsersCheck(_GoogleDriveCheck):
                 "Onyx cannot act as these users, so it skips their files: "
                 f"{', '.join(failures)}."
             )
+        return _unprobed_users_output(len(emails))
 
 
 class _OAuthIgnoredSettingsCheck(_GoogleDriveCheck):
@@ -541,7 +574,7 @@ class _SharedDrivesCheck(_GoogleDriveCheck):
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
         return _shared_drives_in_scope(config)
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: GoogleDriveConnectorConfig = self.config(context)
         ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
@@ -557,12 +590,20 @@ class _SharedDrivesCheck(_GoogleDriveCheck):
                 ),
                 None,
             )
-        if first_drive is None and not config.shared_drive_urls:
-            # Not FAILED: the domain can have no shared drive yet.
-            raise UnexpectedValidationError(
-                "No shared drive is visible to the credential, so shared drives "
-                "index nothing."
-            )
+        if first_drive is not None or config.shared_drive_urls:
+            return None
+        # Not FAILED: the domain can have no shared drive yet.
+        return CheckOutput(
+            advisories=[
+                CheckAdvisory(
+                    message=(
+                        "The credential sees no shared drive, so Onyx did not "
+                        "verify that it can read shared drives. Shared drives "
+                        "index nothing until the credential sees one."
+                    )
+                )
+            ]
+        )
 
 
 class _ConfiguredSharedDrivesCheck(_GoogleDriveCheck):
@@ -726,7 +767,7 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
         return bool(config.my_drive_emails)
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: GoogleDriveConnectorConfig = self.config(context)
         ops: GoogleDriveSourceOperations = _gateway(context)
         requested: list[str] = extract_str_list_from_comma_str(config.my_drive_emails)
@@ -771,6 +812,7 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
                 ),
                 None,
             )
+        return _unprobed_users_output(len(found))
 
 
 class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
@@ -850,6 +892,86 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
                 ),
                 None,
             )
+
+
+class _SharedDriveListingCheck(_GoogleDriveCheck):
+    """Lists every shared drive the connector would read, as options for the
+    shared drive field. Separate from ``google_drive_shared_drives``, which
+    reads one drive to validate."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            check_id="google_drive_shared_drive_listing",
+            display_name="Lists the visible shared drives",
+            discovery=True,
+            remediation=(
+                "Service account: make the primary admin a Workspace admin who "
+                "can manage shared drives. OAuth: the connected user must be a "
+                "member of the shared drives to index."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        ops: GoogleDriveSourceOperations = _gateway(context)
+        with _google_errors(
+            context,
+            api=_DRIVE_API,
+            denied="The primary admin cannot list the shared drives",
+        ):
+            auth: GoogleDriveAuth = ops.authenticate()
+            finding: OptionsFinding = bounded_options(
+                ops.list_named_drives(
+                    user_email=auth.primary_admin_email,
+                    use_domain_admin_access=_is_service_account(auth),
+                ),
+                key=CheckFindingKey.SHARED_DRIVES,
+                field_name=_SHARED_DRIVE_FIELD,
+                value=_shared_drive_url,
+                label=lambda drive: drive.name or drive.id,
+            )
+        return CheckOutput(findings=[finding])
+
+
+def _shared_drive_url(drive: GoogleSharedDrive) -> str:
+    return _FOLDER_URL.format(drive.id)
+
+
+class _UserCountCheck(_GoogleDriveCheck):
+    """Counts the Workspace users a service account lists, which indexing acts
+    as one by one. It does not probe each user, so a user without Google Drive
+    still counts. A config with specific user emails acts as those users only,
+    so the count does not apply to it."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            check_id="google_drive_user_count",
+            display_name="Counts the Workspace users",
+            discovery=True,
+            credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
+            remediation=(
+                "Make the primary admin a Google Workspace admin, give the service "
+                "account the admin.directory.user.readonly scope in domain-wide "
+                "delegation, and turn on the Admin SDK API."
+            ),
+        )
+
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return not config.specific_user_emails
+
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        ops: GoogleDriveSourceOperations = _gateway(context)
+        with _google_errors(
+            context,
+            api=_ADMIN_API,
+            denied="The primary admin cannot list the Workspace users",
+        ):
+            ops.authenticate()
+            finding: CountFinding = bounded_count(
+                ops.list_user_emails(),
+                key=CheckFindingKey.IMPERSONATABLE_USERS,
+                cap=MAX_FINDING_OPTIONS,
+            )
+        return CheckOutput(findings=[finding])
 
 
 def _sample_files(
@@ -1026,6 +1148,8 @@ def build_google_drive_indexing_checks() -> list[CapabilityCheck]:
         _SharedDriveOrganizerCheck(),
         _ContentReadCheck(),
         _DocsApiCheck(),
+        _SharedDriveListingCheck(),
+        _UserCountCheck(),
     ]
 
 

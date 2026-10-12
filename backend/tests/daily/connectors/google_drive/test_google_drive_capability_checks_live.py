@@ -10,6 +10,8 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CountFinding,
+    OptionsFinding,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -91,6 +93,18 @@ def test_checks_pass_on_the_test_workspace(
     }
     assert not not_passed, not_passed
     assert results["google_drive_oauth_user_settings"].applicable is False
+    # The discovery check offers the test shared drive for the shared drive field.
+    drive_urls = [
+        option.value
+        for finding in results["google_drive_shared_drive_listing"].findings
+        if isinstance(finding, OptionsFinding)
+        and finding.field_name == "shared_drive_urls"
+        for option in finding.options
+    ]
+    assert SHARED_DRIVE_1_URL in drive_urls
+    (user_count,) = results["google_drive_user_count"].findings
+    assert isinstance(user_count, CountFinding)
+    assert user_count.count >= 4
 
 
 def test_misplaced_and_unknown_targets_fail(

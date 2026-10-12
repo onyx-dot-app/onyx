@@ -39,6 +39,7 @@ from onyx.connectors.google_drive.models import (
     GoogleDriveAuth,
     GoogleDriveFileType,
     GoogleGroupMember,
+    GoogleSharedDrive,
 )
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import (
@@ -602,6 +603,23 @@ class GoogleDriveSourceOperations(SourceOperations):
             fields="drives(id),nextPageToken",
         ):
             yield drive["id"]
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    @_translated
+    def list_named_drives(
+        self, *, user_email: str, use_domain_admin_access: bool
+    ) -> Iterator[GoogleSharedDrive]:
+        """The shared drives ``list_drives`` lists, with their names."""
+        for drive in execute_paginated_retrieval(
+            retrieval_function=self._drive(user_email).drives().list,
+            list_key="drives",
+            useDomainAdminAccess=use_domain_admin_access,
+            fields="drives(id, name),nextPageToken",
+        ):
+            yield GoogleSharedDrive(id=drive["id"], name=drive.get("name") or "")
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
