@@ -282,16 +282,9 @@ def run_draft_capability_checks_task(
         task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
         return
     snapshot = run.snapshot
-    pending: list[DraftCheckState] = pending_in_run_order(snapshot)
-    pending_result_keys: list[str] = list(
-        dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
-    )
-    timeout_by_check_id = {
-        check.check_id: min(
-            effective_check_timeout_seconds(check), DRAFT_CHECK_TIMEOUT_SECONDS
-        )
-        for check in get_capability_checks(snapshot.source)
-    }
+    pending: list[DraftCheckState] = []
+    pending_result_keys: list[str] = []
+    timeout_by_check_id: dict[str, float] = {}
 
     def mark_next_running() -> None:
         if (
@@ -325,6 +318,18 @@ def run_draft_capability_checks_task(
         save_draft_run(run)
 
     try:
+        # Inside the try, so a failure here marks the run FAILED_TO_RUN rather
+        # than leaving it RUNNING until its lease runs out.
+        pending = pending_in_run_order(snapshot)
+        pending_result_keys = list(
+            dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
+        )
+        timeout_by_check_id = {
+            check.check_id: min(
+                effective_check_timeout_seconds(check), DRAFT_CHECK_TIMEOUT_SECONDS
+            )
+            for check in get_capability_checks(snapshot.source)
+        }
         if is_superseded(run):
             raise _DraftRunSupersededError()
         with get_session_with_current_tenant() as db_session:

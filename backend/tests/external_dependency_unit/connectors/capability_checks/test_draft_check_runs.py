@@ -615,6 +615,30 @@ def test_run_without_a_live_task_reads_as_failed_to_run(
 
 
 @pytest.mark.usefixtures("tenant_context")
+def test_task_setup_failure_reads_as_failed_to_run(
+    db_session: Session,
+    harness: _Harness,
+    users: tuple[User, User],
+    slack_credential: Credential,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin, _ = users
+    started = _start(db_session, admin, slack_credential, {}, uuid4().hex)
+
+    def broken_checks(source: DocumentSource) -> list[CapabilityCheck[Any]]:
+        raise ImportError(f"cannot load the checks for {source.value}")
+
+    monkeypatch.setattr(capability_check_tasks, "get_capability_checks", broken_checks)
+    with pytest.raises(ImportError):
+        harness.run_last_task()
+
+    # The run fails at once instead of reading RUNNING until its lease ends.
+    snapshot = get_draft_check_run(started.run_id, user=admin, db_session=db_session)
+    assert snapshot.status == DraftRunStatus.FAILED_TO_RUN
+    assert harness.runs == []
+
+
+@pytest.mark.usefixtures("tenant_context")
 def test_latest_run_marker_lives_as_long_as_the_run(
     db_session: Session,
     harness: _Harness,
