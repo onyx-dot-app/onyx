@@ -29,7 +29,7 @@ function Provider({ children }: { children: ReactNode }) {
   );
 }
 
-const response = {
+const response: Awaited<ReturnType<typeof uploadFile>> = {
   path: "attachments/draft.txt",
   filename: "draft.txt",
   size_bytes: 5,
@@ -62,7 +62,7 @@ it("starts an existing session with an empty draft, without reading persisted fi
 
 it("retains the selected source after uploading and deselects without deleting history", async () => {
   const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
-  const file = new File(["draft"], "draft.txt");
+  const file: File = new File(["draft"], "draft.txt");
   act(() => result.current.setActiveSession("session"));
   await act(async () => result.current.uploadFiles([file]));
   const selected = result.current.currentMessageFiles[0];
@@ -132,7 +132,7 @@ it("clears sent selections while retaining sandbox files, including after revisi
 
 it("uploads pending welcome sources once when a destination becomes available", async () => {
   const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
-  const file = new File(["draft"], "draft.txt");
+  const file: File = new File(["draft"], "draft.txt");
   await act(async () => result.current.uploadFiles([file]));
   expect(result.current.currentMessageFiles[0]?.status).toBe(
     UploadFileStatus.PENDING
@@ -157,7 +157,7 @@ it.each([false, true])(
       .mockReturnValueOnce(oldUpload.promise)
       .mockResolvedValue({ ...response, path: "attachments/replacement.txt" });
     const { result } = renderHook(useUploadFilesContext, { wrapper: Provider });
-    const file = new File(["draft"], "draft.txt");
+    const file: File = new File(["draft"], "draft.txt");
     await act(async () => result.current.uploadFiles([file]));
     act(() => result.current.setActiveSession("old", { draftId: null }));
     await waitFor(() => expect(uploadFile).toHaveBeenCalledTimes(1));
@@ -190,7 +190,7 @@ it("claims the same welcome sandbox without clearing sources or uploading twice"
   const { result, rerender } = renderHook(useUploadFilesContext, {
     wrapper: Provider,
   });
-  const file = new File(["draft"], "draft.txt");
+  const file: File = new File(["draft"], "draft.txt");
   await act(async () => result.current.uploadFiles([file]));
   act(() => result.current.setActiveSession("sandbox", { draftId: null }));
   await waitFor(() => expect(uploadFile).toHaveBeenCalledTimes(1));

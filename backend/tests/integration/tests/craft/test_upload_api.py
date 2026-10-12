@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from uuid import UUID
 
+from onyx.server.features.build.configs import MAX_UPLOAD_FILES_PER_SESSION
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
@@ -166,3 +169,38 @@ def test_upload_endpoint_404_for_other_users_session(
         cookies=basic_user.cookies,
     )
     assert response.status_code == 404
+
+
+def test_concurrent_uploads_share_stored_file_quota(admin_user: DATestUser) -> None:
+    session_id: UUID = _create_session_id(admin_user)
+    try:
+        for index in range(MAX_UPLOAD_FILES_PER_SESSION - 1):
+            BuildSessionManager.upload_file(
+                admin_user, session_id, filename=f"existing_{index}.txt", content=b"x"
+            )
+        barrier: Barrier = Barrier(2)
+
+        def upload(index: int) -> int:
+            barrier.wait(timeout=10)
+            response = client.post(
+                _upload_url(session_id),
+                files={"file": (f"concurrent_{index}.txt", b"x", "text/plain")},
+                headers=multipart_headers(admin_user),
+                cookies=admin_user.cookies,
+            )
+            return response.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            statuses: list[int] = list(executor.map(upload, range(2)))
+        assert sorted(statuses) == [200, 429]
+        listing = BuildSessionManager.list_files(
+            admin_user, session_id, path="attachments"
+        )
+        assert len(listing.entries) == MAX_UPLOAD_FILES_PER_SESSION
+    finally:
+        response = client.delete(
+            f"{API_SERVER_URL}/build/sessions/{session_id}",
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+        )
+        assert response.status_code == 204

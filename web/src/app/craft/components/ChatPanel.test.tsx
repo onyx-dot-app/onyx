@@ -14,7 +14,7 @@ jest.mock("@/app/craft/services/apiServices", () => ({
   uploadFile: jest.fn(),
 }));
 
-const idle = jest.fn();
+const idle: jest.Mock<void, []> = jest.fn();
 
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push: idle }) }));
 jest.mock("@/lib/analytics/utils", () => ({
