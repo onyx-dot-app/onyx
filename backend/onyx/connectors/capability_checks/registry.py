@@ -20,6 +20,7 @@ from onyx.connectors.google_drive.capability_checks import (
 from onyx.connectors.hubspot.capability_checks import build_hubspot_indexing_checks
 from onyx.connectors.jira.capability_checks import build_jira_indexing_checks
 from onyx.connectors.linear.capability_checks import build_linear_indexing_checks
+from onyx.connectors.notion.capability_checks import build_notion_indexing_checks
 from onyx.connectors.onedrive.capability_checks import build_onedrive_indexing_checks
 from onyx.connectors.outlook.capability_checks import build_outlook_indexing_checks
 from onyx.connectors.slack.capability_checks import build_slack_indexing_checks
@@ -38,6 +39,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.HUBSPOT: build_hubspot_indexing_checks(),
     DocumentSource.JIRA: build_jira_indexing_checks(),
     DocumentSource.LINEAR: build_linear_indexing_checks(),
+    DocumentSource.NOTION: build_notion_indexing_checks(),
 }
 
 

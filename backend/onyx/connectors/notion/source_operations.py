@@ -48,8 +48,6 @@ _NOTION_PAGE_SIZE = 100
 _RATE_LIMITED_STATUS = 429
 _ERROR_TEXT_CHARS = 300
 
-_NOT_YET_TESTED = "Not yet tested: capability checks land later in the stack."
-
 
 class NotionApiError(Exception):
     """A Notion API call failed.
@@ -195,7 +193,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_TESTED,
     )
     def get_bot_user(self, *, fast: bool = False) -> dict[str, Any]:
         """Returns the bot user of the token (``users/me``), with its
@@ -205,7 +202,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_TESTED,
     )
     def iter_search(
         self,
@@ -244,7 +240,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     def get_page(self, *, page_id: str, fast: bool = False) -> dict[str, Any]:
         """Returns one page. A page that became a wiki is a database: Notion
@@ -255,7 +250,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_TESTED,
     )
     def get_database(self, *, database_id: str, fast: bool = False) -> dict[str, Any]:
         """Returns one database with its ``data_sources``. Since API version
@@ -266,7 +260,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_TESTED,
     )
     def get_block_children(
         self,
@@ -290,7 +283,6 @@ class NotionSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_TESTED,
     )
     def query_data_source(
         self,
@@ -313,3 +305,21 @@ class NotionSourceOperations(SourceOperations):
             fast=fast,
             json_body=body or None,
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+    )
+    def list_users(
+        self,
+        *,
+        start_cursor: str | None = None,
+        page_size: int = _NOTION_PAGE_SIZE,
+        fast: bool = False,
+    ) -> dict[str, Any]:
+        """Returns one page of the users of the workspace. Notion answers 403
+        when the integration does not have a user information capability."""
+        params: dict[str, Any] = {"page_size": page_size}
+        if start_cursor:
+            params["start_cursor"] = start_cursor
+        return self._send("GET", "users", fast=fast, params=params)
