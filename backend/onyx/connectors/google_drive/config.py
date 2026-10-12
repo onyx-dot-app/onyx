@@ -58,7 +58,7 @@ class GoogleDriveConnectorConfig(ConnectorConfig):
     continue_on_failure: Annotated[bool | None, _COSMETIC] = None
 
 
-def _has_specific_requests(config: GoogleDriveConnectorConfig) -> bool:
+def has_specific_requests(config: GoogleDriveConnectorConfig) -> bool:
     return bool(
         config.shared_drive_urls or config.my_drive_emails or config.shared_folder_urls
     )
@@ -70,8 +70,8 @@ def google_drive_planning_rule(
     # A specific request turns the general toggles off. A change between
     # the general and the specific mode replaces one set of files with
     # another; inside the specific mode the toggles have no effect.
-    old_specific = _has_specific_requests(old)
-    new_specific = _has_specific_requests(new)
+    old_specific = has_specific_requests(old)
+    new_specific = has_specific_requests(new)
     if old_specific != new_specific:
         return ConnectorChangeOverride(
             scope_directions=dict.fromkeys(
