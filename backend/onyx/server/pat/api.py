@@ -17,11 +17,22 @@ from onyx.server.pat.models import (
     PatScopeOption,
     TokenResponse,
 )
+from onyx.server.settings.models import Tier
+from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import global_version
 
 logger = setup_logger()
 
 router = APIRouter(prefix="/user/pats")
+
+
+def _current_tier() -> Tier:
+    if not global_version.is_ee_version():
+        return Tier.COMMUNITY
+    from ee.onyx.utils.tier import get_tier
+
+    return get_tier()
 
 
 def _validate_assignable_scopes(scopes: list[Permission] | None) -> None:
@@ -39,6 +50,16 @@ def _validate_assignable_scopes(scopes: list[Permission] | None) -> None:
             OnyxErrorCode.INVALID_INPUT,
             f"Unsupported token scope(s): {', '.join(s.value for s in unsupported)}",
         )
+    tier = _current_tier()
+    below_tier = [
+        s for s in scopes if not tier_at_least(tier, SELECTABLE_PAT_SCOPES[s].min_tier)
+    ]
+    if below_tier:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            f"Token scope(s) not available on the {tier.value.title()} plan: "
+            f"{', '.join(s.value for s in below_tier)}",
+        )
 
 
 @router.get("/scopes")
@@ -46,7 +67,12 @@ def list_selectable_scopes(
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[PatScopeOption]:
     """The scopes a user may assign when minting a token, with display metadata."""
-    return list(SELECTABLE_PAT_SCOPES.values())
+    tier = _current_tier()
+    return [
+        option
+        for option in SELECTABLE_PAT_SCOPES.values()
+        if tier_at_least(tier, option.min_tier)
+    ]
 
 
 @router.get("")
