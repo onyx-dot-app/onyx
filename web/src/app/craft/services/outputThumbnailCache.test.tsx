@@ -3,7 +3,7 @@ import { renderHook, waitFor } from "@tests/setup/test-utils";
 import { SWRConfig } from "swr";
 import { useFilePreview } from "@/lib/build/hooks";
 import {
-  OutputThumbnailCache,
+  createOutputThumbnailCache,
   readOutputThumbnailCache,
   retainOutputThumbnailCache,
 } from "@/app/craft/services/outputThumbnailCache";
@@ -19,7 +19,7 @@ function thumbnail(content: string) {
 
 // Retained payload budgets.
 it("evicts the least recently written entry without mutating cache reads", () => {
-  const cache = new OutputThumbnailCache(2);
+  const cache = createOutputThumbnailCache(2);
   cache.set("first", thumbnail("first"));
   cache.set("second", thumbnail("second"));
   cache.get("first");
@@ -28,7 +28,7 @@ it("evicts the least recently written entry without mutating cache reads", () =>
 });
 
 it("bounds retained strings and releases accounting on replacement and clear", () => {
-  const cache = new OutputThumbnailCache(10, 100);
+  const cache = createOutputThumbnailCache(10, 100);
   cache.set("first", thumbnail("a".repeat(60)));
   cache.set("second", thumbnail("b".repeat(60)));
   expect([...cache.keys()]).toEqual(["second"]);
@@ -41,7 +41,7 @@ it("bounds retained strings and releases accounting on replacement and clear", (
 });
 
 it("releases the retained payload budget when a terminal failure replaces bytes", () => {
-  const cache = new OutputThumbnailCache(10, 100);
+  const cache = createOutputThumbnailCache(10, 100);
   cache.set("first", thumbnail("a".repeat(90)));
   cache.set("first", {
     data: { identity: "thumbnail-v1", error: new Error("Forbidden") },
@@ -52,7 +52,7 @@ it("releases the retained payload budget when a terminal failure replaces bytes"
 
 // Stable SWR scope across tile mounts.
 it("reuses cached thumbnail bytes immediately after remount", async () => {
-  const cache = new OutputThumbnailCache();
+  const cache = createOutputThumbnailCache();
   const payload = { content: "image bytes", mimeType: "image/jpeg" };
   const load = jest.fn().mockResolvedValue(payload);
   function Wrapper({ children }: { children: React.ReactNode }) {
@@ -92,26 +92,26 @@ const storageKey = "onyx:craft:output-thumbnails:v1:owner";
 beforeEach(() => window.sessionStorage.clear());
 
 it("restores successful revision-tagged previews across a browser reload", () => {
-  new OutputThumbnailCache(128, 100000, "owner").set(
+  createOutputThumbnailCache(128, 100000, "owner").set(
     savedKey,
     savedThumbnail()
   );
-  const restored = new OutputThumbnailCache(128, 100000, "owner");
+  const restored = createOutputThumbnailCache(128, 100000, "owner");
   expect(restored.get(savedKey)?.data).toEqual(savedThumbnail().data);
   expect(
-    new OutputThumbnailCache(128, 100000, "another-owner").get(savedKey)
+    createOutputThumbnailCache(128, 100000, "another-owner").get(savedKey)
   ).toBeUndefined();
 });
 
 it("does not persist unversioned or failed responses", () => {
-  const cache = new OutputThumbnailCache(128, 100000, "owner");
+  const cache = createOutputThumbnailCache(128, 100000, "owner");
   cache.set(savedKey, {
     data: {
       identity: JSON.stringify([savedKey, null, 0]),
       data: { content: "bytes", mimeType: "image/png" },
     },
   });
-  expect(new OutputThumbnailCache(128, 100000, "owner").size).toBe(0);
+  expect(createOutputThumbnailCache(128, 100000, "owner").size).toBe(0);
   cache.set(savedKey, savedThumbnail());
   cache.set(savedKey, {
     data: {
@@ -119,12 +119,12 @@ it("does not persist unversioned or failed responses", () => {
       error: new Error("Forbidden"),
     },
   });
-  expect(new OutputThumbnailCache(128, 100000, "owner").size).toBe(0);
+  expect(createOutputThumbnailCache(128, 100000, "owner").size).toBe(0);
 });
 
 it("rejects corrupt storage and expired previews", () => {
   window.sessionStorage.setItem(storageKey, "broken JSON");
-  expect(new OutputThumbnailCache(128, 100000, "owner").size).toBe(0);
+  expect(createOutputThumbnailCache(128, 100000, "owner").size).toBe(0);
   window.sessionStorage.setItem(
     storageKey,
     JSON.stringify([
@@ -140,11 +140,11 @@ it("rejects corrupt storage and expired previews", () => {
       },
     ])
   );
-  expect(new OutputThumbnailCache(128, 100000, "owner").size).toBe(0);
+  expect(createOutputThumbnailCache(128, 100000, "owner").size).toBe(0);
 });
 
 it("persists eviction and session purges", () => {
-  const cache = new OutputThumbnailCache(1, 100000, "owner");
+  const cache = createOutputThumbnailCache(1, 100000, "owner");
   cache.set(savedKey, savedThumbnail());
   const another = "craft-output-thumbnail:other:outputs/image.png";
   cache.set(another, {
@@ -153,15 +153,15 @@ it("persists eviction and session purges", () => {
       identity: JSON.stringify([another, "v1", 0]),
     },
   });
-  expect([...new OutputThumbnailCache(128, 100000, "owner").keys()]).toEqual([
+  expect([...createOutputThumbnailCache(128, 100000, "owner").keys()]).toEqual([
     another,
   ]);
   cache.clearSession("other");
-  expect(new OutputThumbnailCache(128, 100000, "owner").size).toBe(0);
+  expect(createOutputThumbnailCache(128, 100000, "owner").size).toBe(0);
 });
 
 it("removes deleted or changed revisions only in the reconciled session", () => {
-  const cache = new OutputThumbnailCache(128, 100000, "owner");
+  const cache = createOutputThumbnailCache(128, 100000, "owner");
   cache.set(savedKey, savedThumbnail());
   cache.reconcileSession("different", {});
   expect(cache.size).toBe(1);
@@ -173,7 +173,7 @@ it("removes deleted or changed revisions only in the reconciled session", () => 
     },
   });
   expect(cache.size).toBe(0);
-  expect(new OutputThumbnailCache(128, 100000, "owner").size).toBe(0);
+  expect(createOutputThumbnailCache(128, 100000, "owner").size).toBe(0);
   cache.set(savedKey, savedThumbnail());
   expect(cache.size).toBe(0);
   cache.reconcileSession("session", {});
@@ -182,7 +182,7 @@ it("removes deleted or changed revisions only in the reconciled session", () => 
 });
 
 it("bounds serialized storage including metadata", () => {
-  const cache = new OutputThumbnailCache(128, 16 * 1024 * 1024, "owner");
+  const cache = createOutputThumbnailCache(128, 16 * 1024 * 1024, "owner");
   for (let index = 0; index < 12; index++) {
     const key = `craft-output-thumbnail:session:outputs/${index}.png`;
     cache.set(key, {
@@ -196,16 +196,16 @@ it("bounds serialized storage including metadata", () => {
     2 * 1024 * 1024
   );
   expect(
-    new OutputThumbnailCache(128, 16 * 1024 * 1024, "owner").size
+    createOutputThumbnailCache(128, 16 * 1024 * 1024, "owner").size
   ).toBeLessThan(12);
 });
 
 it("rejects late responses after terminal purge until a new inventory is accepted", () => {
-  const cache = new OutputThumbnailCache(128, 100000, "owner");
+  const cache = createOutputThumbnailCache(128, 100000, "owner");
   cache.clearSession("session");
   cache.set(savedKey, savedThumbnail());
   expect(cache.size).toBe(0);
-  expect(new OutputThumbnailCache(128, 100000, "owner").size).toBe(0);
+  expect(createOutputThumbnailCache(128, 100000, "owner").size).toBe(0);
   cache.reconcileSession("session", {
     "outputs/image.png": {
       path: "outputs/image.png",
@@ -220,7 +220,7 @@ it("rejects late responses after terminal purge until a new inventory is accepte
 });
 
 it("does not serialize metadata updates and batches session removals", () => {
-  const cache = new OutputThumbnailCache(128, 100000, "owner");
+  const cache = createOutputThumbnailCache(128, 100000, "owner");
   const write = jest.spyOn(Storage.prototype, "setItem");
   try {
     cache.set(savedKey, savedThumbnail());
@@ -244,27 +244,30 @@ it("does not serialize metadata updates and batches session removals", () => {
 });
 
 it("retires previous user caches so late writes cannot replace newer saved bytes", () => {
-  const previous = new OutputThumbnailCache(128, 100000, "switch-owner");
+  const previous = createOutputThumbnailCache(128, 100000, "switch-owner");
   retainOutputThumbnailCache("switch-owner", previous);
   previous.set(savedKey, savedThumbnail("v1"));
-  retainOutputThumbnailCache("another-owner", new OutputThumbnailCache());
-  const current = new OutputThumbnailCache(128, 100000, "switch-owner");
+  retainOutputThumbnailCache("another-owner", createOutputThumbnailCache());
+  const current = createOutputThumbnailCache(128, 100000, "switch-owner");
   retainOutputThumbnailCache("switch-owner", current);
   current.set(savedKey, savedThumbnail("v2"));
   previous.set(savedKey, savedThumbnail("v1"));
   expect(
-    new OutputThumbnailCache(128, 100000, "switch-owner").get(savedKey)?.data
+    createOutputThumbnailCache(128, 100000, "switch-owner").get(savedKey)?.data
       ?.identity
   ).toBe(savedThumbnail("v2").data.identity);
   expect(previous.size).toBe(0);
 });
 
 it("resets anonymous bytes on authentication transitions", () => {
-  const previous = new OutputThumbnailCache();
+  const previous = createOutputThumbnailCache();
   retainOutputThumbnailCache(undefined, previous);
   previous.set(savedKey, savedThumbnail());
-  retainOutputThumbnailCache("authenticated-owner", new OutputThumbnailCache());
-  const current = new OutputThumbnailCache();
+  retainOutputThumbnailCache(
+    "authenticated-owner",
+    createOutputThumbnailCache()
+  );
+  const current = createOutputThumbnailCache();
   retainOutputThumbnailCache(undefined, current);
   previous.set(savedKey, savedThumbnail());
   expect(current.size).toBe(0);
@@ -272,7 +275,7 @@ it("resets anonymous bytes on authentication transitions", () => {
 });
 
 it("rejects late previous-session writes while retaining its accepted cached bytes", () => {
-  const cache = new OutputThumbnailCache(128, 100000, "owner");
+  const cache = createOutputThumbnailCache(128, 100000, "owner");
   cache.activateSession("session");
   cache.set(savedKey, savedThumbnail("v1"));
   cache.activateSession("other");
@@ -287,7 +290,7 @@ it("rejects late previous-session writes while retaining its accepted cached byt
       identity: JSON.stringify([otherKey, "v1", 0]),
     },
   });
-  expect(cache.has(otherKey)).toBe(true);
+  expect(cache.get(otherKey)).toBeDefined();
   cache.activateSession(null);
   cache.set(otherKey, {
     data: {
@@ -301,7 +304,7 @@ it("rejects late previous-session writes while retaining its accepted cached byt
 });
 
 it("accepts partial revisions without deleting unseen cached files", () => {
-  const cache = new OutputThumbnailCache(128, 100000, "owner");
+  const cache = createOutputThumbnailCache(128, 100000, "owner");
   cache.set(savedKey, savedThumbnail());
   const otherKey = "craft-output-thumbnail:session:outputs/other.png";
   cache.set(otherKey, {
@@ -321,8 +324,8 @@ it("accepts partial revisions without deleting unseen cached files", () => {
     },
     false
   );
-  expect(cache.has(savedKey)).toBe(false);
-  expect(cache.has(otherKey)).toBe(true);
+  expect(cache.get(savedKey)).toBeUndefined();
+  expect(cache.get(otherKey)).toBeDefined();
   cache.set(savedKey, savedThumbnail("v2"));
   expect(cache.get(savedKey)?.data?.identity).toBe(
     savedThumbnail("v2").data.identity
@@ -346,13 +349,13 @@ it("accepts partial revisions without deleting unseen cached files", () => {
       identity: JSON.stringify([newKey, "v1", 0]),
     },
   });
-  expect(cache.has(newKey)).toBe(true);
-  expect(cache.has(otherKey)).toBe(true);
+  expect(cache.get(newKey)).toBeDefined();
+  expect(cache.get(otherKey)).toBeDefined();
 });
 
 // React render must not retire the committed owner or write browser storage.
 it("keeps committed ownership unchanged when another user is only read during render", () => {
-  const current = new OutputThumbnailCache(128, 100000, "committed-owner");
+  const current = createOutputThumbnailCache(128, 100000, "committed-owner");
   retainOutputThumbnailCache("committed-owner", current);
   current.set(savedKey, savedThumbnail());
   expect(readOutputThumbnailCache("abandoned-owner")).toBeUndefined();
@@ -360,7 +363,11 @@ it("keeps committed ownership unchanged when another user is only read during re
   expect(current.size).toBe(1);
   const write = jest.spyOn(Storage.prototype, "setItem");
   try {
-    const candidate = new OutputThumbnailCache(128, 100000, "committed-owner");
+    const candidate = createOutputThumbnailCache(
+      128,
+      100000,
+      "committed-owner"
+    );
     candidate.get(savedKey);
     expect(write).not.toHaveBeenCalled();
   } finally {

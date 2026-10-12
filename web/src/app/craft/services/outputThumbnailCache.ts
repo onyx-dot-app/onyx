@@ -85,171 +85,125 @@ function parseThumbnail(value: unknown): SavedThumbnail | null {
 
 type ThumbnailState = State<FilePreviewResult<FileContentResponse>, Error>;
 
-/** Bounds retained thumbnail strings independently of directory and viewer caches. */
-export class OutputThumbnailCache extends Map<string, ThumbnailState> {
-  private readonly sizes = new Map<string, number>();
-  private characters = 0;
-  private readonly saved = new Map<string, SavedThumbnail>();
-  private hydrating = false;
-  private retired = false;
-  private acceptedSession:
-    | {
-        sessionId: string | null;
-        files?: Record<string, OutputFile> | null;
-        complete?: boolean;
-      }
-    | undefined;
+function thumbnailStorageKey(userId: string) {
+  return `onyx:craft:output-thumbnails:v1:${userId}`;
+}
 
-  constructor(
-    private readonly maxEntries = 128,
-    private readonly maxCharacters = 16 * 1024 * 1024,
-    private readonly userId?: string
-  ) {
-    super();
-    if (!userId || typeof window === "undefined") return;
-    this.hydrating = true;
+function readSavedThumbnails(userId?: string): SavedThumbnail[] {
+  if (!userId || typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(thumbnailStorageKey(userId));
+    if (!raw || raw.length > MAX_SAVED_CHARACTERS) return [];
+    const entries: unknown = JSON.parse(raw);
+    if (!Array.isArray(entries) || entries.length > MAX_SAVED_ENTRIES)
+      return [];
+    const items: unknown[] = entries;
+    return items.map(parseThumbnail).filter((entry) => entry !== null);
+  } catch {
+    return [];
+  }
+}
+
+function serializeSavedThumbnails(
+  entries: Iterable<SavedThumbnail>,
+  now: number
+) {
+  const recent = [...entries]
+    .filter((entry) => now - entry.savedAt <= MAX_AGE)
+    .slice(-MAX_SAVED_ENTRIES);
+  let serialized = JSON.stringify(recent);
+  while (serialized.length > MAX_SAVED_CHARACTERS && recent.length) {
+    recent.shift();
+    serialized = JSON.stringify(recent);
+  }
+  return serialized;
+}
+
+function saveThumbnails(userId: string, serialized: string) {
+  if (typeof window === "undefined") return;
+  const key = thumbnailStorageKey(userId);
+  try {
+    window.sessionStorage.setItem(key, serialized);
+  } catch {
+    // Do not leave an older snapshot after a removal fails to save.
     try {
-      const raw = window.sessionStorage.getItem(this.storageKey());
-      if (raw && raw.length <= MAX_SAVED_CHARACTERS) {
-        const entries: unknown = JSON.parse(raw);
-        if (Array.isArray(entries) && entries.length <= MAX_SAVED_ENTRIES) {
-          const items: unknown[] = entries;
-          for (const item of items) {
-            const entry = parseThumbnail(item);
-            if (entry) {
-              this.set(entry.key, { data: entry.data });
-              if (super.has(entry.key)) this.saved.set(entry.key, entry);
-            }
-          }
-        }
-      }
+      window.sessionStorage.removeItem(key);
     } catch {
-      /* Storage can be unavailable. */
-    }
-    this.hydrating = false;
-  }
-
-  /** Each mounted SWR boundary owns its subscriptions, while thumbnail bytes survive navigation. */
-  createProvider(): Cache<FilePreviewResult<FileContentResponse>> {
-    return {
-      get: (key) => this.get(key),
-      set: (key, value) => this.set(key, value),
-      delete: (key) => this.delete(key),
-      keys: () => this.keys(),
-    };
-  }
-
-  private storageKey() {
-    return `onyx:craft:output-thumbnails:v1:${this.userId}`;
-  }
-
-  private persist() {
-    if (
-      !this.userId ||
-      this.hydrating ||
-      this.retired ||
-      typeof window === "undefined"
-    )
-      return;
-    const entries = [...this.saved.values()]
-      .filter((entry) => Date.now() - entry.savedAt <= MAX_AGE)
-      .slice(-MAX_SAVED_ENTRIES);
-    let serialized = JSON.stringify(entries);
-    while (serialized.length > MAX_SAVED_CHARACTERS && entries.length) {
-      entries.shift();
-      serialized = JSON.stringify(entries);
-    }
-    try {
-      window.sessionStorage.setItem(this.storageKey(), serialized);
-    } catch {
-      // Do not leave an older snapshot after a removal fails to save.
-      try {
-        window.sessionStorage.removeItem(this.storageKey());
-      } catch {
-        /* Storage is unavailable. */
-      }
+      /* Storage is unavailable. */
     }
   }
+}
 
-  retire() {
-    this.retired = true;
-    this.acceptedSession = undefined;
-    super.clear();
-    this.sizes.clear();
-    this.saved.clear();
-    this.characters = 0;
+interface AcceptedSession {
+  sessionId: string | null;
+  files?: Record<string, OutputFile> | null;
+  complete?: boolean;
+}
+
+function acceptsThumbnail(
+  session: AcceptedSession | undefined,
+  key: string,
+  value: ThumbnailState
+) {
+  if (!session) return true;
+  const { sessionId, files, complete } = session;
+  if (!sessionId || files === null) return false;
+  const prefix = SWR_KEYS.buildSessionOutputThumbnail(sessionId, "");
+  if (!key.startsWith(prefix)) return false;
+  if (!files) return true;
+  const file = files[key.slice(prefix.length)];
+  return !(
+    (!file && complete) ||
+    (file &&
+      value.data &&
+      value.data.identity !== JSON.stringify([key, file.revision, 0]))
+  );
+}
+
+/** Owns retained bytes; each SWR boundary gets a separate provider over this private map. */
+export function createOutputThumbnailCache(
+  maxEntries = 128,
+  maxCharacters = 16 * 1024 * 1024,
+  userId?: string
+) {
+  const entries = new Map<string, ThumbnailState>();
+  const sizes = new Map<string, number>();
+  const saved = new Map<string, SavedThumbnail>();
+  let characters = 0;
+  let retired = false;
+  let acceptedSession: AcceptedSession | undefined;
+
+  function persist() {
+    if (userId && !retired)
+      saveThumbnails(
+        userId,
+        serializeSavedThumbnails(saved.values(), Date.now())
+      );
   }
 
-  activateSession(sessionId: string | null) {
-    if (this.acceptedSession?.sessionId !== sessionId)
-      this.acceptedSession = { sessionId };
+  function remove(key: string) {
+    characters -= sizes.get(key) ?? 0;
+    sizes.delete(key);
+    const changed = saved.delete(key);
+    entries.delete(key);
+    return changed;
   }
 
-  clearSession(sessionId: string) {
-    if (!this.acceptedSession || this.acceptedSession.sessionId === sessionId)
-      this.acceptedSession = { sessionId, files: null };
-    const prefix = SWR_KEYS.buildSessionOutputThumbnail(sessionId, "");
-    let changed = false;
-    for (const key of this.keys())
-      if (key.startsWith(prefix)) changed = this.remove(key) || changed;
-    if (changed) this.persist();
-  }
-
-  reconcileSession(
-    sessionId: string,
-    files: Record<string, OutputFile>,
-    complete = true
-  ) {
-    this.acceptedSession = { sessionId, files, complete };
-    const prefix = SWR_KEYS.buildSessionOutputThumbnail(sessionId, "");
-    let changed = false;
-    for (const [key, state] of this) {
-      if (!key.startsWith(prefix)) continue;
-      const file = files[key.slice(prefix.length)];
-      try {
-        const identity: unknown = state.data && JSON.parse(state.data.identity);
-        if (
-          (!file && complete) ||
-          (file && (!Array.isArray(identity) || identity[1] !== file.revision))
-        )
-          changed = this.remove(key) || changed;
-      } catch {
-        changed = this.remove(key) || changed;
-      }
-    }
-    if (changed) this.persist();
-  }
-
-  override set(key: string, value: ThumbnailState): this {
+  // Restoring a cache during render must never write browser storage.
+  function store(key: string, value: ThumbnailState) {
+    if (retired || !acceptsThumbnail(acceptedSession, key, value)) return false;
     const entry = parseThumbnail({
       key,
       savedAt: Date.now(),
       data: value.data,
     });
-    if (this.retired) return this;
-    if (this.acceptedSession) {
-      const { sessionId, files, complete } = this.acceptedSession;
-      if (!sessionId) return this;
-      const prefix = SWR_KEYS.buildSessionOutputThumbnail(sessionId, "");
-      if (!key.startsWith(prefix) || files === null) return this;
-      if (files) {
-        const file = files[key.slice(prefix.length)];
-        if (
-          (!file && complete) ||
-          (file &&
-            value.data &&
-            value.data.identity !== JSON.stringify([key, file.revision, 0]))
-        )
-          return this;
-      }
-    }
-    super.delete(key);
-    this.characters -= this.sizes.get(key) ?? 0;
-    const previous = this.saved.get(key);
-    this.saved.delete(key);
-    super.set(key, value);
+    entries.delete(key);
+    characters -= sizes.get(key) ?? 0;
+    const previous = saved.get(key);
+    saved.delete(key);
+    entries.set(key, value);
     if (entry)
-      this.saved.set(
+      saved.set(
         key,
         previous?.data.identity === entry.data.identity &&
           previous.data.data?.content === entry.data.data?.content &&
@@ -259,44 +213,113 @@ export class OutputThumbnailCache extends Map<string, ThumbnailState> {
           : entry
       );
     const size = value.data?.data?.content.length ?? 0;
-    this.sizes.set(key, size);
-    this.characters += size;
-    let changed = previous !== this.saved.get(key);
-    while (
-      this.size > this.maxEntries ||
-      this.characters > this.maxCharacters
-    ) {
-      const oldest = this.keys().next().value;
+    sizes.set(key, size);
+    characters += size;
+    let changed = previous !== saved.get(key);
+    while (entries.size > maxEntries || characters > maxCharacters) {
+      const oldest = entries.keys().next().value;
       if (oldest === undefined) break;
-      changed = this.remove(oldest) || changed;
+      changed = remove(oldest) || changed;
     }
-    if (changed) this.persist();
-    return this;
-  }
-
-  private remove(key: string): boolean {
-    this.characters -= this.sizes.get(key) ?? 0;
-    this.sizes.delete(key);
-    const changed = this.saved.delete(key);
-    super.delete(key);
     return changed;
   }
 
-  override delete(key: string): boolean {
-    const existed = super.has(key);
-    if (this.remove(key)) this.persist();
+  function set(key: string, value: ThumbnailState) {
+    if (store(key, value)) persist();
+  }
+
+  function deleteEntry(key: string) {
+    const existed = entries.has(key);
+    if (remove(key)) persist();
     return existed;
   }
 
-  override clear(): void {
-    const changed = this.saved.size > 0;
-    super.clear();
-    this.sizes.clear();
-    this.characters = 0;
-    this.saved.clear();
-    if (changed) this.persist();
+  function clear() {
+    const changed = saved.size > 0;
+    entries.clear();
+    sizes.clear();
+    saved.clear();
+    characters = 0;
+    if (changed) persist();
   }
+
+  function retire() {
+    retired = true;
+    acceptedSession = undefined;
+    clear();
+  }
+
+  function activateSession(sessionId: string | null) {
+    if (acceptedSession?.sessionId !== sessionId)
+      acceptedSession = { sessionId };
+  }
+
+  function clearSession(sessionId: string) {
+    if (!acceptedSession || acceptedSession.sessionId === sessionId)
+      acceptedSession = { sessionId, files: null };
+    const prefix = SWR_KEYS.buildSessionOutputThumbnail(sessionId, "");
+    let changed = false;
+    for (const key of entries.keys())
+      if (key.startsWith(prefix)) changed = remove(key) || changed;
+    if (changed) persist();
+  }
+
+  function reconcileSession(
+    sessionId: string,
+    files: Record<string, OutputFile>,
+    complete = true
+  ) {
+    acceptedSession = { sessionId, files, complete };
+    const prefix = SWR_KEYS.buildSessionOutputThumbnail(sessionId, "");
+    let changed = false;
+    for (const [key, state] of entries) {
+      if (!key.startsWith(prefix)) continue;
+      const file = files[key.slice(prefix.length)];
+      try {
+        const identity: unknown = state.data && JSON.parse(state.data.identity);
+        if (
+          (!file && complete) ||
+          (file && (!Array.isArray(identity) || identity[1] !== file.revision))
+        )
+          changed = remove(key) || changed;
+      } catch {
+        changed = remove(key) || changed;
+      }
+    }
+    if (changed) persist();
+  }
+
+  const get = (key: string) => entries.get(key);
+  const keys = () => entries.keys();
+  function createProvider(): Cache<FilePreviewResult<FileContentResponse>> {
+    return { get, set, delete: deleteEntry, keys };
+  }
+
+  for (const entry of readSavedThumbnails(userId)) {
+    store(entry.key, { data: entry.data });
+    if (entries.has(entry.key)) saved.set(entry.key, entry);
+  }
+
+  return {
+    get,
+    set,
+    keys,
+    delete: deleteEntry,
+    clear,
+    get size() {
+      return entries.size;
+    },
+    createProvider,
+    activateSession,
+    clearSession,
+    reconcileSession,
+    retire,
+  };
 }
+
+export type OutputThumbnailCache = ReturnType<
+  typeof createOutputThumbnailCache
+>;
 
 interface ThumbnailCacheOwner {
   userId: string | undefined;

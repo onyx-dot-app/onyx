@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -412,4 +413,20 @@ export function useOutputRefreshStatus(
     notify(refreshing);
   }, [refreshing, onChange]);
   useEffect(() => () => notify(false), []);
+}
+
+/** Directory membership stays local; React only observes aggregate loading changes. */
+export function useDirectoryLoading() {
+  const pendingPaths = useRef(new Set<string>());
+  const [isLoading, setIsLoading] = useState(false);
+  const setDirectoryLoading = useCallback((path: string, loading: boolean) => {
+    if (loading) pendingPaths.current.add(path);
+    else pendingPaths.current.delete(path);
+    setIsLoading(pendingPaths.current.size > 0);
+  }, []);
+  const hasPendingDirectories = useCallback(
+    () => pendingPaths.current.size > 0,
+    []
+  );
+  return { isLoading, setDirectoryLoading, hasPendingDirectories };
 }

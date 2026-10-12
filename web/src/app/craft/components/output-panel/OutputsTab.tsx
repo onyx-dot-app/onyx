@@ -3,7 +3,8 @@
 import { SWRConfig } from "swr";
 import { useUser } from "@/providers/UserProvider";
 import {
-  OutputThumbnailCache,
+  createOutputThumbnailCache,
+  type OutputThumbnailCache,
   readOutputThumbnailCache,
   retainOutputThumbnailCache,
 } from "@/app/craft/services/outputThumbnailCache";
@@ -42,7 +43,7 @@ function OutputsScope(props: OutputsTabProps & { userId: string | undefined }) {
   const [{ cache, provider }] = useState(() => {
     const cache =
       readOutputThumbnailCache(props.userId) ??
-      new OutputThumbnailCache(128, 16 * 1024 * 1024, props.userId);
+      createOutputThumbnailCache(128, 16 * 1024 * 1024, props.userId);
     return { cache, provider: cache.createProvider() };
   });
   useLayoutEffect(() => {

@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  useState,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useCallback,
-} from "react";
+import { useEffect, useMemo, useRef, useCallback } from "react";
+import { useDirectoryLoading, useOutputRefreshStatus } from "@/lib/build/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useTranslations } from "next-intl";
 import {
@@ -66,11 +60,12 @@ function WorkspaceBrowser({
     () => new Set(filesTabState.expandedPaths),
     [filesTabState.expandedPaths]
   );
-  const [loading] = useState(() => new DirectoryLoading());
+  const { isLoading, setDirectoryLoading, hasPendingDirectories } =
+    useDirectoryLoading();
   const onStatusChange = useCallback(
     (path: string, status: DirectoryStatus | undefined) =>
-      loading.set(path, status),
-    [loading]
+      setDirectoryLoading(path, status === "loading"),
+    [setDirectoryLoading]
   );
   const toggleFolder = useCallback(
     (path: string) => {
@@ -109,21 +104,20 @@ function WorkspaceBrowser({
       useBuildSessionStore.getState().sessions.get(sessionId)?.filesTabState
         .scrollTop ?? 0;
     scrollContainerRef.current.scrollTop = scrollTopRef.current;
-    if (!loading.isLoading) pendingScrollRestore.current = false;
-  }, [loading, sessionId]);
+    if (!hasPendingDirectories()) pendingScrollRestore.current = false;
+  }, [hasPendingDirectories, sessionId]);
   const onListingReady = useCallback(() => {
     listingReadyRef.current = true;
     pendingScrollRestore.current = true;
     restoreScroll();
   }, [restoreScroll]);
-  const reportLoading = useEffectEvent((busy: boolean) => {
-    if (!searchQuery.trim()) onRefreshingChange?.(isActive && busy);
-    if (!busy) restoreScroll();
-  });
-  useEffect(() => loading.subscribe((busy) => reportLoading(busy)), [loading]);
+  useOutputRefreshStatus(
+    isActive && isLoading,
+    searchQuery.trim() ? undefined : onRefreshingChange
+  );
   useEffect(() => {
-    reportLoading(loading.isLoading);
-  }, [loading, isActive, searchQuery, onRefreshingChange]);
+    if (!isLoading) restoreScroll();
+  }, [isLoading, restoreScroll]);
   const setScrollContainer = useCallback(
     (container: HTMLDivElement | null) => {
       if (!container) saveScroll();
@@ -205,27 +199,4 @@ function WorkspaceBrowser({
       </div>
     </div>
   );
-}
-
-/** Coordinates request lifetimes without copying child loading state into React state. */
-class DirectoryLoading {
-  private paths = new Set<string>();
-  private listener: ((loading: boolean) => void) | undefined;
-  get isLoading() {
-    return this.paths.size > 0;
-  }
-  set(path: string, status: DirectoryStatus | undefined) {
-    const before = this.isLoading;
-    if (status === "loading") this.paths.add(path);
-    else this.paths.delete(path);
-    if (before !== this.isLoading) this.listener?.(this.isLoading);
-  }
-  subscribe(listener: (loading: boolean) => void) {
-    this.listener = listener;
-    listener(this.isLoading);
-    return () => {
-      if (this.listener === listener) this.listener = undefined;
-      listener(false);
-    };
-  }
 }
