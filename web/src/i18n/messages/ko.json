@@ -2634,6 +2634,17 @@
           "description": "Microsoft Graph 호스트입니다. GCC High 또는 DoD에는 https://graph.microsoft.us를 사용하세요."
         }
       },
+      "linear": {
+        "description": "Linear 커넥터 구성",
+        "teams": {
+          "label": "팀",
+          "description": "인덱싱할 Linear 팀 키(예: ENG)입니다. 비워 두면 연결된 사용자가 볼 수 있는 모든 팀을 인덱싱합니다."
+        },
+        "projects": {
+          "label": "프로젝트",
+          "description": "인덱싱할 Linear 프로젝트 이름 또는 URL입니다. 비워 두면 모든 프로젝트를 인덱싱합니다. 팀도 설정된 경우 이슈는 둘 다에 일치해야 합니다."
+        }
+      },
       "add": {
         "authorizeButton": {
           "label": "{source}(으)로 인증",
