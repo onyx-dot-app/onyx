@@ -11,7 +11,14 @@ import {
   useRef,
 } from "react";
 import { usePathname } from "next/navigation";
-import { Button, ShadowDiv, Spacer, Text, Tooltip } from "@opal/components";
+import {
+  Button,
+  Divider,
+  ShadowDiv,
+  Spacer,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
@@ -371,6 +378,14 @@ function SidebarSection({
 }
 
 // ---------------------------------------------------------------------------
+// Divider — horizontal rule between groups in the sidebar
+// ---------------------------------------------------------------------------
+
+function SidebarDivider() {
+  return <Divider paddingParallel={2} paddingPerpendicular={2} />;
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -380,5 +395,6 @@ export {
   SidebarBody as Body,
   SidebarFooter as Footer,
   SidebarSection as Section,
+  SidebarDivider as Divider,
 };
 export type { SidebarRootProps };
