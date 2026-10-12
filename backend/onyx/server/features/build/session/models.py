@@ -1,8 +1,9 @@
 from datetime import datetime
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Literal, Union
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, field_validator
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import (
@@ -15,7 +16,7 @@ from onyx.db.enums import (
 from onyx.server.features.build.db.build_session import session_runtime_stale
 
 if TYPE_CHECKING:
-    from onyx.db.models import BuildSession, Sandbox
+    from onyx.db.models import Artifact, BuildSession, Sandbox
 
 
 # ===== Session Models =====
@@ -79,6 +80,46 @@ class OutputFileResponse(BaseModel):
 class OutputInventoryResponse(BaseModel):
     files: list[OutputFileResponse]
     complete: bool
+
+
+class OutputCard(BaseModel):
+    id: str
+    kind: Literal["file", "app"]
+    path: str
+    name: str
+    turn_index: int
+    revision: int
+    size_bytes: int | None
+    deleted: bool
+    viewed_revision: int | None
+
+    @classmethod
+    def from_model(cls, artifact: "Artifact") -> "OutputCard":
+        if artifact.turn_index is None:
+            raise ValueError("Output cards require a known producing turn")
+        return cls(
+            id=str(artifact.id),
+            kind="app" if artifact.type == ArtifactType.WEB_APP else "file",
+            path=artifact.path,
+            name=artifact.name,
+            turn_index=artifact.turn_index,
+            revision=artifact.version,
+            size_bytes=artifact.size_bytes,
+            deleted=artifact.deleted,
+            viewed_revision=artifact.viewed_revision,
+        )
+
+
+class OutputCardsResponse(BaseModel):
+    cards: list[OutputCard]
+
+
+class OutputsViewedRequest(BaseModel):
+    revisions: dict[UUID, PositiveInt]
+
+
+class OutputViewedRequest(BaseModel):
+    revision: int = Field(gt=0)
 
 
 class ArtifactResponse(BaseModel):

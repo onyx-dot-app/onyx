@@ -569,12 +569,13 @@ class SandboxManager(_ServeMixin, ABC):
 
     @abstractmethod
     def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
+        self, sandbox_id: UUID, session_id: UUID, *, include_web: bool = False
     ) -> OutputsManifestResponse:
         """Describe the session's outputs tree in one call.
 
         Return visible regular files with size and modification time.
-        Exclude hidden entries, symlinks, special files, and outputs/web.
+        Exclude hidden entries, symlinks and special files. Include app source
+        files only when include_web is true; runtime build directories stay hidden.
         Missing workspaces and bounded or unreadable scans are incomplete.
         An existing workspace without outputs is complete and empty.
         Raises RuntimeError-family errors when the backend cannot answer.

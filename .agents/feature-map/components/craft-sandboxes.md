@@ -337,7 +337,10 @@ these validated entries directly.
 The outputs manifest scans visible regular files under `outputs/` without reading file contents.
 It shares file browsing's hidden-name rules through `sandbox_daemon/models.py`.
 The scan excludes dotfiles, dependencies, caches, runtime logs, symlinks, and special files.
-It also skips the root web subtree within outputs before descent. Nested directories named `web` remain visible.
+Ordinary file inventories skip the root web subtree before descent. Nested directories named `web` remain visible.
+Turn attribution requests `include_web=True` to scan app sources too. Generated `dist`, `build`, `coverage`, and `out` entries at the web root remain excluded.
+The scan also ignores root next-env.d.ts and tsconfig.tsbuildinfo; similarly named nested source paths remain visible.
+Both modes share the same traversal limits and symlink protections. The extended request requires a matching sandbox daemon image.
 All examined entries count toward one scan budget, including ignored names and directories.
 A depth limit bounds recursion. Descriptor-relative descent refuses symlinks at every workspace component.
 

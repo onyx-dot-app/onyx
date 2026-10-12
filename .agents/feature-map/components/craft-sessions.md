@@ -175,10 +175,10 @@ reads it to decide whether a turn can run.
 ### `Artifact` (`backend/onyx/db/models.py:Artifact`)
 
 One mutable row per `(session_id, path)`, upserted at turn end
-(`db/artifact.py:upsert_artifact`). `content_hash` drives change detection: a
-changed hash bumps `version` and clears `archive_file_id`; an unchanged hash
-only refreshes metadata. `deleted=True` keeps the row (so a stale FE card
-greys out instead of 404ing) rather than removing it.
+(`db/artifact.py:upsert_artifact`). `source_revision` stores the observed filesystem revision;
+`content_hash` remains reserved for byte-content identity. Changes advance `version` and invalidate `archive_file_id`.
+Unchanged files keep their producing `turn_index`. `viewed_revision` records the session owner’s last viewed version.
+`deleted=True` retains the row so chat can display an unavailable card.
 
 ### `ActionReceipt` (`backend/onyx/db/models.py:ActionReceipt`)
 
@@ -537,10 +537,27 @@ effect.
 
 ### 4.7 Artifacts, receipts, and export
 
-Artifacts are a manifest, not a store: `upsert_artifact`
-(`db/artifact.py`) is called once per `(session, path)` at turn end, keyed on
-a content hash so an unchanged file is a metadata-only touch while a changed
-one bumps `version` and invalidates any cached archive. `download_artifact`
+`backend/onyx/server/features/build/session/output_cards.py` (`TurnOutputCapture`) records output changes for interactive and scheduled turns.
+It captures a complete manifest after workspace restoration and before the prompt starts.
+After the producer stops, it compares a second complete manifest while the runner still owns the prompt slot.
+Confirmed changes update the existing artifact index before terminal status releases the turn.
+Missing baselines, incomplete scans, and lost ownership preserve previous attribution.
+Reclaimed runners do not infer attribution from a replacement baseline.
+
+One indexed path appears beneath its latest producing turn. App source changes become one `outputs/web` card.
+File cards link to current sandbox files; they do not preserve historical file contents.
+Deleted files retain their index rows. Unchanged files keep their previous producing turn.
+Filesystem metadata detects writes; it does not prove that the bytes differ.
+
+`GET /build/sessions/{id}/output-cards` reads owned, indexed cards without waking the sandbox.
+`PATCH /build/sessions/{id}/output-cards/{artifact_id}/viewed` records the exact opened revision on the artifact row.
+The marker only advances. A late acknowledgement cannot clear a newer revision’s unread indicator.
+`PATCH /build/sessions/{id}/output-cards/viewed` acknowledges a map of artifact IDs to viewed revisions in one update.
+It skips deleted, unknown, foreign-session, and future revisions. Concurrent edits remain unread.
+All three routes require session ownership. Unknown producing turns are omitted rather than assigned invented history.
+The older `/artifacts` endpoint still discovers the local webapp; it does not supply these durable cards.
+
+`download_artifact`
 and `export_docx` (`session/api.py:559,610`) read the live file out of the
 sandbox workspace; `md_to_docx.py:markdown_to_docx_bytes` converts a
 Markdown artifact to `.docx` with `mistune` + `python-docx`, pure-Python, no
@@ -554,19 +571,6 @@ Drive file), inserted `PENDING` before the action executes
 `try_record_decision`). A `PENDING` row older than 10 minutes is swept to
 `UNKNOWN` (`sweep_stale_pending_receipts`) so a crashed recorder never looks
 like a silently-still-in-progress send.
-
-Frontend attachments in `web/src/app/craft/contexts/UploadFilesContext.tsx` use a separate scope for each session visit.
-The composer owns draft selections, not the persisted session directory.
-Opening a session starts an empty draft; directory listings never select attachments.
-Removing a chip or clearing a sent draft leaves stored files available to earlier messages.
-Only explicit selections enter the current turn’s attachment context. Stored files do not become new selections. Subagent follow-ups carry an empty current selection while retaining references to earlier attachments.
-Uploads hold the session row lock through quota checks and file writes, so concurrent requests share one session limit.
-URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
-Replacing that destination preserves selected source files and uploads them into the replacement.
-New Build, another session, or visit end clears the previous draft.
-Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
-Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
-ChatPanel owns its UploadFilesProvider. Unmounting chat releases its draft, including pending welcome files and navigation to Craft apps.
 
 ### 4.8 User library
 

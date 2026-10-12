@@ -82,6 +82,7 @@ class OutputsManifestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: UUID
+    include_web: bool = False
 
 
 class OutputsManifestEntry(BaseModel):

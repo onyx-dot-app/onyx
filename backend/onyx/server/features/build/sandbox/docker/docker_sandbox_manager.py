@@ -1682,7 +1682,7 @@ fi
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
 
     def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
+        self, sandbox_id: UUID, session_id: UUID, *, include_web: bool = False
     ) -> OutputsManifestResponse:
         container = self._require_container(sandbox_id)
         try:
@@ -1700,6 +1700,7 @@ fi
                     "-m",
                     "sandbox_daemon.outputs_manifest",
                     str(session_id),
+                    *(["--include-web"] if include_web else []),
                 ],
                 workdir="/opt",
             )

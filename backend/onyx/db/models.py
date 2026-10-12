@@ -6624,6 +6624,10 @@ class Artifact(Base):
     # Content hash from the sandbox manifest. Drives change detection: an
     # upsert with a different hash bumps version and invalidates the archive.
     content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Metadata identity from the bounded sandbox inventory; not a content hash.
+    source_revision: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Highest revision opened by the session owner.
+    viewed_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Bumped on every content change so a consumer holding an earlier
     # version can detect that it was superseded.
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")

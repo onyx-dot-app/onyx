@@ -57,8 +57,10 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
     RequestPermissionRequest,
 )
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
+from onyx.server.features.build.session.output_cards import TurnOutputCapture
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.server.features.build.timeouts import (
     PROVISION_WAIT_SECONDS,
@@ -417,6 +419,26 @@ def _drive_agent(
             )
             db_session.commit()
             return False
+        output_capture = TurnOutputCapture(
+            get_sandbox_manager(), sandbox_id, session_id, 0
+        )
+        event_stream = session_manager.yield_sandbox_events(
+            sandbox_id,
+            session_id,
+            task_prompt,
+            turn_timeout_seconds=float(budget_seconds),
+        )
+
+        def owns_outputs() -> bool:
+            if slot.lost:
+                return False
+            slot.extend()
+            return not slot.lost
+
+        def finish_outputs() -> None:
+            event_stream.close()
+            output_capture.finish(db_session, owns_turn=owns_outputs)
+
         try:
             session_manager.stamp_turn_deadline(
                 sandbox_id,
@@ -426,12 +448,12 @@ def _drive_agent(
                 ),
                 hard_cap_seconds=budget_seconds,
             )
-            for sandbox_event in session_manager.yield_sandbox_events(
-                sandbox_id,
-                session_id,
-                task_prompt,
-                turn_timeout_seconds=float(budget_seconds),
-            ):
+            output_capture.start()
+            if not owns_outputs():
+                raise RuntimeError(
+                    "Prompt slot lease lost while reading output baseline."
+                )
+            for sandbox_event in event_stream:
                 slot.extend()
                 if slot.lost:
                     session_manager.finalize_persist(session_id, state)
@@ -481,6 +503,7 @@ def _drive_agent(
                 # Budget check happens before persistence so a runaway
                 # agent can't keep growing the transcript.
                 if time.monotonic() > deadline:
+                    finish_outputs()
                     session_manager.finalize_persist(session_id, state)
                     mark_run_status(
                         db_session=db_session,
@@ -503,6 +526,8 @@ def _drive_agent(
                 session_manager.persist_sandbox_event(session_id, state, sandbox_event)
                 db_session.commit()
                 final_event_count += 1
+
+            finish_outputs()
 
             if approval_required:
                 # Capture the summary BEFORE finalize_persist — the
@@ -602,6 +627,7 @@ def _drive_agent(
             # to FAILED. Do NOT re-raise — Celery would retry, which is
             # explicitly out of scope for V1.
             db_session.rollback()
+            finish_outputs()
             exc_name = type(exc).__name__
             exc_message = str(exc)
             # Keep the specific exception class name visible by prepending
@@ -637,13 +663,12 @@ def _drive_agent(
             logger.exception("Scheduled run %s failed", run_id)
             return False
         finally:
-            # Clear the deadline stamp on owned exits so a later turn on this
-            # session can't inherit a stale scheduled-run deadline if its own
-            # stamp write fails; skip when the slot was lost (another holder
-            # may own it and have stamped). Best-effort.
-            if not slot.lost:
-                session_manager.clear_turn_deadline(sandbox_id, session_id)
-            # Release the prompt slot on every exit path (clean completion,
-            # approval gate, budget exceeded, exception). Matches the
-            # interactive path's finally in _stream_cli_agent_response.
-            prompt_slot_cm.__exit__(None, None, None)
+            try:
+                event_stream.close()
+            finally:
+                try:
+                    # Do not clear a successor's deadline after losing the slot.
+                    if not slot.lost:
+                        session_manager.clear_turn_deadline(sandbox_id, session_id)
+                finally:
+                    prompt_slot_cm.__exit__(None, None, None)

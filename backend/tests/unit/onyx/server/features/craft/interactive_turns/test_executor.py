@@ -104,6 +104,7 @@ def _run_turn_with_events(
     stamped: list[tuple[int, int]] = []
     cleared: list[bool] = []
     captured_should_abort_on_teardown: list[Callable[[], bool]] = []
+    output_lifecycle: list[str] = []
 
     turn = create_interactive_turn(
         cache=cache,
@@ -161,7 +162,10 @@ def _run_turn_with_events(
             assert attachments == []
             assert should_interrupt is not None
             captured_should_abort_on_teardown.append(should_abort_on_teardown)
-            yield from events
+            try:
+                yield from events
+            finally:
+                output_lifecycle.append("producer_closed")
 
         def merge_events_with_announces(
             self,
@@ -210,6 +214,25 @@ def _run_turn_with_events(
             assert session_id_arg == session_id
             cleared.append(True)
 
+    class OutputCaptureProbe:
+        def __init__(self, *_args: object) -> None:
+            self.started = False
+
+        def start(self) -> None:
+            self.started = True
+            output_lifecycle.append("baseline")
+
+        def finish(self, _db: object, *, owns_turn: Callable[[], bool]) -> None:
+            if not self.started or not owns_turn():
+                return
+            active = get_active_turn(
+                cache=cache, session_id=session_id, user_id=user_id
+            )
+            assert active is not None
+            assert not prompt_slot.exited
+            output_lifecycle.append("cards_persisted")
+
+    monkeypatch.setattr(executor, "TurnOutputCapture", OutputCaptureProbe)
     monkeypatch.setattr(executor, "get_cache_backend", lambda: cache)
     monkeypatch.setattr(
         executor,
@@ -249,6 +272,7 @@ def _run_turn_with_events(
         turn_errors=turn_errors,
         stamped=stamped,
         cleared=cleared,
+        output_lifecycle=output_lifecycle,
         user_id=user_id,
     )
 
@@ -276,7 +300,7 @@ def test_runner_succeeds_on_prompt_response(monkeypatch: pytest.MonkeyPatch) -> 
     assert result.stamped == [(30, 30)]
     assert result.cleared == [True]
     assert result.prompt_slot.exited
-    assert result.prompt_slot.extend_calls == 1
+    assert result.prompt_slot.extend_calls >= 1
     assert result.db_session.rollbacks == 0
 
 
@@ -408,12 +432,12 @@ def test_runner_records_cancelled_prompt_response_as_cancelled(
     # User-initiated cancels don't get an error row.
     assert result.turn_errors == []
     assert result.prompt_slot.exited
-    assert result.prompt_slot.extend_calls == 1
+    assert result.prompt_slot.extend_calls >= 1
     assert result.db_session.rollbacks == 0
 
 
 def test_lost_lease_fails_turn(monkeypatch: pytest.MonkeyPatch) -> None:
-    prompt_slot = _FakePromptSlot(lost_after_extends=1)
+    prompt_slot = _FakePromptSlot(lost_after_extends=2)
     non_terminal_event = object()
     second_event = object()
 
@@ -847,7 +871,7 @@ def test_teardown_abort_allowed_after_successful_turn(
 def test_teardown_abort_suppressed_after_lost_lease(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    prompt_slot = _FakePromptSlot(lost_after_extends=1)
+    prompt_slot = _FakePromptSlot(lost_after_extends=2)
     non_terminal_event = object()
     second_event = object()
 
@@ -1164,3 +1188,49 @@ def test_start_interactive_turn_runner_skips_fresh_running_turn(
     time.sleep(0.05)
 
     assert observed == []
+
+
+@pytest.mark.parametrize("stop_reason", ["end_turn", "cancelled"])
+def test_output_cards_settle_after_producer_and_before_turn_release(
+    monkeypatch: pytest.MonkeyPatch, stop_reason: str
+) -> None:
+    result = _run_turn_with_events(
+        monkeypatch, [PromptResponse.model_validate({"stopReason": stop_reason})]
+    )
+    assert result.output_lifecycle == ["baseline", "producer_closed", "cards_persisted"]
+
+
+def test_reclaimed_runner_does_not_invent_an_output_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_turn_with_events(
+        monkeypatch,
+        [PromptResponse.model_validate({"stopReason": "end_turn"})],
+        reclaimed=True,
+    )
+    assert result.output_lifecycle == ["producer_closed"]
+
+
+def test_lost_prompt_slot_cannot_assign_output_cards(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_turn_with_events(
+        monkeypatch,
+        [PromptResponse.model_validate({"stopReason": "end_turn"})],
+        prompt_slot=_FakePromptSlot(lost_after_extends=2),
+    )
+    assert result.output_lifecycle == ["baseline", "producer_closed"]
+
+
+def test_lost_baseline_lease_prevents_starting_the_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_turn_with_events(
+        monkeypatch,
+        [PromptResponse.model_validate({"stopReason": "end_turn"})],
+        prompt_slot=_FakePromptSlot(lost_after_extends=1),
+    )
+    assert result.output_lifecycle == ["baseline"]
+    assert result.persisted == []
+    finished = get_turn(result.cache, result.turn.turn_id)
+    assert finished is not None and finished.status == TURN_STATUS_FAILED

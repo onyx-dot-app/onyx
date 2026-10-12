@@ -126,6 +126,11 @@ run could saturate would stall dispatch for every tenant
 
 ## 4. How it works
 
+Scheduled execution shares `backend/onyx/server/features/build/session/output_cards.py` (`TurnOutputCapture`) with interactive turns.
+The runner captures output metadata before the prompt and after the producer closes, while retaining prompt ownership.
+It saves latest-turn card ownership before reporting terminal run status. Capture failure preserves earlier cards.
+This index records file references, not archived bytes; [[craft-sessions]] §4.7 owns that contract.
+
 ### 4.1 Creating a task and its schedule
 
 `schedule.py` compiles one of three editor modes (`IntervalPayload`,

@@ -1,0 +1,156 @@
+"""Attribute output changes to the turn that produced them.
+
+Only a complete before/after pair can assign ownership. A failed capture leaves
+previous cards intact. The caller holds the prompt slot until persistence ends.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import PurePosixPath
+from uuid import UUID
+
+from sqlalchemy.orm import Session
+
+from onyx.db.enums import ArtifactType
+from onyx.server.features.build.db.artifact import (
+    get_session_artifacts,
+    mark_artifact_deleted,
+    upsert_artifact,
+)
+from onyx.server.features.build.sandbox.base import SandboxManager
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    OutputsManifestResponse,
+)
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+@dataclass(frozen=True)
+class OutputSource:
+    revision: str
+    size: int
+
+
+def sources_from_manifest(manifest: OutputsManifestResponse) -> dict[str, OutputSource]:
+    sources: dict[str, OutputSource] = {}
+    app_files: list[str] = []
+    app_size = 0
+    for entry in manifest.entries:
+        revision = f"{entry.mtime_ns}:{entry.ctime_ns}:{entry.size}"
+        if entry.path.startswith("web/"):
+            app_files.append(f"{entry.path}\0{revision}")
+            app_size += entry.size
+        else:
+            sources[f"outputs/{entry.path}"] = OutputSource(revision, entry.size)
+    if app_files:
+        revision = hashlib.sha256("\n".join(sorted(app_files)).encode()).hexdigest()
+        sources["outputs/web"] = OutputSource(revision, app_size)
+    return sources
+
+
+class TurnOutputCapture:
+    def __init__(
+        self,
+        manager: SandboxManager,
+        sandbox_id: UUID,
+        session_id: UUID,
+        turn_index: int,
+    ) -> None:
+        self.manager = manager
+        self.sandbox_id = sandbox_id
+        self.session_id = session_id
+        self.turn_index = turn_index
+        self.before: dict[str, OutputSource] | None = None
+        self.finished = False
+
+    def _read(self) -> dict[str, OutputSource] | None:
+        manifest = self.manager.get_outputs_manifest(
+            self.sandbox_id, self.session_id, include_web=True
+        )
+        return sources_from_manifest(manifest) if manifest.complete else None
+
+    def start(self) -> None:
+        try:
+            self.before = self._read()
+        except Exception:
+            logger.warning(
+                "Could not capture output baseline for %s",
+                self.session_id,
+                exc_info=True,
+            )
+
+    def finish(self, db_session: Session, *, owns_turn: Callable[[], bool]) -> None:
+        if self.finished or self.before is None:
+            return
+        self.finished = True
+        try:
+            if not owns_turn():
+                return
+            after = self._read()
+            if after is None or not owns_turn():
+                return
+            # A failed index update must not roll back the transcript.
+            with db_session.begin_nested() as transaction:
+                writes = 0
+                existing = {
+                    artifact.path: artifact
+                    for artifact in get_session_artifacts(
+                        db_session, session_id=self.session_id, include_deleted=True
+                    )
+                }
+                for path, source in after.items():
+                    if self.before.get(path) == source:
+                        continue
+                    artifact = existing.get(path)
+                    if (
+                        artifact is not None
+                        and artifact.turn_index is not None
+                        and artifact.turn_index > self.turn_index
+                    ):
+                        continue
+                    upsert_artifact(
+                        db_session,
+                        session_id=self.session_id,
+                        artifact_type=ArtifactType.WEB_APP
+                        if path == "outputs/web"
+                        else ArtifactType.FILE,
+                        path=path,
+                        name="App"
+                        if path == "outputs/web"
+                        else PurePosixPath(path).name,
+                        turn_index=self.turn_index,
+                        size_bytes=source.size,
+                        content_hash=None,
+                        source_revision=source.revision,
+                    )
+                    writes += 1
+                    if writes % 32 == 0 and not owns_turn():
+                        transaction.rollback()
+                        return
+                for path in self.before.keys() - after.keys():
+                    artifact = existing.get(path)
+                    if artifact is not None and (
+                        artifact.turn_index is None
+                        or artifact.turn_index <= self.turn_index
+                    ):
+                        mark_artifact_deleted(
+                            db_session, session_id=self.session_id, path=path
+                        )
+                        writes += 1
+                        if writes % 32 == 0 and not owns_turn():
+                            transaction.rollback()
+                            return
+            # A slow database batch may outlive the runner or prompt-slot lease.
+            if not owns_turn():
+                db_session.rollback()
+                return
+            db_session.commit()
+        except Exception:
+            db_session.rollback()
+            logger.warning(
+                "Could not persist output cards for %s", self.session_id, exc_info=True
+            )

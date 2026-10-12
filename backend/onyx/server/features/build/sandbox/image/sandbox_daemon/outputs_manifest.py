@@ -28,7 +28,8 @@ _MISSING_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR, errno.ELOOP})
 
 
 class _Walk:
-    def __init__(self) -> None:
+    def __init__(self, include_web: bool) -> None:
+        self.include_web = include_web
         self.remaining = MANIFEST_MAX_ENTRIES
         self.response = OutputsManifestResponse(entries=[])
 
@@ -42,8 +43,17 @@ class _Walk:
                         return
                     self.remaining -= 1
                     if is_hidden_workspace_name(child.name) or (
-                        not prefix and child.name == "web"
+                        not self.include_web and not prefix and child.name == "web"
                     ):
+                        continue
+                    if prefix == "web/" and child.name in {
+                        "dist",
+                        "build",
+                        "coverage",
+                        "out",
+                        "next-env.d.ts",
+                        "tsconfig.tsbuildinfo",
+                    }:
                         continue
                     try:
                         child.name.encode("utf-8")
@@ -95,7 +105,9 @@ def _open_directory(name: str | Path, dir_fd: int | None = None) -> int | None:
         raise
 
 
-def build_outputs_manifest(session_id: UUID) -> OutputsManifestResponse:
+def build_outputs_manifest(
+    session_id: UUID, include_web: bool = False
+) -> OutputsManifestResponse:
     """Describe outputs without trusting any workspace path component."""
     session_fd = _open_directory(SESSIONS_ROOT.parent)
     for name in (SESSIONS_ROOT.name, str(session_id)):
@@ -115,7 +127,7 @@ def build_outputs_manifest(session_id: UUID) -> OutputsManifestResponse:
         os.close(session_fd)
     if outputs_fd is None:
         return OutputsManifestResponse(entries=[])
-    walk = _Walk()
+    walk = _Walk(include_web)
     walk.directory(outputs_fd, "", depth=0)
     walk.response.entries.sort(key=lambda entry: entry.path)
     return walk.response
@@ -128,7 +140,12 @@ if __name__ == "__main__":
         description="Describe a session's output files."
     )
     parser.add_argument("session_id")
+    parser.add_argument("--include-web", action="store_true")
     request: OutputsManifestRequest = OutputsManifestRequest.model_validate(
         vars(parser.parse_args())
     )
-    print(build_outputs_manifest(request.session_id).model_dump_json())
+    print(
+        build_outputs_manifest(
+            request.session_id, request.include_web
+        ).model_dump_json()
+    )

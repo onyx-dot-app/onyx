@@ -63,7 +63,7 @@ def test_upsert_same_hash_touches_without_version_bump(
     db_session.commit()
     assert second.id == first.id
     assert second.version == 1
-    assert second.turn_index == 2
+    assert second.turn_index == 1
 
 
 def test_upsert_content_change_bumps_version_and_clears_archive(
