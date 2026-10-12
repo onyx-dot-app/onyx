@@ -256,6 +256,9 @@ class GroupSyncConfig(BaseModel):
 
 class CensoringConfig(BaseModel):
     chunk_censoring_func: CensoringFuncType
+    # Whether documents under only private connectors of this source go through
+    # the censor too, on top of their private ACL.
+    censors_private_connectors: bool
 
 
 class SyncConfig(BaseModel):
@@ -368,9 +371,12 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
+    # Private Salesforce connectors were indexed with the open ACL before the
+    # ACL was keyed on access type, so the censor still covers their records.
     DocumentSource.SALESFORCE: SyncConfig(
         censoring_config=CensoringConfig(
             chunk_censoring_func=_lazy_censoring(_load_censor_salesforce_chunks),
+            censors_private_connectors=True,
         ),
     ),
     # HubSpot names the users who may view each record, so there are no groups.
