@@ -21,6 +21,7 @@ type UpdateBaseDigestsOptions struct {
 	Family            string
 	ListStaleFamilies bool
 	CacheFile         string
+	CachedOnly        bool
 	PinsFile          string
 }
 
@@ -53,7 +54,9 @@ Examples:
   ods update-base-digests --list-stale-families            # families needing a bump
   ods update-base-digests --write --family python \
       --cache-file digests.json                            # rewrite one family
-  ods update-base-digests --pins-file digests.json         # dump this checkout's pins as a cache`,
+  ods update-base-digests --pins-file digests.json         # dump this checkout's pins as a cache
+  ods update-base-digests --write --family python \
+      --cache-file digests.json --cached-only              # pin to another checkout's digests`,
 		Run: func(cmd *cobra.Command, args []string) {
 			output, err := runUpdateBaseDigests(opts)
 			fmt.Print(output)
@@ -68,7 +71,8 @@ Examples:
 	cmd.Flags().StringVar(&opts.Family, "family", "", "only act on one base family, for example python or node")
 	cmd.Flags().BoolVar(&opts.ListStaleFamilies, "list-stale-families", false, "print the families that have a stale digest, one per line, and exit")
 	cmd.Flags().StringVar(&opts.CacheFile, "cache-file", "", "read resolved digests from this path, or write them there if absent")
-	cmd.Flags().StringVar(&opts.PinsFile, "pins-file", "", "write the digests this checkout pins as a cache file and exit, so another checkout can be pinned to them with --cache-file")
+	cmd.Flags().BoolVar(&opts.CachedOnly, "cached-only", false, "touch only the references --cache-file covers and ask no registry; the rest are kept as pinned")
+	cmd.Flags().StringVar(&opts.PinsFile, "pins-file", "", "write the digests this checkout pins as a cache file and exit, so another checkout can be pinned to them with --cache-file --cached-only")
 
 	return cmd
 }
@@ -113,12 +117,31 @@ func runUpdateBaseDigests(opts *UpdateBaseDigestsOptions) (string, error) {
 		}
 	}
 
-	resolved, err := resolveWithCache(refs, opts.CacheFile)
-	if err != nil {
-		return out.String(), fatalErrorf("Could not resolve every tag:\n%v", err)
+	var resolved map[string]string
+	if opts.CachedOnly {
+		if opts.CacheFile == "" {
+			return out.String(), fatalErrorf("--cached-only needs --cache-file.")
+		}
+		resolved, err = readCache(opts.CacheFile)
+		if err != nil {
+			return out.String(), fatalErrorf("Could not read the cache: %v", err)
+		}
+	} else {
+		resolved, err = resolveWithCache(refs, opts.CacheFile)
+		if err != nil {
+			return out.String(), fatalErrorf("Could not resolve every tag:\n%v", err)
+		}
 	}
 
-	stale := basedigest.Stale(refs, resolved)
+	// A reference the cache leaves out is kept as pinned, so a tag the other
+	// checkout dropped never changes and nothing gets a blank digest.
+	var covered []basedigest.Ref
+	for _, ref := range refs {
+		if _, ok := resolved[ref.Query()]; ok {
+			covered = append(covered, ref)
+		}
+	}
+	stale := basedigest.Stale(covered, resolved)
 
 	if opts.ListStaleFamilies {
 		for _, name := range basedigest.Families(stale) {
@@ -129,7 +152,9 @@ func runUpdateBaseDigests(opts *UpdateBaseDigestsOptions) (string, error) {
 
 	for _, ref := range refs {
 		state := "current"
-		if ref.Digest != resolved[ref.Query()] {
+		if digest, ok := resolved[ref.Query()]; !ok {
+			state = "kept"
+		} else if ref.Digest != digest {
 			state = "update"
 		}
 		fmt.Fprintf(&out, "%7s  %-45s %s:%d\n", state, ref.Display(), ref.Path, ref.Line)
@@ -170,6 +195,21 @@ func writePins(refs []basedigest.Ref, pinsFile string) error {
 	return writeCache(pinsFile, pins)
 }
 
+// readCache loads a --cache-file, empty when the file does not exist yet.
+func readCache(path string) (map[string]string, error) {
+	cached := map[string]string{}
+	data, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(data, &cached); err != nil {
+			return nil, fmt.Errorf("read cache %s: %w", path, err)
+		}
+	case !os.IsNotExist(err):
+		return nil, fmt.Errorf("read cache %s: %w", path, err)
+	}
+	return cached, nil
+}
+
 // writeCache saves digests by query as the JSON --cache-file reads.
 func writeCache(path string, digests map[string]string) error {
 	data, err := json.MarshalIndent(digests, "", "  ")
@@ -194,14 +234,9 @@ func writeCache(path string, digests map[string]string) error {
 func resolveWithCache(refs []basedigest.Ref, cacheFile string) (map[string]string, error) {
 	cached := map[string]string{}
 	if cacheFile != "" {
-		data, err := os.ReadFile(cacheFile)
-		switch {
-		case err == nil:
-			if err := json.Unmarshal(data, &cached); err != nil {
-				return nil, fmt.Errorf("read cache %s: %w", cacheFile, err)
-			}
-		case !os.IsNotExist(err):
-			return nil, fmt.Errorf("read cache %s: %w", cacheFile, err)
+		var err error
+		if cached, err = readCache(cacheFile); err != nil {
+			return nil, err
 		}
 	}
 

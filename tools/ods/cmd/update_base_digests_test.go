@@ -155,19 +155,37 @@ func TestRunUpdateBaseDigests_writesPinsAsACache(t *testing.T) {
 		t.Fatalf("expected pins %v, got %v", want, pins)
 	}
 
-	// One checkout's pins are the other's whole cache for the family, so no
-	// registry is asked, not even for a tag the pins lack in another family.
+	// One checkout's pins rewrite another with --cached-only: no registry is
+	// asked, and a tag the pins lack keeps its own digest, in any family.
 	other := shotGitRepo(t, map[string]string{
 		"Dockerfile": "FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@" + shotDigest("0") + "\n" +
-			"FROM golang:1.26.5-alpine@" + shotDigest("1") + "\n",
+			"FROM python:3.12-slim@" + shotDigest("1") + "\n" +
+			"FROM golang:1.26.5-alpine@" + shotDigest("2") + "\n",
 	})
-	if _, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, Family: "python", CacheFile: pinsFile}); err != nil {
+	output, err = runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, Family: "python", CacheFile: pinsFile, CachedOnly: true})
+	if err != nil {
 		t.Fatalf("runUpdateBaseDigests failed: %v", err)
 	}
+	wantOutput := shotReportLine("update", "library/python:3.13-slim", "Dockerfile:1") +
+		shotReportLine("kept", "python:3.12-slim", "Dockerfile:2") +
+		"\nUpdated 1 reference(s).\n"
+	if output != wantOutput {
+		t.Fatalf("expected output:\n%s\ngot:\n%s", wantOutput, output)
+	}
 	wantDockerfile := "FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@" + shotDigest("a") + "\n" +
-		"FROM golang:1.26.5-alpine@" + shotDigest("1") + "\n"
+		"FROM python:3.12-slim@" + shotDigest("1") + "\n" +
+		"FROM golang:1.26.5-alpine@" + shotDigest("2") + "\n"
 	if got := readShotFile(t, filepath.Join(other, "Dockerfile")); got != wantDockerfile {
-		t.Fatalf("expected the other checkout pinned to the first one's digest, got:\n%s", got)
+		t.Fatalf("expected only the covered python pin to change, got:\n%s", got)
+	}
+}
+
+func TestRunUpdateBaseDigests_cachedOnlyNeedsACache(t *testing.T) {
+	shotDigestRepo(t)
+
+	_, err := runUpdateBaseDigests(&UpdateBaseDigestsOptions{Write: true, CachedOnly: true})
+	if err == nil || err.Error() != "--cached-only needs --cache-file." {
+		t.Fatalf("expected the missing cache file to be refused, got %v", err)
 	}
 }
 
