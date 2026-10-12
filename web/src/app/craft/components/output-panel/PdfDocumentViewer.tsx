@@ -85,8 +85,8 @@ export default function PdfDocumentViewer({
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const pageCount = pdf?.numPages ?? 0;
   const activePage = Math.max(1, Math.min(pageNumber, pageCount || 1));
-  const availableWidth = Math.max(1, viewportSize.width - 32);
-  const availableHeight = Math.max(1, viewportSize.height - 32);
+  const availableWidth = Math.max(1, viewportSize.width);
+  const availableHeight = Math.max(1, viewportSize.height);
   const fitWidth = availableWidth / pageSize.width;
   const scale =
     typeof zoom === "number"

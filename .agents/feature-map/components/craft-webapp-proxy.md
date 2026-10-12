@@ -236,6 +236,7 @@ PDF workers, fonts, character maps, and rendering support files use versioned sa
 `web/tools/prepare-pdf-assets.cjs` copies these assets before dev and production builds, including Docker builds.
 PDF and presentation viewers share page controls and a resizable thumbnail sidebar.
 PDF controls provide page navigation, fit modes, zoom, and download.
+Fit modes use the measured content area, which already excludes viewport padding.
 The file-preview caller shows loading feedback while PDF or presentation refreshes retain their accepted content.
 
 The output panel keeps its five most recently visited tab bodies mounted, including
