@@ -230,7 +230,7 @@ export const MemoizedLink = memo(
           }
           // `inline`: a button is inline-block by default, which would break
           // the surrounding prose differently than the <a> it replaces.
-          className="inline cursor-pointer text-link hover:text-link-hover underline underline-offset-2"
+          className="inline cursor-pointer underline underline-offset-2"
         >
           {rest.children}
         </button>
@@ -242,7 +242,7 @@ export const MemoizedLink = memo(
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="cursor-pointer text-link hover:text-link-hover underline underline-offset-2"
+        className="cursor-pointer underline underline-offset-2"
       >
         {rest.children}
       </a>
