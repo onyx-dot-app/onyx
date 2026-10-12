@@ -242,9 +242,7 @@ class SubagentMessageRequest(BaseModel):
 
 
 class MessageInterruptResponse(BaseModel):
-    """Response to an interrupt request. ``interrupted`` is False when there was
-    no directly-interruptible turn (no running sandbox or no opencode session);
-    the interrupt fence is set regardless."""
+    """Whether the requested turn was selected for cancellation."""
 
     interrupted: bool
 

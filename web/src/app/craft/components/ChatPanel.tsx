@@ -20,7 +20,7 @@ import {
   useQueuedMessages,
   useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
+import { useCraftStreaming } from "@/providers/CraftStreamingProvider";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
 import { BuildMessageAttachment } from "@/app/craft/types/streamingTypes";
 import {
@@ -58,7 +58,7 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
-import { Button, Tooltip } from "@opal/components";
+import { Button, MessageCard, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
@@ -112,10 +112,17 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
   const scheduledRunInFlight =
     isScheduledRunContextInFlight(scheduledRunContext);
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
+  const scheduledRunId = scheduledRunContext?.run_id;
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
-  const hasInterruptibleTurn = session?.status === "running";
+  const isRestoring: boolean =
+    session?.status === "creating" &&
+    !session.activeTurnLocalOwner &&
+    !session.activeTurnId;
+  const hasInterruptibleTurn =
+    (session?.status === "running" || session?.status === "creating") &&
+    (session.activeTurnId !== null || session.activeTurnLocalOwner);
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
@@ -187,15 +194,15 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
   const isViewingSubagent = viewedSubagentSessionId !== null;
   const reduceMotion = useReducedMotion();
 
-  const updateSessionData = useBuildSessionStore(
-    (state) => state.updateSessionData
-  );
-
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
     (state) => state.consumePreProvisionedSession
   );
   const createSession = useBuildSessionStore((state) => state.createSession);
+  const loadSession = useBuildSessionStore((state) => state.loadSession);
+  const retryTurnSettlement = useBuildSessionStore(
+    (state) => state.retryTurnSettlement
+  );
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
   );
@@ -206,22 +213,37 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     streamMessage,
     interruptStreaming,
     streamScheduledRunEvents,
-    streamTurnEvents,
-  } = useBuildStreaming();
+    retryQueuedMessage,
+  } = useCraftStreaming();
   const isInterrupting = useIsInterrupting();
-  const queuedMessages = useQueuedMessages();
+  const sessionQueue = useQueuedMessages();
+  const queuedMessages = useMemo(
+    () => sessionQueue.filter((message) => message.phase !== "starting"),
+    [sessionQueue]
+  );
+  const queuedSendError =
+    !isRunning && !session?.activeTurnId && sessionQueue[0]?.phase === "failed"
+      ? session?.error
+      : null;
+  const settlementError =
+    session?.turnSettlement?.phase === "failed"
+      ? (session.turnSettlement.error ?? t("settlementError.description"))
+      : null;
+  const submissionBlocked =
+    (!!existingSessionId &&
+      !session?.isLoaded &&
+      !session?.activeTurnId &&
+      !session?.activeTurnLocalOwner) ||
+    session?.loadError != null ||
+    session?.turnSettlement?.phase === "failed" ||
+    sessionQueue[0]?.phase === "failed";
+  const recoverableError =
+    settlementError ?? queuedSendError ?? session?.loadError;
   const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
   );
-  const attachedTurnRef = useRef<{
-    turnId: string;
-    controller: AbortController;
-  } | null>(null);
-  const attachCleanupTimerRef = useRef<{
-    turnId: string;
-    timer: ReturnType<typeof setTimeout>;
-  } | null>(null);
+  const activeTurnId = session?.activeTurnId ?? null;
   const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -266,84 +288,26 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
   }, [session?.webappUrl, sessionId, maybeAutoOpenWebapp]);
 
   useEffect(() => {
-    if (!scheduledSessionId || !shouldStreamScheduledRun) return;
+    if (!scheduledSessionId || !scheduledRunId || !shouldStreamScheduledRun)
+      return;
 
     const controller = new AbortController();
-    void streamScheduledRunEvents(scheduledSessionId, controller.signal, () => {
-      void mutateScheduledRunContext();
-    });
+    void streamScheduledRunEvents(
+      scheduledSessionId,
+      scheduledRunId,
+      controller.signal,
+      () => {
+        void mutateScheduledRunContext();
+      }
+    );
 
     return () => controller.abort();
   }, [
     scheduledSessionId,
+    scheduledRunId,
     shouldStreamScheduledRun,
     streamScheduledRunEvents,
     mutateScheduledRunContext,
-  ]);
-
-  const activeTurnId = session?.activeTurnId ?? null;
-  const activeTurnLocalOwner = session?.activeTurnLocalOwner ?? false;
-  useEffect(() => {
-    const pendingCleanup = attachCleanupTimerRef.current;
-    if (pendingCleanup?.turnId === activeTurnId) {
-      clearTimeout(pendingCleanup.timer);
-      attachCleanupTimerRef.current = null;
-    }
-
-    if (
-      !scheduledSessionId ||
-      !activeTurnId ||
-      activeTurnLocalOwner ||
-      scheduledRunInFlight
-    ) {
-      return;
-    }
-
-    const scheduleCleanup = (attachment: {
-      turnId: string;
-      controller: AbortController;
-    }) => {
-      attachCleanupTimerRef.current = {
-        turnId: attachment.turnId,
-        timer: setTimeout(() => {
-          attachment.controller.abort();
-          if (attachedTurnRef.current === attachment) {
-            attachedTurnRef.current = null;
-          }
-          if (attachCleanupTimerRef.current?.turnId === attachment.turnId) {
-            attachCleanupTimerRef.current = null;
-          }
-        }, 0),
-      };
-    };
-
-    const existingAttachment = attachedTurnRef.current;
-    if (existingAttachment?.turnId === activeTurnId) {
-      return () => scheduleCleanup(existingAttachment);
-    }
-
-    existingAttachment?.controller.abort();
-    const controller = new AbortController();
-    const attachment = { turnId: activeTurnId, controller };
-    attachedTurnRef.current = attachment;
-    void streamTurnEvents(
-      scheduledSessionId,
-      activeTurnId,
-      controller.signal,
-      () => {
-        if (attachedTurnRef.current === attachment) {
-          attachedTurnRef.current = null;
-        }
-      }
-    );
-
-    return () => scheduleCleanup(attachment);
-  }, [
-    scheduledSessionId,
-    activeTurnId,
-    activeTurnLocalOwner,
-    scheduledRunInFlight,
-    streamTurnEvents,
   ]);
 
   useEffect(() => {
@@ -355,13 +319,19 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     ) {
       return;
     }
-    updateSessionData(scheduledSessionId, { status: "active" });
+    const store = useBuildSessionStore.getState();
+    const current = store.sessions.get(scheduledSessionId);
+    if (current)
+      void store.beginTurnSettlement(
+        scheduledSessionId,
+        { kind: "scheduled", runId: scheduledRunContext.run_id },
+        current.turnGeneration
+      );
   }, [
     scheduledSessionId,
     scheduledRunContext,
     scheduledRunInFlight,
     activeTurnId,
-    updateSessionData,
   ]);
 
   // Ref to access InputBar methods
@@ -455,6 +425,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
+      if (submissionBlocked) return;
       if (scheduledRunInFlight) {
         toast.error(t("toast.scheduledRunWait"));
         return;
@@ -480,8 +451,13 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
           timestamp: new Date(),
           attachments,
         });
-        // Stream the response
-        await streamMessage(sessionId, message, chosen, attachments);
+        // Only explicit choices override the saved model.
+        await streamMessage(
+          sessionId,
+          message,
+          modelOverride ?? modelBySession[sessionId] ?? null,
+          attachments
+        );
       } else {
         // New session flow - ALWAYS use pre-provisioned session
         const newSessionId = await consumePreProvisionedSession();
@@ -571,6 +547,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       sessionId,
       isRunning,
       scheduledRunInFlight,
+      submissionBlocked,
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
@@ -579,6 +556,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       router,
       hasUploadingFiles,
       selectedModel,
+      modelBySession,
       t,
     ]
   );
@@ -598,57 +576,26 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
 
   const handleQueueMessage = useCallback(
     (text: string, files: BuildFile[]) => {
-      if (sessionId) {
-        enqueueMessage(sessionId, text, toMessageAttachments(files));
-      }
+      return (
+        !!sessionId &&
+        enqueueMessage(
+          sessionId,
+          text,
+          toMessageAttachments(files),
+          modelBySession[sessionId] ?? null
+        )
+      );
     },
-    [sessionId, enqueueMessage]
+    [sessionId, enqueueMessage, modelBySession]
   );
 
   const handleRemoveQueuedMessage = useCallback(
     (index: number) => {
-      if (sessionId) removeQueuedMessage(sessionId, index);
+      const message = queuedMessages[index];
+      if (sessionId && message) removeQueuedMessage(sessionId, message.id);
     },
-    [sessionId, removeQueuedMessage]
+    [sessionId, queuedMessages, removeQueuedMessage]
   );
-
-  // Auto-send the next queued message FIFO after a run cleanly succeeds (each
-  // send re-arms this for the message after). Only fire on a clean completion
-  // and when the send is actually eligible — otherwise we'd dequeue a message
-  // that a failed run never sends, silently dropping it. The sessionId guard
-  // avoids mistaking a session switch for a run completion.
-  const sessionStatus = session?.status;
-  const sessionError = session?.error;
-  const prevIsRunningRef = useRef(isRunning);
-  const prevSessionIdRef = useRef(sessionId);
-  useEffect(() => {
-    const wasRunning = prevIsRunningRef.current;
-    const prevSessionId = prevSessionIdRef.current;
-    prevIsRunningRef.current = isRunning;
-    prevSessionIdRef.current = sessionId;
-
-    const runSucceeded =
-      wasRunning &&
-      !isRunning &&
-      sessionId === prevSessionId &&
-      sessionStatus === "active" &&
-      !sessionError;
-    if (runSucceeded && sessionId && queuedMessages.length > 0) {
-      const next = queuedMessages[0];
-      if (next) {
-        removeQueuedMessage(sessionId, 0);
-        void sendMessage(next.text, next.attachments);
-      }
-    }
-  }, [
-    isRunning,
-    sessionId,
-    sessionStatus,
-    sessionError,
-    queuedMessages,
-    sendMessage,
-    removeQueuedMessage,
-  ]);
 
   return (
     <LayoutGroup id="craft-chat">
@@ -806,6 +753,37 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
                       </Tooltip>
                     </div>
                   )}
+                  {recoverableError && scheduledSessionId && (
+                    <div className="pb-2" role="alert">
+                      <MessageCard
+                        variant="error"
+                        title={t(
+                          settlementError
+                            ? "settlementError.title"
+                            : queuedSendError
+                              ? "queuedSendError.title"
+                              : "loadError.title"
+                        )}
+                        description={recoverableError}
+                        rightChildren={
+                          <Button
+                            onClick={() => {
+                              if (settlementError)
+                                void retryTurnSettlement(scheduledSessionId);
+                              else if (queuedSendError)
+                                void retryQueuedMessage(scheduledSessionId);
+                              else
+                                void loadSession(scheduledSessionId, {
+                                  force: true,
+                                });
+                            }}
+                          >
+                            {t("loadError.retry")}
+                          </Button>
+                        }
+                      />
+                    </div>
+                  )}
                   {sessionId && session?.skillsStale && (
                     <div className="pb-2">
                       <SkillsStaleNotice
@@ -853,6 +831,8 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
                       }
                       disabled={
                         isViewingSubagent ||
+                        isRestoring ||
+                        submissionBlocked ||
                         scheduledRunInFlight ||
                         !hasProvider
                       }
