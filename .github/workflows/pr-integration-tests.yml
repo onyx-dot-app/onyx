@@ -114,6 +114,9 @@ jobs:
             reindex_port:
               - 'backend/onyx/background/celery/tasks/port/**'
               - 'backend/onyx/background/celery/tasks/docprocessing/**'
+              - 'backend/onyx/background/celery/tasks/beat_schedule.py'
+              - 'backend/onyx/background/celery/apps/docprocessing.py'
+              - 'backend/onyx/background/celery/apps/primary.py'
               - 'backend/onyx/db/port_attempt.py'
               - 'backend/onyx/db/port_orphan_candidate.py'
               - 'backend/onyx/db/swap_index.py'
@@ -859,10 +862,11 @@ jobs:
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK }}
           details: |
-            *Failed jobs:*
-            integration-tests (tests/reindex_port)
+            *The daily reindex port run failed.*
+            Check the linked workflow run for the failed job.
 
             *To reproduce locally:*
-            `pytest backend/tests/integration/tests/reindex_port`
+            Start the Onyx services, then run:
+            `uv run --env-file .vscode/.env pytest backend/tests/integration/tests/reindex_port`
           title: "🚨 Daily reindex port integration tests failed!"
           ref-name: ${{ github.ref_name }}
