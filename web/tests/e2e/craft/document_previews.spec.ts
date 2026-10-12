@@ -4,12 +4,20 @@ import { CraftDocumentPreviewPage } from "@tests/e2e/pages/CraftDocumentPreviewP
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import type { OutputInventory } from "@/app/craft/types/streamingTypes";
+import type { Settings } from "@/lib/settings/types";
 
 test("renders PDF pages and retains document navigation across tabs and panel closure", async ({
   page,
 }, testInfo) => {
   await page.context().clearCookies();
   await loginAsWorkerUser(page, testInfo.workerIndex);
+  const settingsResponse = await page.request.get("/api/settings");
+  expect(settingsResponse.ok()).toBe(true);
+  const settings: Settings = await settingsResponse.json();
+  test.skip(
+    settings.onyx_craft_enabled !== true,
+    "Onyx Craft is disabled in this environment"
+  );
   const api = new OnyxApiClient(page.request);
   const sessionId = await api.createCraftSession("E2E document previews");
   const preview = new CraftDocumentPreviewPage(page);
