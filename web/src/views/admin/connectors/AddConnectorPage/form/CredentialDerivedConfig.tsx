@@ -3,11 +3,12 @@
 import { useEffect } from "react";
 import { useFormikContext } from "formik";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 
 export interface CredentialDerivedConfigProps {
   configuration: ConnectionConfiguration;
-  credential: Credential<unknown> | null;
+  /** A saved credential or a typed account: both carry their values. */
+  credential: CredentialValues | null;
 }
 
 /**

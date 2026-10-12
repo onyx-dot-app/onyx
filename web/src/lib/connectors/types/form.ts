@@ -149,6 +149,6 @@ export interface ConnectionConfiguration {
    * field (usually hidden), so that the checks and the create request send it.
    */
   configFromCredential?: (
-    credential: Credential<unknown> | null
+    credential: CredentialValues | null
   ) => Record<string, string | undefined>;
 }

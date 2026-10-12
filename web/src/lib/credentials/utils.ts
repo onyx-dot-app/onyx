@@ -4,6 +4,7 @@ import type {
   Credential,
   CredentialRef,
   CredentialRequest,
+  CredentialValues,
   DraftCredential,
   SavedDraftCredential,
 } from "@/lib/credentials/types";
@@ -31,7 +32,7 @@ import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
  * credential JSON masked. Mirrors `google_credential_kind` in the backend.
  */
 export function googleCredentialKind(
-  credential: Credential<unknown> | null
+  credential: CredentialValues | null
 ): "service_account" | "oauth" | undefined {
   const credentialJson = credential?.credential_json;
   if (typeof credentialJson !== "object" || credentialJson === null) {
