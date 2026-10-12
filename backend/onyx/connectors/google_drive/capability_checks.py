@@ -897,19 +897,24 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
 class _SharedDriveListingCheck(_GoogleDriveCheck):
     """Lists every shared drive the connector would read, as options for the
     shared drive field. Separate from ``google_drive_shared_drives``, which
-    reads one drive to validate."""
+    reads one drive to validate. Applies only when the config indexes shared
+    drives."""
 
     def __init__(self) -> None:
         super().__init__(
             check_id="google_drive_shared_drive_listing",
             display_name="Lists the visible shared drives",
             discovery=True,
+            requires_connector_config=True,
             remediation=(
                 "Service account: make the primary admin a Workspace admin who "
                 "can manage shared drives. OAuth: the connected user must be a "
                 "member of the shared drives to index."
             ),
         )
+
+    def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
+        return _shared_drives_in_scope(config)
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -937,15 +942,15 @@ def _shared_drive_url(drive: GoogleSharedDrive) -> str:
 
 
 class _UserCountCheck(_GoogleDriveCheck):
-    """Counts the Workspace users a service account lists, which indexing acts
-    as one by one. It does not probe each user, so a user without Google Drive
-    still counts. A config with specific user emails acts as those users only,
-    so the count does not apply to it."""
+    """Counts the Workspace users a service account lists: the users whose My
+    Drives indexing reads. It does not probe each user, so a user without
+    Google Drive still counts. Applies only when the config indexes every
+    user's My Drive: not with specific requests or specific user emails."""
 
     def __init__(self) -> None:
         super().__init__(
             check_id="google_drive_user_count",
-            display_name="Counts the Workspace users",
+            display_name="Counts the visible organization users",
             discovery=True,
             credential_kind=GoogleCredentialKind.SERVICE_ACCOUNT,
             remediation=(
@@ -956,7 +961,11 @@ class _UserCountCheck(_GoogleDriveCheck):
         )
 
     def applies_to(self, config: GoogleDriveConnectorConfig) -> bool:
-        return not config.specific_user_emails
+        return (
+            config.include_my_drives
+            and not has_specific_requests(config)
+            and not config.specific_user_emails
+        )
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         ops: GoogleDriveSourceOperations = _gateway(context)
@@ -968,7 +977,7 @@ class _UserCountCheck(_GoogleDriveCheck):
             ops.authenticate()
             finding: CountFinding = bounded_count(
                 ops.list_user_emails(),
-                key=CheckFindingKey.IMPERSONATABLE_USERS,
+                key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS,
                 cap=MAX_FINDING_OPTIONS,
             )
         return CheckOutput(findings=[finding])

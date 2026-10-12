@@ -50,6 +50,8 @@ _ADMIN = f"admin@{_DOMAIN}"
 _SA = GoogleCredentialKind.SERVICE_ACCOUNT
 _OAUTH = GoogleCredentialKind.OAUTH
 _FOLDER_URL = "https://drive.google.com/drive/folders/{}"
+_SHARED_DRIVES: dict[str, Any] = {"include_shared_drives": True}
+_MY_DRIVES: dict[str, Any] = {"include_my_drives": True}
 _CREDENTIAL_KEYS = {
     _SA: DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
     _OAUTH: DB_CREDENTIALS_DICT_TOKEN_KEY,
@@ -526,7 +528,7 @@ def test_shared_drive_listing_offers_each_drive_url_for_the_field() -> None:
         GoogleSharedDrive(id="d2", name=""),
     )
 
-    result = _run("google_drive_shared_drive_listing", ops)
+    result = _run("google_drive_shared_drive_listing", ops, _SHARED_DRIVES)
 
     assert result.status == CapabilityCheckStatus.PASSED
     assert result.findings == [
@@ -544,11 +546,46 @@ def test_shared_drive_listing_offers_each_drive_url_for_the_field() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "config, applies",
+    [
+        ({"include_shared_drives": True}, True),
+        ({"shared_drive_urls": _FOLDER_URL.format("d1")}, True),
+        ({"include_my_drives": True}, False),
+        ({"include_files_shared_with_me": True}, False),
+        # A specific request turns the general toggles off.
+        ({"include_shared_drives": True, "my_drive_emails": _ADMIN}, False),
+    ],
+    ids=[
+        "shared-drives",
+        "shared-drive-urls",
+        "my-drives-only",
+        "shared-with-me-only",
+        "specific-request-without-drives",
+    ],
+)
+def test_shared_drive_listing_applies_only_when_shared_drives_are_indexed(
+    config: dict[str, Any], applies: bool
+) -> None:
+    ops = _ops()
+    ops.list_named_drives.side_effect = _listing(GoogleSharedDrive(id="d1", name="A"))
+
+    result = _run("google_drive_shared_drive_listing", ops, config)
+
+    assert result.applicable is applies
+    if applies:
+        assert result.findings
+    else:
+        assert result.status == CapabilityCheckStatus.SKIPPED
+        assert result.findings == []
+        ops.list_named_drives.assert_not_called()
+
+
 def test_shared_drive_listing_values_parse_back_to_the_drive_ids() -> None:
     ops = _ops()
     ops.list_named_drives.side_effect = _listing(GoogleSharedDrive(id="d1", name="A"))
 
-    (finding,) = _run("google_drive_shared_drive_listing", ops).findings
+    (finding,) = _run("google_drive_shared_drive_listing", ops, _SHARED_DRIVES).findings
 
     assert isinstance(finding, OptionsFinding)
     urls = ",".join(option.value for option in finding.options)
@@ -559,7 +596,7 @@ def test_shared_drive_listing_lists_as_the_oauth_user() -> None:
     ops = _ops(_OAUTH)
     ops.list_named_drives.side_effect = _listing()
 
-    result = _run("google_drive_shared_drive_listing", ops, kind=_OAUTH)
+    result = _run("google_drive_shared_drive_listing", ops, _SHARED_DRIVES, kind=_OAUTH)
 
     assert result.status == CapabilityCheckStatus.PASSED
     ops.list_named_drives.assert_called_once_with(
@@ -574,7 +611,7 @@ def test_shared_drive_listing_stops_at_the_option_cap() -> None:
         for number in range(5000)
     )
 
-    (finding,) = _run("google_drive_shared_drive_listing", ops).findings
+    (finding,) = _run("google_drive_shared_drive_listing", ops, _SHARED_DRIVES).findings
 
     assert isinstance(finding, OptionsFinding)
     assert len(finding.options) == MAX_FINDING_OPTIONS
@@ -585,7 +622,7 @@ def test_shared_drive_listing_403_fails_and_leaves_the_verdict_alone() -> None:
     ops = _ops()
     ops.list_named_drives.side_effect = _http_error(403)
 
-    result = _run("google_drive_shared_drive_listing", ops)
+    result = _run("google_drive_shared_drive_listing", ops, _SHARED_DRIVES)
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert "cannot list the shared drives" in result.message
@@ -597,11 +634,11 @@ def test_shared_drive_listing_403_fails_and_leaves_the_verdict_alone() -> None:
 
 
 def test_user_count_counts_the_listed_users() -> None:
-    result = _run("google_drive_user_count", _ops())
+    result = _run("google_drive_user_count", _ops(), _MY_DRIVES)
 
     assert result.status == CapabilityCheckStatus.PASSED
     assert result.findings == [
-        CountFinding(key=CheckFindingKey.IMPERSONATABLE_USERS, count=2)
+        CountFinding(key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS, count=2)
     ]
 
 
@@ -611,11 +648,11 @@ def test_user_count_stops_at_the_cap() -> None:
         f"user{number}@{_DOMAIN}" for number in range(5000)
     )
 
-    result = _run("google_drive_user_count", ops)
+    result = _run("google_drive_user_count", ops, _MY_DRIVES)
 
     assert result.findings == [
         CountFinding(
-            key=CheckFindingKey.IMPERSONATABLE_USERS,
+            key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS,
             count=MAX_FINDING_OPTIONS,
             at_least=True,
         )
@@ -623,27 +660,42 @@ def test_user_count_stops_at_the_cap() -> None:
 
 
 @pytest.mark.parametrize(
-    "config, kind",
+    "config, kind, applies",
     [
-        ({"specific_user_emails": _ADMIN}, _SA),
-        ({}, _OAUTH),
+        (_MY_DRIVES, _SA, True),
+        ({**_MY_DRIVES, "include_shared_drives": True}, _SA, True),
+        ({"include_shared_drives": True}, _SA, False),
+        ({"include_files_shared_with_me": True}, _SA, False),
+        ({**_MY_DRIVES, "specific_user_emails": _ADMIN}, _SA, False),
+        ({**_MY_DRIVES, "my_drive_emails": _ADMIN}, _SA, False),
+        (_MY_DRIVES, _OAUTH, False),
     ],
-    ids=["specific-users", "oauth"],
+    ids=[
+        "my-drives",
+        "my-and-shared-drives",
+        "shared-drives-only",
+        "shared-with-me-only",
+        "specific-users",
+        "specific-my-drives",
+        "oauth",
+    ],
 )
-def test_user_count_applies_only_when_a_service_account_lists_every_user(
-    config: dict[str, Any], kind: GoogleCredentialKind
+def test_user_count_applies_only_when_every_my_drive_is_indexed(
+    config: dict[str, Any], kind: GoogleCredentialKind, applies: bool
 ) -> None:
     result = _run("google_drive_user_count", _ops(kind), config, kind=kind)
 
-    assert result.applicable is False
-    assert result.findings == []
+    assert result.applicable is applies
+    if not applies:
+        assert result.status == CapabilityCheckStatus.SKIPPED
+        assert result.findings == []
 
 
 def test_user_count_403_fails_and_leaves_the_verdict_alone() -> None:
     ops = _ops()
     ops.list_user_emails.side_effect = _http_error(403)
 
-    result = _run("google_drive_user_count", ops)
+    result = _run("google_drive_user_count", ops, _MY_DRIVES)
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.discovery is True

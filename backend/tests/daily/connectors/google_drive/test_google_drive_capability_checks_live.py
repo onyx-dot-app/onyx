@@ -10,6 +10,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckFindingKey,
     CountFinding,
     OptionsFinding,
 )
@@ -102,9 +103,14 @@ def test_checks_pass_on_the_test_workspace(
         for option in finding.options
     ]
     assert SHARED_DRIVE_1_URL in drive_urls
-    (user_count,) = results["google_drive_user_count"].findings
-    assert isinstance(user_count, CountFinding)
-    assert user_count.count >= 4
+    # The user count applies only when every user's My Drive is indexed.
+    user_count_result = results["google_drive_user_count"]
+    assert user_count_result.applicable is (config.get("include_my_drives") is True)
+    if user_count_result.applicable:
+        (user_count,) = user_count_result.findings
+        assert isinstance(user_count, CountFinding)
+        assert user_count.key == CheckFindingKey.VISIBLE_ORGANIZATION_USERS
+        assert user_count.count >= 4
 
 
 def test_misplaced_and_unknown_targets_fail(
