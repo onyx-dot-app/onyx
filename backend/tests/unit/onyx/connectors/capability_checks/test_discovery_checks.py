@@ -7,6 +7,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks import findings_setting
 from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckState,
     DraftCheckStateKind,
     decide_draft_check_state,
 )
@@ -15,11 +16,13 @@ from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
+    CapabilityCheckResult,
     CapabilityCheckStatus,
     CapabilityVerdict,
     CheckFinding,
     CheckFindingKey,
     CountFinding,
+    OptionsFinding,
     aggregate_capability_verdict,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
@@ -82,22 +85,22 @@ def _broken() -> None:
 
 
 def test_a_discovery_check_is_never_required() -> None:
-    check = _Check("spaces", _found, discovery=True, required=True)
+    check: _Check = _Check("spaces", _found, discovery=True, required=True)
 
     assert check.required is False
-    result = run_capability_checks([check], _context())[0]
+    result: CapabilityCheckResult = run_capability_checks([check], _context())[0]
     assert result.discovery is True
     assert result.required is False
 
 
 def test_discovery_runs_after_validation_whatever_the_registration_order() -> None:
     order: list[str] = []
-    checks = [
+    checks: list[CapabilityCheck] = [
         _Check("spaces", _found, discovery=True, order=order),
         _Check("token", _passes, order=order),
     ]
 
-    results = run_capability_checks(checks, _context())
+    results: list[CapabilityCheckResult] = run_capability_checks(checks, _context())
 
     assert order == ["token", "spaces"]
     assert [result.check_id for result in results] == ["token", "spaces"]
@@ -106,12 +109,12 @@ def test_discovery_runs_after_validation_whatever_the_registration_order() -> No
 
 def test_discovery_does_not_run_after_a_required_failure() -> None:
     order: list[str] = []
-    checks = [
+    checks: list[CapabilityCheck] = [
         _Check("token", _denied, order=order),
         _Check("spaces", _found, discovery=True, order=order),
     ]
 
-    results = run_capability_checks(checks, _context())
+    results: list[CapabilityCheckResult] = run_capability_checks(checks, _context())
 
     assert order == ["token"]
     assert results[1].status == CapabilityCheckStatus.SKIPPED
@@ -128,7 +131,7 @@ def test_discovery_does_not_run_with_findings_off(
     )
     order: list[str] = []
 
-    results = run_capability_checks(
+    results: list[CapabilityCheckResult] = run_capability_checks(
         [_Check("spaces", _found, discovery=True, order=order)], _context()
     )
 
@@ -140,7 +143,7 @@ def test_discovery_does_not_run_with_findings_off(
 def test_a_failed_discovery_check_does_not_change_the_verdict(
     discovery_run: Callable[[], None],
 ) -> None:
-    results = run_capability_checks(
+    results: list[CapabilityCheckResult] = run_capability_checks(
         [_Check("token", _passes), _Check("spaces", discovery_run, discovery=True)],
         _context(),
     )
@@ -149,7 +152,7 @@ def test_a_failed_discovery_check_does_not_change_the_verdict(
 
 
 def test_only_discovery_results_aggregate_to_skipped() -> None:
-    results = run_capability_checks(
+    results: list[CapabilityCheckResult] = run_capability_checks(
         [_Check("spaces", _found, discovery=True)], _context()
     )
 
@@ -158,7 +161,7 @@ def test_only_discovery_results_aggregate_to_skipped() -> None:
 
 
 def test_the_draft_state_marks_a_discovery_check() -> None:
-    state = decide_draft_check_state(
+    state: DraftCheckState = decide_draft_check_state(
         _Check("spaces", _found, discovery=True), _context()
     )
 
@@ -176,7 +179,7 @@ def _numbers(read: list[int]) -> Iterator[int]:
 def test_bounded_options_stop_at_the_cap() -> None:
     read: list[int] = []
 
-    finding = bounded_options(
+    finding: OptionsFinding = bounded_options(
         _numbers(read),
         key=CheckFindingKey.VISIBLE_SPACES,
         field_name="spaces",
@@ -192,7 +195,7 @@ def test_bounded_options_stop_at_the_cap() -> None:
 
 
 def test_bounded_options_under_the_cap_are_complete() -> None:
-    finding = bounded_options(
+    finding: OptionsFinding = bounded_options(
         iter(["a", "b"]),
         key=CheckFindingKey.READABLE_CHANNELS,
         field_name="channels",
@@ -209,10 +212,10 @@ def test_bounded_options_under_the_cap_are_complete() -> None:
 def test_bounded_count_reports_a_lower_bound_at_the_cap() -> None:
     read: list[int] = []
 
-    at_cap = bounded_count(
+    at_cap: CountFinding = bounded_count(
         _numbers(read), key=CheckFindingKey.IMPERSONATABLE_USERS, cap=100
     )
-    under_cap = bounded_count(
+    under_cap: CountFinding = bounded_count(
         iter(range(7)), key=CheckFindingKey.IMPERSONATABLE_USERS, cap=100
     )
 

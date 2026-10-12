@@ -22,6 +22,7 @@ from onyx.configs.constants import DocumentSource, OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_CHECK_TIMEOUT_SECONDS,
     DRAFT_RUN_TTL_SECONDS,
+    DraftCheckState,
     DraftCheckStateKind,
     DraftRunPairScope,
     DraftRunStatus,
@@ -279,9 +280,15 @@ def run_draft_capability_checks_task(
         task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
         return
     snapshot = run.snapshot
-    pending = [
-        check for check in snapshot.checks if check.state == DraftCheckStateKind.PENDING
-    ]
+    # In the order the runner executes them: discovery checks last.
+    pending: list[DraftCheckState] = sorted(
+        (
+            check
+            for check in snapshot.checks
+            if check.state == DraftCheckStateKind.PENDING
+        ),
+        key=lambda check: check.discovery,
+    )
     pending_result_keys: list[str] = list(
         dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
     )
