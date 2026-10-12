@@ -376,7 +376,10 @@ Interactive settlement rechecks ownership after reading history. A changed owner
 Successor assistant packets stay in the live transcript, where later snapshots replace the same parts.
 Only confirmed persistence permits canonical history replacement. Neither path loads runtime metadata or changes navigation.
 A failed read preserves the local transcript and settlement identity. The retry action resumes that same settlement.
-Scheduled transport failures and terminal error packets reconcile saved results through the existing run owner.
+Interactive and scheduled observers reconnect after transport failures while their backend owner remains active.
+A failed start keeps ownership until its pending Stop request finishes. Discarding a failed queued start observes any accepted backend turn before dispatching another prompt.
+Connection loss alone never starts completion handling. Terminal packets or backend completion evidence start canonical reconciliation.
+Scheduled terminal error packets reconcile saved results through the existing run owner.
 Failed and skipped scheduled runs also reload saved history, but never grant queue permission.
 A failed history read preserves the displayed transcript and the existing retry action.
 Failed settlement or queued-start recovery disables ordinary submission until the user retries or discards it.
@@ -391,6 +394,7 @@ Session deletion stops local observation only after the server confirms deletion
 Provider attachment pauses while Stop is pending and resumes when stopping clears, including after a failed request.
 Interactive settlement reads the known turn's terminal outcome before replacing history or granting queue permission.
 Backend failures block queued prompts even after stream disconnection. Unknown outcomes require explicit recovery.
+Expired terminal records require a page refresh to clear local recovery state. Saved history remains; unsent local queues do not.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
 `CraftStreamingProvider` owns that hook and is mounted by `web/src/providers/AppProvider.tsx` inside the authenticated app provider.
 The provider also watches external interactive turns for visible sessions and sessions with queued prompts.

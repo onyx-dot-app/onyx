@@ -17,6 +17,7 @@ import {
   processSSEStream,
   fetchSession,
   fetchScheduledRunEventStream,
+  fetchScheduledRunContext,
   RateLimitedError,
 } from "@/app/craft/services/apiServices";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
@@ -813,13 +814,7 @@ export function useBuildStreaming({
               });
             }
 
-            if (isInterrupting) {
-              // While interrupting, defer settlement to reconcile (settling now races the
-              // in-flight cancel → "Concurrent turn in flight"); just clear persisted streamItems.
-              updateSessionData(sessionId, { streamItems: [] });
-            } else {
-              updateSessionData(sessionId, { streamItems: [] });
-            }
+            updateSessionData(sessionId, { streamItems: [] });
             options?.onPromptResponse?.();
             break;
           }
@@ -965,7 +960,6 @@ export function useBuildStreaming({
         );
       };
       let settledFromPromptResponse = false;
-      let transportError = false;
       const processor = createStreamPacketProcessor(sessionId, {
         signal,
         expectedTurnId: turnId,
@@ -987,53 +981,51 @@ export function useBuildStreaming({
       });
 
       try {
-        while (!signal.aborted) {
-          const response = await fetchTurnEventStream(
-            sessionId,
-            turnId,
-            signal
-          );
-          if (!ownsAttachment()) return;
-          if (!response) {
-            void processor.finalizeOutputs();
-            const current = useBuildSessionStore
-              .getState()
-              .sessions.get(sessionId);
-            if (current)
-              void useBuildSessionStore
-                .getState()
-                .beginTurnSettlement(
-                  sessionId,
-                  { kind: "interactive", turnId },
-                  existingSession?.turnGeneration ?? 0
-                );
+        while (ownsAttachment()) {
+          if (
+            useBuildSessionStore.getState().sessions.get(sessionId)
+              ?.isInterrupting
+          )
             return;
+          try {
+            const response = await fetchTurnEventStream(
+              sessionId,
+              turnId,
+              signal
+            );
+            if (!ownsAttachment()) return;
+            if (response)
+              await processSSEStream(response, processor.processPacket);
+          } catch (error) {
+            if (
+              signal.aborted ||
+              (error instanceof Error && error.name === "AbortError")
+            )
+              return;
+            console.warn("[Streaming] Turn attach stream error:", error);
           }
-          await processSSEStream(response, processor.processPacket);
           const current = useBuildSessionStore
             .getState()
             .sessions.get(sessionId);
           if (
-            signal.aborted ||
+            !ownsAttachment() ||
             settledFromPromptResponse ||
             current?.error ||
-            current?.isInterrupting ||
-            current?.activeTurnId !== turnId ||
-            current.instanceId !== existingSession?.instanceId ||
-            current.turnGeneration !== existingSession?.turnGeneration
+            current?.isInterrupting
           )
             return;
-          const active = await fetchActiveTurn(sessionId);
+          let active: Awaited<ReturnType<typeof fetchActiveTurn>>;
+          try {
+            active = await fetchActiveTurn(sessionId);
+          } catch (error) {
+            if (!ownsAttachment()) return;
+            console.warn("[Streaming] Failed to check attached turn:", error);
+            await sleep(STREAM_RECONNECT_INTERVAL_MS);
+            continue;
+          }
           const owned = useBuildSessionStore.getState().sessions.get(sessionId);
-          if (
-            signal.aborted ||
-            owned?.instanceId !== current.instanceId ||
-            owned.turnGeneration !== current.turnGeneration ||
-            owned.activeTurnId !== turnId
-          )
-            return;
+          if (!ownsAttachment() || !owned || owned.isInterrupting) return;
           if (!active || active.turn_id !== turnId) {
-            void processor.finalizeOutputs();
             void useBuildSessionStore
               .getState()
               .beginTurnSettlement(
@@ -1045,33 +1037,9 @@ export function useBuildStreaming({
           }
           await sleep(STREAM_RECONNECT_INTERVAL_MS);
         }
-      } catch (err) {
-        if ((err as Error).name === "AbortError") {
-          return;
-        }
-
-        transportError = true;
-        console.warn("[Streaming] Turn attach stream error:", err);
       } finally {
         processor.cancelOutputs();
         if (ownsAttachment()) {
-          const currentSession = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId);
-          if (
-            !currentSession?.isInterrupting &&
-            !currentSession?.turnSettlement
-          ) {
-            if (transportError) {
-              await useBuildSessionStore
-                .getState()
-                .beginTurnSettlement(
-                  sessionId,
-                  { kind: "interactive", turnId },
-                  existingSession?.turnGeneration ?? 0
-                );
-            }
-          }
           if (!settledFromPromptResponse) {
             onSettled?.();
           }
@@ -1186,6 +1154,11 @@ export function useBuildStreaming({
         if (!ownsTurn(turn.turn_id)) return;
         await streamTurnEvents(sessionId, turn.turn_id, controller.signal);
       } catch (err) {
+        // A session-wide Stop must finish before another turn can start.
+        const pendingStop = stopRequests.get(
+          `${existingSession?.instanceId}:${generation}`
+        );
+        if (pendingStop) await pendingStop;
         if (!ownsTurn()) return;
         if (queuedMessageId !== undefined) {
           const current = useBuildSessionStore
@@ -1366,48 +1339,48 @@ export function useBuildStreaming({
       });
 
       try {
-        const response = await fetchScheduledRunEventStream(sessionId, signal);
-        if (!ownsScheduledStream()) return;
-        await processSSEStream(response, processor.processPacket);
-        if (!ownsScheduledStream()) return;
-        void processor.finalizeOutputs();
-      } catch (err) {
-        if (!ownsScheduledStream() || (err as Error).name === "AbortError") {
-          return;
+        while (ownsScheduledStream()) {
+          try {
+            const response = await fetchScheduledRunEventStream(
+              sessionId,
+              signal
+            );
+            if (!ownsScheduledStream()) return;
+            await processSSEStream(response, processor.processPacket);
+          } catch (error) {
+            if (
+              signal.aborted ||
+              (error instanceof Error && error.name === "AbortError")
+            )
+              return;
+            console.warn("[Streaming] Scheduled run stream error:", error);
+          }
+          if (!ownsScheduledStream() || settledFromTerminalPacket) return;
+          let run: Awaited<ReturnType<typeof fetchScheduledRunContext>>;
+          try {
+            run = await fetchScheduledRunContext(sessionId);
+          } catch (error) {
+            if (!ownsScheduledStream()) return;
+            console.warn("[Streaming] Failed to check scheduled run:", error);
+            await sleep(STREAM_RECONNECT_INTERVAL_MS);
+            continue;
+          }
+          if (!ownsScheduledStream() || run.run_id !== runId) return;
+          if (run.status !== "RUNNING" && run.status !== "QUEUED") {
+            await useBuildSessionStore
+              .getState()
+              .beginTurnSettlement(
+                sessionId,
+                { kind: "scheduled", runId },
+                owner.turnGeneration
+              );
+            return;
+          }
+          await sleep(STREAM_RECONNECT_INTERVAL_MS);
         }
-
-        console.warn("[Streaming] Scheduled run stream error:", err);
-        await useBuildSessionStore
-          .getState()
-          .beginTurnSettlement(
-            sessionId,
-            { kind: "scheduled", runId },
-            owner.turnGeneration
-          );
       } finally {
         processor.cancelOutputs();
-        if (ownsScheduledStream()) {
-          // The scheduled worker owns persistence after the viewer reaches EOF.
-          const currentStatus = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId)?.status;
-          if (currentStatus === "running") {
-            const current = useBuildSessionStore
-              .getState()
-              .sessions.get(sessionId);
-            if (current)
-              void useBuildSessionStore
-                .getState()
-                .beginTurnSettlement(
-                  sessionId,
-                  { kind: "scheduled", runId },
-                  owner.turnGeneration
-                );
-          }
-          if (!settledFromTerminalPacket) {
-            onSettled?.();
-          }
-        }
+        if (ownsScheduledStream() && !settledFromTerminalPacket) onSettled?.();
       }
     },
     [updateSessionData, clearStreamItems, createStreamPacketProcessor]

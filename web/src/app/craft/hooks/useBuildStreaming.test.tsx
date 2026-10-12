@@ -54,7 +54,7 @@ const originalLoadSession = useBuildSessionStore.getState().loadSession;
 describe("useBuildStreaming thinking packets", () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     useBuildSessionStore.setState({
       currentSessionId: null,
       sessions: new Map(),
@@ -791,7 +791,9 @@ describe("useBuildStreaming thinking packets", () => {
         outputPanelOpen: true,
         activePanelTabId: "file:outputs/missed.pptx",
       });
-      expect(fetchOutputInventory).toHaveBeenCalledTimes(2);
+      expect(fetchOutputInventory).toHaveBeenCalledTimes(
+        settlement === "terminal" ? 2 : 1
+      );
     }
   );
 
@@ -2126,6 +2128,53 @@ describe("useBuildStreaming thinking packets", () => {
     ).toBe(head?.id);
   });
 
+  it("keeps a rejected start owned until its pending Stop finishes", async () => {
+    let rejectStart: ((error: Error) => void) | undefined;
+    let finishStop: (() => void) | undefined;
+    jest.mocked(createTurn).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectStart = reject;
+        })
+    );
+    jest.mocked(interruptMessageStream).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishStop = resolve;
+        })
+    );
+    const { result } = renderHook(() => useBuildStreaming());
+    let sending: Promise<void> | undefined;
+    let stopping: Promise<void> | undefined;
+    act(() => {
+      sending = result.current.streamMessage(sessionId, "start request");
+      stopping = result.current.interruptStreaming(sessionId);
+    });
+    await act(async () => {
+      rejectStart?.(new Error("Start response lost"));
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "running",
+      isInterrupting: true,
+      activeTurnLocalOwner: true,
+    });
+    await act(async () => {
+      finishStop?.();
+      await stopping;
+      await sending;
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "failed",
+      error: "Start response lost",
+      isInterrupting: false,
+      activeTurnLocalOwner: false,
+    });
+  });
+
   it("keeps Stop intent until a pending POST accepts, then stops that accepted turn", async () => {
     let accept:
       | ((turn: Awaited<ReturnType<typeof createTurn>>) => void)
@@ -2563,7 +2612,7 @@ describe("useBuildStreaming thinking packets", () => {
     ]);
   });
 
-  it("hands a failed EOF status check to completion polling before releasing queued work", async () => {
+  it("retries a failed EOF status check before releasing queued work", async () => {
     const active: NonNullable<Awaited<ReturnType<typeof fetchActiveTurn>>> = {
       session_id: sessionId,
       turn_id: "turn-thinking",
@@ -2597,7 +2646,7 @@ describe("useBuildStreaming thinking packets", () => {
       useBuildSessionStore.getState().sessions.get(sessionId)?.queuedMessages
     ).toHaveLength(1);
     await act(async () => {
-      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(2000);
       await sending;
     });
     expect(createTurn).toHaveBeenCalledTimes(2);
@@ -2610,12 +2659,38 @@ describe("useBuildStreaming thinking packets", () => {
         ?.outputInventory?.["outputs/recovered.pdf"]
     ).toBeDefined();
   });
-  it("retains queued work until an explicit retry recovers failed completion polling", async () => {
+  it("reconnects a long running turn after transport loss and dispatches queued work once", async () => {
+    let complete: (() => void) | undefined;
+    let progress: (() => void) | undefined;
+    let closeQueued: (() => void) | undefined;
+    jest.mocked(fetchActiveTurn).mockResolvedValue({
+      session_id: sessionId,
+      turn_id: "turn-thinking",
+      status: "RUNNING",
+      turn_index: 0,
+    });
     jest
-      .mocked(fetchActiveTurn)
-      .mockRejectedValueOnce(new Error("status offline"))
-      .mockRejectedValueOnce(new Error("completion offline"));
-    jest.mocked(processSSEStream).mockResolvedValue(undefined);
+      .mocked(processSSEStream)
+      .mockRejectedValueOnce(new Error("Proxy connection lost"))
+      .mockImplementationOnce(async (_response, onPacket) => {
+        await new Promise<void>((resolve) => {
+          const progressPacket = {
+            type: "agent_message",
+            content: { type: "text", text: "Still working" },
+            _meta: { partId: "live-answer" },
+          };
+          progress = () => onPacket(progressPacket);
+          complete = () => {
+            onPacket({ type: "prompt_response" });
+            resolve();
+          };
+        });
+      })
+      .mockImplementationOnce(async () => {
+        await new Promise<void>((resolve) => {
+          closeQueued = resolve;
+        });
+      });
     const { result } = renderHook(() => useBuildStreaming());
     let sending: Promise<void> | undefined;
     act(() => {
@@ -2625,26 +2700,46 @@ describe("useBuildStreaming thinking packets", () => {
       useBuildSessionStore.getState().enqueueMessage(sessionId, "queued", []);
     });
     await act(async () => {
-      await sending;
+      await jest.advanceTimersByTimeAsync(1000);
     });
-    expect(createTurn).toHaveBeenCalledTimes(1);
+    expect(fetchTurnEventStream).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(31000);
+    });
+    act(() => progress?.());
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)
     ).toMatchObject({
-      turnSettlement: expect.objectContaining({ phase: "failed" }),
-      queuedMessages: [
-        expect.objectContaining({ text: "queued", phase: "waiting" }),
-      ],
+      status: "running",
+      activeTurnId: "turn-thinking",
+      turnSettlement: null,
     });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems
+    ).toEqual([
+      expect.objectContaining({
+        content: "Still working",
+        partId: "live-answer",
+      }),
+    ]);
+    expect(fetchMessages).not.toHaveBeenCalled();
+    expect(createTurn).toHaveBeenCalledTimes(1);
     jest.mocked(fetchActiveTurn).mockResolvedValue(null);
     await act(async () => {
-      await useBuildSessionStore.getState().retryTurnSettlement(sessionId);
+      complete?.();
+      await sending;
     });
     expect(createTurn).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(createTurn).mock.calls[1]?.[1]).toBe("queued");
     expect(
       useBuildSessionStore.getState().sessions.get(sessionId)?.queuedMessages
     ).toEqual([]);
+    await act(async () => {
+      useBuildSessionStore.getState().abortSession(sessionId);
+      closeQueued?.();
+    });
   });
+
   it("settles a failed stream after the Stop request has acknowledged", async () => {
     let failRead: ((error: Error) => void) | undefined;
     jest.mocked(processSSEStream).mockImplementationOnce(
@@ -2775,7 +2870,7 @@ describe("useBuildStreaming thinking packets", () => {
       ).toMatchObject({
         status: "running",
         error: null,
-        turnSettlement: { phase: "reconciling" },
+        turnSettlement: null,
       });
       await act(async () => {
         await jest.advanceTimersByTimeAsync(1000);
@@ -2798,6 +2893,130 @@ describe("useBuildStreaming thinking packets", () => {
       }
     }
   );
+  it.each(["RUNNING", "QUEUED"] as const)(
+    "reconnects a scheduled worker that remains %s beyond thirty seconds",
+    async (status) => {
+      const run = {
+        run_id: "scheduled-run",
+        task_id: "task",
+        task_name: "Task",
+        started_at: "2026-10-12",
+        finished_at: null,
+      };
+      jest
+        .mocked(fetchScheduledRunContext)
+        .mockResolvedValue({ ...run, status });
+      let progress: (() => void) | undefined;
+      let complete: (() => void) | undefined;
+      jest
+        .mocked(processSSEStream)
+        .mockRejectedValueOnce(new Error("Scheduled proxy disconnected"))
+        .mockImplementationOnce(async (_response, onPacket) => {
+          await new Promise<void>((resolve) => {
+            const progressPacket = {
+              type: "agent_message",
+              content: { type: "text", text: "Worker progress" },
+              _meta: { partId: "worker-part" },
+            };
+            progress = () => onPacket(progressPacket);
+            complete = () => {
+              onPacket({ type: "prompt_response" });
+              resolve();
+            };
+          });
+        });
+      const { result } = renderHook(() => useBuildStreaming());
+      let streaming: Promise<void> | undefined;
+      act(() => {
+        streaming = result.current.streamScheduledRunEvents(
+          sessionId,
+          "scheduled-run",
+          new AbortController().signal
+        );
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(1000);
+      });
+      expect(fetchScheduledRunEventStream).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(31000);
+      });
+      act(() => progress?.());
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({ status: "running", turnSettlement: null });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems
+      ).toEqual([
+        expect.objectContaining({
+          partId: "worker-part",
+          content: "Worker progress",
+        }),
+      ]);
+      expect(fetchMessages).not.toHaveBeenCalled();
+      jest
+        .mocked(fetchScheduledRunContext)
+        .mockResolvedValue({ ...run, status: "SUCCEEDED" });
+      await act(async () => {
+        complete?.();
+        await streaming;
+      });
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)?.turnSettlement
+          ?.phase
+      ).toBe("ready");
+      expect(createTurn).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["aborted", "superseded"] as const)(
+    "ends reconnect retry when the observer is %s",
+    async (ending) => {
+      jest
+        .mocked(processSSEStream)
+        .mockRejectedValueOnce(new Error("Disconnected"));
+      jest.mocked(fetchActiveTurn).mockResolvedValue({
+        session_id: sessionId,
+        turn_id: "turn-thinking",
+        status: "RUNNING",
+        turn_index: 0,
+      });
+      const controller = new AbortController();
+      const { result } = renderHook(() => useBuildStreaming());
+      let observing: Promise<void> | undefined;
+      act(() => {
+        observing = result.current.streamTurnEvents(
+          sessionId,
+          "turn-thinking",
+          controller.signal
+        );
+      });
+      await act(async () => {});
+      act(() => {
+        if (ending === "aborted") controller.abort();
+        else
+          useBuildSessionStore.getState().updateSessionData(sessionId, {
+            turnGeneration: 1,
+            activeTurnId: "new-owner",
+            activeTurnLocalOwner: true,
+          });
+      });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(31000);
+        await observing;
+      });
+      expect(fetchTurnEventStream).toHaveBeenCalledTimes(1);
+      expect(fetchMessages).not.toHaveBeenCalled();
+      if (ending === "superseded")
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+        ).toMatchObject({
+          activeTurnId: "new-owner",
+          activeTurnLocalOwner: true,
+        });
+    }
+  );
+
   it.each(["text", "thinking"] as const)(
     "restores an identified child %s prefix before applying its live snapshot",
     async (type) => {

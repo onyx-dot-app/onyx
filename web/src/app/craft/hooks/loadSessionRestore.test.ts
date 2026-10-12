@@ -2190,14 +2190,50 @@ describe("session history races and discarded queued starts", () => {
     }
   );
 
+  it("observes an accepted turn when its lost start response is discarded", async () => {
+    jest.useFakeTimers();
+    jest.mocked(api.fetchActiveTurn).mockResolvedValue(active);
+    const store = useBuildSessionStore.getState();
+    store.createSession(sessionId);
+    store.enqueueMessage(sessionId, "Lost response", []);
+    store.enqueueMessage(sessionId, "Next prompt", []);
+    const queued =
+      useBuildSessionStore.getState().sessions.get(sessionId)?.queuedMessages ??
+      [];
+    const head = queued[0];
+    if (!head) throw new Error("Missing queued fixture");
+    store.updateSessionData(sessionId, {
+      status: "failed",
+      error: "Lost start response",
+      turnGeneration: 3,
+      queuedMessages: queued.map((item) =>
+        item.id === head.id ? { ...item, phase: "failed" } : item
+      ),
+    });
+    store.removeQueuedMessage(sessionId, head.id);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(31_000);
+    });
+    expect(
+      useBuildSessionStore.getState().sessions.get(sessionId)
+    ).toMatchObject({
+      status: "running",
+      activeTurnId: active.turn_id,
+      activeTurnIndex: active.turn_index,
+      activeTurnLocalOwner: false,
+      turnSettlement: null,
+      queuedMessages: [
+        expect.objectContaining({ text: "Next prompt", phase: "waiting" }),
+      ],
+    });
+    expect(store.claimQueuedMessage(sessionId)).toBeNull();
+  });
+
   it("reconciles a discarded failed start before releasing the next queued prompt", async () => {
     jest.useFakeTimers();
     const history = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
     jest.mocked(api.fetchMessages).mockReturnValueOnce(history.promise);
-    jest
-      .mocked(api.fetchActiveTurn)
-      .mockResolvedValueOnce(active)
-      .mockResolvedValue(null);
+    jest.mocked(api.fetchActiveTurn).mockResolvedValue(null);
     const store = useBuildSessionStore.getState();
     store.createSession(sessionId);
     store.enqueueMessage(sessionId, "Failed head", []);
@@ -2227,9 +2263,7 @@ describe("session history races and discarded queued starts", () => {
       },
     });
     expect(api.fetchMessages).not.toHaveBeenCalled();
-    await act(async () => {
-      await jest.advanceTimersByTimeAsync(1000);
-    });
+    await act(async () => {});
     expect(api.fetchMessages).toHaveBeenCalledTimes(1);
     expect(store.claimQueuedMessage(sessionId)).toBeNull();
     history.resolve([]);

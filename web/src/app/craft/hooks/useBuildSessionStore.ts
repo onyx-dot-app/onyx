@@ -1195,9 +1195,7 @@ function reconcileCompletedTranscript(
           const activeTurn = await fetchActiveTurn(sessionId);
           if (!ownsCompletion()) return;
           successor =
-            activeTurn &&
-            owner.turnId !== null &&
-            activeTurn.turn_id !== owner.turnId
+            activeTurn && activeTurn.turn_id !== owner.turnId
               ? activeTurn
               : null;
           waiting = activeTurn !== null && !successor;
@@ -1231,7 +1229,7 @@ function reconcileCompletedTranscript(
           const activeTurn = await fetchActiveTurn(sessionId);
           if (!ownsCompletion()) return;
           if (activeTurn) {
-            if (owner.turnId === null || activeTurn.turn_id === owner.turnId) {
+            if (activeTurn.turn_id === owner.turnId) {
               await new Promise<void>((resolve) => setTimeout(resolve, 1000));
               continue;
             }
