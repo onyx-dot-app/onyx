@@ -986,7 +986,26 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
   test("a quantization change re-indexes with the chosen level", async ({
     page,
   }) => {
-    const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+    // Start from a known level so picking 1-bit is always a change.
+    const current = (await getCurrentSearchSettings(
+      page
+    )) as TestSearchSettings;
+    const servedSettings: TestSearchSettings = {
+      ...current,
+      vector_quantization: "none",
+    };
+    await page.route(CURRENT_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify(servedSettings),
+      });
+    });
+    await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
+      await route.fulfill({ status: 200, body: "null" });
+    });
+    const bodyPromise: Promise<Record<string, unknown>> = new Promise<
+      Record<string, unknown>
+    >((resolve) => {
       void page.route(SET_NEW_SETTINGS_API, async (route) => {
         resolve(
           JSON.parse(route.request().postData() ?? "{}") as Record<
@@ -998,7 +1017,7 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
       });
     });
 
-    const indexSettings = new IndexSettingsPage(page);
+    const indexSettings: IndexSettingsPage = new IndexSettingsPage(page);
     await indexSettings.goto();
     await indexSettings.selectVectorQuantization("1-bit");
 
@@ -1008,7 +1027,7 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
     await indexSettings.expectStrategyOptionAbsent("Do Not Re-index");
 
     await indexSettings.applyReindex();
-    const body = await bodyPromise;
+    const body: Record<string, unknown> = await bodyPromise;
     expect(body.vector_quantization).toBe("scalar_1_bit");
   });
 
@@ -1029,7 +1048,9 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
     await page.route(SECONDARY_SEARCH_SETTINGS_API, async (route) => {
       await route.fulfill({ status: 200, body: "null" });
     });
-    const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+    const bodyPromise: Promise<Record<string, unknown>> = new Promise<
+      Record<string, unknown>
+    >((resolve) => {
       void page.route(SET_NEW_SETTINGS_API, async (route) => {
         resolve(
           JSON.parse(route.request().postData() ?? "{}") as Record<
@@ -1041,12 +1062,12 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
       });
     });
 
-    const indexSettings = new IndexSettingsPage(page);
+    const indexSettings: IndexSettingsPage = new IndexSettingsPage(page);
     await indexSettings.goto();
     await stageNonCurrentSelfHostedModel(page);
     await indexSettings.applyReindex();
 
-    const body = await bodyPromise;
+    const body: Record<string, unknown> = await bodyPromise;
     expect(body.vector_quantization).toBe("scalar_1_bit");
   });
 });

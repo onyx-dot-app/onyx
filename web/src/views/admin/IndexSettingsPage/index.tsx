@@ -1334,9 +1334,8 @@ export default function IndexSettingsPage() {
                 changes.contextualModelChanged
                   ? "warning"
                   : undefined;
-              const quantizationCardBorder = changes.quantizationChanged
-                ? "warning"
-                : undefined;
+              const quantizationCardBorder: "warning" | undefined =
+                changes.quantizationChanged ? "warning" : undefined;
               const imageCardBorder = captioningModelMissing
                 ? "warning"
                 : changes.imageChanged
