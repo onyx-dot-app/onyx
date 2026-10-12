@@ -122,6 +122,18 @@
     "cwd": "$ZED_WORKTREE_ROOT/backend",
   },
   {
+    "label": "db: up N (prompt)",
+    "command": "printf 'Revisions to upgrade: '; read n; \"$ZED_WORKTREE_ROOT/.venv/bin/python\" -m dotenv -f \"$ZED_WORKTREE_ROOT/.vscode/.env\" run -- \"$ZED_WORKTREE_ROOT/.venv/bin/python\" -m alembic upgrade \"+$n\"",
+    "cwd": "$ZED_WORKTREE_ROOT/backend",
+    "use_new_terminal": true,
+  },
+  {
+    "label": "db: down N (prompt)",
+    "command": "printf 'Revisions to downgrade: '; read n; \"$ZED_WORKTREE_ROOT/.venv/bin/python\" -m dotenv -f \"$ZED_WORKTREE_ROOT/.vscode/.env\" run -- \"$ZED_WORKTREE_ROOT/.venv/bin/python\" -m alembic downgrade \"-$n\"",
+    "cwd": "$ZED_WORKTREE_ROOT/backend",
+    "use_new_terminal": true,
+  },
+  {
     "label": "db: drop all",
     "command": "docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T relational_db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE;'",
     "cwd": "$ZED_WORKTREE_ROOT/deployment/docker_compose",
