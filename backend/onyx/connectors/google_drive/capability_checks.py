@@ -52,15 +52,19 @@ from onyx.connectors.google_drive.constants import (
 )
 from onyx.connectors.google_drive.doc_conversion import GOOGLE_MIME_TYPES_TO_EXPORT
 from onyx.connectors.google_drive.drive_access import (
+    OrganizerChoice,
     list_drive_members,
     list_group_member_emails,
     select_drive_organizer,
 )
-from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
+from onyx.connectors.google_drive.models import (
+    GDriveMimeType,
+    GoogleDriveAuth,
+    GoogleDriveFileType,
+)
 from onyx.connectors.google_drive.source_operations import (
     DriveCorpus,
     ExportSizeThresholdExceeded,
-    GoogleDriveAuth,
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
@@ -74,6 +78,7 @@ from onyx.connectors.google_utils.shared_constants import (
     google_credential_kind,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.source_operations import SourceOperations
 
 _DOCS_LINK = SCOPE_DOC_URL
 
@@ -101,7 +106,7 @@ _DOWNLOAD_BLOCKED_REASONS = frozenset({"cannotDownloadFile", "cannotExportFile"}
 
 
 def _gateway(context: CapabilityCheckContext) -> GoogleDriveSourceOperations:
-    gateway = context.source_operations
+    gateway: SourceOperations | None = context.source_operations
     if not isinstance(gateway, GoogleDriveSourceOperations):
         raise TypeError(
             "Bug: The runner constructs the registered gateway for migrated sources."
@@ -120,7 +125,7 @@ def _is_oauth(context: CapabilityCheckContext) -> bool:
 def _scope_hint(context: CapabilityCheckContext) -> str:
     if _is_oauth(context):
         return "Connect Google Drive again and accept every permission Onyx asks for."
-    scopes = ", ".join(GOOGLE_SCOPES[DocumentSource.GOOGLE_DRIVE])
+    scopes: str = ", ".join(GOOGLE_SCOPES[DocumentSource.GOOGLE_DRIVE])
     return (
         "In the Google Admin console (Security > API controls > Domain-wide "
         "delegation), give the service account's client ID these scopes: "
@@ -163,7 +168,7 @@ def _raise_google_error(
             "The credential has no primary admin email. Edit the credential and set it."
         ) from e
     except GoogleDriveRefreshError as e:
-        message = str(e)
+        message: str = str(e)
         if MISSING_SCOPES_ERROR_STR in message or "unauthorized_client" in message:
             raise InsufficientPermissionsError(
                 f"Google refused the scopes Onyx asks for. {_scope_hint(context)}"
@@ -173,7 +178,9 @@ def _raise_google_error(
                 "Google refused the OAuth credential: it was revoked or it "
                 "expired. Connect Google Drive again."
             ) from e
-        admin = context.credential_json.get(DB_CREDENTIALS_PRIMARY_ADMIN_KEY)
+        admin: str | None = context.credential_json.get(
+            DB_CREDENTIALS_PRIMARY_ADMIN_KEY
+        )
         raise InsufficientPermissionsError(
             "Google refused to let the service account act as "
             f"{admin or 'the primary admin'}. Check that the user exists, is not "
@@ -271,14 +278,14 @@ def _candidate_users(
 ) -> tuple[list[str], bool]:
     """The users the connector acts as, in its order, and whether the list was
     cut at ``_MAX_LISTED_USERS``. An OAuth credential acts as its own user."""
-    specific = extract_str_list_from_comma_str(config.specific_user_emails)
+    specific: list[str] = extract_str_list_from_comma_str(config.specific_user_emails)
     if specific:
         return specific, False
-    users = [auth.primary_admin_email]
+    users: list[str] = [auth.primary_admin_email]
     if not _is_service_account(auth):
         return users, False
-    listed = list(islice(ops.list_user_emails(), _MAX_LISTED_USERS + 1))
-    truncated = len(listed) > _MAX_LISTED_USERS
+    listed: list[str] = list(islice(ops.list_user_emails(), _MAX_LISTED_USERS + 1))
+    truncated: bool = len(listed) > _MAX_LISTED_USERS
     users.extend(email for email in listed[:_MAX_LISTED_USERS] if email not in users)
     return users, truncated
 
@@ -291,7 +298,9 @@ def _find_viewer(
     """The first candidate who sees the target, as the connector picks who
     crawls a requested folder."""
     for email in candidates:
-        metadata = ops.probe_target(user_email=email, target_id=target_id)
+        metadata: GoogleDriveFileType | None = ops.probe_target(
+            user_email=email, target_id=target_id
+        )
         if metadata is not None:
             return email, metadata
     return None
@@ -329,7 +338,7 @@ class _GoogleDriveCheck(CapabilityCheck[GoogleDriveConnectorConfig]):
         self._credential_kind = credential_kind
 
     def applies(self, form_state: FormState[GoogleDriveConnectorConfig]) -> bool:
-        config = form_state.config
+        config: GoogleDriveConnectorConfig = form_state.config
         if (
             self._credential_kind is not None
             and config.credential_kind != self._credential_kind
@@ -360,7 +369,7 @@ class _AuthCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_DRIVE_API,
@@ -369,7 +378,7 @@ class _AuthCheck(_GoogleDriveCheck):
                 "primary admin list files"
             ),
         ):
-            auth = ops.authenticate()
+            auth: GoogleDriveAuth = ops.authenticate()
             next(
                 ops.list_files(
                     variant=DriveCorpus.USER,
@@ -405,13 +414,15 @@ class _WorkspaceUsersCheck(_GoogleDriveCheck):
         return not config.specific_user_emails
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_ADMIN_API,
             denied="The primary admin cannot list the Workspace users",
         ):
-            first_admin = next(ops.list_user_emails(query="isAdmin=true"), None)
+            first_admin: str | None = next(
+                ops.list_user_emails(query="isAdmin=true"), None
+            )
         if first_admin is None:
             raise UnexpectedValidationError(
                 "The Workspace directory listed no admin, so Onyx cannot verify "
@@ -464,10 +475,12 @@ class _SpecificUsersCheck(_GoogleDriveCheck):
         return bool(config.specific_user_emails)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        emails = extract_str_list_from_comma_str(
+        emails: list[str] = extract_str_list_from_comma_str(
             self.config(context).specific_user_emails
         )
-        failures = _impersonation_failures(context, _gateway(context), emails)
+        failures: list[str] = _impersonation_failures(
+            context, _gateway(context), emails
+        )
         if failures:
             raise ConnectorValidationError(
                 "Onyx cannot act as these users, so it skips their files: "
@@ -496,8 +509,8 @@ class _OAuthIgnoredSettingsCheck(_GoogleDriveCheck):
         return bool(config.my_drive_emails or config.specific_user_emails)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        ignored = [
+        config: GoogleDriveConnectorConfig = self.config(context)
+        ignored: list[str] = [
             name
             for name, value in (
                 ("My Drive emails", config.my_drive_emails),
@@ -528,15 +541,15 @@ class _SharedDrivesCheck(_GoogleDriveCheck):
         return _shared_drives_in_scope(config)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        ops = _gateway(context)
+        config: GoogleDriveConnectorConfig = self.config(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_DRIVE_API,
             denied="The primary admin cannot list the shared drives",
         ):
-            auth = ops.authenticate()
-            first_drive = next(
+            auth: GoogleDriveAuth = ops.authenticate()
+            first_drive: str | None = next(
                 ops.list_drives(
                     user_email=auth.primary_admin_email,
                     use_domain_admin_access=_is_service_account(auth),
@@ -571,16 +584,16 @@ class _ConfiguredSharedDrivesCheck(_GoogleDriveCheck):
         return bool(config.shared_drive_urls)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        ops = _gateway(context)
+        config: GoogleDriveConnectorConfig = self.config(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_DRIVE_API,
             denied="The credential cannot read the configured shared drives",
         ):
-            auth = ops.authenticate()
-            visible = _visible_drive_ids(ops, auth)
-            missing = [
+            auth: GoogleDriveAuth = ops.authenticate()
+            visible: set[str] = _visible_drive_ids(ops, auth)
+            missing: list[str] = [
                 drive_id
                 for drive_id in _shared_drive_ids(config)
                 if drive_id not in visible
@@ -588,11 +601,22 @@ class _ConfiguredSharedDrivesCheck(_GoogleDriveCheck):
             if not missing:
                 return
             candidates, truncated = _candidate_users(ops, auth, config)
-            unreachable = [
-                drive_id
-                for drive_id in missing
-                if _find_viewer(ops, candidates, drive_id) is None
-            ]
+            unreachable: list[str] = []
+            not_folders: list[str] = []
+            for drive_id in missing:
+                found: tuple[str, GoogleDriveFileType] | None = _find_viewer(
+                    ops, candidates, drive_id
+                )
+                if found is None:
+                    unreachable.append(drive_id)
+                elif found[1].get("mimeType") != DRIVE_FOLDER_TYPE:
+                    not_folders.append(drive_id)
+        if not_folders:
+            # The crawl lists the children of the id, so a file indexes nothing.
+            raise ConnectorValidationError(
+                "These IDs are files, not shared drives or folders, so Onyx "
+                f"indexes nothing from them: {', '.join(not_folders)}."
+            )
         if unreachable and truncated:
             raise UnexpectedValidationError(
                 f"No shared drive with the IDs {', '.join(unreachable)} is "
@@ -624,19 +648,19 @@ class _ConfiguredFoldersCheck(_GoogleDriveCheck):
         return bool(config.shared_folder_urls)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        ops = _gateway(context)
+        config: GoogleDriveConnectorConfig = self.config(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         problems: list[str] = []
         with _google_errors(
             context,
             api=_DRIVE_API,
             denied="The credential cannot read the configured folders",
         ):
-            auth = ops.authenticate()
-            visible_drives = _visible_drive_ids(ops, auth)
-            requested_drives = set(_shared_drive_ids(config))
+            auth: GoogleDriveAuth = ops.authenticate()
+            visible_drives: set[str] = _visible_drive_ids(ops, auth)
+            requested_drives: set[str] = set(_shared_drive_ids(config))
             candidates, truncated = _candidate_users(ops, auth, config)
-            listed = False
+            listed: bool = False
             for folder_id in _folder_ids(config):
                 if folder_id in visible_drives:
                     # The connector drops a drive id from the folders.
@@ -646,7 +670,9 @@ class _ConfiguredFoldersCheck(_GoogleDriveCheck):
                             "'Shared drive URLs'"
                         )
                     continue
-                found = _find_viewer(ops, candidates, folder_id)
+                found: tuple[str, GoogleDriveFileType] | None = _find_viewer(
+                    ops, candidates, folder_id
+                )
                 if found is None:
                     problems.append(f"{folder_id} is not visible to the credential")
                     continue
@@ -700,17 +726,19 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
         return bool(config.my_drive_emails)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        ops = _gateway(context)
-        requested = extract_str_list_from_comma_str(config.my_drive_emails)
+        config: GoogleDriveConnectorConfig = self.config(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
+        requested: list[str] = extract_str_list_from_comma_str(config.my_drive_emails)
         with _google_errors(
             context, api=_ADMIN_API, denied="The primary admin cannot list users"
         ):
-            auth = ops.authenticate()
+            auth: GoogleDriveAuth = ops.authenticate()
             users, truncated = _candidate_users(ops, auth, config)
-        known = {email.lower() for email in users}
-        found = [email for email in requested if email.lower() in known]
-        missing = [email for email in requested if email.lower() not in known]
+        known: set[str] = {email.lower() for email in users}
+        found: list[str] = [email for email in requested if email.lower() in known]
+        missing: list[str] = [
+            email for email in requested if email.lower() not in known
+        ]
         if missing and truncated:
             raise UnexpectedValidationError(
                 f"{', '.join(missing)} are not among the first {_MAX_LISTED_USERS} "
@@ -721,7 +749,7 @@ class _ConfiguredMyDrivesCheck(_GoogleDriveCheck):
                 f"Onyx skips these My Drives: {', '.join(missing)} are not "
                 "primary emails of the users it indexes."
             )
-        failures = _impersonation_failures(context, ops, found)
+        failures: list[str] = _impersonation_failures(context, ops, found)
         if failures:
             raise ConnectorValidationError(
                 f"Onyx cannot act as these users: {', '.join(failures)}."
@@ -766,8 +794,8 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
         return _shared_drives_in_scope(config)
 
     def run(self, context: CapabilityCheckContext) -> None:
-        config = self.config(context)
-        ops = _gateway(context)
+        config: GoogleDriveConnectorConfig = self.config(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_DRIVE_API,
@@ -777,18 +805,18 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
                 "limited access"
             ),
         ):
-            auth = ops.authenticate()
-            visible = _visible_drive_ids(ops, auth)
-            configured = [
+            auth: GoogleDriveAuth = ops.authenticate()
+            visible: set[str] = _visible_drive_ids(ops, auth)
+            configured: list[str] = [
                 drive_id
                 for drive_id in _shared_drive_ids(config)
                 if drive_id in visible
             ]
-            drive_id = next(iter(configured or sorted(visible)), None)
+            drive_id: str | None = next(iter(configured or sorted(visible)), None)
             if drive_id is None:
                 # google_drive_shared_drives reports no visible drive.
                 return
-            choice = select_drive_organizer(
+            choice: OrganizerChoice = select_drive_organizer(
                 drive_id=drive_id,
                 members=list_drive_members(ops, drive_id),
                 google_domain=auth.primary_admin_email.split("@")[-1],
@@ -804,7 +832,7 @@ class _SharedDriveOrganizerCheck(_GoogleDriveCheck):
                     "the admin can see it."
                 )
             if not choice.complete:
-                role = choice.role.value if choice.role else "member"
+                role: str = choice.role.value if choice.role else "member"
                 raise ConnectorValidationError(
                     f"Shared drive {drive_id} has no organizer Onyx can act as, so "
                     f"Onyx reads it as {choice.email} ({role}) and can miss folders "
@@ -864,20 +892,20 @@ class _ContentReadCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
         with _google_errors(
             context,
             api=_DRIVE_API,
             denied="The credential cannot list files",
         ):
-            auth = ops.authenticate()
-            files = _sample_files(
+            auth: GoogleDriveAuth = ops.authenticate()
+            files: list[GoogleDriveFileType] = _sample_files(
                 ops,
                 auth.primary_admin_email,
                 f"mimeType != '{DRIVE_FOLDER_TYPE}' and "
                 f"mimeType != '{DRIVE_SHORTCUT_TYPE}' and trashed = false",
             )
-        native = next(
+        native: GoogleDriveFileType | None = next(
             (
                 file
                 for file in files
@@ -885,14 +913,16 @@ class _ContentReadCheck(_GoogleDriveCheck):
             ),
             None,
         )
-        uploaded = [
+        uploaded: list[tuple[int, GoogleDriveFileType]] = [
             (size, file)
             for file in files
             if file.get("mimeType") not in GOOGLE_MIME_TYPES_TO_EXPORT
             and (size := _size(file)) is not None
             and size <= _MAX_PROBE_BYTES
         ]
-        smallest = min(uploaded, key=lambda item: item[0])[1] if uploaded else None
+        smallest: GoogleDriveFileType | None = (
+            min(uploaded, key=lambda item: item[0])[1] if uploaded else None
+        )
         for file in (native, smallest):
             if file is not None:
                 self._read(context, ops, auth, file)
@@ -904,8 +934,8 @@ class _ContentReadCheck(_GoogleDriveCheck):
         auth: GoogleDriveAuth,
         file: GoogleDriveFileType,
     ) -> None:
-        name = file.get("name") or file["id"]
-        mime_type = file.get("mimeType")
+        name: str = file.get("name") or file["id"]
+        mime_type: str | None = file.get("mimeType")
         try:
             if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
                 ops.export_file(
@@ -956,20 +986,25 @@ class _DocsApiCheck(_GoogleDriveCheck):
         )
 
     def run(self, context: CapabilityCheckContext) -> None:
-        ops = _gateway(context)
+        ops: GoogleDriveSourceOperations = _gateway(context)
+        with _google_errors(
+            context,
+            api=_DRIVE_API,
+            denied="The credential cannot list Google Docs",
+        ):
+            auth: GoogleDriveAuth = ops.authenticate()
+            docs: list[GoogleDriveFileType] = _sample_files(
+                ops,
+                auth.primary_admin_email,
+                f"mimeType = '{GDriveMimeType.DOC.value}' and trashed = false",
+            )
+        if not docs:
+            return
         with _google_errors(
             context,
             api=_DOCS_API,
             denied="The credential cannot read Google Docs through the Docs API",
         ):
-            auth = ops.authenticate()
-            docs = _sample_files(
-                ops,
-                auth.primary_admin_email,
-                f"mimeType = '{GDriveMimeType.DOC.value}' and trashed = false",
-            )
-            if not docs:
-                return
             ops.fetch_google_doc(
                 user_email=auth.primary_admin_email,
                 doc_id=docs[0]["id"],

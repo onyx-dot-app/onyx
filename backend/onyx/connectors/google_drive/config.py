@@ -45,7 +45,9 @@ class GoogleDriveCredentialBinding(CredentialBinding):
     credential_kind: Annotated[GoogleCredentialKind | None, _COSMETIC] = None
 
     def validate_credential(self, credential_json: dict[str, Any]) -> None:
-        actual_kind = google_credential_kind(credential_json)
+        actual_kind: GoogleCredentialKind | None = google_credential_kind(
+            credential_json
+        )
         if (
             self.credential_kind is not None
             and actual_kind is not None
@@ -94,8 +96,8 @@ def google_drive_planning_rule(
     # A specific request turns the general toggles off. A change between
     # the general and the specific mode replaces one set of files with
     # another; inside the specific mode the toggles have no effect.
-    old_specific = has_specific_requests(old)
-    new_specific = has_specific_requests(new)
+    old_specific: bool = has_specific_requests(old)
+    new_specific: bool = has_specific_requests(new)
     if old_specific != new_specific:
         return ConnectorChangeOverride(
             scope_directions=dict.fromkeys(

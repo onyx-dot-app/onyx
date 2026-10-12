@@ -18,8 +18,8 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
-from onyx.connectors.google_drive.models import GDriveMimeType
-from onyx.connectors.google_drive.source_operations import (
+from onyx.connectors.google_drive.models import (
+    GDriveMimeType,
     GoogleDriveAuth,
     GoogleGroupMember,
 )

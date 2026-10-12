@@ -17,14 +17,16 @@ from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_indexing_checks,
 )
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.models import GDriveMimeType
+from onyx.connectors.google_drive.models import (
+    GDriveMimeType,
+    GoogleDriveAuth,
+    GoogleGroupMember,
+)
 from onyx.connectors.google_drive.source_operations import (
     ExportSizeThresholdExceeded,
-    GoogleDriveAuth,
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
-    GoogleGroupMember,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
@@ -294,6 +296,20 @@ def test_configured_shared_drive_id_that_is_a_visible_folder_passes() -> None:
     assert result.status == CapabilityCheckStatus.PASSED
 
 
+def test_configured_shared_drive_id_that_is_a_file_fails() -> None:
+    ops = _ops()
+    ops.probe_target.return_value = {"id": "file1", "mimeType": "text/plain"}
+
+    result = _run(
+        "google_drive_configured_shared_drives",
+        ops,
+        {"shared_drive_urls": _FOLDER_URL.format("file1")},
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert "file1" in result.message
+
+
 def test_configured_folders_report_each_problem() -> None:
     ops = _ops()
     ops.list_drives.side_effect = _listing("drive1")
@@ -431,6 +447,17 @@ def test_docs_api_turned_off_is_reported() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert "Google Docs API is turned off" in result.message
+
+
+def test_docs_api_names_the_drive_api_when_the_listing_fails() -> None:
+    ops = _ops()
+    ops.list_files.side_effect = _http_error(403, "SERVICE_DISABLED")
+
+    result = _run("google_drive_docs_api", ops)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert "Google Drive API is turned off" in result.message
+    ops.fetch_google_doc.assert_not_called()
 
 
 def test_docs_api_passes_without_a_google_doc() -> None:
