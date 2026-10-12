@@ -13,6 +13,7 @@ import pytest
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
+    CapabilityCheckResult,
     CapabilityCheckStatus,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
@@ -87,7 +88,7 @@ def _refusal(status: int, code: str = "accessDenied") -> MicrosoftGraphError:
 def _gateway() -> MagicMock:
     """A healthy tenant: one site with one library holding one small file and
     one page."""
-    gateway = create_autospec(SharepointSourceOperations, instance=True)
+    gateway: MagicMock = create_autospec(SharepointSourceOperations, instance=True)
     gateway.check_token.return_value = SharepointTokenInfo(expires_in=3599)
     gateway.list_site_urls.return_value = [SITE_URL, OTHER_SITE_URL]
     gateway.get_site_id.return_value = "site-id"
@@ -133,7 +134,7 @@ def _status(check_id: str, context: CapabilityCheckContext) -> CapabilityCheckSt
 
 
 def test_every_check_passes_on_a_healthy_tenant() -> None:
-    results = run_capability_checks(
+    results: list[CapabilityCheckResult] = run_capability_checks(
         build_sharepoint_indexing_checks(),
         _context(_gateway(), _config(sites=[f"{SITE_URL}/Shared Documents/Plans"])),
     )
@@ -151,8 +152,8 @@ def test_every_check_passes_on_a_healthy_tenant() -> None:
 
 def test_every_check_waits_for_a_config() -> None:
     """The token check too: the authority it signs in against is a setting."""
-    gateway = _gateway()
-    results = run_capability_checks(
+    gateway: MagicMock = _gateway()
+    results: list[CapabilityCheckResult] = run_capability_checks(
         build_sharepoint_indexing_checks(), _context(gateway, None)
     )
 
@@ -164,7 +165,7 @@ def test_every_check_waits_for_a_config() -> None:
 
 
 def test_token_check_reports_a_blank_credential_field() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.check_token.side_effect = MicrosoftAuthError(MISSING_CREDENTIAL_CODE, "")
 
     with pytest.raises(CredentialInvalidError, match="incomplete"):
@@ -172,7 +173,7 @@ def test_token_check_reports_a_blank_credential_field() -> None:
 
 
 def test_token_check_reports_a_rejected_secret() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.check_token.side_effect = MicrosoftAuthError("invalid_client", "")
 
     with pytest.raises(CredentialInvalidError, match="client secret"):
@@ -183,7 +184,9 @@ def test_token_check_reports_a_rejected_secret() -> None:
 
 
 def test_both_content_types_off_fails() -> None:
-    config = _config(include_site_documents=False, include_site_pages=False)
+    config: dict[str, Any] = _config(
+        include_site_documents=False, include_site_pages=False
+    )
 
     with pytest.raises(ConnectorValidationError, match="content type"):
         _run("sharepoint_content_types", _context(_gateway(), config))
@@ -202,8 +205,8 @@ def test_both_content_types_off_fails() -> None:
     ],
 )
 def test_malformed_or_foreign_site_urls_fail_before_any_read(site_url: str) -> None:
-    gateway = _gateway()
-    config = _config(sites=[SITE_URL, site_url])
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(sites=[SITE_URL, site_url])
 
     with pytest.raises(ConnectorValidationError):
         _run("sharepoint_configured_sites", _context(gateway, config))
@@ -214,7 +217,7 @@ def test_malformed_or_foreign_site_urls_fail_before_any_read(site_url: str) -> N
 def test_a_site_the_ssrf_guard_rejects_fails_before_any_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     def reject(*_: Any, **__: Any) -> None:
         raise SSRFException("private address")
@@ -228,8 +231,10 @@ def test_a_site_the_ssrf_guard_rejects_fails_before_any_read(
 
 
 def test_a_url_that_names_no_site_fails_before_any_read() -> None:
-    gateway = _gateway()
-    config = _config(sites=[SITE_URL, "https://contoso.sharepoint.com/sites/"])
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(
+        sites=[SITE_URL, "https://contoso.sharepoint.com/sites/"]
+    )
 
     with pytest.raises(ConnectorValidationError, match="name no site"):
         _run("sharepoint_configured_sites", _context(gateway, config))
@@ -238,7 +243,7 @@ def test_a_url_that_names_no_site_fails_before_any_read() -> None:
 
 
 def test_a_host_graph_rejects_for_the_tenant_fails() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_site_id.side_effect = _refusal(400, "invalidRequest")
 
     with pytest.raises(ConnectorValidationError, match="invalidRequest"):
@@ -246,19 +251,19 @@ def test_a_host_graph_rejects_for_the_tenant_fails() -> None:
 
 
 def test_an_ambiguous_library_fails() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = [
         SharepointDrive(id="a", name="Plans", web_url=f"{SITE_URL}/Archive"),
         SharepointDrive(id="b", name="Archive", web_url=f"{SITE_URL}/archive"),
     ]
-    config = _config(sites=[f"{SITE_URL}/Archive"])
+    config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Archive"])
 
     with pytest.raises(ConnectorValidationError, match="ambiguous"):
         _run("sharepoint_documents_read", _context(gateway, config))
 
 
 def test_a_site_graph_does_not_know_fails_with_its_url() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_site_id.side_effect = _refusal(404, "itemNotFound")
 
     with pytest.raises(ConnectorValidationError, match=SITE_URL):
@@ -266,7 +271,7 @@ def test_a_site_graph_does_not_know_fails_with_its_url() -> None:
 
 
 def test_a_refused_site_names_the_grant() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_site_id.side_effect = _refusal(403)
 
     with pytest.raises(InsufficientPermissionsError, match="Sites.Selected"):
@@ -274,7 +279,7 @@ def test_a_refused_site_names_the_grant() -> None:
 
 
 def test_configured_sites_check_is_skipped_without_sites() -> None:
-    status = _status(
+    status: CapabilityCheckStatus = _status(
         "sharepoint_configured_sites", _context(_gateway(), _config(sites=[]))
     )
 
@@ -282,7 +287,7 @@ def test_configured_sites_check_is_skipped_without_sites() -> None:
 
 
 def test_a_blank_site_entry_fails_like_indexing() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     with pytest.raises(ConnectorValidationError, match="not a full"):
         _run(
@@ -294,8 +299,10 @@ def test_a_blank_site_entry_fails_like_indexing() -> None:
 
 
 def test_excluded_sites_are_validated_but_never_read() -> None:
-    gateway = _gateway()
-    config = _config(sites=[SITE_URL, OTHER_SITE_URL], excluded_sites=["*/sites/ops"])
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(
+        sites=[SITE_URL, OTHER_SITE_URL], excluded_sites=["*/sites/ops"]
+    )
 
     _run("sharepoint_configured_sites", _context(gateway, config))
 
@@ -306,8 +313,8 @@ def test_excluded_sites_are_validated_but_never_read() -> None:
 
 def test_configured_sites_the_exclusions_remove_are_not_replaced() -> None:
     """Indexing reads nothing then, so the probe must not read other sites."""
-    gateway = _gateway()
-    config = _config(sites=[SITE_URL], excluded_sites=["*/sites/eng"])
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(sites=[SITE_URL], excluded_sites=["*/sites/eng"])
 
     with pytest.raises(UnexpectedValidationError, match="No library"):
         _run("sharepoint_documents_read", _context(gateway, config))
@@ -317,7 +324,7 @@ def test_configured_sites_the_exclusions_remove_are_not_replaced() -> None:
 
 
 def test_discovered_probe_sites_leave_out_personal_sites() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_site_urls.return_value = [
         "https://contoso-my.sharepoint.com/personal/alice",
         OTHER_SITE_URL,
@@ -329,8 +336,8 @@ def test_discovered_probe_sites_leave_out_personal_sites() -> None:
 
 
 def test_discovered_probe_sites_honor_the_exclusions() -> None:
-    gateway = _gateway()
-    config = _config(sites=[], excluded_sites=["*/sites/eng"])
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(sites=[], excluded_sites=["*/sites/eng"])
 
     _run("sharepoint_documents_read", _context(gateway, config))
 
@@ -338,8 +345,8 @@ def test_discovered_probe_sites_honor_the_exclusions() -> None:
 
 
 def test_only_the_first_sites_are_probed() -> None:
-    gateway = _gateway()
-    sites = [f"{SITE_URL}{n}" for n in range(8)]
+    gateway: MagicMock = _gateway()
+    sites: list[str] = [f"{SITE_URL}{n}" for n in range(8)]
 
     _run("sharepoint_configured_sites", _context(gateway, _config(sites=sites)))
 
@@ -350,7 +357,7 @@ def test_only_the_first_sites_are_probed() -> None:
 
 
 def test_an_empty_site_listing_fails() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_site_urls.return_value = []
 
     with pytest.raises(ConnectorValidationError, match="Sites.Selected"):
@@ -358,7 +365,7 @@ def test_an_empty_site_listing_fails() -> None:
 
 
 def test_sites_visible_reads_one_listing_page() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     _run("sharepoint_sites_visible", _context(gateway, _config(sites=[])))
 
@@ -376,8 +383,8 @@ def test_sites_visible_is_skipped_with_configured_sites() -> None:
 
 
 def test_folder_check_resolves_the_configured_folder() -> None:
-    gateway = _gateway()
-    config = _config(sites=[f"{SITE_URL}/Shared Documents/Plans/Q1"])
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Shared Documents/Plans/Q1"])
 
     _run("sharepoint_configured_folder", _context(gateway, config))
 
@@ -387,24 +394,24 @@ def test_folder_check_resolves_the_configured_folder() -> None:
 
 
 def test_missing_folder_fails_with_its_path() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.resolve_folder.side_effect = _refusal(404, "itemNotFound")
-    config = _config(sites=[f"{SITE_URL}/Shared Documents/Plans"])
+    config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Shared Documents/Plans"])
 
     with pytest.raises(ConnectorValidationError, match="Plans"):
         _run("sharepoint_configured_folder", _context(gateway, config))
 
 
 def test_unknown_library_fails_with_its_segment() -> None:
-    gateway = _gateway()
-    config = _config(sites=[f"{SITE_URL}/Archive/Plans"])
+    gateway: MagicMock = _gateway()
+    config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Archive/Plans"])
 
     with pytest.raises(ConnectorValidationError, match="Archive"):
         _run("sharepoint_configured_folder", _context(gateway, config))
 
 
 def test_folder_check_is_skipped_when_documents_are_off() -> None:
-    config = _config(
+    config: dict[str, Any] = _config(
         sites=[f"{SITE_URL}/Shared Documents/Plans"], include_site_documents=False
     )
 
@@ -415,7 +422,7 @@ def test_folder_check_is_skipped_when_documents_are_off() -> None:
 
 
 def test_folder_check_is_skipped_without_a_folder_path() -> None:
-    config = _config(sites=[f"{SITE_URL}/Shared Documents"])
+    config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Shared Documents"])
 
     assert (
         _status("sharepoint_configured_folder", _context(_gateway(), config))
@@ -427,7 +434,7 @@ def test_folder_check_is_skipped_without_a_folder_path() -> None:
 
 
 def test_documents_check_reads_one_file_by_id_and_content() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     _run("sharepoint_documents_read", _context(gateway, _config()))
 
@@ -441,7 +448,7 @@ def test_documents_check_reads_one_file_by_id_and_content() -> None:
 
 
 def test_documents_check_skips_rows_indexing_would_not_read() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page(
         {"id": "deleted", "name": "x.pdf", "deleted": {}, "file": {}},
         {"id": "folder", "name": "f", "folder": {}},
@@ -457,7 +464,7 @@ def test_documents_check_skips_rows_indexing_would_not_read() -> None:
 
 
 def test_documents_check_reads_one_bounded_delta_page() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     _run("sharepoint_documents_read", _context(gateway, _config()))
 
@@ -466,7 +473,7 @@ def test_documents_check_reads_one_bounded_delta_page() -> None:
 
 
 def test_documents_check_reads_only_inside_the_configured_folder() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page(
         {**ITEM_JSON, "id": "outside"},
         {
@@ -478,7 +485,7 @@ def test_documents_check_reads_only_inside_the_configured_folder() -> None:
             },
         },
     )
-    config = _config(sites=[f"{SITE_URL}/Shared Documents/Plans"])
+    config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Shared Documents/Plans"])
 
     _run("sharepoint_documents_read", _context(gateway, config))
 
@@ -488,7 +495,7 @@ def test_documents_check_reads_only_inside_the_configured_folder() -> None:
 def test_documents_check_matches_the_configured_folder_literally() -> None:
     """A folder named `draft%20copy` is configured as `draft%2520copy`, which
     decodes once, the way indexing resolves it."""
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page(
         {
             **ITEM_JSON,
@@ -507,7 +514,9 @@ def test_documents_check_matches_the_configured_folder_literally() -> None:
             },
         },
     )
-    config = _config(sites=[f"{SITE_URL}/Shared Documents/draft%2520copy"])
+    config: dict[str, Any] = _config(
+        sites=[f"{SITE_URL}/Shared Documents/draft%2520copy"]
+    )
 
     _run("sharepoint_documents_read", _context(gateway, config))
 
@@ -515,7 +524,7 @@ def test_documents_check_matches_the_configured_folder_literally() -> None:
 
 
 def test_documents_check_skips_excluded_paths() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page(
         {
             **ITEM_JSON,
@@ -527,7 +536,7 @@ def test_documents_check_skips_excluded_paths() -> None:
         },
         {**ITEM_JSON, "id": "kept"},
     )
-    config = _config(excluded_paths=["Archive/*"])
+    config: dict[str, Any] = _config(excluded_paths=["Archive/*"])
 
     _run("sharepoint_documents_read", _context(gateway, config))
 
@@ -535,12 +544,12 @@ def test_documents_check_skips_excluded_paths() -> None:
 
 
 def test_documents_check_matches_exclusions_on_the_literal_name() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page(
         {**ITEM_JSON, "id": "literal", "name": "draft%20copy.pdf"},
         {**ITEM_JSON, "id": "kept"},
     )
-    config = _config(excluded_paths=["draft%20copy.pdf"])
+    config: dict[str, Any] = _config(excluded_paths=["draft%20copy.pdf"])
 
     _run("sharepoint_documents_read", _context(gateway, config))
 
@@ -548,7 +557,7 @@ def test_documents_check_matches_exclusions_on_the_literal_name() -> None:
 
 
 def test_documents_check_stops_after_the_first_libraries() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = [DRIVE] * 11
     gateway.get_delta_page.return_value = _delta_page()
 
@@ -560,7 +569,7 @@ def test_documents_check_stops_after_the_first_libraries() -> None:
 
 
 def test_refused_download_names_the_grant() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.read_item_bytes.side_effect = _refusal(403)
 
     with pytest.raises(InsufficientPermissionsError, match="plan.pdf"):
@@ -568,7 +577,7 @@ def test_refused_download_names_the_grant() -> None:
 
 
 def test_documents_check_skips_the_download_of_a_large_file() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page(
         {**ITEM_JSON, "size": 50 * 1024 * 1024}
     )
@@ -579,7 +588,7 @@ def test_documents_check_skips_the_download_of_a_large_file() -> None:
 
 
 def test_documents_check_passes_on_an_empty_library() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_delta_page.return_value = _delta_page()
 
     _run("sharepoint_documents_read", _context(gateway, _config()))
@@ -588,12 +597,12 @@ def test_documents_check_passes_on_an_empty_library() -> None:
 
 
 def test_documents_check_uses_the_configured_library() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = [
         DRIVE,
         SharepointDrive(id="other", name="Archive", web_url=f"{SITE_URL}/Archive"),
     ]
-    config = _config(sites=[f"{SITE_URL}/Archive"])
+    config: dict[str, Any] = _config(sites=[f"{SITE_URL}/Archive"])
 
     _run("sharepoint_documents_read", _context(gateway, config))
 
@@ -601,7 +610,7 @@ def test_documents_check_uses_the_configured_library() -> None:
 
 
 def test_documents_check_probes_the_listed_sites_without_configured_ones() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     _run("sharepoint_documents_read", _context(gateway, _config(sites=[])))
 
@@ -610,7 +619,7 @@ def test_documents_check_probes_the_listed_sites_without_configured_ones() -> No
 
 
 def test_refused_file_listing_names_the_grant() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.get_delta_page.side_effect = _refusal(403)
 
     with pytest.raises(InsufficientPermissionsError, match="Sites.Read.All"):
@@ -618,7 +627,7 @@ def test_refused_file_listing_names_the_grant() -> None:
 
 
 def test_throttled_listing_is_indeterminate() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_drives.side_effect = _refusal(429, "tooManyRequests")
 
     with pytest.raises(UnexpectedValidationError):
@@ -626,7 +635,7 @@ def test_throttled_listing_is_indeterminate() -> None:
 
 
 def test_documents_check_is_skipped_when_documents_are_off() -> None:
-    config = _config(include_site_documents=False)
+    config: dict[str, Any] = _config(include_site_documents=False)
 
     assert (
         _status("sharepoint_documents_read", _context(_gateway(), config))
@@ -635,7 +644,7 @@ def test_documents_check_is_skipped_when_documents_are_off() -> None:
 
 
 def test_no_library_anywhere_is_indeterminate() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_drives.return_value = []
 
     with pytest.raises(UnexpectedValidationError, match="No library"):
@@ -646,7 +655,7 @@ def test_no_library_anywhere_is_indeterminate() -> None:
 
 
 def test_pages_check_expands_one_page() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
 
     _run("sharepoint_site_pages_read", _context(gateway, _config()))
 
@@ -658,8 +667,8 @@ def test_pages_check_expands_one_page() -> None:
 def test_pages_check_falls_back_when_the_expanded_listing_is_refused() -> None:
     """One corrupt canvas poisons the expanded listing, and indexing lists
     without it and keeps a corrupt page's metadata."""
-    gateway = _gateway()
-    invalid = _refusal(400, "invalidRequest")
+    gateway: MagicMock = _gateway()
+    invalid: MicrosoftGraphError = _refusal(400, "invalidRequest")
 
     def list_pages(
         *,
@@ -682,7 +691,7 @@ def test_pages_check_falls_back_when_the_expanded_listing_is_refused() -> None:
 
 def test_pages_check_moves_past_a_site_without_a_pages_listing() -> None:
     """A classic site answers 404 on the pages API and indexing skips it."""
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_site_pages.side_effect = [
         _refusal(404, "itemNotFound"),
         SitePagesPage(pages=[{"id": "page-id"}]),
@@ -695,7 +704,7 @@ def test_pages_check_moves_past_a_site_without_a_pages_listing() -> None:
 
 
 def test_pages_check_passes_on_a_site_without_pages() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_site_pages.return_value = SitePagesPage(pages=[])
 
     _run("sharepoint_site_pages_read", _context(gateway, _config()))
@@ -704,7 +713,7 @@ def test_pages_check_passes_on_a_site_without_pages() -> None:
 
 
 def test_refused_pages_fail_the_check() -> None:
-    gateway = _gateway()
+    gateway: MagicMock = _gateway()
     gateway.list_site_pages.side_effect = _refusal(403)
     (result,) = run_capability_checks(
         [_CHECKS_BY_ID["sharepoint_site_pages_read"]], _context(gateway, _config())
@@ -715,7 +724,7 @@ def test_refused_pages_fail_the_check() -> None:
 
 
 def test_pages_check_is_skipped_when_pages_are_off() -> None:
-    config = _config(include_site_pages=False)
+    config: dict[str, Any] = _config(include_site_pages=False)
 
     assert (
         _status("sharepoint_site_pages_read", _context(_gateway(), config))

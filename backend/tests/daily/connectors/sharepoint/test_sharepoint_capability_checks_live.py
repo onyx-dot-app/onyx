@@ -52,7 +52,7 @@ def _config(sites: list[str], **overrides: Any) -> dict[str, Any]:
 def _run(
     credentials: dict[str, Any], config: dict[str, Any] | None
 ) -> tuple[list[CapabilityCheckResult], CapabilityVerdict]:
-    context = CapabilityCheckContext(
+    context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.SHAREPOINT,
         credential_json=credentials,
         connector_specific_config=config,
@@ -63,8 +63,12 @@ def _run(
             connector_specific_config=config or {},
         ),
     )
-    results = run_capability_checks(build_sharepoint_indexing_checks(), context)
-    verdict = compute_capability_verdicts({CredentialCapability.INDEXING}, results)
+    results: list[CapabilityCheckResult] = run_capability_checks(
+        build_sharepoint_indexing_checks(), context
+    )
+    verdict: dict[CredentialCapability, CapabilityVerdict] = (
+        compute_capability_verdicts({CredentialCapability.INDEXING}, results)
+    )
     return results, verdict[CredentialCapability.INDEXING]
 
 
@@ -80,11 +84,11 @@ def _statuses(results: list[CapabilityCheckResult]) -> dict[str, CapabilityCheck
 def test_the_test_tenant_passes(
     test_secrets: dict[TestSecret, str], site_suffixes: list[str]
 ) -> None:
-    sites = [_site(suffix) for suffix in site_suffixes]
+    sites: list[str] = [_site(suffix) for suffix in site_suffixes]
 
     results, verdict = _run(_credentials(test_secrets), _config(sites))
 
-    not_passed = {
+    not_passed: dict[str, str | None] = {
         result.check_id: result.message
         for result in results
         if result.status
@@ -132,7 +136,7 @@ def test_a_wrong_setting_fails_its_check(
     overrides: dict[str, Any],
     check_id: str,
 ) -> None:
-    sites = [
+    sites: list[str] = [
         "https://victim.sharepoint.com/sites/x"
         if suffix == "/../victim"
         else _site(suffix)
