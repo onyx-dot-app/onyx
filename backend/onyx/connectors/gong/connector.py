@@ -99,6 +99,8 @@ class GongConnector(CheckpointedConnector[GongConnectorCheckpoint]):
         self,
         workspaces: list[str] | None = None,
         hide_user_info: bool = False,
+        # Checked against the credential by the binding; unused here.
+        gong_base_url: str | None = None,  # noqa: ARG002
     ) -> None:
         self.workspaces = workspaces
         self.auth_token_basic: str | None = None
