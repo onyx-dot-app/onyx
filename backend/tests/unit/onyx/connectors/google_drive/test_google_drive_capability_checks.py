@@ -419,6 +419,28 @@ def test_my_drive_of_a_listed_user_passes() -> None:
     ops.get_root_folder_id.assert_called_once_with(user_email=f"USER@{_DOMAIN}")
 
 
+@pytest.mark.parametrize(("user_count", "unprobed"), [(30, 5), (25, 0)])
+def test_my_drives_past_the_probe_limit_pass_with_a_count_advisory(
+    user_count: int, unprobed: int
+) -> None:
+    emails = [f"user{number}@{_DOMAIN}" for number in range(user_count)]
+    ops = _ops()
+    ops.list_user_emails.side_effect = _listing(*emails)
+
+    result = _run(
+        "google_drive_configured_my_drives", ops, {"my_drive_emails": ",".join(emails)}
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert ops.get_root_folder_id.call_count == 25
+    if unprobed == 0:
+        assert result.advisories == []
+        return
+    (advisory,) = result.advisories
+    assert f"other {unprobed} users" in advisory.message
+    assert _DOMAIN not in advisory.message
+
+
 def _drive_with_members(ops: MagicMock, *members: dict[str, str]) -> None:
     ops.list_drives.side_effect = _listing("d1")
     ops.list_drive_members.side_effect = _listing(*members)
