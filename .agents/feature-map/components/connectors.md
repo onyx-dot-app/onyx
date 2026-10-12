@@ -102,7 +102,7 @@ directly in `user_file_processing/tasks.py:_load_user_file_documents`. See §4.
 
 ### The `DocumentSource` enum: the canonical list
 
-`backend/onyx/configs/constants.py:DocumentSource` has 62 members and is the
+`backend/onyx/configs/constants.py:DocumentSource` has 63 members and is the
 single source of truth for "what is a valid source in Onyx". It is **not** 1:1
 with `backend/onyx/connectors/registry.py:CONNECTOR_CLASS_MAP`. Four members
 have no connector class and are handled by other components instead:
@@ -121,7 +121,7 @@ tests. A separate `FederatedConnectorSource` enum
 federated-only source like `FEDERATED_SLACK` back to the `DocumentSource` it
 shadows; see [[federated-search]].
 
-Do not enumerate all 58 registered connectors here. `DocumentSource` plus
+Do not enumerate all 59 registered connectors here. `DocumentSource` plus
 `registry.py:CONNECTOR_CLASS_MAP` is the authoritative list. The handful of
 architecturally distinct *shapes* those connectors take are in §4 and §6.
 

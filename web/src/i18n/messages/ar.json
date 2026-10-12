@@ -882,6 +882,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "طلبات Jira Service Management"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
