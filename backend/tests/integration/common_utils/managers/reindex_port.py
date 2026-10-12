@@ -73,11 +73,14 @@ class ReindexPortManager:
         acknowledged_wont_port_cc_pair_ids: list[int] | None = None,
         vector_quantization: str | None = None,
         passage_prefix: str | None = None,
+        index_name: str | None = None,
     ) -> httpx.Response:
         """Reindex to the current embedding model (a new ALT index). With no vector
         setting changed, the port copies the stored vectors; a changed
         `passage_prefix` makes it re-embed. Unset `vector_quantization` /
-        `passage_prefix` keep the current values. Returns the raw response so a caller can
+        `passage_prefix` keep the current values. Pass `index_name` for a new index
+        whose mapping differs: OpenSearch is shared across tests, so the computed
+        name may already hold an index with the old mapping. Returns the raw response so a caller can
         assert on a guard rejection; use `start_reindex` when it must succeed.
         `switchover_type` is a SwitchoverType value ("reindex" waits for the port before
         swapping; "instant" swaps immediately and backfills the live index after).
@@ -113,7 +116,7 @@ class ReindexPortManager:
                 else current.get("passage_prefix") or ""
             ),
             "provider_type": current.get("provider_type"),
-            "index_name": None,
+            "index_name": index_name,
             "multipass_indexing": current.get("multipass_indexing", False),
             "reduced_dimension": current.get("reduced_dimension"),
             "vector_quantization": (

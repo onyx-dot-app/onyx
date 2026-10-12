@@ -97,7 +97,13 @@ def test_reindex_progress_reports_a_copy_for_a_quantization_change(
         "index_name"
     ]
 
-    ReindexPortManager.start_reindex(admin_user, vector_quantization="scalar_7_bit")
+    # A fresh index name: an earlier test may have left a float32 index under
+    # the computed name, and OpenSearch cannot change its encoder.
+    ReindexPortManager.start_reindex(
+        admin_user,
+        vector_quantization="scalar_7_bit",
+        index_name=f"danswer_chunk_quantization_copy_{uuid4().hex[:8]}",
+    )
     assert ReindexPortManager.get_progress(admin_user).reembeds is False
 
     ReindexPortManager.wait_for_reindex_completion(admin_user)

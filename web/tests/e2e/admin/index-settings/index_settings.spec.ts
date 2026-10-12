@@ -1023,8 +1023,7 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
 
     // Only quantization changed, so the banner says the index is rebuilt from
     // the stored vectors rather than fully re-indexed.
-    await expect(page.getByText("The index will be rebuilt.")).toBeVisible();
-    await expect(page.getByText("A full re-index will run.")).toHaveCount(0);
+    await indexSettings.expectQuantizationRebuildBanner();
 
     // Quantization is part of the index mapping, so only the re-index
     // strategies are offered.
