@@ -342,7 +342,7 @@ Transient conversion failures retain those slides and show a warning.
 CSV files display a sticky-header table limited to 1,000 rows, 100 columns, and 5,000 cells.
 CSV viewers report malformed quoted fields and offer a raw download through the preview toolbar.
 The CSV preview uses the shared parser directly. Parser tests live with the shared utility.
-Image previews offer a contrast background toggle.
+Image previews use a fixed neutral contrast background.
 Presentation thumbnails support pointer and keyboard resizing.
 
 ## 5. Contracts and invariants
