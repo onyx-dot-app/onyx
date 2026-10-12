@@ -21,12 +21,14 @@ from onyx.connectors.confluence.source_operations import (
 from onyx.connectors.github.models import (
     GitHubGitTree,
     GitHubIssue,
+    GitHubOrganizationRef,
     GitHubPullRequest,
     GitHubRepository,
     GitHubTokenInfo,
     GitHubTokenKind,
     GitHubTreeEntry,
 )
+from onyx.connectors.github.source_operations import GitHubApiError
 from onyx.connectors.google_drive.models import (
     GDriveMimeType,
     GoogleDriveAuth,
@@ -196,22 +198,33 @@ def _configure_sharepoint_spy(spy: MagicMock) -> None:
     )
 
 
-def _configure_github_spy(spy: MagicMock) -> None:
-    """An organization with one repository that has a pull request, an issue
-    and a README."""
-    spy.get_token_info.return_value = GitHubTokenInfo(
-        login="octocat", kind=GitHubTokenKind.CLASSIC, scopes=["repo"]
+def _github_repository(name: str, visibility: str) -> GitHubRepository:
+    return GitHubRepository(
+        id=len(name),
+        name=name,
+        full_name=f"acme/{name}",
+        html_url=f"https://github.com/acme/{name}",
+        default_branch="main",
+        visibility=visibility,
+        organization=GitHubOrganizationRef(id=1, login="acme"),
+        raw_data={},
     )
-    spy.list_organization_repositories.return_value = [
-        GitHubRepository(
-            id=1,
-            name="docs",
-            full_name="acme/docs",
-            html_url="https://github.com/acme/docs",
-            default_branch="main",
-            raw_data={},
-        )
+
+
+def _configure_github_spy(spy: MagicMock) -> None:
+    """An organization with a private repository that has a pull request, an
+    issue and a README, and an internal repository. Each group has one
+    member."""
+    repositories = [
+        _github_repository("docs", "private"),
+        _github_repository("handbook", "internal"),
     ]
+    spy.get_token_info.return_value = GitHubTokenInfo(
+        login="octocat", kind=GitHubTokenKind.CLASSIC, scopes=["repo", "read:org"]
+    )
+    spy.list_organization_repositories.return_value = repositories
+    spy.list_user_repositories.return_value = repositories
+    spy.get_repository.return_value = repositories[0]
     spy.list_pull_requests.return_value = [
         GitHubPullRequest(
             number=1, title="PR", state="open", html_url="https://github.com/pr/1"
@@ -230,6 +243,17 @@ def _configure_github_spy(spy: MagicMock) -> None:
     spy.get_git_tree.return_value = GitHubGitTree(
         entries=[GitHubTreeEntry(path="README.md", type="blob", size=10)]
     )
+    spy.list_repository_collaborators.return_value = ["octocat"]
+    spy.list_organization_members.return_value = ["octocat"]
+
+
+def _configure_github_user_owner_spy(spy: MagicMock) -> None:
+    """The same repositories, owned by a user: the checks list them with the
+    user listing."""
+    _configure_github_spy(spy)
+    spy.get_organization.side_effect = GitHubApiError(
+        "404 Not Found", status_code=404, github_message="Not Found"
+    )
 
 
 # A unit is covered when the checks exercise it under any one configuration:
@@ -239,7 +263,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
-    DocumentSource.GITHUB: [_configure_github_spy],
+    DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every

@@ -217,6 +217,20 @@ def test_listings_follow_the_link_header() -> None:
     assert second.kwargs["parameters"] is None
 
 
+def test_user_listings_stop_at_the_limit() -> None:
+    gateway, request = _gateway()
+    request.return_value = (
+        _link("https://api.github.com/repos/o/r/collaborators?page=2"),
+        [{"login": "a"}, {"login": "b"}, {"login": "c"}],
+    )
+
+    assert gateway.list_repository_collaborators(repo_full_name="o/r", limit=2) == [
+        "a",
+        "b",
+    ]
+    assert request.call_count == 1
+
+
 def test_cursor_listing_resumes_at_the_cursor_and_skips() -> None:
     gateway, request = _gateway()
     cursor = "https://api.github.com/repos/o/r/pulls?after=abc"

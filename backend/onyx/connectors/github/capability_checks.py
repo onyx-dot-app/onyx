@@ -1,8 +1,10 @@
 """Capability checks for the GitHub connector.
 
-The indexing checks register in ``registry.py``. Each check makes small probes
-(one page, one pull request, one file) with the gateway operations that
-indexing calls.
+The indexing checks register in ``registry.py``; the permission-sync and
+group-sync checks register in the EE registry
+(``ee/onyx/connectors/capability_checks.py``). Each check makes small probes
+(one page, one pull request, one file, a few users) with the gateway
+operations that its sync calls.
 
 The credential is a personal access token: classic (OAuth scopes) or
 fine-grained (repository permissions). GitHub answers 404, not 403, for a
@@ -15,6 +17,8 @@ every repository of the owner (an organization, else a user).
 """
 
 from typing import NoReturn
+
+from pydantic import BaseModel
 
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
@@ -740,4 +744,366 @@ def build_github_indexing_checks() -> list[CapabilityCheck]:
         _PullRequestsCheck(),
         _IssuesCheck(),
         _FilesCheck(),
+    ]
+
+
+# Permission sync. The EE registry registers these checks. Doc sync reads the
+# visibility of each repository: public repositories are public, private ones
+# map to their collaborators group, internal ones to their organization group.
+# Group sync reads the collaborators of each private repository, the members of
+# the organization of each internal repository, and the public email of each
+# user. Both map GitHub users to Onyx users by that email.
+
+_VISIBILITY_PUBLIC = "public"
+_VISIBILITY_INTERNAL = "internal"
+# Repositories a permission check reads to find private and internal ones.
+_PERMISSION_SAMPLE_REPOSITORIES = 20
+_SAMPLE_USERS = 5
+# One login past the sample tells a complete sample from a partial one.
+_USER_LISTING_LIMIT = _SAMPLE_USERS + 1
+_ORG_READ_SCOPE = "read:org"
+# Classic scopes that include another scope.
+_IMPLYING_SCOPES: dict[str, frozenset[str]] = {
+    _ORG_READ_SCOPE: frozenset({"read:org", "write:org", "admin:org"}),
+}
+
+_COLLABORATORS_HINT = (
+    "GitHub lists collaborators only to an account with write (push) access to "
+    "the repository. Classic token: the `repo` and `read:org` scopes. "
+    "Fine-grained token: read access to Metadata."
+)
+_MEMBERS_HINT = (
+    "Classic token: the `read:org` scope. Fine-grained token: read access to the "
+    "organization's Members. Without it, GitHub lists only the public members."
+)
+_EMAIL_HINT = (
+    "GitHub returns only the public email of a profile (Settings > Public "
+    "email). Users without one get no access in Onyx."
+)
+
+
+def _is_private(repository: GitHubRepository) -> bool:
+    """Private for group sync: a private repository, or one whose visibility
+    is unknown (permission sync treats it as private)."""
+    return repository.visibility not in (_VISIBILITY_PUBLIC, _VISIBILITY_INTERNAL)
+
+
+class _RepositorySample(BaseModel):
+    repositories: list[GitHubRepository]
+    # True when permission sync reads repositories the sample left out.
+    cut: bool
+
+
+def _permission_repositories(
+    context: CapabilityCheckContext, config: GithubConnectorConfig
+) -> _RepositorySample:
+    """The repositories permission sync reads, sampled. None readable is
+    INDETERMINATE: the repository checks report why."""
+    # One past the sample tells whether repositories remain unread.
+    repositories: list[GitHubRepository] = _target_repositories(
+        context, config, _PERMISSION_SAMPLE_REPOSITORIES + 1
+    )
+    if not repositories:
+        raise UnexpectedValidationError(
+            "No repository to sync is readable, so Onyx cannot run this probe. "
+            "github_repositories_visible or github_configured_repositories "
+            "reports why."
+        )
+    return _RepositorySample(
+        repositories=repositories[:_PERMISSION_SAMPLE_REPOSITORIES],
+        cut=len(repositories) > _PERMISSION_SAMPLE_REPOSITORIES,
+    )
+
+
+def _raise_if_sample_was_cut(sample: _RepositorySample, kind: str) -> None:
+    """No sampled repository is of the kind a probe needs. When the sample
+    leaves repositories out, the sync can still read one: INDETERMINATE."""
+    if sample.cut:
+        raise UnexpectedValidationError(
+            f"The first {len(sample.repositories)} repositories include no {kind} "
+            "repository, so Onyx cannot verify what group sync reads for the "
+            "others."
+        )
+
+
+class _RepositoryVisibilityCheck(_GitHubCheck):
+    """The repositories list with their visibility, and an internal
+    repository belongs to an organization, as doc sync needs."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.DOC_PERMISSION_SYNC,
+            check_id="github_repository_visibility",
+            display_name="Repository visibility is readable",
+            remediation=(
+                "Give the token read access to the repositories (see the indexing "
+                "checks)."
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config: GithubConnectorConfig = self.config(context)
+        repositories: list[GitHubRepository] = _permission_repositories(
+            context, config
+        ).repositories
+        orphans: list[str] = [
+            repository.full_name
+            for repository in repositories
+            if repository.visibility == _VISIBILITY_INTERNAL
+            and repository.organization is None
+        ]
+        if orphans:
+            raise ConnectorValidationError(
+                f"GitHub returned no organization for the internal repositories "
+                f"{', '.join(f'`{name}`' for name in orphans)}, so permission sync "
+                "cannot give them to the organization's members."
+            )
+
+
+def _scope_hint(token: GitHubTokenInfo | None, *scopes: str) -> str:
+    """Names the scopes a classic token lacks, for a denial message."""
+    if token is None or token.kind != GitHubTokenKind.CLASSIC or token.scopes is None:
+        return ""
+    granted: set[str] = set(token.scopes)
+    missing: list[str] = [
+        scope
+        for scope in scopes
+        if not granted & _IMPLYING_SCOPES.get(scope, frozenset({scope}))
+    ]
+    if not missing:
+        return ""
+    return (
+        f" The classic token lacks the {', '.join(f'`{scope}`' for scope in missing)} "
+        "scope."
+    )
+
+
+def _read_collaborators(
+    context: CapabilityCheckContext, repository: GitHubRepository
+) -> list[str]:
+    gateway: GitHubSourceOperations = _gateway(context)
+    try:
+        return gateway.list_repository_collaborators(
+            repo_full_name=repository.full_name, limit=_USER_LISTING_LIMIT
+        )
+    except GitHubApiError as e:
+        hint: str = _scope_hint(
+            _token_info(gateway), _PRIVATE_REPOSITORY_SCOPE, _ORG_READ_SCOPE
+        )
+        _raise_for_api_error(
+            e,
+            denied=(
+                f"The token cannot list the collaborators of "
+                f"`{repository.full_name}`.{hint} {_COLLABORATORS_HINT}"
+            ),
+            not_found=(
+                f"GitHub does not list the collaborators of "
+                f"`{repository.full_name}` to the token.{hint} {_COLLABORATORS_HINT}"
+            ),
+        )
+
+
+def _read_members(context: CapabilityCheckContext, org_login: str) -> list[str]:
+    gateway: GitHubSourceOperations = _gateway(context)
+    try:
+        return gateway.list_organization_members(
+            org_login=org_login, limit=_USER_LISTING_LIMIT
+        )
+    except GitHubApiError as e:
+        _raise_for_api_error(
+            e,
+            denied=(
+                f"The token cannot list the members of the organization "
+                f"`{org_login}`. {_MEMBERS_HINT}"
+            ),
+        )
+
+
+class _CollaboratorsCheck(_GitHubCheck):
+    """Lists the collaborators of the first private repository. A sync with
+    only public and internal repositories reads no collaborators."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="github_repository_collaborators",
+            display_name="Repository collaborators are readable",
+            remediation=(
+                "Use a token of an account with write access to the private "
+                f"repositories. {_COLLABORATORS_HINT}"
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config: GithubConnectorConfig = self.config(context)
+        sample: _RepositorySample = _permission_repositories(context, config)
+        repository: GitHubRepository | None = next(
+            (
+                repository
+                for repository in sample.repositories
+                if _is_private(repository)
+            ),
+            None,
+        )
+        if repository is None:
+            _raise_if_sample_was_cut(sample, "private")
+            return
+        _read_collaborators(context, repository)
+
+
+def _internal_organizations(sample: _RepositorySample) -> list[str]:
+    """The organizations whose members group sync reads for the sampled
+    internal repositories."""
+    return sorted(
+        {
+            repository.organization.login
+            for repository in sample.repositories
+            if repository.visibility == _VISIBILITY_INTERNAL
+            and repository.organization is not None
+        }
+    )
+
+
+def _unsampled_organization(sample: _RepositorySample) -> str | None:
+    """The owner organization, when the sample leaves out repositories that
+    can be internal ones of it. Group sync may then read its members, but
+    no internal repository proves it, so a failed read is INDETERMINATE."""
+    if not sample.cut:
+        return None
+    return next(
+        (
+            repository.organization.login
+            for repository in sample.repositories
+            if repository.organization is not None
+        ),
+        None,
+    )
+
+
+class _OrganizationMembersCheck(_GitHubCheck):
+    """Lists the members of the organization of an internal repository. A
+    classic token without ``read:org`` reads only the public members, and
+    GitHub reports no error for it."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="github_organization_members",
+            display_name="Organization members are readable",
+            remediation=_MEMBERS_HINT,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config: GithubConnectorConfig = self.config(context)
+        sample: _RepositorySample = _permission_repositories(context, config)
+        organizations: list[str] = _internal_organizations(sample)
+        if not organizations:
+            unsampled: str | None = _unsampled_organization(sample)
+            if unsampled is None:
+                # No internal repository: group sync reads no members.
+                return
+            try:
+                self._probe(context, unsampled)
+            except ConnectorValidationError as e:
+                raise UnexpectedValidationError(
+                    f"The first {len(sample.repositories)} repositories include "
+                    f"no internal repository, so group sync may read no members "
+                    f"of `{unsampled}`. If it does, this fails: {e}"
+                ) from e
+            return
+        self._probe(context, organizations[0])
+
+    def _probe(self, context: CapabilityCheckContext, org_login: str) -> None:
+        token: GitHubTokenInfo | None = _token_info(_gateway(context))
+        if _scope_hint(token, _ORG_READ_SCOPE):
+            raise InsufficientPermissionsError(
+                f"The classic token has no `{_ORG_READ_SCOPE}` scope, so GitHub "
+                f"lists only the public members of `{org_login}`, and the other "
+                "members lose access to its internal repositories in Onyx."
+            )
+        _read_members(context, org_login)
+
+
+class _UserEmailsCheck(_GitHubCheck):
+    """Some sampled users have a public email. Group sync maps GitHub users
+    to Onyx users by the public email of the profile. Fails only when no
+    sampled user has one and the sample covers every user of the first
+    group; a partial sample is INDETERMINATE."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.EXTERNAL_GROUP_SYNC,
+            check_id="github_user_emails",
+            display_name="Users have public emails",
+            required=False,
+            remediation=(
+                "Ask the users to set a public email on their GitHub profile. "
+                f"{_EMAIL_HINT}"
+            ),
+        )
+
+    def run(self, context: CapabilityCheckContext) -> None:
+        config: GithubConnectorConfig = self.config(context)
+        sample: _RepositorySample = _permission_repositories(context, config)
+        private: GitHubRepository | None = next(
+            (
+                repository
+                for repository in sample.repositories
+                if _is_private(repository)
+            ),
+            None,
+        )
+        organizations: list[str] = _internal_organizations(sample) or [
+            org for org in [_unsampled_organization(sample)] if org is not None
+        ]
+        if private is None and not organizations:
+            _raise_if_sample_was_cut(sample, "private or internal")
+            return
+        try:
+            logins: list[str] = (
+                _read_collaborators(context, private)
+                if private is not None
+                else _read_members(context, organizations[0])
+                if organizations
+                else []
+            )
+        except ConnectorValidationError as e:
+            raise UnexpectedValidationError(
+                "Onyx cannot read the users of a group, so this check cannot run. "
+                "github_repository_collaborators or github_organization_members "
+                "reports why."
+            ) from e
+        if not logins:
+            return
+        gateway: GitHubSourceOperations = _gateway(context)
+        emails: list[str | None] = []
+        for login in logins[:_SAMPLE_USERS]:
+            try:
+                emails.append(gateway.get_user(login=login).email)
+            except GitHubApiError as e:
+                _raise_for_api_error(
+                    e, denied=f"The token cannot read the profile of `{login}`"
+                )
+        if any(emails):
+            return
+        if len(logins) > _SAMPLE_USERS:
+            raise UnexpectedValidationError(
+                f"The {_SAMPLE_USERS} sampled users have no public email. Group sync "
+                f"reads more users, so Onyx cannot verify the rest. {_EMAIL_HINT}"
+            )
+        raise InsufficientPermissionsError(
+            f"No user of the sampled group has a public email, so their access "
+            f"cannot map to Onyx users. {_EMAIL_HINT}"
+        )
+
+
+def build_github_doc_permission_sync_checks() -> list[CapabilityCheck]:
+    return [_RepositoryVisibilityCheck()]
+
+
+def build_github_group_sync_checks() -> list[CapabilityCheck]:
+    return [
+        _CollaboratorsCheck(),
+        _OrganizationMembersCheck(),
+        _UserEmailsCheck(),
     ]
