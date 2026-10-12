@@ -4426,6 +4426,7 @@
           "tooltip": "Los embeddings de los documentos se están actualizando por los cambios recientes en este grupo."
         },
         "systemGroup": {
+          "basicDescription": "{appName} gestiona este grupo. Solo contiene miembros, y los permisos de abajo se aplican a todos ellos.",
           "description": "{appName} gestiona este grupo. Solo contiene miembros y es lo único que puedes cambiar.",
           "title": "Grupo del sistema"
         },

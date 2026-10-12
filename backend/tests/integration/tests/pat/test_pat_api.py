@@ -1,14 +1,5 @@
-"""
-Integration tests for Personal Access Token (PAT) API.
-
-Test Suite:
-1. test_pat_lifecycle_happy_path - Complete PAT lifecycle (create, auth, revoke)
-2. test_pat_user_isolation_and_authentication - User authentication and multi-user isolation
-3. test_pat_expiration_flow - Expiration logic (end-of-day UTC, never-expiring)
-4. test_pat_validation_errors - Input validation and error handling
-5. test_pat_sorting_and_last_used - Sorting and last_used_at tracking
-6. test_pat_role_based_access_control - Admin vs Basic permissions
-"""
+"""Integration tests for the personal access token API: lifecycle, isolation,
+expiration, validation, sorting, and permission inheritance."""
 
 import os
 import time
@@ -23,30 +14,6 @@ from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
-
-
-def _grant_create_pat_permission(
-    user: DATestUser,
-    admin_user: DATestUser,
-) -> None:
-    """Grant CREATE_USER_API_KEYS to a non-admin user via a temp group.
-
-    PAT creation is gated by Permission.CREATE_USER_API_KEYS; non-admin test
-    users must be placed in a group that grants it before they can call
-    POST /user/pats.
-    """
-    group = UserGroupManager.create(
-        name=f"pat_creator_{user.id[:8]}",
-        user_ids=[user.id],
-        cc_pair_ids=[],
-        user_performing_action=admin_user,
-    )
-    response = UserGroupManager.set_permissions(
-        user_group=group,
-        permissions=[Permission.CREATE_USER_API_KEYS.value],
-        user_performing_action=admin_user,
-    )
-    response.raise_for_status()
 
 
 def test_pat_lifecycle_happy_path(reset: None) -> None:  # noqa: ARG001
@@ -108,11 +75,6 @@ def test_pat_user_isolation_and_authentication(
     """
     user_a: DATestUser = UserManager.create(name="user_a")
     user_b: DATestUser = UserManager.create(name="user_b")
-
-    # user_a is the first registered user and lands in Admin → has
-    # FULL_ADMIN_PANEL_ACCESS which short-circuits the PAT-creation gate.
-    # user_b is basic and needs CREATE_USER_API_KEYS via a group grant.
-    _grant_create_pat_permission(user_b, user_a)
 
     # Create tokens for both users
     user_a_pats = []
@@ -350,8 +312,6 @@ def test_pat_role_based_access_control(reset: None) -> None:  # noqa: ARG001
     basic_user: DATestUser = UserManager.create(name="basic_user")
     assert not basic_user.is_admin
 
-    _grant_create_pat_permission(basic_user, admin_user)
-
     admin_pat = PATManager.create(
         name="Admin Token",
         expiration_days=7,
@@ -448,7 +408,6 @@ def test_pat_group_permission_access_control(reset: None) -> None:  # noqa: ARG0
         permissions=[
             Permission.MANAGE_CONNECTORS.value,
             Permission.MANAGE_USER_GROUPS.value,
-            Permission.CREATE_USER_API_KEYS.value,
         ],
         user_performing_action=admin_user,
     )
@@ -483,7 +442,6 @@ def test_pat_group_permission_access_control(reset: None) -> None:  # noqa: ARG0
 
     # Sanity: a plain basic user's PAT still cannot reach that endpoint
     plain_basic: DATestUser = UserManager.create(name="plain_basic")
-    _grant_create_pat_permission(plain_basic, admin_user)
     plain_pat = PATManager.create(
         name="Plain Basic Token",
         expiration_days=7,
