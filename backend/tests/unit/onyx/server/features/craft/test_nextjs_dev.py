@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -345,34 +346,45 @@ def test_restore_script_is_valid_bash() -> None:
 
 
 @pytest.mark.parametrize(
-    "declaration,migrates",
+    "managed,declaration,migrates",
     [
-        ("const nextConfig: NextConfig = {};", True),
+        (True, "const nextConfig: NextConfig = {};", True),
         (
+            True,
             "const nextConfig: NextConfig = { experimental: { reactDebugChannel: false } };",
             False,
         ),
-        ("const nextConfig: NextConfig = { trailingSlash: true };", False),
+        (True, "const nextConfig: NextConfig = { trailingSlash: true };", False),
+        (False, "const nextConfig: NextConfig = {};", False),
     ],
 )
 def test_managed_config_migration_preserves_custom_settings(
-    declaration: str, migrates: bool
+    tmp_path: Path, managed: bool, declaration: str, migrates: bool
 ) -> None:
-    script = build_nextjs_start_script(_SESSION_PATH, 3010)
-    migration = re.search(r"sed -i '([^']+)'", script)
-    assert migration is not None
+    config = tmp_path / "outputs" / "web" / "next.config.ts"
+    config.parent.mkdir(parents=True)
+    script = build_nextjs_start_script(str(tmp_path), 3010)
+    migration = script[script.index("NEXT_CONFIG=") : script.index('NEXTJS_PID=""')]
+    if sys.platform == "darwin":
+        # BSD sed requires an explicit empty backup suffix; the sandbox uses GNU sed.
+        migration = migration.replace("sed -i '", "sed -i '' '")
     custom_settings = "nextConfig.headers = async () => [];"
-    source = f"{declaration}\n{custom_settings}\n"
-    result = subprocess.run(
-        ["sed", migration.group(1)],
-        input=source,
-        text=True,
-        capture_output=True,
-        check=True,
-    ).stdout
+    marker = "function resolveWebappBasePath() {}\n" if managed else ""
+    source = f"{marker}{declaration}\n{custom_settings}\n"
+    config.write_text(source)
+    before = config.stat()
+    subprocess.run(["bash", "-ec", migration], check=True, capture_output=True)
+    result = config.read_text()
     assert custom_settings in result
     if migrates:
         assert "reactDebugChannel: false" in result
     else:
         assert result == source
+        assert config.stat().st_ino == before.st_ino
+        assert config.stat().st_mtime_ns == before.st_mtime_ns
+    migrated = config.stat()
+    subprocess.run(["bash", "-ec", migration], check=True, capture_output=True)
+    assert config.read_text() == result
+    assert config.stat().st_ino == migrated.st_ino
+    assert config.stat().st_mtime_ns == migrated.st_mtime_ns
     assert "reactDebugChannel: false" in _TEMPLATE_NEXT_CONFIG.read_text()
