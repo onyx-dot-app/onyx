@@ -486,6 +486,15 @@ document content, and users only as a count. With the workspace security setting
 runner keeps no findings, cached findings are not reused, and report, draft-run and
 edit-plan responses hide findings stored earlier.
 
+A *discovery check* (`CapabilityCheck(discovery=True)`) gathers findings that take
+much longer than validation, such as a listing of every space. It is never
+required and never counts toward a verdict. The runner runs it after the
+validation checks of the same run, and skips it (`applicable=False`) when a
+required check failed or findings are off. Creation does not run it: a cached
+draft result is reused, else it is recorded as not run, so neither creation nor
+the first index attempt waits on it. `findings.py:bounded_options` and
+`bounded_count` read a listing lazily up to a cap.
+
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See

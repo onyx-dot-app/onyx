@@ -30,6 +30,7 @@ from onyx.connectors.capability_checks.draft_runs import (
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CapabilityCheckStatus,
     CheckFinding,
     CheckFindingKey,
     CredentialCapability,
@@ -63,6 +64,8 @@ _TOKEN = "fake_token"
 _CHANNELS = "fake_channels"
 _PERM_SYNC = "fake_perm_sync"
 
+_DISCOVERY = "discovery_check"
+
 
 class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
     def __init__(
@@ -72,6 +75,7 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
         *,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = frozenset(),
+        discovery: bool = False,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -79,6 +83,7 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
             display_name=f"{check_id} display",
             requires_connector_instance=False,
             requires_fields=requires_fields,
+            discovery=discovery,
         )
         self._harness = harness
 
@@ -103,6 +108,8 @@ class _Harness:
         self.runs: list[str] = []
         self.errors: dict[str, Exception] = {}
         self.findings: dict[str, list[CheckFinding]] = {}
+        # Registers a discovery check after the other checks.
+        self.with_discovery = False
         # A check in here waits until its event is set.
         self.slow: dict[str, threading.Event] = {}
         self.send_task = MagicMock()
@@ -131,6 +138,11 @@ class _Harness:
             _FakeConfigCheck(self, _CHANNELS, requires_fields=frozenset({"channels"})),
             _FakeCheck(
                 self, _PERM_SYNC, capability=CredentialCapability.DOC_PERMISSION_SYNC
+            ),
+            *(
+                [_FakeCheck(self, _DISCOVERY, discovery=True)]
+                if self.with_discovery
+                else []
             ),
         ]
 
@@ -339,6 +351,60 @@ def test_draft_findings_reach_the_run_and_the_created_pairs_report(
         result.check_id: result.findings for result in report.check_results
     }
     assert stored_findings[_CHANNELS] == [channels]
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_creation_does_not_run_or_wait_for_a_discovery_check(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.with_discovery = True
+
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+
+    assert _DISCOVERY not in harness.runs
+    # No background run: the first index attempt does not wait for it.
+    harness.send_task.assert_not_called()
+    assert _stored_statuses(db_session, slack_pair)[_DISCOVERY] == "skipped"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_draft_runs_discovery_last_and_creation_keeps_its_findings(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.with_discovery = True
+    found = OptionsFinding(
+        key=CheckFindingKey.READABLE_CHANNELS,
+        field_name="channels",
+        options=[FindingOption(value="a", label="#a")],
+    )
+    harness.findings[_DISCOVERY] = [found]
+    start_draft_capability_check_run(
+        user_id=uuid4(),
+        credential=slack_pair.credential,
+        source=DocumentSource.SLACK,
+        config_class=SlackConnectorConfig,
+        access_type=AccessType.PUBLIC,
+        draft_key=uuid4().hex,
+        form_values={"channels": ["a"]},
+    )
+    run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
+    assert harness.runs == [_TOKEN, _CHANNELS, _DISCOVERY]
+    harness.send_task.reset_mock()
+
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+
+    assert harness.runs == [_TOKEN, _CHANNELS, _DISCOVERY]
+    db_session.expire_all()
+    row = get_capability_report_row(
+        db_session, slack_pair.credential_id, slack_pair.connector_id
+    )
+    assert row is not None and row.report is not None
+    report = CredentialCapabilityReport.model_validate(row.report)
+    discovery = next(
+        result for result in report.check_results if result.check_id == _DISCOVERY
+    )
+    assert discovery.status == CapabilityCheckStatus.PASSED
+    assert discovery.findings == [found]
 
 
 @pytest.mark.usefixtures("tenant_context")
