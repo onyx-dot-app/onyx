@@ -1,5 +1,6 @@
 """Shared utilities for generating AGENTS.md content."""
 
+import json
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -45,34 +46,31 @@ def get_provider_display_name(provider: str | None) -> str | None:
 # Content for the attachments section when user has uploaded files
 ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
 
-The `attachments/` directory contains files that the user has explicitly
-uploaded during this session. **These files are critically important** and
-should be treated as high-priority context.
+The `attachments/` directory stores session files. Its contents are not the
+current task's selections. Files can remain after a draft chip is removed.
 
-### Why Attachments Matter
+Use only the attachment paths selected in the current message as required
+context. Read those files before completing the task. Earlier message
+attachments remain available when the task refers to them. Do not read every
+stored file or infer that a stored file was selected for the current task."""
 
-- The user deliberately chose to upload these files, signaling they are directly relevant to the task
-- These files often contain the specific data, requirements, or examples the user wants you to work with
-- They may include spreadsheets, documents, images, or code that should inform your work
 
-### Required Actions
-
-**At the start of every task, you MUST:**
-
-1. **Check for attachments**: List the contents of `attachments/` to see what the user has provided
-2. **Read and analyze each file**: Thoroughly examine every attachment to understand its contents and relevance
-3. **Reference attachment content**: Use the information from attachments to inform your responses and outputs
-
-### File Handling
-
-- Uploaded files may be in various formats: CSV, JSON, PDF, images, text files, etc.
-- For spreadsheets and data files, examine the structure, columns, and sample data
-- For documents, extract key information and requirements
-- For images, analyze and describe their content
-- For code files, understand the logic and patterns
-
-**Do NOT ignore user uploaded files.** They are there for a reason and likely
-contain exactly what you need to complete the task successfully."""
+def build_attachment_prompt(content: str, paths: Iterable[str]) -> str:
+    """Add explicitly selected file paths to the agent's task context."""
+    selected_paths: list[str] = list(paths)
+    selection: str = (
+        "\n".join(f"- {json.dumps(path)}" for path in selected_paths)
+        if selected_paths
+        else "None."
+    )
+    return (
+        content
+        + "\n\nSelected attachments for this task (read these files):\n"
+        + selection
+        + "\nStored files are not current selections. Do not read unselected files "
+        "unless this task refers to earlier attachments. This selection replaces "
+        "any instruction to read every file in attachments/."
+    )
 
 
 def build_connectable_apps_list(apps: Iterable[ExternalApp]) -> str:

@@ -782,7 +782,11 @@ export async function uploadFile(
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to upload file: ${res.status}`);
+    throw new FetchError(
+      errorData.detail || `Failed to upload file: ${res.status}`,
+      res.status,
+      errorData
+    );
   }
 
   return res.json();
@@ -810,7 +814,11 @@ export async function deleteFile(
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
+    throw new FetchError(
+      errorData.detail || `Failed to delete file: ${res.status}`,
+      res.status,
+      errorData
+    );
   }
 }
 

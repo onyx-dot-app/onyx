@@ -1827,6 +1827,12 @@ class SessionManager:
         Raises:
             ValueError: If session not found or upload limits exceeded
         """
+        # The session row owns stored-file quota across concurrent API requests.
+        session = get_build_session(
+            session_id, user_id, self._db_session, for_update=True
+        )
+        if session is None:
+            raise ValueError("Session not found")
         _, sandbox = self._require_session_and_sandbox(session_id, user_id)
 
         # Check upload limits

@@ -40,6 +40,9 @@ from onyx.server.features.build.interactive_turns.state import (
     get_turn_for_request,
 )
 from onyx.server.features.build.sandbox.models import PromptAttachment
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    build_attachment_prompt,
+)
 from onyx.server.features.build.session.llm_config import GatewaySelection
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import (
@@ -181,7 +184,10 @@ def send_message(
             session_id=session_id,
             user_id=user.id,
             client_request_id=client_request_id,
-            prompt=request.content,
+            prompt=build_attachment_prompt(
+                request.content,
+                (attachment.path for attachment in request.attachments),
+            ),
             turn_index=turn_index,
             attachments=prompt_attachments,
         )

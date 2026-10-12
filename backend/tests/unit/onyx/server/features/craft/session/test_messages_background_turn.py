@@ -199,6 +199,9 @@ def test_send_message_starts_background_turn(
     assert db_session.commits == 1
     turn = get_turn(cache, UUID(response.turn_id))
     assert turn is not None
+    assert "attachments/notes.txt" in turn.prompt
+    assert "attachments/reference.png" in turn.prompt
+    assert "read these files" in turn.prompt
     assert [
         attachment.path for attachment in turn.attachments
     ] == expected_prompt_attachment_paths

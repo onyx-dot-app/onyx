@@ -27,6 +27,7 @@ import {
   BuildFile,
   UploadFileStatus,
   useUploadFilesContext,
+  UploadFilesProvider,
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
@@ -96,9 +97,7 @@ function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
  * - Input bar at bottom
  * - Header with output panel toggle
  */
-export default function BuildChatPanel({
-  existingSessionId,
-}: BuildChatPanelProps) {
+function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
   const t = useTranslations("craft.chatPanel");
   const router = useRouter();
   const outputPanelOpen = useOutputPanelOpen();
@@ -265,14 +264,10 @@ export default function BuildChatPanel({
     currentFilesRef.current = currentMessageFiles;
   }, [currentMessageFiles]);
 
-  /**
-   * Keep the upload context in sync with the active session.
-   * The context handles all session change logic internally (fetching attachments,
-   * clearing files, auto-uploading pending files).
-   */
+  // URL sessions identify drafts; provisional sessions provide upload destinations.
   useEffect(() => {
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
-    setActiveSession(activeSession);
+    setActiveSession(activeSession, { draftId: existingSessionId ?? null });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
   const maybeAutoOpenWebapp = useBuildSessionStore(
@@ -923,3 +918,13 @@ export default function BuildChatPanel({
     </LayoutGroup>
   );
 }
+
+function BuildChatPanel(props: BuildChatPanelProps) {
+  return (
+    <UploadFilesProvider>
+      <ChatPanelContent {...props} />
+    </UploadFilesProvider>
+  );
+}
+
+export default BuildChatPanel;

@@ -1,14 +1,21 @@
 import {
   act,
+  deferred,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@tests/setup/test-utils";
 import BuildChatPanel from "@/app/craft/components/ChatPanel";
+import { useUploadFilesContext } from "@/app/craft/contexts/UploadFilesContext";
+import { uploadFile } from "@/app/craft/services/apiServices";
 import type { CraftInputBarProps } from "@/app/craft/components/CraftInputBar";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+
+jest.mock("@/app/craft/services/apiServices", () => ({
+  uploadFile: jest.fn(),
+}));
 
 const streamMessage = jest.fn().mockResolvedValue(undefined);
 const retryQueuedMessage = jest.fn().mockResolvedValue(undefined);
@@ -31,17 +38,6 @@ jest.mock("@/app/craft/hooks/useBuildStreaming", () => ({
 }));
 jest.mock("@/app/craft/hooks/useWakeOnIntent", () => ({
   useWakeOnIntent: () => idle,
-}));
-jest.mock("@/app/craft/contexts/UploadFilesContext", () => ({
-  UploadFileStatus: { COMPLETED: "completed" },
-  useUploadFilesContext: () => ({
-    currentMessageFiles: [],
-    hasUploadingFiles: false,
-    setActiveSession: idle,
-    endSessionVisit: idle,
-    getCurrentMessageFiles: () => [],
-    uploadFiles: idle,
-  }),
 }));
 jest.mock("@/app/craft/contexts/BuildContext", () => ({
   useBuildContext: () => ({
@@ -90,6 +86,7 @@ jest.mock("@/app/craft/components/CraftInputBar", () => ({
     | "onRemoveQueuedMessage"
   >) => (
     <div>
+      <DraftSelection />
       <button disabled={disabled} onClick={() => onSubmit("prompt", [])}>
         Send
       </button>
@@ -173,6 +170,20 @@ jest.mock("@/app/craft/components/approvals/LiveApprovalsRegion", () => ({
   __esModule: true,
   default: () => null,
 }));
+
+function DraftSelection() {
+  const { currentMessageFiles, uploadFiles } = useUploadFilesContext();
+  return (
+    <div>
+      <button
+        onClick={() => void uploadFiles([new File(["draft"], "draft.txt")])}
+      >
+        Attach draft
+      </button>
+      <span data-testid="draft-count">{currentMessageFiles.length}</span>
+    </div>
+  );
+}
 
 const SESSION_ID = "metadata-session";
 beforeEach(() => {
@@ -383,6 +394,41 @@ it("does not offer queue retry for a different prompt's failure", () => {
   expect(
     useBuildSessionStore.getState().sessions.get(SESSION_ID)?.queuedMessages[0]
   ).toMatchObject({ text: "waiting prompt", phase: "waiting" });
+});
+
+it("retains a draft on rerender and starts fresh after chat unmounts", async () => {
+  const upload = jest.mocked(uploadFile).mockResolvedValue({
+    path: "attachments/draft.txt",
+    filename: "draft.txt",
+    size_bytes: 5,
+  });
+  const first = render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  fireEvent.click(screen.getByRole("button", { name: "Attach draft" }));
+  await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+  first.rerender(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  expect(screen.getByTestId("draft-count")).toHaveTextContent("1");
+  first.unmount();
+  render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  expect(screen.getByTestId("draft-count")).toHaveTextContent("0");
+});
+
+it("cannot restore a draft when an old chat upload completes after remount", async () => {
+  const pending = deferred<Awaited<ReturnType<typeof uploadFile>>>();
+  const upload = jest.mocked(uploadFile).mockReturnValue(pending.promise);
+  const first = render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  fireEvent.click(screen.getByRole("button", { name: "Attach draft" }));
+  expect(screen.getByTestId("draft-count")).toHaveTextContent("1");
+  first.unmount();
+  render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  await act(async () =>
+    pending.resolve({
+      path: "attachments/draft.txt",
+      filename: "draft.txt",
+      size_bytes: 5,
+    })
+  );
+  expect(screen.getByTestId("draft-count")).toHaveTextContent("0");
+  expect(upload).toHaveBeenCalledTimes(1);
 });
 
 it("holds submission during restoration and enables it when the sandbox is ready", async () => {
