@@ -9,6 +9,7 @@ from ee.onyx.connectors.perm_sync_valid import (
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas.connector import CanvasConnector
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.linear.models import LinearViewer
@@ -31,6 +32,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
             DocumentSource.GITHUB,
             DocumentSource.GMAIL,
             DocumentSource.GOOGLE_DRIVE,
+            DocumentSource.HUBSPOT,
             DocumentSource.JIRA,
             DocumentSource.LINEAR,
             DocumentSource.ONEDRIVE,
@@ -47,6 +49,7 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
         DocumentSource.CONFLUENCE,
         DocumentSource.GOOGLE_DRIVE,
         DocumentSource.LINEAR,
+        DocumentSource.HUBSPOT,
         DocumentSource.ONEDRIVE,
         DocumentSource.SHAREPOINT,
         DocumentSource.ZOOM,
@@ -64,8 +67,9 @@ def test_probe_bearing_sources_derive_from_the_dispatch_table() -> None:
             ],
         ),
         (ZoomConnector, ["probe_recording_access_permissions"]),
+        (HubSpotConnector, ["probe_permission_sync_scopes"]),
     ],
-    ids=["canvas", "zoom"],
+    ids=["canvas", "zoom", "hubspot"],
 )
 def test_dispatch_reaches_the_matching_validator(
     connector_class: type[BaseConnector], probes: list[str]
