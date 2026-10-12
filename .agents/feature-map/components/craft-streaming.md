@@ -318,7 +318,8 @@ Presentation keyboard navigation stays inside the active viewer.
 
 Tabs, selection, medium split, and Files expansion remain independent of task-stream rendering.
 Their state belongs to the session's in-memory store, not server session data.
-Inventory responses require the same session instance and turn generation that requested them.
+Inventory responses require the same session instance. Silent reads also require the original turn generation and active turn.
+Non-silent reads can update inventory after a turn changes; new tabs and selection still check the requesting turn.
 Deleted and recreated sessions reject earlier responses, even when they reuse a session ID.
 
 Text, image, Markdown, and PDF viewers retain accepted payloads during refreshes and transient failures.
@@ -326,7 +327,7 @@ Retained viewers show refresh progress and failure feedback without covering the
 Authorization and not-found responses purge accepted payloads from the viewer cache.
 Later transient failures cannot restore invalidated content without a successful read.
 Hidden viewers defer scheduled retries until activation.
-Presentation viewers hide cached slides during conversion because conversion replaces slide files.
+Presentation viewers retain accepted slides during conversion and replace their image tokens when the new conversion completes.
 CSV files display a sticky-header table limited to 1,000 rows, 100 columns, and 5,000 cells.
 CSV viewers report malformed quoted fields and offer a raw download through the preview toolbar.
 The CSV preview uses the shared parser directly. Parser tests live with the shared utility.

@@ -120,6 +120,46 @@ describe("workspace files", () => {
     });
   });
 
+  it.each(["outputs/web/bun.lock", "outputs/custom.data"])(
+    "previews UTF-8 text with an unknown file type: %s",
+    async (path) => {
+      jest.mocked(fetch).mockResolvedValueOnce(
+        new Response('{"name":"café"}\n', {
+          headers: { "Content-Type": "application/octet-stream" },
+        })
+      );
+      await expect(fetchFileContent("session", path)).resolves.toMatchObject({
+        content: '{"name":"café"}\n',
+        isImage: false,
+      });
+    }
+  );
+
+  it.each([new Uint8Array([255, 128]), new Uint8Array([65, 0, 66])])(
+    "rejects non-text bytes even when their extension is unknown",
+    async (bytes) => {
+      jest.mocked(fetch).mockResolvedValueOnce(
+        new Response(bytes, {
+          headers: { "Content-Type": "application/octet-stream" },
+        })
+      );
+      await expect(
+        fetchFileContent("session", "outputs/custom.data")
+      ).resolves.toMatchObject({ content: "", error: "unsupported_binary" });
+    }
+  );
+
+  it("does not decode oversized unknown files", async () => {
+    jest.mocked(fetch).mockResolvedValueOnce(
+      new Response(new Uint8Array(10 * 1024 * 1024 + 1).fill(65), {
+        headers: { "Content-Type": "application/octet-stream" },
+      })
+    );
+    await expect(
+      fetchFileContent("session", "outputs/huge.data")
+    ).resolves.toMatchObject({ error: "unsupported_binary" });
+  });
+
   it("does not decode unsupported binary resources as text", async () => {
     const response = new Response(new Uint8Array([0, 255, 128]), {
       headers: { "Content-Type": "application/octet-stream" },

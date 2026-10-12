@@ -743,6 +743,7 @@ export interface FileContentResponse {
 
 // Maximum file size for image preview (10MB)
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MAX_UNKNOWN_TEXT_SIZE = 10 * 1024 * 1024;
 
 /**
  * Fetch file content from the sandbox for preview.
@@ -825,6 +826,25 @@ export async function fetchFileContent(
       path
     ) || /(?:^|\/)(?:Dockerfile|Makefile|README|LICENSE)$/i.test(path);
   if (!textMimeType && !sourceFile) {
+    if (/^application\/octet-stream(?:;|$)/i.test(mimeType)) {
+      const bytes = await res.arrayBuffer();
+      if (
+        bytes.byteLength <= MAX_UNKNOWN_TEXT_SIZE &&
+        !new Uint8Array(bytes).some(
+          (byte) => byte < 9 || (byte >= 14 && byte < 32)
+        )
+      ) {
+        try {
+          const content = new TextDecoder("utf-8", { fatal: true }).decode(
+            bytes
+          );
+          return { content, mimeType, isImage: false };
+        } catch {
+          // Unknown binary files must not become replacement-character text previews.
+        }
+      }
+    }
+
     return {
       content: "",
       mimeType,
