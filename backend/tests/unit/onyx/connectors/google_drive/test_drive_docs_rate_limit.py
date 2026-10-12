@@ -3,6 +3,7 @@ document instead of indexing its basic text, so the next run fetches it again.
 Other Docs-API errors still fall back to the basic text."""
 
 import json
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -35,16 +36,26 @@ def _http_error(status: int, reason: str | None = None) -> requests.HTTPError:
     return requests.HTTPError(f"{status} error", response=response)
 
 
-def _response(error: requests.HTTPError | None) -> MagicMock:
+def _broken_stream(**_kwargs: Any) -> Iterator[bytes]:
+    yield b'{"tabs"'
+    raise requests.exceptions.ChunkedEncodingError("connection broken")
+
+
+def _response(error: Exception | None) -> MagicMock:
     response = MagicMock()
     response.__enter__ = MagicMock(return_value=response)
     response.__exit__ = MagicMock(return_value=False)
-    response.raise_for_status = MagicMock(side_effect=error)
-    response.iter_content = MagicMock(return_value=iter([json.dumps(_DOC).encode()]))
+    if isinstance(error, requests.exceptions.ChunkedEncodingError):
+        response.iter_content = MagicMock(side_effect=_broken_stream)
+    else:
+        response.raise_for_status = MagicMock(side_effect=error)
+        response.iter_content = MagicMock(
+            return_value=iter([json.dumps(_DOC).encode()])
+        )
     return response
 
 
-def _fetch(errors: list[requests.HTTPError | None]) -> tuple[Any, MagicMock]:
+def _fetch(errors: list[Exception | None]) -> tuple[Any, MagicMock]:
     session = MagicMock()
     session.__enter__ = MagicMock(return_value=session)
     session.__exit__ = MagicMock(return_value=False)
@@ -69,9 +80,14 @@ def _fetch(errors: list[requests.HTTPError | None]) -> tuple[Any, MagicMock]:
 
 
 @pytest.mark.parametrize(
-    "error", [_http_error(429), _http_error(403, "userRateLimitExceeded")]
+    "error",
+    [
+        _http_error(429),
+        _http_error(403, "userRateLimitExceeded"),
+        requests.exceptions.ChunkedEncodingError("connection broken"),
+    ],
 )
-def test_a_rate_limit_is_retried(error: requests.HTTPError) -> None:
+def test_a_transient_error_is_retried(error: Exception) -> None:
     result, session = _fetch([error, None])
 
     assert result == _DOC

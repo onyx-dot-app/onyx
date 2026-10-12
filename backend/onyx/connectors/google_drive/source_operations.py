@@ -210,8 +210,16 @@ def _translate(error: Exception) -> Exception:
     return error
 
 
+# A lost connection, a timeout, or a body stream that broke partway.
+_TRANSIENT_REQUEST_ERRORS = (
+    requests.ConnectionError,
+    requests.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
+
+
 def _is_transient_docs_error(error: BaseException) -> bool:
-    if isinstance(error, (requests.ConnectionError, requests.Timeout)):
+    if isinstance(error, _TRANSIENT_REQUEST_ERRORS):
         return True
     return isinstance(error, requests.HTTPError) and (
         _from_requests_error(error).transient
@@ -223,7 +231,7 @@ def is_transient_google_error(error: BaseException) -> bool:
     or a lost connection."""
     if isinstance(error, GoogleDriveHttpError):
         return error.transient
-    return isinstance(error, (requests.ConnectionError, requests.Timeout))
+    return isinstance(error, _TRANSIENT_REQUEST_ERRORS)
 
 
 _retry_transient_docs_fetch = retry_builder(
