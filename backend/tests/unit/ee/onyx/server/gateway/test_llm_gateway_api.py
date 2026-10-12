@@ -65,7 +65,7 @@ from onyx.server.gateway.models import (
     ResponsesRequest,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
-from onyx.server.settings.models import Settings
+from onyx.server.settings.models import Settings, Tier
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import get_current_trace
 
@@ -1239,6 +1239,7 @@ def test_authorize_rejects_pat_flow_when_gateway_disabled() -> None:
     """The workspace switch rejects PAT traffic even when the credential
     would otherwise authorize."""
     with (
+        patch.object(gateway_api, "get_tier", MagicMock(return_value=Tier.BUSINESS)),
         patch.object(
             gateway_api,
             "load_settings",
@@ -1278,6 +1279,80 @@ def test_authorize_allows_craft_flow_when_gateway_disabled() -> None:
             cast(User, MagicMock(spec=User)),
         )
     assert flow is LLMFlow.CRAFT_LLM_GENERATION
+
+
+@pytest.mark.parametrize("tier", [Tier.BUSINESS, Tier.ENTERPRISE])
+def test_authorize_allows_pat_flow_at_business_or_above(tier: Tier) -> None:
+    with (
+        patch.object(gateway_api, "get_tier", MagicMock(return_value=tier)),
+        patch.object(
+            gateway_api,
+            "load_settings",
+            MagicMock(return_value=Settings(llm_gateway_enabled=True)),
+        ),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+    ):
+        flow = gateway_api._authorize_gateway_request(
+            cast(Request, MagicMock(spec=Request)),
+            cast(User, MagicMock(spec=User)),
+        )
+    assert flow is LLMFlow.LLM_GATEWAY
+
+
+def test_authorize_rejects_pat_flow_on_community() -> None:
+    with (
+        patch.object(gateway_api, "get_tier", MagicMock(return_value=Tier.COMMUNITY)),
+        patch.object(
+            gateway_api,
+            "load_settings",
+            MagicMock(return_value=Settings(llm_gateway_enabled=True)),
+        ),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.LLM_GATEWAY),
+        ),
+        pytest.raises(OnyxError) as exc_info,
+    ):
+        gateway_api._authorize_gateway_request(
+            cast(Request, MagicMock(spec=Request)),
+            cast(User, MagicMock(spec=User)),
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.FEATURE_NOT_AVAILABLE
+    assert exc_info.value.extra == {"required_tier": Tier.BUSINESS.value}
+
+
+def test_authorize_allows_craft_flow_on_community() -> None:
+    """Craft works in Community Edition: sandbox tokens skip the tier floor."""
+    get_tier = MagicMock(return_value=Tier.COMMUNITY)
+    with (
+        patch.object(gateway_api, "get_tier", get_tier),
+        patch.object(
+            gateway_api,
+            "gateway_request_flow",
+            MagicMock(return_value=LLMFlow.CRAFT_LLM_GENERATION),
+        ),
+    ):
+        flow = gateway_api._authorize_gateway_request(
+            cast(Request, MagicMock(spec=Request)),
+            cast(User, MagicMock(spec=User)),
+        )
+    assert flow is LLMFlow.CRAFT_LLM_GENERATION
+    get_tier.assert_not_called()
+
+
+def test_gateway_prefix_not_path_tier_gated() -> None:
+    """Tier is enforced per-flow in the gateway; a path-level gate would
+    402 Craft sandbox traffic on Community."""
+    from ee.onyx.configs.license_enforcement_config import PATH_PREFIX_MIN_TIER
+
+    assert not any(
+        GATEWAY_PATH_PREFIX.startswith(prefix) for prefix in PATH_PREFIX_MIN_TIER
+    )
 
 
 @pytest.mark.parametrize(
