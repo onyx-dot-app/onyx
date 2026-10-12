@@ -911,7 +911,9 @@ function reconcileCompletedTranscript(
           (key) =>
             Array.isArray(key) &&
             key[0] === SWR_KEYS.buildSessionOutputCards(sessionId)
-        ).catch(() => undefined);
+        ).catch((error) => {
+          console.warn("Failed to refresh output cards:", error);
+        });
         let messages = await fetchMessages(sessionId);
         if (!ownsCompletion()) return;
         if (owner.kind === "interactive") {

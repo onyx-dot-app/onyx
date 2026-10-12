@@ -76,7 +76,7 @@ export class CraftChatOutputsPage {
 
   async showAllTurns(): Promise<void> {
     await this.outputs.panel
-      .getByRole("button", { name: "All outputs", exact: true })
+      .getByRole("button", { name: /^Remove Turn .+ outputs$/ })
       .click();
   }
 }

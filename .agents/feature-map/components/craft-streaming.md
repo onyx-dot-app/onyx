@@ -265,6 +265,7 @@ Session metadata and artifacts may finish after a newer turn starts without repl
 
 Turn-end chat cards use the server artifact index, separate from the live output inventory below.
 The browser refreshes card metadata after confirmed worker completion, alongside transcript loading, not the raw completion packet.
+Card refresh failures are logged and do not block transcript loading.
 Settlement checks run every 250ms for the first second, then every second for the remaining bounded retry window.
 Each card belongs to the latest indexed producing turn and opens the current resource.
 Three cards appear inline; the overflow action opens Outputs filtered to that turn.
