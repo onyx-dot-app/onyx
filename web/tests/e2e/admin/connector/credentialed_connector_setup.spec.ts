@@ -111,9 +111,16 @@ test.describe("Credentialed connector setup", () => {
       timeout: 10_000,
     });
 
-    // A site entered before the credential is replaced by the authorized one.
+    // A site the account was not authorized for makes it unusable.
     const siteUrl = setupPage.textField("wiki_base");
     await siteUrl.fill(OTHER_WIKI_BASE);
+    await siteUrl.blur();
+    await expect(setupPage.credentialRow(oauthCredentialId)).toContainText(
+      "Unsupported site domain"
+    );
+
+    // With the site cleared, picking the account fills in its site.
+    await siteUrl.fill("");
     await siteUrl.blur();
     await setupPage.selectCredential(oauthCredentialId);
 

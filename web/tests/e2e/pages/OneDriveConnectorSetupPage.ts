@@ -213,10 +213,23 @@ export class OneDriveConnectorSetupPage {
     return this.page.getByTestId("credential-form");
   }
 
+  /**
+   * Opens the new-account card. It starts open when there is no saved
+   * account, so it is clicked only while closed; retried in case its starting
+   * state settles after the first look.
+   */
   private async openCredentialForm() {
-    await this.page
-      .getByRole("button", { name: "New OneDrive Account" })
-      .click();
+    const card = this.page.getByRole("button", {
+      name: "New OneDrive Account",
+    });
+    await expect(async () => {
+      if ((await card.getAttribute("aria-expanded")) !== "true") {
+        await card.click();
+      }
+      await expect(card).toHaveAttribute("aria-expanded", "true", {
+        timeout: 1_000,
+      });
+    }).toPass();
     await expect(this.page.getByTestId("onedrive_client_id")).toBeVisible();
   }
 

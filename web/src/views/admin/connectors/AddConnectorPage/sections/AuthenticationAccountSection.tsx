@@ -352,6 +352,7 @@ export default function AuthenticationAccountSection({
       // control into that name.
       role="button"
       aria-label={newAccountLabel}
+      aria-expanded={isCreating}
       tabIndex={0}
       expandedContent={
         <div className="p-4" data-testid="credential-form">
