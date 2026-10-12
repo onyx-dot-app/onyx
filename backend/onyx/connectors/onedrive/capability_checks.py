@@ -1,6 +1,12 @@
 from collections.abc import Callable, Generator
 from typing import TypeVar
 
+from onyx.connectors.capability_checks.findings import (
+    MAX_FINDING_OPTIONS,
+    CheckFinding,
+    CheckFindingKey,
+    bounded_count,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
@@ -9,6 +15,7 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    UnexpectedValidationError,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
@@ -41,6 +48,9 @@ from onyx.connectors.onedrive.source_operations import (
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/onedrive"
 _PROBE_PAGE_SIZE = 1
 _CANDIDATE_PAGES = 20
+# A bound on the pages the drive count reads. Pages hold up to 999 users, so
+# the count reaches its cap long before this unless Graph sends empty pages.
+_COUNT_PAGES = 20
 
 T = TypeVar("T")
 _HIDDEN_MEMBERSHIP_VISIBILITY = "HiddenMembership"
@@ -246,6 +256,51 @@ class _UsersCheck(CapabilityCheck):
             raise_for_graph_error(error, "The app cannot list tenant users.")
 
 
+def _tenant_users(
+    gateway: OneDriveSourceOperations,
+) -> Generator[OneDriveUser, None, None]:
+    """The tenant's enabled member users, read one page at a time."""
+    next_link: str | None = None
+    for _ in range(_COUNT_PAGES):
+        page = gateway.list_users(next_link=next_link)
+        yield from page.users
+        next_link = page.next_link
+        if next_link is None:
+            return
+    raise UnexpectedValidationError(
+        f"The tenant's user listing did not end within {_COUNT_PAGES} pages."
+    )
+
+
+class _DriveCountCheck(CapabilityCheck):
+    """Counts the enabled member users: the owners of the OneDrives indexing
+    walks in every-user mode. It does not open each drive, so a user without a
+    OneDrive still counts. Separate from ``onedrive_users``, which reads one
+    user to validate."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="onedrive_drive_count",
+            display_name="Counts the tenant's OneDrives",
+            requires_connector_instance=False,
+            remediation="Grant and admin-consent `User.Read.All`.",
+            docs_link=_DOCS_LINK,
+            discovery=True,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
+        try:
+            finding = bounded_count(
+                _tenant_users(_gateway(context)),
+                key=CheckFindingKey.READABLE_DRIVES,
+                cap=MAX_FINDING_OPTIONS,
+            )
+        except OneDriveGraphError as error:
+            raise_for_graph_error(error, "The app cannot list tenant users.")
+        return [finding]
+
+
 class _ConfiguredUsersCheck(CapabilityCheck[OneDriveConnectorConfig]):
     config_class = OneDriveConnectorConfig
 
@@ -424,6 +479,7 @@ def build_onedrive_indexing_checks() -> list[CapabilityCheck]:
     return [
         _TokenCheck(),
         _UsersCheck(),
+        _DriveCountCheck(),
         _ConfiguredUsersCheck(),
         _DriveCheck(),
         _DeltaCheck(),
