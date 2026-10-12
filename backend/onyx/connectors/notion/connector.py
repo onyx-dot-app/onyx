@@ -152,7 +152,8 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         self.batch_size = batch_size
         self._source_operations: NotionSourceOperations | None = None
         self.indexed_pages: set[str] = set()
-        self.root_page_id = root_page_id
+        # A blank root page ID means "every shared page", as on the create form.
+        self.root_page_id = (root_page_id or "").strip() or None
         # if enabled, will recursively index child pages as they are found rather
         # relying entirely on the `search` API. We have received reports that the
         # `search` API misses many pages - in those cases, this might need to be
