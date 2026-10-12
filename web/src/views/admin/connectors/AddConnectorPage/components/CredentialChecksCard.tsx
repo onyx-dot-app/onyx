@@ -325,7 +325,10 @@ function CheckCardView({
 
   const header = (
     <ContentAction
-      icon={progress.icon}
+      // A run that broke has no counts, so the ring would read as complete;
+      // it shows the failed-check icon instead.
+      icon={status === "failedToRun" ? SvgXCircle : progress.icon}
+      color={status === "failedToRun" ? "danger" : undefined}
       title={t("title")}
       suffix={progress.suffix}
       // Expanded, a short state line keeps the header's height steady while
