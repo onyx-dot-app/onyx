@@ -11652,14 +11652,6 @@
         "text": "Actualizado el {date}"
       }
     },
-    "dropdown": {
-      "default": {
-        "label": "Predeterminado"
-      },
-      "selectOption": {
-        "placeholder": "Selecciona una opción..."
-      }
-    },
     "editable": {
       "edit": {
         "ariaLabel": "Editar"

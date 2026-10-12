@@ -11652,14 +11652,6 @@
         "text": "Aktualisiert am {date}"
       }
     },
-    "dropdown": {
-      "default": {
-        "label": "Standard"
-      },
-      "selectOption": {
-        "placeholder": "Option auswählen..."
-      }
-    },
     "editable": {
       "edit": {
         "ariaLabel": "Bearbeiten"
