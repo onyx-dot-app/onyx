@@ -3081,8 +3081,7 @@
           "label": "Tarif d'entrée (USD par million de jetons)"
         },
         "model": {
-          "label": "Modèle",
-          "placeholder": "Sélectionnez un modèle"
+          "label": "Modèle"
         },
         "outputRate": {
           "label": "Tarif de sortie (USD par million de jetons)"
@@ -11241,11 +11240,6 @@
         "row": {
           "caption": "À quel point le modèle doit répondre de façon prévisible ou créative",
           "title": "Température"
-        }
-      },
-      "trigger": {
-        "noSelection": {
-          "label": "Sélectionner un modèle"
         }
       },
       "unsupportedSetting": {

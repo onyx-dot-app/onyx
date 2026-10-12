@@ -3081,8 +3081,7 @@
           "label": "Eingabepreis (USD pro 1 Mio. Token)"
         },
         "model": {
-          "label": "Modell",
-          "placeholder": "Modell auswählen"
+          "label": "Modell"
         },
         "outputRate": {
           "label": "Ausgabepreis (USD pro 1 Mio. Token)"
@@ -11241,11 +11240,6 @@
         "row": {
           "caption": "Wie vorhersehbar oder kreativ das Modell antworten soll",
           "title": "Temperatur"
-        }
-      },
-      "trigger": {
-        "noSelection": {
-          "label": "Modell auswählen"
         }
       },
       "unsupportedSetting": {

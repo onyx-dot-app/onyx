@@ -26,7 +26,6 @@ import { cn } from "@opal/utils";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
 import {
-  GLOBAL_DEFAULT_LLM_OPTION,
   buildLlmOptions,
   groupLlmOptions,
   llmOptionKey,
@@ -406,16 +405,10 @@ export interface ModelSelectorContentProps {
   /** Set by a host that fetches `providerOptions` itself, so a truncated
    *  provider loads more on scroll and is searched on the server. */
   modelPaging?: ModelPaging;
-  includeHiddenModels?: boolean;
-  requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
   isSelected: (option: LLMOption) => boolean;
   isDisabled?: (option: LLMOption) => boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
-  /** When true, a "Global Default Model" entry is prepended to the list. */
-  includeGlobalDefault?: boolean;
-  /** The global default label supplied by a host with explicit provider data. */
-  globalDefaultDisplayName?: string | null;
   /** When provided, model rows gain a drill-in settings pane. */
   modelDetail?: ModelDetailManagers;
   /** Opening a model's settings also selects it. Hosts pass their select
@@ -428,14 +421,10 @@ export default function ModelSelectorContent({
   providerOptions,
   isLoading: isLoadingProp = false,
   modelPaging: modelPagingProp,
-  includeHiddenModels = false,
-  requiresImageInput,
   onSelect,
   isSelected,
   isDisabled,
   scrollContainerRef: externalScrollRef,
-  includeGlobalDefault = false,
-  globalDefaultDisplayName: globalDefaultDisplayNameProp,
   modelDetail,
   onDetailSelect,
 }: ModelSelectorContentProps) {
@@ -462,8 +451,8 @@ export default function ModelSelectorContent({
   const scrollContainerRef = externalScrollRef ?? internalScrollRef;
 
   const llmOptions = useMemo(
-    () => buildLlmOptions(llmProviders, currentModelName, includeHiddenModels),
-    [llmProviders, currentModelName, includeHiddenModels]
+    () => buildLlmOptions(llmProviders, currentModelName),
+    [llmProviders, currentModelName]
   );
 
   // "Auto" selects the admin-configured router; router rows never list.
@@ -478,9 +467,6 @@ export default function ModelSelectorContent({
 
   const filteredOptions = useMemo(() => {
     let result = llmOptions.filter((opt) => !opt.isRouter);
-    if (requiresImageInput) {
-      result = result.filter((opt) => opt.supportsImageInput);
-    }
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -491,7 +477,7 @@ export default function ModelSelectorContent({
       );
     }
     return result;
-  }, [llmOptions, searchQuery, requiresImageInput]);
+  }, [llmOptions, searchQuery]);
 
   const groupedOptions = useMemo(
     () => groupLlmOptions(filteredOptions),
@@ -695,26 +681,7 @@ export default function ModelSelectorContent({
 
       <PopoverMenu scrollContainerRef={scrollContainerRef}>
         {[
-          ...(includeGlobalDefault && !isLoading
-            ? [
-                <LineItemButton
-                  key="global-default"
-                  selectVariant="select-heavy"
-                  state={
-                    isSelected(GLOBAL_DEFAULT_LLM_OPTION) ? "selected" : "empty"
-                  }
-                  icon={selectionIcon(isSelected(GLOBAL_DEFAULT_LLM_OPTION))}
-                  title={GLOBAL_DEFAULT_LLM_OPTION.displayName}
-                  description={globalDefaultDisplayNameProp ?? undefined}
-                  onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
-                  sizePreset="main-ui"
-                  rounding={2}
-                />,
-              ]
-            : []),
-          ...(autoOption && !requiresImageInput && !isLoading
-            ? [renderModelItem(autoOption)]
-            : []),
+          ...(autoOption && !isLoading ? [renderModelItem(autoOption)] : []),
           null,
           ...(isLoading
             ? [

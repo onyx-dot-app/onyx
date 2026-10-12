@@ -3081,8 +3081,7 @@
           "label": "输入价格（每 100 万 tokens 美元）"
         },
         "model": {
-          "label": "模型",
-          "placeholder": "选择模型"
+          "label": "模型"
         },
         "outputRate": {
           "label": "输出价格（每 100 万 tokens 美元）"
@@ -11241,11 +11240,6 @@
         "row": {
           "caption": "模型回复的可预测程度或创造性程度",
           "title": "温度"
-        }
-      },
-      "trigger": {
-        "noSelection": {
-          "label": "选择模型"
         }
       },
       "unsupportedSetting": {
