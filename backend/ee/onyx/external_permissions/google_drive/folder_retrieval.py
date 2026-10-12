@@ -1,28 +1,18 @@
 from collections.abc import Iterator
 
-from googleapiclient.discovery import Resource
-
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.permission_retrieval import (
     get_permissions_by_ids,
 )
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
-from onyx.connectors.google_drive.file_retrieval import generate_time_range_filter
 from onyx.connectors.google_drive.models import GoogleDriveFileType
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
-
-# Only include fields we need - folder ID and permissions
-# IMPORTANT: must fetch permissionIds, since sometimes the drive API
-# seems to miss permissions when requesting them directly
-FOLDER_PERMISSION_FIELDS = "nextPageToken, files(id, name, permissionIds, permissions(id, emailAddress, type, domain, permissionDetails))"
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveSourceOperations,
+)
 
 
 def get_folder_permissions_by_ids(
-    service: Resource,
+    ops: GoogleDriveSourceOperations,
+    user_email: str,
     folder_id: str,
     permission_ids: list[str],
 ) -> list[GoogleDrivePermission]:
@@ -30,7 +20,8 @@ def get_folder_permissions_by_ids(
     Retrieves permissions for a specific folder filtered by permission IDs.
 
     Args:
-        service: The Google Drive service instance
+        ops: The Google Drive source operations
+        user_email: The user to read the permissions as
         folder_id: The ID of the folder to fetch permissions for
         permission_ids: A list of permission IDs to filter by
 
@@ -38,44 +29,19 @@ def get_folder_permissions_by_ids(
         A list of permissions matching the provided permission IDs
     """
     return get_permissions_by_ids(
-        drive_service=service,  # ty: ignore[invalid-argument-type]
+        ops=ops,
+        user_email=user_email,
         doc_id=folder_id,
         permission_ids=permission_ids,
     )
 
 
 def get_modified_folders(
-    service: Resource,
-    start: SecondsSinceUnixEpoch | None = None,
-    end: SecondsSinceUnixEpoch | None = None,
+    ops: GoogleDriveSourceOperations,
+    user_email: str,
 ) -> Iterator[GoogleDriveFileType]:
     """
-    Retrieves all folders that were modified within the specified time range.
-    Only includes folder ID and permission information, not any contained files.
-
-    Args:
-        service: The Google Drive service instance
-        start: The start time as seconds since Unix epoch (inclusive)
-        end: The end time as seconds since Unix epoch (inclusive)
-
-    Returns:
-        An iterator yielding folder information including ID and permissions
+    Retrieves every folder the user can see. Only includes folder ID and
+    permission information, not any contained files.
     """
-    # Build query for folders
-    query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
-    query += " and trashed = false"
-    query += generate_time_range_filter(start, end)
-
-    # Retrieve and yield folders
-    for folder in execute_paginated_retrieval(
-        retrieval_function=service.files().list,  # ty: ignore[unresolved-attribute]
-        list_key="files",
-        continue_on_404_or_403=True,
-        corpora="allDrives",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True,
-        includePermissionsForView="published",
-        fields=FOLDER_PERMISSION_FIELDS,
-        q=query,
-    ):
-        yield folder
+    yield from ops.list_folders_with_permissions(user_email=user_email)

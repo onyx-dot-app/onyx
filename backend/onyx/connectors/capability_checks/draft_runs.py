@@ -12,6 +12,8 @@ from other pairs.
 """
 
 import math
+import time
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
@@ -56,6 +58,9 @@ DRAFT_RESULT_CACHE_TTL_SECONDS = 10 * 60
 _DRAFT_RUN_KEY_PREFIX = "capability_check_draft_run"
 _DRAFT_LATEST_RUN_KEY_PREFIX = "capability_check_draft_latest_run"
 _DRAFT_RESULT_KEY_PREFIX = "capability_check_draft_result"
+# Set on a result key while a draft run is still to write it.
+_IN_FLIGHT_SUFFIX = ":in_flight"
+_DRAFT_RESULT_POLL_SECONDS = 0.2
 _DRAFT_START_LOCK_PREFIX = "capability_check_draft_start"
 _CC_PAIR_KEY_PART = "cc_pair:"
 # The config-hash part of the result cache key for checks that never read the
@@ -297,6 +302,71 @@ def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
     get_cache_backend().set(
         key, cached.model_dump_json(), ex=DRAFT_RESULT_CACHE_TTL_SECONDS
     )
+
+
+def form_draft_result_keys(
+    checks: Iterable[CapabilityCheck[Any]],
+    *,
+    credential_id: int,
+    credential_updated_at: datetime,
+    source: DocumentSource,
+    access_type: AccessType | None,
+    form_values: dict[str, Any] | None,
+    cc_pair_id: int | None,
+) -> dict[str, str]:
+    """check_id to its result cache key, for a form's draft results."""
+    return {
+        check.check_id: draft_result_cache_key(
+            credential_id=credential_id,
+            credential_updated_at=credential_updated_at,
+            source=source,
+            access_type=access_type,
+            check=check,
+            form_values=form_values,
+            cc_pair_id=cc_pair_id,
+        )
+        for check in checks
+    }
+
+
+def _in_flight_key(result_key: str) -> str:
+    return f"{result_key}{_IN_FLIGHT_SUFFIX}"
+
+
+def mark_draft_results_in_flight(result_keys: Iterable[str], ttl_seconds: int) -> None:
+    """Marks results that a draft run is still to write, so a validation of
+    the same form waits for them instead of running the checks again."""
+    cache = get_cache_backend()
+    for result_key in result_keys:
+        cache.set(_in_flight_key(result_key), "1", ex=ttl_seconds)
+
+
+def clear_draft_result_in_flight(result_key: str) -> None:
+    get_cache_backend().delete(_in_flight_key(result_key))
+
+
+def is_draft_result_in_flight(result_key: str) -> bool:
+    return get_cache_backend().get(_in_flight_key(result_key)) is not None
+
+
+def wait_for_draft_result(
+    result_key: str, timeout_seconds: float
+) -> CachedDraftResult | None:
+    """The result a draft run writes under ``result_key``, once it lands.
+    ``None`` when it does not land within ``timeout_seconds``, or the run
+    stops without it (an INDETERMINATE result is not cached)."""
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        cached = get_cached_draft_result(result_key)
+        if cached is not None:
+            return cached
+        if not is_draft_result_in_flight(result_key):
+            # The run may have written the result just before clearing.
+            return get_cached_draft_result(result_key)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        time.sleep(min(_DRAFT_RESULT_POLL_SECONDS, remaining))
 
 
 def cached_check_result(

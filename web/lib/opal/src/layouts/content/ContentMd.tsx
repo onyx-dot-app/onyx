@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Tag, Text } from "@opal/components";
+import { Button, OverflowText, Tag, Text } from "@opal/components";
 import type { TagProps, TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgAlertCircle from "@opal/icons/alert-circle";
@@ -338,14 +338,21 @@ function ContentMd({
               : undefined
           }
         >
-          <Text
-            font="secondary-body"
-            color="inherit"
-            as="p"
-            maxLines={descriptionMaxLines}
-          >
-            {description}
-          </Text>
+          {/* Clamped, the full description shows in a tooltip when it is cut. */}
+          {descriptionMaxLines ? (
+            <OverflowText
+              font="secondary-body"
+              color="inherit"
+              as="p"
+              maxLines={descriptionMaxLines}
+            >
+              {description}
+            </OverflowText>
+          ) : (
+            <Text font="secondary-body" color="inherit" as="p">
+              {description}
+            </Text>
+          )}
         </div>
       )}
     </div>

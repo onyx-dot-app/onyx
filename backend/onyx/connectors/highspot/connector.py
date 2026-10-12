@@ -62,6 +62,8 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
         self,
         spot_names: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
+        # Checked against the credential by the binding; unused here.
+        highspot_url: str | None = None,  # noqa: ARG002
     ):
         """
         Initialize the Highspot connector.

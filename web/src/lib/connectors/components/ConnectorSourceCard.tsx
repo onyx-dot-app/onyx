@@ -47,6 +47,8 @@ export default function ConnectorSourceCard({
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
         description={description}
+        // One line keeps the cards even; a cut description shows in a tooltip.
+        descriptionMaxLines={1}
         sizePreset="main-ui"
         variant="section"
         padding={2}
