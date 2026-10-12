@@ -71,13 +71,9 @@ export default function DocumentAccessField({
     return method?.disablePermSync === true;
   }, [connector, selectedAuthMethod]);
 
-  // Prefer Auto Sync when available, else Private (User Groups), else
-  // Public. Mirrors the option-availability rules below.
-  const defaultAccess: AccessType = showAutoSync
-    ? "sync"
-    : businessTier || isScopedManager
-      ? "private"
-      : "public";
+  // Prefer Auto Sync when available, else Private (User Groups). Only read
+  // at Business and above, where Private is always offered.
+  const defaultAccess: AccessType = showAutoSync ? "sync" : "private";
 
   const options = useMemo(() => {
     const built: SelectOption[] = [];
@@ -135,7 +131,7 @@ export default function DocumentAccessField({
 
   // Move off an access type the user is not offered, or that is disabled.
   useEffect(() => {
-    if (!businessTier || !options.length) return;
+    if (!businessTier) return;
     if (
       options.some(
         (option) => option.value === accessType.value && !option.disabled
