@@ -282,16 +282,23 @@ export function useConnectorChecks({
         },
         { revalidate: false }
       );
-      // Only the newest start request may write its outcome.
-      const settle = (
+      // Only the newest start request may write its outcome. Resolves to
+      // whether this one still was.
+      const settle = async (
         update: (current: ConnectorChecksSession) => ConnectorChecksSession
-      ) =>
-        mutate<ConnectorChecksSession>(
+      ): Promise<boolean> => {
+        let applied = false;
+        await mutate<ConnectorChecksSession>(
           sessionKey,
-          (current) =>
-            current && current.request === request ? update(current) : current,
+          (current) => {
+            if (!current || current.request !== request) return current;
+            applied = true;
+            return update(current);
+          },
           { revalidate: false }
         );
+        return applied;
+      };
       try {
         // A typed account's values go only with a run, which saves them in
         // the user's draft; later requests name the draft.
@@ -313,11 +320,16 @@ export function useConnectorChecks({
         await mutate(SWR_KEYS.connectorCheckRun(accepted.run_id), accepted, {
           revalidate: false,
         });
-        await settle((current) => ({
-          ...current,
+        const current: boolean = await settle((session) => ({
+          ...session,
           runId: accepted.run_id,
           requesting: false,
         }));
+        if (!current) {
+          // The form moved on (e.g. to another account) while this run
+          // started, so nothing reads it and no reset could cancel it.
+          cancelDraftCheckRun(accepted.run_id).catch(() => undefined);
+        }
       } catch {
         await settle((current) => ({
           ...current,

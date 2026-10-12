@@ -5,6 +5,7 @@ import { Formik, useFormikContext } from "formik";
 import type { ReactNode } from "react";
 import { useConnectorChecks } from "@/lib/connectors/checks/hooks";
 import {
+  cancelDraftCheckRun,
   fetchDraftCheckPlan,
   startDraftCheckRun,
 } from "@/lib/connectors/checks/svc";
@@ -18,6 +19,7 @@ import { ValidSources } from "@/lib/connectors/types/source";
 jest.mock("@/lib/connectors/checks/svc", () => ({
   startDraftCheckRun: jest.fn(),
   fetchDraftCheckPlan: jest.fn(),
+  cancelDraftCheckRun: jest.fn(async () => undefined),
 }));
 // A run fetch returns what the latest start request returned.
 jest.mock("@/lib/fetcher", () => ({
@@ -305,4 +307,29 @@ it("sends a typed account's values with its first run, then names its draft", as
   await waitFor(() => expect(startMock).toHaveBeenCalledTimes(2));
   expect(startMock.mock.lastCall?.[0]).toHaveProperty("credential_id", 7);
   expect(startMock.mock.lastCall?.[0]).not.toHaveProperty("credential_json");
+});
+
+it("cancels a run whose start answers after a newer start", async () => {
+  let answerFirst: (snapshot: DraftCheckRunSnapshot) => void = () => {};
+  const passed = run([check({ ...BINDING, state: "passed" }), CONTENT]);
+  startMock
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerFirst = resolve;
+        })
+    )
+    .mockResolvedValueOnce({ ...passed, run_id: "run-2" });
+  const { result } = renderChecks();
+
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
+  act(() => result.current.checks.rerun());
+  await waitFor(() => expect(result.current.checks.status).toBe("passed"));
+
+  await act(async () => answerFirst({ ...passed, run_id: "run-1" }));
+  await waitFor(() =>
+    expect(jest.mocked(cancelDraftCheckRun)).toHaveBeenCalledWith("run-1")
+  );
+  expect(jest.mocked(cancelDraftCheckRun)).not.toHaveBeenCalledWith("run-2");
 });
