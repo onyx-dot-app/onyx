@@ -31,6 +31,7 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.factory import identify_connector_class, instantiate_connector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.models import InputType
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import (
     SourceOperations,
     get_source_operations_class,
@@ -233,21 +234,49 @@ def _execute_check(
     return _CheckOutcome(
         status=CapabilityCheckStatus.PASSED,
         duration_ms=elapsed_ms(),
-        findings=findings or [],
+        findings=_findings_for_source(findings or [], check, context.source),
     )
 
 
+def _findings_for_source(
+    findings: list[CheckFinding], check: CapabilityCheck, source: DocumentSource
+) -> list[CheckFinding]:
+    """Drops a finding whose ``field_name`` is not a field of the source's
+    config: a form could not use it, so it is a bug in the check."""
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    fields: frozenset[str] = (
+        frozenset(mapping.config_class.model_fields) if mapping else frozenset()
+    )
+    kept: list[CheckFinding] = []
+    for finding in findings:
+        if finding.field_name is not None and finding.field_name not in fields:
+            logger.error(
+                "Capability check %s returned a finding for %s, which is not a "
+                "%s config field; the finding is dropped.",
+                check.check_id,
+                finding.field_name,
+                source.value,
+            )
+            continue
+        kept.append(finding)
+    return kept
+
+
 def _discovery_skip_outcome(
-    validation_results: Sequence[CapabilityCheckResult], keep_findings: bool
+    validation_results: Sequence[CapabilityCheckResult],
+    keep_findings: bool,
+    required_check_failed: bool,
 ) -> _CheckOutcome | None:
-    """Why a discovery check does not run, or None when it runs."""
+    """Why a discovery check does not run, or None when it runs.
+    ``required_check_failed`` covers failures this run did not execute, such
+    as a draft run's cached results."""
     if not keep_findings:
         return _CheckOutcome(
             status=CapabilityCheckStatus.SKIPPED,
             message=_SKIP_FINDINGS_OFF_MESSAGE,
             applicable=False,
         )
-    if any(
+    if required_check_failed or any(
         result.required and result.status == CapabilityCheckStatus.FAILED
         for result in validation_results
     ):
@@ -291,6 +320,7 @@ def run_capability_checks(
     context: CapabilityCheckContext,
     on_result: CapabilityCheckProgressCallback | None = None,
     timeout_cap_seconds: float | None = None,
+    required_check_failed: bool = False,
 ) -> list[CapabilityCheckResult]:
     """Runs checks sequentially and maps their outcomes to statuses.
 
@@ -348,7 +378,7 @@ def run_capability_checks(
     for check in ordered:
         if check.discovery:
             discovery_outcome: _CheckOutcome | None = _discovery_skip_outcome(
-                results, check_findings_enabled()
+                results, check_findings_enabled(), required_check_failed
             )
             if discovery_outcome is not None:
                 record(check, discovery_outcome)
@@ -502,6 +532,7 @@ def generate_capability_report(
     on_result: CapabilityCheckProgressCallback | None = None,
     check_ids: frozenset[str] | None = None,
     timeout_cap_seconds: float | None = None,
+    required_check_failed: bool = False,
 ) -> CredentialCapabilityReport:
     """Runs every capability check for a credential and packages a report.
 
@@ -619,7 +650,11 @@ def generate_capability_report(
         source_operations=source_operations,
     )
     results = run_capability_checks(
-        checks, context, on_result=on_result, timeout_cap_seconds=timeout_cap_seconds
+        checks,
+        context,
+        on_result=on_result,
+        timeout_cap_seconds=timeout_cap_seconds,
+        required_check_failed=required_check_failed,
     )
     return CredentialCapabilityReport(
         credential_id=credential.id,

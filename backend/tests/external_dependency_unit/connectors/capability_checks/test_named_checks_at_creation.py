@@ -24,8 +24,10 @@ from onyx.connectors import factory
 from onyx.connectors.capability_checks import creation, runner
 from onyx.connectors.capability_checks.draft_runs import (
     DraftCheckRunSnapshot,
+    DraftCheckStateKind,
     StoredDraftRun,
     load_draft_run,
+    read_draft_run_for_user,
 )
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -33,6 +35,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CheckFinding,
     CheckFindingKey,
+    CountFinding,
     CredentialCapability,
     CredentialCapabilityReport,
     FindingOption,
@@ -405,6 +408,51 @@ def test_a_draft_runs_discovery_last_and_creation_keeps_its_findings(
     )
     assert discovery.status == CapabilityCheckStatus.PASSED
     assert discovery.findings == [found]
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_cached_required_failure_skips_discovery_in_the_next_draft_run(
+    harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.with_discovery = True
+    harness.findings[_DISCOVERY] = [
+        CountFinding(key=CheckFindingKey.READABLE_CHANNELS, count=1)
+    ]
+    harness.errors[_CHANNELS] = ConnectorValidationError("bot not in channel a")
+    user_id = uuid4()
+    draft_key = uuid4().hex
+
+    def _draft_run() -> DraftCheckRunSnapshot:
+        started = start_draft_capability_check_run(
+            user_id=user_id,
+            credential=slack_pair.credential,
+            source=DocumentSource.SLACK,
+            config_class=SlackConnectorConfig,
+            access_type=AccessType.PUBLIC,
+            draft_key=draft_key,
+            form_values={"channels": ["a"]},
+        )
+        if harness.send_task.call_args is not None:
+            run_draft_capability_checks_task(
+                **harness.send_task.call_args.kwargs["kwargs"]
+            )
+            harness.send_task.reset_mock()
+        snapshot = read_draft_run_for_user(started.run_id, user_id)
+        assert snapshot is not None
+        return snapshot
+
+    _draft_run()
+    assert _DISCOVERY not in harness.runs
+    harness.runs.clear()
+
+    # The failure comes from the cache; the skipped listing was not cached.
+    snapshot = _draft_run()
+
+    assert harness.runs == []
+    states = {check.check_id: check for check in snapshot.checks}
+    assert states[_CHANNELS].state == DraftCheckStateKind.FAILED
+    assert states[_DISCOVERY].state == DraftCheckStateKind.SKIPPED
+    assert states[_DISCOVERY].findings == []
 
 
 @pytest.mark.usefixtures("tenant_context")

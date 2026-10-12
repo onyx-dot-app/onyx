@@ -182,7 +182,7 @@ def test_bounded_options_stop_at_the_cap() -> None:
     finding: OptionsFinding = bounded_options(
         _numbers(read),
         key=CheckFindingKey.VISIBLE_SPACES,
-        field_name="spaces",
+        field_name="space",
         value=str,
         label=lambda number: f"Space {number}",
     )

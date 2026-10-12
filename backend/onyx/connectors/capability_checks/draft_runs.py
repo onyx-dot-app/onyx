@@ -312,9 +312,13 @@ def get_cached_draft_result(key: str) -> CachedDraftResult | None:
 
 
 def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
-    """Caches a terminal result; INDETERMINATE is not cached."""
+    """Caches a terminal result; INDETERMINATE is not cached. Neither is a
+    SKIPPED discovery check: its skip (a failed required check, findings
+    turned off) says nothing about the listing once the cause is gone."""
     state = _STATE_BY_STATUS[result.status]
     if state not in _CACHEABLE_STATES:
+        return
+    if result.discovery and state == DraftCheckStateKind.SKIPPED:
         return
     cached = CachedDraftResult(
         state=state,
@@ -433,6 +437,28 @@ def apply_cached_result(
     check_state.duration_ms = cached.duration_ms
     check_state.findings = cached.findings if check_findings_enabled() else []
     check_state.from_cache = True
+
+
+def pending_in_run_order(snapshot: DraftCheckRunSnapshot) -> list[DraftCheckState]:
+    """The run's PENDING checks in the order the runner executes them:
+    discovery checks last."""
+    return sorted(
+        (
+            check
+            for check in snapshot.checks
+            if check.state == DraftCheckStateKind.PENDING
+        ),
+        key=lambda check: check.discovery,
+    )
+
+
+def required_check_failed(snapshot: DraftCheckRunSnapshot) -> bool:
+    """A required check of the run already FAILED, from the cache: its
+    discovery checks then do not run."""
+    return any(
+        check.required and check.state == DraftCheckStateKind.FAILED
+        for check in snapshot.checks
+    )
 
 
 def cc_pair_draft_key(cc_pair_id: int) -> str:

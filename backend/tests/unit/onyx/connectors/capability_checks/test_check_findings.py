@@ -34,7 +34,7 @@ from onyx.db.enums import CapabilityCheckTrigger
 
 _SPACES = OptionsFinding(
     key=CheckFindingKey.VISIBLE_SPACES,
-    field_name="spaces",
+    field_name="space",
     options=[FindingOption(value="ENG", label="Engineering")],
 )
 _USERS = CountFinding(key=CheckFindingKey.IMPERSONATABLE_USERS, count=1200)

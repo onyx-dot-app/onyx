@@ -35,6 +35,8 @@ from onyx.connectors.capability_checks.draft_runs import (
     is_superseded,
     load_draft_run,
     mark_draft_results_in_flight,
+    pending_in_run_order,
+    required_check_failed,
     save_draft_run,
     wait_for_draft_result,
 )
@@ -280,15 +282,7 @@ def run_draft_capability_checks_task(
         task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
         return
     snapshot = run.snapshot
-    # In the order the runner executes them: discovery checks last.
-    pending: list[DraftCheckState] = sorted(
-        (
-            check
-            for check in snapshot.checks
-            if check.state == DraftCheckStateKind.PENDING
-        ),
-        key=lambda check: check.discovery,
-    )
+    pending: list[DraftCheckState] = pending_in_run_order(snapshot)
     pending_result_keys: list[str] = list(
         dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
     )
@@ -359,6 +353,7 @@ def run_draft_capability_checks_task(
             on_result=on_result,
             check_ids=frozenset(check.check_id for check in pending),
             timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
+            required_check_failed=required_check_failed(snapshot),
         )
         snapshot.status = DraftRunStatus.COMPLETED
         save_draft_run(run)
