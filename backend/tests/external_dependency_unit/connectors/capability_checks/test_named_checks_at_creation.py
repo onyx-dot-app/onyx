@@ -22,18 +22,20 @@ from onyx.background.celery.tasks.capability_checks.tasks import (
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import factory
 from onyx.connectors.capability_checks import creation, runner
-from onyx.connectors.capability_checks.draft_runs import load_draft_run
-from onyx.connectors.capability_checks.findings import (
-    CheckFinding,
-    CheckFindingKey,
-    FindingOption,
-    OptionsFinding,
+from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckRunSnapshot,
+    StoredDraftRun,
+    load_draft_run,
 )
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckFinding,
+    CheckFindingKey,
     CredentialCapability,
     CredentialCapabilityReport,
+    FindingOption,
+    OptionsFinding,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -47,7 +49,7 @@ from onyx.db.credential_capability import (
     mark_capability_report_running,
 )
 from onyx.db.enums import AccessType, CapabilityCheckTrigger, CapabilityReportRunStatus
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, CredentialCapabilityReportRow
 from onyx.server.documents import capability_check_runs
 from onyx.server.documents.capability_check_runs import (
     start_draft_capability_check_run,
@@ -298,13 +300,13 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
 def test_draft_findings_reach_the_run_and_the_created_pairs_report(
     db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
 ) -> None:
-    channels = OptionsFinding(
+    channels: OptionsFinding = OptionsFinding(
         key=CheckFindingKey.READABLE_CHANNELS,
         field_name="channels",
         options=[FindingOption(value="a", label="#a")],
     )
     harness.findings[_CHANNELS] = [channels]
-    snapshot = start_draft_capability_check_run(
+    snapshot: DraftCheckRunSnapshot = start_draft_capability_check_run(
         user_id=uuid4(),
         credential=slack_pair.credential,
         source=DocumentSource.SLACK,
@@ -315,9 +317,9 @@ def test_draft_findings_reach_the_run_and_the_created_pairs_report(
     )
     run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
 
-    stored_run = load_draft_run(snapshot.run_id)
+    stored_run: StoredDraftRun | None = load_draft_run(snapshot.run_id)
     assert stored_run is not None
-    findings_by_check = {
+    findings_by_check: dict[str, list[CheckFinding]] = {
         state.check_id: state.findings for state in stored_run.snapshot.checks
     }
     assert findings_by_check[_CHANNELS] == [channels]
@@ -326,12 +328,14 @@ def test_draft_findings_reach_the_run_and_the_created_pairs_report(
     # Creation reuses the cached results, findings included.
     assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
     db_session.expire_all()
-    row = get_capability_report_row(
+    row: CredentialCapabilityReportRow | None = get_capability_report_row(
         db_session, slack_pair.credential_id, slack_pair.connector_id
     )
     assert row is not None and row.report is not None
-    report = CredentialCapabilityReport.model_validate(row.report)
-    stored_findings = {
+    report: CredentialCapabilityReport = CredentialCapabilityReport.model_validate(
+        row.report
+    )
+    stored_findings: dict[str, list[CheckFinding]] = {
         result.check_id: result.findings for result in report.check_results
     }
     assert stored_findings[_CHANNELS] == [channels]
@@ -401,7 +405,7 @@ def test_failed_report_write_retires_the_running_mark(
         _validate(db_session, slack_pair, {"channels": ["a"]})
 
     db_session.expire_all()
-    row = get_capability_report_row(
+    row: CredentialCapabilityReportRow | None = get_capability_report_row(
         db_session, slack_pair.credential_id, slack_pair.connector_id
     )
     assert row is not None

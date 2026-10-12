@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -14,20 +15,18 @@ from onyx.connectors.capability_checks.draft_runs import (
     apply_check_result,
     cached_check_result,
 )
-from onyx.connectors.capability_checks.findings import (
-    MAX_FINDING_OPTIONS,
-    CheckFinding,
-    CheckFindingKey,
-    CountFinding,
-    FindingOption,
-    OptionsFinding,
-)
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckFinding,
+    CheckFindingKey,
+    CountFinding,
     CredentialCapabilityReport,
+    FindingOption,
+    OptionsFinding,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -80,7 +79,7 @@ def _result(findings: list[CheckFinding]) -> CapabilityCheckResult:
 
 
 def test_a_passing_check_returns_its_findings() -> None:
-    results = run_capability_checks(
+    results: list[CapabilityCheckResult] = run_capability_checks(
         [_FindingsCheck(lambda _context: [_SPACES, _USERS])], _context()
     )
 
@@ -89,13 +88,17 @@ def test_a_passing_check_returns_its_findings() -> None:
 
 
 def test_a_check_returning_none_has_no_findings() -> None:
-    results = run_capability_checks([_FindingsCheck(lambda _context: None)], _context())
+    results: list[CapabilityCheckResult] = run_capability_checks(
+        [_FindingsCheck(lambda _context: None)], _context()
+    )
 
     assert results[0].findings == []
 
 
 def test_a_failing_check_has_no_findings() -> None:
-    results = run_capability_checks([_FindingsCheck(_raise_denied)], _context())
+    results: list[CapabilityCheckResult] = run_capability_checks(
+        [_FindingsCheck(_raise_denied)], _context()
+    )
 
     assert results[0].status == CapabilityCheckStatus.FAILED
     assert results[0].findings == []
@@ -108,18 +111,18 @@ def test_a_mirrored_check_shares_its_findings() -> None:
         calls.append(1)
         return [_USERS]
 
-    checks = [
+    checks: list[CapabilityCheck] = [
         _FindingsCheck(run, capability=CredentialCapability.DOC_PERMISSION_SYNC),
         _FindingsCheck(run, capability=CredentialCapability.EXTERNAL_GROUP_SYNC),
     ]
-    results = run_capability_checks(checks, _context())
+    results: list[CapabilityCheckResult] = run_capability_checks(checks, _context())
 
     assert len(calls) == 1
     assert [result.findings for result in results] == [[_USERS], [_USERS]]
 
 
 def test_findings_round_trip_through_the_stored_report() -> None:
-    report = CredentialCapabilityReport(
+    report: CredentialCapabilityReport = CredentialCapabilityReport(
         credential_id=1,
         source=DocumentSource.CONFLUENCE,
         checked_at=datetime.now(timezone.utc),
@@ -128,20 +131,22 @@ def test_findings_round_trip_through_the_stored_report() -> None:
         check_results=[_result([_SPACES, _USERS])],
     )
 
-    stored = CredentialCapabilityReport.model_validate_json(report.model_dump_json())
+    stored: CredentialCapabilityReport = CredentialCapabilityReport.model_validate_json(
+        report.model_dump_json()
+    )
 
     assert stored.check_results[0].findings == [_SPACES, _USERS]
 
 
 def test_a_result_stored_before_findings_still_parses() -> None:
-    raw = _result([]).model_dump(mode="json")
+    raw: dict[str, Any] = _result([]).model_dump(mode="json")
     del raw["findings"]
 
     assert CapabilityCheckResult.model_validate(raw).findings == []
 
 
 def test_a_finding_this_version_does_not_know_is_dropped() -> None:
-    raw = _result([_USERS]).model_dump(mode="json")
+    raw: dict[str, Any] = _result([_USERS]).model_dump(mode="json")
     raw["findings"] += [
         {"type": "histogram", "key": CheckFindingKey.VISIBLE_SPACES.value},
         {"type": "count", "key": "future_key", "count": 3},
@@ -162,8 +167,8 @@ def test_options_are_capped() -> None:
 
 
 def test_findings_reach_the_draft_state_and_back_from_the_cache() -> None:
-    check = _FindingsCheck(lambda _context: None)
-    state = DraftCheckState(
+    check: _FindingsCheck = _FindingsCheck(lambda _context: None)
+    state: DraftCheckState = DraftCheckState(
         check_id=check.check_id,
         display_name=check.display_name,
         capability=check.capability,
@@ -174,7 +179,7 @@ def test_findings_reach_the_draft_state_and_back_from_the_cache() -> None:
     apply_check_result(state, _result([_SPACES]))
     assert state.findings == [_SPACES]
 
-    cached = CachedDraftResult.model_validate_json(
+    cached: CachedDraftResult = CachedDraftResult.model_validate_json(
         CachedDraftResult(
             state=DraftCheckStateKind.PASSED,
             message="",

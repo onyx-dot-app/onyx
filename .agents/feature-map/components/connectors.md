@@ -471,7 +471,7 @@ without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
 
-A passing check may return *findings* (`capability_checks/findings.py`):
+A passing check may return *findings* (`capability_checks/models.py:CheckFinding`):
 structured information about what the credential and config reach, such as a
 count (`CountFinding`) or a list of named options for a config field
 (`OptionsFinding`, at most `MAX_FINDING_OPTIONS`). A finding has a closed `key`

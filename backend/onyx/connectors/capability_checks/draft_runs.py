@@ -25,16 +25,14 @@ from pydantic_core import to_jsonable_python
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.findings import (
-    CheckFinding,
-    parse_known_findings,
-)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckFinding,
     CredentialCapability,
+    parse_known_findings,
 )
 from onyx.connectors.capability_checks.runner import (
     CheckReadinessKind,

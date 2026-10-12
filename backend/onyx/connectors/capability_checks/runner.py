@@ -7,12 +7,12 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.findings import CheckFinding
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckFinding,
     CredentialCapability,
     CredentialCapabilityReport,
     compute_capability_verdicts,
@@ -179,7 +179,9 @@ def _execute_check(
         return int((time.monotonic() - start) * 1000)
 
     try:
-        findings = run_with_timeout(timeout_seconds, check.run, context)
+        findings: list[CheckFinding] | None = run_with_timeout(
+            timeout_seconds, check.run, context
+        )
     except ConnectorValidationError as e:
         return _CheckOutcome(
             status=CapabilityCheckStatus.FAILED,
