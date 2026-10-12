@@ -364,6 +364,7 @@ function OutputsBrowser({
                   isUnseen={cards.some(
                     (card) =>
                       !card.deleted &&
+                      (turnIndex === null || card.turn_index === turnIndex) &&
                       (card.viewed_revision ?? 0) < card.revision &&
                       card.path.startsWith(`${prefix}${name}/`)
                   )}
@@ -404,6 +405,7 @@ function OutputsBrowser({
                     isUnseen={
                       !!card &&
                       !card.deleted &&
+                      (turnIndex === null || card.turn_index === turnIndex) &&
                       (card.viewed_revision ?? 0) < card.revision
                     }
                     onFileOpen={onFileOpen}

@@ -1,7 +1,14 @@
 "use client";
 
 import { useUser } from "@/providers/UserProvider";
-import { memo, useState, useEffect, useCallback, useRef } from "react";
+import {
+  memo,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+} from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { SelectCard, Text } from "@opal/components";
@@ -156,7 +163,9 @@ function OutputResources({
     markAllViewed,
   } = useOutputCards(contentSessionId);
   const outputsTabState = useBuildSessionStore((state) =>
-    sessionId ? state.sessions.get(sessionId)?.outputsTabState : undefined
+    contentSessionId
+      ? state.sessions.get(contentSessionId)?.outputsTabState
+      : undefined
   );
   const outputsTurnIndex = outputsTabState?.turnIndex ?? null;
   const runtimeReady = sessionId
@@ -181,16 +190,30 @@ function OutputResources({
   );
   const [search, setSearch] = useState("");
   const [sessionlessOutputsSearch, setSessionlessOutputsSearch] = useState("");
+  // Move the welcome query into its provisioned session before the next paint.
+  useLayoutEffect(() => {
+    if (
+      sessionId ||
+      !contentSessionId ||
+      !outputsTabState ||
+      !sessionlessOutputsSearch
+    )
+      return;
+    useBuildSessionStore.getState().updateOutputsTabState(contentSessionId, {
+      searchQuery: sessionlessOutputsSearch,
+    });
+    setSessionlessOutputsSearch("");
+  }, [sessionId, contentSessionId, outputsTabState, sessionlessOutputsSearch]);
   const outputsSearch =
     outputsTabState?.searchQuery ?? sessionlessOutputsSearch;
   const setOutputsSearch = (searchQuery: string) => {
-    if (!sessionId) {
+    if (!contentSessionId || !outputsTabState) {
       setSessionlessOutputsSearch(searchQuery);
       return;
     }
     useBuildSessionStore
       .getState()
-      .updateOutputsTabState(sessionId, { searchQuery });
+      .updateOutputsTabState(contentSessionId, { searchQuery });
   };
   const openFile = (path: string, name: string) => {
     useBuildSessionStore.getState().openFilePreview(sessionId, path, name);

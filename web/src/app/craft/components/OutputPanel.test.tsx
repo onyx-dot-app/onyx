@@ -833,6 +833,67 @@ describe("Files integration", () => {
     }
   );
 
+  it("preserves welcome Outputs filters through provisioning and claim", async () => {
+    const store = () => useBuildSessionStore.getState();
+    useBuildSessionStore.setState({
+      sessions: new Map(),
+      preProvisioning: { status: "idle" },
+    });
+    store().setCurrentSession(null);
+    store().openOutputsTab(null);
+    render(<BuildOutputPanel panelMode="medium" />);
+    const search = screen.getByRole("textbox", { name: "Search outputs" });
+    fireEvent.change(search, { target: { value: "notes" } });
+    act(() => {
+      store().createSession("provisioned");
+      useBuildSessionStore.setState({
+        preProvisioning: { status: "ready", sessionId: "provisioned" },
+      });
+    });
+    expect(search).toHaveValue("notes");
+    act(() =>
+      store().updateOutputsTabState("provisioned", {
+        folder: "reports",
+        fileType: "extension:md",
+      })
+    );
+    act(() => {
+      useBuildSessionStore.setState({
+        preProvisioning: { status: "starting", sessionId: "provisioned" },
+      });
+      store().createSession("provisioned");
+      store().setCurrentSession("provisioned");
+    });
+    expect(search).toHaveValue("notes");
+    expect(store().sessions.get("provisioned")?.outputsTabState).toEqual({
+      searchQuery: "notes",
+      folder: "reports",
+      fileType: "extension:md",
+      turnIndex: null,
+    });
+    act(() => {
+      store().createSession("saved");
+      store().updateOutputsTabState("saved", { searchQuery: "saved query" });
+      store().setCurrentSession("saved");
+      store().openOutputsTab("saved");
+      store().updateOutputsTabState("saved", { searchQuery: "saved query" });
+    });
+    expect(screen.getByRole("textbox", { name: "Search outputs" })).toHaveValue(
+      "saved query"
+    );
+    act(() => {
+      store().setCurrentSession(null);
+      store().openOutputsTab(null);
+    });
+    expect(screen.getByRole("textbox", { name: "Search outputs" })).toHaveValue(
+      ""
+    );
+    expect(store().sessions.get("saved")?.outputsTabState.searchQuery).toBe(
+      "saved query"
+    );
+    await act(async () => {});
+  });
+
   it("preserves welcome search through provisioning and claim, and clears it for another session", async () => {
     const store = () => useBuildSessionStore.getState();
     useBuildSessionStore.setState({

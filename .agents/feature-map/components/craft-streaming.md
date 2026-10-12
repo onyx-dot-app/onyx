@@ -273,6 +273,7 @@ An explicit output open acknowledges the captured card revision, even if its pre
 This records user acknowledgement, not successful content delivery. Newer revisions retain their unread state.
 Opening the overview or loading a thumbnail does not mark an output viewed.
 Live inventory determines file availability when a saved card still records a prior deletion.
+Outputs filters survive welcome workspace claim. Folder unread markers follow the selected turn scope.
 Reload retrieves card metadata without reconstructing attribution from sandbox files.
 See [[craft-sessions]] §4.7 for capture and persistence boundaries.
 

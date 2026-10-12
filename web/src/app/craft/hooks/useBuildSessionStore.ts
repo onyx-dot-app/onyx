@@ -1553,8 +1553,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     initialData?: Partial<BuildSessionData>
   ) => {
     set((state) => {
-      const existingSession = state.sessions.get(sessionId);
       // Carry the welcome panel's visible tab into the conversation.
+      const existingSession = state.sessions.get(sessionId);
       const newSession = createInitialSessionData(sessionId, {
         ...(state.currentSessionId === null &&
           state.noSessionOutputPanelInitialized && {
@@ -1567,6 +1567,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             mediumPanelProportion: state.noSessionMediumPanelProportion,
           }),
         ...(existingSession && {
+          outputsTabState: existingSession.outputsTabState,
           filesTabState: existingSession.filesTabState,
         }),
         ...initialData,

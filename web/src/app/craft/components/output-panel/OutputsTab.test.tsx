@@ -553,6 +553,33 @@ test.each(["complete", "error"] as const)(
 );
 
 // --- Unread descendants ---
+test("scopes folder unread markers to the selected turn", () => {
+  const other = { ...file, path: "outputs/reports/other.md" };
+  store().updateSessionData("session", {
+    outputInventory: { [file.path]: file, [other.path]: other },
+    outputInventoryStatus: "complete",
+  });
+  store().updateOutputsTabState("session", { fileType: "folders" });
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    onFileOpen: jest.fn(),
+    outputCards: [
+      { ...outputCard, viewed_revision: 1 },
+      { ...outputCard, id: "other", path: other.path, turn_index: 1 },
+    ],
+  };
+  const { rerender } = render(<OutputsTab {...props} turnIndex={0} />);
+  expect(screen.getByRole("button", { name: "reports" })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("img", { name: "New or updated" })
+  ).not.toBeInTheDocument();
+  rerender(<OutputsTab {...props} turnIndex={1} />);
+  expect(
+    screen.getByRole("img", { name: "New or updated" })
+  ).toBeInTheDocument();
+});
+
 test("marks each ancestor folder unread until its descendant revision is viewed", async () => {
   const nested = {
     path: "outputs/reports/nested/report.md",
