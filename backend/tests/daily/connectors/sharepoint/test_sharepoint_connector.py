@@ -7,14 +7,14 @@ from urllib.parse import unquote
 
 import pytest
 
-from ee.onyx.external_permissions.sharepoint.permission_utils import (
-    GET_SHAREPOINT_LIST_ITEM_ID_LABEL,
-)
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.microsoft_utils.drive_items import download_via_graph_api
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_client import sleep_and_retry
+from onyx.connectors.microsoft_utils.sharepoint_rest import (
+    GET_SHAREPOINT_LIST_ITEM_ID_LABEL,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -652,7 +652,7 @@ def test_sharepoint_connector_hierarchy_node_permissions(
             mock_store_image,
         ),
         patch(
-            "ee.onyx.external_permissions.sharepoint.permission_utils.sleep_and_retry",
+            "onyx.connectors.microsoft_utils.sharepoint_rest.sleep_and_retry",
             wraps=sleep_and_retry,
         ) as mock_permission_retry,
         patch(
