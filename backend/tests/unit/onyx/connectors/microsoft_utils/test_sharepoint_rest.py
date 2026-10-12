@@ -2,6 +2,7 @@
 plain data, with refusals as MicrosoftGraphError."""
 
 import json
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs, urlparse
@@ -160,7 +161,7 @@ def test_folder_id_lookup_sends_path_as_query_alias() -> None:
     assert query["$select"] == ["UniqueId"]
 
 
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label, **_kwargs: query)
 def test_role_assignments_come_back_as_plain_data(_mock_sleep: MagicMock) -> None:
     binding = MagicMock(role_type_kind=1)
     member = MagicMock(
@@ -195,7 +196,7 @@ def test_role_assignments_come_back_as_plain_data(_mock_sleep: MagicMock) -> Non
     )
 
 
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label, **_kwargs: query)
 def test_role_assignments_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
     context: MagicMock = MagicMock()
     expanded: MagicMock = context.web.role_assignments.expand.return_value
@@ -212,7 +213,7 @@ def test_role_assignments_read_one_page_under_max_rows(_mock_sleep: MagicMock) -
     assert assignments == []
 
 
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label, **_kwargs: query)
 def test_site_group_users_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
     context: MagicMock = MagicMock()
     users: MagicMock = context.web.site_groups.get_by_name.return_value.users
@@ -234,7 +235,7 @@ def test_site_group_users_read_one_page_under_max_rows(_mock_sleep: MagicMock) -
     assert [principal.title for principal in principals] == ["A"]
 
 
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label, **_kwargs: query)
 def test_incomplete_principals_are_skipped(_mock_sleep: MagicMock) -> None:
     complete = MagicMock(
         principal_type=8,
@@ -268,7 +269,7 @@ def test_link_scopes_skip_permissions_without_a_link(_mock_sleep: MagicMock) -> 
     assert scopes == ["anonymous", "organization"]
 
 
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label, **_kwargs: query)
 def test_link_scopes_read_one_page_under_max_rows(_mock_sleep: MagicMock) -> None:
     page: MagicMock = MagicMock()
     page.current_page = [MagicMock(link=MagicMock(scope="anonymous"))]
@@ -288,7 +289,7 @@ def _directory_object(data: dict[str, Any], type_name: str = "DirectoryObject") 
     return type(type_name, (), {"to_json": lambda _self: data})()
 
 
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
+@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label, **_kwargs: query)
 def test_entra_members_are_classified(_mock_sleep: MagicMock) -> None:
     graph_client = MagicMock()
     graph_client.groups.__getitem__.return_value.members = _paged(
@@ -467,3 +468,62 @@ def test_nested_groups_read_one_page_under_max_rows() -> None:
         f"{MEMBERS_URL}?$select=id,displayName,securityEnabled&$top=50"
     ]
     assert groups == [EntraGroup(id=SECOND_ID, displayName="Infra")]
+
+
+def _retry_once(query: Any, _label: str, rebuild: Callable[[], Any]) -> Any:
+    """What sleep_and_retry does after one retryable failure."""
+    del query
+    return rebuild()
+
+
+@patch(f"{MODULE}.sleep_and_retry", side_effect=_retry_once)
+def test_a_retried_role_assignment_page_is_read_once(_mock_sleep: MagicMock) -> None:
+    """A spent query answers nothing, so the retry must send a new one and
+    the page must not be collected twice."""
+    context: MagicMock = MagicMock()
+    expanded: MagicMock = context.web.role_assignments.expand.return_value
+    page: MagicMock = MagicMock()
+    page.current_page = [MagicMock(member=None, role_definition_bindings=[])]
+    expanded.top.return_value.get.return_value = page
+
+    assignments = read_role_assignments(
+        context, SharepointSecurable(kind=SharepointSecurableKind.SITE), max_rows=100
+    )
+
+    assert expanded.top.call_count == 2
+    assert len(assignments) == 1
+
+
+@patch(f"{MODULE}.sleep_and_retry", side_effect=_retry_once)
+def test_a_retried_site_group_page_is_read_once(_mock_sleep: MagicMock) -> None:
+    context: MagicMock = MagicMock()
+    users: MagicMock = context.web.site_groups.get_by_name.return_value.users
+    page: MagicMock = MagicMock()
+    page.current_page = [
+        MagicMock(
+            principal_type=1,
+            login_name="i:0#.f|membership|a@x.com",
+            title="A",
+            user_principal_name="a@x.com",
+        )
+    ]
+    users.top.return_value.get.return_value = page
+
+    principals = read_site_group_users(context, "Members", max_rows=50)
+
+    assert users.top.call_count == 2
+    assert [principal.title for principal in principals] == ["A"]
+
+
+@patch(f"{MODULE}.sleep_and_retry", side_effect=_retry_once)
+def test_a_retried_sharing_link_page_is_read_once(_mock_sleep: MagicMock) -> None:
+    page: MagicMock = MagicMock()
+    page.current_page = [MagicMock(link=MagicMock(scope="anonymous"))]
+    with patch.object(DriveItemData, "to_sdk_driveitem") as to_sdk:
+        permissions: MagicMock = to_sdk.return_value.permissions
+        permissions.top.return_value.get.return_value = page
+
+        scopes = read_sharing_link_scopes(MagicMock(), _drive_item(), max_rows=50)
+
+    assert permissions.top.call_count == 2
+    assert scopes == ["anonymous"]

@@ -67,6 +67,11 @@ _ROLE_ASSIGNMENT_EXPAND = ["Member", "RoleDefinitionBindings"]
 # grant fewer readers than the source does, so the read fails instead.
 MAX_READ_ROWS = 1_000_000
 GET_SHAREPOINT_LIST_ITEM_ID_LABEL = "get_sharepoint_list_item_id"
+
+# Every read builds its query in a function and hands it to sleep_and_retry as
+# rebuild: the SDK answers a spent query with nothing, so a retry must send a
+# new one, and it walks every page again, so the collector starts over.
+
 # securityEnabled tells a security group from a distribution list.
 _NESTED_GROUP_SELECT: list[str] = ["id", "displayName", "securityEnabled"]
 # Graph's code for the group cast on a group kind that cannot nest groups.
@@ -195,21 +200,22 @@ def read_role_assignments(
             )
         _check_read_size(assignments, "Role assignments")
 
-    role_assignments: RoleAssignmentCollection = _securable_object(
-        context, securable
-    ).role_assignments.expand(_ROLE_ASSIGNMENT_EXPAND)
-    if max_rows is not None:
-        page: RoleAssignmentCollection = sleep_and_retry(
-            role_assignments.top(max_rows).get(), "list_role_assignments"
-        )
-        collect(page)
-        return assignments
-    sleep_and_retry(
-        role_assignments.get_all(
+    def build_query() -> Any:
+        assignments.clear()
+        role_assignments: RoleAssignmentCollection = _securable_object(
+            context, securable
+        ).role_assignments.expand(_ROLE_ASSIGNMENT_EXPAND)
+        if max_rows is not None:
+            return role_assignments.top(max_rows).get()
+        return role_assignments.get_all(
             page_size=ROLE_ASSIGNMENTS_PAGE_SIZE, page_loaded=collect
-        ),
-        "list_role_assignments",
+        )
+
+    page: RoleAssignmentCollection = sleep_and_retry(
+        build_query(), "list_role_assignments", rebuild=build_query
     )
+    if max_rows is not None:
+        collect(page)
     return assignments
 
 
@@ -228,14 +234,18 @@ def read_site_group_users(
                 users.append(principal)
         _check_read_size(users, f"Site group `{group_name}`")
 
-    group: Group = context.web.site_groups.get_by_name(group_name)
+    def build_query() -> Any:
+        users.clear()
+        group: Group = context.web.site_groups.get_by_name(group_name)
+        if max_rows is not None:
+            return group.users.top(max_rows).get()
+        return group.users.get_all(page_loaded=collect)
+
+    page: UserCollection = sleep_and_retry(
+        build_query(), "list_site_group_users", rebuild=build_query
+    )
     if max_rows is not None:
-        page: UserCollection = sleep_and_retry(
-            group.users.top(max_rows).get(), "list_site_group_users"
-        )
         collect(page)
-        return users
-    sleep_and_retry(group.users.get_all(page_loaded=collect), "list_site_group_users")
     return users
 
 
@@ -303,16 +313,20 @@ def read_sharing_link_scopes(
         )
         _check_read_size(scopes, f"Sharing links of `{item.id}`")
 
-    permissions: PermissionCollection = item.to_sdk_driveitem(graph_client).permissions
-    if max_rows is not None:
-        page: PermissionCollection = sleep_and_retry(
-            permissions.top(max_rows).get(), "list_sharing_link_scopes"
-        )
-        collect(page)
-        return scopes
-    sleep_and_retry(
-        permissions.get_all(page_loaded=collect), "list_sharing_link_scopes"
+    def build_query() -> Any:
+        scopes.clear()
+        permissions: PermissionCollection = item.to_sdk_driveitem(
+            graph_client
+        ).permissions
+        if max_rows is not None:
+            return permissions.top(max_rows).get()
+        return permissions.get_all(page_loaded=collect)
+
+    page: PermissionCollection = sleep_and_retry(
+        build_query(), "list_sharing_link_scopes", rebuild=build_query
     )
+    if max_rows is not None:
+        collect(page)
     return scopes
 
 
@@ -369,10 +383,11 @@ def read_entra_group_members(
             members.append(_entra_member(member))
         _check_read_size(members, f"Entra group `{group_id}` members")
 
-    sleep_and_retry(
-        graph_client.groups[group_id].members.get_all(page_loaded=collect),
-        "expand_entra_group",
-    )
+    def build_query() -> Any:
+        members.clear()
+        return graph_client.groups[group_id].members.get_all(page_loaded=collect)
+
+    sleep_and_retry(build_query(), "expand_entra_group", rebuild=build_query)
     return members
 
 
@@ -413,8 +428,6 @@ def read_nested_entra_groups(
         )
         return collection.select(_NESTED_GROUP_SELECT)
 
-    # A retry walks every page again, so the list starts over. Returns the
-    # SDK's untyped query object, like the other sleep_and_retry callers.
     def build_query() -> Any:
         groups.clear()
         if max_rows is not None:
