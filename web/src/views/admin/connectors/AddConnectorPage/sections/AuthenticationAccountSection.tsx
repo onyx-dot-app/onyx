@@ -18,6 +18,7 @@ import {
   toast,
 } from "@opal/layouts";
 import { Disabled } from "@opal/core";
+import { cn } from "@opal/utils";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type {
@@ -492,21 +493,23 @@ export default function AuthenticationAccountSection({
         <Section gap={6} alignItems="stretch" width="full">
           {/* One list in a fixed order. Folded, each card that is not the
           chosen one fades, then its height collapses, so the chosen card
-          moves up on its own. Each item holds its own spacing: a closed fold
-          takes no height, but a gap around it would stay. */}
+          moves up on its own. Every item but the first is spaced from the
+          one above inside its fold, so a closed item takes no space. */}
           <div className="flex flex-col">
-            {credentials.map((credential) => (
+            {credentials.map((credential, index) => (
               <Fold
                 key={credential.id}
                 open={accountsExpanded || credential.id === selectedSavedId}
                 keepMounted
               >
-                <div className="pb-2">{renderSavedCard(credential)}</div>
+                <div className={cn(index > 0 && "pt-2")}>
+                  {renderSavedCard(credential)}
+                </div>
               </Fold>
             ))}
             {canAuthorize && (
               <Fold open={accountsExpanded} keepMounted>
-                <div className="pb-2">
+                <div className={cn(credentials.length > 0 && "pt-2")}>
                   <Section flexDirection="row" justifyContent="start" gap={1}>
                     <Button
                       disabled={isAuthorizing}
@@ -529,7 +532,13 @@ export default function AuthenticationAccountSection({
               open={accountsExpanded || selectedSavedId === null}
               keepMounted
             >
-              {newAccountCard}
+              <div
+                className={cn(
+                  (credentials.length > 0 || canAuthorize) && "pt-2"
+                )}
+              >
+                {newAccountCard}
+              </div>
             </Fold>
           </div>
 
