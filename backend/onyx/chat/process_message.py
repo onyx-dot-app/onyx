@@ -161,9 +161,7 @@ APPROX_CHARS_PER_TOKEN = 4
 
 def _collect_available_file_ids(
     chat_history: list[ChatMessage],
-    project_id: int | None,
-    user_id: UUID | None,
-    db_session: Session,
+    context_user_files: list[UserFile],
 ) -> AvailableFiles:
     """Collect all file IDs the FileReaderTool should be allowed to access.
 
@@ -182,14 +180,7 @@ def _collect_available_file_ids(
             except (ValueError, KeyError):
                 pass
 
-    if project_id:
-        user_files = get_user_files_from_project(
-            project_id=project_id,
-            user_id=user_id,
-            db_session=db_session,
-        )
-        for uf in user_files:
-            user_file_ids.add(uf.id)
+    user_file_ids.update(file.id for file in context_user_files)
 
     return AvailableFiles(
         user_file_ids=list(user_file_ids),
@@ -312,25 +303,25 @@ def resolve_context_user_files(
     user_id: UUID | None,
     db_session: Session,
 ) -> list[UserFile]:
-    """Apply the precedence rule to decide which user files to load.
-
-    A custom persona fully supersedes the project.  When a chat uses a
-    custom persona, the project is purely organisational — its files are
-    never loaded and never made searchable.
-
-    Custom persona → persona's own user_files (may be empty).
-    Default persona inside a project → project files.
-    Otherwise → empty list.
-    """
-    if persona.id != DEFAULT_PERSONA_ID:
-        return list(persona.user_files) if persona.user_files else []
+    """Combine project files with a custom persona's files, without duplicates."""
+    user_files: list[UserFile] = []
     if project_id:
-        return get_user_files_from_project(
-            project_id=project_id,
-            user_id=user_id,
-            db_session=db_session,
+        user_files.extend(
+            get_user_files_from_project(
+                project_id=project_id,
+                user_id=user_id,
+                db_session=db_session,
+            )
         )
-    return []
+    if persona.id != DEFAULT_PERSONA_ID and persona.user_files:
+        user_files.extend(persona.user_files)
+    seen_ids: set[UUID] = set()
+    selected_files: list[UserFile] = []
+    for user_file in user_files:
+        if user_file.id not in seen_ids:
+            seen_ids.add(user_file.id)
+            selected_files.append(user_file)
+    return selected_files
 
 
 def _empty_extracted_context_files() -> ExtractedContextFiles:
@@ -528,26 +519,19 @@ def determine_search_params(
     project_id: int | None,
     extracted_context_files: ExtractedContextFiles,
 ) -> SearchParams:
-    """Decide which search filter IDs and search-tool usage apply for a chat turn.
+    """Search both file scopes when their combined contents exceed the prompt budget.
 
-    A custom persona fully supersedes the project — project files are never
-    searchable and the search tool config is entirely controlled by the
-    persona.  The project_id filter is only set for the default persona.
-
-    For the default persona inside a project:
-      - Files overflow  → ENABLED  (vector DB scopes to these files)
-      - Files fit       → DISABLED (content already in prompt)
-      - No files at all → DISABLED (nothing to search)
+    Custom personas keep their search-tool policy. Default personas in projects
+    enable search only when the project files need retrieval.
     """
     is_custom_persona = persona_id != DEFAULT_PERSONA_ID
 
     project_id_filter: int | None = None
     persona_id_filter: int | None = None
     if extracted_context_files.use_as_search_filter:
+        project_id_filter = project_id
         if is_custom_persona:
             persona_id_filter = persona_id
-        else:
-            project_id_filter = project_id
 
     search_usage = SearchToolUsage.AUTO
     if not is_custom_persona and project_id:
@@ -808,14 +792,19 @@ def build_chat_turn(
         )
         chat_history.append(user_message)
 
+    context_user_files = resolve_context_user_files(
+        persona=persona,
+        project_id=chat_session.project_id,
+        user_id=user_id,
+        db_session=db_session,
+    )
+
     # Collect file IDs for the file reader tool *before* summary truncation so
     # that files attached to older (summarized-away) messages are still accessible
     # via the FileReaderTool.
     available_files = _collect_available_file_ids(
         chat_history=chat_history,
-        project_id=chat_session.project_id,
-        user_id=user_id,
-        db_session=db_session,
+        context_user_files=context_user_files,
     )
 
     # Find applicable summary for the current branch
@@ -871,8 +860,11 @@ def build_chat_turn(
     # Reserve against the placeholder-substituted text — the same final form
     # run_llm_loop sends to the model — so long directory values can't
     # invalidate the reservation.
+    replacement_system_prompt: str = (
+        (persona.system_prompt or "") if persona.replace_base_system_prompt else ""
+    )
     max_reserved_system_prompt_tokens_str = substitute_user_placeholders(
-        (persona.system_prompt or "") + (custom_agent_prompt or ""),
+        replacement_system_prompt + (custom_agent_prompt or ""),
         user_memory_context.user_info.placeholder_values,
     )
     reserved_token_count = calculate_reserved_tokens(
@@ -881,16 +873,6 @@ def build_chat_turn(
         token_counter=token_counter,
         files=new_msg_req.file_descriptors,
         user_memory_context=prompt_memory_context,
-    )
-
-    # Determine which user files to use. A custom persona fully supersedes the project —
-    # project files are never loaded or searchable when a custom persona is in play.
-    # Only the default persona inside a project uses the project's files.
-    context_user_files = resolve_context_user_files(
-        persona=persona,
-        project_id=chat_session.project_id,
-        user_id=user_id,
-        db_session=db_session,
     )
 
     # Use the smallest context window across models for safety (harmless for N=1).
@@ -907,13 +889,6 @@ def build_chat_turn(
         project_id=chat_session.project_id,
         extracted_context_files=extracted_context_files,
     )
-
-    # Also grant access to persona-attached user files for FileReaderTool
-    if persona.user_files:
-        existing = set(available_files.user_file_ids)
-        for uf in persona.user_files:
-            if uf.id not in existing:
-                available_files.user_file_ids.append(uf.id)
 
     all_tools = get_tools(db_session)
     tool_id_to_name_map = {tool.id: tool.name for tool in all_tools}
