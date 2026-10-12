@@ -77,8 +77,10 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
     CCPairFullInfo,
+    CCPairHierarchyBreakdown,
     CCPairSyncAttemptsResponse,
     CCPropertyUpdateRequest,
     CCStatusUpdateRequest,
@@ -500,6 +502,21 @@ def get_cc_pair_full_info(
             cc_pair.connector.source, cc_pair.connector.input_type
         ),
     )
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/hierarchy-breakdown")
+def get_cc_pair_hierarchy_breakdown(
+    cc_pair_id: int,
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairHierarchyBreakdown | None:
+    """Document counts per hierarchy node (e.g. Confluence spaces). None until
+    the pair has a successful index attempt. A separate route, because the count
+    reads every document of the pair and the detail page must load fast."""
+    cc_pair = _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+    return build_cc_pair_hierarchy_breakdown(db_session, cc_pair)
 
 
 def _connector_supports_targeted_reindex(

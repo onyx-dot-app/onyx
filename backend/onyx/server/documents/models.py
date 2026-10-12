@@ -24,6 +24,7 @@ from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
+    HierarchyNodeType,
     PermissionSyncStatus,
     ProcessingMode,
 )
@@ -518,6 +519,29 @@ class PendingBackfillSnapshot(BaseModel):
             failure_count=pending.failure_count,
             retry_after=pending.retry_after,
         )
+
+
+class HierarchyBreakdownEntry(BaseModel):
+    # The id the connector config uses for the node (Confluence: space key,
+    # numeric page id). It differs from the stored raw id for Confluence pages.
+    raw_node_id: str
+    # None when the config names a node that the hierarchy does not have.
+    display_name: str | None
+    link: str | None
+    # Indexed documents of the cc-pair in the node's subtree. None: the config
+    # names the node, but no document of the cc-pair is under it.
+    doc_count: int | None
+
+
+class CCPairHierarchyBreakdown(BaseModel):
+    """Where a cc-pair's documents come from, by hierarchy node type."""
+
+    nodes_by_type: dict[HierarchyNodeType, list[HierarchyBreakdownEntry]]
+    # Indexed documents of the cc-pair that are in no listed node's subtree:
+    # documents without a hierarchy parent, or under nodes that are not listed.
+    # The rows can overlap (a listed page inside a listed space), so the row
+    # counts plus this count can be more than the cc-pair's total.
+    other_doc_count: int
 
 
 class CCPairFullInfo(BaseModel):

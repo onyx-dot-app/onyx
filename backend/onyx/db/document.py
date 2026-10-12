@@ -1950,3 +1950,27 @@ def delete_document_by_id__no_commit(
     cc pair associations, feedback, tags).
     """
     delete_documents_complete__no_commit(db_session, [document_id])
+
+
+def get_indexed_documents_for_cc_pair_with_id_containing(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    id_substring: str,
+) -> list[DbDocument]:
+    """The cc-pair's indexed documents whose id contains ``id_substring``
+    (matched as a literal, not as a pattern)."""
+    stmt = (
+        select(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+        )
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+            DbDocument.id.contains(id_substring, autoescape=True),
+        )
+    )
+    return list(db_session.execute(stmt).scalars().all())
