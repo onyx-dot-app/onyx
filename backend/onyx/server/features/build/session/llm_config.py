@@ -11,7 +11,7 @@ from onyx.server.features.build.configs import (
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
 )
-from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
+from onyx.server.gateway.configs import CRAFT_GATEWAY_PATH_PREFIX
 from onyx.server.gateway.model_catalog import (
     build_gateway_model_catalog,
     ordered_gateway_providers,
@@ -133,7 +133,7 @@ def build_onyx_gateway_config(
         return None
 
     api_root = ONYX_SERVER_URL.rstrip("/")
-    api_base = f"{api_root}{GATEWAY_PATH_PREFIX}/v1"
+    api_base = f"{api_root}{CRAFT_GATEWAY_PATH_PREFIX}/v1"
     default_provider_id, default_model_name = default_selection
     return CraftLLMProviderConfig(
         provider=ONYX_GATEWAY_PROVIDER_ID,
