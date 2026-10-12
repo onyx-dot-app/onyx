@@ -484,14 +484,15 @@ mirrors one `__init__` kwarg of the connector. A config may inherit a
 the credential, such as a site URL. `factory.py:validate_credential_binding` checks
 those fields at pairing and on config edit.
 
-Every realm (where an account works: its site, host or subdomain) is a bound field.
-A source whose credential records its realm (GitHub, GitLab, Zendesk and nine more)
-uses `RealmCredentialBinding`: the config holds the realm under the credential's
-key, and the credential must record the same one, compared without case, scheme or
-a trailing slash. An empty config realm accepts every credential. The connector
-still reads the realm from the credential. The add-connector form shows bound
-fields first, copies a realm into a new account's values, and disables saved
-accounts whose stored value differs (`credentialMatchesBoundFields`).
+A realm (where an account works: its site, host or subdomain) lives in the
+credential only, and the connector reads it from there. The connector config does
+not hold it. On the add-connector form the realm is a form-only field
+(`formOnlyFieldNames` in `web/src/lib/connectors/utils.ts`, from the credential
+spec's `realm` fields). The form shows it above the account section, copies it into
+a new account's values, and disables saved accounts whose stored realm differs
+(`credentialMatchesBoundFields`). `withoutFormOnlyFields` removes it from every
+request that sends form values as connector config: Create, check runs and plans,
+and binding checks.
 
 `credential_families.py` lets related sources share one stored credential: Atlassian
 (Confluence, Jira), Google (Gmail, Drive), and Microsoft (SharePoint, OneDrive,

@@ -231,8 +231,8 @@ export function useConnectorChecks({
   const { savedDraft, rememberDraft } = useSavedDraftCredential(source);
 
   const formState: Record<string, unknown> = useMemo(
-    () => connectorFormState(configuration, values),
-    [configuration, values]
+    () => connectorFormState(source, configuration, values),
+    [source, configuration, values]
   );
   // The credential and its bound fields: what a result is valid for.
   const bindingKey: string = useMemo(() => {
