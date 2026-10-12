@@ -426,7 +426,7 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, and HubSpot have
+calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, and Notion have
 a gateway today (`<source>/source_operations.py`); most connectors still call their SDK directly.
 
 ### 4.8 Capabilities and capability checks
@@ -435,7 +435,7 @@ a gateway today (`<source>/source_operations.py`); most connectors still call th
 `EXTERNAL_GROUP_SYNC`) is the vocabulary. `capability_checks/applicability.py`
 decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
-source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, and HubSpot
+source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, and Google Drive
 register real ones today; every other source gets a synthesized fallback wrapping
 `validate_connector_settings`). A source with named checks must have a
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
@@ -710,7 +710,7 @@ lack of a key, ask instead. The shared helper
   changes.
 - **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
   OneDrive, Outlook, Jira, Linear, and HubSpot have a gateway; most connectors still make source-API
-  calls inline, so the "one file that talks to the source" guarantee only holds for those seven today.
+  calls inline, so the "one file that talks to the source" guarantee only holds for those nine today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`
   to preserve existing behavior for connector rows that predate the setting.
