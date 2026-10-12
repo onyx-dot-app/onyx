@@ -47,7 +47,7 @@ def get_provider_display_name(provider: str | None) -> str | None:
 ATTACHMENTS_SECTION_CONTENT = """## Attachments (PRIORITY)
 
 The `attachments/` directory stores session files. Its contents are not the
-current task's selections. Files can remain after a draft chip is removed.
+current task's selections.
 
 Use only the attachment paths selected in the current message as required
 context. Read those files before completing the task. Earlier message
