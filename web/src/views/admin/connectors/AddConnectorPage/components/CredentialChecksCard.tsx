@@ -28,7 +28,6 @@ import {
   SvgMinusCircle,
   SvgPlay,
   SvgRefreshCw,
-  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
@@ -84,7 +83,7 @@ const CHECK_LOGS = {
   // A failed required check blocks, so `CheckLog` makes it heavy.
   failed: {
     variant: "error-light",
-    icon: SvgXCircle,
+    icon: SvgXOctagon,
     detail: "status.failed",
     font: OUTCOME_FONT,
     color: "status-error-05",
