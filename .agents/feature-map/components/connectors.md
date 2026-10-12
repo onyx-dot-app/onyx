@@ -462,7 +462,10 @@ within the blocking budget blocks the pairing. Indexing and perm-sync attempts k
 the legacy validation. Full runs execute as the `RUN_CAPABILITY_CHECKS` Celery task
 on the `capability_checks` queue. A beat task, `CHECK_FOR_STALE_CAPABILITY_RUNS`,
 retires dead runs. Draft runs on an unsaved form (`/admin/connector-checks/runs`)
-reuse their result at creation when the form is unchanged. A newer run with the
+reuse their result at creation when the form is unchanged. A check the draft
+run is still running is not started again: the draft task marks its pending
+results in flight, creation waits for them within its blocking budget, and the
+background run of unfinished checks waits for them too. A newer run with the
 same draft key supersedes an older one, and the cancel endpoint does the same
 without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a

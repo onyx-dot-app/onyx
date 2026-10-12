@@ -209,6 +209,40 @@ it("lets Create run without a run when no required check applies", async () => {
   await waitFor(() => expect(result.current.checks.createReady).toBe(true));
 });
 
+it("lets Create run once required checks pass, while optional ones still run", async () => {
+  startMock.mockResolvedValue(
+    run(
+      [
+        check({ ...BINDING, state: "passed" }),
+        check({ ...CONTENT, state: "passed" }),
+        check({ check_id: "discovery", required: false, state: "running" }),
+      ],
+      "running"
+    )
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+
+  await waitFor(() => expect(result.current.checks.createReady).toBe(true));
+});
+
+it("holds Create while a required check still runs", async () => {
+  startMock.mockResolvedValue(
+    run(
+      [
+        check({ ...BINDING, state: "passed" }),
+        check({ ...CONTENT, state: "running" }),
+      ],
+      "running"
+    )
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+
+  await waitFor(() => expect(result.current.checks.formUnlocked).toBe(true));
+  expect(result.current.checks.createReady).toBe(false);
+});
+
 it("ignores non-required failures and unverified checks for Create", async () => {
   startMock.mockResolvedValue(
     run([
