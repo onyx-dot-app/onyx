@@ -145,13 +145,13 @@ function OutputsBrowser({
       .filter((card) => card.kind === "file")
       .map((card) => [card.path, card])
   );
+  const hasCompleteInventory = liveInventory !== null && status === "complete";
   const indexedFiles = { ...inventory };
   for (const card of fileCards.values()) {
     if (
       !indexedFiles[card.path] &&
-      (card.deleted
-        ? card.turn_index === turnIndex
-        : inventory === null || status !== "complete")
+      (card.turn_index === turnIndex ||
+        (!card.deleted && !hasCompleteInventory))
     )
       indexedFiles[card.path] = {
         path: card.path,
@@ -391,7 +391,9 @@ function OutputsBrowser({
               )}
               {visibleFiles.map((file) => {
                 const card = fileCards.get(file.path);
-                return card?.deleted && !liveInventory?.[file.path] ? (
+                return card &&
+                  !liveInventory?.[file.path] &&
+                  (card.deleted || hasCompleteInventory) ? (
                   <OutputUnavailableTile
                     key={file.path}
                     card={card}

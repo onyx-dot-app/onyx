@@ -85,6 +85,36 @@ test("includes unavailable overflow outputs only in their turn's collection", ()
   ).not.toBeInTheDocument();
 });
 
+test("retains missing saved outputs in their turn when live inventory is complete", () => {
+  store().updateSessionData("session", {
+    outputInventory: {},
+    outputInventoryStatus: "partial",
+  });
+  const props = {
+    sessionId: "session",
+    isActive: false,
+    onFileOpen: jest.fn(),
+    outputCards: [outputCard],
+  };
+  const { rerender } = render(<OutputsTab {...props} turnIndex={0} />);
+  expect(screen.getByRole("button", { name: file.path })).toBeInTheDocument();
+  act(() =>
+    store().updateSessionData("session", { outputInventoryStatus: "complete" })
+  );
+  expect(
+    screen.queryByRole("button", { name: file.path })
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("group", { name: file.path })).toHaveAttribute(
+    "aria-disabled",
+    "true"
+  );
+  expect(screen.getByText("No longer available")).toBeInTheDocument();
+  rerender(<OutputsTab {...props} turnIndex={null} />);
+  expect(
+    screen.queryByRole("group", { name: file.path })
+  ).not.toBeInTheDocument();
+});
+
 test.each([null, 0])(
   "opens recreated files despite a stale deleted card in scope %s",
   async (turnIndex) => {
