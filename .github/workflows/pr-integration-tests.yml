@@ -126,11 +126,12 @@ jobs:
         run: |
           # Find all leaf-level directories in both test directories.
           # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" ! -name "gateway_clients" -exec basename {} \; | sort)
+          # PROBE: only the directory under investigation.
+          tests_dirs="permissions_resources"
           if [[ "$GATEWAY_CHANGED" == "true" ]]; then
             tests_dirs="$tests_dirs gateway_clients"
           fi
-          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" -exec basename {} \; | sort)
+          connector_dirs=""
           if [[ "$SLACK_CHANGED" == "true" ]]; then
             connector_dirs="$connector_dirs slack"
           fi
@@ -397,6 +398,17 @@ jobs:
           retry_wait_seconds: 10
           command: |
             echo "Running ${{ matrix.edition }} integration tests for ${{ matrix.test-dir.path }}..."
+
+            # PROBE: memory, disk and the largest processes every 20s.
+            (while true; do
+              echo "=== MON $(date -u +%T)"
+              free -m | sed -n 2,3p
+              df -h / | tail -1
+              ps -eo rss,pid,args --sort=-rss | head -10 | cut -c1-180
+              sleep 20
+            done) &
+            MON_PID=$!
+            trap 'kill $MON_PID 2>/dev/null' EXIT
 
             # gateway_clients drives real CLI subprocesses, which need a real
             # TCP api_server; run one inside the test container and make every
