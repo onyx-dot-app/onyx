@@ -23,7 +23,10 @@ from onyx.server.features.build.session.models import (
     OutputsViewedRequest,
     OutputViewedRequest,
 )
-from onyx.server.features.build.session.output_cards import TurnOutputCapture
+from onyx.server.features.build.session.output_cards import (
+    capture_turn_outputs,
+    persist_turn_outputs,
+)
 
 
 def manifest(**files: int) -> OutputsManifestResponse:
@@ -37,17 +40,20 @@ def manifest(**files: int) -> OutputsManifestResponse:
     )
 
 
-def capture(
+def persist_capture(
+    db_session: Session,
     session: BuildSession,
     turn: int,
     before: OutputsManifestResponse,
     after: OutputsManifestResponse,
-) -> TurnOutputCapture:
+    *,
+    owns_turn: Callable[[], bool],
+) -> None:
     manager = Mock(spec=SandboxManager)
     manager.get_outputs_manifest.side_effect = [before, after]
-    result = TurnOutputCapture(manager, uuid4(), session.id, turn)
-    result.start()
-    return result
+    snapshot = capture_turn_outputs(manager, uuid4(), session.id, turn)
+    if snapshot is not None:
+        persist_turn_outputs(db_session, manager, snapshot, owns_turn=owns_turn)
 
 
 # Turn attribution and reload.
@@ -60,9 +66,8 @@ def test_output_capture_survives_reload_and_only_moves_changed_files(
     files = manifest(
         **{"notes.md": 1, "report.pdf": 1, "web/app/page.tsx": 1, "web/package.json": 1}
     )
-    first = capture(session, 0, manifest(), files)
-    first.finish(db_session, owns_turn=lambda: True)
-    first.finish(db_session, owns_turn=lambda: True)
+    persist_capture(db_session, session, 0, manifest(), files, owns_turn=lambda: True)
+    persist_capture(db_session, session, 0, manifest(), files, owns_turn=lambda: True)
     db_session.expire_all()
     cards = get_output_cards(session.id, test_user, db_session).cards
     assert len(cards) == 3
@@ -75,9 +80,9 @@ def test_output_capture_survives_reload_and_only_moves_changed_files(
     newer = manifest(
         **{"notes.md": 2, "report.pdf": 1, "web/app/page.tsx": 2, "web/package.json": 1}
     )
-    capture(session, 1, files, newer).finish(db_session, owns_turn=lambda: True)
+    persist_capture(db_session, session, 1, files, newer, owns_turn=lambda: True)
     # Replaying the same final capture does not increment revisions.
-    capture(session, 1, files, newer).finish(db_session, owns_turn=lambda: True)
+    persist_capture(db_session, session, 1, files, newer, owns_turn=lambda: True)
     db_session.expire_all()
     by_path = {
         card.path: card
@@ -106,14 +111,19 @@ def test_uncertain_or_stale_capture_preserves_existing_cards(
 ) -> None:
     session = build_session_with_user()
     files = manifest(**{"report.pdf": 1})
-    capture(session, 2, manifest(), files).finish(db_session, owns_turn=lambda: True)
+    persist_capture(db_session, session, 2, manifest(), files, owns_turn=lambda: True)
     before, after = files, manifest()
     if failure == "before":
         before = OutputsManifestResponse(entries=[], complete=False)
     if failure == "after":
         after = OutputsManifestResponse(entries=[], complete=False)
-    capture(session, 1 if failure == "old_turn" else 3, before, after).finish(
-        db_session, owns_turn=lambda: failure != "owner"
+    persist_capture(
+        db_session,
+        session,
+        1 if failure == "old_turn" else 3,
+        before,
+        after,
+        owns_turn=lambda: failure != "owner",
     )
     card = get_output_cards(session.id, test_user, db_session).cards[0]
     assert not card.deleted
@@ -129,7 +139,7 @@ def test_viewed_revision_is_monotonic_and_cannot_clear_newer_output(
 ) -> None:
     session = build_session_with_user()
     files = manifest(**{"notes.md": 1})
-    capture(session, 0, manifest(), files).finish(db_session, owns_turn=lambda: True)
+    persist_capture(db_session, session, 0, manifest(), files, owns_turn=lambda: True)
     card = get_output_cards(session.id, test_user, db_session).cards[0]
     artifact_id = UUID(card.id)
     assert card.viewed_revision is None
@@ -143,8 +153,13 @@ def test_viewed_revision_is_monotonic_and_cannot_clear_newer_output(
     db_session.expire_all()
     assert artifact.viewed_revision == 1
     assert artifact.updated_at == modified_at
-    capture(session, 1, files, manifest(**{"notes.md": 2})).finish(
-        db_session, owns_turn=lambda: True
+    persist_capture(
+        db_session,
+        session,
+        1,
+        files,
+        manifest(**{"notes.md": 2}),
+        owns_turn=lambda: True,
     )
     late = view_output_card(
         session.id, artifact_id, OutputViewedRequest(revision=1), test_user, db_session
@@ -199,12 +214,12 @@ def test_deleted_output_stays_in_its_original_turn(
 ) -> None:
     session = build_session_with_user()
     files = manifest(**{"notes.md": 1})
-    capture(session, 0, manifest(), files).finish(db_session, owns_turn=lambda: True)
-    capture(session, 1, files, manifest()).finish(db_session, owns_turn=lambda: True)
+    persist_capture(db_session, session, 0, manifest(), files, owns_turn=lambda: True)
+    persist_capture(db_session, session, 1, files, manifest(), owns_turn=lambda: True)
     card = get_output_cards(session.id, test_user, db_session).cards[0]
     assert card.deleted
     assert card.turn_index == 0
-    capture(session, 2, manifest(), files).finish(db_session, owns_turn=lambda: True)
+    persist_capture(db_session, session, 2, manifest(), files, owns_turn=lambda: True)
     restored = get_output_cards(session.id, test_user, db_session).cards[0]
     assert not restored.deleted
     assert restored.revision == 2
@@ -220,11 +235,11 @@ def test_lost_ownership_during_database_writes_rolls_back_all_cards(
 ) -> None:
     session = build_session_with_user()
     before = manifest(**{"original.md": 1})
-    capture(session, 0, manifest(), before).finish(db_session, owns_turn=lambda: True)
+    persist_capture(db_session, session, 0, manifest(), before, owns_turn=lambda: True)
     after = manifest(**{f"new-{index}.md": 2 for index in range(file_count)})
     ownership = iter([True, True, False])
-    capture(session, 1, before, after).finish(
-        db_session, owns_turn=lambda: next(ownership)
+    persist_capture(
+        db_session, session, 1, before, after, owns_turn=lambda: next(ownership)
     )
     # A later caller commit must not publish the abandoned partial batch.
     db_session.commit()
@@ -244,14 +259,24 @@ def test_bulk_viewed_uses_exact_revisions_and_session_owner(
     session = build_session_with_user()
     other = build_session_with_user()
     initial = manifest(**{"one.md": 1, "nested/two.md": 1})
-    capture(session, 0, manifest(), initial).finish(db_session, owns_turn=lambda: True)
-    capture(other, 0, manifest(), manifest(**{"other.md": 1})).finish(
-        db_session, owns_turn=lambda: True
+    persist_capture(db_session, session, 0, manifest(), initial, owns_turn=lambda: True)
+    persist_capture(
+        db_session,
+        other,
+        0,
+        manifest(),
+        manifest(**{"other.md": 1}),
+        owns_turn=lambda: True,
     )
     cards = get_output_cards(session.id, test_user, db_session).cards
     foreign = get_output_cards(other.id, test_user, db_session).cards[0]
-    capture(session, 1, initial, manifest(**{"one.md": 2, "nested/two.md": 1})).finish(
-        db_session, owns_turn=lambda: True
+    persist_capture(
+        db_session,
+        session,
+        1,
+        initial,
+        manifest(**{"one.md": 2, "nested/two.md": 1}),
+        owns_turn=lambda: True,
     )
     request = OutputsViewedRequest(
         revisions={UUID(card.id): card.revision for card in [*cards, foreign]}

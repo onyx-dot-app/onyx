@@ -48,7 +48,11 @@ from onyx.server.features.build.session.interrupt_signal import (
 )
 from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.output_cards import TurnOutputCapture
+from onyx.server.features.build.session.output_cards import (
+    TurnOutputSnapshot,
+    capture_turn_outputs,
+    persist_turn_outputs,
+)
 from onyx.server.features.build.session.sandbox_lifecycle import (
     HEALTH_PROBE_TIMEOUT_SECONDS,
 )
@@ -304,9 +308,8 @@ def _drive_interactive_turn(
             ),
         )
         slot = prompt_slot_cm.__enter__()
-        output_capture = TurnOutputCapture(
-            get_sandbox_manager(), sandbox.id, session_id, turn_index
-        )
+        output_manager = get_sandbox_manager()
+        output_snapshot: TurnOutputSnapshot | None = None
 
         def owns_output_capture() -> bool:
             if not slot.acquired or slot.lost:
@@ -319,7 +322,11 @@ def _drive_interactive_turn(
         def complete_turn(
             *, status: InteractiveTurnStatus, error_detail: str | None = None
         ) -> None:
-            output_capture.finish(db_session, owns_turn=owns_output_capture)
+            nonlocal output_snapshot
+            snapshot, output_snapshot = output_snapshot, None
+            persist_turn_outputs(
+                db_session, output_manager, snapshot, owns_turn=owns_output_capture
+            )
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,
@@ -389,7 +396,9 @@ def _drive_interactive_turn(
 
             # A reclaimed runner cannot infer the original pre-turn inventory.
             if not reclaimed:
-                output_capture.start()
+                output_snapshot = capture_turn_outputs(
+                    output_manager, sandbox.id, session_id, turn_index
+                )
             # Inventory I/O can outlive a lease. Fence the prompt POST again.
             if not owns_output_capture():
                 complete_turn(

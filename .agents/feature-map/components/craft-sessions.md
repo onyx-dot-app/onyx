@@ -537,7 +537,7 @@ effect.
 
 ### 4.7 Artifacts, receipts, and export
 
-`backend/onyx/server/features/build/session/output_cards.py` (`TurnOutputCapture`) records output changes for interactive and scheduled turns.
+`backend/onyx/server/features/build/session/output_cards.py` (`capture_turn_outputs` and `persist_turn_outputs`) records output changes for interactive and scheduled turns.
 It captures a complete manifest after workspace restoration and before the prompt starts.
 After the producer stops, it compares a second complete manifest while the runner still owns the prompt slot.
 Confirmed changes update the existing artifact index before terminal status releases the turn.

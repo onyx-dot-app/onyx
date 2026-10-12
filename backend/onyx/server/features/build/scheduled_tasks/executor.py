@@ -60,7 +60,11 @@ from onyx.server.features.build.sandbox.event_schema import (
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
-from onyx.server.features.build.session.output_cards import TurnOutputCapture
+from onyx.server.features.build.session.output_cards import (
+    TurnOutputSnapshot,
+    capture_turn_outputs,
+    persist_turn_outputs,
+)
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.server.features.build.timeouts import (
     PROVISION_WAIT_SECONDS,
@@ -419,9 +423,8 @@ def _drive_agent(
             )
             db_session.commit()
             return False
-        output_capture = TurnOutputCapture(
-            get_sandbox_manager(), sandbox_id, session_id, 0
-        )
+        output_manager = get_sandbox_manager()
+        output_snapshot: TurnOutputSnapshot | None = None
         event_stream = session_manager.yield_sandbox_events(
             sandbox_id,
             session_id,
@@ -436,8 +439,12 @@ def _drive_agent(
             return not slot.lost
 
         def finish_outputs() -> None:
+            nonlocal output_snapshot
             event_stream.close()
-            output_capture.finish(db_session, owns_turn=owns_outputs)
+            snapshot, output_snapshot = output_snapshot, None
+            persist_turn_outputs(
+                db_session, output_manager, snapshot, owns_turn=owns_outputs
+            )
 
         try:
             session_manager.stamp_turn_deadline(
@@ -448,7 +455,9 @@ def _drive_agent(
                 ),
                 hard_cap_seconds=budget_seconds,
             )
-            output_capture.start()
+            output_snapshot = capture_turn_outputs(
+                output_manager, sandbox_id, session_id, 0
+            )
             if not owns_outputs():
                 raise RuntimeError(
                     "Prompt slot lease lost while reading output baseline."
