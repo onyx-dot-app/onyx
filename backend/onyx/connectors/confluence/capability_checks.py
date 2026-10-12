@@ -35,8 +35,8 @@ from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
-    CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CredentialCapability,
     OptionsFinding,
 )
@@ -407,7 +407,7 @@ class _SpaceListingCheck(_ConfluenceCheck):
             discovery=True,
         )
 
-    def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
             finding: OptionsFinding = bounded_options(
                 _gateway(context).list_spaces(limit=_SPACE_LISTING_PAGE_SIZE),
@@ -420,7 +420,7 @@ class _SpaceListingCheck(_ConfluenceCheck):
             _raise_for_http_error(
                 e, denied="The credential cannot list Confluence spaces."
             )
-        return [finding]
+        return CheckOutput(findings=[finding])
 
 
 class _ConfiguredSpaceCheck(_ConfluenceCheck):

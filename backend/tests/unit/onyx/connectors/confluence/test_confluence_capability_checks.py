@@ -26,6 +26,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityVerdict,
     CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CredentialCapability,
     FindingOption,
     OptionsFinding,
@@ -62,6 +63,11 @@ _MODE_CHECK_IDS = {
     "confluence_configured_page",
     "confluence_cql_query",
 }
+
+
+def _findings(output: CheckOutput | None) -> list[CheckFinding]:
+    assert output is not None
+    return output.findings
 
 
 def _form(**overrides: Any) -> dict[str, Any]:
@@ -350,8 +356,8 @@ def test_space_listing_finds_the_visible_spaces_as_space_options() -> None:
         [{"key": "KB", "name": "Knowledge Base"}, {"key": "~ada"}]
     )
 
-    findings: list[CheckFinding] | None = _CHECKS_BY_ID["confluence_space_listing"].run(
-        _context(gateway, _form())
+    findings: list[CheckFinding] = _findings(
+        _CHECKS_BY_ID["confluence_space_listing"].run(_context(gateway, _form()))
     )
 
     assert findings == [
@@ -372,11 +378,10 @@ def test_space_listing_stops_at_the_option_cap() -> None:
         {"key": f"S{number}", "name": f"Space {number}"} for number in range(5000)
     )
 
-    findings: list[CheckFinding] | None = _CHECKS_BY_ID["confluence_space_listing"].run(
-        _context(gateway, _form())
+    findings: list[CheckFinding] = _findings(
+        _CHECKS_BY_ID["confluence_space_listing"].run(_context(gateway, _form()))
     )
 
-    assert findings is not None
     listing: CheckFinding = findings[0]
     assert isinstance(listing, OptionsFinding)
     assert len(listing.options) == MAX_FINDING_OPTIONS

@@ -35,8 +35,8 @@ from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
-    CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CredentialCapability,
     OptionsFinding,
 )
@@ -711,7 +711,7 @@ class _ReadableChannelListingCheck(CapabilityCheck):
             discovery=True,
         )
 
-    def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
             # The connector matches ``channels`` against bare channel names.
             finding: OptionsFinding = bounded_options(
@@ -726,7 +726,7 @@ class _ReadableChannelListingCheck(CapabilityCheck):
                 e,
                 "The bot token cannot list public channels (`conversations.list`).",
             )
-        return [finding]
+        return CheckOutput(findings=[finding])
 
 
 class _PermSyncChannelListingCheck(CapabilityCheck):

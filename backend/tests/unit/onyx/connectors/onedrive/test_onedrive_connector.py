@@ -16,7 +16,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckStatus,
+    CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CountFinding,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
@@ -81,6 +83,11 @@ from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 OneDriveGroupPage = EntraPage[OneDriveGroup]
 OneDriveGroupMemberPage = EntraPage[EntraDirectoryObject]
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "tenant_spike.json"
+
+
+def _findings(output: CheckOutput | None) -> list[CheckFinding]:
+    assert output is not None
+    return output.findings
 
 
 def _run_step(
@@ -1078,7 +1085,7 @@ def test_onedrive_drive_count_counts_every_page_of_the_listing() -> None:
         OneDriveUserPage(users=[_user("c@x.com")]),
     ]
 
-    findings = _drive_count_check().run(_drive_count_context(gateway))
+    findings = _findings(_drive_count_check().run(_drive_count_context(gateway)))
 
     assert findings == [CountFinding(key=CheckFindingKey.READABLE_DRIVES, count=3)]
     assert [call.kwargs["next_link"] for call in gateway.list_users.call_args_list] == [
@@ -1095,7 +1102,7 @@ def test_onedrive_drive_count_stops_at_the_cap() -> None:
         users=[_user(f"u{number}@x.com") for number in range(999)], next_link="next"
     )
 
-    findings = _drive_count_check().run(_drive_count_context(gateway))
+    findings = _findings(_drive_count_check().run(_drive_count_context(gateway)))
 
     assert findings == [
         CountFinding(

@@ -19,12 +19,15 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, computed_field, field_validator
 from pydantic_core import to_jsonable_python
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.applicability import (
+    get_applicable_capabilities,
+)
 from onyx.connectors.capability_checks.findings_setting import (
     check_findings_enabled,
     hide_findings_if_disabled,
@@ -34,8 +37,11 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CapabilityVerdict,
+    CheckAdvisory,
     CheckFinding,
     CredentialCapability,
+    compute_capability_verdicts,
     parse_known_findings,
 )
 from onyx.connectors.capability_checks.runner import (
@@ -97,6 +103,9 @@ _STATE_BY_STATUS: dict[CapabilityCheckStatus, DraftCheckStateKind] = {
     CapabilityCheckStatus.SKIPPED: DraftCheckStateKind.SKIPPED,
 }
 _STATUS_BY_STATE = {state: status for status, state in _STATE_BY_STATUS.items()}
+_UNFINISHED_STATES = frozenset(
+    {DraftCheckStateKind.PENDING, DraftCheckStateKind.RUNNING}
+)
 # Indeterminate results are transient, so they are not cached.
 _CACHEABLE_STATES = frozenset(
     {
@@ -130,6 +139,9 @@ class DraftCheckState(BaseModel):
     required: bool
     state: DraftCheckStateKind
     message: str = ""
+    # Exception class name of a failure, for support diagnosis.
+    error_type: str | None = None
+    is_fallback: bool = False
     missing_fields: list[str] = []
     invalid_fields: list[str] = []
     remediation: str | None = None
@@ -143,6 +155,7 @@ class DraftCheckState(BaseModel):
     discovery: bool = False
     # What the check found, once it passed.
     findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
 
     @field_validator("findings", mode="before")
     @classmethod
@@ -161,6 +174,40 @@ class DraftCheckRunSnapshot(BaseModel):
     form_errors: dict[str, str]
     unknown_fields: list[str]
     checks: list[DraftCheckState]
+
+    @computed_field
+    @property
+    def verdicts(self) -> dict[CredentialCapability, CapabilityVerdict]:
+        """Each capability's verdict, as a stored report computes it. A
+        capability with a check that is still pending or running has none."""
+        unfinished: set[CredentialCapability] = set()
+        results: list[CapabilityCheckResult] = []
+        for check in self.checks:
+            if check.state in _UNFINISHED_STATES:
+                unfinished.add(check.capability)
+                continue
+            results.append(
+                CapabilityCheckResult(
+                    capability=check.capability,
+                    check_id=check.check_id,
+                    display_name=check.display_name,
+                    required=check.required,
+                    # A waiting check has not verified anything yet.
+                    status=_STATUS_BY_STATE.get(
+                        check.state, CapabilityCheckStatus.SKIPPED
+                    ),
+                    applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
+                    discovery=check.discovery,
+                )
+            )
+        verdicts = compute_capability_verdicts(
+            get_applicable_capabilities(self.source), results
+        )
+        return {
+            capability: verdict
+            for capability, verdict in verdicts.items()
+            if capability not in unfinished
+        }
 
 
 class DraftCheckPlan(BaseModel):
@@ -205,6 +252,7 @@ class CachedDraftResult(BaseModel):
     duration_ms: int | None
     error_type: str | None = None
     findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
 
     @field_validator("findings", mode="before")
     @classmethod
@@ -228,6 +276,7 @@ def decide_draft_check_state(
         state=DraftCheckStateKind.PENDING,
         remediation=check.remediation,
         docs_link=check.docs_link,
+        is_fallback=check.is_fallback,
         validates_binding=check.validates_binding,
         discovery=check.discovery,
     )
@@ -326,6 +375,7 @@ def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
         duration_ms=result.duration_ms,
         error_type=result.error_type,
         findings=result.findings,
+        advisories=result.advisories,
     )
     get_cache_backend().set(
         key, cached.model_dump_json(), ex=DRAFT_RESULT_CACHE_TTL_SECONDS
@@ -417,6 +467,7 @@ def cached_check_result(
         discovery=check.discovery,
         # Cached before the workspace turned findings off.
         findings=cached.findings if check_findings_enabled() else [],
+        advisories=cached.advisories,
     )
 
 
@@ -425,8 +476,10 @@ def apply_check_result(
 ) -> None:
     check_state.state = _STATE_BY_STATUS[result.status]
     check_state.message = result.message
+    check_state.error_type = result.error_type
     check_state.duration_ms = result.duration_ms
     check_state.findings = result.findings
+    check_state.advisories = result.advisories
 
 
 def apply_cached_result(
@@ -434,8 +487,10 @@ def apply_cached_result(
 ) -> None:
     check_state.state = cached.state
     check_state.message = cached.message
+    check_state.error_type = cached.error_type
     check_state.duration_ms = cached.duration_ms
     check_state.findings = cached.findings if check_findings_enabled() else []
+    check_state.advisories = cached.advisories
     check_state.from_cache = True
 
 

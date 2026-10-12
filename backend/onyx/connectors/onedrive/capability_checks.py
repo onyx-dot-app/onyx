@@ -7,8 +7,8 @@ from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
-    CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CountFinding,
     CredentialCapability,
     form_config,
@@ -295,7 +295,7 @@ class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
     def applies(self, form_state: FormState[OneDriveConnectorConfig]) -> bool:
         return not [user for user in form_state.config.users or [] if user.strip()]
 
-    def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
             finding: CountFinding = bounded_count(
                 _tenant_users(_gateway(context)),
@@ -304,7 +304,7 @@ class _DriveCountCheck(CapabilityCheck[OneDriveConnectorConfig]):
             )
         except OneDriveGraphError as error:
             raise_for_graph_error(error, "The app cannot list tenant users.")
-        return [finding]
+        return CheckOutput(findings=[finding])
 
 
 class _ConfiguredUsersCheck(CapabilityCheck[OneDriveConnectorConfig]):

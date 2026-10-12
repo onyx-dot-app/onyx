@@ -21,6 +21,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityVerdict,
     CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CountFinding,
     OptionsFinding,
     aggregate_capability_verdict,
@@ -58,10 +59,11 @@ class _Check(CapabilityCheck):
     def run(
         self,
         context: CapabilityCheckContext,  # noqa: ARG002
-    ) -> list[CheckFinding] | None:
+    ) -> CheckOutput | None:
         if self._order is not None:
             self._order.append(self.check_id)
-        return self._run()
+        findings = self._run()
+        return CheckOutput(findings=findings) if findings is not None else None
 
 
 def _context() -> CapabilityCheckContext:

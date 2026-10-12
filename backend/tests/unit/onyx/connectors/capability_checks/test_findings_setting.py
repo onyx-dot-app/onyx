@@ -18,8 +18,8 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
-    CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CountFinding,
     CredentialCapabilityReport,
 )
@@ -44,8 +44,8 @@ class _UsersCheck(CapabilityCheck):
     def run(
         self,
         context: CapabilityCheckContext,  # noqa: ARG002
-    ) -> list[CheckFinding] | None:
-        return [_USERS]
+    ) -> CheckOutput | None:
+        return CheckOutput(findings=[_USERS])
 
 
 @pytest.fixture

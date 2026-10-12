@@ -13,7 +13,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckAdvisory,
     CheckFinding,
+    CheckOutput,
     CredentialCapability,
     CredentialCapabilityReport,
     compute_capability_verdicts,
@@ -102,6 +104,7 @@ class _CheckOutcome(BaseModel):
     duration_ms: int | None = None
     applicable: bool = True
     findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
 
 
 def _build_result(
@@ -123,6 +126,7 @@ def _build_result(
         validates_binding=check.validates_binding,
         discovery=check.discovery,
         findings=outcome.findings,
+        advisories=outcome.advisories,
     )
 
 
@@ -184,7 +188,7 @@ def _execute_check(
         return int((time.monotonic() - start) * 1000)
 
     try:
-        findings: list[CheckFinding] | None = run_with_timeout(
+        output: CheckOutput | None = run_with_timeout(
             timeout_seconds, check.run, context
         )
     except ConnectorValidationError as e:
@@ -231,10 +235,12 @@ def _execute_check(
             error_type=type(e).__name__,
             duration_ms=elapsed_ms(),
         )
+    output = output or CheckOutput()
     return _CheckOutcome(
         status=CapabilityCheckStatus.PASSED,
         duration_ms=elapsed_ms(),
-        findings=_findings_for_source(findings or [], check, context.source),
+        findings=_findings_for_source(output.findings, check, context.source),
+        advisories=output.advisories,
     )
 
 

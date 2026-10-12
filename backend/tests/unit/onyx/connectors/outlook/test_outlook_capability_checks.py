@@ -17,7 +17,9 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CountFinding,
     CredentialCapability,
     compute_capability_verdicts,
@@ -66,6 +68,11 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
 )
 
 _CHECKS_BY_ID = {check.check_id: check for check in build_outlook_indexing_checks()}
+
+
+def _findings(output: CheckOutput | None) -> list[CheckFinding]:
+    assert output is not None
+    return output.findings
 
 
 def _gateway() -> MagicMock:
@@ -225,7 +232,7 @@ def test_mailbox_count_counts_every_page_of_the_listing() -> None:
         OutlookMailboxPage(mailboxes=[mailbox(id="c")]),
     ]
 
-    findings = _CHECKS_BY_ID["outlook_mailbox_count"].run(_context(gateway))
+    findings = _findings(_CHECKS_BY_ID["outlook_mailbox_count"].run(_context(gateway)))
 
     assert findings == [CountFinding(key=CheckFindingKey.READABLE_MAILBOXES, count=3)]
     assert [
@@ -240,7 +247,7 @@ def test_mailbox_count_stops_at_the_cap() -> None:
         next_link="https://next",
     )
 
-    findings = _CHECKS_BY_ID["outlook_mailbox_count"].run(_context(gateway))
+    findings = _findings(_CHECKS_BY_ID["outlook_mailbox_count"].run(_context(gateway)))
 
     assert findings == [
         CountFinding(
