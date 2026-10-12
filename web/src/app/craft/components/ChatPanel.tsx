@@ -120,7 +120,9 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     session?.status === "creating" &&
     !session.activeTurnLocalOwner &&
     !session.activeTurnId;
-  const hasInterruptibleTurn = session?.status === "running";
+  const hasInterruptibleTurn =
+    (session?.status === "running" || session?.status === "creating") &&
+    (session.activeTurnId !== null || session.activeTurnLocalOwner);
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();

@@ -201,6 +201,9 @@ export function useBuildStreaming({
       generation: number,
       instanceId: string
     ): Promise<void> => {
+      const stopping = useBuildSessionStore
+        .getState()
+        .sessions.get(sessionId)?.isInterrupting;
       // Only act while this is still the interrupt we launched for; otherwise a
       // newer turn (a queued auto-send bumps the generation) would be clobbered.
       const ownsInterrupt = (turnId: string | null): boolean => {
@@ -209,6 +212,7 @@ export function useBuildStreaming({
           !!s &&
           s.instanceId === instanceId &&
           s.turnGeneration === generation &&
+          s.isInterrupting === stopping &&
           s.status === "running" &&
           (turnId === null || !s.activeTurnId || s.activeTurnId === turnId)
         );
@@ -317,6 +321,7 @@ export function useBuildStreaming({
       options: {
         signal: AbortSignal;
         onPromptResponse?: () => void;
+        onTerminalError?: () => void;
         expectedTurnId?: string;
       }
     ) => {
@@ -912,6 +917,10 @@ export function useBuildStreaming({
             }
             void finalizeOutputs();
             appendErrorItem(parsed.message);
+            if (options?.onTerminalError) {
+              options.onTerminalError();
+              break;
+            }
             updateSessionData(sessionId, {
               status: "failed",
               error: parsed.message,
@@ -1231,6 +1240,12 @@ export function useBuildStreaming({
               isInterrupting: false,
               wasInterrupted: false,
             });
+            void reconcileInterruptedTurn(
+              sessionId,
+              turn.turn_id,
+              generation,
+              currentSession.instanceId
+            );
           }
         }
         if (!ownsTurn(turn.turn_id)) return;
@@ -1358,7 +1373,12 @@ export function useBuildStreaming({
   const interruptStreaming = useCallback(
     async (sessionId: string): Promise<void> => {
       const session = useBuildSessionStore.getState().sessions.get(sessionId);
-      if (!session || session.status !== "running" || session.isInterrupting) {
+      if (
+        !session ||
+        (session.status !== "running" && session.status !== "creating") ||
+        (!session.activeTurnId && !session.activeTurnLocalOwner) ||
+        session.isInterrupting
+      ) {
         return;
       }
 
@@ -1389,6 +1409,12 @@ export function useBuildStreaming({
           isInterrupting: false,
           wasInterrupted: false,
         });
+        void reconcileInterruptedTurn(
+          sessionId,
+          interruptedTurnId,
+          generation,
+          session.instanceId
+        );
       }
     },
     [
@@ -1418,25 +1444,23 @@ export function useBuildStreaming({
       // A scheduled run owns one session; reattaching does not start a new turn.
       updateSessionData(sessionId, { status: "running" });
       clearStreamItems(sessionId);
-      let settledFromPromptResponse = false;
+      let settledFromTerminalPacket = false;
+      const settleFromTerminalPacket = (): void => {
+        if (!ownsScheduledStream()) return;
+        settledFromTerminalPacket = true;
+        void useBuildSessionStore
+          .getState()
+          .beginTurnSettlement(
+            sessionId,
+            { kind: "scheduled", runId },
+            owner.turnGeneration
+          );
+        onSettled?.();
+      };
       const processor = createStreamPacketProcessor(sessionId, {
         signal,
-        onPromptResponse: () => {
-          if (!ownsScheduledStream()) return;
-          settledFromPromptResponse = true;
-          const current = useBuildSessionStore
-            .getState()
-            .sessions.get(sessionId);
-          if (current)
-            void useBuildSessionStore
-              .getState()
-              .beginTurnSettlement(
-                sessionId,
-                { kind: "scheduled", runId },
-                owner.turnGeneration
-              );
-          onSettled?.();
-        },
+        onPromptResponse: settleFromTerminalPacket,
+        onTerminalError: settleFromTerminalPacket,
       });
 
       try {
@@ -1478,7 +1502,7 @@ export function useBuildStreaming({
                   owner.turnGeneration
                 );
           }
-          if (!settledFromPromptResponse) {
+          if (!settledFromTerminalPacket) {
             onSettled?.();
           }
         }

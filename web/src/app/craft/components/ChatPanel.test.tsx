@@ -73,6 +73,8 @@ jest.mock("@/app/craft/components/CraftInputBar", () => ({
   __esModule: true,
   default: ({
     disabled,
+    isRunning,
+    onInterrupt,
     onSubmit,
     onQueueMessage,
     queuedMessages = [],
@@ -80,6 +82,8 @@ jest.mock("@/app/craft/components/CraftInputBar", () => ({
   }: Pick<
     CraftInputBarProps,
     | "disabled"
+    | "isRunning"
+    | "onInterrupt"
     | "onSubmit"
     | "onQueueMessage"
     | "queuedMessages"
@@ -87,6 +91,7 @@ jest.mock("@/app/craft/components/CraftInputBar", () => ({
   >) => (
     <div>
       <DraftSelection />
+      {isRunning && onInterrupt && <button onClick={onInterrupt}>Stop</button>}
       <button disabled={disabled} onClick={() => onSubmit("prompt", [])}>
         Send
       </button>
@@ -521,3 +526,36 @@ it("allows a new submission after an ordinary direct start fails", () => {
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   expect(streamMessage).toHaveBeenCalledWith(SESSION_ID, "prompt", null, []);
 });
+
+it.each([
+  {
+    status: "running" as const,
+    activeTurnId: "live-turn",
+    activeTurnLocalOwner: false,
+    visible: true,
+  },
+  {
+    status: "creating" as const,
+    activeTurnId: null,
+    activeTurnLocalOwner: true,
+    visible: true,
+  },
+  {
+    status: "running" as const,
+    activeTurnId: null,
+    activeTurnLocalOwner: false,
+    visible: false,
+  },
+])(
+  "offers Stop only while a turn can still be interrupted (%j)",
+  ({ visible, ...state }) => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, state);
+    render(<BuildChatPanel existingSessionId={SESSION_ID} />);
+    if (visible)
+      expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    else
+      expect(
+        screen.queryByRole("button", { name: "Stop" })
+      ).not.toBeInTheDocument();
+  }
+);

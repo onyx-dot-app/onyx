@@ -374,11 +374,13 @@ After the backend turn ends, the store owns transcript settlement for both inter
 Interactive settlement checks the active turn. Scheduled settlement checks the expected run and its saved status.
 Only confirmed persistence permits canonical history replacement. Neither path loads runtime metadata or changes navigation.
 A failed read preserves the local transcript and settlement identity. The retry action resumes that same settlement.
-Scheduled transport errors also reconcile the worker’s persisted result through its existing run owner.
+Scheduled transport failures and terminal error packets reconcile saved results through the existing run owner.
 Failed and skipped scheduled runs also reload saved history, but never grant queue permission.
 A failed history read preserves the displayed transcript and the existing retry action.
 Failed settlement or queued-start recovery disables ordinary submission until the user retries or discards it.
 Only confirmed completion with persisted history permits the next queued prompt.
+Stop is available only for an active backend turn or a pending local start. History reconciliation alone is not interruptible.
+A failed Stop request resumes completion checks. Those checks yield to a later Stop request for the same turn.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
 `CraftStreamingProvider` owns that hook and is mounted by `web/src/providers/AppProvider.tsx` inside the authenticated app provider.
 The provider also watches external interactive turns for visible sessions and sessions with queued prompts.
