@@ -19,6 +19,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityVerdict,
     CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CredentialCapability,
     FindingOption,
     OptionsFinding,
@@ -64,6 +65,11 @@ _CHECKS_BY_ID = {
     for check in build_slack_indexing_checks()
     + build_slack_doc_permission_sync_checks()
 }
+
+
+def _findings(output: CheckOutput | None) -> list[CheckFinding]:
+    assert output is not None
+    return output.findings
 
 
 def _slack_error(error: str, needed: str | None = None) -> SlackApiError:
@@ -799,9 +805,9 @@ def test_readable_channel_listing_finds_channel_names_as_channel_options() -> No
     )
 
     # Under test.
-    findings: list[CheckFinding] | None = _CHECKS_BY_ID[
-        "slack_readable_channel_listing"
-    ].run(_context(gateway))
+    findings: list[CheckFinding] = _findings(
+        _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+    )
 
     # Postcondition.
     assert findings == [
@@ -844,12 +850,11 @@ def test_readable_channel_listing_lists_each_grid_workspace() -> None:
     )
 
     # Under test.
-    findings: list[CheckFinding] | None = _CHECKS_BY_ID[
-        "slack_readable_channel_listing"
-    ].run(_context(gateway))
+    findings: list[CheckFinding] = _findings(
+        _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+    )
 
     # Postcondition.
-    assert findings is not None
     listing: CheckFinding = findings[0]
     assert isinstance(listing, OptionsFinding)
     assert [option.value for option in listing.options] == ["general", "eng"]
@@ -874,12 +879,11 @@ def test_readable_channel_listing_stops_at_the_option_cap() -> None:
     gateway.list_channels.side_effect = list_channels
 
     # Under test.
-    findings: list[CheckFinding] | None = _CHECKS_BY_ID[
-        "slack_readable_channel_listing"
-    ].run(_context(gateway))
+    findings: list[CheckFinding] = _findings(
+        _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+    )
 
     # Postcondition.
-    assert findings is not None
     listing: CheckFinding = findings[0]
     assert isinstance(listing, OptionsFinding)
     assert len(listing.options) == MAX_FINDING_OPTIONS

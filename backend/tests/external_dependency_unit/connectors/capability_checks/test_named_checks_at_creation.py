@@ -33,8 +33,11 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckStatus,
+    CapabilityVerdict,
+    CheckAdvisory,
     CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CountFinding,
     CredentialCapability,
     CredentialCapabilityReport,
@@ -93,13 +96,16 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
     def run(
         self,
         context: CapabilityCheckContext,  # noqa: ARG002
-    ) -> list[CheckFinding] | None:
+    ) -> CheckOutput | None:
         self._harness.runs.append(self.check_id)
         if (release := self._harness.slow.get(self.check_id)) is not None:
             release.wait(timeout=30)
         if (error := self._harness.errors.get(self.check_id)) is not None:
             raise error
-        return self._harness.findings.get(self.check_id)
+        return CheckOutput(
+            findings=self._harness.findings.get(self.check_id, []),
+            advisories=self._harness.advisories.get(self.check_id, []),
+        )
 
 
 class _FakeConfigCheck(_FakeCheck):
@@ -111,6 +117,7 @@ class _Harness:
         self.runs: list[str] = []
         self.errors: dict[str, Exception] = {}
         self.findings: dict[str, list[CheckFinding]] = {}
+        self.advisories: dict[str, list[CheckAdvisory]] = {}
         # Registers a discovery check after the other checks.
         self.with_discovery = False
         # A check in here waits until its event is set.
@@ -453,6 +460,46 @@ def test_a_cached_required_failure_skips_discovery_in_the_next_draft_run(
     assert states[_CHANNELS].state == DraftCheckStateKind.FAILED
     assert states[_DISCOVERY].state == DraftCheckStateKind.SKIPPED
     assert states[_DISCOVERY].findings == []
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_draft_advisory_reaches_the_run_and_the_created_pairs_report(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    advisory = CheckAdvisory(message="Channel a is empty; reads were not verified.")
+    harness.advisories[_CHANNELS] = [advisory]
+    user_id = uuid4()
+    started = start_draft_capability_check_run(
+        user_id=user_id,
+        credential=slack_pair.credential,
+        source=DocumentSource.SLACK,
+        config_class=SlackConnectorConfig,
+        access_type=AccessType.PUBLIC,
+        draft_key=uuid4().hex,
+        form_values={"channels": ["a"]},
+    )
+    run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
+
+    snapshot = read_draft_run_for_user(started.run_id, user_id)
+    assert snapshot is not None
+    states = {check.check_id: check for check in snapshot.checks}
+    assert states[_CHANNELS].advisories == [advisory]
+    assert snapshot.verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.PASSED
+
+    harness.runs.clear()
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+
+    assert harness.runs == []
+    db_session.expire_all()
+    row = get_capability_report_row(
+        db_session, slack_pair.credential_id, slack_pair.connector_id
+    )
+    assert row is not None and row.report is not None
+    report = CredentialCapabilityReport.model_validate(row.report)
+    channels = next(
+        result for result in report.check_results if result.check_id == _CHANNELS
+    )
+    assert channels.advisories == [advisory]
 
 
 @pytest.mark.usefixtures("tenant_context")

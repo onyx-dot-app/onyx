@@ -23,6 +23,7 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CountFinding,
     CredentialCapabilityReport,
     FindingOption,
@@ -37,7 +38,7 @@ _SPACES = OptionsFinding(
     field_name="space",
     options=[FindingOption(value="ENG", label="Engineering")],
 )
-_USERS = CountFinding(key=CheckFindingKey.IMPERSONATABLE_USERS, count=1200)
+_USERS = CountFinding(key=CheckFindingKey.VISIBLE_ORGANIZATION_USERS, count=1200)
 
 
 class _FindingsCheck(CapabilityCheck):
@@ -55,8 +56,9 @@ class _FindingsCheck(CapabilityCheck):
         )
         self._run = run
 
-    def run(self, context: CapabilityCheckContext) -> list[CheckFinding] | None:
-        return self._run(context)
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+        findings = self._run(context)
+        return CheckOutput(findings=findings) if findings is not None else None
 
 
 def _context() -> CapabilityCheckContext:

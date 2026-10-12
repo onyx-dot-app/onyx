@@ -49,7 +49,7 @@ MAX_FINDING_TEXT_LENGTH: int = 500
 
 class CheckFindingKey(str, Enum):
     SHARED_DRIVES = "shared_drives"
-    IMPERSONATABLE_USERS = "impersonatable_users"
+    VISIBLE_ORGANIZATION_USERS = "visible_organization_users"
     VISIBLE_SPACES = "visible_spaces"
     READABLE_CHANNELS = "readable_channels"
     READABLE_MAILBOXES = "readable_mailboxes"
@@ -106,6 +106,41 @@ def parse_known_findings(raw: Any) -> list[CheckFinding]:
         except ValidationError:
             logger.debug("Dropping an unknown capability check finding")
     return known
+
+
+# Advisories: free text a check adds to its result, at any status. An advisory
+# says what the check could not verify or what the admin should know, for
+# example "the channel is empty, so thread reads were not verified".
+# Advisories are not findings: the findings setting does not hide them, so they
+# must not list what the credential reaches.
+MAX_ADVISORY_LENGTH: int = 1000
+MAX_CHECK_ADVISORIES: int = 20
+
+
+class CheckAdvisory(BaseModel):
+    message: str
+
+    @field_validator("message")
+    @classmethod
+    def _bounded(cls, message: str) -> str:
+        if len(message) <= MAX_ADVISORY_LENGTH:
+            return message
+        return message[: MAX_ADVISORY_LENGTH - 1] + "…"
+
+
+class CheckOutput(BaseModel):
+    """What a passing check returns: findings, and advisories about what it
+    could not verify."""
+
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = Field(default=[], max_length=MAX_CHECK_ADVISORIES)
+
+
+class CheckNotApplicableError(Exception):
+    """Raised by a check that learns at run time that it does not apply, for
+    example a Grid-only check on a workspace that is not on Enterprise Grid.
+    The result is SKIPPED and not applicable, like a check that the config
+    excludes."""
 
 
 class CapabilityCheckStatus(str, Enum):
@@ -188,7 +223,8 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
 
     Concrete checks pass their metadata to ``__init__`` and implement ``run``,
     which raises a ``ValidationError``-family exception on failure and returns
-    nothing on success; the runner maps exceptions to statuses.
+    nothing or a ``CheckOutput`` on success; the runner maps exceptions to
+    statuses.
 
     A check that reads the connector config sets ``config_class`` to the source's
     ``ConnectorConfig`` and reads it through ``config``. It declares:
@@ -269,10 +305,11 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.validates_binding = validates_binding
 
     @abstractmethod
-    def run(self, context: CapabilityCheckContext) -> list[CheckFinding] | None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         """Probes the capability; raises on failure, returns on success. A
-        passing check may return findings: what the credential and config
-        reach (``findings.py``)."""
+        passing check may return a ``CheckOutput``: findings (what the
+        credential and config reach) and advisories (what it could not
+        verify)."""
 
     @property
     def reads_connector_config(self) -> bool:
@@ -337,6 +374,7 @@ class CapabilityCheckResult(BaseModel):
     discovery: bool = False
     # What a passing check found. Empty for every other status.
     findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
 
     @field_validator("findings", mode="before")
     @classmethod

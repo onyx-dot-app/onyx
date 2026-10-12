@@ -31,8 +31,8 @@ from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
-    CheckFinding,
     CheckFindingKey,
+    CheckOutput,
     CountFinding,
     CredentialCapability,
 )
@@ -360,7 +360,7 @@ class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
         config: OutlookConnectorConfig = form_state.config
         return not configured_addresses(config) and not configured_groups(config)
 
-    def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
             finding: CountFinding = bounded_count(
                 _tenant_mailboxes(_gateway(context)),
@@ -369,7 +369,7 @@ class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
             )
         except OutlookGraphError as e:
             raise_for_graph_error(e, USER_LISTING_DENIED)
-        return [finding]
+        return CheckOutput(findings=[finding])
 
 
 class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
