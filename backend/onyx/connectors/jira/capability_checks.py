@@ -28,6 +28,8 @@ from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
+    CheckOutput,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
@@ -82,6 +84,10 @@ def _gateway(context: CapabilityCheckContext) -> JiraSourceOperations:
             "Bug: The runner constructs the registered gateway for migrated sources."
         )
     return gateway
+
+
+def _advisory_output(message: str) -> CheckOutput:
+    return CheckOutput(advisories=[CheckAdvisory(message=message)])
 
 
 def _project_key(config: JiraConnectorConfig) -> str:
@@ -448,7 +454,7 @@ class _JqlQueryCheck(_JiraCheck):
     def applies(self, form_state: FormState[JiraConnectorConfig]) -> bool:
         return bool(_jql(form_state.config))
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: JiraConnectorConfig = self.config(context)
         _validate_jql_shape(_jql(config))
         try:
@@ -462,11 +468,13 @@ class _JqlQueryCheck(_JiraCheck):
                 bad_request="Jira rejected the JQL query",
             )
         if issue is None:
-            # Not FAILED: the scope can be empty on purpose (issues come later).
-            raise UnexpectedValidationError(
-                "The JQL query matches no issue that this credential can read, so "
-                "Onyx cannot verify it. Check the query if issues exist."
+            # The scope can be empty on purpose (issues come later).
+            return _advisory_output(
+                "The JQL query matched no issue that this credential can read. "
+                "Jira accepted the query, but Onyx did not verify that it finds "
+                "issues. If issues exist, check the query."
             )
+        return None
 
 
 class _IssueReadCheck(_JiraCheck):
@@ -484,7 +492,7 @@ class _IssueReadCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: JiraConnectorConfig = self.config(context)
         hint: str = _access_hint(
             config,
@@ -506,10 +514,11 @@ class _IssueReadCheck(_JiraCheck):
                 e, denied=f"The credential cannot search Jira issues. {hint}"
             )
         if issue is None:
-            # Not FAILED: the scope can be empty on purpose (issues come later).
-            raise UnexpectedValidationError(
+            # The scope can be empty on purpose (issues come later).
+            return _advisory_output(
                 "The indexing scope has no issue that this credential can read, "
-                f"so Onyx cannot verify that issues are readable. {hint}"
+                "so Onyx did not verify that issues are readable. If the scope "
+                f"has issues: {hint}"
             )
         fields: Any = issue.get("fields")
         if not isinstance(fields, dict) or "summary" not in fields:
@@ -517,6 +526,7 @@ class _IssueReadCheck(_JiraCheck):
                 "Jira found an issue but did not return its fields, so issues "
                 f"would index without content. {hint}"
             )
+        return None
 
 
 def build_jira_indexing_checks() -> list[CapabilityCheck]:
@@ -557,6 +567,19 @@ _DC_EMAIL_HINT = (
     "(General configuration) is 'Public', or 'Only visible to logged-in users' "
     "with a token account that can see them."
 )
+_JQL_NO_PROJECT_ADVISORY = (
+    "The JQL query matched no issue, so permission sync reads no project yet. "
+    "Onyx did not verify this check. Run the checks again when the query "
+    "matches issues."
+)
+_NO_GROUP_MEMBERS_ADVISORY = (
+    "The sampled groups have no members, so Onyx did not verify that group "
+    "members are readable."
+)
+_NO_GROUP_USERS_ADVISORY = (
+    "The sampled groups have no user members, so Onyx did not verify that "
+    "group members have emails."
+)
 _GROUP_ACCESS_HINT = (
     "Give the token's account Administer Jira, or the global Browse users and "
     "groups permission. On Data Center the account must be in a Jira "
@@ -579,11 +602,11 @@ def _email_hint(gateway: JiraSourceOperations) -> str:
 
 def _probe_project_key(
     context: CapabilityCheckContext, config: JiraConnectorConfig
-) -> str:
+) -> str | None:
     """The configured project in project mode, the project of the first
     matching issue in JQL mode, else the first visible project. Permission sync
-    reads the scheme of every project with indexed issues, so a JQL query that
-    matches nothing has no project to probe."""
+    reads the scheme of every project with indexed issues, so None when the JQL
+    query matches nothing: there is no project to probe."""
     project_key: str = _project_key(config)
     if project_key and not _jql(config):
         return project_key
@@ -595,11 +618,13 @@ def _probe_project_key(
                 "Onyx cannot run the JQL query, so it cannot pick a project to "
                 "probe. jira_jql_query reports why."
             ) from e
-        project: Any = get_issue_field(issue, "project") if issue else None
+        if issue is None:
+            return None
+        project: Any = get_issue_field(issue, "project")
         if not isinstance(project, dict) or not project.get("key"):
             raise UnexpectedValidationError(
-                "The JQL query matches no issue, so permission sync reads no "
-                "project yet and Onyx cannot verify it."
+                "Jira returned the first issue of the JQL query without its "
+                "project, so Onyx cannot pick a project to probe."
             )
         return str(project["key"])
     try:
@@ -659,11 +684,14 @@ def _read_permission_scheme(
 
 def _read_scheme_for_dependent_check(
     context: CapabilityCheckContext, config: JiraConnectorConfig
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str, dict[str, Any]] | None:
     """The probe project and its scheme, for a check that needs the scheme
-    first. A failed read is jira_permission_scheme_read's failure."""
+    first. None when there is no project to probe. A failed read is
+    jira_permission_scheme_read's failure."""
     try:
-        project_key = _probe_project_key(context, config)
+        project_key: str | None = _probe_project_key(context, config)
+        if project_key is None:
+            return None
         return project_key, _read_permission_scheme(context, config, project_key)
     except ConnectorValidationError as e:
         raise UnexpectedValidationError(
@@ -683,16 +711,19 @@ class _PermissionSchemeReadCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: JiraConnectorConfig = self.config(context)
-        project_key = _probe_project_key(context, config)
-        scheme = _read_permission_scheme(context, config, project_key)
+        project_key: str | None = _probe_project_key(context, config)
+        if project_key is None:
+            return _advisory_output(_JQL_NO_PROJECT_ADVISORY)
+        scheme: dict[str, Any] = _read_permission_scheme(context, config, project_key)
         if not _browse_holders(scheme):
             raise InsufficientPermissionsError(
                 f"The permission scheme of the project `{project_key}` grants "
                 "Browse Projects to nobody that Jira shows to this credential. "
                 f"{_perm_sync_hint(config, _ADMIN_HINT)}"
             )
+        return None
 
 
 class _ProjectAccessMappableCheck(_JiraCheck):
@@ -712,9 +743,14 @@ class _ProjectAccessMappableCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: JiraConnectorConfig = self.config(context)
-        project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        project_scheme: tuple[str, dict[str, Any]] | None = (
+            _read_scheme_for_dependent_check(context, config)
+        )
+        if project_scheme is None:
+            return _advisory_output(_JQL_NO_PROJECT_ADVISORY)
+        project_key, scheme = project_scheme
         holder_types: set[str] = {
             str(holder.get("type")) for holder in _browse_holders(scheme)
         }
@@ -725,6 +761,7 @@ class _ProjectAccessMappableCheck(_JiraCheck):
                 f"{', '.join(unsupported)}. Onyx cannot map these grants, so the "
                 "users they cover get no access to the project's issues in Onyx."
             )
+        return None
 
 
 def _role_actor_user(actor: dict[str, Any]) -> dict[str, Any] | None:
@@ -810,18 +847,24 @@ class _ProjectRolesReadCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: JiraConnectorConfig = self.config(context)
-        project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        project_scheme: tuple[str, dict[str, Any]] | None = (
+            _read_scheme_for_dependent_check(context, config)
+        )
+        if project_scheme is None:
+            return _advisory_output(_JQL_NO_PROJECT_ADVISORY)
+        project_key, scheme = project_scheme
         role_ids: list[str] = _browse_role_ids(scheme)
         if _is_public(scheme) or not role_ids:
-            return
+            return None
         role: dict[str, Any] = _read_role(context, config, project_key, role_ids[0])
         if not isinstance(role.get("actors"), list):
             raise InsufficientPermissionsError(
                 f"Jira returned a role of the project `{project_key}` without its "
                 f"members. {_perm_sync_hint(config, _ADMIN_HINT)}"
             )
+        return None
 
 
 def _is_group_actor(actor: dict[str, Any]) -> bool:
@@ -852,14 +895,19 @@ class _PermissionUserEmailsCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: JiraConnectorConfig = self.config(context)
         gateway: JiraSourceOperations = _gateway(context)
-        project_key, scheme = _read_scheme_for_dependent_check(context, config)
+        project_scheme: tuple[str, dict[str, Any]] | None = (
+            _read_scheme_for_dependent_check(context, config)
+        )
+        if project_scheme is None:
+            return _advisory_output(_JQL_NO_PROJECT_ADVISORY)
+        project_key, scheme = project_scheme
         holders: list[dict[str, Any]] = _browse_holders(scheme)
         holder_types: set[str] = {str(holder.get("type")) for holder in holders}
         if _is_public(scheme) or HOLDER_TYPE_GROUP in holder_types:
-            return
+            return None
         # Direct user grants carry the expanded user.
         emails: list[str | None] = [
             holder["user"].get("emailAddress")
@@ -885,7 +933,7 @@ class _PermissionUserEmailsCheck(_JiraCheck):
             if isinstance(actor, dict)
         ]
         if any(_is_group_actor(actor) for actor in actors):
-            return
+            return None
         role_users: list[dict[str, Any]] = [
             user for actor in actors if (user := _role_actor_user(actor))
         ]
@@ -923,6 +971,7 @@ class _PermissionUserEmailsCheck(_JiraCheck):
                 "email, so their access cannot map to Onyx users. "
                 f"{_email_hint(gateway)}"
             )
+        return None
 
 
 def _list_groups(
@@ -1064,14 +1113,12 @@ class _GroupMembershipCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: JiraConnectorConfig = self.config(context)
         if not _sample_group_members(context, config).members:
             # The reads succeeded: the first groups can be empty.
-            raise UnexpectedValidationError(
-                "The sampled groups have no members, so Onyx cannot verify "
-                "that group members are readable."
-            )
+            return _advisory_output(_NO_GROUP_MEMBERS_ADVISORY)
+        return None
 
 
 class _GroupMemberEmailsCheck(_JiraCheck):
@@ -1086,7 +1133,7 @@ class _GroupMemberEmailsCheck(_JiraCheck):
             ),
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config: JiraConnectorConfig = self.config(context)
         try:
             sample: JiraGroupMemberSample = _sample_group_members(context, config)
@@ -1101,7 +1148,9 @@ class _GroupMemberEmailsCheck(_JiraCheck):
             for member in sample.members
             if member.get("accountType") in (None, _ATLASSIAN_ACCOUNT_TYPE)
         ]
-        if people and not any(member.get("emailAddress") for member in people):
+        if not people:
+            return _advisory_output(_NO_GROUP_USERS_ADVISORY)
+        if not any(member.get("emailAddress") for member in people):
             if not sample.complete:
                 raise UnexpectedValidationError(
                     "The sampled group members have no visible email. Group sync "
@@ -1112,6 +1161,7 @@ class _GroupMemberEmailsCheck(_JiraCheck):
                 "No member of the sampled group has a visible email, so group "
                 f"members cannot map to Onyx users. {_email_hint(_gateway(context))}"
             )
+        return None
 
 
 def build_jira_doc_permission_sync_checks() -> list[CapabilityCheck]:

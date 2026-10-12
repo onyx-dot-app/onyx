@@ -69,6 +69,17 @@ def _api_error(status: int, text: str | None = None) -> JiraApiError:
     return JiraApiError(f"HTTP {status}", status_code=status, text=text)
 
 
+def _advisories(result: CapabilityCheckResult) -> list[str]:
+    return [advisory.message for advisory in result.advisories]
+
+
+def _match_nothing(gateway: MagicMock) -> None:
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=[], next_page_token=None
+    )
+    gateway.search_issues.return_value = []
+
+
 # --- jira_auth / jira_scoped_token_auth ---
 
 
@@ -342,17 +353,29 @@ def test_jql_query_fails_with_the_jira_message() -> None:
     assert "reserved JQL word" in result.message
 
 
-def test_jql_query_is_indeterminate_when_it_matches_nothing() -> None:
-    gateway: MagicMock = _gateway(is_cloud=True)
-    gateway.search_issue_ids.return_value = JiraIssueIdPage(
-        issue_ids=[], next_page_token=None
-    )
+@pytest.mark.parametrize("is_cloud", [True, False], ids=["cloud", "server"])
+def test_jql_query_passes_with_an_advisory_when_it_matches_nothing(
+    is_cloud: bool,
+) -> None:
+    gateway: MagicMock = _gateway(is_cloud=is_cloud)
+    _match_nothing(gateway)
 
     result: CapabilityCheckResult = _run(
         "jira_jql_query", gateway, _config(jql_query="project = EMPTY")
     )
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = _advisories(result)
+    assert "matched no issue" in advisory
+
+
+def test_jql_query_has_no_advisory_when_it_matches_an_issue() -> None:
+    result: CapabilityCheckResult = _run(
+        "jira_jql_query", _gateway(is_cloud=True), _config(jql_query="project = X")
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert _advisories(result) == []
 
 
 # --- jira_issue_read ---
@@ -417,3 +440,27 @@ def test_issue_read_leaves_a_bad_scope_to_the_scope_checks() -> None:
     )
 
     assert result.status == CapabilityCheckStatus.INDETERMINATE
+
+
+@pytest.mark.parametrize(
+    "scoped_token,hint",
+    [(False, "Browse Projects"), (True, "read:jira-work")],
+    ids=["classic", "scoped"],
+)
+def test_issue_read_passes_with_an_advisory_for_an_empty_scope(
+    scoped_token: bool, hint: str
+) -> None:
+    gateway: MagicMock = _gateway(is_cloud=True)
+    _match_nothing(gateway)
+
+    result: CapabilityCheckResult = _run(
+        "jira_issue_read",
+        gateway,
+        _config(project_key="AS", scoped_token=scoped_token),
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = _advisories(result)
+    assert "did not verify that issues are readable" in advisory
+    assert hint in advisory
+    gateway.bulk_fetch_issues.assert_not_called()

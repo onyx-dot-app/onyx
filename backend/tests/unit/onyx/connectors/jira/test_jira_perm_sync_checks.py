@@ -80,6 +80,10 @@ def _api_error(status: int, text: str | None = None) -> JiraApiError:
     return JiraApiError(f"HTTP {status}", status_code=status, text=text)
 
 
+def _advisories(result: CapabilityCheckResult) -> list[str]:
+    return [advisory.message for advisory in result.advisories]
+
+
 def test_all_checks_pass_on_a_readable_site() -> None:
     gateway = _gateway()
     for check in (
@@ -87,6 +91,7 @@ def test_all_checks_pass_on_a_readable_site() -> None:
     ):
         result = _run(check.check_id, gateway)
         assert result.status == CapabilityCheckStatus.PASSED, result
+        assert _advisories(result) == [], result
 
 
 def test_perm_sync_checks_do_not_apply_to_public_connectors() -> None:
@@ -148,16 +153,41 @@ def test_permission_scheme_read_probes_the_project_of_a_jql_match() -> None:
     gateway.get_project_permission_scheme.assert_called_once_with(project_key="AS")
 
 
-def test_permission_scheme_read_is_indeterminate_when_the_jql_matches_nothing() -> None:
+@pytest.mark.parametrize(
+    "check_id",
+    [check.check_id for check in build_jira_doc_permission_sync_checks()],
+)
+def test_doc_perm_sync_checks_pass_with_an_advisory_when_the_jql_matches_nothing(
+    check_id: str,
+) -> None:
     gateway = _gateway()
     gateway.search_issue_ids.return_value = JiraIssueIdPage(
         issue_ids=[], next_page_token=None
     )
 
     result = _run(
-        "jira_permission_scheme_read",
+        check_id,
         gateway,
         {**_CONFIG, "project_key": "", "jql_query": 'project = "EMPTY"'},
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = _advisories(result)
+    assert "JQL query matched no issue" in advisory
+    gateway.get_project_permission_scheme.assert_not_called()
+
+
+def test_permission_scheme_read_is_indeterminate_for_an_issue_without_project() -> None:
+    gateway = _gateway()
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=["1"], next_page_token=None
+    )
+    gateway.bulk_fetch_issues.return_value = []
+
+    result = _run(
+        "jira_permission_scheme_read",
+        gateway,
+        {**_CONFIG, "project_key": "", "jql_query": 'project = "AS"'},
     )
 
     assert result.status == CapabilityCheckStatus.INDETERMINATE
@@ -411,6 +441,31 @@ def test_group_membership_skips_a_deleted_group() -> None:
     result = _run("jira_group_membership", gateway)
 
     assert result.status == CapabilityCheckStatus.PASSED
+
+
+def test_group_membership_passes_with_an_advisory_for_empty_groups() -> None:
+    gateway = _gateway()
+    gateway.get_group_members_page.return_value = {"values": [], "isLast": True}
+
+    result = _run("jira_group_membership", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = _advisories(result)
+    assert "no members" in advisory
+
+
+def test_group_member_emails_passes_with_an_advisory_without_user_members() -> None:
+    gateway = _gateway()
+    gateway.get_group_members_page.return_value = {
+        "values": [{"accountType": "app", "displayName": "Automation"}],
+        "isLast": True,
+    }
+
+    result = _run("jira_group_member_emails", gateway)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = _advisories(result)
+    assert "no user members" in advisory
 
 
 def test_group_membership_fails_without_the_group_member_api() -> None:
