@@ -58,9 +58,12 @@ _HIDDEN_MEMBERSHIP_VISIBILITY = "HiddenMembership"
 
 _EMPTY_DRIVE_ADVISORY = CheckAdvisory(
     message=(
-        "The check found no item in the OneDrives it opened. "
+        "The check found no item in the OneDrives it sampled. "
         "It did not read item permissions. "
-        "Add a file to a OneDrive and run the check again to verify this access."
+        f"The check samples the drives of the first {_CANDIDATE_PAGES} configured "
+        f"users, or of the users on the first {_CANDIDATE_PAGES} pages of the "
+        "user list. Add a file to one of those drives and run the check again "
+        "to verify this access."
     )
 )
 _NO_VISIBLE_GROUP_ADVISORY = CheckAdvisory(

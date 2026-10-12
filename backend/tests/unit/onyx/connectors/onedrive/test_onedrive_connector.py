@@ -1436,6 +1436,8 @@ def test_onedrive_permission_check_accepts_empty_drive_at_end_cursor() -> None:
     assert result.status == CapabilityCheckStatus.PASSED
     (advisory,) = result.advisories
     assert "did not read item permissions" in advisory.message
+    # The admin must know which drives the check samples.
+    assert "first 20 configured users" in advisory.message
     gateway.get_delta_page.assert_called_once()
     gateway.list_permissions.assert_not_called()
 
