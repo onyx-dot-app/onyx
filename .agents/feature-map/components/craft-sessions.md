@@ -555,6 +555,7 @@ Filesystem metadata detects writes; it does not prove that the bytes differ.
 The marker only advances. A late acknowledgement cannot clear a newer revision’s unread indicator.
 `PATCH /build/sessions/{id}/output-cards/viewed` acknowledges a map of artifact IDs to viewed revisions in one update.
 It skips deleted, unknown, foreign-session, and future revisions. Concurrent edits remain unread.
+Viewed requests accept at most 10,000 revisions, matching the inventory bound. Deleted historical cards do not need acknowledgements.
 All three routes require session ownership. Unknown producing turns are omitted rather than assigned invented history.
 The older `/artifacts` endpoint still discovers the local webapp; it does not supply these durable cards.
 

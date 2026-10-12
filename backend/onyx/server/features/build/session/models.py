@@ -14,6 +14,9 @@ from onyx.db.enums import (
     SharingScope,
 )
 from onyx.server.features.build.db.build_session import session_runtime_stale
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    MANIFEST_MAX_ENTRIES,
+)
 
 if TYPE_CHECKING:
     from onyx.db.models import Artifact, BuildSession, Sandbox
@@ -115,7 +118,7 @@ class OutputCardsResponse(BaseModel):
 
 
 class OutputsViewedRequest(BaseModel):
-    revisions: dict[UUID, PositiveInt]
+    revisions: dict[UUID, PositiveInt] = Field(max_length=MANIFEST_MAX_ENTRIES)
 
 
 class OutputViewedRequest(BaseModel):

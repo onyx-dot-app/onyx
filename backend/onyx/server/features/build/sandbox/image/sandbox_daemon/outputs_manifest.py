@@ -14,6 +14,7 @@ from pathlib import Path
 from uuid import UUID
 
 from sandbox_daemon.models import (
+    MANIFEST_MAX_ENTRIES,
     OutputsManifestEntry,
     OutputsManifestRequest,
     OutputsManifestResponse,
@@ -21,8 +22,6 @@ from sandbox_daemon.models import (
 )
 from sandbox_daemon.snapshot import SESSIONS_ROOT
 
-# Count all examined entries, including directories and ignored names.
-MANIFEST_MAX_ENTRIES = 10_000
 MANIFEST_MAX_DEPTH = 64
 _MISSING_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR, errno.ELOOP})
 
