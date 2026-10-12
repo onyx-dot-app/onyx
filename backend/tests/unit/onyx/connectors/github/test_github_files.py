@@ -1,13 +1,10 @@
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
-from github import Github
-from github.GithubException import GithubException, UnknownObjectException
-from github.RateLimit import RateLimit
-from github.Requester import Requester
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.connector import (
@@ -15,7 +12,13 @@ from onyx.connectors.github.connector import (
     GithubConnectorStage,
     _is_indexable_path,
 )
-from onyx.connectors.github.models import SerializedRepository
+from onyx.connectors.github.models import (
+    GitHubFileContent,
+    GitHubGitTree,
+    GitHubRepository,
+    GitHubTreeEntry,
+)
+from onyx.connectors.github.source_operations import GitHubApiError
 from onyx.connectors.models import ConnectorFailure, Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
@@ -61,74 +64,70 @@ def test_is_indexable_path(path: str, size: int | None, expected: bool) -> None:
     assert _is_indexable_path(path, size) is expected
 
 
+class FakeRepoFiles:
+    """The files of one repository, served through the fake gateway."""
+
+    def __init__(
+        self,
+        gateway: MagicMock,
+        files: dict[str, bytes],
+        truncated: bool = False,
+    ) -> None:
+        self.files = files
+        gateway.get_git_tree.side_effect = lambda **_kwargs: GitHubGitTree(
+            entries=[
+                GitHubTreeEntry(path=path, type="blob", size=len(content))
+                for path, content in files.items()
+            ],
+            truncated=truncated,
+        )
+        gateway.get_file_content.side_effect = self._content
+
+    def _content(
+        self, *, repo_full_name: str, path: str, ref: str
+    ) -> GitHubFileContent:
+        del repo_full_name, ref
+        return GitHubFileContent(content=self.files[path], encoding="base64")
+
+
 @pytest.fixture
-def mock_github_client() -> MagicMock:
-    mock = MagicMock(spec=Github)
-    mock.get_repo = MagicMock()
-    mock.get_rate_limit = MagicMock(return_value=MagicMock(spec=RateLimit))
-    mock._requester = MagicMock(spec=Requester)
-    return mock
+def serve_files(
+    mock_source_operations: MagicMock,
+    create_repo: Callable[..., GitHubRepository],
+) -> Callable[..., GitHubRepository]:
+    """Serves the files from the configured repository and returns it."""
 
-
-def _tree_element(path: str, size: int, type_: str = "blob") -> MagicMock:
-    el = MagicMock()
-    el.path = path
-    el.size = size
-    el.type = type_
-    return el
-
-
-@pytest.fixture
-def create_mock_repo() -> Callable[..., MagicMock]:
-    def _create(
+    def _serve(
         files: dict[str, bytes],
         pushed_at: datetime | None = None,
         truncated: bool = False,
-    ) -> MagicMock:
-        mock_repo = MagicMock()
-        mock_repo.name = "test-repo"
-        mock_repo.id = 1
-        mock_repo.full_name = "test-org/test-repo"
-        mock_repo.html_url = "https://github.com/test-org/test-repo"
-        mock_repo.default_branch = "main"
-        mock_repo.pushed_at = pushed_at or datetime(2023, 1, 1)
-        mock_repo.configure_mock(
-            raw_headers={"status": "200 OK"},
-            raw_data={"id": 1, "full_name": "test-org/test-repo"},
+    ) -> GitHubRepository:
+        overrides: dict[str, Any] = {}
+        if pushed_at is not None:
+            overrides["pushed_at"] = pushed_at.isoformat()
+        repo = create_repo(**overrides)
+        mock_source_operations.get_repository.return_value = repo
+        FakeRepoFiles(mock_source_operations, files, truncated)
+        return repo
+
+    return _serve
+
+
+@pytest.fixture
+def build_files_connector(
+    build_github_connector: Callable[..., GithubConnector],
+) -> Callable[..., GithubConnector]:
+    def _build(
+        include_files: bool = True, branch: str | None = None
+    ) -> GithubConnector:
+        return build_github_connector(
+            include_prs=False,
+            include_issues=False,
+            include_files=include_files,
+            branch=branch,
         )
 
-        tree = MagicMock()
-        tree.tree = [_tree_element(p, len(c)) for p, c in files.items()]
-        tree.raw_data = {"truncated": truncated}
-        mock_repo.get_git_tree = MagicMock(return_value=tree)
-
-        def _get_contents(path: str, ref: str | None = None) -> MagicMock:
-            del ref  # accepted as a kwarg by the connector, unused in the mock
-            cf = MagicMock()
-            cf.decoded_content = files[path]
-            return cf
-
-        mock_repo.get_contents = MagicMock(side_effect=_get_contents)
-        return mock_repo
-
-    return _create
-
-
-def _build_connector(
-    mock_github_client: MagicMock,
-    include_files: bool = True,
-    branch: str | None = None,
-) -> GithubConnector:
-    connector = GithubConnector(
-        repo_owner="test-org",
-        repositories="test-repo",
-        include_prs=False,
-        include_issues=False,
-        include_files=include_files,
-        branch=branch,
-    )
-    connector.github_client = mock_github_client
-    return connector
+    return _build
 
 
 def _all_items(outputs: list) -> list:
@@ -139,26 +138,25 @@ def _all_items(outputs: list) -> list:
 
 
 def test_files_not_indexed_when_disabled(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client, include_files=False)
-    mock_repo = create_mock_repo({"README.md": b"# Hello"})
-    mock_github_client.get_repo.return_value = mock_repo
+    connector = build_files_connector(include_files=False)
+    serve_files({"README.md": b"# Hello"})
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     assert _all_items(outputs) == []
-    mock_repo.get_git_tree.assert_not_called()
+    mock_source_operations.get_git_tree.assert_not_called()
 
 
 def test_files_indexed_when_enabled(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client)
-    mock_repo = create_mock_repo(
+    connector = build_files_connector()
+    serve_files(
         {
             "README.md": b"# Hello world",
             "docs/guide.md": b"a guide",
@@ -166,10 +164,8 @@ def test_files_indexed_when_enabled(
             "logo.png": b"\x89PNG\r\n",  # excluded extension
         }
     )
-    mock_github_client.get_repo.return_value = mock_repo
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
     ids = sorted(d.id for d in docs)
@@ -192,16 +188,14 @@ def test_files_indexed_when_enabled(
 
 
 def test_binary_file_yields_failure(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client)
+    connector = build_files_connector()
     # .md extension but undecodable binary content
-    mock_repo = create_mock_repo({"corrupt.md": b"\xff\xfe\x00\x01\x80\x81"})
-    mock_github_client.get_repo.return_value = mock_repo
+    serve_files({"corrupt.md": b"\xff\xfe\x00\x01\x80\x81"})
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     items = _all_items(outputs)
     assert len(items) == 1
@@ -209,24 +203,22 @@ def test_binary_file_yields_failure(
 
 
 def test_undecodable_content_yields_failure(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    """decoded_content is None for non-base64 encodings (LFS, encoding='none').
+    """GitHub sends no base64 content for some files (LFS, over 1 MB).
 
     This must surface as a ConnectorFailure, not an unhandled TypeError.
     """
-    connector = _build_connector(mock_github_client)
-    mock_repo = create_mock_repo({"big.md": b"placeholder"})
+    connector = build_files_connector()
+    serve_files({"big.md": b"placeholder"})
+    mock_source_operations.get_file_content.side_effect = None
+    mock_source_operations.get_file_content.return_value = GitHubFileContent(
+        content=None, encoding="none"
+    )
 
-    none_content = MagicMock()
-    none_content.decoded_content = None
-    none_content.encoding = "none"
-    mock_repo.get_contents = MagicMock(return_value=none_content)
-    mock_github_client.get_repo.return_value = mock_repo
-
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     items = _all_items(outputs)
     assert len(items) == 1
@@ -234,38 +226,29 @@ def test_undecodable_content_yields_failure(
 
 
 def test_pushed_at_gate_skips_file_stage(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client)
-    mock_repo = create_mock_repo(
-        {"README.md": b"# Hello"},
-        pushed_at=datetime(2020, 1, 1),
-    )
-    mock_github_client.get_repo.return_value = mock_repo
+    connector = build_files_connector()
+    serve_files({"README.md": b"# Hello"}, pushed_at=datetime(2020, 1, 1))
 
     # poll window starts well after the repo's last push
     start = datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp()
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(
-            connector, start, time.time()
-        )
+    outputs = load_everything_from_checkpoint_connector(connector, start, time.time())
 
     assert _all_items(outputs) == []
-    mock_repo.get_git_tree.assert_not_called()
+    mock_source_operations.get_git_tree.assert_not_called()
 
 
 def test_files_paginated_across_checkpoints(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client)
-    files = {f"doc{i:03d}.md": f"content {i}".encode() for i in range(250)}
-    mock_repo = create_mock_repo(files)
-    mock_github_client.get_repo.return_value = mock_repo
+    connector = build_files_connector()
+    serve_files({f"doc{i:03d}.md": f"content {i}".encode() for i in range(250)})
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
     assert len(docs) == 250
@@ -273,21 +256,19 @@ def test_files_paginated_across_checkpoints(
 
 
 def test_extensionless_docs_indexed(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client)
-    mock_repo = create_mock_repo(
+    connector = build_files_connector()
+    serve_files(
         {
             "README": b"top-level readme",
             "LICENSE": b"MIT",
             "Makefile": b"all:\n\tbuild",  # extensionless, not a doc -> excluded
         }
     )
-    mock_github_client.get_repo.return_value = mock_repo
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
     ids = sorted(d.id for d in docs)
@@ -298,15 +279,13 @@ def test_extensionless_docs_indexed(
 
 
 def test_truncated_tree_yields_failure(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client)
-    mock_repo = create_mock_repo({"README.md": b"# Hi"}, truncated=True)
-    mock_github_client.get_repo.return_value = mock_repo
+    connector = build_files_connector()
+    serve_files({"README.md": b"# Hi"}, truncated=True)
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     items = _all_items(outputs)
     failures = [i for i in items if isinstance(i, ConnectorFailure)]
@@ -319,39 +298,32 @@ def test_truncated_tree_yields_failure(
 
 
 def test_empty_repository_tree_skips_file_stage(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
     """GitHub returns 409 when listing the tree of an empty repository."""
-    connector = _build_connector(mock_github_client)
-    mock_repo = create_mock_repo({})
-    mock_repo.get_git_tree.side_effect = GithubException(
-        409, {"message": "Git Repository is empty."}, {}
+    connector = build_files_connector()
+    serve_files({})
+    mock_source_operations.get_git_tree.side_effect = GitHubApiError(
+        "409", status_code=409, github_message="Git Repository is empty."
     )
-    mock_github_client.get_repo.return_value = mock_repo
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     assert _all_items(outputs) == []
     assert outputs[-1].next_checkpoint.has_more is False
 
 
 def test_branch_override_threads_through_listing_fetching_and_urls(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client, branch="gh-pages")
-    mock_repo = create_mock_repo(
-        {
-            "index.md": b"# Site home",
-            "docs/setup.md": b"setup guide",
-        }
-    )
-    mock_github_client.get_repo.return_value = mock_repo
+    connector = build_files_connector(branch="gh-pages")
+    serve_files({"index.md": b"# Site home", "docs/setup.md": b"setup guide"})
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
     ids = sorted(d.id for d in docs)
@@ -363,24 +335,27 @@ def test_branch_override_threads_through_listing_fetching_and_urls(
         assert doc.metadata.get("branch") == "gh-pages"
 
     # Both the tree listing and every content fetch must target the branch.
-    mock_repo.get_git_tree.assert_called_once_with("gh-pages", recursive=True)
-    for call in mock_repo.get_contents.call_args_list:
+    mock_source_operations.get_git_tree.assert_called_once_with(
+        repo_full_name="test-org/test-repo", ref="gh-pages"
+    )
+    for call in mock_source_operations.get_file_content.call_args_list:
         assert call.kwargs["ref"] == "gh-pages"
 
 
 def test_default_branch_used_when_branch_unset(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client)
-    mock_repo = create_mock_repo({"README.md": b"# Hello"})
-    mock_github_client.get_repo.return_value = mock_repo
+    connector = build_files_connector()
+    serve_files({"README.md": b"# Hello"})
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        load_everything_from_checkpoint_connector(connector, 0, time.time())
+    load_everything_from_checkpoint_connector(connector, 0, time.time())
 
-    mock_repo.get_git_tree.assert_called_once_with("main", recursive=True)
-    for call in mock_repo.get_contents.call_args_list:
+    mock_source_operations.get_git_tree.assert_called_once_with(
+        repo_full_name="test-org/test-repo", ref="main"
+    )
+    for call in mock_source_operations.get_file_content.call_args_list:
         assert call.kwargs["ref"] == "main"
 
 
@@ -392,16 +367,17 @@ def test_blank_branch_normalized_to_none() -> None:
 
 
 def test_resumed_checkpoint_from_other_branch_relists(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
     """A checkpoint resumed after the branch setting changed must re-list.
 
     Otherwise paths listed from the old branch pair with content fetches from
     the new branch — deleted paths fail and new-branch-only files are skipped.
     """
-    connector = _build_connector(mock_github_client, branch="gh-pages")
-    mock_repo = create_mock_repo({"new-only.md": b"new content"})
+    connector = build_files_connector(branch="gh-pages")
+    repo = serve_files({"new-only.md": b"new content"})
 
     checkpoint = connector.build_dummy_checkpoint()
     checkpoint.stage = GithubConnectorStage.FILES
@@ -411,7 +387,7 @@ def test_resumed_checkpoint_from_other_branch_relists(
 
     items = list(
         connector._fetch_repo_files(
-            mock_repo,
+            repo,
             checkpoint,
             start=None,
             is_slim=False,
@@ -423,25 +399,24 @@ def test_resumed_checkpoint_from_other_branch_relists(
     assert [d.id for d in docs] == [
         "https://github.com/test-org/test-repo/blob/gh-pages/new-only.md"
     ]
-    mock_repo.get_git_tree.assert_called_once_with("gh-pages", recursive=True)
+    mock_source_operations.get_git_tree.assert_called_once_with(
+        repo_full_name="test-org/test-repo", ref="gh-pages"
+    )
     assert checkpoint.file_paths == ["new-only.md"]
     assert checkpoint.file_paths_branch == "gh-pages"
 
 
 def test_resumed_branch_change_bypasses_pushed_at_gate(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
     """Re-listing after a branch change must ignore the pushed_at gate.
 
     The new branch was never indexed, so an old pushed_at must not cause the
     re-listing to be skipped with an empty path list.
     """
-    connector = _build_connector(mock_github_client, branch="gh-pages")
-    mock_repo = create_mock_repo(
-        {"new-only.md": b"new content"},
-        pushed_at=datetime(2020, 1, 1),
-    )
+    connector = build_files_connector(branch="gh-pages")
+    repo = serve_files({"new-only.md": b"new content"}, pushed_at=datetime(2020, 1, 1))
 
     checkpoint = connector.build_dummy_checkpoint()
     checkpoint.stage = GithubConnectorStage.FILES
@@ -452,7 +427,7 @@ def test_resumed_branch_change_bypasses_pushed_at_gate(
     # poll window starts well after the repo's last push
     items = list(
         connector._fetch_repo_files(
-            mock_repo,
+            repo,
             checkpoint,
             start=datetime(2023, 1, 1, tzinfo=timezone.utc),
             is_slim=False,
@@ -468,45 +443,39 @@ def test_resumed_branch_change_bypasses_pushed_at_gate(
 
 
 def test_nonexistent_branch_raises_clear_error(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    connector = _build_connector(mock_github_client, branch="no-such-branch")
-    mock_repo = create_mock_repo({})
-    mock_repo.get_git_tree.side_effect = GithubException(
-        404, {"message": "Not Found"}, {}
+    connector = build_files_connector(branch="no-such-branch")
+    repo = serve_files({})
+    mock_source_operations.get_git_tree.side_effect = GitHubApiError(
+        "404", status_code=404, github_message="Not Found"
     )
 
     with pytest.raises(ConnectorValidationError, match="no-such-branch"):
-        connector._list_indexable_files(mock_repo)
+        connector._list_indexable_files(repo)
 
 
 def test_prs_disabled_404_does_not_crash_files(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_github_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
-    """A repo with PRs disabled (mirror) returns 404 on get_pulls.
+    """A repo with PRs disabled (mirror) returns 404 on the PR listing.
 
     This must skip the PRS stage rather than crash the whole connector, so
     files still get indexed.
     """
-    connector = GithubConnector(
-        repo_owner="test-org",
-        repositories="test-repo",
-        include_prs=True,
-        include_issues=False,
-        include_files=True,
+    connector = build_github_connector(
+        include_prs=True, include_issues=False, include_files=True
     )
-    connector.github_client = mock_github_client
-
-    mock_repo = create_mock_repo({"README.md": b"# Hi"})
-    mock_repo.get_pulls.return_value.get_page.side_effect = UnknownObjectException(
-        404, {"message": "Not Found"}, {}
+    serve_files({"README.md": b"# Hi"})
+    mock_source_operations.list_pull_requests.side_effect = GitHubApiError(
+        "404", status_code=404, github_message="Not Found"
     )
-    mock_github_client.get_repo.return_value = mock_repo
 
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
     assert [d.id for d in docs] == [
@@ -515,8 +484,8 @@ def test_prs_disabled_404_does_not_crash_files(
 
 
 def test_files_paginated_with_issues_enabled_no_stage_regression(
-    mock_github_client: MagicMock,
-    create_mock_repo: Callable[..., MagicMock],
+    build_github_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
 ) -> None:
     """Resuming a multi-batch FILES checkpoint must not regress to ISSUES.
 
@@ -524,22 +493,12 @@ def test_files_paginated_with_issues_enabled_no_stage_regression(
     overwrote a resumed FILES checkpoint back to ISSUES, nulling file_paths and
     re-indexing files from page 0. Each file must be indexed exactly once.
     """
-    connector = GithubConnector(
-        repo_owner="test-org",
-        repositories="test-repo",
-        include_prs=False,
-        include_issues=True,
-        include_files=True,
+    connector = build_github_connector(
+        include_prs=False, include_issues=True, include_files=True
     )
-    connector.github_client = mock_github_client
+    serve_files({f"doc{i:03d}.md": f"content {i}".encode() for i in range(250)})
 
-    files = {f"doc{i:03d}.md": f"content {i}".encode() for i in range(250)}
-    mock_repo = create_mock_repo(files)
-    mock_repo.get_issues.return_value.get_page.return_value = []  # no issues
-    mock_github_client.get_repo.return_value = mock_repo
-
-    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
-        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
 
     docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
     ids = [d.id for d in docs]
