@@ -1,18 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import { memo, useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
-  useSession,
+  useChatSession,
   useSessionId,
   useHasSession,
   useIsRunning,
   useIsInterrupting,
   useWasInterrupted,
-  useOutputPanelOpen,
-  useToggleOutputPanel,
   useBuildSessionStore,
   useIsPreProvisioning,
   useIsPreProvisioningFailed,
@@ -55,10 +53,9 @@ import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsR
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
-import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
-import { Button, MessageCard, Tooltip } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
@@ -72,6 +69,8 @@ import {
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
   existingSessionId?: string | null;
+  headerControlWidth?: number;
+  animateLayout?: boolean;
 }
 
 function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
@@ -97,11 +96,14 @@ function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
  * - Input bar at bottom
  * - Header with output panel toggle
  */
-function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
+function ChatPanelContent({
+  existingSessionId,
+  headerControlWidth = 76,
+  animateLayout = true,
+}: BuildChatPanelProps) {
   const t = useTranslations("craft.chatPanel");
   const router = useRouter();
-  const outputPanelOpen = useOutputPanelOpen();
-  const session = useSession();
+  const session = useChatSession();
   const sessionId = useSessionId();
   const scheduledSessionId = sessionId ?? existingSessionId ?? null;
   // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
@@ -127,7 +129,6 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
   const { isMobile } = useScreenSize();
-  const toggleOutputPanel = useToggleOutputPanel();
   const onWakeIntent = useWakeOnIntent();
 
   const { llmProviders, defaultText, defaultCraft } = useLanguageModels();
@@ -255,37 +256,17 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
   const sandboxNotReady = isPreProvisioning || isPreProvisioningFailed;
   const {
     currentMessageFiles,
+    getCurrentMessageFiles,
     hasUploadingFiles,
     setActiveSession,
     uploadFiles,
   } = useUploadFilesContext();
-
-  // Ref to access current file state in async callbacks
-  const currentFilesRef = useRef(currentMessageFiles);
-  useEffect(() => {
-    currentFilesRef.current = currentMessageFiles;
-  }, [currentMessageFiles]);
 
   // URL sessions identify drafts; provisional sessions provide upload destinations.
   useEffect(() => {
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
     setActiveSession(activeSession, { draftId: existingSessionId ?? null });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
-
-  const maybeAutoOpenWebapp = useBuildSessionStore(
-    (s) => s.maybeAutoOpenWebapp
-  );
-
-  // A URL starts readiness checks; only a serving webapp can open Preview.
-  const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    const prev = prevWebappUrlRef.current;
-    const current = session?.webappUrl ?? null;
-    if (prev === null && current !== null && sessionId) {
-      void maybeAutoOpenWebapp(sessionId);
-    }
-    prevWebappUrlRef.current = current;
-  }, [session?.webappUrl, sessionId, maybeAutoOpenWebapp]);
 
   useEffect(() => {
     if (!scheduledSessionId || !scheduledRunId || !shouldStreamScheduledRun)
@@ -340,7 +321,6 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
   // Scroll detection for auto-scroll "magnet"
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const [showScrollButton, setShowScrollButton] = useState(false);
   const prevScrollTopRef = useRef(0);
 
   // Check if user is at bottom of scroll container
@@ -375,11 +355,9 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
     if (scrolledUp) {
       // User scrolled up - release auto-scroll magnet
       setIsAtBottom(wasAtBottom);
-      setShowScrollButton(!wasAtBottom);
     } else if (wasAtBottom) {
       // We're at bottom - ensure button stays hidden (handles content growth)
       setIsAtBottom(true);
-      setShowScrollButton(false);
     }
     // If scrollTop increased but we're still at bottom, it's content growth - do nothing
 
@@ -393,30 +371,20 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
 
     // Use requestAnimationFrame to ensure we scroll after any layout changes
     requestAnimationFrame(() => {
-      if (!container) return;
-
-      // Scroll to a value larger than scrollHeight - browsers will clamp to max
-      // This ensures we always reach the absolute bottom
-      const targetScroll = container.scrollHeight + 1000; // Add buffer to ensure we go all the way
-      container.scrollTo({ top: targetScroll, behavior: "smooth" });
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: reduceMotion ? "instant" : "smooth",
+      });
 
       // Update state immediately
       setIsAtBottom(true);
-      setShowScrollButton(false);
-
-      // Update prevScrollTopRef after scroll completes
-      setTimeout(() => {
-        if (container) {
-          prevScrollTopRef.current = container.scrollTop;
-        }
-      }, 600); // Smooth scroll animation duration
     });
-  }, []);
+  }, [reduceMotion]);
 
   // Reset scroll state when session changes
   useEffect(() => {
     setIsAtBottom(true);
-    setShowScrollButton(false);
+    prevScrollTopRef.current = 0;
   }, [sessionId]);
 
   const sendMessage = useCallback(
@@ -451,7 +419,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
           timestamp: new Date(),
           attachments,
         });
-        // Only explicit choices override the saved model.
+        // Stream the response
         await streamMessage(
           sessionId,
           message,
@@ -488,8 +456,8 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
 
           await new Promise<void>((resolve) => {
             const checkUploads = () => {
-              // Check current state via ref (updates with each render)
-              const stillUploading = currentFilesRef.current.some(
+              // Read accepted uploads without waiting for a React render.
+              const stillUploading = getCurrentMessageFiles().some(
                 (f) => f.status === UploadFileStatus.UPLOADING
               );
               if (!stillUploading || waited >= maxWaitMs) {
@@ -555,6 +523,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
       nameBuildSession,
       router,
       hasUploadingFiles,
+      getCurrentMessageFiles,
       selectedModel,
       modelBySession,
       t,
@@ -613,13 +582,17 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
         {({ getRootProps }) => (
           <div
             {...getRootProps()}
-            className={cn(
-              "flex flex-col h-full transition-all duration-300 ease-in-out outline-hidden",
-              outputPanelOpen ? "w-1/2 ps-4" : "w-full"
-            )}
+            className="flex flex-col h-full w-full outline-hidden"
           >
             {/* Chat header */}
-            <div className="flex flex-row items-center justify-between ps-4 pe-4 py-3 relative overflow-visible">
+            <div
+              className={cn(
+                "flex flex-row items-center justify-between gap-2 ps-4 py-3 h-[52px] relative overflow-visible",
+                animateLayout &&
+                  "transition-[padding-inline-end] duration-180 ease-out motion-reduce:transition-none"
+              )}
+              style={{ paddingInlineEnd: headerControlWidth || 16 }}
+            >
               <div className="flex min-w-0 flex-row items-center gap-2 max-w-[75%]">
                 {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
                 {isMobile && leftSidebarFolded && (
@@ -637,25 +610,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
                   context={scheduledRunContext ?? null}
                 />
               </div>
-              {/* Right cluster: sandbox status sits left of the panel toggle. The
-              toggle stays pinned to the right edge, so the status chip's width
-              changes grow leftward into empty space without shifting anything. */}
-              <div className="flex flex-row items-center gap-2 shrink-0">
-                <SandboxStatusIndicator />
-                <SandboxAsleepNotice />
-                {/* Output panel toggle — same icon for open and close */}
-                <Button
-                  icon={SvgSidebar}
-                  onClick={toggleOutputPanel}
-                  tooltip={
-                    outputPanelOpen
-                      ? t("outputPanel.closeTooltip")
-                      : t("outputPanel.openTooltip")
-                  }
-                  prominence="tertiary"
-                  interaction={outputPanelOpen ? "hover" : undefined}
-                />
-              </div>
+              <SandboxStatusIndicator />
               {/* Soft fade border at bottom */}
               {!videoBackgroundEnabled && (
                 <div className="absolute bottom-0 start-0 end-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
@@ -666,8 +621,10 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
             agent and a subagent (keyed by the viewed agent). */}
             <div
               ref={scrollContainerRef}
+              data-testid="craft-chat-scroll"
               onScroll={handleScroll}
-              className="flex flex-col flex-1 min-h-0 overflow-auto"
+              className="flex flex-col flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-color:var(--border-02)_transparent] supports-[selector(::-webkit-scrollbar)]:[scrollbar-color:auto] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border-02 [&::-webkit-scrollbar-thumb:hover]:bg-border-03"
+              style={{ scrollbarWidth: "auto" }}
             >
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -676,7 +633,7 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
                   transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex flex-col flex-1"
+                  className="flex flex-col flex-1 shrink-0"
                 >
                   {isViewingSubagent && viewedSubagentSessionId ? (
                     <SubagentView subagentSessionId={viewedSubagentSessionId} />
@@ -712,146 +669,138 @@ function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
                   )}
                 </motion.div>
               </AnimatePresence>
-            </div>
 
-            {/* Input bar at bottom when session exists. */}
-            {(hasSession || existingSessionId) && (
-              <div className="px-4 pb-8 pt-4 relative">
-                {/* Soft fade border at top */}
-                {!videoBackgroundEnabled && (
-                  <div className="absolute top-0 start-0 end-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
-                )}
+              {/* Keep the composer inside the scroll viewport so its scrollbar spans the full height. */}
+              {(hasSession || existingSessionId) && (
                 <div
-                  className="max-w-[720px] mx-auto"
-                  onFocusCapture={onWakeIntent}
-                  onKeyDownCapture={onWakeIntent}
+                  data-testid="craft-chat-composer"
+                  className={cn(
+                    "sticky bottom-0 z-10 shrink-0 px-4 pb-8 pt-4",
+                    !videoBackgroundEnabled && "bg-background-neutral-01"
+                  )}
                 >
-                  {/* Scroll to bottom button - shown when user has scrolled away */}
-                  {showScrollButton && (
-                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
-                      <Tooltip
-                        tooltip={t("scrollToBottom.label")}
-                        delayDuration={200}
-                      >
-                        <button
-                          onClick={scrollToBottom}
-                          className={cn(
-                            "flex items-center justify-center",
-                            "w-8 h-8 rounded-full",
-                            "bg-background-neutral-inverted-00 border border-border-01",
-                            "shadow-box-01 hover:shadow-box-02",
-                            "transition-all duration-200",
-                            "hover:bg-background-tint-inverted-01"
-                          )}
+                  {/* Soft fade border at top */}
+                  {!videoBackgroundEnabled && (
+                    <div className="absolute top-0 start-0 end-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                  )}
+                  <div
+                    className="max-w-[720px] mx-auto"
+                    onFocusCapture={onWakeIntent}
+                    onKeyDownCapture={onWakeIntent}
+                  >
+                    {/* Scroll to bottom button - shown when user has scrolled away */}
+                    {!isAtBottom && (
+                      <div className="absolute -top-12 start-1/2 -translate-x-1/2 z-10">
+                        <Button
+                          icon={SvgChevronDown}
+                          size="md"
+                          prominence="secondary"
+                          tooltip={t("scrollToBottom.label")}
                           aria-label={t("scrollToBottom.label")}
-                        >
-                          <SvgChevronDown
-                            size={20}
-                            className="stroke-background-neutral-00"
-                          />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  )}
-                  {recoverableError && scheduledSessionId && (
-                    <div className="pb-2" role="alert">
-                      <MessageCard
-                        variant="error"
-                        title={t(
-                          settlementError
-                            ? "settlementError.title"
-                            : queuedSendError
-                              ? "queuedSendError.title"
-                              : "loadError.title"
-                        )}
-                        description={recoverableError}
-                        rightChildren={
-                          <Button
-                            onClick={() => {
-                              if (settlementError)
-                                void retryTurnSettlement(scheduledSessionId);
-                              else if (queuedSendError)
-                                void retryQueuedMessage(scheduledSessionId);
-                              else
-                                void loadSession(scheduledSessionId, {
-                                  force: true,
-                                });
-                            }}
-                          >
-                            {t("loadError.retry")}
-                          </Button>
-                        }
-                      />
-                    </div>
-                  )}
-                  {sessionId && session?.skillsStale && (
-                    <div className="pb-2">
-                      <SkillsStaleNotice
-                        sessionId={sessionId}
-                        turnActive={isRunning}
-                      />
-                    </div>
-                  )}
-                  {/* The selected model is sent with each message, so a
+                          onClick={scrollToBottom}
+                        />
+                      </div>
+                    )}
+                    {recoverableError && scheduledSessionId && (
+                      <div className="pb-2" role="alert">
+                        <MessageCard
+                          variant="error"
+                          title={t(
+                            settlementError
+                              ? "settlementError.title"
+                              : queuedSendError
+                                ? "queuedSendError.title"
+                                : "loadError.title"
+                          )}
+                          description={recoverableError}
+                          rightChildren={
+                            <Button
+                              onClick={() => {
+                                if (settlementError)
+                                  void retryTurnSettlement(scheduledSessionId);
+                                else if (queuedSendError)
+                                  void retryQueuedMessage(scheduledSessionId);
+                                else
+                                  void loadSession(scheduledSessionId, {
+                                    force: true,
+                                  });
+                              }}
+                            >
+                              {t("loadError.retry")}
+                            </Button>
+                          }
+                        />
+                      </div>
+                    )}
+                    {sessionId && session?.skillsStale && (
+                      <div className="pb-2">
+                        <SkillsStaleNotice
+                          sessionId={sessionId}
+                          turnActive={isRunning}
+                        />
+                      </div>
+                    )}
+                    {/* The selected model is sent with each message, so a
                   switch applies from the next turn. Subagent transcripts
                   cannot send, so they get no picker. */}
-                  {session?.isLoaded && !isViewingSubagent && (
-                    <div className="flex justify-end pb-2">
-                      <ModelPickerButton
-                        selection={selectedModel}
-                        onChange={(model) => {
-                          if (sessionId) {
-                            setModelBySession((m) => ({
-                              ...m,
-                              [sessionId]: model,
-                            }));
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                  {/* The composer stays in view for subagents (layout consistency)
+                    {session?.isLoaded && !isViewingSubagent && (
+                      <div className="flex justify-end pb-2">
+                        <ModelPickerButton
+                          selection={selectedModel}
+                          onChange={(model) => {
+                            if (sessionId) {
+                              setModelBySession((m) => ({
+                                ...m,
+                                [sessionId]: model,
+                              }));
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                    {/* The composer stays in view for subagents (layout consistency)
                   but is disabled — replying to subagents is not supported. */}
-                  <motion.div
-                    layoutId="craft-composer"
-                    transition={{
-                      duration: reduceMotion ? 0 : 0.25,
-                      ease: "easeOut",
-                    }}
-                  >
-                    <CraftInputBar
-                      ref={inputBarRef}
-                      onSubmit={handleSubmit}
-                      isRunning={displayIsRunning}
-                      isInterrupting={isInterrupting}
-                      onInterrupt={
-                        hasInterruptibleTurn && !scheduledRunInFlight
-                          ? handleInterrupt
-                          : undefined
-                      }
-                      disabled={
-                        isViewingSubagent ||
-                        isRestoring ||
-                        submissionBlocked ||
-                        scheduledRunInFlight ||
-                        !hasProvider
-                      }
-                      placeholder={
-                        isViewingSubagent
-                          ? t("input.subagentPlaceholder")
-                          : scheduledRunInFlight
-                            ? t("input.scheduledRunPlaceholder")
-                            : t("input.continuePlaceholder")
-                      }
-                      queuedMessages={queuedMessages}
-                      onQueueMessage={handleQueueMessage}
-                      onRemoveQueuedMessage={handleRemoveQueuedMessage}
-                      contextUsage={contextUsage}
-                    />
-                  </motion.div>
+                    <motion.div
+                      layoutId="craft-composer"
+                      transition={{
+                        duration: reduceMotion ? 0 : 0.25,
+                        ease: "easeOut",
+                      }}
+                    >
+                      <CraftInputBar
+                        ref={inputBarRef}
+                        onSubmit={handleSubmit}
+                        isRunning={displayIsRunning}
+                        isInterrupting={isInterrupting}
+                        onInterrupt={
+                          hasInterruptibleTurn && !scheduledRunInFlight
+                            ? handleInterrupt
+                            : undefined
+                        }
+                        disabled={
+                          isViewingSubagent ||
+                          isRestoring ||
+                          submissionBlocked ||
+                          scheduledRunInFlight ||
+                          !hasProvider
+                        }
+                        placeholder={
+                          isViewingSubagent
+                            ? t("input.subagentPlaceholder")
+                            : scheduledRunInFlight
+                              ? t("input.scheduledRunPlaceholder")
+                              : t("input.continuePlaceholder")
+                        }
+                        queuedMessages={queuedMessages}
+                        onQueueMessage={handleQueueMessage}
+                        onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                        contextUsage={contextUsage}
+                      />
+                    </motion.div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </Dropzone>
@@ -867,4 +816,4 @@ function BuildChatPanel(props: BuildChatPanelProps) {
   );
 }
 
-export default BuildChatPanel;
+export default memo(BuildChatPanel);

@@ -12876,6 +12876,12 @@
       "csv": {
         "truncated": "미리보기는 {rows, number}행, {columns, number}열, {cells, number}셀로 제한됩니다. 모든 데이터를 보려면 원본을 다운로드하세요.",
         "malformed": "이 CSV에는 따옴표로 묶인 잘못된 필드가 있습니다. 확인하려면 원본을 다운로드하세요."
+      },
+      "imageTooLarge": {
+        "description": "이미지가 너무 커서 미리 볼 수 없습니다. 원본을 다운로드하여 여세요."
+      },
+      "unsupported": {
+        "description": "이 파일은 미리 볼 수 없습니다. 원본을 다운로드하여 여세요."
       }
     },
     "filesTab": {
@@ -12895,9 +12901,34 @@
       },
       "download": {
         "label": "다운로드"
+      },
+      "partial": {
+        "label": "일부 폴더를 로드할 수 없습니다. 새로 고침하여 재시도하세요."
+      },
+      "noMatches": {
+        "label": "일치하는 파일이 없습니다"
+      },
+      "previousPage": {
+        "label": "이전 페이지"
+      },
+      "nextPage": {
+        "label": "다음 페이지"
+      },
+      "page": {
+        "label": "{total}페이지 중 {page}페이지"
+      },
+      "upload": {
+        "label": "파일 업로드",
+        "error": "파일을 업로드할 수 없습니다. 다시 시도하세요."
+      },
+      "emptyDirectory": {
+        "label": "이 디렉터리에 파일이 없습니다"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "대비 배경"
+      },
       "error": {
         "description": "이미지를 표시할 수 없습니다",
         "title": "이미지를 불러오지 못했습니다"
@@ -12907,9 +12938,6 @@
       },
       "preview": {
         "ariaLabel": "{name} 미리보기"
-      },
-      "background": {
-        "contrast": "대비 배경"
       }
     },
     "inputBar": {
@@ -13566,7 +13594,8 @@
         "ariaLabel": "URL 복사: {url}"
       },
       "downloadFile": {
-        "tooltip": "파일 다운로드"
+        "tooltip": "파일 다운로드",
+        "label": "다운로드"
       },
       "export": {
         "button": ".docx로 내보내기",
@@ -13636,6 +13665,144 @@
     "welcome": {
       "input": {
         "placeholder": "데이터를 분석하고 대시보드를 만들어 주세요..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "모든 파일"
+      },
+      "browser": {
+        "label": "앱"
+      },
+      "list": {
+        "label": "출력 탭"
+      },
+      "close": {
+        "label": "{name} 닫기"
+      },
+      "reordered": {
+        "label": "탭을 {count}개 중 {position}번째 위치로 이동했습니다"
+      },
+      "open": {
+        "label": "탭 열기"
+      },
+      "outputs": {
+        "label": "출력"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "앱 미리 보기"
+      },
+      "home": {
+        "title": "앱",
+        "action": "앱"
+      },
+      "checking": {
+        "label": "웹 앱 확인 중"
+      },
+      "failed": {
+        "description": "로컬 웹 앱을 확인할 수 없습니다. 다시 로드하여 재시도하세요."
+      },
+      "unavailable": {
+        "description": "웹 앱을 사용할 수 없습니다. 샌드박스를 복원하거나 다시 로드하여 재시도하세요.",
+        "label": "사용 불가"
+      },
+      "empty": {
+        "title": "사용 가능한 웹 앱이 없습니다",
+        "description": "로컬 앱이 실행되면 여기에 표시됩니다."
+      },
+      "starting": {
+        "label": "웹 앱 시작 중"
+      },
+      "loading": {
+        "label": "웹 앱 로드 중"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "출력 열기"
+      },
+      "close": {
+        "ariaLabel": "출력 닫기"
+      },
+      "expand": {
+        "ariaLabel": "출력 확장"
+      },
+      "restore": {
+        "ariaLabel": "출력 복원"
+      },
+      "resize": {
+        "ariaLabel": "출력 크기 조정"
+      },
+      "files": {
+        "search": {
+          "placeholder": "파일 검색"
+        },
+        "location": {
+          "label": "샌드박스의 모든 파일"
+        }
+      },
+      "browser": {
+        "placeholder": "샌드박스의 웹앱"
+      },
+      "reload": {
+        "file": "파일 다시 로드",
+        "files": "파일 새로 고침",
+        "browser": "웹 앱 새로 고침",
+        "unavailable": "새로 고치려면 샌드박스를 복원하세요"
+      },
+      "export": {
+        "failed": "이 파일을 내보낼 수 없습니다. 다시 시도하세요."
+      },
+      "empty": {
+        "title": "워크스페이스 보기 선택"
+      },
+      "status": {
+        "provisioning": "샌드박스 초기화 중",
+        "running": "샌드박스 실행 중",
+        "sleeping": "샌드박스 절전 중",
+        "restoring": "세션 복원 중",
+        "terminated": "샌드박스 종료됨",
+        "failed": "샌드박스 오류",
+        "ready": "샌드박스 준비 완료",
+        "loading": "샌드박스 찾는 중"
+      }
+    },
+    "outputsTab": {
+      "home": {
+        "description": "에이전트가 만든 파일"
+      },
+      "empty": {
+        "description": "에이전트가 만든 파일이 여기에 표시됩니다."
+      },
+      "loading": {
+        "label": "출력 로드 중…"
+      },
+      "unavailable": {
+        "description": "샌드박스가 준비되면 출력이 표시됩니다."
+      },
+      "error": {
+        "description": "출력을 새로 고치지 못했습니다. 다시 시도하세요."
+      },
+      "incomplete": {
+        "description": "일부 출력을 로드하지 못했습니다."
+      },
+      "filter": {
+        "label": "파일 유형",
+        "all": "전체",
+        "folders": "폴더",
+        "noExtension": "확장자 없음"
+      },
+      "folders": {
+        "ariaLabel": "출력 폴더",
+        "root": "출력"
+      },
+      "filtered": {
+        "empty": "일치하는 출력이 없습니다"
+      },
+      "search": {
+        "placeholder": "출력 검색"
       }
     }
   },

@@ -21,12 +21,13 @@ packages:
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
-  src/app/craft: 99.2
+  src/app/craft: 99.3
   src/app/ee: 95.6
   src/app/federated: 97
   src/app/mcp: 99.5
   src/app/nrf: 99.2
   src/app/oauth-config: 100
+  src/app/oauth-provider: 100
   src/components: 97.7
   src/components/admin: 96.1
   src/components/auth: 89.3
@@ -66,7 +67,7 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 98.9
+  src/lib/connectors: 99
   src/lib/constants: 100
   src/lib/credentials: 98.3
   src/lib/extension: 100
@@ -78,6 +79,8 @@ packages:
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
   src/lib/oauth: 100
+  src/lib/oauth-provider: 100
+  src/lib/opensearch-health: 100
   src/lib/permissions: 100
   src/lib/position: 100
   src/lib/projects: 99.7
@@ -112,7 +115,7 @@ packages:
   src/sections/actions: 99.1
   src/sections/admin: 100
   src/sections/agents: 99.8
-  src/sections/banners: 98.5
+  src/sections/banners: 99.1
   src/sections/cards: 100
   src/sections/chat: 99.7
   src/sections/document-sidebar: 99.5
@@ -120,6 +123,7 @@ packages:
   src/sections/knowledge: 99.6
   src/sections/modals: 99.5
   src/sections/model-selector: 99.6
+  src/sections/oauth-provider: 100
   src/sections/onboarding: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.3

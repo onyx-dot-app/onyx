@@ -3,17 +3,30 @@ import type { State } from "swr";
 import {
   act,
   deferred,
+  fireEvent,
   render,
   screen,
   waitFor,
 } from "@tests/setup/test-utils";
 
 import { FilePreviewContent } from "@/app/craft/components/output-panel/FilePreviewContent";
-import { fetchFileContent } from "@/app/craft/services/apiServices";
+import {
+  downloadArtifactFile,
+  fetchFileContent,
+} from "@/app/craft/services/apiServices";
+
+let mockViewerUserId: string | undefined = "viewer-user";
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({ user: mockViewerUserId ? { id: mockViewerUserId } : null }),
+}));
+beforeEach(() => {
+  mockViewerUserId = "viewer-user";
+});
 
 jest.mock("@/app/craft/services/apiServices", () => ({
   ...jest.requireActual("@/app/craft/services/apiServices"),
   fetchFileContent: jest.fn(),
+  downloadArtifactFile: jest.fn(),
 }));
 
 jest.mock("@/app/craft/components/output-panel/PptxPreview", () => ({
@@ -82,10 +95,9 @@ describe("FilePreviewContent", () => {
     );
   });
 
-  it("forwards inline revisions to standalone previews", () => {
+  it("forwards revisions to standalone previews", () => {
     render(
       <FilePreviewContent
-        fullHeight={false}
         revision="123:100"
         sessionId="inline-slides"
         filePath="outputs/deck.pptx"
@@ -102,43 +114,38 @@ describe("FilePreviewContent", () => {
     );
   });
 
-  it.each(["revision", "reload"])(
-    "reloads inline text after %s",
-    async (change) => {
-      jest.mocked(fetchFileContent).mockResolvedValue({
-        content: "old text",
-        mimeType: "text/plain",
-        isImage: false,
-      });
-      const { rerender } = render(
-        <FilePreviewContent
-          fullHeight={false}
-          sessionId="inline-text"
-          filePath="outputs/notes.txt"
-          revision="123:100"
-          refreshKey={0}
-        />
-      );
-      expect(await screen.findByText("old text")).toBeInTheDocument();
-      jest.mocked(fetchFileContent).mockResolvedValue({
-        content: "new text",
-        mimeType: "text/plain",
-        isImage: false,
-      });
-      rerender(
-        <FilePreviewContent
-          fullHeight={false}
-          sessionId="inline-text"
-          filePath="outputs/notes.txt"
-          revision={change === "revision" ? "456:100" : "123:100"}
-          refreshKey={change === "reload" ? 1 : 0}
-        />
-      );
-      await waitFor(() =>
-        expect(screen.getByText("new text")).toBeInTheDocument()
-      );
-    }
-  );
+  it.each(["revision", "reload"])("reloads text after %s", async (change) => {
+    jest.mocked(fetchFileContent).mockResolvedValue({
+      content: "old text",
+      mimeType: "text/plain",
+      isImage: false,
+    });
+    const { rerender } = render(
+      <FilePreviewContent
+        sessionId="inline-text"
+        filePath="outputs/notes.txt"
+        revision="123:100"
+        refreshKey={0}
+      />
+    );
+    expect(await screen.findByText("old text")).toBeInTheDocument();
+    jest.mocked(fetchFileContent).mockResolvedValue({
+      content: "new text",
+      mimeType: "text/plain",
+      isImage: false,
+    });
+    rerender(
+      <FilePreviewContent
+        sessionId="inline-text"
+        filePath="outputs/notes.txt"
+        revision={change === "revision" ? "456:100" : "123:100"}
+        refreshKey={change === "reload" ? 1 : 0}
+      />
+    );
+    await waitFor(() =>
+      expect(screen.getByText("new text")).toBeInTheDocument()
+    );
+  });
 
   it("uses detected image content before the Markdown extension", async () => {
     const content = "data:image/png;base64,aW1hZ2U=";
@@ -267,6 +274,55 @@ it("revalidates retained source files on activation without resetting their scro
   expect(scroller.scrollTop).toBe(120);
 });
 
+it("restores a text viewer position after eviction and reports active scrolling", async () => {
+  jest.mocked(fetchFileContent).mockResolvedValue({
+    content: "Retained scroll content",
+    mimeType: "text/plain",
+    isImage: false,
+  });
+  const onScrollTopChange = jest.fn();
+  const view = (initialScrollTop: number) => (
+    <FilePreviewContent
+      sessionId="scroll-restoration"
+      filePath="outputs/notes.txt"
+      initialScrollTop={initialScrollTop}
+      onScrollTopChange={onScrollTopChange}
+    />
+  );
+  const { unmount } = render(view(140));
+  let text = await screen.findByText("Retained scroll content");
+  let scroll = text.closest(".overflow-auto");
+  if (!scroll) throw new Error("No viewer scroll region");
+  expect(scroll.scrollTop).toBe(140);
+  fireEvent.scroll(scroll, { target: { scrollTop: 220 } });
+  expect(onScrollTopChange).toHaveBeenLastCalledWith(220);
+  unmount();
+  render(view(220));
+  text = await screen.findByText("Retained scroll content");
+  scroll = text.closest(".overflow-auto");
+  expect(scroll?.scrollTop).toBe(220);
+});
+
+// Unsupported preview download
+it("offers a download for unsupported content", async () => {
+  jest.mocked(fetchFileContent).mockResolvedValue({
+    content: "",
+    mimeType: "application/octet-stream",
+    error: "unsupported_binary",
+  });
+  render(
+    <FilePreviewContent
+      sessionId="session-download"
+      filePath="outputs/archive.zip"
+    />
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Download" }));
+  expect(downloadArtifactFile).toHaveBeenCalledWith(
+    "session-download",
+    "outputs/archive.zip"
+  );
+});
+
 it.each(["png", "md"])(
   "shows refresh progress and errors over retained %s previews",
   async (extension) => {
@@ -282,7 +338,9 @@ it.each(["png", "md"])(
       .mockReset()
       .mockResolvedValueOnce(original)
       .mockReturnValueOnce(refresh.promise);
+    const onRefreshingChange = jest.fn();
     const props = {
+      onRefreshingChange,
       sessionId: `feedback-${extension}`,
       filePath: `outputs/file.${extension}`,
       revision: "original",
@@ -296,9 +354,7 @@ it.each(["png", "md"])(
     else
       expect(await screen.findByText("retained markdown")).toBeInTheDocument();
     rerender(<FilePreviewContent {...props} refreshKey={1} />);
-    expect(
-      screen.getByRole("status", { name: "Loading file..." })
-    ).toBeInTheDocument();
+    expect(onRefreshingChange).toHaveBeenLastCalledWith(true);
     await act(async () => refresh.reject(new Error("refresh failed")));
     expect(screen.getByRole("alert")).toHaveTextContent("refresh failed");
     if (extension === "png")
@@ -307,33 +363,41 @@ it.each(["png", "md"])(
   }
 );
 
-it.each(["md", "png", "txt"])(
-  "keeps inline %s previews at their required height",
-  async (extension) => {
-    const isImage = extension === "png";
-    jest
-      .mocked(fetchFileContent)
-      .mockReset()
-      .mockResolvedValue({
-        content: isImage ? "data:image/png;base64,abc" : "inline document",
-        mimeType: isImage ? "image/png" : "text/plain",
-        isImage,
-      });
-    const { container } = render(
-      <FilePreviewContent
-        fullHeight={false}
-        sessionId={`inline-height-${extension}`}
-        filePath={`outputs/file.${extension}`}
-      />
-    );
-    if (isImage) await screen.findByRole("img");
-    else await screen.findByText("inline document");
-    const viewer = container.firstElementChild;
-    if (extension === "txt") expect(viewer).not.toHaveClass("h-full");
-    else expect(viewer).toHaveClass("h-full");
-  }
-);
+// Authentication ownership
+it("waits for authenticated identity and releases private bytes on user changes", async () => {
+  mockViewerUserId = undefined;
+  jest.mocked(fetchFileContent).mockReset().mockResolvedValue({
+    content: "first user's file",
+    mimeType: "text/plain",
+  });
+  const view = () => (
+    <FilePreviewContent
+      sessionId="same-session"
+      filePath="outputs/readme.txt"
+      revision="same-revision"
+    />
+  );
+  const { rerender } = render(view());
+  expect(fetchFileContent).not.toHaveBeenCalled();
+  mockViewerUserId = "first-user";
+  rerender(view());
+  await screen.findByText("first user's file");
+  const secondRead = deferred<{ content: string; mimeType: string }>();
+  jest.mocked(fetchFileContent).mockReturnValueOnce(secondRead.promise);
+  mockViewerUserId = "second-user";
+  rerender(view());
+  expect(screen.queryByText("first user's file")).not.toBeInTheDocument();
+  await act(async () => {
+    secondRead.resolve({
+      content: "second user's file",
+      mimeType: "text/plain",
+    });
+  });
+  await screen.findByText("second user's file");
+  expect(fetchFileContent).toHaveBeenCalledTimes(2);
+});
 
+// Preview lifetime and rendering.
 it("renders CSV content as a table through the file preview", async () => {
   jest.mocked(fetchFileContent).mockResolvedValue({
     content: "name,value\nAlice,42",
@@ -347,36 +411,4 @@ it("renders CSV content as a table through the file preview", async () => {
     await screen.findByRole("columnheader", { name: "name" })
   ).toBeInTheDocument();
   expect(screen.getByRole("cell", { name: "Alice" })).toBeInTheDocument();
-});
-
-test("shows refresh feedback while retaining a PDF until replacement bytes arrive", async () => {
-  const replacement = deferred<Response>();
-  const fetch = jest
-    .spyOn(globalThis, "fetch")
-    .mockResolvedValueOnce(new Response("original"))
-    .mockReturnValueOnce(replacement.promise);
-  const preview = (revision: string) => (
-    <FilePreviewContent
-      sessionId="pdf-feedback"
-      filePath="outputs/report.pdf"
-      revision={revision}
-    />
-  );
-  try {
-    const { rerender } = render(preview("1"));
-    const viewer = await screen.findByTitle("report.pdf");
-    await waitFor(() =>
-      expect(screen.queryByLabelText("Loading file...")).not.toBeInTheDocument()
-    );
-    rerender(preview("2"));
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-    expect(screen.getByTitle("report.pdf")).toBe(viewer);
-    expect(screen.getByLabelText("Loading file...")).toBeInTheDocument();
-    await act(async () => replacement.resolve(new Response("updated")));
-    await waitFor(() =>
-      expect(screen.queryByLabelText("Loading file...")).not.toBeInTheDocument()
-    );
-  } finally {
-    fetch.mockRestore();
-  }
 });

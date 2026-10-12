@@ -11,7 +11,7 @@
 **Owns:**
 `backend/onyx/server/features/build/webapp_proxy.py`,
 `backend/onyx/server/features/build/sandbox/nextjs_dev.py`,
-`web/src/app/craft/components/output-panel/PreviewTab.tsx`,
+`web/src/app/craft/components/output-panel/`,
 `web/src/app/craft/components/OutputPanel.tsx`
 
 **Read first:** `docs/craft/lazy-webapp-provisioning.md`. It is the design
@@ -22,24 +22,33 @@ script this document's provisioning section maps to code.
 
 ## 1. What the user experiences
 
+A user asks Craft to build a web app. The dev server starts when the agent first needs it.
+Opening Apps from the plus menu shows compact, stacked local-app tiles with the same shared home layout as the empty panel.
+The local app tile reads "Preview Your App". The home heading reads "Apps".
+The Apps home URL bar reads "Webapps on your sandbox".
+Background webapp discovery does not disable reload for a serving app. Browser reload follows the iframe document load, not discovery polling. The loading cover blocks interaction until the document load completes. Only user-requested reloads show the reload spinner.
+Each tile opens its registered session app. A tooltip shows its URL.
+The current backend supplies one app registration per session; the UI accepts a list without inventing additional servers.
+A serving app fills its Browser tab through the authorized session proxy route.
+Source edits use the existing dev server and HMR path.
 
-A user asks Craft to build a web app. As the agent writes code, a Preview tab
-in the session view shows the running app in an iframe, hot-reloading as the
-agent edits files. The user never runs a command to see this; the dev server
-starts the first time the agent (or the user, via a documented fallback
-script) needs it.
+Browser tabs open only through user actions. Passive discoveries cannot reopen a closed panel or change its selection.
+When no tabs are open, a heading and three compact, stacked Outputs, All Files, and Apps tiles offer the plus menu actions.
+Each Browser tab keeps its own selected app and stable resource identity.
+The panel retains app frames across tab switches, reorder, and medium/full/closed transitions.
+A transient discovery failure preserves the accepted frame while showing an unavailable state.
+A replacement URL reaches the frame only when that app reports readiness.
+Switching sessions releases the previous session's frames.
+Closing a tab or panel does not terminate its server.
+Closing the active tab selects the most recently viewed tab that remains open.
+Closing an inactive tab does not change selection. Drag order does not change viewing history.
+History contains each open, viewed tab once. Older preferences without history use the adjacent tab as a fallback.
+Panel mode, ordered tabs, selected tab, viewing history, and split width survive hard reloads in the same browser tab.
+These preferences use session-scoped browser session storage. They exclude transcripts, file contents, and runtime state.
+Invalid saved preferences fall back to defaults. Deleting a session clears its saved preferences. Successful logout clears all saved panel preferences.
 
-Automatic panel opening waits for `webapp-info` to report a serving webapp.
-A URL or source-file edit alone cannot open Preview or its Files fallback.
-Concurrent opening requests share one readiness check per session with a 30-second deadline.
-The deadline aborts stalled requests and releases the shared check so later tasks can retry.
-Late checks respect dismissal, newer turns, and an already-open artifact.
-The panel retains the last serving URL for the current session through readiness failures.
-It switches to a replacement URL only after that URL is ready. Switching sessions clears this state.
-Readiness polling stops on a successful ready response or after 30 seconds.
-
-Only the session owner can load the Preview tab, because `get_webapp_info`
-verifies ownership. The proxy also admits any authenticated tenant user who
+Only the session owner can discover apps, because `get_webapp_info` verifies ownership.
+The proxy also admits any authenticated tenant user who
 knows the proxy URL when the sharing scope is `PUBLIC_ORG`. A logged-in viewer
 without access gets a 404, not a broken frame.
 A logged-out viewer is redirected to `/auth/login`.
@@ -58,8 +67,8 @@ A logged-out viewer is redirected to `/auth/login`.
 `backend/onyx/server/features/build/session/api.py:get_webapp_info` (GET
 `/build/sessions/{session_id}/webapp-info`) is a separate, authenticated
 endpoint that reports `has_webapp`, `webapp_url`, and `ready`; the frontend
-polls it to decide when to show the Preview tab and what iframe URL to pass
-it (`web/src/app/craft/components/OutputPanel.tsx`).
+reads it to populate Browser home and select the authorized iframe URL
+(`web/src/app/craft/components/OutputPanel.tsx`).
 
 ### Cache keys (`webapp_proxy.py`)
 
@@ -216,60 +225,107 @@ provisioning entirely, since nothing will view them live.
 ### Artifact preview refresh
 
 `OutputPanel.tsx` reads each file's revision from the session inventory and passes
-it through `FilePreviewContent.tsx` to the selected viewer. Files-tab inline previews
-use the same component and revision source. These production callers make revision-based
-cache reuse active; explicit reload counters change independently of file revisions.
+it through `FilePreviewContent.tsx` to the selected viewer. File activation in Files opens the same resource tab.
+These production callers make revision-based cache reuse active; explicit reload counters change independently of file revisions.
 Idle session entry and focus reconcile metadata without selecting files.
+The store validates output inventory after idle filesystem writes; streaming owns discovery during tasks.
+The Outputs view requests validation when activated or when a task ends, without mirroring inventory state.
 
+Output subscriptions select only runtime and inventory fields, excluding conversation and panel layout changes.
+Retained file viewers skip unrelated tab updates. Markdown and CSV content skip visibility-only renders.
 Each retained file viewer owns a private SWR cache with one current payload.
-`web/src/lib/build/hooks.ts:useFilePreview` owns revision-aware payload replacement.
+`web/src/lib/build/hooks.ts:useFilePreview` owns payload replacement through one request identity: file key, revision, and reload counter.
+Activation validates that identity against the accepted cached result.
 File revisions and explicit reloads replace that payload. A retained viewer with an unchanged
 revision reuses its data and DOM across tab switches. Files without revisions
 revalidate on activation while keeping their current content visible. Closing or evicting a viewer
 releases its cache; reopening fetches fresh bytes. SWR retries failed requests and
-rejects superseded responses. Viewers show only results and errors for their
-accepted revision and reload counter. Cache misses and reloads bypass the
+rejects superseded responses. Transient failures retain accepted content.
+Viewers show errors only for the current request identity. Cache misses and reloads bypass the
 browser cache when fetching artifacts. Unversioned PDF activation reads compare bytes
 with the displayed PDF. Identical bytes reuse its Blob and PDF.js document.
-Changed bytes replace the displayed PDF. React-PDF releases its loading tasks when the viewer unmounts.
-PDF workers, fonts, character maps, and rendering support files use versioned same-origin URLs.
-`web/tools/prepare-pdf-assets.cjs` copies these assets before dev and production builds, including Docker builds.
-PDF and presentation viewers share page controls and a resizable thumbnail sidebar.
-PDF controls provide page navigation, fit modes, zoom, and download.
+Changed bytes replace the displayed PDF. React-PDF owns PDF.js loading tasks and releases them with the viewer.
 Fit modes use the measured content area, which already excludes viewport padding.
-The file-preview caller shows loading feedback while PDF or presentation refreshes retain their accepted content.
 
-The output panel keeps its five most recently visited tab bodies mounted, including
-pinned tabs and file previews. Inactive bodies keep their layout but are invisible,
-inert, and hidden from assistive technology. Stable DOM order prevents iframe reloads
-on tab switches. Closing a tab, changing sessions, closing the panel after its
-animation, or visiting a sixth tab releases the corresponding retained bodies.
-Hidden file viewers retain their accepted revision and payload. Activation loads
-the latest revision once; intermediate hidden edits do not trigger conversions.
-Webapp iframes remain live while retained.
+The output panel retains Outputs, All Files, and Browser bodies, plus five recently visited file viewers, including PDFs.
+PDF viewers stay mounted to preserve page, zoom, and thumbnail state.
+Rendered thumbnail canvases remain mounted while inactive; hidden thumbnails do not start rendering.
+Inactive bodies keep their layout but stay invisible, inert, and hidden from assistive technology.
+Stable DOM order prevents app iframe reloads when tabs switch or reorder.
+Closing the panel keeps retained bodies. Closing a file tab, changing sessions, or evicting a viewer releases its payload cache.
+Directory listings remain in shared SWR independently of tab mounts.
+Terminal access and not-found errors replace accepted listings with cached failure results, preventing stored snapshots from returning.
+Closing a tab also clears its local refresh, export, slide, and scroll state.
+Hidden file viewers retain their accepted revision and payload.
+Hidden viewers defer new reads and retries; reopening retries missing or failed previews even with a known revision.
+Terminal access and not-found responses replace retained bytes with cached failure results. Later transient failures cannot restore them.
+Presentation viewers retain accepted slides and sidebar state during background conversion.
+Transient failures show a warning; conversion and error screens appear only without accepted slides.
+Failure warnings reserve space above retained content.
+Activation loads the latest revision once; intermediate hidden edits do not trigger conversions.
+Webapp iframes stay mounted across panel size transitions.
+A frame beneath an unavailable-app overlay is inert and hidden from assistive technology.
 
-Files owns a private directory cache keyed by session and path. Each expanded
-directory manages its own cancellable request. Requests have a ten-second deadline;
-a stalled directory cannot block another directory. Activation and file-change
-signals revalidate visible directories while retaining their existing rows.
-Hiding or collapsing a directory aborts its request. Cancellations stay silent.
-Loading replaces the folder icon with a spinner for at least 150 ms; file rows appear as soon as they arrive.
-Collapsing or hiding the folder cancels the display timer. Failed folder reads show an icon
-with an error tooltip. Empty, loading, and failed child listings add no text rows.
-The toolbar spinner runs only for an explicit refresh, until visible directory reads finish.
-When Files shows an inline preview, an explicit refresh reloads that file instead.
-The preview shows its own loading state, and the toolbar remains available.
-Automatic directory refreshes do not reload an unchanged inline preview.
-Expansion and saved scroll
-remain in session UI state; directory responses do not. Scroll is saved on
-hiding or unmounting, without store writes on each scroll event.
-
-Artifacts derives its folder tree from the shared output inventory. It does not
-fetch directories or probe for empty folders. Activation reconciles the inventory;
-partial scans retain known files and report incomplete results. Loading, errors,
-and complete empty results have separate states.
+Files owns workspace state. Directory and search listings use the shared SWR cache keyed by session and path.
+Fresh listings survive session switches and Files tab closure; stale listings refresh with previous rows visible.
+`web/src/app/craft/services/workspaceDirectorySnapshots.ts` saves directory metadata in user-and-session-scoped browser session storage.
+Snapshots expire after 24 hours and are bounded to 32 directories and 256,000 characters per session.
+Hard reload uses validated snapshots as stale SWR fallback data, then reconciles with the server.
+Authorization and missing-session errors clear these snapshots. File contents and runtime state are not stored.
+A stable logical workspace identity preserves panel search and viewer state through welcome provisioning and claim.
+Backend requests and data caches retain the actual session identity.
+`DirectoryTree.tsx` renders folders and manages each expanded directory's cancellable request. Requests have a ten-second deadline;
+a stalled directory cannot block another directory. Successful directory and search reads stay fresh for 30 seconds.
+Quick reopen and folder expansion reuse fresh listings. Stale activation refreshes in the background.
+Directory and file-preview reads pause while the sandbox restores. Restore completion invalidates directory listings and file previews.
+Only active, successful current-generation listings can reconcile expansion or consume initial folder expansion.
+Missing or invalidated directory data is pending before its fetch effect starts.
+Manual reload and file-change signals bypass freshness while retaining existing rows.
+Collapsing a directory, entering search, or leaving its workspace aborts its request. Tab and panel closure keep directory reads running. Cancellations stay silent.
+Loading replaces the folder icon with a spinner; file rows appear as soon as they arrive.
+Failed folder reads show an error icon and message. Failed refreshes of cached empty directories also show the error.
+Complete empty folders display a concise empty state.
+Root loading and failed reads have separate messages; failures can retain the last successful rows.
+The Files reload control shows pending directory work and remains disabled until visible reads finish.
+`web/src/app/craft/services/workspaceFiles.ts` loads the workspace search inventory in bounded directory batches.
+The Files address row provides workspace search. Search matches names and session-relative paths case-insensitively.
+It reads accessible directory listings with bounded work and reports partial or failed discovery separately.
+Partial refreshes preserve previous hits only beneath failed directories; successful reads remove deleted hits.
+Clearing search returns to the retained tree. File activation opens a resource tab.
+Folder expansion and saved scroll stay in session UI state; directory responses do not.
+The Files toolbar places Upload beside workspace search, matching the file Download action.
+`WorkspaceUploadButton.tsx` owns the hidden picker and upload state; Files owns directory and search state.
+Rows reveal Download with the shared hover fade; keyboard focus and touch also expose it.
+Folder chevrons follow Download. Download does not toggle the folder or open a file.
+The Files tree has no attach-to-chat action. Names use regular-weight secondary text. Empty-directory messages align with the file-row icons at their depth.
+A batch upload refreshes listings after any successful upload, even if a later file fails.
+Completed uploads and deletes invalidate their original session even after navigation changes the composer.
+Scroll saves on hiding or unmounting, without store writes for each scroll event.
+Outputs is the default resource tab when users first open the panel. Its equal compact cards show only files under `outputs/`, including nested files. The grid uses two columns in narrow panels and three in wider panels, with cards filling the available width up to a 768-pixel content area. Previews grow with the cards; fallback icons grow on wide panels. Folders use compact outlined cards above the file-preview grid. Folder browsing shows filenames; recursive search and type filters show relative paths. Home views align near the top. Full-panel unsupported previews use the same home layout, title styling, and centered download action. All Files browses the full sandbox. Both views open the same file resource tabs.
+`OutputsTab.tsx` uses the shared output inventory and home layout.
+The root user context supplies the cache owner outside private SWR scopes.
+Cache ownership changes after React commits; render and hydration do not write shared state.
+In-flight preview validation coalesces repeated activation for the same request identity.
+Retries require the current committed identity and an active viewer.
+Each directory owns its folder row and loading status. Files aggregates request status without copying row state.
+Directory, search, and webapp cache keys include the authenticated user ID.
+Partial search responses merge accepted cached entries at the fetch boundary.
+ It restores user-and-session-scoped metadata snapshots as display hints while sandbox discovery and inventory validation run. Snapshots expire after 24 hours and hold at most 2000 files or 256000 characters. Cached hints never enter the store or establish task baselines. Complete inventories replace snapshots; transient failures retain hints, while terminal errors clear them. A live result always replaces the hint, including an empty inventory. Preview fetching waits for live inventory revisions. `OutputTile.tsx` owns lightweight image and text previews plus hover downloads. Visible eligible tiles fetch previews; large files and unsupported formats use file icons. PDF and PowerPoint cards use the shared first-page thumbnail endpoint. Markdown uses the same safe renderer as file previews, scaled into a clipped paper thumbnail. Image backdrops improve transparent-image contrast. Pending thumbnails keep a quiet placeholder; cached images display without a mount animation. Failed previews fall back to file icons. PDF and PowerPoint use shared navigation controls and thumbnail sidebars.
+PDF callbacks reject results from retired document sources. Image load state belongs to its source; contrast selection remains independent.
+PDF.js renders PDFs through React-PDF with selectable text, links, page arrows, a page count, zoom presets, and fit-width/fit-page controls.
+Thumbnail rendering is limited to nearby visible pages. Both sidebars support pointer and keyboard resizing, bounded to preserve document space.
+Next configuration copies versioned PDF.js worker, font, character-map, color-profile, and WASM files into public assets.
+PDF assets are served from the same origin. Downloads remain in the URL bar. Width stays while the viewer remains mounted. Full image previews default to a neutral contrast backdrop; a toggle restores the normal panel background. Downloads preserve the original image. Thumbnails share a session-and-path SWR cache separate from full-file viewers. The cache retains at most 128 entries and 16 Mi characters of preview content, evicting the oldest updated entries. Matching revisions reuse cached payloads across tile remounts; changed revisions refresh them. Browser reload restores up to 64 user-scoped thumbnail payloads within 2 Mi characters and a 30-minute age limit. Metadata-only SWR updates do not write storage. Terminal errors and accepted inventory changes invalidate saved previews, including late responses. Partial scans invalidate changed revisions without deleting unseen files. The address row searches output names and paths. Breadcrumbs show output folders; extension filters and search match descendants of the current folder. The filter offers All, Folders, and the extensions present in that folder tree. Folders shows immediate directories. The default view shows immediate files and folders. It keeps cached cards visible during refresh and shows partial or failed reads separately. Session loading and manual reloads never open file tabs automatically. Opening Outputs reuses the session inventory.
+During a task, newly created previewable outputs open file tabs. The first output is selected once per task, unless the user has changed the selection. A complete baseline prevents existing files from opening as new outputs.
 
 PowerPoint previews use LibreOffice and PDF rasterization to produce slide images.
+Docker and Kubernetes deploy the converter and office helper as normal files in a content-versioned managed directory.
+They reuse a complete bundle and verify deployment before running its `preview.py` entry point.
+Deployment uses `push_to_sandbox` and its shared retry and result handling.
+Converter installation does not replace agent-managed skills or enter session snapshots.
+Conversion helpers raise typed failures; the CLI boundary emits the status and a safe diagnostic.
+Docker and Kubernetes share a strict converter response parser.
+It requires a known status and nonempty page paths confined to the session workspace.
 Each successful conversion response assigns a fresh slide image token.
 A vertical thumbnail column supports click and keyboard navigation, marks the
 selected slide, and scrolls it into view. Thumbnail images load lazily.
@@ -277,6 +333,8 @@ Keyboard navigation only handles events within the slide toolbar.
 Inactive presentations ignore keyboard navigation. Closed output panels are inert,
 so their controls cannot receive focus or keyboard input.
 Updated decks clamp the current slide to their new bounds.
+The saved slide initializes the viewer; parent updates do not reset local navigation.
+Each slide image owns its loading state and releases it when its source changes.
 
 ## 5. Contracts and invariants
 
@@ -400,4 +458,19 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
   one.** `get_webapp_url` on Kubernetes returns a
   `*.svc.cluster.local` URL. This proxy is the only path a browser can use
   to reach it; there is no direct-to-pod fallback for a viewer.
-- **PowerPoint replacements can preserve modification time.** The converter reuses cached slides only when they are newer than the source modification and change times. This detects same-size replacements without hashing file contents.
+- **PowerPoint replacements can preserve modification time.** The converter reuses cached slides only when the stored source revision matches device, inode, size, modification time, and change time. Missing or malformed revision records require regeneration. This detects same-size replacements without hashing file contents.
+
+Unsupported and oversized file previews show a Download action beside their explanation.
+
+### Resource and inventory ownership
+
+Each open tab owns one local record for reload, loading, export, and viewer position.
+Closing and reopening a file or Outputs collection starts a new viewer lifetime, including batched changes.
+All Files retains one browser for the selected workspace, including while its tab is closed.
+Callbacks from retired tab instances cannot update their replacements.
+Inventory request loading is separate from accepted scan completeness.
+Cancellation releases request loading without changing accepted metadata or completeness.
+Each mounted Outputs collection owns a distinct SWR provider identity over the retained thumbnail cache.
+Unmounting one collection cannot remove another collection’s SWR subscriptions.
+Session activation restores thumbnail revision and deletion checks in the same committed lifecycle.
+Pending preview callbacks cannot write before those checks return.

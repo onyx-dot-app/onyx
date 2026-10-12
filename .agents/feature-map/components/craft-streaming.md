@@ -245,6 +245,8 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 ---
 
+### Completed transcript handoff
+
 The streamed response remains visible until the server confirms completion and persisted history is available.
 `turnSettlement` owns this handoff with reconciling, failed, and ready states.
 Interactive completion and interruption use the same settlement path. Scheduled runs use their own saved run status as the completion boundary.
@@ -264,23 +266,16 @@ Session metadata and artifacts may finish after a newer turn starts without repl
 The frontend keeps a temporary output inventory in each Zustand session.
 `useBuildSessionStore.ts:refreshOutputInventory` reads one flat response from
 `GET /build/sessions/{id}/outputs`. Each file has a path, size, and opaque revision.
-Artifacts derives its folder tree from this same inventory without directory requests.
-It shows loading, failed, and incomplete reads separately from complete empty results.
-Partial first reads can display known files but cannot establish a discovery baseline.
-Activating Artifacts reconciles the inventory; only idle sessions use a silent refresh.
-The browser does not walk output directories.
-Session loading and pre-provisioning fetch the inventory in the background.
-Messages send immediately, using the last successful inventory for discovery.
-Neither message submission nor turn completion waits for inventory reads.
-The first complete response establishes a silent baseline, even if a task has already created files.
-Those files appear in Artifacts but do not automatically open. Later discoveries can open normally.
-Partial initial reads cannot establish the baseline.
-Idle cached sessions reconcile revisions on entry and focus without adding tabs or changing selection.
-Reloading the page discards the inventory; nothing is written to the database or local storage.
+The Files resource tab browses the accessible session workspace through directory requests.
+Its search walks accessible directory listings without fetching file contents.
+Session loading and pre-provisioning fetch the output inventory in the background.
+Messages submit immediately; neither submission nor turn completion waits for inventory reads.
+Complete inventories replace known files. Partial reads merge their results and preserve unscanned files.
+Idle cached sessions reconcile revisions on entry and focus without changing resource tabs or selection.
+Reloading the page discards the inventory; the database and local storage do not store it.
 Reads allow 35 seconds per attempt, covering the backend's 30-second RPC deadline and HTTP overhead.
-Failed reads retry twice, after one and two seconds. Retries retain their original turn and selection rules.
-An incomplete scan preserves known entries and waits for a later refresh to establish a complete baseline.
-This can occur when a tree exceeds scan limits or contains an unreadable directory.
+Failed reads retry twice, after one and two seconds.
+An incomplete scan preserves known entries. A later complete response can remove missing files.
 
 `useBuildSessionStore.ts:compareOutputInventory` compares paths and metadata
 revisions. Completed shell and edit tools, including child-agent tools,
@@ -290,55 +285,48 @@ Tool completions during a read coalesce into one pending refresh.
 A terminal stream observation replaces pending work with a final read.
 Canonical completion also starts an authoritative read. This covers recovery without a terminal packet.
 The store serializes all inventory reads per session, including focus and panel reads.
-A silent read cannot consume new files before pending turn discovery selects them.
+Queued reads preserve turn ordering; passive discoveries never select resources.
 An already-settled turn also triggers reconciliation when the attach returns no stream.
 Partial responses retain unseen entries. Failed responses preserve the last
 inventory. Queued reads and responses from older turns are ignored.
 Aborted queued reads do not issue a request. Completed queues are released.
 
-New previewable files add tabs. One shared transition selects the first eligible output,
-opens the panel, and locks automatic selection for the task. Files and ready webapps
-use the same interruption, dismissal, and manual-navigation checks.
-Within that batch, PowerPoint and PDF take priority over Markdown and images.
-Later files add tabs without changing the selection. This also works when the
-panel is already open. Opening, selecting, and locking the selection happen in
-one store update. Other formats update the inventory without opening a generic tab;
-helper scripts must not reveal an empty Artifacts view before the deliverable exists. Changed files
-refresh their previews without selecting a tab. Deleted files invalidate their
-previews. Each mounted viewer caches one payload for its file path, inventory
-revision, and explicit reload counter. Reload counters are per file and change only
-when the user requests a reload. The panel retains up to five recently visited tab
-bodies, preserving scroll, slide selection, and unchanged preview bytes across
-switches. Retained iframes stay in stable DOM order. Closed tabs, evicted tabs, and
-prior sessions release their viewer caches. Closing the panel releases its bodies
-after the animation. Hidden file viewers retain their displayed revision and load
-the latest revision on activation. Files without inventory revisions revalidate
-when their preview mounts or becomes active. Each successful PowerPoint conversion response gives
-slide images a fresh browser cache token; unchanged retained viewers reuse it.
-PDF activation reads without revisions reuse the displayed Blob when bytes match.
-Changed bytes replace the PDF; React-PDF releases its loading tasks on replacement or unmount. Presentation
-keyboard navigation stays inside the active viewer.
+Silent inventory reads never select resources. Webapp URL discovery and refresh events wait for readiness before automatic selection. File and webapp discovery share one automatic selection policy. Task output discovery opens new previewable file tabs and can select the first output once per task. Readiness checks share requests for the same runtime. Instance, task, sandbox, and remount changes reject stale readiness. Existing local app tabs are reused. User navigation locks selection for the remaining task. Restored panel preferences also lock automatic selection until a new task starts, preserving the selected tab and dismissal across reloads.
+Explicit file clicks open a file tab and use medium when the panel was closed.
+Explicit opening preserves an existing medium or full layout.
+Outputs, All Files, file previews, and Browser share one ordered, closeable tab collection per session.
+File identity uses a normalized session-relative path. Browser identity remains separate from its selected app.
+Resource tabs and their active ID are the only tab-selection model.
+OutputPanelMode is the only source of panel visibility; no category adapter or stored open boolean remains.
 
-The first automatic output selection, manual tab selection, closing a tab or the panel, and
-history navigation suppress further automatic selection for the current turn.
-A single `outputSelectionLocked` flag controls this behavior independently of panel visibility.
-A new interactive turn clears the lock. Reopening the panel does not clear it.
-Scheduled runs use fresh sessions; reattaching preserves their selection lock.
-Explicit file clicks still open their preview. The inventory keeps updating while navigation
-is suppressed, so old changes do not appear as new files later.
-Selecting the current history entry preserves Back and Forward history instead of adding a duplicate entry.
+Changed files invalidate the corresponding previews without selecting a tab.
+Deleted files keep an explanatory file tab instead of selecting another resource.
+Each mounted viewer caches one payload for its path, inventory revision, and explicit reload counter.
+Reload counters are per file and change only when the user requests a reload.
+The panel retains Outputs, All Files, Browser, and five recently visited file viewers, including PDFs.
+PDF previews use PDF.js with page thumbnails and shared document navigation controls.
+Inactive bodies stay invisible, inert, and hidden from assistive technology.
+Stable body order preserves app frames through tab reorder and layout changes.
+Closing the panel retains these bodies. Closing a tab, evicting a file viewer, or changing sessions releases its cache.
+Hidden viewers load the latest revision when activated; intermediate hidden edits do not trigger conversions.
+Files without revisions revalidate when mounted or activated.
+PowerPoint conversion responses give slide images fresh browser cache tokens.
+Unchanged retained viewers reuse their tokens and selected slides.
+PDF activation reads without revisions retain the displayed Blob when bytes match.
+Changed bytes replace the PDF. Replacement and unmount revoke its object URL.
+Presentation keyboard navigation stays inside the active viewer.
+
+Tabs, selection, medium split, and Files expansion remain independent of task-stream rendering.
+Their state belongs to the session's in-memory store, not server session data.
+Inventory responses require the same session instance and turn generation that requested them.
+Deleted and recreated sessions reject earlier responses, even when they reuse a session ID.
 
 Text, image, Markdown, and PDF viewers retain accepted payloads during refreshes and transient failures.
-Retained viewers show refresh progress and failure feedback.
-Welcome inline image and Markdown previews fill a bounded viewer; plain text grows with its content.
+Retained viewers show refresh progress and failure feedback without covering their content.
 Authorization and not-found responses purge accepted payloads from the viewer cache.
-Within a retained cache, preview remounts reuse matching revisions and reload changed revisions.
-Closing or evicting a viewer releases its cache. Reopening it reads the file again.
 Later transient failures cannot restore invalidated content without a successful read.
 Hidden viewers defer scheduled retries until activation.
-Presentation viewers retain accepted slides during conversion and show loading feedback.
-Transient conversion failures retain those slides and show a warning.
-
+Presentation viewers hide cached slides during conversion because conversion replaces slide files.
 CSV files display a sticky-header table limited to 1,000 rows, 100 columns, and 5,000 cells.
 CSV viewers report malformed quoted fields and offer a raw download through the preview toolbar.
 The CSV preview uses the shared parser directly. Parser tests live with the shared utility.
@@ -466,7 +454,7 @@ cd backend && uv run pytest tests/integration -k craft
 Frontend regression tests for output discovery and panel selection:
 
 ```bash
-cd web && bun run test --runInBand useBuildStreaming.test.tsx useBuildSessionStore.outputs.test.ts
+cd web && bun run test --runInBand useBuildStreaming.test.tsx useBuildSessionStore.test.tsx
 ```
 
 `backend/tests/external_dependency_unit/craft/test_streaming_persistence.py`
@@ -541,15 +529,18 @@ work against the default Kubernetes backend, follow
   deliberate (avoids double-driving a healthy turn) but reads as latency if
   you don't know the constant.
 
-Access-loss results stay in the file cache across remounts. Transient failures cannot restore revoked bytes.
+### Output selection during a task
 
-Preview retries stop when a viewer unmounts or its requested revision changes. Development effect replay reuses the pending request.
+A new task releases the previous output selection lock. Inventory reads require
+a complete baseline before treating files as new outputs. New previewable files
+open resource tabs; the first file is selected once per task. User selection
+or dismissal locks automatic selection until the next task. Silent reads only
+update metadata. The Outputs overview remains available on first automatic opening.
+
+Webapp artifact events start readiness checks through the session store.
+Automatic opening does not depend on a mounted chat panel or a URL-change effect.
 
 A scheduled preview retry runs only while its failure remains current. Activation recovery makes the old retry obsolete.
-
-Welcome inline previews offer an original-file download. Presentation slide images own loading state by their URL.
-
-A failed presentation image displays an error. Changing the slide starts a new image load.
 
 
 Live text parts retain their OpenCode part ID across stream attachments. Delta packets append to that part. Authoritative snapshots replace its text in place. Text and thinking parts keep their position relative to tool events. Durable worker events retain delta text and the part ID. Persistence splits text at part or routing boundaries. Restoration combines segments of the same part before live snapshots replace them. Older saved rows without IDs retain their existing display behavior.

@@ -12876,6 +12876,12 @@
       "csv": {
         "truncated": "Vista previa limitada a {rows, number} filas, {columns, number} columnas y {cells, number} celdas. Descarga el original para ver todos los datos.",
         "malformed": "Este CSV contiene un campo entre comillas no válido. Descarga el original para revisarlo."
+      },
+      "imageTooLarge": {
+        "description": "Esta imagen es demasiado grande para la vista previa. Descarga el original para abrirla."
+      },
+      "unsupported": {
+        "description": "Este archivo no se puede previsualizar. Descarga el original para abrirlo."
       }
     },
     "filesTab": {
@@ -12895,9 +12901,34 @@
       },
       "download": {
         "label": "Descargar"
+      },
+      "partial": {
+        "label": "No se pudieron cargar algunas carpetas. Actualiza para volver a intentarlo."
+      },
+      "noMatches": {
+        "label": "No hay archivos coincidentes"
+      },
+      "previousPage": {
+        "label": "Página anterior"
+      },
+      "nextPage": {
+        "label": "Página siguiente"
+      },
+      "page": {
+        "label": "Página {page} de {total}"
+      },
+      "upload": {
+        "label": "Subir archivos",
+        "error": "No se pudieron subir los archivos. Vuelve a intentarlo."
+      },
+      "emptyDirectory": {
+        "label": "No hay archivos en este directorio"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Fondo de contraste"
+      },
       "error": {
         "description": "No se pudo mostrar la imagen",
         "title": "No se pudo cargar la imagen"
@@ -12907,9 +12938,6 @@
       },
       "preview": {
         "ariaLabel": "Vista previa de {name}"
-      },
-      "background": {
-        "contrast": "Fondo de contraste"
       }
     },
     "inputBar": {
@@ -13566,7 +13594,8 @@
         "ariaLabel": "Copiar URL: {url}"
       },
       "downloadFile": {
-        "tooltip": "Descargar archivo"
+        "tooltip": "Descargar archivo",
+        "label": "Descargar"
       },
       "export": {
         "button": "Exportar a .docx",
@@ -13636,6 +13665,144 @@
     "welcome": {
       "input": {
         "placeholder": "Analiza mis datos y crea un panel..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "Todos los archivos"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Pestañas de resultados"
+      },
+      "close": {
+        "label": "Cerrar {name}"
+      },
+      "reordered": {
+        "label": "Pestaña movida a la posición {position} de {count}"
+      },
+      "open": {
+        "label": "Abrir una pestaña"
+      },
+      "outputs": {
+        "label": "Resultados"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Previsualiza tu app"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Comprobando aplicaciones web"
+      },
+      "failed": {
+        "description": "No se pudieron comprobar las aplicaciones web locales. Recarga para volver a intentarlo."
+      },
+      "unavailable": {
+        "description": "La aplicación web no está disponible. Restaura el entorno aislado o recarga para volver a intentarlo.",
+        "label": "No disponible"
+      },
+      "empty": {
+        "title": "No hay aplicaciones web disponibles",
+        "description": "Las aplicaciones locales aparecen aquí cuando están en ejecución."
+      },
+      "starting": {
+        "label": "Iniciando aplicación web"
+      },
+      "loading": {
+        "label": "Cargando aplicación web"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Abrir resultados"
+      },
+      "close": {
+        "ariaLabel": "Cerrar resultados"
+      },
+      "expand": {
+        "ariaLabel": "Ampliar resultados"
+      },
+      "restore": {
+        "ariaLabel": "Restaurar resultados"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar tamaño de resultados"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Buscar archivos"
+        },
+        "location": {
+          "label": "Todos los archivos de tu entorno"
+        }
+      },
+      "browser": {
+        "placeholder": "Aplicaciones web en tu sandbox"
+      },
+      "reload": {
+        "file": "Recargar archivo",
+        "files": "Actualizar archivos",
+        "browser": "Actualizar aplicaciones web",
+        "unavailable": "Restaura el entorno aislado para actualizar"
+      },
+      "export": {
+        "failed": "No se pudo exportar este archivo. Vuelve a intentarlo."
+      },
+      "empty": {
+        "title": "Elige una vista del espacio de trabajo"
+      },
+      "status": {
+        "provisioning": "Inicializando entorno aislado",
+        "running": "Entorno aislado en ejecución",
+        "sleeping": "Entorno aislado en reposo",
+        "restoring": "Restaurando sesión",
+        "terminated": "Entorno aislado terminado",
+        "failed": "Error en el entorno aislado",
+        "ready": "Entorno aislado listo",
+        "loading": "Buscando entorno aislado"
+      }
+    },
+    "outputsTab": {
+      "home": {
+        "description": "Archivos creados por tu agente"
+      },
+      "empty": {
+        "description": "Los archivos que cree tu agente aparecerán aquí."
+      },
+      "loading": {
+        "label": "Cargando resultados…"
+      },
+      "unavailable": {
+        "description": "Los resultados aparecerán cuando tu entorno esté listo."
+      },
+      "error": {
+        "description": "No se pudieron actualizar los resultados. Inténtalo de nuevo."
+      },
+      "incomplete": {
+        "description": "No se pudieron cargar algunos resultados."
+      },
+      "filter": {
+        "label": "Tipo de archivo",
+        "all": "Todos",
+        "folders": "Carpetas",
+        "noExtension": "Sin extensión"
+      },
+      "folders": {
+        "ariaLabel": "Carpetas de resultados",
+        "root": "Resultados"
+      },
+      "filtered": {
+        "empty": "No hay resultados coincidentes"
+      },
+      "search": {
+        "placeholder": "Buscar resultados"
       }
     }
   },

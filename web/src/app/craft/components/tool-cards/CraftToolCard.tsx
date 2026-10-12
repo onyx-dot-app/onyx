@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgChevronDown, SvgSparkle } from "@opal/icons";
+import { SvgChevronDown, SvgSparkle, SvgLoader } from "@opal/icons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -24,7 +24,6 @@ import {
   getToolIcon,
   isSkillCall,
   isSkillInvocation,
-  SvgLoader,
 } from "@/app/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 

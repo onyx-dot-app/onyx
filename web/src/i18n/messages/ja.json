@@ -12876,6 +12876,12 @@
       "csv": {
         "truncated": "プレビューは{rows, number}行、{columns, number}列、{cells, number}セルまでです。すべてのデータを見るには元のファイルをダウンロードしてください。",
         "malformed": "このCSVには引用符で囲まれた無効なフィールドがあります。確認するには元のファイルをダウンロードしてください。"
+      },
+      "imageTooLarge": {
+        "description": "この画像は大きすぎるためプレビューできません。元のファイルをダウンロードして開いてください。"
+      },
+      "unsupported": {
+        "description": "このファイルはプレビューできません。元のファイルをダウンロードして開いてください。"
       }
     },
     "filesTab": {
@@ -12895,9 +12901,34 @@
       },
       "download": {
         "label": "ダウンロード"
+      },
+      "partial": {
+        "label": "一部のフォルダーを読み込めませんでした。更新してもう一度お試しください。"
+      },
+      "noMatches": {
+        "label": "一致するファイルはありません"
+      },
+      "previousPage": {
+        "label": "前のページ"
+      },
+      "nextPage": {
+        "label": "次のページ"
+      },
+      "page": {
+        "label": "{total}ページ中{page}ページ"
+      },
+      "upload": {
+        "label": "ファイルをアップロード",
+        "error": "ファイルをアップロードできませんでした。もう一度お試しください。"
+      },
+      "emptyDirectory": {
+        "label": "このディレクトリにはファイルがありません"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "コントラスト背景"
+      },
       "error": {
         "description": "画像を表示できませんでした",
         "title": "画像を読み込めませんでした"
@@ -12907,9 +12938,6 @@
       },
       "preview": {
         "ariaLabel": "{name} のプレビュー"
-      },
-      "background": {
-        "contrast": "コントラスト背景"
       }
     },
     "inputBar": {
@@ -13566,7 +13594,8 @@
         "ariaLabel": "URL をコピー: {url}"
       },
       "downloadFile": {
-        "tooltip": "ファイルをダウンロード"
+        "tooltip": "ファイルをダウンロード",
+        "label": "ダウンロード"
       },
       "export": {
         "button": ".docx にエクスポート",
@@ -13636,6 +13665,144 @@
     "welcome": {
       "input": {
         "placeholder": "データを分析してダッシュボードを作成..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "すべてのファイル"
+      },
+      "browser": {
+        "label": "アプリ"
+      },
+      "list": {
+        "label": "出力タブ"
+      },
+      "close": {
+        "label": "{name}を閉じる"
+      },
+      "reordered": {
+        "label": "タブを{count}個中{position}番目に移動しました"
+      },
+      "open": {
+        "label": "タブを開く"
+      },
+      "outputs": {
+        "label": "出力"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "アプリをプレビュー"
+      },
+      "home": {
+        "title": "アプリ",
+        "action": "アプリ"
+      },
+      "checking": {
+        "label": "Webアプリを確認中"
+      },
+      "failed": {
+        "description": "ローカルWebアプリを確認できませんでした。再読み込みしてもう一度お試しください。"
+      },
+      "unavailable": {
+        "description": "Webアプリを利用できません。サンドボックスを復元するか、再読み込みしてお試しください。",
+        "label": "利用不可"
+      },
+      "empty": {
+        "title": "利用可能なWebアプリはありません",
+        "description": "ローカルアプリが実行中になると、ここに表示されます。"
+      },
+      "starting": {
+        "label": "Webアプリを起動中"
+      },
+      "loading": {
+        "label": "Webアプリを読み込み中"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "出力を開く"
+      },
+      "close": {
+        "ariaLabel": "出力を閉じる"
+      },
+      "expand": {
+        "ariaLabel": "出力を拡大"
+      },
+      "restore": {
+        "ariaLabel": "出力を元のサイズに戻す"
+      },
+      "resize": {
+        "ariaLabel": "出力のサイズを変更"
+      },
+      "files": {
+        "search": {
+          "placeholder": "ファイルを検索"
+        },
+        "location": {
+          "label": "サンドボックス内のすべてのファイル"
+        }
+      },
+      "browser": {
+        "placeholder": "サンドボックス内のウェブアプリ"
+      },
+      "reload": {
+        "file": "ファイルを再読み込み",
+        "files": "ファイルを更新",
+        "browser": "Webアプリを更新",
+        "unavailable": "更新するにはサンドボックスを復元してください"
+      },
+      "export": {
+        "failed": "ファイルをエクスポートできませんでした。もう一度お試しください。"
+      },
+      "empty": {
+        "title": "ワークスペースの表示を選択"
+      },
+      "status": {
+        "provisioning": "サンドボックスを初期化中",
+        "running": "サンドボックス実行中",
+        "sleeping": "サンドボックス休止中",
+        "restoring": "セッションを復元中",
+        "terminated": "サンドボックス終了",
+        "failed": "サンドボックスでエラー",
+        "ready": "サンドボックス準備完了",
+        "loading": "サンドボックスを検索中"
+      }
+    },
+    "outputsTab": {
+      "home": {
+        "description": "エージェントが作成したファイル"
+      },
+      "empty": {
+        "description": "エージェントが作成したファイルはここに表示されます。"
+      },
+      "loading": {
+        "label": "出力を読み込み中…"
+      },
+      "unavailable": {
+        "description": "サンドボックスの準備ができると出力が表示されます。"
+      },
+      "error": {
+        "description": "出力を更新できませんでした。もう一度お試しください。"
+      },
+      "incomplete": {
+        "description": "一部の出力を読み込めませんでした。"
+      },
+      "filter": {
+        "label": "ファイルの種類",
+        "all": "すべて",
+        "folders": "フォルダー",
+        "noExtension": "拡張子なし"
+      },
+      "folders": {
+        "ariaLabel": "出力フォルダー",
+        "root": "出力"
+      },
+      "filtered": {
+        "empty": "一致する出力がありません"
+      },
+      "search": {
+        "placeholder": "出力を検索"
       }
     }
   },

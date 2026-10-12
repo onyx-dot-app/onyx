@@ -5,11 +5,15 @@ import type { TextPartUpdate } from "@/app/craft/utils/packetTypes";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
+import {
+  readOutputPanelPreferences,
+  clearOutputPanelPreferences,
+} from "@/app/craft/services/outputPanelPreferences";
 
 import {
   ApiSessionResponse,
   Artifact,
-  ArtifactType,
   BuildMessage,
   BuildMessageAttachment,
   SessionHistoryItem,
@@ -26,6 +30,8 @@ import {
   TodoListState,
   type ContextUsage,
   type PanelTab,
+  type OutputPanelMode,
+  normalizePanelPath,
   panelTabId,
   type SubagentState,
   type SubagentStatus,
@@ -50,6 +56,8 @@ import {
   fetchWebappInfo,
   restoreSession,
 } from "@/app/craft/services/apiServices";
+
+import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
@@ -621,9 +629,6 @@ function mapApiSessionStatus(
   }
 }
 
-// Re-export types for consumers
-export type { Artifact, ArtifactType, SessionHistoryItem };
-
 // =============================================================================
 // Store Types (mirrors chat's useChatSessionStore pattern)
 // =============================================================================
@@ -638,8 +643,14 @@ export type PreProvisioningState =
 
 // Module-level variable to store the provisioning promise (not in Zustand state for serializability)
 let provisioningPromise: Promise<string | null> | null = null;
-const webappReadinessChecks = new Map<string, Promise<boolean>>();
-const outputInventoryRequests = new Map<string, Promise<void>>();
+
+interface OutputInventoryRequest {
+  controller: AbortController;
+  promise: Promise<void>;
+  session: BuildSessionData;
+  coalescible: boolean;
+}
+const outputInventoryRequests = new Map<string, OutputInventoryRequest>();
 
 function sameSessionRuntime(
   first: BuildSessionData,
@@ -671,20 +682,6 @@ export interface FilesTabState {
   scrollTop: number;
 }
 
-/** Tab history entry - can be a pinned tab or a transient panel tab */
-export type TabHistoryEntry =
-  | { type: "pinned"; tab: OutputTabType }
-  | { type: "panel-tab"; tabId: string };
-
-/** Browser-style tab navigation history */
-export interface TabNavigationHistory {
-  entries: TabHistoryEntry[];
-  currentIndex: number;
-}
-
-/** Output panel tab types */
-export type OutputTabType = "preview" | "files" | "artifacts";
-
 export type CompletionOwner =
   | { kind: "interactive"; turnId: string | null }
   | { kind: "scheduled"; runId: string };
@@ -699,12 +696,14 @@ export type TurnSettlement = {
 
 export interface BuildSessionData {
   id: string;
+  /** Reject responses from an earlier instance of this local session. */
   instanceId: string;
   status: SessionStatus;
   messages: BuildMessage[];
   artifacts: Artifact[];
   /** Active backend turn, if this session is currently running. */
   activeTurnId: string | null;
+  /** The streamed response stays visible until this turn reaches durable completion. */
   turnSettlement: TurnSettlement | null;
   /** The user-message turn index for the active backend turn. */
   activeTurnIndex: number | null;
@@ -737,9 +736,9 @@ export interface BuildSessionData {
    * when it changes, so a stale reconcile can't clobber the superseding turn.
    */
   turnGeneration: number;
+  /** Only the latest API load can publish session state. */
   loadGeneration: number;
   error: string | null;
-  /** History/runtime requests fail independently of the current turn. */
   loadError: string | null;
   webappUrl: string | null;
   /** Backend sandbox state plus transient client-owned lifecycle states. */
@@ -753,17 +752,20 @@ export interface BuildSessionData {
   origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
-  /** Session metadata, including the saved model, is available. */
   isLoaded: boolean;
   contextUsage: ContextUsage | null;
-  outputPanelOpen: boolean;
+  /** UI identity remains stable while a welcome workspace becomes a conversation. */
+  outputWorkspaceId: string;
+  outputPanelMode: OutputPanelMode;
+  outputPanelInitialized: boolean;
+  mediumPanelProportion: number;
   /** Counter to trigger webapp refresh when web/ files change (increments on each edit) */
   webappNeedsRefresh: number;
   /** Counter to force an iframe remount (restore only — live edits are handled by HMR) */
   webappNeedsRemount: number;
   /** Counter to trigger files list refresh when outputs/ directory changes (increments on each write/edit) */
   filesNeedsRefresh: number;
-  /** Transient panel tabs open in this session (files, subagents, etc.) */
+  /** Ordered resource tabs scoped to this session. */
   panelTabs: PanelTab[];
   /** Subagents spawned in this session, keyed by child opencode session id. */
   subagents: Map<string, SubagentState>;
@@ -772,354 +774,23 @@ export interface BuildSessionData {
    * in place of the chat. `null` = normal chat view.
    */
   viewedSubagentSessionId: string | null;
-  /** Active pinned tab in output panel */
-  activeOutputTab: OutputTabType;
-  /** Active transient panel tab ID (when set, takes precedence over pinned tab) */
+  /** Selected resource tab, or null when all tabs are closed. */
   activePanelTabId: string | null;
+  /** Unique open tab IDs, most recently viewed first. */
+  panelTabHistory: string[];
   /** Files tab state - expanded folders and scroll position */
   filesTabState: FilesTabState;
-  /** Browser-style tab navigation history for back/forward */
-  tabHistory: TabNavigationHistory;
-  /** Shared metadata for discovery, Artifacts, and preview revisions. */
+  /** Shared file metadata for discovery and preview revisions. */
   outputInventory: Record<string, OutputFile> | null;
-  outputInventoryStatus: "loading" | "complete" | "partial" | "error";
-  /** Automatic discovery starts after the first complete inventory. */
+  outputInventoryStatus: "unloaded" | "complete" | "partial" | "error";
+  outputInventoryLoading: boolean;
+  outputInventoryError?: Error;
+  /** True until an authoritative inventory establishes which files predate this task. */
   outputBaselinePending: boolean;
+  /** Manual navigation or the first automatic preview retains selection until the next task. */
+  outputSelectionLocked: boolean;
   /** Explicit preview reloads, keyed by file path. File edits use inventory revisions. */
   filePreviewRefreshKeys: Record<string, number>;
-  /** Manual navigation, panel dismissal, or the first automatic selection locks selection until the next task. */
-  outputSelectionLocked: boolean;
-}
-
-// Prefer deliverables over slide images and supporting notes within one batch.
-function outputPreviewPriority(path: string): number {
-  if (/\.pptx?$/i.test(path)) return 0;
-  if (/\.pdf$/i.test(path)) return 1;
-  if (/\.md$/i.test(path)) return 2;
-  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(path)) return 3;
-  return 4;
-}
-
-function compareOutputInventory(
-  previous: Record<string, OutputFile>,
-  inventory: OutputInventory
-) {
-  const files: Record<string, OutputFile> = inventory.complete
-    ? {}
-    : { ...previous };
-  const added: OutputFile[] = [];
-  const changed: string[] = [];
-  for (const file of inventory.files) {
-    files[file.path] = file;
-    if (previous[file.path] === undefined) added.push(file);
-    else if (previous[file.path]?.revision !== file.revision)
-      changed.push(file.path);
-  }
-  if (!inventory.complete) {
-    const scannedPaths = new Set(inventory.files.map((file) => file.path));
-    // A path cannot be both a file and a parent directory, even in a partial scan.
-    for (const path of Object.keys(files)) {
-      const segments = path.split("/");
-      while (segments.length > 2) {
-        segments.pop();
-        const parent = segments.join("/");
-        if (scannedPaths.has(parent)) {
-          delete files[path];
-          changed.push(path);
-          break;
-        }
-        if (scannedPaths.has(path) && files[parent]) {
-          delete files[parent];
-          changed.push(parent);
-        }
-      }
-    }
-  }
-  if (inventory.complete) {
-    for (const path of Object.keys(previous)) {
-      if (files[path] === undefined) changed.push(path);
-    }
-  }
-  added.sort(
-    (a, b) =>
-      outputPreviewPriority(a.path) - outputPreviewPriority(b.path) ||
-      a.path.localeCompare(b.path)
-  );
-  return { files, added, changed };
-}
-
-function automaticallySelectOutput(
-  session: BuildSessionData,
-  target: PanelTab | { kind: OutputTabType }
-): Partial<BuildSessionData> {
-  if (
-    session.outputSelectionLocked ||
-    session.isInterrupting ||
-    session.wasInterrupted ||
-    session.status === "failed"
-  )
-    return {};
-  return {
-    ...selectOutputTarget(session, target),
-    outputPanelOpen: true,
-    outputSelectionLocked: true,
-  };
-}
-
-function selectOutputTarget(
-  session: BuildSessionData,
-  target: PanelTab | { kind: OutputTabType }
-): Partial<BuildSessionData> {
-  const entry: TabHistoryEntry =
-    target.kind === "file"
-      ? { type: "panel-tab", tabId: panelTabId(target) }
-      : { type: "pinned", tab: target.kind };
-  const currentEntry =
-    session.tabHistory.entries[session.tabHistory.currentIndex];
-  const isCurrentEntry =
-    entry.type === "pinned"
-      ? currentEntry?.type === "pinned" && currentEntry.tab === entry.tab
-      : currentEntry?.type === "panel-tab" &&
-        currentEntry.tabId === entry.tabId;
-  const entries = [
-    ...session.tabHistory.entries.slice(0, session.tabHistory.currentIndex + 1),
-    entry,
-  ];
-  return {
-    activeOutputTab:
-      target.kind === "file" ? session.activeOutputTab : target.kind,
-    activePanelTabId: target.kind === "file" ? panelTabId(target) : null,
-    panelTabs:
-      target.kind === "file" &&
-      !session.panelTabs.some((tab) => panelTabId(tab) === panelTabId(target))
-        ? [...session.panelTabs, target]
-        : session.panelTabs,
-    tabHistory: isCurrentEntry
-      ? session.tabHistory
-      : { entries, currentIndex: entries.length - 1 },
-  };
-}
-
-function navigateOutputHistory(
-  session: BuildSessionData,
-  direction: -1 | 1
-): Partial<BuildSessionData> | null {
-  const { tabHistory } = session;
-  const currentIndex = tabHistory.currentIndex + direction;
-  const entry = tabHistory.entries[currentIndex];
-  if (!entry) return null;
-
-  let panelTabs = session.panelTabs;
-  if (
-    entry.type === "panel-tab" &&
-    !panelTabs.some((tab) => panelTabId(tab) === entry.tabId) &&
-    entry.tabId.startsWith("file:")
-  ) {
-    const path = entry.tabId.slice("file:".length);
-    panelTabs = [
-      ...panelTabs,
-      { kind: "file", path, fileName: path.split("/").pop() || path },
-    ];
-  }
-  return {
-    tabHistory: { ...tabHistory, currentIndex },
-    activeOutputTab:
-      entry.type === "pinned" ? entry.tab : session.activeOutputTab,
-    activePanelTabId: entry.type === "panel-tab" ? entry.tabId : null,
-    panelTabs,
-    outputSelectionLocked: true,
-  };
-}
-
-interface BuildSessionStore {
-  // Session management (mirrors chat)
-  currentSessionId: string | null;
-  sessions: Map<string, BuildSessionData>;
-  sessionHistory: SessionHistoryItem[];
-
-  // Pre-provisioning state (discriminated union - see PreProvisioningState type)
-  preProvisioning: PreProvisioningState;
-
-  // Controller state (replaces refs in useBuildSessionController for better race condition handling)
-  controllerState: {
-    /** Tracks which URL we've triggered provisioning for (prevents re-triggering) */
-    lastTriggeredForUrl: string | null;
-    /** Tracks which session ID has been loaded (prevents duplicate API calls) */
-    loadedSessionId: string | null;
-  };
-
-  // Temporary output panel state when no session exists (resets when session is created/cleared)
-  noSessionOutputPanelOpen: boolean;
-
-  // Temporary active tab when no session exists (resets when session is created/cleared)
-  noSessionActiveOutputTab: OutputTabType;
-
-  // Actions - Session Management
-  setCurrentSession: (sessionId: string | null) => void;
-  createSession: (
-    sessionId: string,
-    initialData?: Partial<BuildSessionData>
-  ) => void;
-  updateSessionData: (
-    sessionId: string,
-    updates: Partial<BuildSessionData>
-  ) => void;
-
-  // Actions - Current Session Shortcuts
-  appendMessageToCurrent: (message: BuildMessage) => void;
-  toggleCurrentOutputPanel: () => void;
-
-  // Actions - Session-specific operations (for streaming - immune to currentSessionId changes)
-  appendMessageToSession: (sessionId: string, message: BuildMessage) => void;
-  addArtifactToSession: (sessionId: string, artifact: Artifact) => void;
-
-  // Actions - Stream Items (FIFO rendering)
-  appendStreamItem: (sessionId: string, item: StreamItem) => void;
-  updateStreamItem: (
-    sessionId: string,
-    itemId: string,
-    updates: Partial<StreamItem>
-  ) => void;
-  updateLastStreamingText: (sessionId: string, content: string) => void;
-  updateLastStreamingThinking: (sessionId: string, content: string) => void;
-  updateToolCallStreamItem: (
-    sessionId: string,
-    toolCallId: string,
-    updates: Partial<ToolCallState>
-  ) => void;
-  cancelLatestInFlightToolCallStreamItem: (sessionId: string) => void;
-  upsertTodoListStreamItem: (
-    sessionId: string,
-    todoListId: string,
-    todoList: TodoListState
-  ) => void;
-  clearStreamItems: (sessionId: string) => void;
-
-  // Actions - Queued Messages
-  enqueueMessage: (
-    sessionId: string,
-    text: string,
-    attachments: BuildMessageAttachment[],
-    model?: BuildLlmSelection | null
-  ) => boolean;
-  removeQueuedMessage: (sessionId: string, messageId: number) => void;
-  claimQueuedMessage: (sessionId: string) => CraftQueuedMessage | null;
-  beginTurnSettlement: (
-    sessionId: string,
-    owner: CompletionOwner,
-    generation: number
-  ) => Promise<void>;
-  retryTurnSettlement: (sessionId: string) => Promise<void>;
-
-  // Actions - Abort Control
-  setAbortController: (sessionId: string, controller: AbortController) => void;
-  abortSession: (sessionId: string) => void;
-
-  // Actions - Session Lifecycle
-  loadSession: (
-    sessionId: string,
-    options?: { force?: boolean }
-  ) => Promise<void>;
-
-  // Actions - Session History
-  refreshSessionHistory: () => Promise<void>;
-  nameBuildSession: (sessionId: string) => Promise<void>;
-  renameBuildSession: (sessionId: string, newName: string) => Promise<void>;
-  deleteBuildSession: (sessionId: string) => Promise<void>;
-
-  // Utilities
-  cleanupOldSessions: (maxSessions?: number) => void;
-
-  // Pre-provisioning Actions
-  ensurePreProvisionedSession: () => Promise<string | null>;
-  consumePreProvisionedSession: () => Promise<string | null>;
-
-  // Controller State Actions (for useBuildSessionController - replaces refs)
-  setControllerTriggered: (url: string | null) => void;
-  setControllerLoaded: (sessionId: string | null) => void;
-
-  // Webapp Refresh Actions
-  triggerWebappRefresh: (sessionId: string) => void;
-  // Files Refresh Actions
-  triggerFilesRefresh: (sessionId: string) => void;
-
-  // Output inventory and automatic navigation
-  refreshOutputInventory: (
-    sessionId: string,
-    options?: { silent?: boolean; signal?: AbortSignal }
-  ) => Promise<void>;
-  maybeAutoOpenWebapp: (sessionId: string) => Promise<void>;
-
-  // File Preview Actions
-  openFilePreview: (sessionId: string, path: string, fileName: string) => void;
-  /** Generic: remove the panel tab whose panelTabId === tabId; clears active if it was active. */
-  closePanelTab: (sessionId: string, tabId: string) => void;
-  setActiveOutputTab: (sessionId: string, tab: OutputTabType) => void;
-  setActivePanelTabId: (sessionId: string, tabId: string | null) => void;
-  /** Set active tab when no session exists (for pre-provisioned sandbox viewing) */
-  setNoSessionActiveOutputTab: (tab: OutputTabType) => void;
-
-  // Files Tab State Actions
-  updateFilesTabState: (
-    sessionId: string,
-    updates: Partial<FilesTabState>
-  ) => void;
-
-  // Subagent Actions
-  /** Swap the main column to show a subagent's transcript in place of the chat. */
-  viewSubagent: (sessionId: string, subagentSessionId: string) => void;
-  /** Return the main column to the normal chat (main-agent) view. */
-  returnToMainAgent: (sessionId: string) => void;
-  /** Upsert a subagent + one of its tool calls (creates the subagent if absent). */
-  recordSubagentToolCall: (
-    sessionId: string,
-    subagentSessionId: string,
-    parentToolCallId: string,
-    toolCall: ToolCallState,
-    subagentType: string | null,
-    name: string
-  ) => void;
-  /**
-   * Seed/backfill a subagent's identifying meta from a parent `task` event.
-   * Creates the SubagentState if absent (status "running"); never clobbers
-   * already-known identifying fields.
-   */
-  seedSubagentMeta: (
-    sessionId: string,
-    subagentSessionId: string,
-    parentToolCallId: string,
-    subagentType: string | null,
-    name: string,
-    prompt: string
-  ) => void;
-  /**
-   * Mark a subagent as completed (or failed), optionally with its response.
-   * When a response is provided, it is set on the LAST turn.
-   */
-  markSubagentComplete: (
-    sessionId: string,
-    subagentSessionId: string,
-    status: SubagentStatus,
-    response?: string | null
-  ) => void;
-  /** Append streamed response text to the LAST turn's response. */
-  appendSubagentResponseChunk: (
-    sessionId: string,
-    subagentSessionId: string,
-    text: string,
-    part?: TextPartUpdate
-  ) => void;
-  /** Append streamed thinking text to the LAST turn's thinking stream. */
-  appendSubagentThinkingChunk: (
-    sessionId: string,
-    subagentSessionId: string,
-    text: string,
-    part?: TextPartUpdate
-  ) => void;
-
-  // Tab Navigation History Actions
-  navigateTabBack: (sessionId: string) => void;
-  navigateTabForward: (sessionId: string) => void;
 }
 
 export function canReuseSession(
@@ -1289,6 +960,349 @@ function reconcileCompletedTranscript(
   return request;
 }
 
+function outputPreviewPriority(path: string): number {
+  if (/\.pptx?$/i.test(path)) return 0;
+  if (/\.pdf$/i.test(path)) return 1;
+  if (/\.md$/i.test(path)) return 2;
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(path)) return 3;
+  return 4;
+}
+
+function compareOutputInventory(
+  previous: Record<string, OutputFile>,
+  inventory: OutputInventory
+) {
+  const files: Record<string, OutputFile> = inventory.complete
+    ? {}
+    : { ...previous };
+  const added: OutputFile[] = [];
+  const changed: string[] = [];
+  for (const file of inventory.files) {
+    files[file.path] = file;
+    if (previous[file.path] === undefined) added.push(file);
+    else if (previous[file.path]?.revision !== file.revision)
+      changed.push(file.path);
+  }
+  if (!inventory.complete) {
+    const scannedPaths = new Set(inventory.files.map((file) => file.path));
+    // A path cannot be both a file and a parent directory, even in a partial scan.
+    for (const path of Object.keys(files)) {
+      const segments = path.split("/");
+      while (segments.length > 2) {
+        segments.pop();
+        const parent = segments.join("/");
+        if (scannedPaths.has(parent)) {
+          delete files[path];
+          changed.push(path);
+          break;
+        }
+        if (scannedPaths.has(path) && files[parent]) {
+          delete files[parent];
+          changed.push(parent);
+        }
+      }
+    }
+  }
+  if (inventory.complete) {
+    for (const path of Object.keys(previous)) {
+      if (files[path] === undefined) changed.push(path);
+    }
+  }
+  return { files, added, changed };
+}
+
+function panelTabHistory(
+  tabs: PanelTab[],
+  active: string | null,
+  history: readonly string[] = []
+): string[] {
+  const openIds = new Set(tabs.map(panelTabId));
+  return [...new Set(active ? [active, ...history] : history)].filter((id) =>
+    openIds.has(id)
+  );
+}
+
+function selectOutputTarget(
+  session: Pick<BuildSessionData, "panelTabs" | "panelTabHistory">,
+  target: PanelTab
+): Pick<
+  BuildSessionData,
+  "panelTabs" | "activePanelTabId" | "panelTabHistory"
+> {
+  const id = panelTabId(target);
+  const panelTabs = session.panelTabs.some((tab) => panelTabId(tab) === id)
+    ? session.panelTabs
+    : [...session.panelTabs, target];
+  return {
+    activePanelTabId: id,
+    panelTabs,
+    panelTabHistory: panelTabHistory(panelTabs, id, session.panelTabHistory),
+  };
+}
+
+function selectWelcomeOutputTarget(
+  state: BuildSessionStore,
+  target: PanelTab
+): Partial<BuildSessionStore> {
+  const selected = selectOutputTarget(
+    {
+      panelTabs: state.noSessionPanelTabs,
+      panelTabHistory: state.noSessionPanelTabHistory,
+    },
+    target
+  );
+  return {
+    noSessionPanelTabs: selected.panelTabs,
+    noSessionActivePanelTabId: selected.activePanelTabId,
+    noSessionPanelTabHistory: selected.panelTabHistory,
+  };
+}
+
+function canAutomaticallySelectOutput(session: BuildSessionData): boolean {
+  return (
+    !session.outputSelectionLocked &&
+    !session.isInterrupting &&
+    !session.wasInterrupted &&
+    session.status !== "failed"
+  );
+}
+
+function automaticallySelectOutput(
+  session: BuildSessionData,
+  target: PanelTab
+): Partial<BuildSessionData> {
+  if (!canAutomaticallySelectOutput(session)) return {};
+  const panelTabs: PanelTab[] = session.outputPanelInitialized
+    ? session.panelTabs
+    : [{ kind: "outputs" }, ...session.panelTabs];
+  return {
+    ...selectOutputTarget({ ...session, panelTabs }, target),
+    outputSelectionLocked: true,
+    outputPanelInitialized: true,
+    outputPanelMode:
+      session.outputPanelMode === "closed" ? "medium" : session.outputPanelMode,
+  };
+}
+
+const webappAutoOpenRequests = new Map<
+  string,
+  { session: BuildSessionData; promise: Promise<void> }
+>();
+
+interface BuildSessionStore {
+  // Session management (mirrors chat)
+  currentSessionId: string | null;
+  sessions: Map<string, BuildSessionData>;
+  sessionHistory: SessionHistoryItem[];
+
+  // Pre-provisioning state (discriminated union - see PreProvisioningState type)
+  preProvisioning: PreProvisioningState;
+
+  // Controller state (replaces refs in useBuildSessionController for better race condition handling)
+  controllerState: {
+    /** Tracks which URL we've triggered provisioning for (prevents re-triggering) */
+    lastTriggeredForUrl: string | null;
+    /** Tracks which session ID has been loaded (prevents duplicate API calls) */
+    loadedSessionId: string | null;
+  };
+
+  // Temporary output panel state when no session exists (resets when session is created/cleared)
+  noSessionOutputWorkspaceId: string;
+  noSessionOutputPanelMode: OutputPanelMode;
+  noSessionOutputPanelInitialized: boolean;
+  noSessionMediumPanelProportion: number;
+  noSessionPanelTabs: PanelTab[];
+  noSessionActivePanelTabId: string | null;
+  noSessionPanelTabHistory: string[];
+
+  // Temporary active tab when no session exists (resets when session is created/cleared)
+
+  // Actions - Session Management
+  setCurrentSession: (sessionId: string | null) => void;
+  createSession: (
+    sessionId: string,
+    initialData?: Partial<BuildSessionData>
+  ) => void;
+  updateSessionData: (
+    sessionId: string,
+    updates: Partial<BuildSessionData>
+  ) => void;
+
+  // Actions - Current Session Shortcuts
+  appendMessageToCurrent: (message: BuildMessage) => void;
+  toggleCurrentOutputPanel: () => void;
+
+  // Actions - Session-specific operations (for streaming - immune to currentSessionId changes)
+  appendMessageToSession: (sessionId: string, message: BuildMessage) => void;
+  addArtifactToSession: (sessionId: string, artifact: Artifact) => void;
+
+  // Actions - Stream Items (FIFO rendering)
+  appendStreamItem: (sessionId: string, item: StreamItem) => void;
+  updateStreamItem: (
+    sessionId: string,
+    itemId: string,
+    updates: Partial<StreamItem>
+  ) => void;
+  updateLastStreamingText: (sessionId: string, content: string) => void;
+  updateLastStreamingThinking: (sessionId: string, content: string) => void;
+  updateToolCallStreamItem: (
+    sessionId: string,
+    toolCallId: string,
+    updates: Partial<ToolCallState>
+  ) => void;
+  cancelLatestInFlightToolCallStreamItem: (sessionId: string) => void;
+  upsertTodoListStreamItem: (
+    sessionId: string,
+    todoListId: string,
+    todoList: TodoListState
+  ) => void;
+  clearStreamItems: (sessionId: string) => void;
+
+  // Actions - Queued Messages
+  enqueueMessage: (
+    sessionId: string,
+    text: string,
+    attachments: BuildMessageAttachment[],
+    model?: BuildLlmSelection | null
+  ) => boolean;
+  removeQueuedMessage: (sessionId: string, messageId: number) => void;
+  claimQueuedMessage: (sessionId: string) => CraftQueuedMessage | null;
+  beginTurnSettlement: (
+    sessionId: string,
+    owner: CompletionOwner,
+    generation: number
+  ) => Promise<void>;
+  retryTurnSettlement: (sessionId: string) => Promise<void>;
+
+  // Actions - Abort Control
+  setAbortController: (sessionId: string, controller: AbortController) => void;
+  abortSession: (sessionId: string) => void;
+
+  // Actions - Session Lifecycle
+  loadSession: (
+    sessionId: string,
+    options?: { force?: boolean }
+  ) => Promise<void>;
+
+  // Actions - Session History
+  refreshSessionHistory: () => Promise<void>;
+  nameBuildSession: (sessionId: string) => Promise<void>;
+  renameBuildSession: (sessionId: string, newName: string) => Promise<void>;
+  deleteBuildSession: (sessionId: string) => Promise<void>;
+
+  // Utilities
+  cleanupOldSessions: (maxSessions?: number) => void;
+
+  // Pre-provisioning Actions
+  ensurePreProvisionedSession: () => Promise<string | null>;
+  consumePreProvisionedSession: () => Promise<string | null>;
+
+  // Controller State Actions (for useBuildSessionController - replaces refs)
+  setControllerTriggered: (url: string | null) => void;
+  setControllerLoaded: (sessionId: string | null) => void;
+
+  // Webapp Refresh Actions
+  triggerWebappRefresh: (sessionId: string) => void;
+  maybeAutoOpenWebapp: (sessionId: string) => Promise<void>;
+  // Files Refresh Actions
+  triggerFilesRefresh: (sessionId: string) => void;
+
+  // Output inventory and automatic navigation
+  refreshOutputInventory: (
+    sessionId: string,
+    options?: { silent?: boolean; signal?: AbortSignal }
+  ) => Promise<void>;
+
+  // File Preview Actions
+  openFilePreview: (
+    sessionId: string | null,
+    path: string,
+    fileName: string
+  ) => void;
+  /** Generic: remove the panel tab whose panelTabId === tabId; clears active if it was active. */
+  setCurrentOutputPanelMode: (mode: OutputPanelMode) => void;
+  setCurrentMediumPanelProportion: (proportion: number) => void;
+  openOutputsTab: (sessionId: string | null) => void;
+  openFilesTab: (sessionId: string | null) => void;
+  openBrowserTab: (
+    sessionId: string | null,
+    appId?: string,
+    appName?: string
+  ) => void;
+  navigateBrowserTab: (
+    sessionId: string | null,
+    tabId: string,
+    appId: string | null,
+    appName?: string
+  ) => void;
+  reorderPanelTab: (
+    sessionId: string | null,
+    tabId: string,
+    index: number
+  ) => void;
+  closePanelTab: (sessionId: string | null, tabId: string) => void;
+  setActivePanelTabId: (sessionId: string | null, tabId: string | null) => void;
+  /** Set active tab when no session exists (for pre-provisioned sandbox viewing) */
+
+  // Files Tab State Actions
+  updateFilesTabState: (
+    sessionId: string,
+    updates: Partial<FilesTabState>
+  ) => void;
+
+  // Subagent Actions
+  /** Swap the main column to show a subagent's transcript in place of the chat. */
+  viewSubagent: (sessionId: string, subagentSessionId: string) => void;
+  /** Return the main column to the normal chat (main-agent) view. */
+  returnToMainAgent: (sessionId: string) => void;
+  /** Upsert a subagent + one of its tool calls (creates the subagent if absent). */
+  recordSubagentToolCall: (
+    sessionId: string,
+    subagentSessionId: string,
+    parentToolCallId: string,
+    toolCall: ToolCallState,
+    subagentType: string | null,
+    name: string
+  ) => void;
+  /**
+   * Seed/backfill a subagent's identifying meta from a parent `task` event.
+   * Creates the SubagentState if absent (status "running"); never clobbers
+   * already-known identifying fields.
+   */
+  seedSubagentMeta: (
+    sessionId: string,
+    subagentSessionId: string,
+    parentToolCallId: string,
+    subagentType: string | null,
+    name: string,
+    prompt: string
+  ) => void;
+  /**
+   * Mark a subagent as completed (or failed), optionally with its response.
+   * When a response is provided, it is set on the LAST turn.
+   */
+  markSubagentComplete: (
+    sessionId: string,
+    subagentSessionId: string,
+    status: SubagentStatus,
+    response?: string | null
+  ) => void;
+  /** Append streamed response text to the LAST turn's response. */
+  appendSubagentResponseChunk: (
+    sessionId: string,
+    subagentSessionId: string,
+    text: string,
+    part?: TextPartUpdate
+  ) => void;
+  /** Append streamed thinking text to the LAST turn's thinking stream. */
+  appendSubagentThinkingChunk: (
+    sessionId: string,
+    subagentSessionId: string,
+    text: string,
+    part?: TextPartUpdate
+  ) => void;
+}
+
 // =============================================================================
 // Initial State Factory
 // =============================================================================
@@ -1296,61 +1310,87 @@ function reconcileCompletedTranscript(
 const createInitialSessionData = (
   sessionId: string,
   initialData?: Partial<BuildSessionData>
-): BuildSessionData => ({
-  id: sessionId,
-  status: "idle",
-  messages: [],
-  artifacts: [],
-  activeTurnId: null,
-  turnSettlement: null,
-  activeTurnIndex: null,
-  activeTurnLocalOwner: false,
-  streamItems: [],
-  queuedMessages: [],
-  isInterrupting: false,
-  wasInterrupted: false,
-  turnGeneration: 0,
-  loadGeneration: 0,
-  error: null,
-  loadError: null,
-  webappUrl: null,
-  sandbox: null,
-  agentProvider: null,
-  agentModel: null,
-  skillsStale: false,
-  skillsStaleRevision: 0,
-  origin: "INTERACTIVE",
-  abortController: new AbortController(),
-  lastAccessed: new Date(),
-  isLoaded: false,
-  contextUsage: null,
-  outputPanelOpen: false,
-  webappNeedsRefresh: 0,
-  webappNeedsRemount: 0,
-  filesNeedsRefresh: 0,
-  panelTabs: [],
-  subagents: new Map(),
-  viewedSubagentSessionId: null,
-  activeOutputTab: "preview",
-  activePanelTabId: null,
-  filesTabState: {
-    expandedPaths: [],
-    scrollTop: 0,
-  },
-  tabHistory: {
-    entries: [
-      { type: "pinned", tab: initialData?.activeOutputTab ?? "preview" },
-    ],
-    currentIndex: 0,
-  },
-  outputInventory: null,
-  outputInventoryStatus: "loading",
-  outputBaselinePending: initialData?.outputInventory == null,
-  filePreviewRefreshKeys: {},
-  outputSelectionLocked: false,
-  ...initialData,
-  instanceId: genId("session-state"),
-});
+): BuildSessionData => {
+  const preferences = readOutputPanelPreferences(sessionId);
+  initialData = { ...preferences, ...initialData };
+  const mode = initialData?.outputPanelMode ?? "closed";
+  let panelTabs = (initialData?.panelTabs ?? []).map(
+    (tab): PanelTab =>
+      tab.kind === "file" ? { ...tab, path: normalizePanelPath(tab.path) } : tab
+  );
+  let activePanelTabId = initialData?.activePanelTabId ?? null;
+  if (activePanelTabId?.startsWith("file:"))
+    activePanelTabId = `file:${normalizePanelPath(activePanelTabId.slice("file:".length))}`;
+  const initialized =
+    initialData?.outputPanelInitialized ??
+    (mode !== "closed" || panelTabs.length > 0);
+  if (
+    mode !== "closed" &&
+    panelTabs.length === 0 &&
+    initialData?.outputPanelInitialized === undefined
+  ) {
+    panelTabs = [{ kind: "outputs" }];
+    activePanelTabId = "outputs";
+  }
+  return {
+    id: sessionId,
+    status: "idle",
+    messages: [],
+    artifacts: [],
+    activeTurnId: null,
+    turnSettlement: null,
+    activeTurnIndex: null,
+    activeTurnLocalOwner: false,
+    streamItems: [],
+    queuedMessages: [],
+    isInterrupting: false,
+    wasInterrupted: false,
+    turnGeneration: 0,
+    loadGeneration: 0,
+    error: null,
+    loadError: null,
+    webappUrl: null,
+    sandbox: null,
+    agentProvider: null,
+    agentModel: null,
+    skillsStale: false,
+    skillsStaleRevision: 0,
+    origin: "INTERACTIVE",
+    abortController: new AbortController(),
+    lastAccessed: new Date(),
+    isLoaded: false,
+    contextUsage: null,
+
+    mediumPanelProportion: 0.5,
+    webappNeedsRefresh: 0,
+    webappNeedsRemount: 0,
+    filesNeedsRefresh: 0,
+    subagents: new Map(),
+    viewedSubagentSessionId: null,
+    filesTabState: {
+      expandedPaths: [],
+      scrollTop: 0,
+    },
+    outputInventory: null,
+    outputInventoryStatus: "unloaded",
+    outputInventoryLoading: false,
+    outputBaselinePending: initialData?.outputInventory == null,
+    outputSelectionLocked: preferences?.outputPanelInitialized ?? false,
+    filePreviewRefreshKeys: {},
+    ...initialData,
+    instanceId: genId("session-state"),
+    outputWorkspaceId: initialData?.outputWorkspaceId ?? sessionId,
+    outputPanelMode: mode,
+    outputPanelInitialized: initialized,
+    panelTabs,
+    activePanelTabId,
+    panelTabHistory: panelTabHistory(
+      panelTabs,
+      activePanelTabId,
+      initialData.panelTabHistory
+    ),
+  };
+};
 
 // =============================================================================
 // Store
@@ -1401,10 +1441,13 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   // Temporary output panel state when no session exists (resets when session is created/cleared)
-  noSessionOutputPanelOpen: false,
-
-  // The welcome page has no webapp to preview.
-  noSessionActiveOutputTab: "files",
+  noSessionOutputWorkspaceId: genId("workspace"),
+  noSessionOutputPanelMode: "closed",
+  noSessionOutputPanelInitialized: false,
+  noSessionMediumPanelProportion: 0.5,
+  noSessionPanelTabs: [],
+  noSessionActivePanelTabId: null,
+  noSessionPanelTabHistory: [],
 
   // ===========================================================================
   // Session Management (mirrors chat's pattern)
@@ -1416,8 +1459,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       if (sessionId === null) {
         return {
           currentSessionId: null,
-          noSessionOutputPanelOpen: false,
-          noSessionActiveOutputTab: "files",
+          noSessionOutputWorkspaceId: genId("workspace"),
+          noSessionOutputPanelMode: "closed",
+          noSessionOutputPanelInitialized: false,
+          noSessionPanelTabs: [],
+          noSessionActivePanelTabId: null,
+          noSessionPanelTabHistory: [],
         };
       }
 
@@ -1427,27 +1474,37 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           ? { status: "idle" }
           : state.preProvisioning;
 
-      // If session doesn't exist, create it and inherit output panel state
+      // History sessions restore their own panel preferences.
       if (!state.sessions.has(sessionId)) {
-        const newSession = createInitialSessionData(sessionId, {
-          outputPanelOpen: state.noSessionOutputPanelOpen,
-          ...(state.noSessionOutputPanelOpen && {
-            activeOutputTab: state.noSessionActiveOutputTab,
-          }),
-        });
+        const newSession = createInitialSessionData(sessionId);
         const newSessions = new Map(state.sessions);
         newSessions.set(sessionId, newSession);
         return {
           currentSessionId: sessionId,
           preProvisioning,
           sessions: newSessions,
-          noSessionOutputPanelOpen: false,
         };
       }
 
       // Update last accessed for existing session and reset no-session panel state
       const session = state.sessions.get(sessionId)!;
+      const claimedWelcome =
+        state.currentSessionId === null &&
+        state.noSessionOutputPanelInitialized &&
+        (state.preProvisioning.status === "ready" ||
+          state.preProvisioning.status === "starting") &&
+        state.preProvisioning.sessionId === sessionId;
       const updatedSession = { ...session, lastAccessed: new Date() };
+      if (claimedWelcome) {
+        updatedSession.outputWorkspaceId = state.noSessionOutputWorkspaceId;
+        updatedSession.outputPanelMode = state.noSessionOutputPanelMode;
+        updatedSession.outputPanelInitialized = true;
+        updatedSession.panelTabs = state.noSessionPanelTabs;
+        updatedSession.activePanelTabId = state.noSessionActivePanelTabId;
+        updatedSession.panelTabHistory = state.noSessionPanelTabHistory;
+        updatedSession.mediumPanelProportion =
+          state.noSessionMediumPanelProportion;
+      }
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
 
@@ -1455,7 +1512,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         currentSessionId: sessionId,
         preProvisioning,
         sessions: newSessions,
-        noSessionOutputPanelOpen: false,
       };
     });
   },
@@ -1467,14 +1523,20 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   ) => {
     set((state) => {
       // Carry the welcome panel's visible tab into the conversation.
-      const outputPanelOpen =
-        initialData?.outputPanelOpen ?? state.noSessionOutputPanelOpen;
       const newSession = createInitialSessionData(sessionId, {
-        activeOutputTab: state.noSessionActiveOutputTab,
+        ...(state.currentSessionId === null &&
+          state.noSessionOutputPanelInitialized && {
+            outputWorkspaceId: state.noSessionOutputWorkspaceId,
+            outputPanelMode: state.noSessionOutputPanelMode,
+            outputPanelInitialized: true,
+            panelTabs: state.noSessionPanelTabs,
+            activePanelTabId: state.noSessionActivePanelTabId,
+            panelTabHistory: state.noSessionPanelTabHistory,
+            mediumPanelProportion: state.noSessionMediumPanelProportion,
+          }),
         filesTabState:
           state.sessions.get(sessionId)?.filesTabState ?? EMPTY_FILES_TAB_STATE,
         ...initialData,
-        outputPanelOpen,
       });
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, newSession);
@@ -1529,26 +1591,56 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   toggleCurrentOutputPanel: () => {
-    const {
-      currentSessionId,
-      sessions,
-      updateSessionData,
-      noSessionOutputPanelOpen,
-    } = get();
-    if (currentSessionId) {
-      const session = sessions.get(currentSessionId);
-      if (session) {
-        const closing = session.outputPanelOpen;
-        const update: Partial<BuildSessionData> = {
-          outputPanelOpen: !session.outputPanelOpen,
-        };
-        if (closing) update.outputSelectionLocked = true;
-        updateSessionData(currentSessionId, update);
-      }
+    const state = get();
+    const mode = state.currentSessionId
+      ? state.sessions.get(state.currentSessionId)?.outputPanelMode
+      : state.noSessionOutputPanelMode;
+    state.setCurrentOutputPanelMode(mode === "closed" ? "medium" : "closed");
+  },
+
+  setCurrentOutputPanelMode: (mode) => {
+    const state = get();
+    if (state.currentSessionId) {
+      const session = state.sessions.get(state.currentSessionId);
+      if (!session) return;
+      const updates: Partial<BuildSessionData> = {
+        outputPanelMode: mode,
+        ...(mode === "closed" && { outputSelectionLocked: true }),
+        outputPanelInitialized:
+          session.outputPanelInitialized || mode !== "closed",
+      };
+      if (mode !== "closed" && !session.outputPanelInitialized)
+        Object.assign(
+          updates,
+          selectOutputTarget(session, { kind: "outputs" })
+        );
+      state.updateSessionData(state.currentSessionId, updates);
     } else {
-      // No session - toggle temporary state
-      set({ noSessionOutputPanelOpen: !noSessionOutputPanelOpen });
+      const fresh = mode !== "closed" && !state.noSessionOutputPanelInitialized;
+      const updates: Partial<BuildSessionStore> = {
+        noSessionOutputPanelInitialized:
+          state.noSessionOutputPanelInitialized || mode !== "closed",
+        noSessionOutputPanelMode: mode,
+      };
+      if (fresh) {
+        Object.assign(
+          updates,
+          selectWelcomeOutputTarget(state, { kind: "outputs" })
+        );
+      }
+      set(updates);
     }
+  },
+
+  setCurrentMediumPanelProportion: (proportion) => {
+    if (!Number.isFinite(proportion)) return;
+    const value = Math.max(0, Math.min(1, proportion));
+    const state = get();
+    if (state.currentSessionId)
+      state.updateSessionData(state.currentSessionId, {
+        mediumPanelProportion: value,
+      });
+    else set({ noSessionMediumPanelProportion: value });
   },
 
   // ===========================================================================
@@ -1585,6 +1677,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       newSessions.set(sessionId, updatedSession);
       return { sessions: newSessions };
     });
+    if (artifact.type === "nextjs_app" || artifact.type === "web_app")
+      void get().maybeAutoOpenWebapp(sessionId);
   },
 
   // ===========================================================================
@@ -2009,6 +2103,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     // Check if already loaded in cache
     const existingSession = sessions.get(sessionId);
     if (canReuseSession(existingSession) && options?.force !== true) {
+      if (
+        existingSession?.sandbox?.status === "running" &&
+        existingSession.status !== "running"
+      )
+        void get().refreshOutputInventory(sessionId, { silent: true });
       return;
     }
 
@@ -2179,6 +2278,11 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         origin: sessionData.origin,
       });
       if (!needsRestore) {
+        if (
+          get().sessions.get(sessionId)?.outputInventory === null ||
+          runtimeSession.status !== "running"
+        )
+          void get().refreshOutputInventory(sessionId, { silent: true });
         const artifacts: Artifact[] = await fetchArtifacts(sessionId);
         if (!isCurrentRuntimeLoad()) return;
         const hasWebapp: boolean = artifacts.some(
@@ -2192,14 +2296,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
               ? `http://localhost:${sessionData.nextjs_port}`
               : null,
         });
-        if (
-          get().sessions.get(sessionId)?.outputInventory === null ||
-          runtimeSession.status !== "running"
-        )
-          void get().refreshOutputInventory(sessionId, { silent: true });
       }
 
       if (needsRestore) {
+        outputInventoryRequests.get(sessionId)?.controller.abort();
         const skillsStaleRevisionBeforeRestore: number | undefined =
           get().sessions.get(sessionId)?.skillsStaleRevision;
         try {
@@ -2321,11 +2421,12 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   },
 
   deleteBuildSession: async (sessionId: string) => {
-    const { currentSessionId, abortSession, refreshSessionHistory } = get();
+    const { abortSession, refreshSessionHistory } = get();
 
     try {
       await apiDeleteSession(sessionId);
       abortSession(sessionId);
+      clearOutputPanelPreferences(sessionId);
 
       // Remove session from local state
       set((state) => {
@@ -2336,11 +2437,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           sessionHistory: state.sessionHistory.filter(
             (historyItem) => historyItem.id !== sessionId
           ),
-          currentSessionId:
-            currentSessionId === sessionId ? null : state.currentSessionId,
         };
       });
 
+      if (get().currentSessionId === sessionId) get().setCurrentSession(null);
       void refreshSessionHistory();
     } catch (err) {
       console.error("Failed to delete session:", err);
@@ -2522,7 +2622,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   triggerWebappRefresh: (sessionId: string) => {
     const session = get().sessions.get(sessionId);
     if (session) {
-      // Refresh data and apply the same dismissal policy as file outputs.
       get().updateSessionData(sessionId, {
         webappNeedsRefresh: (session.webappNeedsRefresh || 0) + 1,
       });
@@ -2533,16 +2632,25 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   triggerFilesRefresh: (sessionId: string) => {
     const session = get().sessions.get(sessionId);
     if (session) {
-      // Increment refresh counter to trigger files list refresh
-      // Using a counter ensures each filesystem change triggers a new refresh
       get().updateSessionData(sessionId, {
-        filesNeedsRefresh: (session.filesNeedsRefresh || 0) + 1,
+        filesNeedsRefresh: session.filesNeedsRefresh + 1,
       });
+      // Streaming owns discovery during a task; idle writes only validate metadata.
+      if (
+        !session.activeTurnId &&
+        session.status !== "running" &&
+        session.status !== "creating"
+      ) {
+        // A write needs a read started after the mutation.
+        const previousRead = outputInventoryRequests.get(sessionId);
+        if (previousRead) previousRead.coalescible = false;
+        void get().refreshOutputInventory(sessionId, { silent: true });
+      }
     }
   },
 
   // ===========================================================================
-  // Auto-open Actions
+  // Output Inventory
   // ===========================================================================
 
   refreshOutputInventory: async (
@@ -2551,16 +2659,44 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   ) => {
     const started: BuildSessionData | undefined = get().sessions.get(sessionId);
     if (!started || signal?.aborted) return;
+    const matchesRuntime = (session: BuildSessionData): boolean =>
+      sameSessionRuntime(session, started);
+    const previousRequest = outputInventoryRequests.get(sessionId);
+    const sameRuntime =
+      previousRequest &&
+      !previousRequest.controller.signal.aborted &&
+      sameSessionRuntime(previousRequest.session, started);
+    if (previousRequest && !sameRuntime) previousRequest.controller.abort();
+    const runtimeController =
+      sameRuntime && previousRequest
+        ? previousRequest.controller
+        : new AbortController();
+    const coalescible = silent && signal === undefined;
+    if (
+      coalescible &&
+      sameRuntime &&
+      previousRequest?.coalescible &&
+      previousRequest.session.activeTurnId === started.activeTurnId &&
+      matchesRuntime(previousRequest.session) &&
+      previousRequest.session.turnGeneration === started.turnGeneration
+    ) {
+      await previousRequest.promise;
+      return;
+    }
+    const requestSignal = signal
+      ? AbortSignal.any([signal, runtimeController.signal])
+      : runtimeController.signal;
     const isCurrent = (): boolean => {
       const current = get().sessions.get(sessionId);
-      return (
-        !signal?.aborted &&
-        current !== undefined &&
-        sameSessionRuntime(current, started) &&
-        (!silent ||
-          (current.turnGeneration === started.turnGeneration &&
-            current.activeTurnId === started.activeTurnId))
-      );
+      if (requestSignal.aborted || !current || !matchesRuntime(current))
+        return false;
+      // Passive reads cannot consume files from a newly attached turn.
+      if (silent)
+        return (
+          current.turnGeneration === started.turnGeneration &&
+          current.activeTurnId === started.activeTurnId
+        );
+      return true;
     };
     const ownsTurn = (session: BuildSessionData): boolean =>
       session.turnGeneration === started.turnGeneration &&
@@ -2568,19 +2704,19 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         !started.activeTurnId ||
         session.activeTurnId === started.activeTurnId);
     const readInventory = async (): Promise<void> => {
+      if (!isCurrent()) return;
       for (let attempt = 0; attempt < 3; attempt++) {
         const current = get().sessions.get(sessionId);
         if (!isCurrent() || !current || (attempt > 0 && !ownsTurn(current)))
           return;
         const controller = new AbortController();
         const abort = (): void => controller.abort();
-        signal?.addEventListener("abort", abort, { once: true });
         // Allow the backend's 30-second RPC deadline plus HTTP overhead.
         const timeout = setTimeout(abort, 35000);
         try {
           const inventory = await fetchOutputInventory(
             sessionId,
-            controller.signal
+            AbortSignal.any([controller.signal, requestSignal])
           );
           if (!isCurrent()) return;
           const session = get().sessions.get(sessionId);
@@ -2593,6 +2729,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           const updates: Partial<BuildSessionData> = {
             outputInventory: files,
             outputInventoryStatus: inventory.complete ? "complete" : "partial",
+            outputInventoryError: undefined,
             outputBaselinePending:
               (session.outputBaselinePending || previous === null) &&
               !inventory.complete,
@@ -2602,56 +2739,64 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
                 ? 1
                 : 0),
           };
-          // Unknown baselines still refresh previews, but cannot attribute files to this task.
           if (
-            previous === null ||
-            session.outputBaselinePending ||
-            silent ||
-            !ownsTurn(session)
+            previous !== null &&
+            !session.outputBaselinePending &&
+            !silent &&
+            ownsTurn(session)
           ) {
-            get().updateSessionData(sessionId, updates);
-            return;
-          }
-          const newTabs: PanelTab[] = added
-            .filter((file) => outputPreviewPriority(file.path) < 4)
-            .map(
-              (file): PanelTab => ({
+            const newTabs: PanelTab[] = added
+              .filter((file) => outputPreviewPriority(file.path) < 4)
+              .sort(
+                (a, b) =>
+                  outputPreviewPriority(a.path) -
+                    outputPreviewPriority(b.path) ||
+                  a.path.localeCompare(b.path)
+              )
+              .map((file) => ({
                 kind: "file",
                 path: file.path,
                 fileName: file.path.split("/").pop() || file.path,
-              })
-            );
-          const existingIds: Set<string> = new Set(
-            session.panelTabs.map(panelTabId)
-          );
-          const panelTabs: PanelTab[] = [
-            ...session.panelTabs,
-            ...newTabs.filter((tab) => !existingIds.has(panelTabId(tab))),
-          ];
-          updates.panelTabs = panelTabs;
-          const target: PanelTab | undefined = newTabs[0];
-          if (target)
-            Object.assign(
-              updates,
-              automaticallySelectOutput({ ...session, panelTabs }, target)
-            );
+              }));
+            const existingIds = new Set(session.panelTabs.map(panelTabId));
+            updates.panelTabs = [
+              ...session.panelTabs,
+              ...newTabs.filter((tab) => !existingIds.has(panelTabId(tab))),
+            ];
+            const target = newTabs[0];
+            if (target)
+              Object.assign(
+                updates,
+                automaticallySelectOutput(
+                  { ...session, panelTabs: updates.panelTabs },
+                  target
+                )
+              );
+          }
           get().updateSessionData(sessionId, updates);
           return;
         } catch (error) {
           const current = get().sessions.get(sessionId);
           if (!isCurrent() || !current || !ownsTurn(current)) return;
-          if (attempt === 2) {
+          const terminal = isAuthStatusError(error) || isNotFoundError(error);
+          if (terminal || attempt === 2) {
             get().updateSessionData(sessionId, {
               outputInventoryStatus: "error",
+              outputInventoryError:
+                error instanceof Error ? error : new Error(String(error)),
+              ...(terminal && {
+                outputInventory: null,
+                outputBaselinePending: true,
+              }),
             });
             console.warn(
               "[Streaming] Failed to refresh output inventory:",
               error
             );
+            return;
           }
         } finally {
           clearTimeout(timeout);
-          signal?.removeEventListener("abort", abort);
         }
         if (attempt < 2) {
           await new Promise<void>((resolve) =>
@@ -2661,79 +2806,231 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       }
     };
 
+    // Loading belongs to the request queue; accepted completeness stays intact.
+    get().updateSessionData(sessionId, { outputInventoryLoading: true });
     // Focus and panel reads must not consume files before pending turn discovery.
-    const previousRequest = outputInventoryRequests.get(sessionId);
-    const request = previousRequest
-      ? previousRequest.then(readInventory)
-      : readInventory();
-    outputInventoryRequests.set(sessionId, request);
+    const request =
+      sameRuntime && previousRequest
+        ? previousRequest.promise.then(readInventory)
+        : readInventory();
+    const queued: OutputInventoryRequest = {
+      controller: runtimeController,
+      promise: request,
+      session: started,
+      coalescible,
+    };
+    outputInventoryRequests.set(sessionId, queued);
     try {
       await request;
     } finally {
-      if (outputInventoryRequests.get(sessionId) === request)
+      if (outputInventoryRequests.get(sessionId) === queued) {
         outputInventoryRequests.delete(sessionId);
+        if (get().sessions.get(sessionId)?.instanceId === started.instanceId)
+          get().updateSessionData(sessionId, { outputInventoryLoading: false });
+      }
     }
   },
 
   maybeAutoOpenWebapp: async (sessionId) => {
     const started = get().sessions.get(sessionId);
-    if (!started || started.outputSelectionLocked) return;
-
-    let readiness = webappReadinessChecks.get(sessionId);
-    if (!readiness) {
-      readiness = waitForWebappReady(sessionId).finally(() => {
-        webappReadinessChecks.delete(sessionId);
-      });
-      webappReadinessChecks.set(sessionId, readiness);
+    if (!started || !canAutomaticallySelectOutput(started)) return;
+    const matchesRuntime = (session: BuildSessionData) =>
+      sameSessionRuntime(session, started) &&
+      session.turnGeneration === started.turnGeneration &&
+      session.webappNeedsRemount === started.webappNeedsRemount;
+    const existing = webappAutoOpenRequests.get(sessionId);
+    if (existing && matchesRuntime(existing.session)) return existing.promise;
+    const request = (async () => {
+      if (!(await waitForWebappReady(sessionId))) return;
+      const session = get().sessions.get(sessionId);
+      if (
+        !session ||
+        !matchesRuntime(session) ||
+        !canAutomaticallySelectOutput(session)
+      )
+        return;
+      const target: PanelTab = session.panelTabs.find(
+        (tab) => tab.kind === "browser" && tab.appId === sessionId
+      ) ?? { kind: "browser", id: genId("browser"), appId: sessionId };
+      get().updateSessionData(
+        sessionId,
+        automaticallySelectOutput(session, target)
+      );
+    })();
+    const entry = { session: started, promise: request };
+    webappAutoOpenRequests.set(sessionId, entry);
+    try {
+      await request;
+    } finally {
+      if (webappAutoOpenRequests.get(sessionId) === entry)
+        webappAutoOpenRequests.delete(sessionId);
     }
-    if (!(await readiness)) return;
-    const session = get().sessions.get(sessionId);
-    if (
-      !session ||
-      session.turnGeneration !== started.turnGeneration ||
-      (session.activeTurnId &&
-        started.activeTurnId &&
-        session.activeTurnId !== started.activeTurnId)
-    )
-      return;
-    get().updateSessionData(
-      sessionId,
-      automaticallySelectOutput(session, { kind: "preview" })
-    );
   },
 
   openFilePreview: (sessionId, path, fileName) => {
+    if (!sessionId) {
+      const state = get();
+      const tab: PanelTab = {
+        kind: "file",
+        path: normalizePanelPath(path),
+        fileName,
+      };
+      set({
+        ...selectWelcomeOutputTarget(state, tab),
+        noSessionOutputPanelInitialized: true,
+        noSessionOutputPanelMode:
+          state.noSessionOutputPanelMode === "closed"
+            ? "medium"
+            : state.noSessionOutputPanelMode,
+      });
+      return;
+    }
     const session = get().sessions.get(sessionId);
     if (!session) return;
     get().updateSessionData(sessionId, {
-      ...selectOutputTarget(session, { kind: "file", path, fileName }),
-      outputPanelOpen: true,
+      outputPanelInitialized: true,
       outputSelectionLocked: true,
+      ...selectOutputTarget(session, {
+        kind: "file",
+        path: normalizePanelPath(path),
+        fileName,
+      }),
+      outputPanelMode:
+        session.outputPanelMode === "closed"
+          ? "medium"
+          : session.outputPanelMode,
     });
+  },
+
+  openOutputsTab: (sessionId) => openCollectionTab(sessionId, "outputs"),
+
+  openFilesTab: (sessionId) => openCollectionTab(sessionId, "files"),
+
+  openBrowserTab: (sessionId, appId, appName) => {
+    const state = get();
+    const session = sessionId ? state.sessions.get(sessionId) : undefined;
+    if (sessionId && !session) return;
+    const tabs = session?.panelTabs ?? state.noSessionPanelTabs;
+    const existing = appId
+      ? tabs.find((tab) => tab.kind === "browser" && tab.appId === appId)
+      : undefined;
+    const tab: PanelTab = existing ?? {
+      kind: "browser",
+      id: genId("browser"),
+      appId: appId ?? null,
+      appName,
+    };
+    if (session && sessionId)
+      state.updateSessionData(sessionId, {
+        outputPanelInitialized: true,
+        outputSelectionLocked: true,
+        ...selectOutputTarget(session, tab),
+        outputPanelMode:
+          session.outputPanelMode === "closed"
+            ? "medium"
+            : session.outputPanelMode,
+      });
+    else
+      set({
+        noSessionOutputPanelInitialized: true,
+        ...selectWelcomeOutputTarget(state, tab),
+        noSessionOutputPanelMode:
+          state.noSessionOutputPanelMode === "closed"
+            ? "medium"
+            : state.noSessionOutputPanelMode,
+      });
+  },
+
+  navigateBrowserTab: (sessionId, tabId, appId, appName) => {
+    const state = get();
+    const tabs = sessionId
+      ? state.sessions.get(sessionId)?.panelTabs
+      : state.noSessionPanelTabs;
+    if (!tabs) return;
+    const panelTabs = tabs.map((tab) =>
+      panelTabId(tab) === tabId && tab.kind === "browser"
+        ? { ...tab, appId, appName }
+        : tab
+    );
+    if (sessionId)
+      state.updateSessionData(sessionId, {
+        panelTabs,
+        outputSelectionLocked: true,
+      });
+    else set({ noSessionPanelTabs: panelTabs });
+  },
+
+  reorderPanelTab: (sessionId, tabId, index) => {
+    const state = get();
+    const tabs = sessionId
+      ? state.sessions.get(sessionId)?.panelTabs
+      : state.noSessionPanelTabs;
+    if (!tabs) return;
+    const tab = tabs.find((item) => panelTabId(item) === tabId);
+    if (!tab) return;
+    const panelTabs = tabs.filter((item) => panelTabId(item) !== tabId);
+    panelTabs.splice(Math.max(0, Math.min(panelTabs.length, index)), 0, tab);
+    if (sessionId)
+      state.updateSessionData(sessionId, {
+        panelTabs,
+        outputSelectionLocked: true,
+      });
+    else set({ noSessionPanelTabs: panelTabs });
   },
 
   closePanelTab: (sessionId, tabId) => {
-    const session = get().sessions.get(sessionId);
-    if (!session) return;
-    const wasActive = session.activePanelTabId === tabId;
-    get().updateSessionData(sessionId, {
-      panelTabs: session.panelTabs.filter((tab) => panelTabId(tab) !== tabId),
-      activePanelTabId: wasActive ? null : session.activePanelTabId,
-      activeOutputTab: wasActive ? "files" : session.activeOutputTab,
-      outputSelectionLocked: true,
-    });
-  },
-
-  setActiveOutputTab: (sessionId, tab) => {
-    const session = get().sessions.get(sessionId);
-    if (!session) return;
-    get().updateSessionData(sessionId, {
-      ...selectOutputTarget(session, { kind: tab }),
-      outputSelectionLocked: true,
-    });
+    const state = get();
+    const session = sessionId ? state.sessions.get(sessionId) : undefined;
+    if (sessionId && !session) return;
+    const tabs = session?.panelTabs ?? state.noSessionPanelTabs;
+    const index = tabs.findIndex((tab) => panelTabId(tab) === tabId);
+    if (index < 0) return;
+    const panelTabs = tabs.filter((tab) => panelTabId(tab) !== tabId);
+    const active = session
+      ? session.activePanelTabId
+      : state.noSessionActivePanelTabId;
+    const history = panelTabHistory(
+      panelTabs,
+      null,
+      session?.panelTabHistory ?? state.noSessionPanelTabHistory
+    );
+    const neighbor = panelTabs[Math.max(0, index - 1)];
+    const activePanelTabId =
+      active === tabId
+        ? (history[0] ?? (neighbor ? panelTabId(neighbor) : null))
+        : active;
+    const nextHistory = panelTabHistory(panelTabs, activePanelTabId, history);
+    if (sessionId)
+      state.updateSessionData(sessionId, {
+        panelTabs,
+        activePanelTabId,
+        panelTabHistory: nextHistory,
+        outputSelectionLocked: true,
+      });
+    else
+      set({
+        noSessionPanelTabs: panelTabs,
+        noSessionActivePanelTabId: activePanelTabId,
+        noSessionPanelTabHistory: nextHistory,
+      });
   },
 
   setActivePanelTabId: (sessionId, tabId) => {
+    if (!sessionId) {
+      if (
+        tabId === null ||
+        get().noSessionPanelTabs.some((tab) => panelTabId(tab) === tabId)
+      )
+        set((state) => ({
+          noSessionActivePanelTabId: tabId,
+          noSessionPanelTabHistory: panelTabHistory(
+            state.noSessionPanelTabs,
+            tabId,
+            state.noSessionPanelTabHistory
+          ),
+        }));
+      return;
+    }
     const session = get().sessions.get(sessionId);
     if (!session) return;
     const tab = session.panelTabs.find(
@@ -2741,13 +3038,9 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     );
     if (tabId !== null && !tab) return;
     get().updateSessionData(sessionId, {
-      ...(tab ? selectOutputTarget(session, tab) : { activePanelTabId: null }),
       outputSelectionLocked: true,
+      ...(tab ? selectOutputTarget(session, tab) : { activePanelTabId: null }),
     });
-  },
-
-  setNoSessionActiveOutputTab: (tab: OutputTabType) => {
-    set({ noSessionActiveOutputTab: tab });
   },
 
   // ===========================================================================
@@ -3097,24 +3390,6 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       return { sessions: newSessions };
     });
   },
-
-  // ===========================================================================
-  // Tab Navigation History Actions
-  // ===========================================================================
-
-  navigateTabBack: (sessionId) => {
-    const session = get().sessions.get(sessionId);
-    if (!session) return;
-    const updates = navigateOutputHistory(session, -1);
-    if (updates) get().updateSessionData(sessionId, updates);
-  },
-
-  navigateTabForward: (sessionId) => {
-    const session = get().sessions.get(sessionId);
-    if (!session) return;
-    const updates = navigateOutputHistory(session, 1);
-    if (updates) get().updateSessionData(sessionId, updates);
-  },
 }));
 
 // =============================================================================
@@ -3126,10 +3401,6 @@ const EMPTY_PANEL_TABS: PanelTab[] = [];
 const EMPTY_FILES_TAB_STATE: FilesTabState = {
   expandedPaths: [],
   scrollTop: 0,
-};
-const EMPTY_TAB_HISTORY: TabNavigationHistory = {
-  entries: [],
-  currentIndex: 0,
 };
 const EMPTY_SUBAGENTS: Map<string, SubagentState> = new Map();
 
@@ -3143,6 +3414,141 @@ export const useSession = (): BuildSessionData | null =>
     if (!currentSessionId) return null;
     return sessions.get(currentSessionId) ?? null;
   });
+
+type ChatSessionData = Pick<
+  BuildSessionData,
+  | "origin"
+  | "status"
+  | "agentProvider"
+  | "agentModel"
+  | "contextUsage"
+  | "activeTurnId"
+  | "activeTurnLocalOwner"
+  | "error"
+  | "loadError"
+  | "turnSettlement"
+  | "isLoaded"
+  | "messages"
+  | "streamItems"
+  | "webappNeedsRefresh"
+  | "skillsStale"
+>;
+
+/** Output controls do not invalidate the chat transcript subscription. */
+export const useChatSession = (): ChatSessionData | null =>
+  useBuildSessionStore(
+    useShallow((state) => {
+      const session = state.currentSessionId
+        ? state.sessions.get(state.currentSessionId)
+        : undefined;
+      if (!session) return null;
+      const {
+        origin,
+        status,
+        agentProvider,
+        agentModel,
+        contextUsage,
+        activeTurnId,
+        activeTurnLocalOwner,
+        error,
+        loadError,
+        turnSettlement,
+        isLoaded,
+        messages,
+        streamItems,
+        webappNeedsRefresh,
+        skillsStale,
+      } = session;
+      return {
+        origin,
+        status,
+        agentProvider,
+        agentModel,
+        contextUsage,
+        activeTurnId,
+        activeTurnLocalOwner,
+        error,
+        loadError,
+        turnSettlement,
+        isLoaded,
+        messages,
+        streamItems,
+        webappNeedsRefresh,
+        skillsStale,
+      };
+    })
+  );
+
+function openCollectionTab(
+  sessionId: string | null,
+  kind: "outputs" | "files"
+): void {
+  const state = useBuildSessionStore.getState();
+  if (sessionId) {
+    const session = state.sessions.get(sessionId);
+    if (!session) return;
+    state.updateSessionData(sessionId, {
+      outputPanelInitialized: true,
+      outputSelectionLocked: true,
+      ...selectOutputTarget(session, { kind }),
+      outputPanelMode:
+        session.outputPanelMode === "closed"
+          ? "medium"
+          : session.outputPanelMode,
+    });
+  } else {
+    useBuildSessionStore.setState({
+      noSessionOutputPanelInitialized: true,
+      noSessionOutputPanelMode:
+        state.noSessionOutputPanelMode === "closed"
+          ? "medium"
+          : state.noSessionOutputPanelMode,
+      ...selectWelcomeOutputTarget(state, { kind }),
+    });
+  }
+}
+
+type OutputSessionData = Pick<
+  BuildSessionData,
+  | "sandbox"
+  | "status"
+  | "webappNeedsRefresh"
+  | "outputInventory"
+  | "outputInventoryStatus"
+  | "outputInventoryLoading"
+  | "filePreviewRefreshKeys"
+  | "webappNeedsRemount"
+>;
+
+export const useOutputSession = (): OutputSessionData | null =>
+  useBuildSessionStore(
+    useShallow((state) => {
+      const session = state.currentSessionId
+        ? state.sessions.get(state.currentSessionId)
+        : undefined;
+      if (!session) return null;
+      const {
+        sandbox,
+        status,
+        webappNeedsRefresh,
+        outputInventory,
+        outputInventoryStatus,
+        outputInventoryLoading,
+        filePreviewRefreshKeys,
+        webappNeedsRemount,
+      } = session;
+      return {
+        sandbox,
+        status,
+        webappNeedsRefresh,
+        outputInventory,
+        outputInventoryStatus,
+        outputInventoryLoading,
+        filePreviewRefreshKeys,
+        webappNeedsRemount,
+      };
+    })
+  );
 
 export const useSessionId = () =>
   useBuildSessionStore((state) => state.currentSessionId);
@@ -3175,21 +3581,6 @@ export const useWasInterrupted = () =>
 export const useSessionHistory = () =>
   useBuildSessionStore((state) => state.sessionHistory);
 
-/**
- * Returns the output panel open state for the current session.
- * Falls back to temporary state when no session exists (welcome page).
- * This temporary state resets to false when a session is created or cleared.
- */
-export const useOutputPanelOpen = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions, noSessionOutputPanelOpen } = state;
-    if (!currentSessionId) return noSessionOutputPanelOpen;
-    return sessions.get(currentSessionId)?.outputPanelOpen ?? false;
-  });
-
-export const useToggleOutputPanel = () =>
-  useBuildSessionStore((state) => state.toggleCurrentOutputPanel);
-
 // Pre-provisioning selectors
 export const useIsPreProvisioning = () =>
   useBuildSessionStore(
@@ -3221,41 +3612,18 @@ export const useQueuedMessages = () =>
     );
   });
 
-// Webapp refresh selector
-export const useWebappNeedsRefresh = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return 0;
-    return sessions.get(currentSessionId)?.webappNeedsRefresh ?? 0;
-  });
-
-// Webapp remount selector
-export const useWebappNeedsRemount = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return 0;
-    return sessions.get(currentSessionId)?.webappNeedsRemount ?? 0;
-  });
-
 // Panel tab selectors
 export const usePanelTabs = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_PANEL_TABS;
+    if (!currentSessionId) return state.noSessionPanelTabs;
     return sessions.get(currentSessionId)?.panelTabs ?? EMPTY_PANEL_TABS;
-  });
-
-export const useActiveOutputTab = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions, noSessionActiveOutputTab } = state;
-    if (!currentSessionId) return noSessionActiveOutputTab;
-    return sessions.get(currentSessionId)?.activeOutputTab ?? "preview";
   });
 
 export const useActivePanelTabId = () =>
   useBuildSessionStore((state) => {
     const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return null;
+    if (!currentSessionId) return state.noSessionActivePanelTabId;
     return sessions.get(currentSessionId)?.activePanelTabId ?? null;
   });
 
@@ -3265,13 +3633,6 @@ export const useFilesTabState = (sessionId: string | null) =>
     return (
       state.sessions.get(sessionId)?.filesTabState ?? EMPTY_FILES_TAB_STATE
     );
-  });
-
-export const useTabHistory = () =>
-  useBuildSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    if (!currentSessionId) return EMPTY_TAB_HISTORY;
-    return sessions.get(currentSessionId)?.tabHistory ?? EMPTY_TAB_HISTORY;
   });
 
 // Subagent selectors
@@ -3318,3 +3679,27 @@ export const useCurrentSessionTitle = (): string | null =>
       sessionHistory.find((item) => item.id === currentSessionId)?.title ?? null
     );
   });
+
+export const useOutputPanelMode = () =>
+  useBuildSessionStore((state) =>
+    state.currentSessionId
+      ? (state.sessions.get(state.currentSessionId)?.outputPanelMode ??
+        "closed")
+      : state.noSessionOutputPanelMode
+  );
+
+export const useMediumPanelProportion = () =>
+  useBuildSessionStore((state) =>
+    state.currentSessionId
+      ? (state.sessions.get(state.currentSessionId)?.mediumPanelProportion ??
+        0.5)
+      : state.noSessionMediumPanelProportion
+  );
+
+export const useOutputWorkspaceId = () =>
+  useBuildSessionStore((state) =>
+    state.currentSessionId
+      ? (state.sessions.get(state.currentSessionId)?.outputWorkspaceId ??
+        state.currentSessionId)
+      : state.noSessionOutputWorkspaceId
+  );

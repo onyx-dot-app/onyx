@@ -3,13 +3,16 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { cn } from "@opal/utils";
 
-import type { FilePreviewScrollPosition } from "@/app/craft/components/output-panel/types";
+export interface FilePreviewScrollPosition {
+  initialScrollTop?: number;
+  onScrollTopChange?: (scrollTop: number) => void;
+  isActive?: boolean;
+}
 
 interface FilePreviewScrollAreaProps extends FilePreviewScrollPosition {
   children: ReactNode;
   padding?: 0 | 4 | 6;
   paddingX?: 0 | 4 | 6;
-  fullHeight?: boolean;
 }
 
 /** Keeps a viewer's position through hidden tabs and bounded cache eviction. */
@@ -20,7 +23,6 @@ export function FilePreviewScrollArea({
   isActive = true,
   padding = 4,
   paddingX,
-  fullHeight = true,
 }: FilePreviewScrollAreaProps) {
   const element = useRef<HTMLDivElement>(null);
   const position = useRef(initialScrollTop);
@@ -35,8 +37,7 @@ export function FilePreviewScrollArea({
     <div
       ref={element}
       className={cn(
-        "overflow-auto",
-        fullHeight && "h-full",
+        "h-full overflow-auto",
         padding === 6 ? "p-6" : padding === 4 ? "p-4" : "p-0",
         paddingX === 6
           ? "px-6"

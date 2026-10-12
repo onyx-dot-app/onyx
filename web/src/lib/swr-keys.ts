@@ -199,12 +199,19 @@ export const SWR_KEYS = {
   buildUserLibraryTree: "/api/build/user-library/tree",
   buildSessionFiles: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/files?path=`,
+  // Recursive workspace discovery aggregates directory responses, not an endpoint.
+  buildSessionWorkspaceInventory: (sessionId: string) => [
+    "craft-workspace-inventory",
+    sessionId,
+  ],
   buildSessionWebappInfo: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/webapp-info`,
   buildSessionArtifacts: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/artifacts`,
   buildSessionArtifactFile: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
+  buildSessionOutputThumbnail: (sessionId: string, filePath: string) =>
+    `craft-output-thumbnail:${sessionId}:${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
   buildExternalApps: "/api/build/apps",
