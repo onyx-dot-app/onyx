@@ -28,6 +28,7 @@ from onyx.connectors.google_drive.source_operations import (
     ExportSizeThresholdExceeded,
     GoogleDriveHttpError,
     GoogleDriveSourceOperations,
+    is_transient_google_error,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -630,6 +631,8 @@ def convert_drive_item_to_document(
             or not (
                 isinstance(doc_or_failure.exception, GoogleDriveHttpError)
                 and doc_or_failure.exception.status_code in [401, 403, 404]
+                # Google also reports a rate limit as a 403.
+                and not doc_or_failure.exception.rate_limited
             )
         ):
             return doc_or_failure
@@ -779,6 +782,11 @@ def _convert_drive_item_to_document(
                             doc_sections,
                         )
             except Exception as e:
+                # A rate limit that outlasted the retries fails the document,
+                # so the next run fetches it again. Basic text would stay
+                # indexed until the file changes.
+                if is_transient_google_error(e):
+                    raise
                 logger.warning(
                     "Error in advanced parsing: %s. Using basic extraction.",
                     e,

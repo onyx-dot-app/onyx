@@ -22,10 +22,27 @@ from onyx.background.celery.tasks.capability_checks.tasks import (
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import factory
 from onyx.connectors.capability_checks import creation, runner
+from onyx.connectors.capability_checks.draft_runs import (
+    DraftCheckRunSnapshot,
+    DraftCheckStateKind,
+    StoredDraftRun,
+    load_draft_run,
+    read_draft_run_for_user,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CapabilityCheckStatus,
+    CapabilityVerdict,
+    CheckAdvisory,
+    CheckFinding,
+    CheckFindingKey,
+    CheckOutput,
+    CountFinding,
     CredentialCapability,
+    CredentialCapabilityReport,
+    FindingOption,
+    OptionsFinding,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -39,7 +56,7 @@ from onyx.db.credential_capability import (
     mark_capability_report_running,
 )
 from onyx.db.enums import AccessType, CapabilityCheckTrigger, CapabilityReportRunStatus
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, CredentialCapabilityReportRow
 from onyx.server.documents import capability_check_runs
 from onyx.server.documents.capability_check_runs import (
     start_draft_capability_check_run,
@@ -53,6 +70,8 @@ _TOKEN = "fake_token"
 _CHANNELS = "fake_channels"
 _PERM_SYNC = "fake_perm_sync"
 
+_DISCOVERY = "discovery_check"
+
 
 class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
     def __init__(
@@ -62,6 +81,7 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
         *,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         requires_fields: frozenset[str] = frozenset(),
+        discovery: bool = False,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -69,15 +89,23 @@ class _FakeCheck(CapabilityCheck[SlackConnectorConfig]):
             display_name=f"{check_id} display",
             requires_connector_instance=False,
             requires_fields=requires_fields,
+            discovery=discovery,
         )
         self._harness = harness
 
-    def run(self, context: CapabilityCheckContext) -> None:  # noqa: ARG002
+    def run(
+        self,
+        context: CapabilityCheckContext,  # noqa: ARG002
+    ) -> CheckOutput | None:
         self._harness.runs.append(self.check_id)
         if (release := self._harness.slow.get(self.check_id)) is not None:
             release.wait(timeout=30)
         if (error := self._harness.errors.get(self.check_id)) is not None:
             raise error
+        return CheckOutput(
+            findings=self._harness.findings.get(self.check_id, []),
+            advisories=self._harness.advisories.get(self.check_id, []),
+        )
 
 
 class _FakeConfigCheck(_FakeCheck):
@@ -88,6 +116,10 @@ class _Harness:
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.runs: list[str] = []
         self.errors: dict[str, Exception] = {}
+        self.findings: dict[str, list[CheckFinding]] = {}
+        self.advisories: dict[str, list[CheckAdvisory]] = {}
+        # Registers a discovery check after the other checks.
+        self.with_discovery = False
         # A check in here waits until its event is set.
         self.slow: dict[str, threading.Event] = {}
         self.send_task = MagicMock()
@@ -116,6 +148,11 @@ class _Harness:
             _FakeConfigCheck(self, _CHANNELS, requires_fields=frozenset({"channels"})),
             _FakeCheck(
                 self, _PERM_SYNC, capability=CredentialCapability.DOC_PERMISSION_SYNC
+            ),
+            *(
+                [_FakeCheck(self, _DISCOVERY, discovery=True)]
+                if self.with_discovery
+                else []
             ),
         ]
 
@@ -282,6 +319,190 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
 
 
 @pytest.mark.usefixtures("tenant_context")
+def test_draft_findings_reach_the_run_and_the_created_pairs_report(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    channels: OptionsFinding = OptionsFinding(
+        key=CheckFindingKey.READABLE_CHANNELS,
+        field_name="channels",
+        options=[FindingOption(value="a", label="#a")],
+    )
+    harness.findings[_CHANNELS] = [channels]
+    snapshot: DraftCheckRunSnapshot = start_draft_capability_check_run(
+        user_id=uuid4(),
+        credential=slack_pair.credential,
+        source=DocumentSource.SLACK,
+        config_class=SlackConnectorConfig,
+        access_type=AccessType.PUBLIC,
+        draft_key=uuid4().hex,
+        form_values={"channels": ["a"]},
+    )
+    run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
+
+    stored_run: StoredDraftRun | None = load_draft_run(snapshot.run_id)
+    assert stored_run is not None
+    findings_by_check: dict[str, list[CheckFinding]] = {
+        state.check_id: state.findings for state in stored_run.snapshot.checks
+    }
+    assert findings_by_check[_CHANNELS] == [channels]
+    assert findings_by_check[_TOKEN] == []
+
+    # Creation reuses the cached results, findings included.
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+    db_session.expire_all()
+    row: CredentialCapabilityReportRow | None = get_capability_report_row(
+        db_session, slack_pair.credential_id, slack_pair.connector_id
+    )
+    assert row is not None and row.report is not None
+    report: CredentialCapabilityReport = CredentialCapabilityReport.model_validate(
+        row.report
+    )
+    stored_findings: dict[str, list[CheckFinding]] = {
+        result.check_id: result.findings for result in report.check_results
+    }
+    assert stored_findings[_CHANNELS] == [channels]
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_creation_does_not_run_or_wait_for_a_discovery_check(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.with_discovery = True
+
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+
+    assert _DISCOVERY not in harness.runs
+    # No background run: the first index attempt does not wait for it.
+    harness.send_task.assert_not_called()
+    assert _stored_statuses(db_session, slack_pair)[_DISCOVERY] == "skipped"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_draft_runs_discovery_last_and_creation_keeps_its_findings(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.with_discovery = True
+    found = OptionsFinding(
+        key=CheckFindingKey.READABLE_CHANNELS,
+        field_name="channels",
+        options=[FindingOption(value="a", label="#a")],
+    )
+    harness.findings[_DISCOVERY] = [found]
+    start_draft_capability_check_run(
+        user_id=uuid4(),
+        credential=slack_pair.credential,
+        source=DocumentSource.SLACK,
+        config_class=SlackConnectorConfig,
+        access_type=AccessType.PUBLIC,
+        draft_key=uuid4().hex,
+        form_values={"channels": ["a"]},
+    )
+    run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
+    assert harness.runs == [_TOKEN, _CHANNELS, _DISCOVERY]
+    harness.send_task.reset_mock()
+
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+
+    assert harness.runs == [_TOKEN, _CHANNELS, _DISCOVERY]
+    db_session.expire_all()
+    row = get_capability_report_row(
+        db_session, slack_pair.credential_id, slack_pair.connector_id
+    )
+    assert row is not None and row.report is not None
+    report = CredentialCapabilityReport.model_validate(row.report)
+    discovery = next(
+        result for result in report.check_results if result.check_id == _DISCOVERY
+    )
+    assert discovery.status == CapabilityCheckStatus.PASSED
+    assert discovery.findings == [found]
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_cached_required_failure_skips_discovery_in_the_next_draft_run(
+    harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    harness.with_discovery = True
+    harness.findings[_DISCOVERY] = [
+        CountFinding(key=CheckFindingKey.READABLE_CHANNELS, count=1)
+    ]
+    harness.errors[_CHANNELS] = ConnectorValidationError("bot not in channel a")
+    user_id = uuid4()
+    draft_key = uuid4().hex
+
+    def _draft_run() -> DraftCheckRunSnapshot:
+        started = start_draft_capability_check_run(
+            user_id=user_id,
+            credential=slack_pair.credential,
+            source=DocumentSource.SLACK,
+            config_class=SlackConnectorConfig,
+            access_type=AccessType.PUBLIC,
+            draft_key=draft_key,
+            form_values={"channels": ["a"]},
+        )
+        if harness.send_task.call_args is not None:
+            run_draft_capability_checks_task(
+                **harness.send_task.call_args.kwargs["kwargs"]
+            )
+            harness.send_task.reset_mock()
+        snapshot = read_draft_run_for_user(started.run_id, user_id)
+        assert snapshot is not None
+        return snapshot
+
+    _draft_run()
+    assert _DISCOVERY not in harness.runs
+    harness.runs.clear()
+
+    # The failure comes from the cache; the skipped listing was not cached.
+    snapshot = _draft_run()
+
+    assert harness.runs == []
+    states = {check.check_id: check for check in snapshot.checks}
+    assert states[_CHANNELS].state == DraftCheckStateKind.FAILED
+    assert states[_DISCOVERY].state == DraftCheckStateKind.SKIPPED
+    assert states[_DISCOVERY].findings == []
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_draft_advisory_reaches_the_run_and_the_created_pairs_report(
+    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+) -> None:
+    advisory = CheckAdvisory(message="Channel a is empty; reads were not verified.")
+    harness.advisories[_CHANNELS] = [advisory]
+    user_id = uuid4()
+    started = start_draft_capability_check_run(
+        user_id=user_id,
+        credential=slack_pair.credential,
+        source=DocumentSource.SLACK,
+        config_class=SlackConnectorConfig,
+        access_type=AccessType.PUBLIC,
+        draft_key=uuid4().hex,
+        form_values={"channels": ["a"]},
+    )
+    run_draft_capability_checks_task(**harness.send_task.call_args.kwargs["kwargs"])
+
+    snapshot = read_draft_run_for_user(started.run_id, user_id)
+    assert snapshot is not None
+    states = {check.check_id: check for check in snapshot.checks}
+    assert states[_CHANNELS].advisories == [advisory]
+    assert snapshot.verdicts[CredentialCapability.INDEXING] == CapabilityVerdict.PASSED
+
+    harness.runs.clear()
+    assert _validate(db_session, slack_pair, {"channels": ["a"]}) is True
+
+    assert harness.runs == []
+    db_session.expire_all()
+    row = get_capability_report_row(
+        db_session, slack_pair.credential_id, slack_pair.connector_id
+    )
+    assert row is not None and row.report is not None
+    report = CredentialCapabilityReport.model_validate(row.report)
+    channels = next(
+        result for result in report.check_results if result.check_id == _CHANNELS
+    )
+    assert channels.advisories == [advisory]
+
+
+@pytest.mark.usefixtures("tenant_context")
 def test_a_cached_draft_failure_runs_again_at_creation(
     db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
 ) -> None:
@@ -345,7 +566,7 @@ def test_failed_report_write_retires_the_running_mark(
         _validate(db_session, slack_pair, {"channels": ["a"]})
 
     db_session.expire_all()
-    row = get_capability_report_row(
+    row: CredentialCapabilityReportRow | None = get_capability_report_row(
         db_session, slack_pair.credential_id, slack_pair.connector_id
     )
     assert row is not None

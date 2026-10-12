@@ -471,6 +471,30 @@ without a successor: the task stops before its next check. The plan endpoint
 (`/admin/connector-checks/plan`) lists the same checks without a credential or a
 run, so the form can tell which checks exist and which are required first.
 
+A passing check may return *findings* (`capability_checks/models.py:CheckFinding`):
+structured information about what the credential and config reach, such as a
+count (`CountFinding`) or a list of named options for a config field
+(`OptionsFinding`, at most `MAX_FINDING_OPTIONS`). A finding has a closed `key`
+that the frontend turns into a localized label, and an optional `field_name`.
+The runner puts findings on `CapabilityCheckResult.findings`, so they are stored
+in the report JSON, in the draft-run snapshot (`DraftCheckState.findings`) and in
+the draft result cache, and creation copies cached findings into the new pair's
+report. A stored finding with a type or key this version does not know is
+dropped when read. Findings hold container names, ids and counts only: never
+document content, and users only as a count. With the workspace security setting
+`allow_connector_check_findings` off (`capability_checks/findings_setting.py`), the
+runner keeps no findings, cached findings are not reused, and report, draft-run and
+edit-plan responses hide findings stored earlier.
+
+A *discovery check* (`CapabilityCheck(discovery=True)`) gathers findings that take
+much longer than validation, such as a listing of every space. It is never
+required and never counts toward a verdict. The runner runs it after the
+validation checks of the same run, and skips it (`applicable=False`) when a
+required check failed or findings are off. Creation does not run it: a cached
+draft result is reused, else it is recorded as not run, so neither creation nor
+the first index attempt waits on it. `findings.py:bounded_options` and
+`bounded_count` read a listing lazily up to a cap.
+
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
@@ -493,6 +517,21 @@ a new account's values, and disables saved accounts whose stored realm differs
 (`credentialMatchesBoundFields`). `withoutFormOnlyFields` removes it from every
 request that sends form values as connector config: Create, check runs and plans,
 and binding checks.
+
+A config also picks how the cc-pair status page breaks the documents down by
+hierarchy node. `hierarchy_breakdown_sections` returns the node types to list, and
+the nodes that the config names (`HierarchyBreakdownSection`). The default (`None`)
+lists the top-level nodes: the children of the source's root node. A named node
+without documents shows as not indexed (`doc_count: null`). `hierarchy_node_key` maps
+a stored `raw_node_id` to the id that the config uses. Confluence lists every space
+plus the configured space (`space`) or page (`page_id`). A page node's raw id is the
+page URL, so its key is the numeric page id. Space keys match without case
+(`case_insensitive_keys`). A leaf page has no hierarchy node, so a configured
+page without a node shows its document (`nodes_can_be_documents`). STUB nodes are
+never listed. `other_doc_count` holds the
+indexed documents in no listed node's subtree; a document under two listed rows (a
+page inside a space) is in both rows, but never in "other". The counts come from
+`db/hierarchy.py:get_subtree_document_counts_for_cc_pair`.
 
 `credential_families.py` lets related sources share one stored credential: Atlassian
 (Confluence, Jira), Google (Gmail, Drive), and Microsoft (SharePoint, OneDrive,
