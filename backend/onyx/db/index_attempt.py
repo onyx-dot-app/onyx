@@ -1402,3 +1402,25 @@ def get_active_index_attempts_without_task(db_session: Session) -> list[IndexAtt
             )
         ).all()
     )
+
+
+def cc_pair_has_successful_index_attempt(db_session: Session, cc_pair_id: int) -> bool:
+    """True when a full index run of the pair succeeded, for any search
+    settings. An embedding swap moves the earlier runs to past settings, but
+    the documents stay. Backfills, targeted reindexes and the port's synthetic
+    seed do not count."""
+    return bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                    IndexAttempt.status.in_(
+                        [IndexingStatus.SUCCESS, IndexingStatus.COMPLETED_WITH_ERRORS]
+                    ),
+                    IndexAttempt.is_backfill.is_(False),
+                    IndexAttempt.is_synthetic_seed.is_(False),
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
+                )
+            )
+        )
+    )

@@ -518,6 +518,21 @@ a new account's values, and disables saved accounts whose stored realm differs
 request that sends form values as connector config: Create, check runs and plans,
 and binding checks.
 
+A config also picks how the cc-pair status page breaks the documents down by
+hierarchy node. `hierarchy_breakdown_sections` returns the node types to list, and
+the nodes that the config names (`HierarchyBreakdownSection`). The default (`None`)
+lists the top-level nodes: the children of the source's root node. A named node
+without documents shows as not indexed (`doc_count: null`). `hierarchy_node_key` maps
+a stored `raw_node_id` to the id that the config uses. Confluence lists every space
+plus the configured space (`space`) or page (`page_id`). A page node's raw id is the
+page URL, so its key is the numeric page id. Space keys match without case
+(`case_insensitive_keys`). A leaf page has no hierarchy node, so a configured
+page without a node shows its document (`nodes_can_be_documents`). STUB nodes are
+never listed. `other_doc_count` holds the
+indexed documents in no listed node's subtree; a document under two listed rows (a
+page inside a space) is in both rows, but never in "other". The counts come from
+`db/hierarchy.py:get_subtree_document_counts_for_cc_pair`.
+
 `credential_families.py` lets related sources share one stored credential: Atlassian
 (Confluence, Jira), Google (Gmail, Drive), and Microsoft (SharePoint, OneDrive,
 Outlook, Teams). Each source has a `FamilyCredentialCodec`.
