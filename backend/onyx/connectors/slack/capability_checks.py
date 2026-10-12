@@ -31,15 +31,14 @@ Scope-to-capability mapping (see also the OAuth scope list in
 from collections.abc import Iterator
 from typing import Any, NoReturn
 
-from onyx.connectors.capability_checks.findings import (
-    CheckFinding,
-    CheckFindingKey,
-    bounded_options,
-)
+from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckFinding,
+    CheckFindingKey,
     CredentialCapability,
+    OptionsFinding,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -673,13 +672,15 @@ def _iter_public_channels(
     slack_client: SlackSourceOperations,
 ) -> Iterator[dict[str, Any]]:
     """Every unarchived public channel, read page by page. On Enterprise Grid,
-    lists each workspace in turn, as the connector does."""
+    lists each workspace in turn, as the connector does. The connector matches
+    ``channels`` by name, so channels that share a name across workspaces are
+    one option."""
     team_ids: list[str | None] = (
         [*list_grid_team_ids(slack_client)]
         if _auth_test(slack_client).enterprise_id
         else [None]
     )
-    seen: set[str] = set()
+    seen_names: set[str] = set()
     for team_id in team_ids:
         for page in slack_client.list_channels(
             variant=SlackChannelVariant.PUBLIC,
@@ -688,9 +689,9 @@ def _iter_public_channels(
             team_id=team_id,
         ):
             for channel in page.channels:
-                if channel["id"] in seen:
+                if channel["name"] in seen_names:
                     continue
-                seen.add(channel["id"])
+                seen_names.add(channel["name"])
                 yield channel
 
 
@@ -713,7 +714,7 @@ class _ReadableChannelListingCheck(CapabilityCheck):
     def run(self, context: CapabilityCheckContext) -> list[CheckFinding]:
         try:
             # The connector matches ``channels`` against bare channel names.
-            finding = bounded_options(
+            finding: OptionsFinding = bounded_options(
                 _iter_public_channels(_slack_client(context)),
                 key=CheckFindingKey.READABLE_CHANNELS,
                 field_name=_CHANNELS_FIELD,

@@ -12,17 +12,16 @@ from unittest.mock import MagicMock, create_autospec
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.capability_checks.findings import (
-    MAX_FINDING_OPTIONS,
-    CheckFindingKey,
-    FindingOption,
-    OptionsFinding,
-)
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheckContext,
     CapabilityCheckStatus,
     CapabilityVerdict,
+    CheckFinding,
+    CheckFindingKey,
     CredentialCapability,
+    FindingOption,
+    OptionsFinding,
     compute_capability_verdicts,
 )
 from onyx.connectors.capability_checks.registry import get_capability_checks
@@ -800,7 +799,9 @@ def test_readable_channel_listing_finds_channel_names_as_channel_options() -> No
     )
 
     # Under test.
-    findings = _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+    findings: list[CheckFinding] | None = _CHECKS_BY_ID[
+        "slack_readable_channel_listing"
+    ].run(_context(gateway))
 
     # Postcondition.
     assert findings == [
@@ -830,19 +831,26 @@ def test_readable_channel_listing_lists_each_grid_workspace() -> None:
     )
     channels_by_team = {
         "T1": [{"id": "C1", "name": "general"}],
-        # A shared channel appears in both workspaces.
-        "T2": [{"id": "C1", "name": "general"}, {"id": "C2", "name": "eng"}],
+        # A shared channel appears in both workspaces, and another workspace
+        # has its own channel with the same name: both are one option.
+        "T2": [
+            {"id": "C1", "name": "general"},
+            {"id": "C3", "name": "general"},
+            {"id": "C2", "name": "eng"},
+        ],
     }
     gateway.list_channels.side_effect = lambda **kwargs: iter(
         [SlackChannelsPage(channels=channels_by_team[kwargs["team_id"]])]
     )
 
     # Under test.
-    findings = _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+    findings: list[CheckFinding] | None = _CHECKS_BY_ID[
+        "slack_readable_channel_listing"
+    ].run(_context(gateway))
 
     # Postcondition.
     assert findings is not None
-    listing = findings[0]
+    listing: CheckFinding = findings[0]
     assert isinstance(listing, OptionsFinding)
     assert [option.value for option in listing.options] == ["general", "eng"]
 
@@ -866,11 +874,13 @@ def test_readable_channel_listing_stops_at_the_option_cap() -> None:
     gateway.list_channels.side_effect = list_channels
 
     # Under test.
-    findings = _CHECKS_BY_ID["slack_readable_channel_listing"].run(_context(gateway))
+    findings: list[CheckFinding] | None = _CHECKS_BY_ID[
+        "slack_readable_channel_listing"
+    ].run(_context(gateway))
 
     # Postcondition.
     assert findings is not None
-    listing = findings[0]
+    listing: CheckFinding = findings[0]
     assert isinstance(listing, OptionsFinding)
     assert len(listing.options) == MAX_FINDING_OPTIONS
     assert listing.truncated is True
