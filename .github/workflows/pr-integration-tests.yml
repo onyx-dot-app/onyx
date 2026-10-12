@@ -406,7 +406,15 @@ jobs:
               df -h / | tail -1
               ps -eo rss=,args= | awk '{r=$1; $1=""; k=substr($0,2,110); s[k]+=r; c[k]++} END {for (k in s) printf "%7dM x%-3d %s\n", s[k]/1024, c[k], k}' | sort -rn | head -14
               echo "python procs: $(pgrep -c python) postgres procs: $(pgrep -c postgres)"
-              sleep 20
+              AVAIL=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+              if [ "$AVAIL" -lt 1200 ]; then
+                echo "=== PROBE: MemAvailable ${AVAIL}MB; full dump, then stop the test container"
+                ps -eo rss=,pid=,ppid=,etimes=,args= --sort=-rss | head -60 | cut -c1-220
+                docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' || true
+                docker kill test-runner || true
+                break
+              fi
+              sleep 5
             done) &
             MON_PID=$!
             trap 'kill $MON_PID 2>/dev/null' EXIT
