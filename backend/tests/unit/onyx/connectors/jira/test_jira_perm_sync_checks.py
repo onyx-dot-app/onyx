@@ -314,11 +314,59 @@ def test_permission_user_emails_passes_when_a_role_holds_a_group() -> None:
 
 def test_permission_user_emails_skips_app_accounts() -> None:
     gateway = _gateway()
-    gateway.get_user.return_value = {"accountType": "app"}
+    gateway.get_project_role.return_value = {
+        "actors": [
+            {"actorUser": {"accountId": "app-1"}},
+            {"actorUser": {"accountId": "acc-1"}},
+        ]
+    }
+    gateway.get_user.side_effect = [
+        {"accountType": "app"},
+        {"accountType": "atlassian", "emailAddress": "dev@example.com"},
+    ]
 
     result = _run("jira_permission_user_emails", gateway)
 
     assert result.status == CapabilityCheckStatus.PASSED
+
+
+@pytest.mark.parametrize(
+    "permissions,actors",
+    [
+        ([_browse({"type": "projectRole", "value": "10003"})], []),
+        (
+            [_browse({"type": "projectRole", "value": "10003"})],
+            [{"actorUser": {"accountId": "app-1"}}],
+        ),
+        ([_browse({"type": "reporter"})], []),
+    ],
+    ids=["empty-role", "app-only-role", "reporter-only"],
+)
+def test_permission_user_emails_fails_when_no_user_would_get_access(
+    permissions: list[dict[str, Any]], actors: list[dict[str, Any]]
+) -> None:
+    gateway = _gateway()
+    gateway.get_project_permission_scheme.return_value = {"permissions": permissions}
+    gateway.get_project_role.return_value = {"actors": actors}
+    gateway.get_user.return_value = {"accountType": "app"}
+
+    result = _run("jira_permission_user_emails", gateway)
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_type == "ConnectorValidationError"
+    assert "no user would get access" in result.message
+
+
+def test_permission_user_emails_is_indeterminate_for_partial_app_sample() -> None:
+    gateway = _gateway()
+    gateway.get_project_role.return_value = {
+        "actors": [{"actorUser": {"accountId": f"app-{i}"}} for i in range(6)]
+    }
+    gateway.get_user.return_value = {"accountType": "app"}
+
+    result = _run("jira_permission_user_emails", gateway)
+
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
 
 
 def test_permission_user_emails_looks_up_data_center_users_by_name() -> None:

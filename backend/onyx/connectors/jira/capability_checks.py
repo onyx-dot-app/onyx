@@ -514,7 +514,14 @@ class _IssueReadCheck(_JiraCheck):
                 e, denied=f"The credential cannot search Jira issues. {hint}"
             )
         if issue is None:
-            # The scope can be empty on purpose (issues come later).
+            if not _project_key(config) and not _jql(config):
+                # Every document comes from this search, so the run would
+                # index nothing.
+                raise ConnectorValidationError(
+                    "Jira projects are visible, but this credential can read no "
+                    f"issue in them, so indexing would add no documents. {hint}"
+                )
+            # A project or JQL scope can be empty on purpose (issues come later).
             return _advisory_output(
                 "The indexing scope has no issue that this credential can read, "
                 "so Onyx did not verify that issues are readable. If the scope "
@@ -880,9 +887,9 @@ class _PermissionUserEmailsCheck(_JiraCheck):
 
     Passes for a public project (``anyone`` or ``applicationRole``), which syncs
     without reading users, and for a project with group grants, which give
-    access through group sync. Fails only when every sampled user hides the
-    email and the sample covers every user the sync reads; a partial sample
-    with hidden emails is INDETERMINATE."""
+    access through group sync. Fails when the sample covers every user the
+    sync reads and no user maps: no user account holds the grant, or every
+    user hides the email. A partial sample is INDETERMINATE."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -959,7 +966,20 @@ class _PermissionUserEmailsCheck(_JiraCheck):
                 # Apps and customers never map to Onyx users.
                 continue
             emails.append(details.get("emailAddress"))
-        if emails and not any(emails):
+        if not emails:
+            if not complete_sample:
+                raise UnexpectedValidationError(
+                    f"The sampled grants of the project `{project_key}` hold no "
+                    "user account. Permission sync reads more users, so Onyx "
+                    "cannot verify the rest."
+                )
+            raise ConnectorValidationError(
+                f"The Browse Projects grants of the project `{project_key}` hold "
+                "no user, group, or public access that Onyx can map, so no user "
+                "would get access to its issues in Onyx. Grant Browse Projects "
+                "to users, groups or project roles with members."
+            )
+        if not any(emails):
             if not complete_sample:
                 raise UnexpectedValidationError(
                     f"The sampled users who can browse the project `{project_key}` "

@@ -447,8 +447,13 @@ def test_issue_read_leaves_a_bad_scope_to_the_scope_checks() -> None:
     [(False, "Browse Projects"), (True, "read:jira-work")],
     ids=["classic", "scoped"],
 )
+@pytest.mark.parametrize(
+    "scope",
+    [{"project_key": "AS"}, {"jql_query": "project = AS"}],
+    ids=["project", "jql"],
+)
 def test_issue_read_passes_with_an_advisory_for_an_empty_scope(
-    scoped_token: bool, hint: str
+    scope: dict[str, str], scoped_token: bool, hint: str
 ) -> None:
     gateway: MagicMock = _gateway(is_cloud=True)
     _match_nothing(gateway)
@@ -456,7 +461,7 @@ def test_issue_read_passes_with_an_advisory_for_an_empty_scope(
     result: CapabilityCheckResult = _run(
         "jira_issue_read",
         gateway,
-        _config(project_key="AS", scoped_token=scoped_token),
+        _config(scoped_token=scoped_token, **scope),
     )
 
     assert result.status == CapabilityCheckStatus.PASSED
@@ -464,3 +469,24 @@ def test_issue_read_passes_with_an_advisory_for_an_empty_scope(
     assert "did not verify that issues are readable" in advisory
     assert hint in advisory
     gateway.bulk_fetch_issues.assert_not_called()
+
+
+@pytest.mark.parametrize("is_cloud", [True, False], ids=["cloud", "server"])
+def test_issue_read_fails_when_no_issue_is_readable_without_a_scope(
+    is_cloud: bool,
+) -> None:
+    gateway: MagicMock = _gateway(is_cloud=is_cloud)
+    _match_nothing(gateway)
+
+    result: CapabilityCheckResult = _run(
+        "jira_issue_read",
+        gateway,
+        _config(jira_base_url=_CLOUD_URL if is_cloud else _DC_URL),
+        credential_json=_CLOUD_CREDENTIAL if is_cloud else _DC_CREDENTIAL,
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_type == "ConnectorValidationError"
+    assert "indexing would add no documents" in result.message
+    assert "Browse Projects" in result.message
+    assert _advisories(result) == []
