@@ -12895,6 +12895,9 @@
       "preparing": {
         "description": "開発環境をセットアップしています",
         "title": "サンドボックスを準備しています..."
+      },
+      "download": {
+        "label": "ダウンロード"
       }
     },
     "imagePreview": {
@@ -13067,6 +13070,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDFの操作"
+      },
+      "thumbnails": {
+        "toggle": "ページのサムネイルを表示・非表示",
+        "resize": "ページのサムネイルの幅を変更",
+        "label": "ページのサムネイル"
+      },
+      "page": {
+        "previous": "前のページ",
+        "next": "次のページ",
+        "counter": "{current} / {total}",
+        "preview": "ページ{page}のプレビュー",
+        "select": "ページ{page}に移動"
+      },
+      "zoom": {
+        "out": "縮小",
+        "in": "拡大",
+        "label": "ズーム",
+        "fitWidth": "幅に合わせる",
+        "fitPage": "ページに合わせる"
+      },
       "error": {
         "description": "PDF ファイルを読み込めませんでした。",
         "title": "PDF をプレビューできません"
@@ -13079,6 +13104,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "プレゼンテーションの操作"
+      },
+      "thumbnails": {
+        "toggle": "スライドのサムネイルを表示・非表示"
+      },
+      "resize": {
+        "ariaLabel": "スライドのサムネイルの幅を変更"
+      },
       "slides": {
         "label": "スライド"
       },
@@ -13089,7 +13123,7 @@
         "label": "次のスライド"
       },
       "converting": {
-        "label": "プレゼンテーションを変換しています..."
+        "label": "プレビューを準備中..."
       },
       "empty": {
         "label": "このプレゼンテーションにはスライドがありません"
@@ -13102,9 +13136,6 @@
       },
       "slide": {
         "counter": "スライド {current} / {total}"
-      },
-      "resize": {
-        "ariaLabel": "スライドのサムネイルの幅を変更"
       }
     },
     "previewTab": {

@@ -12895,6 +12895,9 @@
       "preparing": {
         "description": "Configurando tu entorno de desarrollo",
         "title": "Preparando sandbox..."
+      },
+      "download": {
+        "label": "Descargar"
       }
     },
     "imagePreview": {
@@ -13067,6 +13070,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "Controles de PDF"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar u ocultar miniaturas",
+        "resize": "Cambiar el tamaño de las miniaturas",
+        "label": "Miniaturas de páginas"
+      },
+      "page": {
+        "previous": "Página anterior",
+        "next": "Página siguiente",
+        "counter": "{current} / {total}",
+        "preview": "Vista previa de la página {page}",
+        "select": "Ir a la página {page}"
+      },
+      "zoom": {
+        "out": "Alejar",
+        "in": "Acercar",
+        "label": "Zoom",
+        "fitWidth": "Ajustar al ancho",
+        "fitPage": "Ajustar a la página"
+      },
       "error": {
         "description": "No se pudo cargar el archivo PDF.",
         "title": "No se puede previsualizar el PDF"
@@ -13079,6 +13104,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Controles de presentación"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar u ocultar miniaturas de diapositivas"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar el tamaño de las miniaturas"
+      },
       "slides": {
         "label": "Diapositivas"
       },
@@ -13089,7 +13123,7 @@
         "label": "Diapositiva siguiente"
       },
       "converting": {
-        "label": "Convirtiendo presentación..."
+        "label": "Preparando la vista previa..."
       },
       "empty": {
         "label": "Esta presentación no tiene diapositivas"
@@ -13102,9 +13136,6 @@
       },
       "slide": {
         "counter": "Diapositiva {current} de {total}"
-      },
-      "resize": {
-        "ariaLabel": "Cambiar el tamaño de las miniaturas"
       }
     },
     "previewTab": {

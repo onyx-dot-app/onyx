@@ -12895,6 +12895,9 @@
       "preparing": {
         "description": "Deine Entwicklungsumgebung wird eingerichtet",
         "title": "Sandbox wird vorbereitet..."
+      },
+      "download": {
+        "label": "Herunterladen"
       }
     },
     "imagePreview": {
@@ -13067,6 +13070,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF-Steuerung"
+      },
+      "thumbnails": {
+        "toggle": "Seitenminiaturen ein-/ausblenden",
+        "resize": "Seitenminiaturen skalieren",
+        "label": "Seitenminiaturen"
+      },
+      "page": {
+        "previous": "Vorherige Seite",
+        "next": "Nächste Seite",
+        "counter": "{current} / {total}",
+        "preview": "Vorschau von Seite {page}",
+        "select": "Zu Seite {page}"
+      },
+      "zoom": {
+        "out": "Verkleinern",
+        "in": "Vergrößern",
+        "label": "Zoom",
+        "fitWidth": "Breite anpassen",
+        "fitPage": "Seite anpassen"
+      },
       "error": {
         "description": "Die PDF-Datei konnte nicht geladen werden.",
         "title": "PDF kann nicht in der Vorschau angezeigt werden"
@@ -13079,6 +13104,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Präsentationssteuerung"
+      },
+      "thumbnails": {
+        "toggle": "Folienminiaturen ein-/ausblenden"
+      },
+      "resize": {
+        "ariaLabel": "Folienminiaturen skalieren"
+      },
       "slides": {
         "label": "Folien"
       },
@@ -13089,7 +13123,7 @@
         "label": "Nächste Folie"
       },
       "converting": {
-        "label": "Präsentation wird konvertiert..."
+        "label": "Vorschau wird vorbereitet..."
       },
       "empty": {
         "label": "Keine Folien in dieser Präsentation"
@@ -13102,9 +13136,6 @@
       },
       "slide": {
         "counter": "Folie {current} von {total}"
-      },
-      "resize": {
-        "ariaLabel": "Folienminiaturen skalieren"
       }
     },
     "previewTab": {

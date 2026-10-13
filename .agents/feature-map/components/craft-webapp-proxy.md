@@ -229,10 +229,15 @@ revalidate on activation while keeping their current content visible. Closing or
 releases its cache; reopening fetches fresh bytes. SWR retries failed requests and
 rejects superseded responses. Viewers show only results and errors for their
 accepted revision and reload counter. Cache misses and reloads bypass the
-browser cache when fetching artifacts. PDF object URLs are revoked when replaced
-or when their viewer unmounts. Unversioned PDF activation reads compare bytes
-with the displayed PDF. Identical bytes reuse its Blob and object URL, preserving
-the iframe and reading position. Changed bytes replace the displayed PDF.
+browser cache when fetching artifacts. Unversioned PDF activation reads compare bytes
+with the displayed PDF. Identical bytes reuse its Blob and PDF.js document.
+Changed bytes replace the displayed PDF. React-PDF releases its loading tasks when the viewer unmounts.
+PDF workers, fonts, character maps, and rendering support files use versioned same-origin URLs.
+`web/tools/prepare-pdf-assets.cjs` copies these assets before dev and production builds, including Docker builds.
+PDF and presentation viewers share page controls and a resizable thumbnail sidebar.
+PDF controls provide page navigation, fit modes, zoom, and download.
+Fit modes use the measured content area, which already excludes viewport padding.
+The file-preview caller shows loading feedback while PDF or presentation refreshes retain their accepted content.
 
 The output panel keeps its five most recently visited tab bodies mounted, including
 pinned tabs and file previews. Inactive bodies keep their layout but are invisible,
