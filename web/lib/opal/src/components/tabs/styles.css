@@ -34,14 +34,23 @@
   @apply relative z-1 inline-flex items-center justify-center whitespace-nowrap rounded-08;
 }
 
-/* 36px tall, border included. */
+/* Minimum heights, border included; taller content grows the tab. Contained
+   and underline are 2.25rem, pill 1.75rem. */
 .opal-tabs-trigger[data-variant="contained"] {
-  @apply h-9 px-2 gap-2 border border-transparent;
+  @apply min-h-9 px-2 gap-2 border border-transparent;
 }
 
 .opal-tabs-trigger[data-variant="pill"],
 .opal-tabs-trigger[data-variant="underline"] {
   @apply p-1;
+}
+
+.opal-tabs-trigger[data-variant="pill"] {
+  @apply min-h-7;
+}
+
+.opal-tabs-trigger[data-variant="underline"] {
+  @apply min-h-9;
 }
 
 /* contained (the surface paints the active background) */

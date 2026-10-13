@@ -21,7 +21,7 @@ import { Tabs } from "@opal/components";
 
 ### Contained (default)
 
-Equal-width tabs, 36px tall, laid out in a grid on a tinted background. The active tab sits on a white card with a subtle shadow, which slides to the next tab when the selection changes. Best for primary page-level navigation.
+Equal-width tabs, at least 2.25rem tall, laid out in a grid on a tinted background. The active tab sits on a white card with a subtle shadow, which slides to the next tab when the selection changes. Best for primary page-level navigation.
 
 ```tsx
 <Tabs variant="contained">
@@ -34,7 +34,7 @@ Equal-width tabs, 36px tall, laid out in a grid on a tinted background. The acti
 
 ### Pill
 
-Content-width tabs. The active tab's filled background and the underline indicator both slide between tabs. Good for secondary navigation or filter-style tabs.
+Content-width tabs, at least 1.75rem tall. The active tab's filled background and the underline indicator both slide between tabs. Good for secondary navigation or filter-style tabs.
 
 ```tsx
 <Tabs variant="pill">
@@ -47,7 +47,7 @@ Content-width tabs. The active tab's filled background and the underline indicat
 
 ### Underline
 
-Like pill but without the filled active background — only the underline indicator is shown, and it slides between tabs.
+Like pill, but at least 2.25rem tall and without the filled active background — only the underline indicator is shown, and it slides between tabs.
 
 ```tsx
 <Tabs variant="underline">
