@@ -9291,6 +9291,17 @@
           "validation": "먼저 유효성 검사 실패를 수정하세요.",
           "reconciliation": "먼저 범위 변경을 조정할 방법을 선택하세요."
         }
+      },
+      "pendingBackfills": {
+        "title": "대기 중인 백필",
+        "description": "편집에서 이 실행을 요청했습니다. 실행이 성공할 때까지 여기에 표시됩니다.",
+        "window": "{start} ~ {end}",
+        "windowFromStart": "{end}까지 전체",
+        "waiting": "실행을 기다리는 중입니다.",
+        "runningNow": "인덱싱 시도가 지금 실행 중입니다.",
+        "retry": "{count, plural, other {#회 실패했습니다. 다음 재시도: {time}.}}",
+        "scoped": "추가되거나 변경된 항목만",
+        "failures": "{count, plural, other {실패 #회}}"
       }
     }
   },

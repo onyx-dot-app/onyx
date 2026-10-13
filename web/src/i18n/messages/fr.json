@@ -9291,6 +9291,17 @@
           "validation": "Corrigez d'abord les échecs de validation.",
           "reconciliation": "Choisissez d'abord comment rapprocher le changement de périmètre."
         }
+      },
+      "pendingBackfills": {
+        "title": "Rattrapages en attente",
+        "description": "Une modification a demandé ces exécutions. Chacune reste ici jusqu'à ce qu'une exécution réussisse.",
+        "window": "Du {start} au {end}",
+        "windowFromStart": "Tout jusqu'au {end}",
+        "waiting": "En attente de son exécution.",
+        "runningNow": "Une tentative d'indexation l'exécute maintenant.",
+        "retry": "{count, plural, one {Échec une fois. Prochaine tentative : {time}.} other {Échec # fois. Prochaine tentative : {time}.}}",
+        "scoped": "Éléments ajoutés ou modifiés uniquement",
+        "failures": "{count, plural, one {# échec} other {# échecs}}"
       }
     }
   },
