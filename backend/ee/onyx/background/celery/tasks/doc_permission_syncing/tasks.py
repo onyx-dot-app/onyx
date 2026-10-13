@@ -191,6 +191,18 @@ def fail_expired_doc_permission_sync_attempts_for_tenant() -> None:
         )
 
 
+def _stop_reason_for_failure(callback: "PermissionSyncCallback | None") -> str | None:
+    """The stop cause to record with a failure. It never raises (the stop signal
+    lives in Redis), so the failure is always recorded."""
+    if callback is None:
+        return None
+    try:
+        return callback.stop_reason()
+    except Exception:
+        task_logger.exception("Could not read the permission sync stop reason")
+        return None
+
+
 def is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external doc permissions sync is due."""
 
@@ -776,7 +788,7 @@ def connector_permission_sync_generator_task(
         error_msg = format_error_for_logging(e)
         full_exception_trace = traceback.format_exc()
         # Connectors raise a generic "stop signal" error for every stop cause
-        stop_reason = callback.stop_reason() if callback is not None else None
+        stop_reason = _stop_reason_for_failure(callback)
         if stop_reason is not None:
             error_msg = f"Permission sync stopped: {stop_reason}. {error_msg}"
 

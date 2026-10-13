@@ -13,7 +13,7 @@ checkout, of which there is exactly one.
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import cast
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 from uuid import uuid4
 
 import pytest
@@ -49,6 +49,7 @@ from onyx.redis.redis_connector_doc_perm_sync import (
     RedisConnectorPermissionSync,
     RedisConnectorPermissionSyncPayload,
 )
+from onyx.redis.redis_connector_stop import RedisConnectorStop
 from shared_configs.configs import (
     POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE as TEST_TENANT_ID,
 )
@@ -212,3 +213,39 @@ def test_sync_on_pair_that_left_perm_sync_fails_and_clears_fence(
     )
     assert attempt is not None
     assert attempt.status == PermissionSyncStatus.FAILED
+
+
+def test_failure_is_recorded_when_redis_is_down(
+    synced_cc_pair: ConnectorCredentialPair, db_session: Session
+) -> None:
+    """Reading the stop reason touches Redis; a Redis outage must not stop the
+    attempt from being marked failed with the real error."""
+
+    def _fake_doc_sync(
+        cc_pair: ConnectorCredentialPair,  # noqa: ARG001
+        fetch_all_existing_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
+        fetch_all_existing_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
+        callback: IndexingHeartbeatInterface | None,  # noqa: ARG001
+    ) -> Generator[ElementExternalAccess, None, None]:
+        raise RuntimeError("connector died mid-crawl")
+        yield
+
+    with (
+        patch.object(
+            RedisConnectorStop,
+            "fenced",
+            new_callable=PropertyMock,
+            side_effect=ConnectionError("redis down"),
+        ),
+        pytest.raises(RuntimeError, match="connector died mid-crawl"),
+    ):
+        _run_perm_sync(synced_cc_pair.id, _fake_doc_sync)
+
+    db_session.expire_all()
+    attempt = get_latest_doc_permission_sync_attempt_for_cc_pair(
+        db_session, synced_cc_pair.id
+    )
+    assert attempt is not None
+    assert attempt.status == PermissionSyncStatus.FAILED
+    assert attempt.error_message is not None
+    assert "connector died mid-crawl" in attempt.error_message
