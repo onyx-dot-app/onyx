@@ -3134,6 +3134,9 @@
           "title": "커넥터 관리 액세스"
         },
         "title": "커넥터 설정"
+      },
+      "optionsListInput": {
+        "placeholder": "목록에서 {label} 선택 또는 입력"
       }
     },
     "costOverrides": {

@@ -28,18 +28,28 @@ import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import { toWireAccess } from "@/lib/connectors/accessType";
 import { checksProgress } from "@/lib/connectors/checks/progress";
+import {
+  findingOptions,
+  storedCheckResults,
+  type StoredReportScope,
+} from "@/lib/connectors/checks/findings";
 import type { CredentialRef } from "@/lib/credentials/types";
-import { useSavedDraftCredential } from "@/lib/credentials/hooks";
+import {
+  useCredentialCheckReports,
+  useSavedDraftCredential,
+} from "@/lib/credentials/hooks";
 import { toCredentialRequest } from "@/lib/credentials/utils";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
+  CheckFindingKey,
   ConnectorChecksStatus,
   DraftCheckPlan,
   DraftCheckRunSnapshot,
   DraftCheckState,
   DraftCheckStateKind,
   DraftRerunMode,
+  FindingOption,
 } from "@/lib/connectors/checks/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { AccessType } from "@/lib/types";
@@ -114,6 +124,7 @@ function toCheckResult(
     remediation: check.remediation,
     docs_link: check.docs_link,
     duration_ms: check.duration_ms,
+    findings: check.findings,
   };
 }
 
@@ -508,6 +519,37 @@ export function useResetChecksOnCredentialChange({
       { revalidate: false }
     );
   }, [stale, staleRunId, credentialKey, session?.request, sessionKey, mutate]);
+}
+
+/** Options a discovery check listed under `key`: the form's latest run, else the stored reports in `scope`. Starts no run. */
+export function useFindingOptions(
+  source: ConfigurableSources,
+  key: CheckFindingKey,
+  scope: StoredReportScope | null
+): FindingOption[] {
+  const { data: session } = useSWR<ConnectorChecksSession>(
+    SWR_KEYS.connectorCheckSession(source),
+    null
+  );
+  const runId: string | null = session?.runId ?? null;
+  const { data: run } = useSWR<DraftCheckRunSnapshot>(
+    runId ? SWR_KEYS.connectorCheckRun(runId) : null,
+    null
+  );
+  const { reportFor } = useCredentialCheckReports(source);
+  const { savedDraft } = useSavedDraftCredential(source);
+  // The form's account: a saved credential, else the draft a run saved the
+  // typed account as. A run of another account is stale until the reset.
+  const accountId: number | null =
+    scope?.credentialId ?? savedDraft?.credential_id ?? null;
+  return useMemo(() => {
+    const fromRun: FindingOption[] =
+      run && run.credential_id === accountId
+        ? findingOptions(run.checks, key)
+        : [];
+    if (fromRun.length > 0 || scope === null) return fromRun;
+    return findingOptions(storedCheckResults(reportFor, scope), key);
+  }, [run, accountId, key, scope, reportFor]);
 }
 
 const PLAN_DEBOUNCE_MS = 300;
