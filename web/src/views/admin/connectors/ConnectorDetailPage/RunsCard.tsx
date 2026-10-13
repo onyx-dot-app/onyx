@@ -161,7 +161,7 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
     search !== "";
 
   return (
-    <Card border="solid" rounding={4} padding={2}>
+    <Card border="solid" rounding={4} padding={2} data-testid="connector-runs">
       {logRun !== null && (
         <ExceptionTraceModal
           onOutsideClick={() => setLogRun(null)}
@@ -175,7 +175,7 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
           onClose={() => setStagesAttemptId(null)}
         />
       )}
-      <Section alignItems="stretch" gap={2} height="fit">
+      <Section alignItems="stretch" gap={1} height="fit">
         <Section
           flexDirection="row"
           justifyContent="between"

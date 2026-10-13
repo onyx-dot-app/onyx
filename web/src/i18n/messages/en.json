@@ -2490,7 +2490,6 @@
         "prune": "Prune every **{every}**"
       },
       "runs": {
-        "title": "Index Runs",
         "kinds": {
           "label": "Run type",
           "all": "All Types",

@@ -2490,7 +2490,6 @@
         "prune": "Nettoyage toutes les **{every}**"
       },
       "runs": {
-        "title": "Exécutions d'indexation",
         "kinds": {
           "label": "Type d'exécution",
           "all": "Tous les types",

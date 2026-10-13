@@ -320,7 +320,7 @@ export default function RunRow({
               <Button
                 icon={SvgBarChartSmall}
                 prominence="tertiary"
-                size="sm"
+                size="xs"
                 tooltip={t("actions.stages")}
                 aria-label={t("actions.stages")}
                 onClick={onViewStages}

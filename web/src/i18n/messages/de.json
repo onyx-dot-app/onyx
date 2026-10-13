@@ -2490,7 +2490,6 @@
         "prune": "Bereinigung alle **{every}**"
       },
       "runs": {
-        "title": "Indexläufe",
         "kinds": {
           "label": "Laufart",
           "all": "Alle Arten",

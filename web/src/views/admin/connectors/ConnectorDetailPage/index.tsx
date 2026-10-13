@@ -477,14 +477,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         <Divider paddingParallel={0} paddingPerpendicular={0} />
         <ScheduleSection ccPair={ccPair} editable={canOperate} />
 
-        <Section alignItems="stretch" gap={3} height="fit">
-          <Content
-            title={t("runs.title")}
-            sizePreset="main-content"
-            variant="section"
-          />
-          <RunsCard ccPairId={ccPair.id} canOperate={canOperate} />
-        </Section>
+        <RunsCard ccPairId={ccPair.id} canOperate={canOperate} />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

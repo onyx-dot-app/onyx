@@ -11,7 +11,7 @@ export class AdminConnectorDetailPage {
 
   /** Rendered only once the cc-pair has resolved. */
   readonly indexingSection: Locator;
-  /** The attempt history at the bottom of the page. */
+  /** The run list at the bottom of the page. */
   readonly runsSection: Locator;
   /** The run-type filter, shown only when the pair runs more than indexing. */
   readonly runKindFilter: Locator;
@@ -32,7 +32,7 @@ export class AdminConnectorDetailPage {
   constructor(page: Page) {
     this.page = page;
     this.indexingSection = page.getByTestId("connector-indexing-status");
-    this.runsSection = page.getByText("Index Runs", { exact: true });
+    this.runsSection = page.getByTestId("connector-runs");
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
     this.noRunsMessage = page.getByText("No runs yet", { exact: true });

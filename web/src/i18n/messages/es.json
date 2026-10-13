@@ -2490,7 +2490,6 @@
         "prune": "Depurar cada **{every}**"
       },
       "runs": {
-        "title": "Ejecuciones de indexación",
         "kinds": {
           "label": "Tipo de ejecución",
           "all": "Todos los tipos",
