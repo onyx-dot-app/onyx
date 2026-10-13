@@ -261,6 +261,7 @@ export const connectorConfigs: Record<
         query: "Enter the website URL to scrape e.g. https://docs.onyx.app/:",
         label: "Base URL",
         name: "base_url",
+        placeholder: "https://example.com",
         optional: false,
       },
       {
