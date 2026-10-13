@@ -2,9 +2,10 @@
 
 The per-session opencode config sends ``CRAFT_SESSION_HEADER`` on every LLM
 call. A request-scoped dependency verifies the session belongs to the caller
-and binds it to a context variable; the trace helper reads it from there. The
-variable travels into the stream worker threads with the rest of the request
-context (``start_thread_with_context``), so nothing in between has to carry it.
+and binds it to a context variable; ``onyx.server.gateway.tracing`` reads it
+when it opens a trace. The variable travels into the stream worker threads with
+the rest of the request context (``start_thread_with_context``), so nothing in
+between has to carry it.
 """
 
 from collections.abc import AsyncIterator, Callable, Coroutine
@@ -20,9 +21,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
-from onyx.tracing.flows import LLMFlow
-from onyx.tracing.framework.create import trace
-from onyx.tracing.framework.traces import Trace
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -87,12 +85,3 @@ def craft_session_binder(
             CRAFT_SESSION_ID_CONTEXTVAR.reset(token)
 
     return bind_craft_session
-
-
-def llm_gateway_trace(flow: LLMFlow, model: str) -> Trace:
-    """One trace per gateway call, tagged with the bound Craft session if any."""
-    metadata: dict[str, str] = {"flow": flow.value, "model": model}
-    craft_session_id = CRAFT_SESSION_ID_CONTEXTVAR.get()
-    if craft_session_id is not None:
-        metadata["craft_session_id"] = craft_session_id
-    return trace("llm_gateway", metadata=metadata)

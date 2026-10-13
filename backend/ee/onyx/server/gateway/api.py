@@ -68,7 +68,7 @@ from onyx.server.gateway.configs import (
     GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
     GATEWAY_PATH_PREFIX,
 )
-from onyx.server.gateway.craft_session import craft_session_binder, llm_gateway_trace
+from onyx.server.gateway.craft_session import craft_session_binder
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
     AnthropicContentBlock,
@@ -116,6 +116,7 @@ from onyx.server.gateway.models import (
     ResponsesOutputTextPart,
     ResponsesRequest,
 )
+from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.settings.store import load_settings

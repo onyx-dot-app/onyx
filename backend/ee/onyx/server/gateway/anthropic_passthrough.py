@@ -37,12 +37,12 @@ from onyx.server.gateway.configs import (
     ANTHROPIC_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
     ANTHROPIC_PASSTHROUGH_READ_TIMEOUT_SECONDS,
 )
-from onyx.server.gateway.craft_session import llm_gateway_trace
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicErrorEvent,
     AnthropicMessagesRequest,
 )
+from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.traces import Trace
