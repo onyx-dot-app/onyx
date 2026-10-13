@@ -66,6 +66,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ReasoningStart,
 )
 from onyx.tools.models import ToolCallKickoff
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
@@ -592,16 +593,42 @@ def _cache_split_stats(
     }
 
 
+def _step_offers_tools(
+    tool_definitions: list[dict], tool_choice: ToolChoiceOptions
+) -> bool:
+    """Whether the step can call a tool that re-sends the prefix. The memory
+    tool is injected into nearly every step and is rarely called on a one-shot
+    question, so a memory-only toolset does not count."""
+    if tool_choice == ToolChoiceOptions.NONE:
+        return False
+    return any(
+        tool_def.get("function", {}).get("name") != MemoryTool.NAME
+        for tool_def in tool_definitions
+    )
+
+
+def _has_prior_turns(cacheable_prefix: list[ChatMessageSimple]) -> bool:
+    """An earlier turn's answer precedes the current user message."""
+    for msg in cacheable_prefix:
+        if msg.message_type == MessageType.ASSISTANT:
+            return True
+    return False
+
+
 def translate_history_to_llm_format(
     history: list[ChatMessageSimple],
     llm_config: LLMConfig,
     *,
     image_replay: HistoryImageReplay | None = None,
+    offers_tools: bool = True,
 ) -> list[ChatCompletionMessage]:
     """Convert a list of ChatMessageSimple to list[ChatCompletionMessage] format.
 
     Converts ChatMessageSimple messages to ChatCompletionMessage format,
     handling different message types and image files for multimodal support.
+
+    ``offers_tools`` is whether this step can call tools: a first-turn step
+    with no tools is a one-shot prompt, so its tail is not cache-marked.
     """
     messages: list[ChatCompletionMessage] = []
     history_message_formatter = _get_history_message_formatter(llm_config)
@@ -770,6 +797,8 @@ def translate_history_to_llm_format(
             cacheable_prefix=messages[: last_cacheable_msg_idx + 1],
             suffix=messages[last_cacheable_msg_idx + 1 :],
             continuation=False,
+            mark_tail=offers_tools
+            or _has_prior_turns(history[: last_cacheable_msg_idx + 1]),
         )
         assert isinstance(processed_messages, list)  # for type-checking
         messages = processed_messages
@@ -881,7 +910,10 @@ def run_llm_step_pkt_generator(
         history, llm.config
     )
     llm_msg_history = translate_history_to_llm_format(
-        history, llm.config, image_replay=image_replay
+        history,
+        llm.config,
+        image_replay=image_replay,
+        offers_tools=_step_offers_tools(tool_definitions, tool_choice),
     )
     has_reasoned = False
 

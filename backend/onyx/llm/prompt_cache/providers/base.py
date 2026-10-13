@@ -25,6 +25,7 @@ class PromptCacheProvider(ABC):
         suffix: list[ChatCompletionMessage],
         continuation: bool,
         cache_metadata: CacheMetadata | None,
+        mark_tail: bool = True,
     ) -> list[ChatCompletionMessage]:
         """Transform messages to enable caching.
 
@@ -36,6 +37,8 @@ class PromptCacheProvider(ABC):
                 Note: When cacheable_prefix is a string, it should remain in its own
                 content block even if continuation=True.
             cache_metadata: Optional cache metadata from previous requests
+            mark_tail: Whether the end of the prefix should be a breakpoint.
+                False for a one-shot prompt that nothing will re-read.
 
         Returns:
             Combined and transformed messages ready for LLM API call
