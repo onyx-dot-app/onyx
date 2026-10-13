@@ -2771,6 +2771,12 @@
           "shareFailed": {
             "toast": "이 계정을 사용할 수 있는 사용자를 변경하지 못했습니다. 다시 시도하세요."
           },
+          "renameSaved": {
+            "toast": "계정 이름을 변경했습니다."
+          },
+          "renameFailed": {
+            "toast": "이 계정의 이름을 변경할 수 없습니다. 다시 시도하세요."
+          },
           "onlyMeOwnerOnly": {
             "tooltip": "이 계정을 추가한 사람만 비공개로 설정할 수 있습니다."
           },

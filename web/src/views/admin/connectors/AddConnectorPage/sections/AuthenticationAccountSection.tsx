@@ -125,9 +125,17 @@ export default function AuthenticationAccountSection({
   // Expanded, the section lists every account. Folded, only the chosen one
   // (or the new-account card when nothing is chosen) stays.
   const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
-  /** Folds the section. The new-account card closes too; expanding leaves it closed. */
+  // The saved accounts whose details are open.
+  const [openDetailIds, setOpenDetailIds] = useState<ReadonlySet<number>>(
+    () => new Set()
+  );
+  /**
+   * Folds the section. Every card's details close too, the new account's
+   * form and each saved account's; expanding leaves them closed.
+   */
   function foldAccounts() {
     close();
+    setOpenDetailIds(new Set());
     setAccountsExpanded(false);
   }
 
@@ -372,14 +380,22 @@ export default function AuthenticationAccountSection({
             : setAccountsExpanded(true)
         }
         onDelete={() => onDeleteCredential(credential)}
+        detailsOpen={openDetailIds.has(credential.id)}
+        onDetailsOpenChange={(open) =>
+          setOpenDetailIds((ids) => {
+            const next = new Set(ids);
+            if (open) next.add(credential.id);
+            else next.delete(credential.id);
+            return next;
+          })
+        }
         checkReport={checkReports.reportFor(credential.id)}
         onRerunChecks={() => checkReports.rerun(credential.id)}
         groupsLocked={!businessTier}
-        onUpdateSharing={async (sharing) => {
-          const response = await updateCredentialSharing(
-            credential.id,
-            sharing
-          );
+        // The sharing route also renames: it allows group managers, and
+        // checks that the user may edit the account.
+        onSaveAccount={async (update) => {
+          const response = await updateCredentialSharing(credential.id, update);
           if (!response.ok) throw new Error(await response.text());
           const saved: SimilarCredential = await response.json();
           refresh();

@@ -99,6 +99,10 @@ interface AuthenticationAccountCardProps {
   onDeselect: () => void;
   /** Called once the user confirms the deletion. */
   onDelete: () => void;
+  /** Whether the details below the header are open. */
+  detailsOpen: boolean;
+  /** Called when the chevron opens or closes the details. */
+  onDetailsOpenChange: (open: boolean) => void;
   /** The account's stored check report, or null if it was never checked. */
   checkReport: CredentialCheckReport | null;
   /** Starts the checks on this account; resolves once the run is queued. */
@@ -106,11 +110,11 @@ interface AuthenticationAccountCardProps {
   /** Locks sharing with groups, which needs the Business plan. */
   groupsLocked: boolean;
   /**
-   * Saves who may reuse the account; resolves to what the server stored and
-   * rejects when the save fails.
+   * Saves who may reuse the account, and its name when given; resolves to
+   * what the server stored and rejects when the save fails.
    */
-  onUpdateSharing: (
-    sharing: Pick<CredentialSharing, "admin_public" | "groups">
+  onSaveAccount: (
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
   ) => Promise<{ admin_public: boolean; groups?: number[] }>;
 }
 /**
@@ -128,10 +132,12 @@ export default function AuthenticationAccountCard({
   onSelect,
   onDeselect,
   onDelete,
+  detailsOpen,
+  onDetailsOpenChange,
   checkReport,
   onRerunChecks,
   groupsLocked,
-  onUpdateSharing,
+  onSaveAccount,
 }: AuthenticationAccountCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
@@ -164,7 +170,6 @@ export default function AuthenticationAccountCard({
       setStarting(false);
     }
   }
-  const [expanded, setExpanded] = useState<boolean>(false);
   // What the server holds, and what the select shows: group edits stay
   // local until focus leaves the group picker.
   const [savedSharing, setSavedSharing] = useState<ShareAccountFormValues>(() =>
@@ -189,46 +194,80 @@ export default function AuthenticationAccountCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverSharing]);
 
-  // One save at a time, without locking the select: a change made while a
-  // save runs waits, and only the latest waiting change is sent next.
+  // A rename shows at once, until the list refetch brings the stored name.
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  useEffect(() => {
+    setPendingName(null);
+  }, [credential.name]);
+
+  // Sharing and the name save through one route, one save at a time, without
+  // locking the controls: a change made while a save runs waits, and the
+  // waiting changes merge, so only the latest of each is sent next. Saves
+  // therefore land in order, and only the newest decides what shows.
   const savedSharingRef = useRef<ShareAccountFormValues>(savedSharing);
-  const sharingInFlightRef = useRef<boolean>(false);
-  const queuedSharingRef = useRef<ShareAccountFormValues | null>(null);
+  const saveInFlightRef = useRef<boolean>(false);
+  const queuedSaveRef = useRef<{
+    sharing: ShareAccountFormValues | null;
+    name: string | null;
+  } | null>(null);
   // Group edits not yet sent: they wait for the picker's blur, so a save
   // that lands meanwhile must not replace them.
   const unsentGroupEditsRef = useRef<boolean>(false);
-  async function saveSharing(next: ShareAccountFormValues) {
-    unsentGroupEditsRef.current = false;
-    setSharing(next);
-    if (sharingInFlightRef.current) {
-      queuedSharingRef.current = next;
-      return;
+  // Read fresh: a change can queue while a save is awaited.
+  function waitingSave() {
+    return queuedSaveRef.current;
+  }
+  async function saveAccount(change: {
+    sharing?: ShareAccountFormValues;
+    name?: string;
+  }) {
+    if (change.sharing) {
+      unsentGroupEditsRef.current = false;
+      setSharing(change.sharing);
     }
-    sharingInFlightRef.current = true;
+    if (change.name !== undefined) setPendingName(change.name);
+    queuedSaveRef.current = {
+      sharing: change.sharing ?? queuedSaveRef.current?.sharing ?? null,
+      name: change.name ?? queuedSaveRef.current?.name ?? null,
+    };
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setSavingSharing(true);
-    let target: ShareAccountFormValues | null = next;
-    while (target !== null) {
-      queuedSharingRef.current = null;
+    while (queuedSaveRef.current !== null) {
+      const target = queuedSaveRef.current;
+      queuedSaveRef.current = null;
       try {
-        const stored = shareAccountValues(
-          await onUpdateSharing(shareAccountPayload(target))
-        );
-        savedSharingRef.current = stored;
-        setSavedSharing(stored);
+        // A rename alone sends the stored sharing, so it changes nothing else.
+        const stored = await onSaveAccount({
+          ...shareAccountPayload(target.sharing ?? savedSharingRef.current),
+          ...(target.name !== null && { name: target.name }),
+        });
+        const storedSharing = shareAccountValues(stored);
+        savedSharingRef.current = storedSharing;
+        setSavedSharing(storedSharing);
         // A newer change, sent or not, keeps what the select shows.
-        if (queuedSharingRef.current === null && !unsentGroupEditsRef.current) {
-          setSharing(stored);
+        if (waitingSave()?.sharing == null && !unsentGroupEditsRef.current) {
+          setSharing(storedSharing);
         }
-        toast.success(t("shareSaved.toast"));
+        if (target.sharing) toast.success(t("shareSaved.toast"));
+        if (target.name !== null) toast.success(t("renameSaved.toast"));
       } catch {
-        if (queuedSharingRef.current === null && !unsentGroupEditsRef.current) {
+        if (
+          target.sharing &&
+          waitingSave()?.sharing == null &&
+          !unsentGroupEditsRef.current
+        ) {
           setSharing(savedSharingRef.current);
         }
-        toast.error(t("shareFailed.toast"));
+        if (target.sharing) toast.error(t("shareFailed.toast"));
+        if (target.name !== null) {
+          // A newer rename still waiting keeps showing.
+          if (waitingSave()?.name == null) setPendingName(null);
+          toast.error(t("renameFailed.toast"));
+        }
       }
-      target = queuedSharingRef.current;
     }
-    sharingInFlightRef.current = false;
+    saveInFlightRef.current = false;
     setSavingSharing(false);
   }
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
@@ -249,8 +288,9 @@ export default function AuthenticationAccountCard({
   const isOwnAccount: boolean =
     credential.is_owner ?? (user !== null && credential.user_id === user.id);
   // The owner, or an admin when the account is shared with admins or has no
-  // owner, may change its sharing; a group-shared user may only use it.
-  const canEditSharing: boolean =
+  // owner, may rename it and change its sharing; a group-shared user may only
+  // use it.
+  const canEditAccount: boolean =
     isOwnAccount ||
     (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
       (credential.admin_public || credential.user_id === null));
@@ -294,7 +334,7 @@ export default function AuthenticationAccountCard({
       <Disabled disabled={!selectable}>
         <SelectCard
           expandable
-          expanded={expanded}
+          expanded={detailsOpen}
           expandableContentHeight="full"
           state={selected && !quietSelection ? "selected" : "filled"}
           border="solid"
@@ -372,7 +412,7 @@ export default function AuthenticationAccountCard({
                 <Divider paddingParallel={2} paddingPerpendicular={0} />
                 <Tooltip
                   tooltip={
-                    canEditSharing ? undefined : t("shareLocked.tooltip")
+                    canEditAccount ? undefined : t("shareLocked.tooltip")
                   }
                 >
                   <div className="p-2">
@@ -390,16 +430,16 @@ export default function AuthenticationAccountCard({
                             next.groups.length === 0
                           )
                         ) {
-                          void saveSharing(next);
+                          void saveAccount({ sharing: next });
                           return;
                         }
                         unsentGroupEditsRef.current = true;
                         setSharing(next);
                       }}
                       onGroupsBlur={() => {
-                        if (hasUnsavedSharing) void saveSharing(sharing);
+                        if (hasUnsavedSharing) void saveAccount({ sharing });
                       }}
-                      disabled={!canEditSharing}
+                      disabled={!canEditAccount}
                       onlyMeDisabledReason={
                         isOwnAccount ? undefined : t("onlyMeOwnerOnly.tooltip")
                       }
@@ -417,16 +457,28 @@ export default function AuthenticationAccountCard({
             gap={4}
             width="full"
           >
-            <Section alignItems="start" gap={0} padding={2} width="full">
+            {/* Stretched, and free to shrink beside the buttons, so a long
+            name is cut at the column's edge rather than widening the card. */}
+            <Section
+              alignItems="stretch"
+              gap={0}
+              padding={2}
+              width="full"
+              className="min-w-0"
+            >
               <Content
                 icon={getSourceMetadata(source).icon}
-                // Named by who created it; the account's own name stands in
-                // for one with no creator.
+                // The account's name, which its editors can change in place;
+                // an unnamed account shows who created it.
                 title={
-                  credential.user_email ??
-                  credential.name ??
+                  (pendingName ?? credential.name) ||
+                  credential.user_email ||
                   t("untitled.label")
                 }
+                // One line; a long name is cut, in full on hover.
+                titleMaxLines={1}
+                editable={canEditAccount}
+                onTitleChange={(name) => void saveAccount({ name })}
                 suffix={t("sourceSuffix", { source: sourceName })}
                 description={t("addedOn.label", { date: addedOn })}
                 sizePreset="main-ui"
@@ -490,18 +542,18 @@ export default function AuthenticationAccountCard({
                 </div>
               )}
               <Button
-                icon={expanded ? SvgChevronUp : SvgChevronDown}
+                icon={detailsOpen ? SvgChevronUp : SvgChevronDown}
                 prominence="tertiary"
                 aria-label={
-                  expanded
+                  detailsOpen
                     ? t("collapseButton.ariaLabel")
                     : t("expandButton.ariaLabel")
                 }
-                aria-expanded={expanded}
+                aria-expanded={detailsOpen}
                 onClick={(event) => {
                   // Opens the details; it does not pick the account.
                   event.stopPropagation();
-                  setExpanded((open) => !open);
+                  onDetailsOpenChange(!detailsOpen);
                 }}
               />
             </Section>

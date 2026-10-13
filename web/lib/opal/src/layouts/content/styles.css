@@ -403,11 +403,6 @@
   gap: 0.125rem;
 }
 
-.opal-content-md-header[data-editing] {
-  @apply rounded-08;
-  box-shadow: inset 0 0 0 1px var(--border-02);
-}
-
 /* ---------------------------------------------------------------------------
    Icon
    --------------------------------------------------------------------------- */
@@ -432,10 +427,18 @@
   @apply flex items-center w-full min-w-0 gap-0;
 }
 
+/* The edited title alone: it sizes to its text (the hidden mirror), and the
+   outline marks only it, so the icon and suffix stay outside the edit. */
 .opal-content-md-input-sizer {
+  @apply rounded-04;
   display: inline-grid;
   align-items: stretch;
-  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  /* The hidden mirror of a long title is wider than the field; clipped, it
+     cannot make a clipping ancestor (a card) scroll sideways. */
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--border-02);
 }
 
 .opal-content-md-input-sizer > * {
@@ -481,6 +484,11 @@
 
 .opal-content-md-description {
   @apply text-start w-full;
+}
+
+/* Stays one line beside the title, edited or not. */
+.opal-content-md-suffix {
+  @apply shrink-0 whitespace-nowrap;
 }
 
 /* ===========================================================================
