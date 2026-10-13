@@ -96,26 +96,17 @@ async def test_business_passes_business_path(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "current_tier", [Tier.COMMUNITY, Tier.BUSINESS, Tier.ENTERPRISE]
+)
 @patch("ee.onyx.server.middleware.tier_gate.get_tier")
-async def test_community_blocked_from_gateway(
-    mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
-) -> None:
-    mock_get_tier.return_value = Tier.COMMUNITY
-    middleware, call_next = middleware_harness
-    response = await middleware(_make_request("/api/gateway/v1/models"), call_next)
-
-    assert response.status_code == 402
-    assert json.loads(bytes(response.body))["required_tier"] == "business"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("current_tier", [Tier.BUSINESS, Tier.ENTERPRISE])
-@patch("ee.onyx.server.middleware.tier_gate.get_tier")
-async def test_paid_tiers_pass_gateway(
+async def test_gateway_not_path_gated(
     mock_get_tier: MagicMock,
     current_tier: Tier,
     middleware_harness: MiddlewareHarness,
 ) -> None:
+    """Craft sandbox traffic must reach the gateway on every tier; the
+    gateway enforces LLM_GATEWAY_MIN_TIER on third-party PAT traffic itself."""
     mock_get_tier.return_value = current_tier
     middleware, call_next = middleware_harness
     response = await middleware(_make_request("/api/gateway/v1/models"), call_next)

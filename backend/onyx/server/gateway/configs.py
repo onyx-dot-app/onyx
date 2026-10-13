@@ -3,7 +3,6 @@ import os
 from onyx.server.settings.models import Tier
 
 GATEWAY_PATH_PREFIX = "/gateway"
-CRAFT_GATEWAY_PATH_PREFIX = "/build/gateway"
 LLM_GATEWAY_MIN_TIER = Tier.BUSINESS
 
 # Kill switch, default ON: set to "false" to send Anthropic-backed providers
