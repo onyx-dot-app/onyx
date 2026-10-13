@@ -2049,13 +2049,9 @@ echo WRITE_OK"""
                 ["/bin/sh", "-c", script],
                 tar_bytes,
             )
-        except ExecError as e:
-            cause = e.__cause__
+        except (ExecError, APIError) as e:
+            cause = e.__cause__ if isinstance(e, ExecError) else e
             if isinstance(cause, APIError) and not cause.is_client_error():
-                raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
-            raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
-        except APIError as e:
-            if not e.is_client_error():
                 raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
             raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
         except (OSError, RequestsConnectionError, Timeout) as e:
