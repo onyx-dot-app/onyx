@@ -1,4 +1,4 @@
-import { expect, type Page, type Request } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import {
   mockPassingConnectorChecks,
   runConnectorChecks,
@@ -16,22 +16,21 @@ export interface OneDriveCredentialRequest {
   directoryId: string;
   hasClientSecret: boolean;
   hasCertificatePassword: boolean;
-  privateKeyField?: string;
-  privateKeyType?: string;
+  /** The certificate, as the base64 text the account stores. */
+  privateKey?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function parseCredentialJson(value: unknown): OneDriveCredentialRequest {
-  if (!isRecord(value)) {
-    throw new Error("Credential request must be an object");
-  }
+/** The draft account a check run sends, or `null` for a saved account. */
+function parseDraftCredential(
+  value: unknown,
+): OneDriveCredentialRequest | null {
+  if (!isRecord(value) || !isRecord(value.credential_json)) return null;
   const credentialJson = value.credential_json;
-  if (!isRecord(credentialJson)) {
-    throw new Error("Credential JSON must be an object");
-  }
+  const privateKey = credentialJson.onedrive_private_key;
   return {
     authenticationMethod: String(credentialJson.authentication_method ?? ""),
     clientId: String(credentialJson.onedrive_client_id ?? ""),
@@ -42,39 +41,13 @@ function parseCredentialJson(value: unknown): OneDriveCredentialRequest {
     hasCertificatePassword:
       typeof credentialJson.onedrive_certificate_password === "string" &&
       credentialJson.onedrive_certificate_password.length > 0,
-  };
-}
-
-function getMultipartField(body: string, fieldName: string): string {
-  const fieldMarker = `name="${fieldName}"`;
-  const fieldStart = body.indexOf(fieldMarker);
-  if (fieldStart < 0) {
-    return "";
-  }
-  const valueStart = body.indexOf("\r\n\r\n", fieldStart);
-  if (valueStart < 0) {
-    return "";
-  }
-  const valueEnd = body.indexOf("\r\n--", valueStart);
-  return body.slice(valueStart + 4, valueEnd < 0 ? undefined : valueEnd);
-}
-
-function parsePrivateKeyCredential(
-  request: Request
-): OneDriveCredentialRequest {
-  const body = request.postData() ?? "";
-  const credential = parseCredentialJson({
-    credential_json: JSON.parse(getMultipartField(body, "credential_json")),
-  });
-  return {
-    ...credential,
-    privateKeyField: getMultipartField(body, "field_key"),
-    privateKeyType: getMultipartField(body, "type_definition_key"),
+    ...(typeof privateKey === "string" ? { privateKey } : {}),
   };
 }
 
 export class OneDriveConnectorSetupPage {
-  readonly credentialRequests: OneDriveCredentialRequest[] = [];
+  /** The draft account of the latest check run. */
+  credentialRequest: OneDriveCredentialRequest | null = null;
   readonly connectorRequests: OneDriveConfigRequest[] = [];
 
   constructor(private readonly page: Page) {}
@@ -82,7 +55,7 @@ export class OneDriveConnectorSetupPage {
   async mockRoutes(connectorError?: string) {
     await this.page.route(
       "**/api/manage/admin/similar-credentials/onedrive*",
-      (route) => route.fulfill({ json: [] })
+      (route) => route.fulfill({ json: [] }),
     );
     await this.page.route("**/api/connector/oauth/details/onedrive", (route) =>
       route.fulfill({
@@ -91,18 +64,8 @@ export class OneDriveConnectorSetupPage {
           supports_manual_credentials: true,
           additional_kwargs: [],
         },
-      })
+      }),
     );
-    await this.page.route("**/api/manage/credential/private-key", (route) => {
-      this.credentialRequests.push(parsePrivateKeyCredential(route.request()));
-      return route.fulfill({ json: this.credentialResponse(42) });
-    });
-    await this.page.route("**/api/manage/credential", (route) => {
-      this.credentialRequests.push(
-        parseCredentialJson(route.request().postDataJSON())
-      );
-      return route.fulfill({ json: this.credentialResponse(41) });
-    });
     // Create makes the connector and pairs it in one request.
     await this.page.route(
       "**/api/manage/admin/connector-with-credential",
@@ -136,26 +99,35 @@ export class OneDriveConnectorSetupPage {
         return route.fulfill({
           json: { success: true, message: "", data: 71 },
         });
-      }
+      },
     );
     await mockPassingConnectorChecks(this.page);
+    // A typed account travels with the check run, which saves it as a draft.
+    // Registered last, so it sees the run first and hands it to the mock.
+    await this.page.route(
+      "**/api/manage/admin/connector-checks/runs",
+      (route) => {
+        const draft = parseDraftCredential(route.request().postDataJSON());
+        if (draft) this.credentialRequest = draft;
+        return route.fallback();
+      },
+    );
   }
 
   async goto() {
     await this.page.goto("/admin/connectors/onedrive");
     await expect(
-      this.page.locator('[aria-label="admin-page-title"]')
+      this.page.locator('[aria-label="admin-page-title"]'),
     ).toBeVisible();
   }
 
-  async createClientSecretCredential() {
+  async fillClientSecretCredential() {
     await this.openCredentialForm();
     await this.fillCredentialIdentity();
     await this.page.getByTestId("onedrive_client_secret").fill("secret-value");
-    await this.submitCredential();
   }
 
-  async createCertificateCredential() {
+  async fillCertificateCredential() {
     await this.openCredentialForm();
     await this.page.getByRole("tab", { name: "Certificate" }).click();
     await this.fillCredentialIdentity();
@@ -167,7 +139,6 @@ export class OneDriveConnectorSetupPage {
       mimeType: "application/x-pkcs12",
       buffer: Buffer.from("test-pfx"),
     });
-    await this.submitCredential();
   }
 
   /** Run the connector checks and wait for the configuration to unlock. */
@@ -195,7 +166,7 @@ export class OneDriveConnectorSetupPage {
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname ===
-          "/api/manage/admin/connector-with-credential"
+          "/api/manage/admin/connector-with-credential",
     );
     await this.page
       .getByRole("button", { name: "Create Connector", exact: true })
@@ -207,18 +178,13 @@ export class OneDriveConnectorSetupPage {
   async submitInvalidConnector(name: string, message: string) {
     await this.page.getByTestId("connector-name").fill(name);
     await expect(
-      this.page.getByRole("button", { name: "Create Connector", exact: true })
+      this.page.getByRole("button", { name: "Create Connector", exact: true }),
     ).toBeDisabled();
     await expect(this.page.getByText(message)).toBeVisible();
   }
 
   async expectCreated() {
     await expect(this.page).toHaveURL(/\/admin\/indexing-status/);
-  }
-
-  /** The creation form, once its card is expanded. */
-  private get credentialForm() {
-    return this.page.getByTestId("credential-form");
   }
 
   /**
@@ -244,44 +210,5 @@ export class OneDriveConnectorSetupPage {
   private async fillCredentialIdentity() {
     await this.page.getByTestId("onedrive_client_id").fill("client-id");
     await this.page.getByTestId("onedrive_directory_id").fill("directory-id");
-  }
-
-  private async submitCredential() {
-    const responsePromise = this.page.waitForResponse(
-      (response) =>
-        response.request().method() === "POST" &&
-        [
-          "/api/manage/credential",
-          "/api/manage/credential/private-key",
-        ].includes(new URL(response.url()).pathname)
-    );
-    await this.credentialForm
-      .getByRole("button", { name: "Create", exact: true })
-      .click();
-    const response = await responsePromise;
-    expect(response.ok()).toBeTruthy();
-    // The card folds itself away on success. The fold is hidden from the
-    // accessibility tree, so the form's own button stops resolving.
-    await expect(
-      this.page.getByRole("button", { name: "Create", exact: true })
-    ).toBeHidden();
-  }
-
-  private credentialResponse(id: number) {
-    const timestamp = new Date(0).toISOString();
-    return {
-      id,
-      credential: {
-        id,
-        credential_json: {},
-        admin_public: true,
-        source: "onedrive",
-        name: "OneDrive test credential",
-        user_id: null,
-        user_email: null,
-        time_created: timestamp,
-        time_updated: timestamp,
-      },
-    };
   }
 }
