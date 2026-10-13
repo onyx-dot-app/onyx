@@ -110,6 +110,7 @@ export default function InputUpload(props: InputUploadProps) {
   } = props;
   const strings = useOpalStrings();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const isNonEditable = variant === "disabled" || variant === "readOnly";
 
   // Text mode: the value when the caller does not own it, and what it came
@@ -272,7 +273,15 @@ export default function InputUpload(props: InputUploadProps) {
           data-testid={props["data-testid"]}
           className="opal-input-upload-trigger"
           onClick={openFilePicker}
+          ref={triggerRef}
           onPaste={handlePaste}
+          onKeyDown={(e) => {
+            // Delete or Backspace clears the value, as the × does.
+            if (e.key !== "Delete" && e.key !== "Backspace") return;
+            if (!hasValue) return;
+            e.preventDefault();
+            clear();
+          }}
           onBlur={onBlur}
         >
           <div className="opal-input-leading-icon">
@@ -301,7 +310,11 @@ export default function InputUpload(props: InputUploadProps) {
         {hasValue && !isNonEditable && drag === null && (
           <Button
             icon={SvgX}
-            onClick={noProp(clear)}
+            onClick={noProp(() => {
+              clear();
+              // The × goes with the value, so focus returns to the control.
+              triggerRef.current?.focus();
+            })}
             type="button"
             prominence="internal"
             size="sm"

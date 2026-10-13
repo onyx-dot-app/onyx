@@ -39,6 +39,35 @@ describe("InputUploadField", () => {
     expect(screen.getByText("Pasted text")).toBeInTheDocument();
   });
 
+  test("Delete clears an upload from the keyboard, and the × returns focus", async () => {
+    const user = userEvent.setup({ delay: null });
+    let form: FormikProps<KeyForm> | null = null;
+    const { container } = render(
+      <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
+        {(formik) => {
+          form = formik;
+          return <InputUploadField name="key" />;
+        }}
+      </Formik>
+    );
+    const trigger = container.querySelector<HTMLButtonElement>(
+      ".opal-input-upload-trigger"
+    );
+    if (!trigger) throw new Error("no trigger");
+
+    await user.upload(picker(container), new File(["one"], "one.txt"));
+    await waitFor(() => expect(form?.values.key).toBe("one"));
+    trigger.focus();
+    await user.keyboard("{Delete}");
+    await waitFor(() => expect(form?.values.key).toBe(""));
+
+    await user.upload(picker(container), new File(["two"], "two.txt"));
+    await waitFor(() => expect(form?.values.key).toBe("two"));
+    await user.click(screen.getByRole("button", { name: "Clear file" }));
+    await waitFor(() => expect(form?.values.key).toBe(""));
+    expect(trigger).toHaveFocus();
+  });
+
   test("the × clears an upload", async () => {
     const user = userEvent.setup({ delay: null });
     let form: FormikProps<KeyForm> | null = null;

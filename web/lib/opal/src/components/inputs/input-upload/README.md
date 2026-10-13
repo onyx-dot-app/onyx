@@ -4,7 +4,8 @@
 **Formik:** `import { InputUploadField } from "@opal/form";`
 
 An upload control in the input chrome, for one file in a form row. Nothing is typed: a click, Enter
-or Space opens the file picker, and a file can be dropped on it. It leads with an import icon, shows
+or Space opens the file picker, and a file can be dropped on it. With a value, Delete or Backspace
+clears it, as the × does; clearing with the × returns focus to the control. It leads with an import icon, shows
 the placeholder until a file is in, then the file's name, with a × at the end that clears it.
 
 While files are dragged anywhere over the page (`useWindowFileDrag` from `@opal/hooks`), the control
