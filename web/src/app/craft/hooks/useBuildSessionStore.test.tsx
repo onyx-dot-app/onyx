@@ -3541,6 +3541,11 @@ describe("session history races and discarded queued starts", () => {
     async (source) => {
       const latestHistory =
         deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+      const inventory =
+        deferred<Awaited<ReturnType<typeof api.fetchOutputInventory>>>();
+      jest
+        .mocked(api.fetchOutputInventory)
+        .mockReturnValueOnce(inventory.promise);
       jest.mocked(api.fetchActiveTurn).mockResolvedValue(active);
       if (source === "lookup")
         jest.mocked(api.fetchActiveTurn).mockResolvedValueOnce(null);
@@ -3554,6 +3559,10 @@ describe("session history races and discarded queued starts", () => {
         status: "running",
         activeTurnId: "completed-turn",
         turnGeneration: 1,
+        outputInventory: {},
+        outputBaselinePending: false,
+        panelTabs: [{ kind: "files" }],
+        activePanelTabId: "files",
       });
       store.enqueueMessage(sessionId, "Waiting prompt", []);
       const settling = store.beginTurnSettlement(
@@ -3615,6 +3624,25 @@ describe("session history races and discarded queued starts", () => {
           content: "Partial answer",
         }),
       ]);
+      expect(store.claimQueuedMessage(sessionId)).toBeNull();
+      expect(api.fetchOutputInventory).toHaveBeenCalledTimes(1);
+      const savedFile = { path: "outputs/saved.pdf", revision: "1", size: 100 };
+      inventory.resolve({ files: [savedFile], complete: true });
+      await waitFor(() =>
+        expect(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+            ?.outputInventory
+        ).toEqual({ [savedFile.path]: savedFile })
+      );
+      expect(
+        useBuildSessionStore.getState().sessions.get(sessionId)
+      ).toMatchObject({
+        activeTurnId: active.turn_id,
+        status: "running",
+        panelTabs: [{ kind: "files" }],
+        activePanelTabId: "files",
+        outputSelectionLocked: false,
+      });
       expect(store.claimQueuedMessage(sessionId)).toBeNull();
     }
   );

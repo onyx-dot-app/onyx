@@ -945,10 +945,7 @@ function reconcileCompletedTranscript(
         );
         const current = useBuildSessionStore.getState().sessions.get(sessionId);
         if (!current?.turnSettlement) return;
-        if (!successor)
-          void useBuildSessionStore
-            .getState()
-            .refreshOutputInventory(sessionId);
+        void useBuildSessionStore.getState().refreshOutputInventory(sessionId);
         useBuildSessionStore.getState().updateSessionData(sessionId, {
           messages: restored.messages,
           streamItems: restored.streamItems,

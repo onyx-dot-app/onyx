@@ -317,6 +317,8 @@ completions while the turn streams. Tool completions during a read coalesce into
 A terminal stream observation cancels pending discovery timers.
 Canonical completion owns the final authoritative read, including recovery without a terminal packet.
 Transcript reconciliation cancels earlier inventory reads. Passive reads defer until reconciliation ends.
+Settlement starts a replacement inventory read even when it hands off to a successor turn.
+That read can update file availability, but the predecessor cannot open or select tabs for the successor.
 The store serializes all inventory reads per session, including focus and panel reads.
 Queued reads preserve turn ordering; passive discoveries never select resources.
 An already-settled turn also triggers reconciliation when the attach returns no stream.
