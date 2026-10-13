@@ -595,7 +595,11 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   return (
     <Formik
-      initialValues={editValues ?? initialValues}
+      // Edit mode lays the pair's state over the create form's values, so
+      // form-only fields (e.g. the typed account) keep their defaults.
+      initialValues={
+        editValues ? { ...initialValues, ...editValues } : initialValues
+      }
       validationSchema={createConnectorValidationSchema(
         connector,
         isScopedManager,
