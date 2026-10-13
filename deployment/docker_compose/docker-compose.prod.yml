@@ -222,8 +222,8 @@ services:
       target: runtime
     command: >
       /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-true}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-true}\" != \"true\" ]; then
-        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), skipping...';
-        exit 0;
+        echo 'MCP server is disabled (MCP_SERVER_ENABLED=false), idling...';
+        exec sleep infinity;
       else
         exec python -m onyx.mcp_server_main;
       fi"
@@ -233,8 +233,7 @@ services:
     depends_on:
       - relational_db
       - cache
-    # on-failure: exiting cleanly while disabled must not restart the container
-    restart: on-failure
+    restart: unless-stopped
     environment:
       - POSTGRES_HOST=${POSTGRES_HOST:-relational_db}
       - REDIS_HOST=${REDIS_HOST:-cache}

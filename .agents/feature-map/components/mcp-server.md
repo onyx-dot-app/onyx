@@ -118,8 +118,7 @@ Self-hosted docker-compose runs the `mcp_server` service **by default** in
 every file generated from `deployment/docker_compose/docker-compose.template.yml`.
 The service and nginx both default `MCP_SERVER_ENABLED` to `true`; an operator
 sets `MCP_SERVER_ENABLED=false` in `.env` to turn it off. Disabled, the container
-exits cleanly (`restart: on-failure`) and `run-nginx.sh` writes empty MCP
-includes. The service runs `python -m onyx.mcp_server_main` in the same backend
+idles (`sleep infinity`) and `run-nginx.sh` writes empty MCP includes. The service runs `python -m onyx.mcp_server_main` in the same backend
 image, pointed at `API_SERVER_HOST=api_server`. The `onyx-cli` installer ships
 `mcp.conf.inc.template` and `mcp_upstream.conf.inc.template` so nginx can
 render the MCP routes.
