@@ -85,7 +85,12 @@ class OrgCredentialField(BaseModel):
 class OAuthFlowSpec(BaseModel):
     """Initial-grant OAuth 2.0 parameters for a provider. Consumed by the
     External-App OAuth routes to build the authorize URL and exchange the
-    code for a token."""
+    code for a token.
+
+    ``authorize_url`` and ``token_url`` may carry ``{placeholder}`` fields for a
+    provider whose endpoints live on a per-account host. Read them through
+    :meth:`OAuthExternalAppProvider.resolve_oauth_endpoints`, which fills those
+    in, rather than off the spec."""
 
     model_config = ConfigDict(frozen=True)
 

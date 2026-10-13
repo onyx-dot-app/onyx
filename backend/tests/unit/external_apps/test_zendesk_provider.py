@@ -88,6 +88,14 @@ def test_oauth_endpoints_are_on_the_configured_account() -> None:
     assert endpoints.token_url == "https://acme.zendesk.com/oauth/tokens"
 
 
+def test_spec_urls_stay_templates() -> None:
+    """Nothing may "fix" these into literals: there is no one Zendesk host, and
+    `resolve_oauth_endpoints` is the only correct way to read them."""
+    oauth = _provider().spec.oauth
+    assert "{subdomain}" in oauth.authorize_url
+    assert "{subdomain}" in oauth.token_url
+
+
 def test_descriptor_carries_no_fallback_pattern() -> None:
     """There is no account-agnostic Zendesk host to fall back to, so the static
     descriptor stays empty: a row is only ever matched on resolved patterns."""
