@@ -1,0 +1,53 @@
+@reference "#reference.css";
+
+/* The drop target: the control and its hidden file input. */
+.opal-input-upload {
+  @apply w-full;
+}
+
+/* The field itself picks a file: no caret, a pointer, and the row's text
+   one line tall, as a typed input's is. */
+.opal-input-upload-trigger {
+  @apply flex flex-1 min-w-0 items-center h-6 cursor-pointer select-none outline-hidden;
+}
+
+.opal-input[data-variant="disabled"] .opal-input-upload-trigger {
+  @apply cursor-not-allowed;
+}
+
+.opal-input[data-variant="readOnly"] .opal-input-upload-trigger {
+  @apply cursor-default;
+}
+
+/* The uploaded file's name, or the placeholder in its muted style. */
+.opal-input-upload-label {
+  @apply truncate p-0.5 font-main-ui-body text-text-04;
+}
+
+.opal-input-upload-label[data-placeholder] {
+  @apply font-main-ui-muted text-text-02;
+}
+
+.opal-input[data-variant="disabled"] .opal-input-upload-label {
+  @apply text-text-02;
+}
+
+/* While files are dragged over the page, the control shows itself as a drop
+   target; over the control itself, its fill deepens. */
+.opal-input-upload[data-drag] .opal-input {
+  background-color: var(--action-selection-01);
+  border: 1px dashed var(--action-selection-05);
+}
+
+.opal-input-upload[data-drag="over"] .opal-input {
+  background-color: var(--action-selection-02);
+}
+
+.opal-input-upload[data-drag] .opal-input-upload-label {
+  @apply font-main-ui-action;
+  color: var(--action-selection-05);
+}
+
+.opal-input-upload[data-drag] .opal-input-leading-icon-svg {
+  color: var(--action-selection-05);
+}

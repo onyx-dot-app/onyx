@@ -13944,9 +13944,13 @@
       "valueCannotBeRevealed": "无法显示该值",
       "year": "年"
     },
-    "inputFile": {
+    "inputUpload": {
       "attachFile": "附加文件",
-      "clearFile": "清除文件"
+      "clearFile": "清除文件",
+      "pasted": "已粘贴的文本",
+      "attached": "已附加文件",
+      "dropToAdd": "将文件拖放到此处以添加",
+      "dropToReplace": "拖放到此处以替换文件"
     },
     "inputImage": {
       "alt": "图片",

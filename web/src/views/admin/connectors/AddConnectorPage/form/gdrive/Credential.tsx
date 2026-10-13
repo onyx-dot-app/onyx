@@ -9,7 +9,7 @@ import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
 import { Button, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { InputFile } from "@opal/components";
+import { InputUpload } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { refreshAllGoogleData } from "@/lib/googleConnector";
 import { parseOauthAppCredentialJson } from "@/lib/credentials/utils";
@@ -80,7 +80,7 @@ export const DriveAuthSection = ({
             })
           )}
         </Text>
-        <InputFile
+        <InputUpload
           accept="application/json"
           placeholder={t("gdrive.oauthUpload.placeholder")}
           setValue={(value) => {
@@ -125,7 +125,7 @@ export const DriveAuthSection = ({
         <Text as="p" font="main-ui-action">
           {t("gdrive.serviceAccountOption.title")}
         </Text>
-        <InputFile
+        <InputUpload
           accept="application/json"
           placeholder={t("gdrive.serviceAccountUpload.placeholder")}
           setValue={(value) => {

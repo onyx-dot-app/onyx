@@ -17,6 +17,14 @@ export type OpalStrings = {
   clear: string;
   attachFile: string;
   clearFile: string;
+  /** InputUpload's label for a value that was pasted, not uploaded. */
+  inputUploadPasted: string;
+  /** InputUpload's label for a value set from outside, such as a saved one. */
+  inputUploadAttached: string;
+  /** InputUpload's copy while a file is dragged and it holds none. */
+  inputUploadDropToAdd: string;
+  /** InputUpload's copy while a file is dragged over it and it holds one. */
+  inputUploadDropToReplace: string;
   clearFilter: string;
   date: string;
   dateRange: string;
@@ -123,6 +131,10 @@ export const defaultOpalStrings: OpalStrings = {
   clear: "Clear",
   attachFile: "Attach file",
   clearFile: "Clear file",
+  inputUploadPasted: "Pasted text",
+  inputUploadAttached: "File attached",
+  inputUploadDropToAdd: "Drop file here to add",
+  inputUploadDropToReplace: "Drop here to replace file",
   clearFilter: "Clear filter",
   date: "Date",
   dateRange: "Date range",

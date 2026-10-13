@@ -13944,9 +13944,13 @@
       "valueCannotBeRevealed": "La valeur ne peut pas être affichée",
       "year": "Année"
     },
-    "inputFile": {
+    "inputUpload": {
       "attachFile": "Joindre un fichier",
-      "clearFile": "Effacer le fichier"
+      "clearFile": "Effacer le fichier",
+      "pasted": "Texte collé",
+      "attached": "Fichier joint",
+      "dropToAdd": "Déposez le fichier ici pour l’ajouter",
+      "dropToReplace": "Déposez ici pour remplacer le fichier"
     },
     "inputImage": {
       "alt": "Image",

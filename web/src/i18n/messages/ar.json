@@ -13944,9 +13944,13 @@
       "valueCannotBeRevealed": "لا يمكن إظهار القيمة",
       "year": "السنة"
     },
-    "inputFile": {
+    "inputUpload": {
       "attachFile": "إرفاق ملف",
-      "clearFile": "مسح الملف"
+      "clearFile": "مسح الملف",
+      "pasted": "نص ملصق",
+      "attached": "تم إرفاق ملف",
+      "dropToAdd": "أفلت الملف هنا لإضافته",
+      "dropToReplace": "أفلت هنا لاستبدال الملف"
     },
     "inputImage": {
       "alt": "صورة",

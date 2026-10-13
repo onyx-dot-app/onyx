@@ -8,7 +8,7 @@
 # `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 98.8
+total: 98.9
 packages:
   .: 100
   src: 99.4
@@ -21,14 +21,15 @@ packages:
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
-  src/app/craft: 99.2
+  src/app/craft: 99.3
   src/app/ee: 95.6
   src/app/federated: 97
   src/app/mcp: 99.5
   src/app/nrf: 99.2
   src/app/oauth-config: 100
-  src/components: 97.7
-  src/components/admin: 96.1
+  src/app/oauth-provider: 100
+  src/components: 97.6
+  src/components/admin: 95.8
   src/components/auth: 89.3
   src/components/chat: 97.2
   src/components/context: 100
@@ -41,7 +42,7 @@ packages:
   src/components/oauth: 89.5
   src/components/search: 99.5
   src/components/standardAnswers: 100
-  src/components/tools: 99.7
+  src/components/tools: 100
   src/components/tooltip: 100
   src/components/ui: 99.9
   src/components/voice: 100
@@ -66,9 +67,9 @@ packages:
   src/lib/billing: 100
   src/lib/build: 100
   src/lib/chat: 98.6
-  src/lib/connectors: 98.9
+  src/lib/connectors: 99
   src/lib/constants: 100
-  src/lib/credentials: 98.3
+  src/lib/credentials: 98.4
   src/lib/extension: 100
   src/lib/externalApps: 100
   src/lib/hierarchy: 100
@@ -78,6 +79,8 @@ packages:
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
   src/lib/oauth: 100
+  src/lib/oauth-provider: 100
+  src/lib/opensearch-health: 100
   src/lib/permissions: 100
   src/lib/position: 100
   src/lib/projects: 99.7
@@ -88,6 +91,7 @@ packages:
   src/lib/sidebar: 100
   src/lib/skills: 97.4
   src/lib/sso: 99.3
+  src/lib/tiers: 100
   src/lib/tools: 98.1
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
@@ -112,7 +116,7 @@ packages:
   src/sections/actions: 99.1
   src/sections/admin: 100
   src/sections/agents: 99.8
-  src/sections/banners: 98.5
+  src/sections/banners: 99.1
   src/sections/cards: 100
   src/sections/chat: 99.7
   src/sections/document-sidebar: 99.5
@@ -120,11 +124,12 @@ packages:
   src/sections/knowledge: 99.6
   src/sections/modals: 99.5
   src/sections/model-selector: 99.6
+  src/sections/oauth-provider: 100
   src/sections/onboarding: 99.8
   src/sections/settings: 100
   src/sections/sidebar: 99.3
   src/sections/skills: 99.8
   src/sections/usage: 99.6
   src/views: 99.4
-  src/views/admin: 98.4
+  src/views/admin: 98.5
   types: 100

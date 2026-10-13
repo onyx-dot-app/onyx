@@ -4,9 +4,8 @@ import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
-import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { InputSingleSelectField } from "@opal/form";
+import { InputUploadField, InputSingleSelectField } from "@opal/form";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
@@ -134,7 +133,10 @@ function VertexAIModalInternals({
             title={t("vertexAi.credentialsField.title")}
             subDescription={t("vertexAi.credentialsField.description")}
           >
-            <FileUploadFormField name={FIELD_VERTEX_CREDENTIALS} label="" />
+            <InputUploadField
+              name={FIELD_VERTEX_CREDENTIALS}
+              accept="application/json,.json"
+            />
           </InputVertical>
         </InputPadder>
       )}

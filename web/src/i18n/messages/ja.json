@@ -13944,9 +13944,13 @@
       "valueCannotBeRevealed": "値を表示できません",
       "year": "年"
     },
-    "inputFile": {
+    "inputUpload": {
       "attachFile": "ファイルを添付",
-      "clearFile": "ファイルをクリア"
+      "clearFile": "ファイルをクリア",
+      "pasted": "貼り付けたテキスト",
+      "attached": "ファイル添付済み",
+      "dropToAdd": "ここにファイルをドロップして追加",
+      "dropToReplace": "ここにドロップしてファイルを置き換え"
     },
     "inputImage": {
       "alt": "画像",

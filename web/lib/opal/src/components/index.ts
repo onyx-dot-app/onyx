@@ -91,11 +91,13 @@ export {
   type InputNumberProps,
 } from "@opal/components/inputs/input-number/components";
 
-/* InputFile */
+/* InputUpload */
 export {
-  default as InputFile,
-  type InputFileProps,
-} from "@opal/components/inputs/input-file/components";
+  default as InputUpload,
+  type InputUploadProps,
+  type InputUploadTextProps,
+  type InputUploadFileProps,
+} from "@opal/components/inputs/input-upload/components";
 
 /* InputList */
 export {
