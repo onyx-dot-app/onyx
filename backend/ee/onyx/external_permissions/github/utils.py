@@ -2,18 +2,19 @@ from collections.abc import Callable
 from enum import Enum
 from typing import TypeVar
 
-from github import Github, RateLimitExceededException
-from github.GithubException import GithubException
-from github.NamedUser import NamedUser
-from github.PaginatedList import PaginatedList
-from github.Repository import Repository
 from pydantic import BaseModel, Field
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.github.models import GitHubOrganizationRef, GitHubRepository
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
+from onyx.connectors.github.source_operations import (
+    GitHubApiError,
+    GitHubRateLimitError,
+    GitHubSourceOperations,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -37,7 +38,7 @@ T = TypeVar("T")
 def _run_with_retry(
     operation: Callable[[], T],
     description: str,
-    github_client: Github,
+    source_operations: GitHubSourceOperations,
     retry_count: int = 0,
 ) -> T:
     """Execute a GitHub operation with retry on rate limit and exception handling."""
@@ -46,18 +47,20 @@ def _run_with_retry(
         result = operation()
         logger.debug("Operation '%s' completed successfully", description)
         return result
-    except RateLimitExceededException as error:
+    except GitHubRateLimitError as error:
         if retry_count >= MAX_RETRY_COUNT:
             raise RuntimeError(f"Max retries exceeded for {description}") from error
-        sleep_after_rate_limit_exception(github_client)
+        sleep_after_rate_limit_exception(source_operations)
         logger.warning(
             "Rate limit exceeded while %s. Retrying... (attempt %s/%s)",
             description,
             retry_count + 1,
             MAX_RETRY_COUNT,
         )
-        return _run_with_retry(operation, description, github_client, retry_count + 1)
-    except GithubException as e:
+        return _run_with_retry(
+            operation, description, source_operations, retry_count + 1
+        )
+    except GitHubApiError as e:
         logger.warning("GitHub API error during %s: %s", description, e)
         raise
     except Exception as e:
@@ -77,13 +80,16 @@ class GitHubGroupSyncCache(BaseModel):
     )
 
 
-def _get_user_info(user: NamedUser, cache: GitHubGroupSyncCache) -> UserInfo:
-    login = user.login
+def _get_user_info(
+    login: str, source_operations: GitHubSourceOperations, cache: GitHubGroupSyncCache
+) -> UserInfo:
     cached_user = cache.users_by_login.get(login)
     if cached_user is not None:
         return cached_user
 
-    user_info = UserInfo(login=login, email=user.email)
+    user_info = UserInfo(
+        login=login, email=source_operations.get_user(login=login).email
+    )
     if user_info.email is None:
         logger.warning("GitHub user %s has no email", login)
     cache.users_by_login[login] = user_info
@@ -91,9 +97,11 @@ def _get_user_info(user: NamedUser, cache: GitHubGroupSyncCache) -> UserInfo:
 
 
 def _fetch_organization_group(
-    github_client: Github, repo: Repository, cache: GitHubGroupSyncCache
+    source_operations: GitHubSourceOperations,
+    repo: GitHubRepository,
+    cache: GitHubGroupSyncCache,
 ) -> ExternalUserGroup:
-    organization = repo.organization
+    organization: GitHubOrganizationRef | None = repo.organization
     if organization is None:
         raise ValueError(f"Repository {repo.full_name} has no organization")
 
@@ -104,25 +112,16 @@ def _fetch_organization_group(
     org_name = organization.login
     logger.info("Fetching organization members for %s", org_name)
 
-    org = _run_with_retry(
-        lambda: github_client.get_organization(org_name),
-        f"get organization {org_name}",
-        github_client,
-    )
-    if not org:
-        logger.error("Failed to fetch organization %s", org_name)
-        raise RuntimeError(f"Failed to fetch organization {org_name}")
-
-    members: PaginatedList[NamedUser] | list[NamedUser] = _run_with_retry(
-        lambda: org.get_members(filter_="all"),
+    member_logins: list[str] = _run_with_retry(
+        lambda: source_operations.list_organization_members(org_login=org_name),
         f"get members for organization {org_name}",
-        github_client,
+        source_operations,
     )
 
     user_emails = {
         user_info.email
-        for member in members
-        if (user_info := _get_user_info(member, cache)).email
+        for login in member_logins
+        if (user_info := _get_user_info(login, source_operations, cache)).email
     }
     organization_group = ExternalUserGroup(
         id=form_organization_group_id(organization.id),
@@ -135,18 +134,22 @@ def _fetch_organization_group(
 
 
 def _fetch_repository_collaborator_emails(
-    repo: Repository, github_client: Github, cache: GitHubGroupSyncCache
+    repo: GitHubRepository,
+    source_operations: GitHubSourceOperations,
+    cache: GitHubGroupSyncCache,
 ) -> set[str]:
     """Fetch every user with repository access, regardless of the grant source."""
-    collaborators: PaginatedList[NamedUser] | list[NamedUser] = _run_with_retry(
-        repo.get_collaborators,
+    collaborator_logins: list[str] = _run_with_retry(
+        lambda: source_operations.list_repository_collaborators(
+            repo_full_name=repo.full_name
+        ),
         f"get collaborators for repository {repo.full_name}",
-        github_client,
+        source_operations,
     )
     user_emails = {
         user_info.email
-        for collaborator in collaborators
-        if (user_info := _get_user_info(collaborator, cache)).email
+        for login in collaborator_logins
+        if (user_info := _get_user_info(login, source_operations, cache)).email
     }
     logger.info(
         "Fetched %s collaborators with emails for repository %s",
@@ -174,33 +177,28 @@ def form_organization_group_id(organization_id: int) -> str:
     return group_id
 
 
-def get_repository_visibility(repo: Repository) -> GitHubVisibility:
+def get_repository_visibility(repo: GitHubRepository) -> GitHubVisibility:
     """
     Get the visibility of a repository.
     Returns GitHubVisibility enum member.
     """
-    if hasattr(repo, "visibility"):
-        visibility = repo.visibility
-        logger.info(
-            "Repository %s visibility from attribute: %s", repo.full_name, visibility
+    visibility = repo.visibility
+    logger.info(
+        "Repository %s visibility from attribute: %s", repo.full_name, visibility
+    )
+    try:
+        return GitHubVisibility(visibility)
+    except ValueError:
+        logger.warning(
+            "Unknown visibility '%s' for repo %s, defaulting to private",
+            visibility,
+            repo.full_name,
         )
-        try:
-            return GitHubVisibility(visibility)
-        except ValueError:
-            logger.warning(
-                "Unknown visibility '%s' for repo %s, defaulting to private",
-                visibility,
-                repo.full_name,
-            )
-            return GitHubVisibility.PRIVATE
-
-    logger.info("Repository %s is private", repo.full_name)
-    return GitHubVisibility.PRIVATE
+        return GitHubVisibility.PRIVATE
 
 
 def get_external_access_permission(
-    repo: Repository,
-    github_client: Github,  # noqa: ARG001
+    repo: GitHubRepository,
     add_prefix: bool = False,
 ) -> ExternalAccess:
     """
@@ -271,8 +269,8 @@ def get_external_access_permission(
 
 
 def get_external_user_group(
-    repo: Repository,
-    github_client: Github,
+    repo: GitHubRepository,
+    source_operations: GitHubSourceOperations,
     cache: GitHubGroupSyncCache,
 ) -> list[ExternalUserGroup]:
     """Build the repository group while sharing users and organizations across repos."""
@@ -285,7 +283,9 @@ def get_external_user_group(
 
     if repo_visibility == GitHubVisibility.PRIVATE:
         logger.info("Processing private repository %s", repo.full_name)
-        user_emails = _fetch_repository_collaborator_emails(repo, github_client, cache)
+        user_emails = _fetch_repository_collaborator_emails(
+            repo, source_operations, cache
+        )
         if not user_emails:
             return []
 
@@ -308,7 +308,7 @@ def get_external_user_group(
         organization_id = organization.id
         if organization_id in cache.organization_groups_by_id:
             return []
-        return [_fetch_organization_group(github_client, repo, cache)]
+        return [_fetch_organization_group(source_operations, repo, cache)]
 
     logger.info("Repository %s is public - no user groups needed", repo.full_name)
     return []

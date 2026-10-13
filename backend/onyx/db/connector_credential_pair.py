@@ -409,6 +409,24 @@ def _add_user_filters(
     return stmt.where(where_clause)
 
 
+def get_cc_pairs_using_credential(
+    db_session: Session, credential_id: int, source: DocumentSource
+) -> list[ConnectorCredentialPair]:
+    """The pairs of ``source`` connectors that use the credential and are not
+    being deleted, with their connectors loaded. Not filtered by user."""
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(Connector, Connector.id == ConnectorCredentialPair.connector_id)
+        .options(selectinload(ConnectorCredentialPair.connector))
+        .where(
+            ConnectorCredentialPair.credential_id == credential_id,
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+            Connector.source == source,
+        )
+    )
+    return list(db_session.scalars(stmt).all())
+
+
 def get_manageable_cc_pairs_for_credentials(
     db_session: Session,
     user: User,

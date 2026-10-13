@@ -80,7 +80,8 @@ them). Current taxonomy (`AuditAction` in `backend/onyx/utils/audit.py`):
   `user_group.rename`, `user_group.delete`, `user_group.permission_change`,
   `user_group.manager_change`
 - **API activity (admin config / resource CRUD):** `settings.craft_default_change`,
-  `search_settings.contextual_rag_model_update`, `llm_provider.{create,update,delete}`,
+  `search_settings.contextual_rag_model_update`, `search_settings.cc_pair_access_mode_change`,
+  `llm_provider.{create,update,delete}`,
   `connector.{create,update,delete}`, `cc_pair.{create,update,delete}`,
   `api_key.{create,regenerate,update,delete}`, `credential.{create,update,delete}`,
   `credential.access`, `permission.denied`

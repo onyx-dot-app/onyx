@@ -141,13 +141,13 @@ It never talks to an LLM.
 Returns a frozen `ChatTurnSetup` (`chat_state.py`). It is frozen and detached from
 the DB session on purpose: worker threads must not hold ORM objects.
 
-It resolves, in this order:
+Preparation resolves:
 - the session, the persona, and the LLM(s) via `get_llm_for_persona`
-- the custom agent prompt via `get_custom_agent_prompt(persona, chat_session)`. It may
-  come from the agent **or** the project. **A custom persona fully supersedes the
-  project.**
+- combined project and agent instructions via `get_custom_agent_prompt(persona, chat_session)`;
+  agent instructions take precedence on conflicts ([[projects]] §4.5)
 - user memories via `get_memories`
-- context files via `resolve_context_user_files` and `extract_context_files`
+- the combined project and agent file selection via `resolve_context_user_files`,
+  reused by prompt loading and tools; `extract_context_files` applies the shared budget
 - reserved token count via `calculate_reserved_tokens` (`chat/prompt_utils.py`)
 - the user message row via `create_new_chat_message`
 - assistant message IDs via `reserve_message_id` or `reserve_multi_model_message_ids`
@@ -185,8 +185,8 @@ The reasoning behind each position is in `backend/onyx/chat/README.md` and in
 
 - The custom agent prompt is a **user message**, not part of the system prompt, and
   it **moves** to sit just above the newest user message each turn. If
-  `persona.replace_base_system_prompt` is set, it replaces the system prompt instead
-  and stops moving.
+  `persona.replace_base_system_prompt` is set, agent instructions form the system
+  prompt; project instructions remain a separate moving user message.
 - The reminder is always **last**. Models attend hardest to the final tokens. The
   citation reminder lives here, and it stays until the turn ends.
 

@@ -322,8 +322,12 @@ invocation, inside the single DB session opened at the top of `run()`
 ### 4.3a Query-time cc-pair access filter
 
 A `SYNC_RESTRICTED` pair needs the workspace setting `allow_connector_group_restrictions`
-(`/admin/security`, default off, Business tier to turn on). `cc_pair.py:_assert_sync_restricted_allowed`
-rejects a pair that uses it while the setting is off.
+(`/admin/security`, default off, Business tier to turn on).
+`onyx/connectors/pairing_access.py:validate_pairing_access` rejects a pair that uses it
+while the setting is off. It also rejects a pair that becomes `SYNC_RESTRICTED` before
+the `cc_pair_ids` backfill of the current index is complete, because the guard below
+cannot hide chunks that do not have `cc_pair_ids` yet. A pair that is already
+`SYNC_RESTRICTED` can still change its groups while a new index runs its backfill.
 
 A second filter works from the cc-pair a chunk belongs to instead of from the
 ACL snapshot stored on the chunk. `onyx/db/connector_credential_pair.py:get_cc_pair_access_sets_for_user`
@@ -368,6 +372,12 @@ picks the `CCPairAccessMode`:
 - `ENFORCE`: results use the cc-pair filter. This needs the `enabled` flag,
   the Redis-only flag `cc_pair_access_filter` / `enforce`, and a finished `cc_pair_ids` backfill
   (`document_index/opensearch/cc_pair_ids_backfill.py:is_cc_pair_ids_backfill_complete`).
+
+Both flags live in the cache (`OnyxRuntime`). On a self-hosted deployment, an
+admin sets them with the mode dropdown on Index Settings
+(`PUT /search-settings/cc-pair-access-mode`). That route refuses `ENFORCE` before
+the backfill is complete. It refuses every change in a multi-tenant deployment,
+because there the flags are shared by all tenants and operators own them.
 
 In `_get_search_filters`, `_get_cc_pair_access_visibility_filter` replaces the
 ACL clause only in `ENFORCE` mode. In every other mode the ACL clause stays,

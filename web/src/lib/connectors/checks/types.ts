@@ -24,6 +24,45 @@ export type CapabilityCheckStatus =
   | "indeterminate"
   | "skipped";
 
+/** What a discovery check lists, named by `CheckFindingKey` on the backend. */
+export type CheckFindingKey =
+  | "shared_drives"
+  | "visible_organization_users"
+  | "visible_spaces"
+  | "readable_channels"
+  | "readable_mailboxes"
+  | "readable_drives";
+
+/** One choice a listing offers a config field. */
+export interface FindingOption {
+  /** What the config field stores: an id or a URL. */
+  value: string;
+  /** What the admin reads. */
+  label: string;
+  detail: string | null;
+}
+
+export interface OptionsFinding {
+  type: "options";
+  key: CheckFindingKey;
+  /** The config field the options are for. */
+  field_name: string | null;
+  options: FindingOption[];
+  /** The listing stopped at the backend's option cap. */
+  truncated: boolean;
+}
+
+export interface CountFinding {
+  type: "count";
+  key: CheckFindingKey;
+  field_name: string | null;
+  count: number;
+  /** The listing stopped at a cap, so the real count is at least `count`. */
+  at_least: boolean;
+}
+
+export type CheckFinding = OptionsFinding | CountFinding;
+
 /** One finished check, as the checks card shows it. */
 export interface CapabilityCheckResult {
   capability: CredentialCapability;
@@ -37,6 +76,8 @@ export interface CapabilityCheckResult {
   remediation: string | null;
   docs_link: string | null;
   duration_ms: number | null;
+  /** What a passing discovery check listed. Empty for every other check. */
+  findings: CheckFinding[];
 }
 
 /** A check's state in a draft run. */
@@ -90,6 +131,7 @@ export interface DraftCheckState {
   from_cache: boolean;
   /** The check proves the credential works with the credential-bound fields. */
   validates_binding: boolean;
+  findings: CheckFinding[];
 }
 
 export interface DraftCheckRunSnapshot {
@@ -123,6 +165,18 @@ export interface DraftCheckPlanRequest {
   source: ValidSources;
   access_type: AccessType | null;
   form_state: Record<string, unknown>;
+}
+
+/**
+ * Body of `POST /manage/admin/cc-pair/{id}/edit/checks`: a dry run of the
+ * checks on a proposed edit of the pair.
+ */
+export interface PairEditCheckRunRequest {
+  connector_specific_config: Record<string, unknown>;
+  access_type: AccessType;
+  /** `null` keeps the pair's credential. */
+  credential_id: number | null;
+  rerun: DraftRerunMode;
 }
 
 /**

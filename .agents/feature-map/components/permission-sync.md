@@ -222,7 +222,7 @@ in every connector SDK.
 Perm-sync capability checks (`validate_perm_sync` probes and named checks) are
 dispatched from `ee/onyx/connectors/capability_checks.py` and `perm_sync_valid.py`. The
 check implementations live in the connector modules. Confluence, Google Drive, OneDrive,
-Outlook, Slack, and HubSpot have named perm-sync checks. See [[connectors]] §4.8.
+Outlook, SharePoint, GitHub, Slack, and HubSpot have named perm-sync checks. See [[connectors]] §4.8.
 
 ### 4.2 Doc sync flow
 
@@ -272,6 +272,9 @@ are thin wrappers around `generic_doc_sync`, differing only in which connector
 class and `DocumentSource` they pass. Four sources have a different
 shape: Slack and Google Drive (below), and Gmail and GitHub (own `doc_sync.py`, no
 `generic_doc_sync`; GitHub uses `fetch_all_existing_docs_fn` to re-check repository visibility).
+GitHub group sync reads the collaborators of private repositories and the members of
+the organization of internal ones, and maps each user by the public email of the
+profile. The `github_user_emails` check warns when no sampled user has one.
 
 - **Slack** (`ee/onyx/external_permissions/slack/doc_sync.py:slack_doc_sync`)
   does not use `generic_doc_sync` at all. Slack has no document-level ACL

@@ -17,8 +17,8 @@ import {
   getCredentialSpec,
   initialCredentialValues,
 } from "@/lib/credentials/utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import {
   DEFAULT_SHARE_AUDIENCE,
   ShareAccountField,
@@ -27,6 +27,7 @@ import {
 } from "@/lib/credentials/components/ShareAccountField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
+import { AccountNameField } from "@/lib/credentials/components/AccountNameField";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgPlusCircle } from "@opal/icons";
 
@@ -51,6 +52,8 @@ function CreateButton({ onClick, isSubmitting, isValid }: CreateButtonProps) {
 }
 
 type CreateCredentialFormValues = ShareAccountFormValues & {
+  /** The account's display name; blank leaves it "Untitled". */
+  name: string;
   [key: string]: unknown;
 };
 
@@ -110,7 +113,8 @@ export default function CreateCredential({
     setSubmitting(true);
     formikHelpers.setSubmitting(true);
 
-    const { share, groups, ...credentialValues } = values;
+    const { share, groups, name, ...credentialValues } = values;
+    const displayName: string = name.trim();
 
     let privateKey: TypedFile | null = null;
     const filteredCredentialValues = Object.fromEntries(
@@ -127,7 +131,7 @@ export default function CreateCredential({
       const response = await submitCredential({
         credential_json: filteredCredentialValues,
         ...shareAccountPayload({ share, groups }),
-        // No name: the credential list shows its "Untitled" fallback.
+        ...(displayName && { name: displayName }),
         source: sourceType,
         private_key: privateKey || undefined,
       });
@@ -199,6 +203,7 @@ export default function CreateCredential({
     <Formik<CreateCredentialFormValues>
       initialValues={{
         ...initialCredentialValues(spec),
+        name: "",
         share: DEFAULT_SHARE_AUDIENCE,
         groups: [],
         ...(initialAuthMethod && {
@@ -231,15 +236,19 @@ export default function CreateCredential({
                 setAuthMethod={setAuthMethod}
               />
 
-              {/* Above: the fields the source needs. Below: optional sharing
-              and the Create button. */}
+              {/* Above: the fields the source needs. Below: the optional name
+              and sharing, then the Create button. */}
               <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-              {businessTier && (
-                <Disabled disabled={!formikProps.isValid}>
-                  <ShareAccountField disabled={!formikProps.isValid} />
-                </Disabled>
-              )}
+              <Disabled disabled={!formikProps.isValid}>
+                <Section alignItems="stretch" gap={4}>
+                  <AccountNameField name="name" />
+                  <ShareAccountField
+                    disabled={!formikProps.isValid}
+                    groupsLocked={!businessTier}
+                  />
+                </Section>
+              </Disabled>
 
               <Section flexDirection="row" justifyContent="end">
                 <CreateButton

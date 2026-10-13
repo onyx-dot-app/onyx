@@ -10,8 +10,8 @@ import {
   useSession,
   useSessionHistory,
   useBuildSessionStore,
-  SessionHistoryItem,
 } from "@/app/craft/hooks/useBuildSessionStore";
+import type { SessionHistoryItem } from "@/app/craft/types/streamingTypes";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { Button, Dropdown, SidebarTab, Text } from "@opal/components";
 import {

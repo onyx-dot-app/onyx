@@ -17,7 +17,9 @@ export const HoverPopup = ({
   return (
     <Tooltip
       tooltip={popupContent}
-      side={direction === "left-top" ? "left" : direction}
+      side={
+        direction === "left" || direction === "left-top" ? "start" : direction
+      }
     >
       <div>{mainContent}</div>
     </Tooltip>

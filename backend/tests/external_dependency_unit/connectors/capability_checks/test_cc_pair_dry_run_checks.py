@@ -7,7 +7,7 @@ trigger, which runs the named checks as pairing validation does."""
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -43,12 +43,13 @@ from onyx.connectors.models import InputType
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.db.credential_capability import get_capability_report_row
 from onyx.db.enums import AccessType, CapabilityCheckTrigger, CapabilityReportRunStatus
-from onyx.db.models import ConnectorCredentialPair, Credential
+from onyx.db.models import ConnectorCredentialPair, Credential, User
 from onyx.server.documents import capability_check_runs
 from onyx.server.documents.capability_check_runs import (
     start_cc_pair_draft_check_run,
     start_draft_capability_check_run,
 )
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -123,6 +124,14 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> _Harness:
     return _Harness(monkeypatch)
 
 
+@pytest.fixture
+def admin(db_session: Session) -> Generator[User, None, None]:
+    user = create_test_user(db_session, "dry_run_admin", is_admin=True)
+    yield user
+    db_session.rollback()
+    delete_test_user(db_session, user)
+
+
 def _slack_pair(db_session: Session) -> Generator[ConnectorCredentialPair, None, None]:
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
     cc_pair.connector.input_type = InputType.POLL
@@ -147,13 +156,13 @@ def other_slack_pair(
 def _dry_run(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
-    user_id: UUID,
+    user: User,
     credential: Credential | None = None,
     config: dict[str, Any] = _PROPOSED_CONFIG,
 ) -> DraftCheckRunSnapshot:
     return start_cc_pair_draft_check_run(
         db_session,
-        user_id=user_id,
+        user=user,
         cc_pair_id=cc_pair.id,
         proposed_credential=credential,
         access_type=AccessType.PUBLIC,
@@ -167,10 +176,13 @@ def _states(snapshot: DraftCheckRunSnapshot) -> dict[str, DraftCheckStateKind]:
 
 @pytest.mark.usefixtures("tenant_context")
 def test_dry_run_uses_the_proposed_state_and_the_pairs_connector(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
-    user_id = uuid4()
-    started = _dry_run(db_session, slack_pair, user_id)
+    user_id = admin.id
+    started = _dry_run(db_session, slack_pair, admin)
     assert started.status == DraftRunStatus.RUNNING
     harness.run_last_task()
 
@@ -197,11 +209,14 @@ def test_dry_run_uses_the_proposed_state_and_the_pairs_connector(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_dry_run_of_an_all_default_config_runs_the_config_checks(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     # {} is a complete Slack config: every field takes its default.
-    user_id = uuid4()
-    started = _dry_run(db_session, slack_pair, user_id, config={})
+    user_id = admin.id
+    started = _dry_run(db_session, slack_pair, admin, config={})
     assert _states(started) == {
         _TOKEN: DraftCheckStateKind.PENDING,
         _CHANNELS: DraftCheckStateKind.PENDING,
@@ -220,14 +235,15 @@ def test_dry_run_of_an_all_default_config_runs_the_config_checks(
 @pytest.mark.usefixtures("tenant_context")
 def test_dry_run_results_are_cached_apart_from_create_forms_and_other_pairs(
     db_session: Session,
+    admin: User,
     harness: _Harness,
     slack_pair: ConnectorCredentialPair,
     other_slack_pair: ConnectorCredentialPair,
 ) -> None:
-    user_id = uuid4()
     # A create-form draft run with the same credential, access type and form.
     start_draft_capability_check_run(
-        user_id=user_id,
+        db_session,
+        user=admin,
         credential=slack_pair.credential,
         source=DocumentSource.SLACK,
         config_class=SlackConnectorConfig,
@@ -240,19 +256,19 @@ def test_dry_run_results_are_cached_apart_from_create_forms_and_other_pairs(
 
     # The pair's dry run does not reuse the create-form results.
     harness.send_task.reset_mock()
-    _dry_run(db_session, slack_pair, user_id)
+    _dry_run(db_session, slack_pair, admin)
     harness.run_last_task()
     assert harness.runs == [_TOKEN, _CHANNELS] * 2
 
     # Another pair with the same proposed credential does not reuse them.
     harness.send_task.reset_mock()
-    _dry_run(db_session, other_slack_pair, user_id, credential=slack_pair.credential)
+    _dry_run(db_session, other_slack_pair, admin, credential=slack_pair.credential)
     harness.run_last_task()
     assert harness.runs == [_TOKEN, _CHANNELS] * 3
 
     # The same pair and proposed state reuses its own results.
     harness.send_task.reset_mock()
-    cached = _dry_run(db_session, slack_pair, user_id)
+    cached = _dry_run(db_session, slack_pair, admin)
     assert cached.status == DraftRunStatus.COMPLETED
     assert all(check.from_cache for check in cached.checks)
     harness.send_task.assert_not_called()
@@ -260,12 +276,15 @@ def test_dry_run_results_are_cached_apart_from_create_forms_and_other_pairs(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_a_newer_dry_run_of_the_pair_supersedes_the_earlier(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
-    user_id = uuid4()
-    first = _dry_run(db_session, slack_pair, user_id)
+    user_id = admin.id
+    first = _dry_run(db_session, slack_pair, admin)
     first_task_kwargs = harness.send_task.call_args.kwargs["kwargs"]
-    second = _dry_run(db_session, slack_pair, user_id)
+    second = _dry_run(db_session, slack_pair, admin)
 
     first_read = read_draft_run_for_user(first.run_id, user_id)
     assert first_read is not None
@@ -282,10 +301,13 @@ def test_a_newer_dry_run_of_the_pair_supersedes_the_earlier(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_edit_validations_read_the_pairs_dry_run_results(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     harness.errors[_CHANNELS] = ConnectorValidationError("bot not in channel")
-    _dry_run(db_session, slack_pair, uuid4())
+    _dry_run(db_session, slack_pair, admin)
     harness.run_last_task()
     harness.runs.clear()
 
@@ -340,10 +362,13 @@ def _validate_proposed_for_edit(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_connector_config_update_runs_the_named_checks(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     # Apply validates the proposed config before it writes it.
-    _dry_run(db_session, slack_pair, uuid4())
+    _dry_run(db_session, slack_pair, admin)
     harness.run_last_task()
     harness.runs.clear()
 

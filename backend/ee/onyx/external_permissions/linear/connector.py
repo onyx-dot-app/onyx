@@ -39,18 +39,6 @@ def _beat(callback: IndexingHeartbeatInterface | None, amount: int) -> None:
 class LinearPermSyncConnector(LinearConnector, SlimConnectorWithPermSync):
     """The connector with its permission walk."""
 
-    @classmethod
-    def from_connector(cls, connector: LinearConnector) -> "LinearPermSyncConnector":
-        """The twin of a connector the factory built, on the same credential
-        provider."""
-        twin = cls(
-            team_keys=connector.team_keys,
-            projects=connector.projects,
-            batch_size=connector.batch_size,
-        )
-        twin.set_credentials_provider(connector.ops.credentials_provider)
-        return twin
-
     def retrieve_all_slim_docs_perm_sync(
         self,
         start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002

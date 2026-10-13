@@ -30,7 +30,7 @@ def test_unregistered_source_gets_connector_settings_fallback() -> None:
     Verifies fallback synthesis for a source with no named INDEXING checks.
     """
     # Under test.
-    checks = get_capability_checks(DocumentSource.GITHUB)
+    checks = get_capability_checks(DocumentSource.BOX)
 
     # Postcondition.
     # On OSS builds only the synthesized INDEXING check exists.
@@ -39,7 +39,7 @@ def test_unregistered_source_gets_connector_settings_fallback() -> None:
     ]
     assert len(indexing_checks) == 1
     fallback = indexing_checks[0]
-    assert fallback.check_id == "github_connector_settings"
+    assert fallback.check_id == "box_connector_settings"
     assert fallback.is_fallback is True
     assert fallback.required is True
     assert fallback.requires_connector_instance is True
@@ -53,21 +53,21 @@ def test_registered_source_gets_no_fallback(monkeypatch: pytest.MonkeyPatch) -> 
     # the gateway).
     monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})
 
-    class _GithubOperations(SourceOperations):
-        source = DocumentSource.GITHUB
+    class _BoxOperations(SourceOperations):
+        source = DocumentSource.BOX
         sdk_modules = ()
 
     named_check = _NamedCheck(
         capability=CredentialCapability.INDEXING,
-        check_id="github_named_check",
+        check_id="box_named_check",
         display_name="Named check",
     )
     monkeypatch.setitem(
-        registry._INDEXING_CHECKS_BY_SOURCE, DocumentSource.GITHUB, [named_check]
+        registry._INDEXING_CHECKS_BY_SOURCE, DocumentSource.BOX, [named_check]
     )
 
     # Under test.
-    checks = get_capability_checks(DocumentSource.GITHUB)
+    checks = get_capability_checks(DocumentSource.BOX)
 
     # Postcondition.
     indexing_checks = [
@@ -84,11 +84,11 @@ def test_fallback_check_calls_validate_connector_settings() -> None:
     # Precondition.
     connector = MagicMock(spec=BaseConnector)
     context = CapabilityCheckContext(
-        source=DocumentSource.GITHUB,
+        source=DocumentSource.BOX,
         credential_json={},
         connector=connector,
     )
-    check = get_capability_checks(DocumentSource.GITHUB)[0]
+    check = get_capability_checks(DocumentSource.BOX)[0]
 
     # Under test.
     check.run(context)

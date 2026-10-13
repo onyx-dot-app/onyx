@@ -2,24 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  Divider,
-  Fold,
-  InputTypeIn,
-  SelectCard,
-  Tabs,
-} from "@opal/components";
-import {
-  Content,
-  ContentAction,
-  InputVertical,
-  Section,
-  toast,
-} from "@opal/layouts";
+import { Button, Divider, Fold, SelectCard, Tabs } from "@opal/components";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import { cn } from "@opal/utils";
-import { FormikField } from "@/refresh-components/form/FormikField";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type {
   Credential,
@@ -34,9 +20,11 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
+import { AccountNameField } from "@/lib/credentials/components/AccountNameField";
+import { updateCredentialSharing } from "@/lib/credentials/svc";
 import { getIn, useFormikContext } from "formik";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import {
   NEW_ACCOUNT_FIELD,
   NEW_ACCOUNT_NAME_FIELD,
@@ -80,6 +68,8 @@ interface AuthenticationAccountSectionProps {
   checkedCredential: Credential<any> | DraftCredential | null;
   /** Locks the Start Checks prompt, as the configuration below is locked. */
   checksLocked: boolean;
+  /** Set when the form edits this pair: the checks are dry runs of it. */
+  editCCPairId?: number | null;
 }
 
 /**
@@ -96,9 +86,9 @@ export default function AuthenticationAccountSection({
   newAccountReady,
   checkedCredential,
   checksLocked,
+  editCCPairId = null,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
-  const tCreate = useTranslations("admin.credentials.create");
   const newAccountNameField = `${NEW_ACCOUNT_FIELD}.${NEW_ACCOUNT_NAME_FIELD}`;
   const settings = useSettings();
   const {
@@ -121,9 +111,17 @@ export default function AuthenticationAccountSection({
   // Expanded, the section lists every account. Folded, only the chosen one
   // (or the new-account card when nothing is chosen) stays.
   const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
-  /** Folds the section. The new-account card closes too; expanding leaves it closed. */
+  // The saved accounts whose details are open.
+  const [openDetailIds, setOpenDetailIds] = useState<ReadonlySet<number>>(
+    () => new Set()
+  );
+  /**
+   * Folds the section. Every card's details close too, the new account's
+   * form and each saved account's; expanding leaves them closed.
+   */
   function foldAccounts() {
     close();
+    setOpenDetailIds(new Set());
     setAccountsExpanded(false);
   }
 
@@ -175,7 +173,31 @@ export default function AuthenticationAccountSection({
     if (currentCredential !== null) onCredentialChange(null);
   }, [newAccountKey, currentCredential, onCredentialChange]);
 
+  // A picked account that drops out of the list was un-shared or deleted by
+  // someone else: say so and drop the pick. Only an account the list has
+  // shown counts, so a just-created pick waits for the list to catch up.
+  const pickSeenRef = useRef<number | null>(null);
+  const deletingIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (credentials === undefined || selectedSavedId === null) return;
+    if (credentials.some((credential) => credential.id === selectedSavedId)) {
+      pickSeenRef.current = selectedSavedId;
+      return;
+    }
+    if (
+      pickSeenRef.current !== selectedSavedId ||
+      deletingIdRef.current === selectedSavedId
+    ) {
+      return;
+    }
+    pickSeenRef.current = null;
+    toast.error(t("add.accountUnavailable.toast"));
+    onCredentialChange(null);
+  }, [credentials, selectedSavedId, onCredentialChange, t]);
+
   async function onDeleteCredential(credential: Credential<any | null>) {
+    // The user's own delete is not an account going missing.
+    deletingIdRef.current = credential.id;
     const error = await remove(credential, t("add.unknownError.toast"));
     if (error === null) {
       // A deleted account cannot stay picked.
@@ -183,6 +205,7 @@ export default function AuthenticationAccountSection({
     } else {
       toast.error(error);
     }
+    deletingIdRef.current = null;
   }
 
   async function onSwap(selectedCredential: Credential<any>) {
@@ -241,29 +264,12 @@ export default function AuthenticationAccountSection({
           {/* Opens once the account's own fields are valid. */}
           <Disabled disabled={!newAccountReady}>
             <Section alignItems="stretch" gap={4}>
-              <InputVertical
-                withLabel={newAccountNameField}
-                title={tCreate("nameField.title")}
-                suffix="optional"
-              >
-                <FormikField<string>
-                  name={newAccountNameField}
-                  render={(formikField) => (
-                    <InputTypeIn
-                      {...formikField}
-                      id={newAccountNameField}
-                      value={formikField.value ?? ""}
-                      placeholder={tCreate("nameField.placeholder")}
-                    />
-                  )}
-                />
-              </InputVertical>
-              {businessTier && (
-                <ShareAccountField
-                  namePrefix={NEW_ACCOUNT_FIELD}
-                  disabled={!newAccountReady}
-                />
-              )}
+              <AccountNameField name={newAccountNameField} />
+              <ShareAccountField
+                namePrefix={NEW_ACCOUNT_FIELD}
+                disabled={!newAccountReady}
+                groupsLocked={!businessTier}
+              />
             </Section>
           </Disabled>
         </Section>
@@ -344,8 +350,27 @@ export default function AuthenticationAccountSection({
             : setAccountsExpanded(true)
         }
         onDelete={() => onDeleteCredential(credential)}
+        detailsOpen={openDetailIds.has(credential.id)}
+        onDetailsOpenChange={(open) =>
+          setOpenDetailIds((ids) => {
+            const next = new Set(ids);
+            if (open) next.add(credential.id);
+            else next.delete(credential.id);
+            return next;
+          })
+        }
         checkReport={checkReports.reportFor(credential.id)}
         onRerunChecks={() => checkReports.rerun(credential.id)}
+        groupsLocked={!businessTier}
+        // The sharing route also renames: it allows group managers, and
+        // checks that the user may edit the account.
+        onSaveAccount={async (update) => {
+          const response = await updateCredentialSharing(credential.id, update);
+          if (!response.ok) throw new Error(await response.text());
+          const saved: SimilarCredential = await response.json();
+          refresh();
+          return saved;
+        }}
       />
     );
   }
@@ -538,6 +563,7 @@ export default function AuthenticationAccountSection({
             locked={checksLocked || !checkedCredential}
             // Starting the checks completes the account step, so it folds.
             onStart={foldAccounts}
+            ccPairId={editCCPairId}
           />
         </Section>
       )}

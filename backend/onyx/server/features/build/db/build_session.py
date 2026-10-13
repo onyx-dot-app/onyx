@@ -65,12 +65,16 @@ def get_build_session(
     session_id: UUID,
     user_id: UUID,
     db_session: Session,
+    *,
+    for_update: bool = False,
 ) -> BuildSession | None:
     """Get a build session by ID, ensuring it belongs to the user."""
     stmt = select(BuildSession).where(
         BuildSession.id == session_id,
         BuildSession.user_id == user_id,
     )
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db_session.scalar(stmt)
 
 

@@ -7,14 +7,17 @@ import ManageAccessField from "@/views/admin/connectors/AddConnectorPage/compone
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
 import { getSourceDisplayName } from "@/lib/sources";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
 
 interface ConnectorSettingsSectionProps {
   connector: ConfigurableSources;
   currentCredential: CredentialValues | null;
   /** Freezes the section while the page locks the configuration. */
   disabled?: boolean;
+  /**
+   * The form edits a saved pair: its access stays as loaded, and its manage
+   * groups are not part of the edit.
+   */
+  editing?: boolean;
 }
 
 /** The connector's name, who can read its documents, and who manages it. */
@@ -22,10 +25,9 @@ export default function ConnectorSettingsSection({
   connector,
   currentCredential,
   disabled,
+  editing = false,
 }: ConnectorSettingsSectionProps) {
   const t = useTranslations("admin.connectorsList.settings");
-  // Below Business every connector is public and only admins manage it.
-  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   return (
     <Collapsible
@@ -52,11 +54,14 @@ export default function ConnectorSettingsSection({
               connector={connector}
               currentCredential={currentCredential}
               disabled={disabled}
+              keepInitialAccess={editing}
             />
           </Section>
         </Card>
 
-        {businessTier && (
+        {/* Shown on every tier; below Business its groups are locked. Edit
+            mode leaves the manage groups alone. */}
+        {!editing && (
           <Card border="solid" rounding={4} padding={4} disabled={disabled}>
             <ManageAccessField disabled={disabled} />
           </Card>

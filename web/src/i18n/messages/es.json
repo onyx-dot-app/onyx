@@ -1857,9 +1857,6 @@
           "restoreTooltip": "Restaurar el valor predeterminado"
         },
         "description": "Indica cuánto tiempo debe conservar {appName} los chats de tu organización.",
-        "enterprisePlanTag": {
-          "label": "Plan Enterprise"
-        },
         "forever": {
           "label": "Para siempre"
         },
@@ -1875,16 +1872,11 @@
           "message": "Los chats sin actividad durante más de {days, plural, one {# día} other {# días}} se eliminarán de forma permanente. Esta acción no se puede deshacer.",
           "title": "¿Reducir la retención de chats?"
         },
-        "tierTooltip": "La retención del historial de chats es una función del plan Enterprise.",
         "title": "Conservar el historial de chats"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Plan Business"
-        },
         "description": "Modo de interfaz para buscar documentos rápidamente en tu organización.",
         "noConnectorsTooltip": "Configura conectores para usar el modo de búsqueda",
-        "tierTooltip": "El modo de búsqueda requiere el plan Business o Enterprise.",
         "title": "Modo de búsqueda"
       },
       "systemPrompt": {
@@ -2772,7 +2764,28 @@
           },
           "rerunFailed": {
             "toast": "No se pudieron iniciar las comprobaciones. Inténtalo de nuevo."
+          },
+          "shareSaved": {
+            "toast": "Uso compartido actualizado."
+          },
+          "shareFailed": {
+            "toast": "No se pudo cambiar quién puede usar esta cuenta. Inténtalo de nuevo."
+          },
+          "renameSaved": {
+            "toast": "Cuenta renombrada."
+          },
+          "renameFailed": {
+            "toast": "No se pudo cambiar el nombre de esta cuenta. Inténtalo de nuevo."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Solo quien añadió esta cuenta puede hacerla privada."
+          },
+          "shareLocked": {
+            "tooltip": "Solo quien añadió esta cuenta, o un administrador con quien está compartida, puede cambiar quién puede usarla."
           }
+        },
+        "accountUnavailable": {
+          "toast": "Esta cuenta ya no está disponible para ti. Elige otra cuenta."
         }
       },
       "credentialRequired": {
@@ -3121,6 +3134,9 @@
           "title": "Acceso de gestión del conector"
         },
         "title": "Configuración del conector"
+      },
+      "optionsListInput": {
+        "placeholder": "Elige {label} de la lista o escríbelo"
       }
     },
     "costOverrides": {
@@ -3503,7 +3519,7 @@
         "jiraUserEmail": "Obligatorio para Jira Cloud.",
         "lumappsServiceUser": "El usuario en cuyo nombre se indexa.",
         "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
-        "pfxFile": "Un archivo PFX.",
+        "pfxFile": "Sube el archivo `.pfx` que contiene la clave privada del registro de la aplicación. Debe ocupar menos de 10 KB.",
         "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io."
       },
       "methods": {
@@ -5236,6 +5252,10 @@
         "orSeparator": {
           "label": "o"
         },
+        "quantizationOnly": {
+          "description": "Solo cambió la cuantización de vectores, así que Onyx reconstruye el índice a partir de los vectores almacenados, sin volver a generar embeddings. Esto es mucho más rápido que una reindexación completa.",
+          "title": "Se reconstruirá el índice."
+        },
         "reindex": {
           "description": "La reindexación puede tardar *horas o días* según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Se ejecutará una reindexación completa."
@@ -5456,7 +5476,9 @@
         "cancelButton": {
           "label": "Cancelar la reindexación y revertir"
         },
+        "copyTitle": "Reconstruyendo el índice…",
         "description": {
+          "copy": "Onyx está reconstruyendo el índice a partir de los vectores almacenados, sin volver a generar embeddings. Esto es mucho más rápido que volver a generarlos.",
           "withModel": "La nueva configuración de embeddings (**{model}**) se aplica a medida que avanza la reindexación. Esto puede tardar **horas o días** según el tamaño del corpus.",
           "withoutModel": "La nueva configuración de embeddings se aplica a medida que avanza la reindexación. Esto puede tardar **horas o días** según el tamaño del corpus."
         },
@@ -5622,6 +5644,62 @@
         "e5SmallV2": "La versión más pequeña y rápida de la línea de modelos E5. Si ejecutas {appName} en un sistema con recursos limitados, puede ser una buena opción.",
         "multilingualE5Base": "Para corpus en idiomas distintos del inglés, esta es la opción indicada.",
         "multilingualE5Small": "Para corpus en idiomas distintos del inglés en un sistema con recursos limitados, esta es la opción indicada."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Todos los fragmentos del índice de búsqueda tienen sus ID de conector. La búsqueda usa el acceso por conector.",
+            "off": "Todos los fragmentos del índice de búsqueda tienen sus ID de conector. La búsqueda usa las listas de acceso de los documentos. El acceso por conector está desactivado.",
+            "shadow": "Todos los fragmentos del índice de búsqueda tienen sus ID de conector. La búsqueda usa las listas de acceso de los documentos y las compara con el acceso por conector."
+          },
+          "title": "Actualización del acceso por conector completada"
+        },
+        "notStarted": {
+          "description": "Un proceso en segundo plano añadirá los ID de conector a los fragmentos existentes del índice de búsqueda. Comenzará en unos minutos.",
+          "title": "La actualización del acceso por conector no ha comenzado"
+        },
+        "progress": {
+          "ariaLabel": "Progreso de la actualización del acceso por conector"
+        },
+        "running": {
+          "description": "Un proceso en segundo plano añade los ID de conector a los fragmentos existentes del índice de búsqueda. El acceso de búsqueda por conector solo se puede aplicar cuando termine.",
+          "title": "Actualizando el índice de búsqueda para el acceso por conector…"
+        },
+        "status": {
+          "connectors": "{done, number} de {total, number} conectores completados",
+          "connectorsLeft": "{count, plural, one {Queda # conector} other {Quedan # conectores}}",
+          "current": "Conector actual: {name}",
+          "documentsLeft": "{count, plural, one {Queda # documento} other {Quedan # documentos}}"
+        },
+        "mode": {
+          "description": "Cómo decide la búsqueda qué documentos puede ver un usuario.",
+          "enforcePending": "Aplicar está configurado y empieza cuando termine la actualización.",
+          "enforceUnavailable": "Disponible cuando termine la actualización del índice de búsqueda.",
+          "label": "Modo de acceso de búsqueda",
+          "options": {
+            "enforce": {
+              "description": "La búsqueda usa el acceso por conector.",
+              "title": "Aplicar"
+            },
+            "off": {
+              "description": "La búsqueda usa las listas de acceso de los documentos.",
+              "title": "Desactivado"
+            },
+            "shadow": {
+              "description": "La búsqueda usa las listas de acceso de los documentos y registra dónde el acceso por conector da un resultado distinto.",
+              "title": "Sombra"
+            }
+          },
+          "placeholder": "Selecciona un modo",
+          "toasts": {
+            "error": "No se pudo actualizar el modo de acceso de búsqueda.",
+            "success": "Modo de acceso de búsqueda establecido en {mode}."
+          }
+        },
+        "loadError": {
+          "description": "Recarga la página para intentarlo de nuevo.",
+          "title": "No se pudo cargar la actualización del acceso por conector"
+        }
       }
     },
     "indexing": {
@@ -8998,9 +9076,6 @@
           "description": "Cuando está desactivado, todos los endpoints de la puerta de enlace rechazan las solicitudes, los tokens existentes dejan de funcionar y el ámbito de la puerta de enlace se oculta del selector de tokens. El tráfico del sandbox de Craft se controla por separado en la configuración de Craft."
         }
       },
-      "businessPlanTag": {
-        "label": "Plan Business"
-      },
       "tierTooltip": "LLM Gateway requiere el plan Business o Enterprise.",
       "scopeNote": {
         "title": "Cada usuario configura su propio token y los datos de conexión en Configuración → LLM Gateway."
@@ -9065,6 +9140,233 @@
         "completed": "Comprobaciones completadas.",
         "inProgress": "Comprobaciones en curso...",
         "waiting": "Esperando la configuración del conector..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Editar conector"
+      },
+      "header": {
+        "title": "Editar {name}",
+        "description": "Cambia la configuración de este conector de {source}. Revisarás el plan antes de aplicar los cambios.",
+        "reviewButton": {
+          "label": "Revisar cambios"
+        }
+      },
+      "loadError": {
+        "title": "No se pudo cargar el conector",
+        "description": "Vuelve a cargar la página o regresa al conector.",
+        "backButton": {
+          "label": "Volver al conector"
+        }
+      },
+      "credentialSwap": {
+        "title": "Elegiste otra credencial",
+        "description": "El plan te permite conservar los documentos indexados, o volver a indexar todo y eliminar los documentos que la nueva credencial no puede ver."
+      },
+      "files": {
+        "title": "Archivos",
+        "description": "Agrega o quita archivos. Los archivos nuevos se indexan solo después de aplicar el plan.",
+        "empty": "El conector no tiene archivos.",
+        "addButton": {
+          "label": "Agregar archivos"
+        },
+        "remove": {
+          "tooltip": "Quitar {name}"
+        },
+        "uploadFailed": {
+          "toast": "No se pudieron subir los archivos: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "No se pudo calcular el plan: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Guarde la cuenta nueva antes de revisar los cambios o elija una cuenta guardada."
+      },
+      "applied": {
+        "toast": "Se aplicaron los cambios."
+      },
+      "plan": {
+        "title": "Revisar el plan",
+        "description": "{count, plural, one {El conector tiene # documento indexado.} other {El conector tiene # documentos indexados.}}",
+        "changes": {
+          "list": "Cambios: {fields}",
+          "none": "No hay cambios."
+        },
+        "stale": {
+          "title": "El conector cambió",
+          "description": "El conector cambió después de calcular este plan. Vuelve a calcular el plan antes de aplicarlo.",
+          "replanButton": {
+            "label": "Volver a planificar"
+          }
+        },
+        "expired": {
+          "title": "El plan caducó",
+          "description": "Este plan caducó o ya se aplicó. Vuelva a calcular el plan."
+        },
+        "applyFailed": {
+          "title": "No se pudieron aplicar los cambios"
+        },
+        "validation": {
+          "title": "Validación",
+          "blocks": "La nueva configuración no superó la validación. Corrígela antes de aplicar.",
+          "warns": "Algunas comprobaciones opcionales fallaron. Aún puedes aplicar.",
+          "error": {
+            "title": "La configuración no es válida"
+          }
+        },
+        "warnings": {
+          "title": "Advertencias"
+        },
+        "notes": {
+          "title": "Notas"
+        },
+        "reconciliation": {
+          "title": "Elige cómo conciliar el cambio de alcance",
+          "description": "El plan no puede saber si el cambio en {fields} agrega o quita documentos. Elige qué hace la aplicación.",
+          "option": {
+            "prune": {
+              "title": "Depurar",
+              "description": "Quitar los documentos que ya no están en el alcance."
+            },
+            "full_reindex": {
+              "title": "Reindexación completa",
+              "description": "Indexar todo de nuevo desde la fecha de inicio para agregar los documentos que ahora están en el alcance."
+            },
+            "both": {
+              "title": "Reindexación completa y luego depurar",
+              "description": "Indexar todo de nuevo y luego quitar los documentos que ya no están en el alcance."
+            },
+            "nothing": {
+              "title": "No hacer nada",
+              "description": "Conservar los documentos indexados. Las ejecuciones posteriores usan la nueva configuración."
+            }
+          }
+        },
+        "credential": {
+          "title": "Cambio de credencial",
+          "description": "Elige qué pasa con los documentos indexados con la credencial anterior.",
+          "option": {
+            "keep_indexed": {
+              "title": "Conservar los documentos indexados",
+              "description": "Las ejecuciones posteriores usan la nueva credencial. Es la opción rápida."
+            },
+            "full_reindex_and_prune": {
+              "title": "Reindexación completa y depuración",
+              "description": "Indexar todo de nuevo con la nueva credencial y luego quitar los documentos que no puede ver."
+            }
+          }
+        },
+        "steps": {
+          "title": "Pasos",
+          "description": "Lo que hace la aplicación, en orden. Puedes desactivar los pasos opcionales.",
+          "none": "La aplicación guarda la configuración. No se necesita indexar.",
+          "required": {
+            "label": "Obligatorio"
+          },
+          "optional": {
+            "label": "Opcional"
+          },
+          "include": {
+            "ariaLabel": "Ejecutar el paso: {step}"
+          },
+          "fields": "Campos: {fields}",
+          "window": "Ventana: de {start} a {end}",
+          "windowFromStart": "Ventana: todo hasta {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Actualizar los grupos de acceso a datos",
+              "description": "La búsqueda aplica los nuevos grupos de inmediato."
+            },
+            "access_type": {
+              "title": "Cambiar el tipo de acceso",
+              "description": "Cambia quién puede leer los documentos."
+            },
+            "enter_perm_sync": {
+              "title": "Iniciar la sincronización de permisos",
+              "description": "Los documentos quedan ocultos hasta que termine la primera sincronización de permisos."
+            },
+            "leave_perm_sync": {
+              "title": "Detener la sincronización de permisos",
+              "description": "Los permisos de la fuente ya no deciden quién lee los documentos."
+            },
+            "restart_attempt": {
+              "title": "Reiniciar el intento de indexación en curso",
+              "description": "El intento en curso se detiene y comienza uno nuevo con la nueva configuración."
+            },
+            "full_reindex_then_prune": {
+              "title": "Reindexación completa y luego depurar",
+              "description": "Indexar todo de nuevo y luego quitar los documentos que la fuente ya no devuelve."
+            },
+            "full_reindex": {
+              "title": "Reindexación completa",
+              "description": "Indexar todo de nuevo desde la fecha de inicio."
+            },
+            "scoped_backfill": {
+              "title": "Rellenar los elementos agregados",
+              "description": "Indexar solo el historial de los elementos agregados."
+            },
+            "window_backfill": {
+              "title": "Rellenar la ventana anterior",
+              "description": "Indexar el periodo entre la nueva y la antigua fecha de inicio."
+            },
+            "prune": {
+              "title": "Depurar",
+              "description": "Quitar los documentos que la fuente ya no devuelve."
+            }
+          },
+          "reason": {
+            "identity_changed": "Cambian los ID de los documentos",
+            "behavior_changed": "Cambió el procesamiento",
+            "scope_widened": "Alcance ampliado",
+            "scope_narrowed": "Alcance reducido",
+            "items_added_or_changed": "Elementos agregados o cambiados",
+            "items_removed": "Elementos quitados",
+            "opaque_scope_choice": "Tu elección de alcance",
+            "indexing_start_earlier": "Fecha de inicio anterior",
+            "credential_full_path": "Opción completa de credencial",
+            "access_changed": "Cambió el acceso",
+            "permissions_fetched_during_indexing": "Los permisos llegan con la indexación",
+            "attempt_running": "Hay un intento en curso",
+            "scoped_backfill_superseded": "Se reemplaza un relleno anterior",
+            "admin_added": "Agregado por ti",
+            "indexing_start_later": "Fecha de inicio posterior"
+          }
+        },
+        "extra": {
+          "title": "Trabajo adicional",
+          "description": "Agrega trabajo que el plan no necesita.",
+          "fullReindex": {
+            "title": "Agregar una reindexación completa",
+            "description": "Indexar todo de nuevo desde la fecha de inicio."
+          },
+          "prune": {
+            "title": "Agregar una depuración",
+            "description": "Quitar los documentos que la fuente ya no devuelve."
+          }
+        },
+        "backButton": {
+          "label": "Volver a editar"
+        },
+        "applyButton": {
+          "label": "Aplicar"
+        },
+        "blocked": {
+          "validation": "Corrige primero los errores de validación.",
+          "reconciliation": "Elige primero cómo conciliar el cambio de alcance."
+        }
+      },
+      "pendingBackfills": {
+        "title": "Rellenos pendientes",
+        "description": "Una edición solicitó estas ejecuciones. Cada una permanece aquí hasta que una ejecución tenga éxito.",
+        "window": "De {start} a {end}",
+        "windowFromStart": "Todo hasta {end}",
+        "waiting": "Espera su ejecución.",
+        "runningNow": "Un intento de indexación lo ejecuta ahora.",
+        "retry": "{count, plural, one {Falló una vez. Próximo reintento: {time}.} other {Falló # veces. Próximo reintento: {time}.}}",
+        "scoped": "Solo elementos añadidos o cambiados",
+        "failures": "{count, plural, one {# fallo} other {# fallos}}"
       }
     }
   },
@@ -12088,6 +12390,24 @@
         "empty": "Esta hoja está vacía.",
         "tooLarge": "Esta hoja es demasiado grande para la vista previa. Descarga el archivo para verla."
       }
+    },
+    "plans": {
+      "free": {
+        "title": "Plan gratuito",
+        "tooltip": "Disponible en todos los planes."
+      },
+      "business": {
+        "title": "Plan Business",
+        "tooltip": "Requiere el [plan Business o Enterprise](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Plan Enterprise",
+        "tooltip": "Requiere el [plan Enterprise](/admin/billing)."
+      },
+      "upgrade": {
+        "label": "Mejorar plan"
+      },
+      "availableFor": "Disponible en el {plan}"
     }
   },
   "craft": {
@@ -12431,6 +12751,17 @@
         "operationWait": "Espera a que se complete la operación actual.",
         "sandboxWait": "Espera a que se inicialice el sandbox",
         "scheduledRunWait": "Espera a que termine la ejecución programada."
+      },
+      "loadError": {
+        "title": "No se pudo cargar la sesión",
+        "retry": "Volver a intentar"
+      },
+      "queuedSendError": {
+        "title": "No se pudo enviar el mensaje en cola"
+      },
+      "settlementError": {
+        "title": "No se pudo confirmar que la tarea terminó",
+        "description": "Vuelve a intentarlo para comprobar la tarea y cargar su respuesta guardada."
       }
     },
     "compaction": {
@@ -12548,6 +12879,12 @@
       "csv": {
         "truncated": "Vista previa limitada a {rows, number} filas, {columns, number} columnas y {cells, number} celdas. Descarga el original para ver todos los datos.",
         "malformed": "Este CSV contiene un campo entre comillas no válido. Descarga el original para revisarlo."
+      },
+      "imageTooLarge": {
+        "description": "Esta imagen es demasiado grande para la vista previa. Descarga el original para abrirla."
+      },
+      "unsupported": {
+        "description": "Este archivo no se puede previsualizar. Descarga el original para abrirlo."
       }
     },
     "filesTab": {
@@ -12564,9 +12901,37 @@
       "preparing": {
         "description": "Configurando tu entorno de desarrollo",
         "title": "Preparando sandbox..."
+      },
+      "download": {
+        "label": "Descargar"
+      },
+      "partial": {
+        "label": "No se pudieron cargar algunas carpetas. Actualiza para volver a intentarlo."
+      },
+      "noMatches": {
+        "label": "No hay archivos coincidentes"
+      },
+      "previousPage": {
+        "label": "Página anterior"
+      },
+      "nextPage": {
+        "label": "Página siguiente"
+      },
+      "page": {
+        "label": "Página {page} de {total}"
+      },
+      "upload": {
+        "label": "Subir archivos",
+        "error": "No se pudieron subir los archivos. Vuelve a intentarlo."
+      },
+      "emptyDirectory": {
+        "label": "No hay archivos en este directorio"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Fondo de contraste"
+      },
       "error": {
         "description": "No se pudo mostrar la imagen",
         "title": "No se pudo cargar la imagen"
@@ -12576,9 +12941,6 @@
       },
       "preview": {
         "ariaLabel": "Vista previa de {name}"
-      },
-      "background": {
-        "contrast": "Fondo de contraste"
       }
     },
     "inputBar": {
@@ -12736,6 +13098,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "Controles de PDF"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar u ocultar miniaturas",
+        "resize": "Cambiar el tamaño de las miniaturas",
+        "label": "Miniaturas de páginas"
+      },
+      "page": {
+        "previous": "Página anterior",
+        "next": "Página siguiente",
+        "counter": "{current} / {total}",
+        "preview": "Vista previa de la página {page}",
+        "select": "Ir a la página {page}"
+      },
+      "zoom": {
+        "out": "Alejar",
+        "in": "Acercar",
+        "label": "Zoom",
+        "fitWidth": "Ajustar al ancho",
+        "fitPage": "Ajustar a la página"
+      },
       "error": {
         "description": "No se pudo cargar el archivo PDF.",
         "title": "No se puede previsualizar el PDF"
@@ -12748,6 +13132,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Controles de presentación"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar u ocultar miniaturas de diapositivas"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar el tamaño de las miniaturas"
+      },
       "slides": {
         "label": "Diapositivas"
       },
@@ -12758,7 +13151,7 @@
         "label": "Diapositiva siguiente"
       },
       "converting": {
-        "label": "Convirtiendo presentación..."
+        "label": "Preparando la vista previa..."
       },
       "empty": {
         "label": "Esta presentación no tiene diapositivas"
@@ -12771,9 +13164,6 @@
       },
       "slide": {
         "counter": "Diapositiva {current} de {total}"
-      },
-      "resize": {
-        "ariaLabel": "Cambiar el tamaño de las miniaturas"
       }
     },
     "previewTab": {
@@ -13207,7 +13597,8 @@
         "ariaLabel": "Copiar URL: {url}"
       },
       "downloadFile": {
-        "tooltip": "Descargar archivo"
+        "tooltip": "Descargar archivo",
+        "label": "Descargar"
       },
       "export": {
         "button": "Exportar a .docx",
@@ -13278,6 +13669,159 @@
       "input": {
         "placeholder": "Analiza mis datos y crea un panel..."
       }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "Todos los archivos"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Pestañas de resultados"
+      },
+      "close": {
+        "label": "Cerrar {name}"
+      },
+      "reordered": {
+        "label": "Pestaña movida a la posición {position} de {count}"
+      },
+      "open": {
+        "label": "Abrir una pestaña"
+      },
+      "outputs": {
+        "label": "Resultados"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Previsualiza tu app"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Comprobando aplicaciones web"
+      },
+      "failed": {
+        "description": "No se pudieron comprobar las aplicaciones web locales. Recarga para volver a intentarlo."
+      },
+      "unavailable": {
+        "description": "La aplicación web no está disponible. Restaura el entorno aislado o recarga para volver a intentarlo.",
+        "label": "No disponible"
+      },
+      "empty": {
+        "title": "No hay aplicaciones web disponibles",
+        "description": "Las aplicaciones locales aparecen aquí cuando están en ejecución."
+      },
+      "starting": {
+        "label": "Iniciando aplicación web"
+      },
+      "loading": {
+        "label": "Cargando aplicación web"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Abrir resultados"
+      },
+      "close": {
+        "ariaLabel": "Cerrar resultados"
+      },
+      "expand": {
+        "ariaLabel": "Ampliar resultados"
+      },
+      "restore": {
+        "ariaLabel": "Restaurar resultados"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar tamaño de resultados"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Buscar archivos"
+        },
+        "location": {
+          "label": "Todos los archivos de tu entorno"
+        }
+      },
+      "browser": {
+        "placeholder": "Aplicaciones web en tu sandbox"
+      },
+      "reload": {
+        "file": "Recargar archivo",
+        "files": "Actualizar archivos",
+        "browser": "Actualizar aplicaciones web",
+        "unavailable": "Restaura el entorno aislado para actualizar"
+      },
+      "export": {
+        "failed": "No se pudo exportar este archivo. Vuelve a intentarlo."
+      },
+      "empty": {
+        "title": "Elige una vista del espacio de trabajo"
+      },
+      "status": {
+        "provisioning": "Inicializando entorno aislado",
+        "running": "Entorno aislado en ejecución",
+        "sleeping": "Entorno aislado en reposo",
+        "restoring": "Restaurando sesión",
+        "terminated": "Entorno aislado terminado",
+        "failed": "Error en el entorno aislado",
+        "ready": "Entorno aislado listo",
+        "loading": "Buscando entorno aislado"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Marcar todos como vistos",
+        "error": "No se pudieron marcar los resultados como vistos. Inténtalo de nuevo."
+      },
+      "home": {
+        "description": "Archivos creados por tu agente"
+      },
+      "empty": {
+        "description": "Los archivos que cree tu agente aparecerán aquí."
+      },
+      "loading": {
+        "label": "Cargando resultados…"
+      },
+      "unavailable": {
+        "description": "Los resultados aparecerán cuando tu entorno esté listo."
+      },
+      "error": {
+        "description": "No se pudieron actualizar los resultados. Inténtalo de nuevo."
+      },
+      "incomplete": {
+        "description": "No se pudieron cargar algunos resultados."
+      },
+      "filter": {
+        "label": "Tipo de archivo",
+        "all": "Todos",
+        "folders": "Carpetas",
+        "noExtension": "Sin extensión"
+      },
+      "folders": {
+        "ariaLabel": "Carpetas de resultados",
+        "root": "Resultados"
+      },
+      "filtered": {
+        "empty": "No hay resultados coincidentes"
+      },
+      "search": {
+        "placeholder": "Buscar resultados"
+      },
+      "scope": {
+        "turn": "Resultados del turno {turn, number}",
+        "all": "Todos los resultados"
+      },
+      "unseen": "Nuevo o actualizado"
+    },
+    "turnOutputs": {
+      "showAll": "Ver los {count} resultados",
+      "app": "Aplicación",
+      "unavailable": "Ya no está disponible",
+      "appTitle": "Vista previa de tu aplicación"
     },
     "upgrade": {
       "title": "Craft requiere un plan Business",
@@ -13628,8 +14172,14 @@
       "year": "Año"
     },
     "inputFile": {
-      "attachFile": "Adjuntar archivo",
       "clearFile": "Quitar archivo"
+    },
+    "inputUpload": {
+      "placeholder": "Añadir un archivo…",
+      "pasted": "Texto pegado",
+      "attached": "Archivo adjunto",
+      "dropToAdd": "Suelta el archivo aquí para añadirlo",
+      "dropToReplace": "Suelta aquí para reemplazar el archivo"
     },
     "inputImage": {
       "alt": "Imagen",

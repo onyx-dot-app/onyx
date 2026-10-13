@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
+  InputUpload,
   InputPasswordTypeIn,
   InputSwitch,
   InputTypeIn,
@@ -10,19 +11,29 @@ import {
 } from "@opal/components";
 import {
   Content,
+  InputErrorText,
   InputHorizontal,
   InputVertical,
   Label,
   Section,
 } from "@opal/layouts";
 import { InputCheckboxField } from "@opal/form";
-import type { IconFunctionComponent } from "@opal/types";
-import { getIn, useFormikContext } from "formik";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { markdown } from "@opal/utils";
+import { getIn, useField, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
-import { TypedFileUploadFormField } from "@/components/Field";
+import {
+  FILE_TYPE_DEFINITIONS,
+  type TypedFile,
+} from "@/lib/connectors/fileTypes";
+import { createTypedFile } from "@/lib/connectors/utils";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
-import { getCredentialSpec, methodFields } from "@/lib/credentials/utils";
+import {
+  getCredentialFileType,
+  getCredentialSpec,
+  methodFields,
+} from "@/lib/credentials/utils";
 import type {
   CredentialFieldValues,
   CredentialSpec,
@@ -70,10 +81,15 @@ function CredentialField({
   const name: string = namePrefix ? `${namePrefix}.${fieldKey}` : fieldKey;
   const checkboxIcon = useCheckboxIcon(name, label);
 
-  // A file such as a .pfx key is binary; Opal's InputFile reads text, so
-  // this field keeps the typed upload until Opal can hand back a File.
   if (field.kind === "file") {
-    return <TypedFileUploadFormField name={name} label={label} />;
+    return (
+      <CredentialFileField
+        name={name}
+        fieldKey={fieldKey}
+        label={label}
+        description={copy.description}
+      />
+    );
   }
 
   // The checkbox stands in for the icon, left of the title. The label around
@@ -155,6 +171,79 @@ function CredentialField({
           )
         }
       />
+    </InputVertical>
+  );
+}
+
+interface CredentialFileFieldProps {
+  /** The Formik path. */
+  name: string;
+  /** The spec key: it picks the file's type and names it to the server. */
+  fieldKey: string;
+  label: string | RichStr;
+  /**
+   * The field's hint. A plain string is read as markdown, so `.pfx` in
+   * backticks shows as code.
+   */
+  description?: string | RichStr;
+}
+
+/**
+ * A key file, such as a .pfx certificate. It stays binary: the field holds a
+ * `TypedFile`, checked against its type's size and extensions when picked.
+ */
+export function CredentialFileField({
+  name,
+  fieldKey,
+  label,
+  description,
+}: CredentialFileFieldProps) {
+  const t = useTranslations("common.field");
+  const [field, , helpers] = useField<TypedFile | null>(name);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileType = getCredentialFileType(fieldKey);
+  const definition = fileType ? FILE_TYPE_DEFINITIONS[fileType] : null;
+
+  async function takeFile(file: File | null) {
+    setFileError(null);
+    if (!file) {
+      void helpers.setValue(null);
+      return;
+    }
+    if (!fileType) {
+      setFileError(t("fileValidation.noTypeDefinition", { name: fieldKey }));
+      return;
+    }
+    const typedFile = createTypedFile(file, fieldKey, fileType);
+    const { isValid, errors } = await typedFile.validate();
+    if (!isValid) {
+      setFileError(errors.join(", ") || t("fileValidation.unknownError"));
+      void helpers.setValue(null);
+      return;
+    }
+    void helpers.setValue(typedFile);
+    void helpers.setTouched(true, false);
+  }
+
+  return (
+    <InputVertical
+      withLabel={name}
+      title={label}
+      subDescription={
+        typeof description === "string" ? markdown(description) : description
+      }
+    >
+      <InputUpload
+        mode="file"
+        id={name}
+        name={name}
+        data-testid={fieldKey}
+        accept={definition?.validation?.allowedExtensions?.join(",")}
+        value={field.value?.file ?? null}
+        onFileChange={(file) => void takeFile(file)}
+        variant={fileError ? "error" : "primary"}
+      />
+      {fileError && <InputErrorText type="error">{fileError}</InputErrorText>}
     </InputVertical>
   );
 }

@@ -27,7 +27,11 @@ from onyx.connectors.google_utils.shared_constants import (
     ONYX_SCOPE_INSTRUCTIONS,
     GoogleOAuthAuthenticationMethod,
 )
-from onyx.db.credentials import fetch_credential_by_id_for_user, update_credential_json
+from onyx.db.credentials import (
+    CredentialAccessLevel,
+    fetch_credential_by_id_for_user,
+    update_credential_json,
+)
 from onyx.db.encrypted_kv_store import (
     delete_encrypted_kv,
     load_encrypted_kv,
@@ -226,7 +230,9 @@ def build_service_account_creds(
 def _stored_credential_json(
     credential_id: int, user: User, db_session: Session
 ) -> dict[str, Any]:
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(
+        credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
+    )
     if credential is None:
         raise ValueError(f"Credential {credential_id} not found")
     return (

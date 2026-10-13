@@ -4,6 +4,11 @@ import { useEffect, useMemo, useRef } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { InputSingleSelect, type SelectOption } from "@opal/components";
+import {
+  usePlans,
+  useTierAtLeast,
+  useTierLockedOptions,
+} from "@/lib/tiers/hooks";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { SvgOrganization, SvgUserSync, SvgUsers } from "@opal/icons";
 import { AccessType, Permission } from "@/lib/types";
@@ -16,8 +21,7 @@ import AutoSyncOptions from "@/views/admin/connectors/AddConnectorPage/component
 import ConnectorGroupRestrictionPicker from "@/lib/connectors/components/ConnectorGroupRestrictionPicker";
 import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import GroupShareList from "@/lib/connectors/components/GroupShareList";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import type { CredentialValues } from "@/lib/credentials/types";
 import { getCredentialSpec } from "@/lib/credentials/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -34,21 +38,26 @@ interface DocumentAccessFieldProps {
   connector: ConfigurableSources;
   currentCredential?: CredentialValues | null;
   disabled?: boolean;
+  /** Keep the loaded access type: do not move it to the sync default. */
+  keepInitialAccess?: boolean;
 }
 
 /**
  * Who can read the connector's documents: synced from the source, specific
- * groups (private, with a group picker), or everyone (public). Renders nothing
- * below the Business tier, where every connector is public.
+ * groups (private, with a group picker), or everyone (public). Below the
+ * Business tier every connector is public: the field still shows, locked on
+ * Everyone, with the Business plan tag.
  */
 export default function DocumentAccessField({
   connector,
   currentCredential,
   disabled,
+  keepInitialAccess = false,
 }: DocumentAccessFieldProps) {
   const t = useTranslations("admin.connectorsList.settings.documentAccess");
   const tRestriction = useTranslations("admin.connector.groupRestriction");
   const { appName } = useSettings();
+  const plans = usePlans();
   const [accessType, , accessTypeHelpers] = useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -79,9 +88,10 @@ export default function DocumentAccessField({
       ? "private"
       : "public";
 
-  const options = useMemo(() => {
+  // Auto Sync and Specific Groups need Business; Everyone is on every tier.
+  const businessOptions = useMemo(() => {
     const built: SelectOption[] = [];
-    if (showAutoSync) {
+    if (isValidAutoSyncSource(connector)) {
       built.push({
         value: "sync",
         title: t("sync.title", {
@@ -94,39 +104,50 @@ export default function DocumentAccessField({
         disabled: isSyncDisabledByAuth,
       });
     }
-    if (businessTier) {
-      built.push({
-        value: "private",
-        title: t("specificGroups.title"),
-        description: t("specificGroups.description"),
-        icon: SvgUsers,
-      });
-    }
-    // A scoped manager's authority stops at the groups they manage, so the
-    // backend rejects a public connector from them. Offering it would only
-    // produce a 403 on submit.
-    if (!isScopedManager) {
-      built.push({
-        value: "public",
-        title: t("everyone.title"),
-        description: t("everyone.description"),
-        icon: SvgOrganization,
-      });
-    }
+    built.push({
+      value: "private",
+      title: t("specificGroups.title"),
+      description: t("specificGroups.description"),
+      icon: SvgUsers,
+    });
     return built;
-  }, [
-    businessTier,
-    isScopedManager,
-    showAutoSync,
-    isSyncDisabledByAuth,
-    connector,
-    t,
-    appName,
-  ]);
+  }, [isSyncDisabledByAuth, connector, t, appName]);
+  // A scoped manager's authority stops at the groups they manage, so the
+  // backend rejects a public connector from them. Offering it would only
+  // produce a 403 on submit.
+  const everyTierOptions = useMemo(
+    (): SelectOption[] =>
+      isScopedManager
+        ? []
+        : [
+            {
+              value: "public",
+              title: t("everyone.title"),
+              description: t("everyone.description"),
+              icon: SvgOrganization,
+            },
+          ],
+    [isScopedManager, t]
+  );
+  // What can be picked: below Business, only Everyone, which is the value.
+  const options = useMemo(
+    () =>
+      businessTier
+        ? [...everyTierOptions, ...businessOptions]
+        : everyTierOptions,
+    [businessTier, businessOptions, everyTierOptions]
+  );
+  // What the list shows: every option in one order. Below Business they all
+  // sit locked under an upgrade link, Everyone selected.
+  const lockForBusiness = useTierLockedOptions(Tier.BUSINESS);
+  const listedOptions = useMemo(
+    () => lockForBusiness([...everyTierOptions, ...businessOptions]),
+    [everyTierOptions, businessOptions, lockForBusiness]
+  );
 
   // Sync is the default wherever it is offered and enabled, until the user
   // picks an option themselves.
-  const userChoseRef = useRef(false);
+  const userChoseRef = useRef(keepInitialAccess);
   const syncAvailable = showAutoSync && !isSyncDisabledByAuth;
   useEffect(() => {
     if (userChoseRef.current || !syncAvailable) return;
@@ -155,14 +176,13 @@ export default function DocumentAccessField({
     accessTypeHelpers,
   ]);
 
-  if (!businessTier) return null;
-
   return (
     <Section gap={3} alignItems="stretch" height="fit">
       <InputHorizontal
         withLabel="access_type"
         title={t("title")}
         description={t("description")}
+        tag={businessTier ? undefined : plans[Tier.BUSINESS].tag}
         disabled={disabled}
         fillInput
         center
@@ -177,7 +197,7 @@ export default function DocumentAccessField({
             userChoseRef.current = true;
             accessTypeHelpers.setValue(option.value as AccessType);
           }}
-          options={options}
+          options={listedOptions}
           placeholder={t("title")}
           disabled={disabled}
         />

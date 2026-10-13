@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,17 +22,13 @@ def _fake_load_credentials(
     self: SharepointConnector,
     credentials: dict[str, Any],  # noqa: ARG001
 ) -> None:
-    self.msal_app = MagicMock()
-    self.sp_tenant_domain = "contoso"
+    self._ops = MagicMock()
 
 
 @pytest.mark.parametrize("exhaustive", [True, False])
 def test_group_sync_uses_the_connector_config_flag(exhaustive: bool) -> None:
     with (
         patch.object(SharepointConnector, "load_credentials", _fake_load_credentials),
-        patch.object(SharepointConnector, "_create_rest_client_context"),
-        patch.object(SharepointConnector, "graph_client", new_callable=PropertyMock),
-        patch.object(SharepointConnector, "graph_api", new_callable=PropertyMock),
         patch.object(
             group_sync, "get_sharepoint_external_groups", return_value=[]
         ) as get_groups,

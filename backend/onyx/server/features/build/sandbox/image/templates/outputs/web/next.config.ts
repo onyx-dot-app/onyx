@@ -16,7 +16,12 @@ const allowedDevOrigins = (process.env.ONYX_WEBAPP_ALLOWED_DEV_ORIGINS || "")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  experimental: {
+    // Keep hydration data in the document instead of waiting for a dev WebSocket.
+    reactDebugChannel: false,
+  },
+};
 
 if (webappBasePath) {
   nextConfig.basePath = webappBasePath;

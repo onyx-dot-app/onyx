@@ -2,7 +2,7 @@
 
 import "@opal/components/tag/styles.css";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { Text, Tooltip } from "@opal/components";
+import { Text, Tooltip, type TextFont } from "@opal/components";
 import { SvgAlertTriangle, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { TAG_COLORS, type TagColor } from "@opal/components/tag/colors";
@@ -26,6 +26,9 @@ interface TagProps {
 
   /** Size variant. Default: `"sm"`. */
   size?: TagSize;
+
+  /** Optional typography override for the surrounding surface. */
+  font?: TextFont;
 
   /**
    * Switches to the editable tag (Figma Tag `Type=Editable`): remove button,
@@ -73,6 +76,7 @@ function Tag({
   title,
   color = "gray",
   size = "sm",
+  font: fontOverride,
   onRemove,
   removeInTabOrder = true,
   disabled = false,
@@ -87,11 +91,12 @@ function Tag({
   const capped = editable || truncate;
 
   const font =
-    size === "sm"
+    fontOverride ??
+    (size === "sm"
       ? "figure-small-value"
       : editable
         ? "main-ui-body"
-        : "secondary-body";
+        : "secondary-body");
 
   // Editable gray reads in text-04 per the Figma spec. TAG_COLORS.gray
   // (text-03) stays for the passive metadata tag.

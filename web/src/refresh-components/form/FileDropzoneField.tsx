@@ -22,7 +22,7 @@ export interface FileDropzoneFieldProps {
 /**
  * Formik-bound drop area with a file picker button. The field holds a
  * `File[]`, or one `File` (or null) when it takes a single file. Files stay
- * binary, unlike Opal's InputFile, which reads them as text.
+ * binary. For one file in a form row, use Opal's InputUpload.
  */
 export default function FileDropzoneField({
   name,

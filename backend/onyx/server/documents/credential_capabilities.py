@@ -200,10 +200,15 @@ def trigger_capability_check(
         db_session, request.connector_id, credential_id, user
     )
     credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    if credential is None and pairing_visible:
+    if (
+        credential is None
+        and pairing_visible
+        and request.connector_specific_config is None
+    ):
         # The run needs the credential row itself; the unfiltered fetch also
         # keeps an unknown credential a 404 for global managers, whose pairing
-        # shortcut checks nothing.
+        # shortcut checks nothing. An override config is a new use of the
+        # credential, so it needs credential visibility.
         credential = fetch_credential_by_id(credential_id, db_session)
     if credential is None:
         raise OnyxError(
@@ -241,6 +246,7 @@ def trigger_capability_check(
     try:
         row = start_capability_check_run(
             db_session,
+            user=user,
             credential_id=credential_id,
             connector_id=request.connector_id,
             source=run_source,
@@ -592,7 +598,8 @@ def start_draft_check_run(
     )
     try:
         return start_draft_capability_check_run(
-            user_id=user.id,
+            db_session,
+            user=user,
             credential=credential,
             source=request.source,
             config_class=mapping.config_class,

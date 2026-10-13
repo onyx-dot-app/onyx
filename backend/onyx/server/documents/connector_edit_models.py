@@ -29,7 +29,9 @@ class ConnectorEditProposal(BaseModel):
 
     connector_specific_config: dict[str, Any]
     access_type: AccessType
-    data_access_group_ids: list[int] = []
+    # None keeps the pair's data-access groups. An editor may see only some
+    # of them, so a form whose access did not change sends None.
+    data_access_group_ids: list[int] | None = None
     credential_id: int
     indexing_start: datetime | None = None
     name: str

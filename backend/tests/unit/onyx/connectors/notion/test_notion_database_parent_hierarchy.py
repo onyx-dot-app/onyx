@@ -7,7 +7,7 @@ emits a hierarchy node for that page even if its BlockReadOutput is empty
 upsert can be promoted.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.notion.connector import (
@@ -15,6 +15,8 @@ from onyx.connectors.notion.connector import (
     NotionConnector,
     NotionPage,
 )
+from onyx.connectors.notion.models import NotionSearchResponse
+from onyx.connectors.notion.source_operations import NotionApiError
 from onyx.db.enums import HierarchyNodeType
 
 
@@ -63,16 +65,19 @@ class TestDatabaseParentPageTracking:
         """A database whose parent type is page_id is added to _database_parent_page_ids."""
         connector = _make_connector()
 
-        search_response = MagicMock()
-        search_response.results = [
-            {"id": "ds-1", "parent": {"database_id": "db-1"}},
-        ]
-        search_response.has_more = False
+        search_response = NotionSearchResponse(
+            results=[{"id": "ds-1", "parent": {"database_id": "db-1"}}],
+            next_cursor=None,
+        )
 
         db_page = _make_db_page("db-1", parent={"type": "page_id", "page_id": "page-P"})
 
         with (
-            patch.object(connector, "_search_notion", return_value=search_response),
+            patch.object(
+                connector.source_operations,
+                "iter_search",
+                return_value=iter([search_response]),
+            ),
             patch.object(connector, "_fetch_database_as_page", return_value=db_page),
         ):
             list(connector._yield_database_hierarchy_nodes())
@@ -83,16 +88,19 @@ class TestDatabaseParentPageTracking:
         """A database whose parent is the workspace root is not tracked."""
         connector = _make_connector()
 
-        search_response = MagicMock()
-        search_response.results = [
-            {"id": "ds-1", "parent": {"database_id": "db-1"}},
-        ]
-        search_response.has_more = False
+        search_response = NotionSearchResponse(
+            results=[{"id": "ds-1", "parent": {"database_id": "db-1"}}],
+            next_cursor=None,
+        )
 
         db_page = _make_db_page("db-1", parent={"type": "workspace", "workspace": True})
 
         with (
-            patch.object(connector, "_search_notion", return_value=search_response),
+            patch.object(
+                connector.source_operations,
+                "iter_search",
+                return_value=iter([search_response]),
+            ),
             patch.object(connector, "_fetch_database_as_page", return_value=db_page),
         ):
             list(connector._yield_database_hierarchy_nodes())
@@ -101,22 +109,25 @@ class TestDatabaseParentPageTracking:
 
     def test_failed_fetch_does_not_record(self) -> None:
         """A database whose fetch fails (exception path) is not recorded."""
-        import requests
-
         connector = _make_connector()
 
-        search_response = MagicMock()
-        search_response.results = [
-            {"id": "ds-1", "parent": {"database_id": "db-1"}},
-        ]
-        search_response.has_more = False
+        search_response = NotionSearchResponse(
+            results=[{"id": "ds-1", "parent": {"database_id": "db-1"}}],
+            next_cursor=None,
+        )
 
         with (
-            patch.object(connector, "_search_notion", return_value=search_response),
+            patch.object(
+                connector.source_operations,
+                "iter_search",
+                return_value=iter([search_response]),
+            ),
             patch.object(
                 connector,
                 "_fetch_database_as_page",
-                side_effect=requests.exceptions.HTTPError("404"),
+                side_effect=NotionApiError(
+                    "404", status_code=404, code="object_not_found"
+                ),
             ),
         ):
             list(connector._yield_database_hierarchy_nodes())

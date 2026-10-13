@@ -731,34 +731,23 @@ def convert_chat_history(
 
 
 def get_custom_agent_prompt(persona: Persona, chat_session: ChatSession) -> str | None:
-    """Get the custom agent prompt from persona or project instructions. If it's replacing the base system prompt,
-    it does not count as a custom agent prompt (logic exists later also to drop it in this case).
-
-    Chat Sessions in Projects that are using a custom agent will retain the custom agent prompt.
-    Priority: persona.system_prompt (if not default Agent) > chat_session.project.instructions
-
-    # NOTE: Logic elsewhere allows saving empty strings for potentially other purposes but for constructing the prompts
-    # we never want to return an empty string for a prompt so it's translated into an explicit None.
-
-    Args:
-        persona: The Persona object
-        chat_session: The ChatSession object
-
-    Returns:
-        The prompt to use for the custom Agent part of the prompt.
-    """
-    # If using a custom Agent, always respect its prompt, even if in a Project, and even if it's an empty custom prompt.
-    if persona.id != DEFAULT_PERSONA_ID:
-        # Logic exists later also to drop it in this case but this is strictly correct anyhow.
-        if persona.replace_base_system_prompt:
-            return None
-        return persona.system_prompt or None
-
-    # If in a project and using the default Agent, respect the project instructions.
-    if chat_session.project and chat_session.project.instructions:
-        return chat_session.project.instructions
-
-    return None
+    """Combine project and agent instructions without repeating a replacement prompt."""
+    project_instructions: str | None = (
+        chat_session.project.instructions if chat_session.project else None
+    )
+    agent_instructions: str | None = (
+        persona.system_prompt if persona.id != DEFAULT_PERSONA_ID else None
+    )
+    if persona.replace_base_system_prompt:
+        # The agent instructions already appear in the system message.
+        return project_instructions or None
+    if project_instructions and agent_instructions:
+        return (
+            f"Project instructions:\n{project_instructions}\n\n"
+            f"Agent instructions:\n{agent_instructions}\n\n"
+            "If these instructions conflict, follow the agent instructions."
+        )
+    return agent_instructions or project_instructions or None
 
 
 def is_last_assistant_message_clarification(chat_history: list[ChatMessage]) -> bool:

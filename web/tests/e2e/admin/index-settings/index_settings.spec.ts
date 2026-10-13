@@ -890,7 +890,7 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
     await expect(applyButton).toBeEnabled();
 
     // Dropdown should show the REINDEX option as selected
-    await expect(page.getByRole("combobox").first()).toHaveValue(
+    await expect(new IndexSettingsPage(page).strategySelect).toHaveValue(
       /re-index all connectors/i
     );
   });
@@ -945,7 +945,7 @@ test.describe("Index Settings — switchover strategies @exclusive", () => {
       await stageNonCurrentSelfHostedModel(page);
 
       // Open the strategy dropdown and pick the target option
-      await page.getByRole("combobox").first().click();
+      await new IndexSettingsPage(page).strategySelect.click();
       await page.getByRole("option", { name: label }).click();
 
       await page.getByRole("button", { name: "Apply & Re-index" }).click();
@@ -1020,6 +1020,10 @@ test.describe("Index Settings — vector quantization @exclusive", () => {
     const indexSettings: IndexSettingsPage = new IndexSettingsPage(page);
     await indexSettings.goto();
     await indexSettings.selectVectorQuantization("1-bit");
+
+    // Only quantization changed, so the banner says the index is rebuilt from
+    // the stored vectors rather than fully re-indexed.
+    await indexSettings.expectQuantizationRebuildBanner();
 
     // Quantization is part of the index mapping, so only the re-index
     // strategies are offered.

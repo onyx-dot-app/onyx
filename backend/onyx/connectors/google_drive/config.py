@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.connectors.connector_config import ConnectorConfig, CredentialBinding
@@ -43,6 +43,8 @@ class GoogleDriveCredentialBinding(CredentialBinding):
     # so capability checks for one kind can apply before a run reads the
     # credential. The connector reads the kind from the credential itself.
     credential_kind: Annotated[GoogleCredentialKind | None, _COSMETIC] = None
+
+    credential_derived_fields: ClassVar[frozenset[str]] = frozenset({"credential_kind"})
 
     def validate_credential(self, credential_json: dict[str, Any]) -> None:
         actual_kind: GoogleCredentialKind | None = google_credential_kind(

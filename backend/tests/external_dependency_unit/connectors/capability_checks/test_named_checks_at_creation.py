@@ -56,11 +56,16 @@ from onyx.db.credential_capability import (
     mark_capability_report_running,
 )
 from onyx.db.enums import AccessType, CapabilityCheckTrigger, CapabilityReportRunStatus
-from onyx.db.models import ConnectorCredentialPair, CredentialCapabilityReportRow
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    CredentialCapabilityReportRow,
+    User,
+)
 from onyx.server.documents import capability_check_runs
 from onyx.server.documents.capability_check_runs import (
     start_draft_capability_check_run,
 )
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -174,6 +179,14 @@ def slack_pair(db_session: Session) -> Generator[ConnectorCredentialPair, None, 
     cleanup_cc_pair(db_session, cc_pair)
 
 
+@pytest.fixture
+def admin(db_session: Session) -> Generator[User, None, None]:
+    user = create_test_user(db_session, "named_checks_admin", is_admin=True)
+    yield user
+    db_session.rollback()
+    delete_test_user(db_session, user)
+
+
 def _validate(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
@@ -189,6 +202,7 @@ def _validate(
         access_type,
         db_session,
         enforce_creation=enforce_creation,
+        user=None,
     )
 
 
@@ -282,10 +296,14 @@ def test_perm_sync_checks_run_only_for_synced_access(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_fresh_draft_results_for_the_same_form_are_reused(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     start_draft_capability_check_run(
-        user_id=uuid4(),
+        db_session,
+        user=admin,
         credential=slack_pair.credential,
         source=DocumentSource.SLACK,
         config_class=SlackConnectorConfig,
@@ -320,7 +338,10 @@ def test_fresh_draft_results_for_the_same_form_are_reused(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_draft_findings_reach_the_run_and_the_created_pairs_report(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     channels: OptionsFinding = OptionsFinding(
         key=CheckFindingKey.READABLE_CHANNELS,
@@ -329,7 +350,8 @@ def test_draft_findings_reach_the_run_and_the_created_pairs_report(
     )
     harness.findings[_CHANNELS] = [channels]
     snapshot: DraftCheckRunSnapshot = start_draft_capability_check_run(
-        user_id=uuid4(),
+        db_session,
+        user=admin,
         credential=slack_pair.credential,
         source=DocumentSource.SLACK,
         config_class=SlackConnectorConfig,
@@ -379,7 +401,10 @@ def test_creation_does_not_run_or_wait_for_a_discovery_check(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_a_draft_runs_discovery_last_and_creation_keeps_its_findings(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     harness.with_discovery = True
     found = OptionsFinding(
@@ -389,7 +414,8 @@ def test_a_draft_runs_discovery_last_and_creation_keeps_its_findings(
     )
     harness.findings[_DISCOVERY] = [found]
     start_draft_capability_check_run(
-        user_id=uuid4(),
+        db_session,
+        user=admin,
         credential=slack_pair.credential,
         source=DocumentSource.SLACK,
         config_class=SlackConnectorConfig,
@@ -419,19 +445,23 @@ def test_a_draft_runs_discovery_last_and_creation_keeps_its_findings(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_a_cached_required_failure_skips_discovery_in_the_next_draft_run(
-    harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     harness.with_discovery = True
     harness.findings[_DISCOVERY] = [
         CountFinding(key=CheckFindingKey.READABLE_CHANNELS, count=1)
     ]
     harness.errors[_CHANNELS] = ConnectorValidationError("bot not in channel a")
-    user_id = uuid4()
+    user_id = admin.id
     draft_key = uuid4().hex
 
     def _draft_run() -> DraftCheckRunSnapshot:
         started = start_draft_capability_check_run(
-            user_id=user_id,
+            db_session,
+            user=admin,
             credential=slack_pair.credential,
             source=DocumentSource.SLACK,
             config_class=SlackConnectorConfig,
@@ -464,13 +494,17 @@ def test_a_cached_required_failure_skips_discovery_in_the_next_draft_run(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_a_draft_advisory_reaches_the_run_and_the_created_pairs_report(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     advisory = CheckAdvisory(message="Channel a is empty; reads were not verified.")
     harness.advisories[_CHANNELS] = [advisory]
-    user_id = uuid4()
+    user_id = admin.id
     started = start_draft_capability_check_run(
-        user_id=user_id,
+        db_session,
+        user=admin,
         credential=slack_pair.credential,
         source=DocumentSource.SLACK,
         config_class=SlackConnectorConfig,
@@ -504,12 +538,16 @@ def test_a_draft_advisory_reaches_the_run_and_the_created_pairs_report(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_a_cached_draft_failure_runs_again_at_creation(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     # A draft run caches a failure; then the admin fixes the source.
     harness.errors[_CHANNELS] = ConnectorValidationError("bot not in channel a")
     start_draft_capability_check_run(
-        user_id=uuid4(),
+        db_session,
+        user=admin,
         credential=slack_pair.credential,
         source=DocumentSource.SLACK,
         config_class=SlackConnectorConfig,
@@ -624,7 +662,9 @@ def test_slow_required_check_does_not_block_and_its_result_lands_later(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_failed_enqueue_marks_the_run_failed_to_run(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     harness.make_slow(_TOKEN)
     harness.send_task.side_effect = RuntimeError("broker down")
@@ -638,12 +678,16 @@ def test_failed_enqueue_marks_the_run_failed_to_run(
 
 
 def _start_draft_run_in_background(
-    harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> threading.Thread:
     """Starts a create-form draft run of the slack form and runs its task in a
     thread, as a worker would."""
     start_draft_capability_check_run(
-        user_id=uuid4(),
+        db_session,
+        user=admin,
         credential=slack_pair.credential,
         source=DocumentSource.SLACK,
         config_class=SlackConnectorConfig,
@@ -669,10 +713,13 @@ def _wait_until_started(harness: _Harness, check_id: str) -> None:
 
 @pytest.mark.usefixtures("tenant_context")
 def test_creation_awaits_a_check_the_draft_run_is_still_running(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     release = harness.make_slow(_CHANNELS)
-    worker = _start_draft_run_in_background(harness, slack_pair)
+    worker = _start_draft_run_in_background(db_session, admin, harness, slack_pair)
     _wait_until_started(harness, _CHANNELS)
     # The draft finishes the check while creation waits for it.
     threading.Timer(0.3, release.set).start()
@@ -688,10 +735,13 @@ def test_creation_awaits_a_check_the_draft_run_is_still_running(
 
 @pytest.mark.usefixtures("tenant_context")
 def test_background_run_awaits_a_draft_check_that_outlasts_the_budget(
-    db_session: Session, harness: _Harness, slack_pair: ConnectorCredentialPair
+    db_session: Session,
+    admin: User,
+    harness: _Harness,
+    slack_pair: ConnectorCredentialPair,
 ) -> None:
     release = harness.make_slow(_CHANNELS)
-    worker = _start_draft_run_in_background(harness, slack_pair)
+    worker = _start_draft_run_in_background(db_session, admin, harness, slack_pair)
     _wait_until_started(harness, _CHANNELS)
 
     # The draft is still running the check when the budget ends.
