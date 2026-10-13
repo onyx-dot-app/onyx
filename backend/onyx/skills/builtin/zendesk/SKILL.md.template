@@ -101,6 +101,7 @@ next call.
   (`status`, `priority`, `assignee_id`, `group_id`). A value that parses as JSON
   keeps its type, so `--set assignee_id=123` sends a number.
 - `tag` adds tags; `--replace` overwrites the whole tag set. Zendesk treats a
-  tag change as a ticket update, so it follows the "Update a ticket" setting.
+  tag change as a ticket update, so it follows the "Update a ticket" setting,
+  and it refuses tag changes on a closed ticket.
 - `call` lets you hit any v2 endpoint: `call <METHOD> /api/v2/... [json_body]`.
   Pass user input as the JSON body, not by string-formatting into the path.

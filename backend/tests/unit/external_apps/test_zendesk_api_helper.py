@@ -192,6 +192,42 @@ def test_a_page_that_never_ends_is_bounded(monkeypatch: pytest.MonkeyPatch) -> N
     assert result["cursor"] == "c"
 
 
+@pytest.mark.parametrize(
+    "argv, expected_method",
+    [
+        (["--site", "acme", "tag", "1", "--tags", "a"], "PUT"),
+        (["--site", "acme", "tag", "1", "--tags", "a", "--replace"], "POST"),
+    ],
+)
+def test_tag_uses_zendesks_reversed_tag_methods(
+    monkeypatch: pytest.MonkeyPatch, argv: list[str], expected_method: str
+) -> None:
+    """Zendesk reverses the usual convention: PUT adds tags, POST replaces the
+    whole list. Backwards, the default `tag` would erase a ticket's tags."""
+    seen: list[str] = []
+
+    def _fake_request(
+        _base: str, method: str, _path: str, _body: object = None
+    ) -> object:
+        seen.append(method)
+        return {"tags": ["a"]}
+
+    monkeypatch.setattr(zendesk, "_request", _fake_request)
+    result = zendesk._dispatch_write(zendesk._build_parser().parse_args(argv))
+    assert seen == [expected_method]
+    assert result == {"ok": True, "tags": ["a"]}
+
+
+def test_changed_rejects_a_blank_cursor() -> None:
+    """An empty `--cursor` passes the "exactly one" check but names no
+    position; it must be an input error, not a traceback."""
+    args = zendesk._build_parser().parse_args(
+        ["--site", "acme", "changed", "--cursor", ""]
+    )
+    with pytest.raises(zendesk.ZendeskError):
+        zendesk._incremental_tickets(_BASE, args)
+
+
 def test_ids_are_percent_encoded_into_the_path() -> None:
     assert (
         zendesk._path("/api/v2/tickets/{0}.json", "12/3?x")

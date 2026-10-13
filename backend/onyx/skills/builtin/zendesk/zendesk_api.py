@@ -224,9 +224,13 @@ def _incremental_tickets(base_url: str, a: argparse.Namespace) -> dict[str, Any]
         raise ZendeskError("limit must be a positive integer")
     if (a.since is None) == (a.cursor is None):
         raise ZendeskError("pass exactly one of --since or --cursor")
+    if a.cursor is not None and not a.cursor.strip():
+        raise ZendeskError("--cursor must not be blank")
 
     params: dict[str, Any] = (
-        {"cursor": a.cursor} if a.cursor else {"start_time": _epoch_seconds(a.since)}
+        {"cursor": a.cursor}
+        if a.cursor is not None
+        else {"start_time": _epoch_seconds(a.since)}
     )
     params["per_page"] = min(_PAGE_SIZE, a.limit)
     url: str | None = (
@@ -476,12 +480,11 @@ def _dispatch_write(a: argparse.Namespace) -> dict[str, Any]:
         tags = _tags(a.tags)
         if not tags:
             raise ZendeskError("--tags must name at least one tag")
-        # The dedicated tags endpoint, not a ticket update: it is what the
-        # "Change a ticket's tags" action governs, so tagging follows that
-        # setting rather than the one for ticket updates. PUT sets the whole
-        # tag list, POST adds to it.
+        # Zendesk reverses the usual REST convention here: PUT is "Add Tags"
+        # (it appends) and POST is "Set Tags" (it replaces the whole list).
+        # Getting this backwards silently erases a ticket's other tags.
         path = _path("/api/v2/tickets/{0}/tags.json", a.id)
-        updated = _request(site, "PUT" if a.replace else "POST", path, {"tags": tags})
+        updated = _request(site, "POST" if a.replace else "PUT", path, {"tags": tags})
         return {"ok": True, "tags": updated.get("tags")}
 
     if a.cmd in ("update", "comment"):
