@@ -31,6 +31,7 @@ from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     cleanup_stuck_scheduled_runs,
     dispatch_due_scheduled_tasks,
 )
+from onyx.configs.constants import MessageType
 from onyx.db.enums import (
     SandboxStatus,
     ScheduledTaskErrorClass,
@@ -39,10 +40,12 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
 )
 from onyx.db.models import Sandbox, ScheduledTask, ScheduledTaskRun, User
+from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.sandbox.base import SandboxEvent
 from onyx.server.features.build.sandbox.event_schema import (
     TURN_ERROR_CODE_TIMEOUT,
     TURN_ERROR_CODE_TRANSPORT,
+    AgentMessageChunk,
     Error,
     PromptResponse,
     RequestPermissionRequest,
@@ -551,7 +554,18 @@ def test_run_fails_when_wake_fails(
 
 
 # Output capture must finish before the run can release queued work.
-@pytest.mark.parametrize("outcome", ["success", "error", "approval", "lost_lease"])
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "success",
+        "error",
+        "approval",
+        "lost_lease",
+        "lost_final_lease",
+        "timeout",
+        "exception",
+    ],
+)
 def test_output_cards_follow_producer_close_and_precede_terminal_status(
     db_session: Session,
     test_user: User,
@@ -590,6 +604,9 @@ def test_output_cards_follow_producer_close_and_precede_terminal_status(
         db_session.refresh(run)
         assert run.status == ScheduledTaskRunStatus.RUNNING
         lifecycle.append("final_capture")
+        if outcome == "lost_final_lease":
+            assert stub_sandbox_manager.last_prompt_slot is not None
+            stub_sandbox_manager.last_prompt_slot.lost = True
         return OutputsManifestResponse(
             entries=[
                 OutputsManifestEntry(path="report.md", size=20, mtime_ns=1, ctime_ns=1)
@@ -601,11 +618,19 @@ def test_output_cards_follow_producer_close_and_precede_terminal_status(
     ) -> Generator[SandboxEvent | RequestPermissionRequest, None, None]:
         lifecycle.append("producer_started")
         try:
+            if outcome in {"exception", "timeout"}:
+                yield AgentMessageChunk.model_validate(
+                    {
+                        "sessionUpdate": "agent_message_chunk",
+                        "content": {"type": "text", "text": "Created the report."},
+                    }
+                )
+                raise RuntimeError("Producer failed after writing the report")
             if outcome == "error":
                 yield Error.model_validate(
                     {"code": TURN_ERROR_CODE_TRANSPORT, "message": "Transport failed"}
                 )
-            elif outcome == "approval":
+            elif outcome in {"approval", "lost_final_lease"}:
                 yield RequestPermissionRequest.model_validate(
                     {
                         "sessionId": "scheduled-session",
@@ -620,7 +645,10 @@ def test_output_cards_follow_producer_close_and_precede_terminal_status(
 
     monkeypatch.setattr(stub_sandbox_manager, "get_outputs_manifest", manifest)
     monkeypatch.setattr(stub_sandbox_manager, "send_message", produce)
-    run_scheduled_task_logic(run.id)
+    if outcome == "timeout":
+        run_scheduled_task_logic(run.id, budget_seconds=0)
+    else:
+        run_scheduled_task_logic(run.id)
     db_session.expire_all()
     assert run.session_id is not None
     cards = get_output_cards(run.session_id, test_user, db_session).cards
@@ -635,13 +663,32 @@ def test_output_cards_follow_producer_close_and_precede_terminal_status(
             "producer_closed",
             "final_capture",
         ]
-        assert len(cards) == 1
-        assert (cards[0].path, cards[0].turn_index) == ("outputs/report.md", 0)
+        if outcome == "lost_final_lease":
+            assert cards == []
+        else:
+            assert len(cards) == 1
+            assert (cards[0].path, cards[0].turn_index) == ("outputs/report.md", 0)
         assert (
             run.status
             == {
                 "success": ScheduledTaskRunStatus.SUCCEEDED,
                 "error": ScheduledTaskRunStatus.FAILED,
+                "exception": ScheduledTaskRunStatus.FAILED,
+                "timeout": ScheduledTaskRunStatus.FAILED,
+                "lost_final_lease": ScheduledTaskRunStatus.FAILED,
                 "approval": ScheduledTaskRunStatus.AWAITING_APPROVAL,
             }[outcome]
         )
+
+    if outcome == "timeout":
+        assert run.error_class == ScheduledTaskErrorClass.TIMEOUT.value
+    if outcome == "lost_final_lease":
+        assert run.error_detail == "Prompt slot lease lost mid-turn."
+
+    if outcome == "exception":
+        messages = get_session_messages(run.session_id, db_session)
+        assistant_messages = [
+            message for message in messages if message.type == MessageType.ASSISTANT
+        ]
+        assert len(assistant_messages) == 1
+        assert "Created the report." in str(assistant_messages[0].message_metadata)

@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal, Union
@@ -368,3 +369,19 @@ class OpencodeHistorySnapshotResponse(BaseModel):
     """Response for an opencode history snapshot attempt."""
 
     created: bool
+
+
+class OutputSource(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    revision: str
+    size: int
+
+
+class TurnOutputSnapshot(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    sandbox_id: UUID
+    session_id: UUID
+    turn_index: int
+    sources: Mapping[str, OutputSource]

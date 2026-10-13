@@ -311,6 +311,19 @@ def test_bulk_viewed_uses_exact_revisions_and_session_owner(
     )
     with pytest.raises(OnyxError):
         view_output_cards(session.id, request, User(id=uuid4()), db_session)
+    # Reject the whole request before acknowledging any valid entries.
+    future = dict(request.revisions)
+    future[UUID(cards[0].id)] = 100
+    with pytest.raises(OnyxError) as conflict:
+        view_output_cards(
+            session.id, OutputsViewedRequest(revisions=future), test_user, db_session
+        )
+    assert conflict.value.status_code == 409
+    db_session.commit()
+    assert all(
+        card.viewed_revision is None
+        for card in get_output_cards(session.id, test_user, db_session).cards
+    )
     result = view_output_cards(session.id, request, test_user, db_session)
     assert len(result.cards) == 2
     assert all(card.viewed_revision == 1 for card in result.cards)

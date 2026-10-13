@@ -553,9 +553,12 @@ def view_output_cards(
 ) -> OutputCardsResponse:
     if get_build_session(session_id, user.id, db_session) is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
-    cards = mark_outputs_viewed(
-        db_session, session_id=session_id, revisions=body.revisions
-    )
+    try:
+        cards = mark_outputs_viewed(
+            db_session, session_id=session_id, revisions=body.revisions
+        )
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.CONFLICT, str(error)) from error
     response = OutputCardsResponse(
         cards=[OutputCard.from_model(card) for card in cards]
     )

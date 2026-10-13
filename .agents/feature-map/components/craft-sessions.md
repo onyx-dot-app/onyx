@@ -176,8 +176,8 @@ reads it to decide whether a turn can run.
 
 One mutable row per `(session_id, path)`, upserted at turn end
 (`db/artifact.py:upsert_artifact`). `source_revision` stores the observed filesystem revision;
-`content_hash` remains reserved for byte-content identity. Changes advance `version` and invalidate `archive_file_id`.
-Unchanged files keep their producing `turn_index`. `viewed_revision` records the session owner’s last viewed version.
+Changes advance `version` and invalidate `archive_file_id`.
+Unchanged files keep their producing `turn_index`. `viewed_revision` records the session owner's last viewed version.
 `deleted=True` retains the row so chat can display an unavailable card.
 
 ### `ActionReceipt` (`backend/onyx/db/models.py:ActionReceipt`)
@@ -322,6 +322,12 @@ flushes whatever the per-turn `BuildStreamingState` accumulated since the
 last flush. So there is no single "save the whole turn" transaction to point
 to the way `save_chat_turn` is one; correctness instead rests on: no
 streamed terminal path may skip its `finalize_persist` + `finish_turn` pair.
+
+The turn events endpoint emits `turn_completed` only after backend finalization reaches a terminal state.
+It releases the sandbox subscription before waiting for that state and can replay a completed turn on attachment.
+The packet carries the owned turn ID, status, index, and error detail. Transport errors remain stream errors.
+Both runners close the producer and commit the transcript before the separate output-index transaction.
+They persist output metadata before publishing terminal status, while retaining prompt ownership.
 
 ### 4.3 Locking
 
@@ -537,27 +543,16 @@ effect.
 
 ### 4.7 Artifacts, receipts, and export
 
-`backend/onyx/server/features/build/session/output_cards.py` (`capture_turn_outputs` and `persist_turn_outputs`) records output changes for interactive and scheduled turns.
-It captures a complete manifest after workspace restoration and before the prompt starts.
-After the producer stops, it compares a second complete manifest while the runner still owns the prompt slot.
-Confirmed changes update the existing artifact index before terminal status releases the turn.
-Missing baselines, incomplete scans, and lost ownership preserve previous attribution.
-A later complete inventory marks missing indexed files deleted, including deletions missed by earlier failed captures.
-Reclaimed runners do not infer attribution from a replacement baseline.
+`backend/onyx/server/features/build/session/output_cards.py` compares complete manifests before and after each interactive or scheduled prompt, while the runner owns the prompt slot.
+It saves changed paths and their producing turns before terminal status. Webapp source changes share the `outputs/web` entry.
+Incomplete scans and lost ownership preserve earlier attribution. Reclaimed runners do not invent a new baseline.
+Complete scans mark missing indexed paths deleted. Revisions detect filesystem writes, not differences in file contents.
 
-One indexed path appears beneath its latest producing turn. App source changes become one `outputs/web` card.
-File cards link to current sandbox files; they do not preserve historical file contents.
-Deleted files retain their index rows. Unchanged files keep their previous producing turn.
-Filesystem metadata detects writes; it does not prove that the bytes differ.
-
-`GET /build/sessions/{id}/output-cards` reads owned, indexed cards without waking the sandbox.
-`PATCH /build/sessions/{id}/output-cards/{artifact_id}/viewed` records the exact opened revision on the artifact row.
-The marker only advances. A late acknowledgement cannot clear a newer revision’s unread indicator.
-`PATCH /build/sessions/{id}/output-cards/viewed` acknowledges a map of artifact IDs to viewed revisions in one update.
-It skips deleted, unknown, foreign-session, and future revisions. Concurrent edits remain unread.
-Viewed requests accept at most 10,000 revisions, matching the inventory bound. Deleted historical cards do not need acknowledgements.
-All three routes require session ownership. Unknown producing turns are omitted rather than assigned invented history.
-The older `/artifacts` endpoint still discovers the local webapp; it does not supply these durable cards.
+`GET /build/sessions/{id}/output-cards` reads indexed cards without waking the sandbox. It omits rows without a producing turn.
+`PATCH /build/sessions/{id}/output-cards/{artifact_id}/viewed` records the opened revision; `/output-cards/viewed` accepts up to 10,000 ID/revision pairs.
+Both routes advance viewed revisions monotonically and reject future revisions with 409. Bulk requests fail before changing any row.
+Bulk requests skip deleted, unknown, and foreign-session IDs. All three routes require session ownership.
+The older `/artifacts` endpoint discovers the local webapp; it does not supply durable cards.
 
 `download_artifact`
 and `export_docx` (`session/api.py:559,610`) read the live file out of the

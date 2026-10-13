@@ -27,6 +27,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     PromptResponse,
 )
 from onyx.server.features.build.sandbox.event_schema import Error as SandboxError
+from onyx.server.features.build.session.models import TurnOutputSnapshot
 from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     PROMPT_SLOT_WAIT_OUT_ORPHAN_SECONDS,
@@ -99,6 +100,7 @@ def _run_turn_with_events(
     reclaimed: bool = False,
     prompt_slot: "_FakePromptSlot | None" = None,
     session_missing: bool = False,
+    turn_index: int = 0,
 ) -> SimpleNamespace:
     cache = FakeCache()
     db_session = _FakeDbSession()
@@ -120,7 +122,7 @@ def _run_turn_with_events(
         user_id=user_id,
         client_request_id="req-1",
         prompt="hello",
-        turn_index=0,
+        turn_index=turn_index,
     )
 
     class FakeSessionManager:
@@ -197,10 +199,10 @@ def _run_turn_with_events(
             finalized.append(session_id_arg)
 
         def persist_turn_error(
-            self, session_id_arg: UUID, turn_index: int, message: str
+            self, session_id_arg: UUID, turn_index_arg: int, message: str
         ) -> None:
             assert session_id_arg == session_id
-            assert turn_index == 0
+            assert turn_index_arg == turn_index
             turn_errors.append(message)
 
         def stamp_turn_deadline(
@@ -222,14 +224,25 @@ def _run_turn_with_events(
             assert session_id_arg == session_id
             cleared.append(True)
 
-    def capture_outputs(*_args: object) -> executor.TurnOutputSnapshot:
+    def capture_outputs(
+        manager: object, sandbox_id_arg: UUID, session_id_arg: UUID, turn_index_arg: int
+    ) -> TurnOutputSnapshot:
+        assert manager is executor.get_sandbox_manager()
+        assert sandbox_id_arg == sandbox_id
+        assert session_id_arg == session_id
+        assert turn_index_arg == turn_index
         output_lifecycle.append("baseline")
-        return executor.TurnOutputSnapshot(sandbox_id, session_id, 0, {})
+        return TurnOutputSnapshot(
+            sandbox_id=sandbox_id_arg,
+            session_id=session_id_arg,
+            turn_index=turn_index_arg,
+            sources={},
+        )
 
     def persist_outputs(
         _db: object,
         _manager: object,
-        _snapshot: executor.TurnOutputSnapshot | None,
+        _snapshot: TurnOutputSnapshot | None,
         *,
         owns_turn: Callable[[], bool],
     ) -> None:
@@ -1204,7 +1217,9 @@ def test_output_cards_settle_after_producer_and_before_turn_release(
     monkeypatch: pytest.MonkeyPatch, stop_reason: str
 ) -> None:
     result = _run_turn_with_events(
-        monkeypatch, [PromptResponse.model_validate({"stopReason": stop_reason})]
+        monkeypatch,
+        [PromptResponse.model_validate({"stopReason": stop_reason})],
+        turn_index=7,
     )
     assert result.output_lifecycle == ["baseline", "producer_closed", "cards_persisted"]
 
@@ -1255,3 +1270,4 @@ def test_terminal_status_retry_does_not_capture_outputs_twice(
     )
     assert finish.call_count == 2
     assert result.output_lifecycle == ["baseline", "producer_closed", "cards_persisted"]
+    assert result.prompt_slot.exited

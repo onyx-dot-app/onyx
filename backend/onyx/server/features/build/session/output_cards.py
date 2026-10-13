@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from pathlib import PurePosixPath
-from types import MappingProxyType
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -22,21 +20,21 @@ from onyx.server.features.build.db.artifact import (
     upsert_artifact,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
-from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
-    OutputsManifestResponse,
-)
+from onyx.server.features.build.session.models import OutputSource, TurnOutputSnapshot
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-@dataclass(frozen=True)
-class OutputSource:
-    revision: str
-    size: int
+_OWNERSHIP_CHECK_BATCH_SIZE = 32
 
 
-def sources_from_manifest(manifest: OutputsManifestResponse) -> dict[str, OutputSource]:
+def _read_sources(
+    manager: SandboxManager, sandbox_id: UUID, session_id: UUID
+) -> Mapping[str, OutputSource] | None:
+    manifest = manager.get_outputs_manifest(sandbox_id, session_id, include_web=True)
+    if not manifest.complete:
+        return None
     sources: dict[str, OutputSource] = {}
     app_files: list[str] = []
     app_size = 0
@@ -46,28 +44,13 @@ def sources_from_manifest(manifest: OutputsManifestResponse) -> dict[str, Output
             app_files.append(f"{entry.path}\0{revision}")
             app_size += entry.size
         else:
-            sources[f"outputs/{entry.path}"] = OutputSource(revision, entry.size)
+            sources[f"outputs/{entry.path}"] = OutputSource(
+                revision=revision, size=entry.size
+            )
     if app_files:
         revision = hashlib.sha256("\n".join(sorted(app_files)).encode()).hexdigest()
-        sources["outputs/web"] = OutputSource(revision, app_size)
+        sources["outputs/web"] = OutputSource(revision=revision, size=app_size)
     return sources
-
-
-@dataclass(frozen=True)
-class TurnOutputSnapshot:
-    sandbox_id: UUID
-    session_id: UUID
-    turn_index: int
-    sources: Mapping[str, OutputSource]
-
-
-def _read_sources(
-    manager: SandboxManager, sandbox_id: UUID, session_id: UUID
-) -> Mapping[str, OutputSource] | None:
-    manifest = manager.get_outputs_manifest(sandbox_id, session_id, include_web=True)
-    return (
-        MappingProxyType(sources_from_manifest(manifest)) if manifest.complete else None
-    )
 
 
 def capture_turn_outputs(
@@ -76,7 +59,12 @@ def capture_turn_outputs(
     try:
         sources = _read_sources(manager, sandbox_id, session_id)
         if sources is not None:
-            return TurnOutputSnapshot(sandbox_id, session_id, turn_index, sources)
+            return TurnOutputSnapshot(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                turn_index=turn_index,
+                sources=sources,
+            )
     except Exception:
         logger.warning(
             "Could not capture output baseline for %s", session_id, exc_info=True
@@ -99,25 +87,31 @@ def persist_turn_outputs(
         after = _read_sources(manager, snapshot.sandbox_id, snapshot.session_id)
         if after is None or not owns_turn():
             return
-        # A failed index update must not roll back the transcript.
-        with db_session.begin_nested() as transaction:
-            writes = 0
-            existing = {
-                artifact.path: artifact
-                for artifact in get_session_artifacts(
-                    db_session, session_id=snapshot.session_id, include_deleted=True
+        # Callers commit the transcript before this independent artifact transaction.
+        existing = {
+            artifact.path: artifact
+            for artifact in get_session_artifacts(
+                db_session, session_id=snapshot.session_id, include_deleted=True
+            )
+        }
+        writes = 0
+        for path in sorted(after.keys() | existing.keys()):
+            artifact = existing.get(path)
+            if (
+                artifact is not None
+                and artifact.turn_index is not None
+                and artifact.turn_index > snapshot.turn_index
+            ):
+                continue
+            source = after.get(path)
+            if source is None:
+                # A complete inventory repairs deletions missed by an earlier scan.
+                if artifact is None or artifact.deleted:
+                    continue
+                mark_artifact_deleted(
+                    db_session, session_id=snapshot.session_id, path=path
                 )
-            }
-            for path, source in after.items():
-                if snapshot.sources.get(path) == source:
-                    continue
-                artifact = existing.get(path)
-                if (
-                    artifact is not None
-                    and artifact.turn_index is not None
-                    and artifact.turn_index > snapshot.turn_index
-                ):
-                    continue
+            elif snapshot.sources.get(path) != source:
                 upsert_artifact(
                     db_session,
                     session_id=snapshot.session_id,
@@ -128,27 +122,14 @@ def persist_turn_outputs(
                     name="App" if path == "outputs/web" else PurePosixPath(path).name,
                     turn_index=snapshot.turn_index,
                     size_bytes=source.size,
-                    content_hash=None,
                     source_revision=source.revision,
                 )
-                writes += 1
-                if writes % 32 == 0 and not owns_turn():
-                    transaction.rollback()
-                    return
-            # A complete inventory also repairs deletions missed by an earlier scan.
-            for path in existing.keys() - after.keys():
-                artifact = existing[path]
-                if not artifact.deleted and (
-                    artifact.turn_index is None
-                    or artifact.turn_index <= snapshot.turn_index
-                ):
-                    mark_artifact_deleted(
-                        db_session, session_id=snapshot.session_id, path=path
-                    )
-                    writes += 1
-                    if writes % 32 == 0 and not owns_turn():
-                        transaction.rollback()
-                        return
+            else:
+                continue
+            writes += 1
+            if writes % _OWNERSHIP_CHECK_BATCH_SIZE == 0 and not owns_turn():
+                db_session.rollback()
+                return
         # A slow database batch may outlive the runner or prompt-slot lease.
         if not owns_turn():
             db_session.rollback()

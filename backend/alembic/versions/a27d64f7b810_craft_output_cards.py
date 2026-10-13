@@ -14,10 +14,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("artifact", sa.Column("source_revision", sa.String(), nullable=True))
+    op.alter_column("artifact", "content_hash", new_column_name="source_revision")
     op.add_column("artifact", sa.Column("viewed_revision", sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:
     op.drop_column("artifact", "viewed_revision")
-    op.drop_column("artifact", "source_revision")
+    op.alter_column("artifact", "source_revision", new_column_name="content_hash")

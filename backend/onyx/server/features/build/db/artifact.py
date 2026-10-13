@@ -1,7 +1,7 @@
 """Artifact index DAL.
 
-One mutable row per (session, path), upserted at turn end. A source revision
-or content hash identifies changes that advance the version and owning turn.
+One mutable row per (session, path), upserted at turn end. The source revision
+identifies changes that advance the version and owning turn.
 Unchanged observations preserve both. Helpers flush and never commit,
 the caller owns the transaction so rows land before the turn's terminal
 event.
@@ -26,8 +26,7 @@ def upsert_artifact(
     name: str,
     turn_index: int | None,
     size_bytes: int | None,
-    content_hash: str | None,
-    source_revision: str | None = None,
+    source_revision: str,
 ) -> Artifact:
     """Insert or update the row for (session, path).
 
@@ -37,9 +36,7 @@ def upsert_artifact(
     """
     changed = or_(
         Artifact.deleted,
-        Artifact.source_revision.is_distinct_from(source_revision)
-        if source_revision is not None
-        else Artifact.content_hash.is_distinct_from(content_hash),
+        Artifact.source_revision.is_distinct_from(source_revision),
     )
     stmt = (
         pg_insert(Artifact)
@@ -50,7 +47,6 @@ def upsert_artifact(
             name=name,
             turn_index=turn_index,
             size_bytes=size_bytes,
-            content_hash=content_hash,
             source_revision=source_revision,
             version=1,
             deleted=False,
@@ -62,7 +58,6 @@ def upsert_artifact(
                 "name": name,
                 "turn_index": case((changed, turn_index), else_=Artifact.turn_index),
                 "size_bytes": size_bytes,
-                "content_hash": content_hash,
                 "source_revision": source_revision,
                 "deleted": False,
                 "version": case(
@@ -110,13 +105,7 @@ def get_session_artifacts(
     query = select(Artifact).where(Artifact.session_id == session_id)
     if not include_deleted:
         query = query.where(Artifact.deleted.is_(False))
-    return list(
-        db_session.scalars(
-            query.order_by(desc(Artifact.created_at)).execution_options(
-                populate_existing=True
-            )
-        )
-    )
+    return list(db_session.scalars(query.order_by(desc(Artifact.created_at))))
 
 
 def get_output_card_rows(db_session: Session, *, session_id: UUID) -> list[Artifact]:
@@ -126,7 +115,6 @@ def get_output_card_rows(db_session: Session, *, session_id: UUID) -> list[Artif
             select(Artifact)
             .where(Artifact.session_id == session_id, Artifact.turn_index.is_not(None))
             .order_by(Artifact.turn_index, Artifact.path)
-            .execution_options(populate_existing=True)
         )
     )
 
@@ -171,16 +159,29 @@ def mark_outputs_viewed(
     """Acknowledge only supplied revisions; concurrent edits stay unread."""
     if not revisions:
         return []
+    # Lock before validating so the complete request succeeds or fails together.
+    rows = db_session.execute(
+        select(Artifact.id, Artifact.version)
+        .where(
+            Artifact.session_id == session_id,
+            Artifact.id.in_(revisions),
+            Artifact.turn_index.is_not(None),
+            Artifact.deleted.is_(False),
+        )
+        .order_by(Artifact.id)
+        .with_for_update()
+    ).all()
+    if any(revisions[artifact_id] > version for artifact_id, version in rows):
+        raise ValueError("Output revision is newer than the current file")
+    if not rows:
+        return []
     viewed = case(revisions, value=Artifact.id)
     return list(
         db_session.scalars(
             update(Artifact)
             .where(
                 Artifact.session_id == session_id,
-                Artifact.id.in_(revisions),
-                Artifact.turn_index.is_not(None),
-                Artifact.deleted.is_(False),
-                Artifact.version >= viewed,
+                Artifact.id.in_([artifact_id for artifact_id, _ in rows]),
             )
             .values(
                 viewed_revision=func.greatest(Artifact.viewed_revision, viewed),

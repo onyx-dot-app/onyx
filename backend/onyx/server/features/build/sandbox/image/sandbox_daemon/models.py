@@ -38,6 +38,11 @@ _HIDDEN_NAMES = frozenset(
 )
 
 
+WEB_GENERATED_NAMES = frozenset(
+    {"dist", "build", "coverage", "out", "next-env.d.ts", "tsconfig.tsbuildinfo"}
+)
+
+
 def is_hidden_workspace_name(name: str) -> bool:
     return name.startswith(".") or name in _HIDDEN_NAMES
 

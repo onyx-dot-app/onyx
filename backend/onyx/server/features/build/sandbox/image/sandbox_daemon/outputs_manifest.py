@@ -15,6 +15,7 @@ from uuid import UUID
 
 from sandbox_daemon.models import (
     MANIFEST_MAX_ENTRIES,
+    WEB_GENERATED_NAMES,
     OutputsManifestEntry,
     OutputsManifestRequest,
     OutputsManifestResponse,
@@ -45,14 +46,7 @@ class _Walk:
                         not self.include_web and not prefix and child.name == "web"
                     ):
                         continue
-                    if prefix == "web/" and child.name in {
-                        "dist",
-                        "build",
-                        "coverage",
-                        "out",
-                        "next-env.d.ts",
-                        "tsconfig.tsbuildinfo",
-                    }:
+                    if prefix == "web/" and child.name in WEB_GENERATED_NAMES:
                         continue
                     try:
                         child.name.encode("utf-8")
