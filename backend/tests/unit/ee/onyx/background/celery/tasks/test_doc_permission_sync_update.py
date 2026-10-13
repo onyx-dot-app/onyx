@@ -1,25 +1,18 @@
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
+from ee.onyx.background.celery.tasks.doc_permission_syncing import tasks as perm_tasks
 from onyx.access.models import (
     DocExternalAccess,
     ElementExternalAccess,
     ExternalAccess,
     NodeExternalAccess,
 )
-from onyx.redis.redis_connector_doc_perm_sync import (
-    PermissionSyncResult,
-    RedisConnectorPermissionSync,
-)
-from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
 @pytest.mark.parametrize("element_kind", ["document", "node"])
-@pytest.mark.parametrize("with_logger", [False, True])
-def test_oversized_acl_counts_as_error_and_continues(
-    element_kind: str, with_logger: bool
-) -> None:
+def test_oversized_acl_counts_as_error_and_continues(element_kind: str) -> None:
     at_limit = ExternalAccess(
         external_user_emails={"member@example.com"},
         external_user_group_ids={
@@ -46,21 +39,14 @@ def test_oversized_acl_counts_as_error_and_continues(
             external_access=at_limit, raw_node_id="accepted-node", source="test"
         )
     )
-    sync = RedisConnectorPermissionSync("public", 1, Mock(spec=TenantRedisClient))
-
-    with patch(
-        "onyx.redis.redis_connector_doc_perm_sync.fetch_versioned_implementation"
-    ) as resolve_update:
-        result = sync.update_db(
-            lock=None,
+    with patch.object(perm_tasks, "element_update_permissions") as update_element:
+        result = perm_tasks.update_element_permissions_batch(
+            tenant_id="public",
             new_permissions=[rejected, accepted],
             source_string="test",
             connector_id=2,
             credential_id=3,
-            task_logger=Mock() if with_logger else None,
         )
 
-    assert result == PermissionSyncResult(num_updated=1, num_errors=1)
-    resolve_update.return_value.assert_called_once_with(
-        "public", accepted, "test", 2, 3
-    )
+    assert result == perm_tasks.PermissionSyncResult(num_updated=1, num_errors=1)
+    update_element.assert_called_once_with("public", accepted, "test", 2, 3)

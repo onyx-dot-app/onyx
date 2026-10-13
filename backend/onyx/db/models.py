@@ -6225,6 +6225,8 @@ class DocPermissionSyncAttempt(Base):
         DateTime(timezone=True), default=None
     )
 
+    celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
+
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair"
@@ -6235,6 +6237,13 @@ class DocPermissionSyncAttempt(Base):
             "ix_permission_sync_attempt_latest_for_cc_pair",
             "connector_credential_pair_id",
             "time_created",
+        ),
+        # At most one open attempt per cc_pair: this is the doc permission sync lock
+        Index(
+            "uq_doc_permission_sync_attempt_open_cc_pair",
+            "connector_credential_pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
         ),
         Index(
             "ix_permission_sync_attempt_status_time",
