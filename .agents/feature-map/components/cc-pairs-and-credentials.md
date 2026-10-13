@@ -67,7 +67,7 @@ deletion units.
 | Method | Path | Handler | File |
 |---|---|---|---|
 | POST | `/manage/admin/connector` | `create_connector_from_model` | `server/documents/connector.py` |
-| POST | `/manage/admin/connector-with-mock-credential` | | `server/documents/connector.py` |
+| POST | `/manage/admin/connector-with-mock-credential` | `create_connector_with_mock_credential`; `?paused=true` creates the pair paused and starts no indexing | `server/documents/connector.py` |
 | DELETE | `/manage/admin/connector/{connector_id}` | `delete_connector_by_id` | `server/documents/connector.py` |
 | POST | `/manage/admin/connector/run-once` | | Triggers one manual index attempt. |
 | POST | `/manage/admin/connector/indexing-status` | | Backs the indexing status admin page. |
