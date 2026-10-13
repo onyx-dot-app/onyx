@@ -35,6 +35,9 @@ from onyx.connectors.google_drive.config import (
     google_drive_planning_rule,
 )
 from onyx.connectors.jira.config import JiraConnectorConfig, jira_planning_rule
+from onyx.connectors.jira_service_management.config import (
+    JiraServiceManagementConnectorConfig,
+)
 from onyx.connectors.notion.config import (
     NotionConnectorConfig,
     notion_planning_rule,
@@ -80,6 +83,10 @@ PLANNING_RULES: dict[DocumentSource, PlanningRule] = {
         GoogleDriveConnectorConfig, google_drive_planning_rule
     ),
     DocumentSource.JIRA: planning_rule(JiraConnectorConfig, jira_planning_rule),
+    # Same config semantics as Jira: JQL takes precedence over the project.
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: planning_rule(
+        JiraServiceManagementConnectorConfig, jira_planning_rule
+    ),
     DocumentSource.NOTION: planning_rule(NotionConnectorConfig, notion_planning_rule),
     DocumentSource.OUTLOOK: planning_rule(
         OutlookConnectorConfig, outlook_planning_rule

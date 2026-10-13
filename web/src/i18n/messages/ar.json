@@ -882,6 +882,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jira_service_management": {
+          "description": "طلبات مكتب الخدمة وتذاكر الدعم"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
