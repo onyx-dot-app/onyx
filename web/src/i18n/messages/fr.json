@@ -3134,6 +3134,9 @@
           "title": "Accès de gestion du connecteur"
         },
         "title": "Paramètres du connecteur"
+      },
+      "optionsListInput": {
+        "placeholder": "Choisissez {label} dans la liste ou saisissez-en"
       }
     },
     "costOverrides": {
@@ -12876,6 +12879,12 @@
       "csv": {
         "truncated": "Aperçu limité à {rows, number} lignes, {columns, number} colonnes et {cells, number} cellules. Téléchargez le fichier original pour toutes les données.",
         "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier."
+      },
+      "imageTooLarge": {
+        "description": "Cette image est trop volumineuse pour un aperçu. Téléchargez l’original pour l’ouvrir."
+      },
+      "unsupported": {
+        "description": "Ce fichier ne peut pas être prévisualisé. Téléchargez l’original pour l’ouvrir."
       }
     },
     "filesTab": {
@@ -12892,9 +12901,37 @@
       "preparing": {
         "description": "Configuration de votre environnement de développement",
         "title": "Préparation du bac à sable..."
+      },
+      "download": {
+        "label": "Télécharger"
+      },
+      "partial": {
+        "label": "Certains dossiers n’ont pas pu être chargés. Actualisez pour réessayer."
+      },
+      "noMatches": {
+        "label": "Aucun fichier correspondant"
+      },
+      "previousPage": {
+        "label": "Page précédente"
+      },
+      "nextPage": {
+        "label": "Page suivante"
+      },
+      "page": {
+        "label": "Page {page} sur {total}"
+      },
+      "upload": {
+        "label": "Importer des fichiers",
+        "error": "Impossible d’importer les fichiers. Réessayez."
+      },
+      "emptyDirectory": {
+        "label": "Aucun fichier dans ce répertoire"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Fond contrasté"
+      },
       "error": {
         "description": "L'image n'a pas pu être affichée",
         "title": "Échec du chargement de l'image"
@@ -12904,9 +12941,6 @@
       },
       "preview": {
         "ariaLabel": "Aperçu de {name}"
-      },
-      "background": {
-        "contrast": "Fond contrasté"
       }
     },
     "inputBar": {
@@ -13064,6 +13098,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "Commandes PDF"
+      },
+      "thumbnails": {
+        "toggle": "Afficher ou masquer les miniatures",
+        "resize": "Redimensionner les miniatures",
+        "label": "Miniatures des pages"
+      },
+      "page": {
+        "previous": "Page précédente",
+        "next": "Page suivante",
+        "counter": "{current} / {total}",
+        "preview": "Aperçu de la page {page}",
+        "select": "Aller à la page {page}"
+      },
+      "zoom": {
+        "out": "Zoom arrière",
+        "in": "Zoom avant",
+        "label": "Zoom",
+        "fitWidth": "Ajuster à la largeur",
+        "fitPage": "Ajuster à la page"
+      },
       "error": {
         "description": "Le fichier PDF n'a pas pu être chargé.",
         "title": "Impossible de prévisualiser le PDF"
@@ -13076,6 +13132,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Commandes de présentation"
+      },
+      "thumbnails": {
+        "toggle": "Afficher ou masquer les miniatures des diapositives"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionner les miniatures des diapositives"
+      },
       "slides": {
         "label": "Diapositives"
       },
@@ -13086,7 +13151,7 @@
         "label": "Diapositive suivante"
       },
       "converting": {
-        "label": "Conversion de la présentation..."
+        "label": "Préparation de l’aperçu..."
       },
       "empty": {
         "label": "Aucune diapositive dans cette présentation"
@@ -13099,9 +13164,6 @@
       },
       "slide": {
         "counter": "Diapositive {current} sur {total}"
-      },
-      "resize": {
-        "ariaLabel": "Redimensionner les miniatures des diapositives"
       }
     },
     "previewTab": {
@@ -13535,7 +13597,8 @@
         "ariaLabel": "Copier l'URL : {url}"
       },
       "downloadFile": {
-        "tooltip": "Télécharger le fichier"
+        "tooltip": "Télécharger le fichier",
+        "label": "Télécharger"
       },
       "export": {
         "button": "Exporter en .docx",
@@ -13606,6 +13669,159 @@
       "input": {
         "placeholder": "Analyse mes données et crée un tableau de bord..."
       }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "Tous les fichiers"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Onglets de résultats"
+      },
+      "close": {
+        "label": "Fermer {name}"
+      },
+      "reordered": {
+        "label": "Onglet déplacé à la position {position} sur {count}"
+      },
+      "open": {
+        "label": "Ouvrir un onglet"
+      },
+      "outputs": {
+        "label": "Résultats"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Prévisualisez votre application"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Vérification des applications web"
+      },
+      "failed": {
+        "description": "Impossible de vérifier les applications web locales. Rechargez pour réessayer."
+      },
+      "unavailable": {
+        "description": "L’application web est indisponible. Restaurez le bac à sable ou rechargez pour réessayer.",
+        "label": "Indisponible"
+      },
+      "empty": {
+        "title": "Aucune application web disponible",
+        "description": "Les applications locales apparaissent ici lorsqu’elles fonctionnent."
+      },
+      "starting": {
+        "label": "Démarrage de l’application web"
+      },
+      "loading": {
+        "label": "Chargement de l’application web"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Ouvrir les résultats"
+      },
+      "close": {
+        "ariaLabel": "Fermer les résultats"
+      },
+      "expand": {
+        "ariaLabel": "Agrandir les résultats"
+      },
+      "restore": {
+        "ariaLabel": "Restaurer les résultats"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionner les résultats"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Rechercher des fichiers"
+        },
+        "location": {
+          "label": "Tous les fichiers de votre environnement"
+        }
+      },
+      "browser": {
+        "placeholder": "Applications web dans votre sandbox"
+      },
+      "reload": {
+        "file": "Recharger le fichier",
+        "files": "Actualiser les fichiers",
+        "browser": "Actualiser les applications web",
+        "unavailable": "Restaurez le bac à sable pour actualiser"
+      },
+      "export": {
+        "failed": "Impossible d’exporter ce fichier. Réessayez."
+      },
+      "empty": {
+        "title": "Choisissez une vue de l’espace de travail"
+      },
+      "status": {
+        "provisioning": "Initialisation du bac à sable",
+        "running": "Bac à sable en cours d’exécution",
+        "sleeping": "Bac à sable en veille",
+        "restoring": "Restauration de la session",
+        "terminated": "Bac à sable arrêté",
+        "failed": "Échec du bac à sable",
+        "ready": "Bac à sable prêt",
+        "loading": "Recherche du bac à sable"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Tout marquer comme vu",
+        "error": "Impossible de marquer les sorties comme vues. Réessayez."
+      },
+      "home": {
+        "description": "Fichiers créés par votre agent"
+      },
+      "empty": {
+        "description": "Les fichiers créés par votre agent apparaîtront ici."
+      },
+      "loading": {
+        "label": "Chargement des résultats…"
+      },
+      "unavailable": {
+        "description": "Les résultats apparaîtront lorsque votre environnement sera prêt."
+      },
+      "error": {
+        "description": "Impossible d’actualiser les résultats. Réessayez."
+      },
+      "incomplete": {
+        "description": "Certains résultats n’ont pas pu être chargés."
+      },
+      "filter": {
+        "label": "Type de fichier",
+        "all": "Tous",
+        "folders": "Dossiers",
+        "noExtension": "Sans extension"
+      },
+      "folders": {
+        "ariaLabel": "Dossiers de résultats",
+        "root": "Résultats"
+      },
+      "filtered": {
+        "empty": "Aucun résultat correspondant"
+      },
+      "search": {
+        "placeholder": "Rechercher des résultats"
+      },
+      "scope": {
+        "turn": "Résultats du tour {turn, number}",
+        "all": "Toutes les sorties"
+      },
+      "unseen": "Nouveau ou mis à jour"
+    },
+    "turnOutputs": {
+      "showAll": "Voir les {count} résultats",
+      "app": "Application",
+      "unavailable": "N’est plus disponible",
+      "appTitle": "Aperçu de votre application"
     }
   },
   "knowledge": {

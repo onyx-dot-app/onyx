@@ -93,6 +93,7 @@ the contract keeps Opal host-agnostic while the app supplies real translations.
 
 ## Tests
 
+- Craft: keep one test file per source file. Group related cases with section comments and scoped `describe` blocks.
 - Component tests (Jest + React Testing Library): `web/tests/README.md`.
 - E2E (Playwright): `web/tests/e2e/README.md` holds the hard rules (Page Object Model, locator
   priority).

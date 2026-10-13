@@ -3134,6 +3134,9 @@
           "title": "连接器管理权限"
         },
         "title": "连接器设置"
+      },
+      "optionsListInput": {
+        "placeholder": "从列表中选择{label}或输入"
       }
     },
     "costOverrides": {
@@ -12876,6 +12879,12 @@
       "csv": {
         "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
         "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
+      },
+      "imageTooLarge": {
+        "description": "此图片过大，无法预览。请下载原始文件以打开它。"
+      },
+      "unsupported": {
+        "description": "此文件无法预览。请下载原文件后打开。"
       }
     },
     "filesTab": {
@@ -12892,9 +12901,37 @@
       "preparing": {
         "description": "正在设置您的开发环境",
         "title": "正在准备沙箱..."
+      },
+      "download": {
+        "label": "下载"
+      },
+      "partial": {
+        "label": "部分文件夹无法加载。请刷新后重试。"
+      },
+      "noMatches": {
+        "label": "没有匹配的文件"
+      },
+      "previousPage": {
+        "label": "上一页"
+      },
+      "nextPage": {
+        "label": "下一页"
+      },
+      "page": {
+        "label": "第{page}页，共{total}页"
+      },
+      "upload": {
+        "label": "上传文件",
+        "error": "无法上传文件。请重试。"
+      },
+      "emptyDirectory": {
+        "label": "此目录中没有文件"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "对比背景"
+      },
       "error": {
         "description": "无法显示该图片",
         "title": "图片加载失败"
@@ -12904,9 +12941,6 @@
       },
       "preview": {
         "ariaLabel": "{name} 的预览"
-      },
-      "background": {
-        "contrast": "对比背景"
       }
     },
     "inputBar": {
@@ -13064,6 +13098,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF 控件"
+      },
+      "thumbnails": {
+        "toggle": "显示或隐藏页面缩略图",
+        "resize": "调整页面缩略图宽度",
+        "label": "页面缩略图"
+      },
+      "page": {
+        "previous": "上一页",
+        "next": "下一页",
+        "counter": "{current} / {total}",
+        "preview": "第 {page} 页预览",
+        "select": "转到第 {page} 页"
+      },
+      "zoom": {
+        "out": "缩小",
+        "in": "放大",
+        "label": "缩放",
+        "fitWidth": "适合宽度",
+        "fitPage": "适合页面"
+      },
       "error": {
         "description": "无法加载该 PDF 文件。",
         "title": "无法预览 PDF"
@@ -13076,6 +13132,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "演示文稿控件"
+      },
+      "thumbnails": {
+        "toggle": "显示或隐藏幻灯片缩略图"
+      },
+      "resize": {
+        "ariaLabel": "调整幻灯片缩略图宽度"
+      },
       "slides": {
         "label": "幻灯片"
       },
@@ -13086,7 +13151,7 @@
         "label": "下一张幻灯片"
       },
       "converting": {
-        "label": "正在转换演示文稿..."
+        "label": "正在准备预览..."
       },
       "empty": {
         "label": "此演示文稿中没有幻灯片"
@@ -13099,9 +13164,6 @@
       },
       "slide": {
         "counter": "幻灯片 {current} / {total}"
-      },
-      "resize": {
-        "ariaLabel": "调整幻灯片缩略图宽度"
       }
     },
     "previewTab": {
@@ -13535,7 +13597,8 @@
         "ariaLabel": "复制 URL：{url}"
       },
       "downloadFile": {
-        "tooltip": "下载文件"
+        "tooltip": "下载文件",
+        "label": "下载"
       },
       "export": {
         "button": "导出为 .docx",
@@ -13606,6 +13669,159 @@
       "input": {
         "placeholder": "分析我的数据并创建仪表板..."
       }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "所有文件"
+      },
+      "browser": {
+        "label": "应用"
+      },
+      "list": {
+        "label": "输出标签页"
+      },
+      "close": {
+        "label": "关闭{name}"
+      },
+      "reordered": {
+        "label": "标签页已移至第{position}个，共{count}个"
+      },
+      "open": {
+        "label": "打开标签页"
+      },
+      "outputs": {
+        "label": "输出"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "预览你的应用"
+      },
+      "home": {
+        "title": "应用",
+        "action": "应用"
+      },
+      "checking": {
+        "label": "正在检查网页应用"
+      },
+      "failed": {
+        "description": "无法检查本地网页应用。请重新加载后重试。"
+      },
+      "unavailable": {
+        "description": "网页应用不可用。请恢复沙盒或重新加载后重试。",
+        "label": "不可用"
+      },
+      "empty": {
+        "title": "没有可用的网页应用",
+        "description": "本地应用运行后会显示在这里。"
+      },
+      "starting": {
+        "label": "正在启动网页应用"
+      },
+      "loading": {
+        "label": "正在加载网页应用"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "打开输出"
+      },
+      "close": {
+        "ariaLabel": "关闭输出"
+      },
+      "expand": {
+        "ariaLabel": "展开输出"
+      },
+      "restore": {
+        "ariaLabel": "还原输出"
+      },
+      "resize": {
+        "ariaLabel": "调整输出大小"
+      },
+      "files": {
+        "search": {
+          "placeholder": "搜索文件"
+        },
+        "location": {
+          "label": "沙盒中的所有文件"
+        }
+      },
+      "browser": {
+        "placeholder": "沙箱中的网页应用"
+      },
+      "reload": {
+        "file": "重新加载文件",
+        "files": "刷新文件",
+        "browser": "刷新网页应用",
+        "unavailable": "请恢复沙盒以刷新"
+      },
+      "export": {
+        "failed": "无法导出此文件。请重试。"
+      },
+      "empty": {
+        "title": "选择工作区视图"
+      },
+      "status": {
+        "provisioning": "正在初始化沙盒",
+        "running": "沙盒正在运行",
+        "sleeping": "沙盒正在休眠",
+        "restoring": "正在恢复会话",
+        "terminated": "沙盒已终止",
+        "failed": "沙盒发生故障",
+        "ready": "沙盒已就绪",
+        "loading": "正在查找沙盒"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "全部标为已查看",
+        "error": "无法将输出标为已查看。请重试。"
+      },
+      "home": {
+        "description": "智能体创建的文件"
+      },
+      "empty": {
+        "description": "智能体创建的文件将显示在这里。"
+      },
+      "loading": {
+        "label": "正在加载输出…"
+      },
+      "unavailable": {
+        "description": "沙盒准备就绪后将显示输出。"
+      },
+      "error": {
+        "description": "无法刷新输出，请重试。"
+      },
+      "incomplete": {
+        "description": "部分输出无法加载。"
+      },
+      "filter": {
+        "label": "文件类型",
+        "all": "全部",
+        "folders": "文件夹",
+        "noExtension": "无扩展名"
+      },
+      "folders": {
+        "ariaLabel": "输出文件夹",
+        "root": "输出"
+      },
+      "filtered": {
+        "empty": "没有匹配的输出"
+      },
+      "search": {
+        "placeholder": "搜索输出"
+      },
+      "scope": {
+        "turn": "第 {turn, number} 轮输出",
+        "all": "所有输出"
+      },
+      "unseen": "新增或已更新"
+    },
+    "turnOutputs": {
+      "showAll": "查看全部 {count} 个输出",
+      "app": "应用",
+      "unavailable": "已不可用",
+      "appTitle": "预览你的应用"
     }
   },
   "knowledge": {

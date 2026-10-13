@@ -21,7 +21,7 @@ packages:
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
-  src/app/craft: 99.3
+  src/app/craft: 99.4
   src/app/ee: 95.6
   src/app/federated: 97
   src/app/mcp: 99.5
@@ -95,7 +95,7 @@ packages:
   src/lib/tools: 98.1
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
-  src/lib/users: 99
+  src/lib/users: 99.1
   src/lib/voice: 99.3
   src/lib/webSearch: 97.4
   src/providers: 99.5

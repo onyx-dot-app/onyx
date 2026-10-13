@@ -3,11 +3,9 @@ import {
   SvgFileText,
   SvgEdit,
   SvgSearch,
-  SvgGlobe,
   SvgCpu,
   SvgCheckSquare,
   SvgAlertCircle,
-  SvgLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import type {
@@ -81,8 +79,6 @@ export function getStatusDisplay(status: ToolCallStatus): StatusDisplay {
       };
   }
 }
-
-export { SvgLoader, SvgGlobe };
 
 /** The "Using <skill> skill" invocation card (drives the sparkle + border). */
 export function isSkillInvocation(toolCall: ToolCallState): boolean {

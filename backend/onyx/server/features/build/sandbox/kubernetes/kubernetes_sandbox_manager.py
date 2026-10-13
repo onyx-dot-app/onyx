@@ -2046,12 +2046,13 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
             raise RuntimeError(f"Failed to list directory: {e}") from e
 
     def get_outputs_manifest(
-        self, sandbox_id: UUID, session_id: UUID
+        self, sandbox_id: UUID, session_id: UUID, *, include_web: bool = False
     ) -> OutputsManifestResponse:
         try:
             return self._sidecar_client.outputs_manifest(
                 sandbox_id=sandbox_id,
                 session_id=session_id,
+                include_web=include_web,
             )
         except SidecarRequestError as e:
             raise RuntimeError(f"Failed to build outputs manifest: {e}") from e

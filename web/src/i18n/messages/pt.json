@@ -3134,6 +3134,9 @@
           "title": "Acesso de gerenciamento do conector"
         },
         "title": "Configurações do conector"
+      },
+      "optionsListInput": {
+        "placeholder": "Escolha {label} na lista ou digite"
       }
     },
     "costOverrides": {
@@ -12876,6 +12879,12 @@
       "csv": {
         "truncated": "Prévia limitada a {rows, number} linhas, {columns, number} colunas e {cells, number} células. Baixe o original para todos os dados.",
         "malformed": "Este CSV contém um campo entre aspas inválido. Baixe o original para verificá-lo."
+      },
+      "imageTooLarge": {
+        "description": "Esta imagem é muito grande para a prévia. Baixe o original para abri-la."
+      },
+      "unsupported": {
+        "description": "Não é possível visualizar este arquivo. Baixe o original para abri-lo."
       }
     },
     "filesTab": {
@@ -12892,9 +12901,37 @@
       "preparing": {
         "description": "Configurando seu ambiente de desenvolvimento",
         "title": "Preparando sandbox..."
+      },
+      "download": {
+        "label": "Baixar"
+      },
+      "partial": {
+        "label": "Não foi possível carregar algumas pastas. Atualize para tentar novamente."
+      },
+      "noMatches": {
+        "label": "Nenhum arquivo correspondente"
+      },
+      "previousPage": {
+        "label": "Página anterior"
+      },
+      "nextPage": {
+        "label": "Próxima página"
+      },
+      "page": {
+        "label": "Página {page} de {total}"
+      },
+      "upload": {
+        "label": "Enviar arquivos",
+        "error": "Não foi possível enviar os arquivos. Tente novamente."
+      },
+      "emptyDirectory": {
+        "label": "Não há arquivos neste diretório"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Fundo de contraste"
+      },
       "error": {
         "description": "Não foi possível exibir a imagem",
         "title": "Falha ao carregar a imagem"
@@ -12904,9 +12941,6 @@
       },
       "preview": {
         "ariaLabel": "Pré-visualização de {name}"
-      },
-      "background": {
-        "contrast": "Fundo de contraste"
       }
     },
     "inputBar": {
@@ -13064,6 +13098,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "Controles de PDF"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar ou ocultar miniaturas",
+        "resize": "Redimensionar miniaturas das páginas",
+        "label": "Miniaturas das páginas"
+      },
+      "page": {
+        "previous": "Página anterior",
+        "next": "Próxima página",
+        "counter": "{current} / {total}",
+        "preview": "Prévia da página {page}",
+        "select": "Ir para a página {page}"
+      },
+      "zoom": {
+        "out": "Diminuir zoom",
+        "in": "Aumentar zoom",
+        "label": "Zoom",
+        "fitWidth": "Ajustar à largura",
+        "fitPage": "Ajustar à página"
+      },
       "error": {
         "description": "Não foi possível carregar o arquivo PDF.",
         "title": "Não é possível visualizar o PDF"
@@ -13076,6 +13132,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Controles da apresentação"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar ou ocultar miniaturas dos slides"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionar miniaturas dos slides"
+      },
       "slides": {
         "label": "Slides"
       },
@@ -13086,7 +13151,7 @@
         "label": "Próximo slide"
       },
       "converting": {
-        "label": "Convertendo apresentação..."
+        "label": "Preparando a prévia..."
       },
       "empty": {
         "label": "Esta apresentação não tem slides"
@@ -13099,9 +13164,6 @@
       },
       "slide": {
         "counter": "Slide {current} de {total}"
-      },
-      "resize": {
-        "ariaLabel": "Redimensionar miniaturas dos slides"
       }
     },
     "previewTab": {
@@ -13535,7 +13597,8 @@
         "ariaLabel": "Copiar URL: {url}"
       },
       "downloadFile": {
-        "tooltip": "Baixar arquivo"
+        "tooltip": "Baixar arquivo",
+        "label": "Baixar"
       },
       "export": {
         "button": "Exportar para .docx",
@@ -13606,6 +13669,159 @@
       "input": {
         "placeholder": "Analise meus dados e crie um painel..."
       }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "Todos os arquivos"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Abas de resultados"
+      },
+      "close": {
+        "label": "Fechar {name}"
+      },
+      "reordered": {
+        "label": "Aba movida para a posição {position} de {count}"
+      },
+      "open": {
+        "label": "Abrir uma aba"
+      },
+      "outputs": {
+        "label": "Resultados"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Visualize seu app"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Verificando aplicativos web"
+      },
+      "failed": {
+        "description": "Não foi possível verificar os aplicativos web locais. Recarregue para tentar novamente."
+      },
+      "unavailable": {
+        "description": "O aplicativo web está indisponível. Restaure o ambiente isolado ou recarregue para tentar novamente.",
+        "label": "Indisponível"
+      },
+      "empty": {
+        "title": "Nenhum aplicativo web disponível",
+        "description": "Os aplicativos locais aparecem aqui quando estão em execução."
+      },
+      "starting": {
+        "label": "Iniciando aplicativo web"
+      },
+      "loading": {
+        "label": "Carregando aplicativo web"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Abrir resultados"
+      },
+      "close": {
+        "ariaLabel": "Fechar resultados"
+      },
+      "expand": {
+        "ariaLabel": "Expandir resultados"
+      },
+      "restore": {
+        "ariaLabel": "Restaurar resultados"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionar resultados"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Buscar arquivos"
+        },
+        "location": {
+          "label": "Todos os arquivos do seu ambiente"
+        }
+      },
+      "browser": {
+        "placeholder": "Aplicativos web no seu sandbox"
+      },
+      "reload": {
+        "file": "Recarregar arquivo",
+        "files": "Atualizar arquivos",
+        "browser": "Atualizar aplicativos web",
+        "unavailable": "Restaure o ambiente isolado para atualizar"
+      },
+      "export": {
+        "failed": "Não foi possível exportar este arquivo. Tente novamente."
+      },
+      "empty": {
+        "title": "Escolha uma visualização do espaço de trabalho"
+      },
+      "status": {
+        "provisioning": "Inicializando ambiente isolado",
+        "running": "Ambiente isolado em execução",
+        "sleeping": "Ambiente isolado em repouso",
+        "restoring": "Restaurando sessão",
+        "terminated": "Ambiente isolado encerrado",
+        "failed": "Falha no ambiente isolado",
+        "ready": "Ambiente isolado pronto",
+        "loading": "Buscando ambiente isolado"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Marcar todos como vistos",
+        "error": "Não foi possível marcar os resultados como vistos. Tente novamente."
+      },
+      "home": {
+        "description": "Arquivos criados pelo seu agente"
+      },
+      "empty": {
+        "description": "Os arquivos criados pelo seu agente aparecerão aqui."
+      },
+      "loading": {
+        "label": "Carregando resultados…"
+      },
+      "unavailable": {
+        "description": "Os resultados aparecerão quando seu ambiente estiver pronto."
+      },
+      "error": {
+        "description": "Não foi possível atualizar os resultados. Tente novamente."
+      },
+      "incomplete": {
+        "description": "Não foi possível carregar alguns resultados."
+      },
+      "filter": {
+        "label": "Tipo de arquivo",
+        "all": "Todos",
+        "folders": "Pastas",
+        "noExtension": "Sem extensão"
+      },
+      "folders": {
+        "ariaLabel": "Pastas de resultados",
+        "root": "Resultados"
+      },
+      "filtered": {
+        "empty": "Nenhum resultado correspondente"
+      },
+      "search": {
+        "placeholder": "Pesquisar resultados"
+      },
+      "scope": {
+        "turn": "Resultados do turno {turn, number}",
+        "all": "Todos os resultados"
+      },
+      "unseen": "Novo ou atualizado"
+    },
+    "turnOutputs": {
+      "showAll": "Ver todos os {count} resultados",
+      "app": "Aplicativo",
+      "unavailable": "Não está mais disponível",
+      "appTitle": "Prévia do seu aplicativo"
     }
   },
   "knowledge": {

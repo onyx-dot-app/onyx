@@ -1,9 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { ValidSources } from "@/lib/connectors/types/source";
+import { connectorConfigs } from "@/lib/connectors/connectors";
+import { isEditableSource } from "@/lib/connectors/edit/editable";
+import {
+  labelFindingValues,
+  storedCheckResults,
+} from "@/lib/connectors/checks/findings";
+import { useCredentialCheckReports } from "@/lib/credentials/hooks";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
@@ -27,7 +34,7 @@ function convertObjectToString(obj: any): string | any {
   return obj;
 }
 
-export function buildConfigEntries(
+function buildConfigEntries(
   obj: any,
   sourceType: ValidSources
 ): { [key: string]: string } {
@@ -246,7 +253,32 @@ export function AdvancedConfigDisplay({
   );
 }
 
-export function ConfigDisplay({
+interface ConnectorConfigDisplayProps {
+  source: ValidSources;
+  config: Record<string, unknown>;
+  credentialId: number;
+  connectorId: number;
+}
+
+/** A pair's config with listing-backed entries shown by name. The pair's report is read before the credential's. */
+export function ConnectorConfigDisplay({
+  source,
+  config,
+  credentialId,
+  connectorId,
+}: ConnectorConfigDisplayProps) {
+  const { reportFor } = useCredentialCheckReports(source);
+  const configEntries = useMemo(() => {
+    const checks = storedCheckResults(reportFor, { credentialId, connectorId });
+    const labeled = isEditableSource(source)
+      ? labelFindingValues(connectorConfigs[source], config, checks)
+      : config;
+    return buildConfigEntries(labeled, source);
+  }, [source, config, credentialId, connectorId, reportFor]);
+  return <ConfigDisplay configEntries={configEntries} />;
+}
+
+function ConfigDisplay({
   configEntries,
   onEdit,
 }: {

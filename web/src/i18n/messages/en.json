@@ -3134,6 +3134,9 @@
           "title": "Connector Manage Access"
         },
         "title": "Connector Settings"
+      },
+      "optionsListInput": {
+        "placeholder": "Pick {label} from the list, or type one"
       }
     },
     "costOverrides": {
@@ -12876,6 +12879,12 @@
       "csv": {
         "truncated": "Preview limited to {rows, number} rows, {columns, number} columns, and {cells, number} cells. Download the original for all data.",
         "malformed": "This CSV contains an invalid quoted field. Download the original to inspect it."
+      },
+      "imageTooLarge": {
+        "description": "This image is too large to preview. Download the original to open it."
+      },
+      "unsupported": {
+        "description": "Download the original to open it."
       }
     },
     "filesTab": {
@@ -12892,9 +12901,37 @@
       "preparing": {
         "description": "Setting up your development environment",
         "title": "Preparing sandbox..."
+      },
+      "download": {
+        "label": "Download"
+      },
+      "partial": {
+        "label": "Some folders could not be loaded. Refresh to try again."
+      },
+      "noMatches": {
+        "label": "No matching files"
+      },
+      "previousPage": {
+        "label": "Previous page"
+      },
+      "nextPage": {
+        "label": "Next page"
+      },
+      "page": {
+        "label": "Page {page} of {total}"
+      },
+      "upload": {
+        "label": "Upload files",
+        "error": "Could not upload files. Try again."
+      },
+      "emptyDirectory": {
+        "label": "No files in this directory"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Contrast background"
+      },
       "error": {
         "description": "The image could not be displayed",
         "title": "Failed to load image"
@@ -12904,9 +12941,6 @@
       },
       "preview": {
         "ariaLabel": "Preview of {name}"
-      },
-      "background": {
-        "contrast": "Contrast background"
       }
     },
     "inputBar": {
@@ -13064,6 +13098,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF controls"
+      },
+      "thumbnails": {
+        "toggle": "Toggle page thumbnails",
+        "resize": "Resize page thumbnails",
+        "label": "Page thumbnails"
+      },
+      "page": {
+        "previous": "Previous page",
+        "next": "Next page",
+        "counter": "{current} / {total}",
+        "preview": "Page {page} preview",
+        "select": "Go to page {page}"
+      },
+      "zoom": {
+        "out": "Zoom out",
+        "in": "Zoom in",
+        "label": "Zoom",
+        "fitWidth": "Fit width",
+        "fitPage": "Fit page"
+      },
       "error": {
         "description": "The PDF file could not be loaded.",
         "title": "Cannot preview PDF"
@@ -13076,6 +13132,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Presentation controls"
+      },
+      "thumbnails": {
+        "toggle": "Toggle slide thumbnails"
+      },
+      "resize": {
+        "ariaLabel": "Resize slide thumbnails"
+      },
       "slides": {
         "label": "Slides"
       },
@@ -13086,7 +13151,7 @@
         "label": "Next slide"
       },
       "converting": {
-        "label": "Converting presentation..."
+        "label": "Preparing preview..."
       },
       "empty": {
         "label": "No slides in this presentation"
@@ -13099,9 +13164,6 @@
       },
       "slide": {
         "counter": "Slide {current} of {total}"
-      },
-      "resize": {
-        "ariaLabel": "Resize slide thumbnails"
       }
     },
     "previewTab": {
@@ -13535,7 +13597,8 @@
         "ariaLabel": "Copy URL: {url}"
       },
       "downloadFile": {
-        "tooltip": "Download file"
+        "tooltip": "Download file",
+        "label": "Download"
       },
       "export": {
         "button": "Export to .docx",
@@ -13606,6 +13669,159 @@
       "input": {
         "placeholder": "Analyze my data and create a dashboard..."
       }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "All Files"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Output tabs"
+      },
+      "close": {
+        "label": "Close {name}"
+      },
+      "reordered": {
+        "label": "Tab moved to position {position} of {count}"
+      },
+      "open": {
+        "label": "Open a tab"
+      },
+      "outputs": {
+        "label": "Outputs"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Preview Your App"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Checking webapps"
+      },
+      "failed": {
+        "description": "Could not check local webapps. Reload to try again."
+      },
+      "unavailable": {
+        "description": "The webapp is unavailable. Restore the sandbox or reload to try again.",
+        "label": "Unavailable"
+      },
+      "empty": {
+        "title": "No webapps available",
+        "description": "Local apps appear here when they are running."
+      },
+      "starting": {
+        "label": "Starting webapp"
+      },
+      "loading": {
+        "label": "Loading webapp"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Open outputs"
+      },
+      "close": {
+        "ariaLabel": "Close outputs"
+      },
+      "expand": {
+        "ariaLabel": "Expand outputs"
+      },
+      "restore": {
+        "ariaLabel": "Restore outputs"
+      },
+      "resize": {
+        "ariaLabel": "Resize outputs"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Search files"
+        },
+        "location": {
+          "label": "All files on your sandbox"
+        }
+      },
+      "browser": {
+        "placeholder": "Webapps on your sandbox"
+      },
+      "reload": {
+        "file": "Reload file",
+        "files": "Refresh files",
+        "browser": "Refresh webapps",
+        "unavailable": "Restore the sandbox to refresh"
+      },
+      "export": {
+        "failed": "Could not export this file. Try again."
+      },
+      "empty": {
+        "title": "Choose a workspace view"
+      },
+      "status": {
+        "provisioning": "Initializing sandbox",
+        "running": "Sandbox running",
+        "sleeping": "Sandbox sleeping",
+        "restoring": "Restoring session",
+        "terminated": "Sandbox terminated",
+        "failed": "Sandbox failed",
+        "ready": "Sandbox ready",
+        "loading": "Finding sandbox"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Mark all viewed",
+        "error": "Could not mark outputs as viewed. Try again."
+      },
+      "home": {
+        "description": "Files created by your agent"
+      },
+      "empty": {
+        "description": "Files your agent creates will appear here."
+      },
+      "loading": {
+        "label": "Loading outputs…"
+      },
+      "unavailable": {
+        "description": "Outputs will appear when your sandbox is ready."
+      },
+      "error": {
+        "description": "Could not refresh outputs. Try again."
+      },
+      "incomplete": {
+        "description": "Some outputs could not be loaded."
+      },
+      "filter": {
+        "label": "File type",
+        "all": "All",
+        "folders": "Folders",
+        "noExtension": "No extension"
+      },
+      "folders": {
+        "ariaLabel": "Output folders",
+        "root": "Outputs"
+      },
+      "filtered": {
+        "empty": "No matching outputs"
+      },
+      "search": {
+        "placeholder": "Search outputs"
+      },
+      "scope": {
+        "turn": "Turn {turn, number} outputs",
+        "all": "All outputs"
+      },
+      "unseen": "New or updated"
+    },
+    "turnOutputs": {
+      "showAll": "View all {count} outputs",
+      "app": "App",
+      "unavailable": "No longer available",
+      "appTitle": "Preview your app"
     }
   },
   "knowledge": {

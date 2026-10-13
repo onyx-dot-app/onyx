@@ -1100,8 +1100,9 @@ class SessionManager:
                 tenant_id=get_current_tenant_id(),
             )
 
-        for acp_event in raw_events:
-            yield _streaming.event_to_sse(acp_event)
+        with contextlib.closing(raw_events):
+            for acp_event in raw_events:
+                yield _streaming.event_to_sse(acp_event)
 
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #

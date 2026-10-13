@@ -433,7 +433,9 @@ it("retains a draft on rerender and starts fresh after chat unmounts", async () 
   const first = render(<BuildChatPanel existingSessionId={SESSION_ID} />);
   fireEvent.click(screen.getByRole("button", { name: "Attach draft" }));
   await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
-  first.rerender(<BuildChatPanel existingSessionId={SESSION_ID} />);
+  first.rerender(
+    <BuildChatPanel existingSessionId={SESSION_ID} headerControlWidth={100} />
+  );
   expect(screen.getByTestId("draft-count")).toHaveTextContent("1");
   first.unmount();
   render(<BuildChatPanel existingSessionId={SESSION_ID} />);

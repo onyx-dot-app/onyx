@@ -99,6 +99,7 @@ RUN --mount=type=secret,id=sentry_auth_token \
     if [ -f /run/secrets/sentry_auth_token ]; then \
         export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
     fi && \
+    node tools/prepare-pdf-assets.cjs && \
     NODE_OPTIONS="${NODE_OPTIONS}" npx next build
 
 # Runtime stage. Runs as the non-root `node` user (uid 1000), which both the default slim
