@@ -25,7 +25,17 @@ def test_an_empty_form_runs_checks_when_the_defaults_are_complete() -> None:
 
 
 def test_an_empty_form_waits_when_a_field_is_required() -> None:
-    # repo_owner has no default.
-    assert _states(DocumentSource.GITHUB) == {
-        "github_connector_settings": DraftCheckStateKind.WAITING
+    # workspace has no default.
+    assert _states(DocumentSource.BITBUCKET) == {
+        "bitbucket_connector_settings": DraftCheckStateKind.WAITING
     }
+
+
+def test_an_empty_form_runs_only_the_named_checks_that_need_no_field() -> None:
+    # The GitHub sign-in needs no config; the other checks need repo_owner.
+    states = _states(DocumentSource.GITHUB)
+
+    assert states["github_auth"] == DraftCheckStateKind.PENDING
+    assert states["github_token_scopes"] == DraftCheckStateKind.PENDING
+    assert states["github_owner"] == DraftCheckStateKind.WAITING
+    assert states["github_pull_requests"] == DraftCheckStateKind.WAITING

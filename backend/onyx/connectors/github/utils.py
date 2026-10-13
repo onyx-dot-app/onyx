@@ -79,6 +79,12 @@ def validate_credential_base_url(base_url: str) -> None:
         ) from e
 
 
+def parse_repository_names(repositories: str | None) -> list[str]:
+    """The repository names of the comma-separated setting, without blanks.
+    Empty means every repository of the owner."""
+    return [name.strip() for name in (repositories or "").split(",") if name.strip()]
+
+
 def resolve_github_base_url(credentials: Mapping[str, Any]) -> str | None:
     """The API root the client calls. None means github.com.
 

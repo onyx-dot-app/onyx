@@ -73,7 +73,13 @@ _RETRY_AFTER_HEADER = "retry-after"
 _SSO_HEADER = "x-github-sso"
 
 _ALL_CAPABILITIES = frozenset(CredentialCapability)
-_NOT_YET_TESTED = "Not yet tested: capability checks land later in the stack."
+_PERM_SYNC_CHECKS_PENDING = (
+    "Not yet tested: the permission-sync checks land in the next PR."
+)
+_CURSOR_FALLBACK = (
+    "Used only when GitHub refuses offset pages for a large listing; it reads "
+    "the same endpoint as the offset listing that the checks probe."
+)
 
 
 class BoundedGithubRetry(GithubRetry):
@@ -339,7 +345,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def get_token_info(self) -> GitHubTokenInfo:
@@ -376,7 +381,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def get_organization(self, *, login: str) -> GitHubOrganizationRef:
@@ -388,7 +393,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_organization_repositories(
@@ -401,7 +406,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_user_repositories(
@@ -414,7 +419,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def get_repository(self, *, owner: str, name: str) -> GitHubRepository:
@@ -426,7 +431,10 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=(
+            "Re-reads, by id, a repository that a listing returned during "
+            "indexing; the repository checks probe the same access."
+        ),
     )
     @_translated
     def get_repository_by_id(self, *, repo_id: int) -> GitHubRepository:
@@ -437,7 +445,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def list_root_contents(self, *, repo_full_name: str) -> list[str]:
@@ -454,7 +461,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def get_branch(self, *, repo_full_name: str, branch: str) -> GitHubBranch:
@@ -468,7 +474,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def list_pull_requests(
@@ -486,7 +491,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=_CURSOR_FALLBACK,
     )
     @_translated
     def iter_pull_requests_by_cursor(
@@ -512,7 +517,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def get_pull_request(
@@ -526,7 +530,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def list_issues(
@@ -544,7 +547,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=_CURSOR_FALLBACK,
     )
     @_translated
     def iter_issues_by_cursor(
@@ -572,7 +575,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def get_issue(self, *, repo_full_name: str, number: int) -> GitHubIssue:
@@ -583,7 +585,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def get_git_tree(self, *, repo_full_name: str, ref: str) -> GitHubGitTree:
@@ -606,7 +607,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
     )
     @_translated
     def get_file_content(
@@ -633,7 +633,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_NOT_YET_TESTED,
+        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def get_user(self, *, login: str) -> GitHubUser:
@@ -648,7 +648,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_repository_collaborators(self, *, repo_full_name: str) -> list[str]:
@@ -665,7 +665,7 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.BOTH,
-        untested=_NOT_YET_TESTED,
+        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_organization_members(self, *, org_login: str) -> list[str]:

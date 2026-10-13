@@ -14,6 +14,7 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.confluence.capability_checks import (
     build_confluence_indexing_checks,
 )
+from onyx.connectors.github.capability_checks import build_github_indexing_checks
 from onyx.connectors.google_drive.capability_checks import (
     build_google_drive_indexing_checks,
 )
@@ -44,6 +45,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.LINEAR: build_linear_indexing_checks(),
     DocumentSource.NOTION: build_notion_indexing_checks(),
     DocumentSource.SHAREPOINT: build_sharepoint_indexing_checks(),
+    DocumentSource.GITHUB: build_github_indexing_checks(),
 }
 
 
