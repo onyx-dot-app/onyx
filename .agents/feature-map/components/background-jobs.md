@@ -217,7 +217,6 @@ seconds, `beat_schedule.py:BEAT_EXPIRES_DEFAULT`), matching the
 Every connector-scoped key is namespaced per tenant through the standard Redis
 client factory and, within a tenant, per `cc_pair_id` via the `RedisConnector`
 family in `onyx/redis/` (`redis_connector_prune.py`, `redis_connector_delete.py`,
-`redis_connector_doc_perm_sync.py`, `redis_connector_ext_group_sync.py`,
 `redis_document_set.py`, `redis_usergroup.py`).
 
 | Pattern | Example owner | TTL | Meaning |
