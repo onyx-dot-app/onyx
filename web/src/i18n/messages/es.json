@@ -9094,6 +9094,10 @@
         "backButton": {
           "label": "Volver al conector"
         }
+      },
+      "credentialSwap": {
+        "title": "Elegiste otra credencial",
+        "description": "El plan te permite conservar los documentos indexados, o volver a indexar todo y eliminar los documentos que la nueva credencial no puede ver."
       }
     }
   },

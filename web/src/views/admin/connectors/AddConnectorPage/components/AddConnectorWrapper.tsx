@@ -123,6 +123,8 @@ interface ConnectorChecksGates {
 interface ConnectorChecksGateProps {
   source: ConfigurableSources;
   credential: CredentialRef | null;
+  /** Set when the form edits this pair: the checks are dry runs of it. */
+  ccPairId: number | null;
   children: (gates: ConnectorChecksGates) => ReactNode;
 }
 
@@ -134,11 +136,13 @@ interface ConnectorChecksGateProps {
 function ConnectorChecksGate({
   source,
   credential,
+  ccPairId,
   children,
 }: ConnectorChecksGateProps) {
   const { formUnlocked, createReady } = useConnectorChecks({
     source,
     credential,
+    ccPairId,
   });
   return children({ formUnlocked, createReady });
 }
@@ -642,10 +646,21 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         ].filter((field) => !field.hidden);
         const hasVisibleBoundFields = visibleBoundFields.length > 0;
         const checkedCredential = canCreate ? formCredential : null;
+        // Another account than the pair's is a credential swap; the plan
+        // offers to keep what is indexed or to re-index in full. A typed
+        // account is another account too.
+        const credentialSwapped: boolean =
+          edit !== undefined &&
+          formCredential !== null &&
+          !(
+            "id" in formCredential &&
+            formCredential.id === edit.ccPair.credential.id
+          );
         return (
           <ConnectorChecksGate
             source={connector}
             credential={toCredentialRef(checkedCredential)}
+            ccPairId={edit?.ccPair.id ?? null}
           >
             {(checks) => {
               const formUnlocked: boolean =
@@ -824,6 +839,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 !configUnlocked &&
                                 gate?.reason?.kind !== "runChecks"
                               }
+                              editCCPairId={edit?.ccPair.id ?? null}
+                            />
+                          )}
+
+                          {credentialSwapped && (
+                            <MessageCard
+                              variant="info"
+                              title={editT("credentialSwap.title")}
+                              description={editT("credentialSwap.description")}
                             />
                           )}
 
