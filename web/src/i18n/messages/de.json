@@ -12774,22 +12774,6 @@
         "label": "Verbinde deine Daten"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "Dein Arbeitsbereich wird gefertigt...",
-        "enchanting": "Mit Magie verzaubern...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "Ressourcen sammeln...",
-        "miningDependencies": "Abhängigkeiten schürfen...",
-        "placingBlocks": "Blöcke platzieren...",
-        "punchingWood": "Holz hacken...",
-        "smeltingCode": "Code verhütten...",
-        "worldGenerated": "Weltgenerierung abgeschlossen..."
-      },
-      "tagline": {
-        "label": "Deine nächste große Idee wird gefertigt..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "Leeren"

@@ -12774,22 +12774,6 @@
         "label": "データを接続"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "ワークスペースをクラフトしています...",
-        "enchanting": "魔法でエンチャントしています...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "資源を集めています...",
-        "miningDependencies": "依存関係を採掘しています...",
-        "placingBlocks": "ブロックを設置しています...",
-        "punchingWood": "木を殴っています...",
-        "smeltingCode": "コードを精錬しています...",
-        "worldGenerated": "ワールド生成が完了しました..."
-      },
-      "tagline": {
-        "label": "次の素晴らしいアイデアをクラフト中..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "クリア"
