@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useTranslations } from "next-intl";
+import { useDebouncedValue } from "@opal/hooks";
 import { SvgProgressRing } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
@@ -553,16 +554,6 @@ export function useFindingOptions(
 }
 
 const PLAN_DEBOUNCE_MS = 300;
-
-/** `value`, once it has held still for `delayMs`. */
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timeout = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timeout);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 /**
  * The checks a run would hold for `source` with this access type and form.

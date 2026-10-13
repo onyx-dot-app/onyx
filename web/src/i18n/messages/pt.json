@@ -2064,22 +2064,6 @@
         "description": "Este erro ocorreu durante a tentativa de exclusão do conector. Você pode tentar excluir novamente clicando no botão \"Excluir\".",
         "title": "Erro de exclusão"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "Documentos sincronizados",
-          "errorMessage": "Mensagem de erro",
-          "permissionErrors": "Erros de permissão",
-          "status": "Status",
-          "timeStarted": "Horário de início"
-        },
-        "empty": {
-          "description": "As execuções de sincronização das permissões dos documentos são agendadas em segundo plano. Elas podem demorar a aparecer — tente atualizar em cerca de 30 segundos.",
-          "title": "Ainda não há tentativas de sincronização das permissões dos documentos"
-        },
-        "errorModal": {
-          "title": "Erro na sincronização das permissões dos documentos"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "Confira <link>nossa documentação</link> para mais informações sobre como configurar este conector."
@@ -2172,23 +2156,6 @@
           "heading": "{multiple, select, true {Arquivos selecionados} other {Arquivo selecionado}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "Mensagem de erro",
-          "groups": "Grupos",
-          "memberships": "Associações",
-          "status": "Status",
-          "timeStarted": "Horário de início",
-          "users": "Usuários"
-        },
-        "empty": {
-          "description": "As execuções de sincronização das associações de grupo são agendadas em segundo plano. Elas podem demorar a aparecer — tente atualizar em cerca de 30 segundos.",
-          "title": "Ainda não há tentativas de sincronização das associações de grupo"
-        },
-        "errorModal": {
-          "title": "Erro na sincronização das associações de grupo"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "Todos mantêm o acesso sincronizado da origem.",
@@ -2208,33 +2175,6 @@
         "toggle": {
           "description": "Limite o acesso aos membros dos grupos selecionados. As permissões sincronizadas continuam valendo.",
           "title": "Restringir acesso a grupos"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "Mensagem de erro",
-          "newDocs": "Novos documentos",
-          "status": "Status",
-          "timeStarted": "Horário de início",
-          "totalDocs": "Total de documentos",
-          "totalDocsTooltip": "Número total de documentos substituídos no índice durante esta tentativa de indexação"
-        },
-        "docsPerMinute": "{rate} documentos / min",
-        "docsRemoved": "(também removeu {count} documentos detectados como excluídos na origem)",
-        "empty": {
-          "description": "As tentativas de indexação são agendadas em segundo plano e podem demorar a aparecer. Tente atualizar a página em cerca de 30 segundos!",
-          "title": "Nenhuma tentativa de indexação agendada ainda"
-        },
-        "noAdditionalDocs": "Nenhum documento adicional processado",
-        "reindexTooltip": {
-          "completed": "Esta tentativa de indexação foi uma reindexação completa. Todos os documentos da origem foram sincronizados com o sistema.",
-          "inProgress": "Esta tentativa de indexação é uma reindexação completa. Todos os documentos da origem estão sendo sincronizados com o sistema."
-        },
-        "stageMetricsButton": {
-          "tooltip": "Ver métricas por etapa"
-        },
-        "viewTrace": {
-          "ariaLabel": "Ver rastreamento completo"
         }
       },
       "indexErrorsAlert": {
@@ -2492,30 +2432,6 @@
           "total": "/ {total}"
         }
       },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "Ver a mensagem de erro completa"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "Sincronização das permissões dos documentos",
-          "notApplicableDescription": "Este conector não usa uma tarefa separada de sincronização das permissões dos documentos."
-        },
-        "groupMembership": {
-          "label": "Sincronização das associações de grupo",
-          "notApplicableDescription": "Este conector não usa uma tarefa separada de sincronização das associações de grupo."
-        },
-        "indexing": {
-          "label": "Indexação"
-        },
-        "loadError": {
-          "title": "Falha ao carregar as tentativas de sincronização"
-        },
-        "notApplicable": {
-          "title": "Não se aplica"
-        }
-      },
       "toasts": {
         "completeReindexStarted": "Reindexação completa iniciada com sucesso",
         "deletionScheduleFailed": "Falha ao agendar a exclusão do conector - {message}",
@@ -2574,7 +2490,80 @@
         "prune": "Limpar a cada **{every}**"
       },
       "runs": {
-        "title": "Execuções de indexação"
+        "title": "Execuções de indexação",
+        "kinds": {
+          "label": "Tipo de execução",
+          "all": "Todos os tipos",
+          "indexing": "Índice de documentos",
+          "doc_permission_sync": "Sincronização de permissões",
+          "group_sync": "Sincronização de membros de grupos"
+        },
+        "detail": {
+          "queued": "Na fila",
+          "running": "Em execução",
+          "rate": "{rate} documentos/min",
+          "finished": "{time} ({minutes, number} min)"
+        },
+        "actions": {
+          "stages": "Ver métricas por etapa",
+          "cancel": "Cancelar",
+          "logs": "Ver logs"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, one {# documento falhou} other {# documentos falharam}}"
+        },
+        "figures": {
+          "indexed": "indexados",
+          "synced": "sincronizados",
+          "memberships": "associações"
+        },
+        "counts": {
+          "newDocs": "{count, plural, one {# documento novo} other {# documentos novos}}",
+          "updatedDocs": "Documentos atualizados",
+          "removedDocs": "{count, plural, one {# documento removido} other {# documentos removidos}}",
+          "users": "{count, plural, one {# usuário} other {# usuários}}",
+          "groups": "{count, plural, one {# grupo} other {# grupos}}",
+          "running": "{count, plural, one {# execução em andamento} other {# execuções em andamento}}",
+          "succeeded": "{count, plural, one {# execução bem-sucedida} other {# execuções bem-sucedidas}}",
+          "failed": "{count, plural, one {# execução com falha} other {# execuções com falha}}"
+        },
+        "search": {
+          "placeholder": "Pesquisar erros de execuções..."
+        },
+        "window": {
+          "label": "Período",
+          "all": "Todo o período",
+          "h12": "Últimas 12 horas",
+          "h24": "Últimas 24 horas",
+          "d7": "Últimos 7 dias",
+          "d30": "Últimos 30 dias"
+        },
+        "statusGroups": {
+          "label": "Status",
+          "all": "Todos os status",
+          "running": "Em execução",
+          "succeeded": "Bem-sucedidas",
+          "failed": "Com falha",
+          "canceled": "Canceladas"
+        },
+        "loadError": {
+          "title": "Não foi possível carregar as execuções."
+        },
+        "empty": {
+          "title": "Ainda não há execuções",
+          "filteredTitle": "Nenhuma execução corresponde a estes filtros.",
+          "description": "As execuções são agendadas em segundo plano e podem demorar um pouco para aparecer."
+        },
+        "units": "{count, plural, one {execução} other {execuções}}",
+        "errorModal": {
+          "indexing": "Erro na execução de indexação",
+          "doc_permission_sync": "Erro na sincronização de permissões de documentos",
+          "group_sync": "Erro na sincronização de membros de grupos"
+        },
+        "toasts": {
+          "canceled": "A execução está sendo cancelada.",
+          "cancelFailed": "Não foi possível cancelar a execução. Tente novamente."
+        }
       }
     },
     "connectorTitle": {
@@ -7913,18 +7902,17 @@
         "deleting": "Excluindo",
         "error": "Erro",
         "failed": "Falhou",
-        "inProgress": "Em andamento",
         "indexed": "Indexado",
         "indexing": "Indexando",
         "initialIndexing": "Indexação inicial",
         "interrupted": "Interrompido",
         "invalid": "Inválido",
         "invalidConnectorTooltip": "O conector está em um estado inválido. Atualize as credenciais ou crie um novo conector.",
-        "none": "Nenhum",
         "notStarted": "Não iniciado",
         "paused": "Pausado",
         "scheduled": "Agendado",
-        "succeeded": "Bem-sucedido"
+        "synced": "Sincronizado",
+        "syncing": "Sincronizando"
       }
     },
     "systemInfo": {

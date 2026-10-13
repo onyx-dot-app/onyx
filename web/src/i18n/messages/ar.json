@@ -2064,22 +2064,6 @@
         "description": "حدث هذا الخطأ أثناء محاولة حذف الموصل. يمكنك إعادة محاولة الحذف بالنقر على زر \"حذف\".",
         "title": "خطأ في الحذف"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "المستندات المتزامنة",
-          "errorMessage": "رسالة الخطأ",
-          "permissionErrors": "أخطاء الأذونات",
-          "status": "الحالة",
-          "timeStarted": "وقت البدء"
-        },
-        "empty": {
-          "description": "تُجدول عمليات مزامنة أذونات المستندات في الخلفية. قد تستغرق بعض الوقت للظهور. جرّب التحديث خلال 30 ثانية تقريبًا.",
-          "title": "لا توجد محاولات مزامنة أذونات مستندات بعد"
-        },
-        "errorModal": {
-          "title": "خطأ في مزامنة أذونات المستندات"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "راجع <link>مستنداتنا</link> لمزيد من المعلومات حول إعداد هذا الموصّل."
@@ -2172,23 +2156,6 @@
           "heading": "{multiple, select, true {الملفات المحددة} other {الملف المحدد}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "رسالة الخطأ",
-          "groups": "المجموعات",
-          "memberships": "العضويات",
-          "status": "الحالة",
-          "timeStarted": "وقت البدء",
-          "users": "المستخدمون"
-        },
-        "empty": {
-          "description": "تُجدول عمليات مزامنة عضويات المجموعات في الخلفية. قد تستغرق بعض الوقت للظهور. جرّب التحديث خلال 30 ثانية تقريبًا.",
-          "title": "لا توجد محاولات مزامنة عضويات مجموعات بعد"
-        },
-        "errorModal": {
-          "title": "خطأ في مزامنة عضويات المجموعات"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "يحتفظ الجميع بالوصول المتزامن من المصدر.",
@@ -2208,33 +2175,6 @@
         "toggle": {
           "description": "قصر الوصول على أعضاء المجموعات المحددة. تظل الأذونات المتزامنة سارية.",
           "title": "تقييد الوصول بالمجموعات"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "رسالة الخطأ",
-          "newDocs": "المستندات الجديدة",
-          "status": "الحالة",
-          "timeStarted": "وقت البدء",
-          "totalDocs": "إجمالي المستندات",
-          "totalDocsTooltip": "إجمالي عدد المستندات المستبدلة في الفهرس خلال محاولة الفهرسة هذه"
-        },
-        "docsPerMinute": "{rate} مستند / دقيقة",
-        "docsRemoved": "(كما أُزيل {count} مستندًا اكتُشف حذفها في المصدر)",
-        "empty": {
-          "description": "تُجدول محاولات الفهرسة في الخلفية وقد تستغرق بعض الوقت للظهور. جرّب تحديث الصفحة خلال 30 ثانية تقريبًا!",
-          "title": "لم تُجدول محاولات فهرسة بعد"
-        },
-        "noAdditionalDocs": "لم تُعالج مستندات إضافية",
-        "reindexTooltip": {
-          "completed": "كانت محاولة الفهرسة هذه إعادة فهرسة كاملة. تمت مزامنة جميع المستندات من المصدر إلى النظام.",
-          "inProgress": "محاولة الفهرسة هذه إعادة فهرسة كاملة. تجري مزامنة جميع المستندات من المصدر إلى النظام."
-        },
-        "stageMetricsButton": {
-          "tooltip": "عرض مقاييس المراحل"
-        },
-        "viewTrace": {
-          "ariaLabel": "عرض التتبع الكامل"
         }
       },
       "indexErrorsAlert": {
@@ -2492,30 +2432,6 @@
           "total": "/ {total}"
         }
       },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "عرض رسالة الخطأ الكاملة"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "مزامنة أذونات المستندات",
-          "notApplicableDescription": "لا يستخدم هذا الموصل مهمة منفصلة لمزامنة أذونات المستندات."
-        },
-        "groupMembership": {
-          "label": "مزامنة عضويات المجموعات",
-          "notApplicableDescription": "لا يستخدم هذا الموصل مهمة منفصلة لمزامنة عضويات المجموعات."
-        },
-        "indexing": {
-          "label": "الفهرسة"
-        },
-        "loadError": {
-          "title": "فشل تحميل محاولات المزامنة"
-        },
-        "notApplicable": {
-          "title": "غير منطبق"
-        }
-      },
       "toasts": {
         "completeReindexStarted": "بدأت إعادة الفهرسة الكاملة بنجاح",
         "deletionScheduleFailed": "فشلت جدولة حذف الموصل - {message}",
@@ -2574,7 +2490,80 @@
         "prune": "تنقية كل **{every}**"
       },
       "runs": {
-        "title": "عمليات الفهرسة"
+        "title": "عمليات الفهرسة",
+        "kinds": {
+          "label": "نوع التشغيل",
+          "all": "كل الأنواع",
+          "indexing": "فهرسة المستندات",
+          "doc_permission_sync": "مزامنة الأذونات",
+          "group_sync": "مزامنة عضوية المجموعات"
+        },
+        "detail": {
+          "queued": "في قائمة الانتظار",
+          "running": "قيد التشغيل",
+          "rate": "{rate} مستند/دقيقة",
+          "finished": "{time} ({minutes, number} دقيقة)"
+        },
+        "actions": {
+          "stages": "عرض مقاييس المراحل",
+          "cancel": "إلغاء",
+          "logs": "عرض السجلات"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}"
+        },
+        "figures": {
+          "indexed": "مفهرس",
+          "synced": "متزامن",
+          "memberships": "عضويات"
+        },
+        "counts": {
+          "newDocs": "{count, plural, one {مستند جديد واحد} other {# مستندات جديدة}}",
+          "updatedDocs": "المستندات المحدثة",
+          "removedDocs": "{count, plural, one {تمت إزالة مستند واحد} other {تمت إزالة # مستندات}}",
+          "users": "{count, plural, one {مستخدم واحد} other {# مستخدمين}}",
+          "groups": "{count, plural, one {مجموعة واحدة} other {# مجموعات}}",
+          "running": "{count, plural, one {تشغيل واحد قيد التنفيذ} other {# عمليات تشغيل قيد التنفيذ}}",
+          "succeeded": "{count, plural, one {نجح تشغيل واحد} other {نجحت # عمليات تشغيل}}",
+          "failed": "{count, plural, one {فشل تشغيل واحد} other {فشلت # عمليات تشغيل}}"
+        },
+        "search": {
+          "placeholder": "ابحث في أخطاء التشغيل..."
+        },
+        "window": {
+          "label": "النطاق الزمني",
+          "all": "كل الأوقات",
+          "h12": "آخر 12 ساعة",
+          "h24": "آخر 24 ساعة",
+          "d7": "آخر 7 أيام",
+          "d30": "آخر 30 يومًا"
+        },
+        "statusGroups": {
+          "label": "الحالة",
+          "all": "كل الحالات",
+          "running": "قيد التشغيل",
+          "succeeded": "ناجح",
+          "failed": "فشل",
+          "canceled": "ملغى"
+        },
+        "loadError": {
+          "title": "تعذر تحميل عمليات التشغيل."
+        },
+        "empty": {
+          "title": "لا توجد عمليات تشغيل بعد",
+          "filteredTitle": "لا توجد عمليات تشغيل تطابق هذه المرشحات.",
+          "description": "تتم جدولة عمليات التشغيل في الخلفية وقد يستغرق ظهورها بعض الوقت."
+        },
+        "units": "{count, plural, one {تشغيل} other {عمليات تشغيل}}",
+        "errorModal": {
+          "indexing": "خطأ في تشغيل الفهرسة",
+          "doc_permission_sync": "خطأ في مزامنة أذونات المستندات",
+          "group_sync": "خطأ في مزامنة عضوية المجموعات"
+        },
+        "toasts": {
+          "canceled": "يجري إلغاء التشغيل.",
+          "cancelFailed": "تعذر إلغاء التشغيل. حاول مرة أخرى."
+        }
       }
     },
     "connectorTitle": {
@@ -7913,18 +7902,17 @@
         "deleting": "جارٍ الحذف",
         "error": "خطأ",
         "failed": "فشلت",
-        "inProgress": "قيد التنفيذ",
         "indexed": "مفهرس",
         "indexing": "جارٍ الفهرسة",
         "initialIndexing": "فهرسة أولية",
         "interrupted": "متقطعة",
         "invalid": "غير صالحة",
         "invalidConnectorTooltip": "الموصل في حالة غير صالحة. يرجى تحديث بيانات الاعتماد أو إنشاء موصل جديد.",
-        "none": "بدون",
         "notStarted": "لم تبدأ",
         "paused": "موقوف مؤقتًا",
         "scheduled": "مجدولة",
-        "succeeded": "نجحت"
+        "synced": "تمت المزامنة",
+        "syncing": "جارٍ المزامنة"
       }
     },
     "systemInfo": {

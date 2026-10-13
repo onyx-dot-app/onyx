@@ -2064,22 +2064,6 @@
         "description": "This error occurred while attempting to delete the connector. You may re-attempt a deletion by clicking the \"Delete\" button.",
         "title": "Deletion Error"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "Docs Synced",
-          "errorMessage": "Error Message",
-          "permissionErrors": "Permission Errors",
-          "status": "Status",
-          "timeStarted": "Time Started"
-        },
-        "empty": {
-          "description": "Document-permission sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds.",
-          "title": "No document permission sync attempts yet"
-        },
-        "errorModal": {
-          "title": "Document Permission Sync Error"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "Check out <link>our docs</link> for more info on configuring this connector."
@@ -2172,23 +2156,6 @@
           "heading": "{multiple, select, true {Selected Files} other {Selected File}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "Error Message",
-          "groups": "Groups",
-          "memberships": "Memberships",
-          "status": "Status",
-          "timeStarted": "Time Started",
-          "users": "Users"
-        },
-        "empty": {
-          "description": "Group-membership sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds.",
-          "title": "No group membership sync attempts yet"
-        },
-        "errorModal": {
-          "title": "Group Membership Sync Error"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "Everyone keeps the access synced from the source.",
@@ -2208,33 +2175,6 @@
         "toggle": {
           "description": "Limit access to members of selected groups. Synced permissions still apply.",
           "title": "Restrict Access to Groups"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "Error Message",
-          "newDocs": "New Docs",
-          "status": "Status",
-          "timeStarted": "Time Started",
-          "totalDocs": "Total Docs",
-          "totalDocsTooltip": "Total number of documents replaced in the index during this indexing attempt"
-        },
-        "docsPerMinute": "{rate} docs / min",
-        "docsRemoved": "(also removed {count} docs that were detected as deleted in the source)",
-        "empty": {
-          "description": "Index attempts are scheduled in the background, and may take some time to appear. Try refreshing the page in ~30 seconds!",
-          "title": "No indexing attempts scheduled yet"
-        },
-        "noAdditionalDocs": "No additional docs processed",
-        "reindexTooltip": {
-          "completed": "This index attempt was a full re-index. All documents from the source were synced into the system.",
-          "inProgress": "This index attempt is a full re-index. All documents from the source are being synced into the system."
-        },
-        "stageMetricsButton": {
-          "tooltip": "View stage metrics"
-        },
-        "viewTrace": {
-          "ariaLabel": "View full trace"
         }
       },
       "indexErrorsAlert": {
@@ -2492,30 +2432,6 @@
           "total": "/ {total}"
         }
       },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "View full error message"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "Document Permission Sync",
-          "notApplicableDescription": "This connector does not use a separate document-permission syncing job."
-        },
-        "groupMembership": {
-          "label": "Group Membership Sync",
-          "notApplicableDescription": "This connector does not use a separate group-membership syncing job."
-        },
-        "indexing": {
-          "label": "Indexing"
-        },
-        "loadError": {
-          "title": "Failed to load sync attempts"
-        },
-        "notApplicable": {
-          "title": "Not applicable"
-        }
-      },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",
         "deletionScheduleFailed": "Failed to schedule deletion of connector - {message}",
@@ -2574,7 +2490,80 @@
         "prune": "Prune every **{every}**"
       },
       "runs": {
-        "title": "Index Runs"
+        "title": "Index Runs",
+        "kinds": {
+          "label": "Run type",
+          "all": "All Types",
+          "indexing": "Document Index",
+          "doc_permission_sync": "Permissions Sync",
+          "group_sync": "Group Membership Sync"
+        },
+        "detail": {
+          "queued": "Queued",
+          "running": "Running",
+          "rate": "{rate} docs/min",
+          "finished": "{time} ({minutes, number} min)"
+        },
+        "actions": {
+          "stages": "View Stage Metrics",
+          "cancel": "Cancel",
+          "logs": "View Logs"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, one {# document failed} other {# documents failed}}"
+        },
+        "figures": {
+          "indexed": "indexed",
+          "synced": "synced",
+          "memberships": "memberships"
+        },
+        "counts": {
+          "newDocs": "{count, plural, one {# new document} other {# new documents}}",
+          "updatedDocs": "Updated documents",
+          "removedDocs": "{count, plural, one {# document removed} other {# documents removed}}",
+          "users": "{count, plural, one {# user} other {# users}}",
+          "groups": "{count, plural, one {# group} other {# groups}}",
+          "running": "{count, plural, one {# run in progress} other {# runs in progress}}",
+          "succeeded": "{count, plural, one {# run succeeded} other {# runs succeeded}}",
+          "failed": "{count, plural, one {# run failed} other {# runs failed}}"
+        },
+        "search": {
+          "placeholder": "Search run errors..."
+        },
+        "window": {
+          "label": "Time range",
+          "all": "All time",
+          "h12": "Last 12 hours",
+          "h24": "Last 24 hours",
+          "d7": "Last 7 days",
+          "d30": "Last 30 days"
+        },
+        "statusGroups": {
+          "label": "Status",
+          "all": "All Status",
+          "running": "Running",
+          "succeeded": "Succeeded",
+          "failed": "Failed",
+          "canceled": "Canceled"
+        },
+        "loadError": {
+          "title": "Couldn't load the runs."
+        },
+        "empty": {
+          "title": "No runs yet",
+          "filteredTitle": "No runs match these filters.",
+          "description": "Runs are scheduled in the background and may take a moment to appear."
+        },
+        "units": "{count, plural, one {run} other {runs}}",
+        "errorModal": {
+          "indexing": "Index Run Error",
+          "doc_permission_sync": "Document Permission Sync Error",
+          "group_sync": "Group Membership Sync Error"
+        },
+        "toasts": {
+          "canceled": "The run is being canceled.",
+          "cancelFailed": "Couldn't cancel the run. Try again."
+        }
       }
     },
     "connectorTitle": {
@@ -7913,18 +7902,17 @@
         "deleting": "Deleting",
         "error": "Error",
         "failed": "Failed",
-        "inProgress": "In Progress",
         "indexed": "Indexed",
         "indexing": "Indexing",
         "initialIndexing": "Initial Indexing",
         "interrupted": "Interrupted",
         "invalid": "Invalid",
         "invalidConnectorTooltip": "Connector is in an invalid state. Please update the credentials or create a new connector.",
-        "none": "None",
         "notStarted": "Not Started",
         "paused": "Paused",
         "scheduled": "Scheduled",
-        "succeeded": "Succeeded"
+        "synced": "Synced",
+        "syncing": "Syncing"
       }
     },
     "systemInfo": {

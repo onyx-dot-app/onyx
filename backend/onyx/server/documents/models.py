@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timezone
 from enum import Enum
-from typing import Annotated, Any, Generic, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 from uuid import UUID
 
 from pydantic import (
@@ -22,6 +22,8 @@ from onyx.connectors.models import InputType
 from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
+    CCPairRunKind,
+    CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     HierarchyNodeType,
@@ -494,21 +496,41 @@ class PaginatedReturn(BaseModel, Generic[PaginatedType]):
     total_items: int
 
 
-class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
-    """Paginated response for the per-cc-pair sync-attempt history endpoints.
+class CCPairIndexRun(BaseModel):
+    kind: Literal[CCPairRunKind.INDEXING] = CCPairRunKind.INDEXING
+    time_created: datetime
+    attempt: IndexAttemptSnapshot
 
-    ``applicable`` is False when the cc-pair's source does not run the kind
-    of sync this endpoint reports on (e.g. Slack has no group sync; Salesforce
-    has neither doc sync nor group sync). The frontend uses this to render an
-    explanatory message instead of an empty-state — the two are distinct
-    states: ``applicable=True, items=[], total_items=0`` legitimately means
-    "no attempts yet" and must not be confused with "this kind of sync isn't
-    applicable for this source".
-    """
 
-    applicable: bool
-    items: list[PaginatedType]
+class CCPairDocPermissionSyncRun(BaseModel):
+    kind: Literal[CCPairRunKind.DOC_PERMISSION_SYNC] = CCPairRunKind.DOC_PERMISSION_SYNC
+    time_created: datetime
+    attempt: DocPermissionSyncAttemptSnapshot
+
+
+class CCPairGroupSyncRun(BaseModel):
+    kind: Literal[CCPairRunKind.GROUP_SYNC] = CCPairRunKind.GROUP_SYNC
+    time_created: datetime
+    attempt: ExternalGroupSyncAttemptSnapshot
+
+
+CCPairRun = Annotated[
+    CCPairIndexRun | CCPairDocPermissionSyncRun | CCPairGroupSyncRun,
+    Field(discriminator="kind"),
+]
+
+
+class CCPairRunsResponse(BaseModel):
+    """One page of the pair's runs, newest first."""
+
+    items: list[CCPairRun]
+    # Runs matching every filter, across the kinds asked for.
     total_items: int
+    # The kinds this pair runs, whatever was asked for.
+    kinds: list[CCPairRunKind]
+    # Per status group, ignoring the status filter, so the counts stay put
+    # while one is applied.
+    status_counts: dict[CCPairRunStatusGroup, int]
 
 
 class PendingBackfillSnapshot(BaseModel):

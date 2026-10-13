@@ -88,7 +88,9 @@ deletion units.
 | PUT | `/manage/admin/cc-pair/{id}/status` | `update_cc_pair_status` | Pause/resume only. |
 | PUT | `/manage/admin/cc-pair/{id}/name`, `PUT .../property` | | |
 | POST | `/manage/admin/cc-pair/{id}/prune` | `prune_cc_pair` | |
-| GET | `/manage/admin/cc-pair/{id}/index-attempts`, `.../errors`, `.../permission-sync-attempts`, `.../external-group-sync-attempts`, `.../get-docs-sync-status` | | Status surfaces for one cc-pair. |
+| GET | `/manage/admin/cc-pair/{id}/index-attempts`, `.../errors`, `.../get-docs-sync-status` | | Status surfaces for one cc-pair. |
+| GET | `/manage/admin/cc-pair/{id}/runs` | `get_cc_pair_runs` | The pair's index attempts plus, for a perm-synced pair, its document permission and group syncs, as one feed newest first. One SQL union pages it (`db/cc_pair_runs.py`). Filters: time window, kinds, status groups, error text. Status counts ignore the status filter. A source whose group sync covers all its pairs shows that source's group syncs on every pair. |
+| POST | `/manage/admin/index-attempt/{id}/cancel` | `cancel_index_attempt` | Cancels one running or queued attempt. Needs `CCPairAccessLevel.OPERATE`. Shares the pause route's cancel helper. |
 | GET | `/manage/admin/cc-pair/{id}/hierarchy-breakdown` | `get_cc_pair_hierarchy_breakdown` | `server/documents/hierarchy_breakdown.py`. Node type → `{raw_node_id, display_name, link, doc_count}` rows: the pair's indexed documents in each node's subtree. `other_doc_count`: the indexed documents in no listed node's subtree. `null` until a full index run of the pair succeeds (under any search settings). Computed live; a separate route so the detail page stays fast. See [[connectors]] §4.9. |
 | POST | `/manage/admin/deletion-attempt` | `create_deletion_attempt_for_connector_id` | `server/manage/administrative.py`. **The real deletion trigger.** Needs `CCPairAccessLevel.EDIT` on the pair. |
 | POST, GET | `/manage/admin/indexing/targeted-reindex`, `/manage/admin/indexing/targeted-reindex/{job_id}` | `server/documents/targeted_reindex.py` | Reindex only the documents that previously failed, and read the job. |

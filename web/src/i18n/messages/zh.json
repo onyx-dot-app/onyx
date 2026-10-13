@@ -2064,22 +2064,6 @@
         "description": "尝试删除连接器时发生此错误。您可以点击“删除”按钮重新尝试删除。",
         "title": "删除错误"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "已同步文档数",
-          "errorMessage": "错误信息",
-          "permissionErrors": "权限错误",
-          "status": "状态",
-          "timeStarted": "开始时间"
-        },
-        "empty": {
-          "description": "文档权限同步任务在后台安排执行。可能需要一段时间才会显示——请在约 30 秒后刷新。",
-          "title": "暂无文档权限同步尝试"
-        },
-        "errorModal": {
-          "title": "文档权限同步错误"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "有关配置此连接器的更多信息，请查看<link>我们的文档</link>。"
@@ -2172,23 +2156,6 @@
           "heading": "{multiple, select, true {已选择的文件} other {已选择的文件}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "错误信息",
-          "groups": "用户组",
-          "memberships": "成员关系",
-          "status": "状态",
-          "timeStarted": "开始时间",
-          "users": "用户"
-        },
-        "empty": {
-          "description": "用户组成员同步任务在后台安排执行。可能需要一段时间才会显示——请在约 30 秒后刷新。",
-          "title": "暂无用户组成员同步尝试"
-        },
-        "errorModal": {
-          "title": "用户组成员同步错误"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "所有人保留从源系统同步的访问权限。",
@@ -2208,33 +2175,6 @@
         "toggle": {
           "description": "仅允许所选群组的成员访问。同步的权限仍然适用。",
           "title": "限制为群组访问"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "错误信息",
-          "newDocs": "新增文档数",
-          "status": "状态",
-          "timeStarted": "开始时间",
-          "totalDocs": "文档总数",
-          "totalDocsTooltip": "本次索引尝试中在索引里被替换的文档总数"
-        },
-        "docsPerMinute": "{rate} 个文档 / 分钟",
-        "docsRemoved": "（同时移除了 {count} 个在来源中被检测为已删除的文档）",
-        "empty": {
-          "description": "索引尝试在后台安排执行，可能需要一段时间才会显示。请在约 30 秒后刷新页面！",
-          "title": "尚未安排索引尝试"
-        },
-        "noAdditionalDocs": "未处理额外的文档",
-        "reindexTooltip": {
-          "completed": "本次索引尝试是完整重新索引。来源中的所有文档均已同步到系统。",
-          "inProgress": "本次索引尝试是完整重新索引。来源中的所有文档正在同步到系统。"
-        },
-        "stageMetricsButton": {
-          "tooltip": "查看阶段指标"
-        },
-        "viewTrace": {
-          "ariaLabel": "查看完整追踪"
         }
       },
       "indexErrorsAlert": {
@@ -2492,30 +2432,6 @@
           "total": "/ {total}"
         }
       },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "查看完整错误信息"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "文档权限同步",
-          "notApplicableDescription": "此连接器不使用独立的文档权限同步任务。"
-        },
-        "groupMembership": {
-          "label": "群组成员同步",
-          "notApplicableDescription": "此连接器不使用独立的群组成员同步任务。"
-        },
-        "indexing": {
-          "label": "索引"
-        },
-        "loadError": {
-          "title": "加载同步任务失败"
-        },
-        "notApplicable": {
-          "title": "不适用"
-        }
-      },
       "toasts": {
         "completeReindexStarted": "已成功启动完全重新索引",
         "deletionScheduleFailed": "安排删除连接器失败 - {message}",
@@ -2574,7 +2490,80 @@
         "prune": "每 **{every}** 清理一次"
       },
       "runs": {
-        "title": "索引运行"
+        "title": "索引运行",
+        "kinds": {
+          "label": "运行类型",
+          "all": "所有类型",
+          "indexing": "文档索引",
+          "doc_permission_sync": "权限同步",
+          "group_sync": "群组成员同步"
+        },
+        "detail": {
+          "queued": "排队中",
+          "running": "运行中",
+          "rate": "{rate} 文档/分钟",
+          "finished": "{time}（{minutes, number} 分钟）"
+        },
+        "actions": {
+          "stages": "查看阶段指标",
+          "cancel": "取消",
+          "logs": "查看日志"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, other {# 个文档失败}}"
+        },
+        "figures": {
+          "indexed": "已索引",
+          "synced": "已同步",
+          "memberships": "个成员关系"
+        },
+        "counts": {
+          "newDocs": "{count, plural, other {# 个新文档}}",
+          "updatedDocs": "已更新的文档",
+          "removedDocs": "{count, plural, other {已移除 # 个文档}}",
+          "users": "{count, plural, other {# 个用户}}",
+          "groups": "{count, plural, other {# 个群组}}",
+          "running": "{count, plural, other {# 个运行进行中}}",
+          "succeeded": "{count, plural, other {# 个运行成功}}",
+          "failed": "{count, plural, other {# 个运行失败}}"
+        },
+        "search": {
+          "placeholder": "搜索运行错误..."
+        },
+        "window": {
+          "label": "时间范围",
+          "all": "全部时间",
+          "h12": "过去 12 小时",
+          "h24": "过去 24 小时",
+          "d7": "过去 7 天",
+          "d30": "过去 30 天"
+        },
+        "statusGroups": {
+          "label": "状态",
+          "all": "所有状态",
+          "running": "运行中",
+          "succeeded": "成功",
+          "failed": "失败",
+          "canceled": "已取消"
+        },
+        "loadError": {
+          "title": "无法加载运行记录。"
+        },
+        "empty": {
+          "title": "暂无运行记录",
+          "filteredTitle": "没有符合这些筛选条件的运行。",
+          "description": "运行在后台调度，可能需要一点时间才会显示。"
+        },
+        "units": "{count, plural, other {个运行}}",
+        "errorModal": {
+          "indexing": "索引运行错误",
+          "doc_permission_sync": "文档权限同步错误",
+          "group_sync": "群组成员同步错误"
+        },
+        "toasts": {
+          "canceled": "正在取消运行。",
+          "cancelFailed": "无法取消运行，请重试。"
+        }
       }
     },
     "connectorTitle": {
@@ -7913,18 +7902,17 @@
         "deleting": "正在删除",
         "error": "错误",
         "failed": "失败",
-        "inProgress": "进行中",
         "indexed": "已索引",
         "indexing": "正在索引",
         "initialIndexing": "初始索引",
         "interrupted": "已中断",
         "invalid": "无效",
         "invalidConnectorTooltip": "连接器处于无效状态。请更新凭据或创建新的连接器。",
-        "none": "无",
         "notStarted": "未开始",
         "paused": "已暂停",
         "scheduled": "已计划",
-        "succeeded": "成功"
+        "synced": "已同步",
+        "syncing": "同步中"
       }
     },
     "systemInfo": {

@@ -1,108 +1,15 @@
 "use client";
 
-import { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { ValidStatuses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { timeAgo } from "@opal/time";
 import {
   FiAlertTriangle,
   FiCheckCircle,
   FiClock,
-  FiMinus,
   FiPauseCircle,
 } from "react-icons/fi";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
-import { Tooltip } from "@opal/components";
-
-// Wrap a status badge in a hover tooltip carrying its error/reason text, or
-// return the bare badge when there is no message.
-function badgeWithErrorTooltip(
-  icon: ReactNode,
-  errorMsg?: string | null
-): ReactNode {
-  if (!errorMsg) {
-    return icon;
-  }
-  return (
-    <Tooltip tooltip={errorMsg}>
-      <div className="cursor-pointer">{icon}</div>
-    </Tooltip>
-  );
-}
-
-export function IndexAttemptStatus({
-  status,
-  errorMsg,
-}: {
-  status: ValidStatuses | null;
-  errorMsg?: string | null;
-}) {
-  const t = useTranslations("admin.status.badges");
-  let badge;
-
-  if (status === "failed") {
-    badge = badgeWithErrorTooltip(
-      <Badge variant="destructive" icon={FiAlertTriangle}>
-        {t("failed")}
-      </Badge>,
-      errorMsg
-    );
-  } else if (status === "completed_with_errors") {
-    badge = (
-      <Badge variant="secondary" icon={FiAlertTriangle}>
-        {t("completedWithErrors")}
-      </Badge>
-    );
-  } else if (status === "success") {
-    badge = (
-      <Badge variant="success" icon={FiCheckCircle}>
-        {t("succeeded")}
-      </Badge>
-    );
-  } else if (status === "in_progress") {
-    badge = (
-      <Badge variant="in_progress" icon={FiClock}>
-        {t("inProgress")}
-      </Badge>
-    );
-  } else if (status === "not_started") {
-    badge = (
-      <Badge variant="not_started" icon={FiClock}>
-        {t("scheduled")}
-      </Badge>
-    );
-  } else if (status === "canceled") {
-    badge = (
-      <Badge variant="canceled" icon={FiClock}>
-        {t("canceled")}
-      </Badge>
-    );
-  } else if (status === "interrupted") {
-    // Stopped by infrastructure (deploy / autoscaling), not an error, so it
-    // resumes automatically. Neutral badge with the reason on hover, never red.
-    badge = badgeWithErrorTooltip(
-      <Badge variant="canceled" icon={FiClock}>
-        {t("interrupted")}
-      </Badge>,
-      errorMsg
-    );
-  } else if (status === "invalid") {
-    badge = (
-      <Badge variant="invalid" icon={FiAlertTriangle}>
-        {t("invalid")}
-      </Badge>
-    );
-  } else {
-    badge = (
-      <Badge variant="outline" icon={FiMinus}>
-        {t("none")}
-      </Badge>
-    );
-  }
-
-  return <div>{badge}</div>;
-}
 
 export function CCPairStatus({
   ccPairStatus,

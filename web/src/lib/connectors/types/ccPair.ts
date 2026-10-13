@@ -143,24 +143,48 @@ export interface ExternalGroupSyncAttemptSnapshot {
   time_finished: string | null;
 }
 
-/**
- * Response wrapper used by both per-cc-pair sync-attempt endpoints
- * (`/permission-sync-attempts` and `/external-group-sync-attempts`).
- * Mirrors `CCPairSyncAttemptsResponse` in
- * `backend/onyx/server/documents/models.py`.
- *
- * `applicable === false` means the cc-pair's source does not run this
- * kind of sync job at all (e.g. Salesforce has no doc sync; Slack has
- * no group sync) and `items` will always be `[]`. The frontend MUST
- * use this flag to render the explanatory "this connector does not use
- * a separate ... syncing job" message rather than the generic empty
- * state — the two cases are different and `items.length === 0` alone
- * does NOT distinguish them.
- */
-export interface CCPairSyncAttemptsResponse<T> {
-  applicable: boolean;
-  items: T[];
+/** Mirrors `CCPairRunKind` in `backend/onyx/server/documents/models.py`. */
+export type CCPairRunKind = "indexing" | "doc_permission_sync" | "group_sync";
+
+/** Mirrors `CCPairRunStatusGroup`: how the run list buckets every kind's statuses. */
+export type CCPairRunStatusGroup =
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "canceled";
+
+/** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
+export type CCPairRun =
+  | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
+  | {
+      kind: "doc_permission_sync";
+      time_created: string;
+      attempt: DocPermissionSyncAttemptSnapshot;
+    }
+  | {
+      kind: "group_sync";
+      time_created: string;
+      attempt: ExternalGroupSyncAttemptSnapshot;
+    };
+
+/** Mirrors `CCPairRunsResponse`. `status_counts` ignores the status filter. */
+export interface CCPairRunsResponse {
+  items: CCPairRun[];
   total_items: number;
+  kinds: CCPairRunKind[];
+  status_counts: Record<CCPairRunStatusGroup, number>;
+}
+
+/** The run list's query, as `GET /admin/cc-pair/{id}/runs` takes it. */
+export interface CCPairRunsQuery {
+  pageNum: number;
+  pageSize: number;
+  /** ISO time. Runs created before it are left out. */
+  since: string | null;
+  kinds: CCPairRunKind[] | null;
+  statusGroups: CCPairRunStatusGroup[] | null;
+  /** Matched against error messages. */
+  q: string;
 }
 
 export interface IndexAttemptError {
