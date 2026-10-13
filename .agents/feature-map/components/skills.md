@@ -233,8 +233,8 @@ document sources; an external-app skill goes through
 `cloud-description:` frontmatter override on cloud deployments, strips or keeps
 `{{#IF_CLOUD_SCOPE}}...{{/IF_CLOUD_SCOPE}}` blocks, substitutes any
 `{{APP:<key>}}` value the provider derived from this app row's configuration
-(`external_apps/providers/registry.py:resolve_instance_config` — a Zendesk
-account's base URL), and fills `{{ACTION_AVAILABILITY_SECTION}}` with a "these
+(`external_apps/providers/registry.py:skill_template_values_for` — a
+Zendesk account's base URL), and fills `{{ACTION_AVAILABILITY_SECTION}}` with a "these
 actions are unavailable and should not be attempted" list built from
 `build_action_availability_section`: cloud-withheld actions plus the admin's
 stored `DENY` overrides (`external_apps/providers/registry.py:action_policy_views`).

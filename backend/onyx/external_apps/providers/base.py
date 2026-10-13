@@ -124,25 +124,6 @@ class AdminDescriptorSpec(BaseModel):
     setup_instructions: str
 
 
-class AppInstanceConfig(BaseModel):
-    """What one configured app row needs that the static descriptor can't give.
-
-    Only a provider whose host is per-account produces this. Zendesk is the
-    case: every account lives on its own ``*.zendesk.com`` subdomain, so the
-    gateway's patterns and the bundled skill's base URL both come from the
-    organization credentials an admin filled in — the gateway keeps a literal
-    host (the credential-injection boundary) and the skill knows which account
-    to call."""
-
-    model_config = ConfigDict(frozen=True)
-
-    # Match-ready regexes, as `ExternalApp.upstream_url_regexes` uses them.
-    upstream_url_patterns: list[str]
-    # Substituted into the provider's ``SKILL.md.template`` as ``{{APP:<key>}}``.
-    # The rendered SKILL.md ships to the sandbox, so never put a secret here.
-    skill_template_values: dict[str, str] = {}
-
-
 class ProviderSpec(BaseModel):
     """The base declarative definition every built-in provider must supply:
     identity, the admin descriptor, and the action catalog. Pydantic enforces
@@ -220,23 +201,21 @@ class ExternalAppProvider(ABC):
         ``action_type``. Empty by default; override to register decoders."""
         return {}
 
-    def resolve_instance(
+    def skill_template_values(
         self,
         org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
-    ) -> AppInstanceConfig | None:
-        """Per-app-row gateway config derived from the admin-supplied
-        organization credentials, or ``None`` — the default — when this
-        provider's host is fixed and the app's own stored config stands as the
-        admin set it.
+    ) -> dict[str, str]:
+        """Values substituted into this provider's ``SKILL.md.template`` as
+        ``{{APP:<key>}}``. Empty by default; override when the skill needs
+        something only this app's configuration knows (Zendesk's account base
+        URL). Sibling of :meth:`payload_decoders` — a small per-provider
+        contribution to a shared pipeline.
 
-        Override only when the upstream host depends on that config, which is
-        what makes the gateway patterns provider-owned for that provider.
-
-        ``org_credentials`` may carry masked secrets (the admin form echoes them
-        back), so an override must read only fields declared non-secret in
-        ``required_org_credential_fields``. Raise ``OnyxError(INVALID_INPUT)``
-        when a field the host depends on is missing or malformed."""
-        return None
+        The rendered SKILL.md ships to the sandbox, so never return a secret.
+        ``org_credentials`` carries only the provider's non-secret fields
+        (``registry.skill_template_values_for`` filters them), and an override
+        may raise ``OnyxError(INVALID_INPUT)`` on a malformed value."""
+        return {}
 
 
 class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
@@ -337,7 +316,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     ) -> OAuthEndpoints:
         """The authorize/token URLs for one app row. The spec's static URLs by
         default; override for a provider whose endpoints live on a per-account
-        domain. Same ``org_credentials`` caveats as ``resolve_instance``."""
+        domain. ``org_credentials`` is the app's stored credential map."""
         return OAuthEndpoints(
             authorize_url=self.spec.oauth.authorize_url,
             token_url=self.spec.oauth.token_url,

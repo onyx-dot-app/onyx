@@ -143,14 +143,11 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 
 - `ExternalApp` (`backend/onyx/db/models.py:ExternalApp`): the configured
   app. `upstream_url_patterns` is a plain regex list for built-ins and a glob
-  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). An
-  admin authors them, except for a built-in whose provider resolves them from
-  its own configuration — `resolve_instance` returns `None` for every provider
-  on a fixed host, and a per-account one (Zendesk) returns the configured
-  account's host, which the admin API then writes instead of the submitted
-  value (`external_apps/providers/registry.py:resolve_instance_config`, which
-  hands the provider only its non-secret credential fields).
-  `organization_credentials` and (on
+  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). They
+  are client-supplied on every write: a built-in's come from its descriptor via
+  the Configure modal, which first fills any `{field}` placeholder from the
+  credentials the admin entered, so a provider on a per-account host (Zendesk)
+  is saved pinned to that one account. `organization_credentials` and (on
   `ExternalAppUserCredential`) `user_credentials` are `EncryptedJson` /
   `SensitiveValue`, read only via `.get_value(apply_mask=False)`.
 - `ExternalAppUserCredential` (`models.py`): one row per `(external_app_id,
@@ -524,14 +521,16 @@ they can never disagree about which server owns a request; see
    request. `_resolve_and_match` sets the 403 and returns before `request()`
    ever reaches credential injection or forwarding
    (`gate.py:GateAddon._resolve_and_match`); no `ActionApproval` row is written for a `DENY`.
-3. **A built-in app's `upstream_url_patterns` pin a literal upstream host.**
+3. **An app's `upstream_url_patterns` pin a literal upstream host.**
    The host is the credential-injection boundary: a pattern spanning a whole
    domain would let a prompt-injected agent spend this tenant's token on
    another account of the same vendor. `UrlGlob` enforces this for `CUSTOM`
-   apps (the host may hold no wildcard); built-ins author regexes used as-is,
-   so a provider on a per-account host must resolve the configured host into
-   the pattern rather than matching `*.vendor.com`
-   (`external_apps/providers/zendesk.py:ZendeskProvider.resolve_instance`).
+   apps (the host may hold no wildcard). Built-ins author regexes used as-is
+   and the backend does not re-check them, so a provider on a per-account host
+   carries a `{field}` template that the Configure modal fills from the
+   admin's input rather than shipping a `*.vendor.com` wildcard
+   (`external_apps/providers/zendesk.py`, `admin/ConfigureProviderModal.tsx:fillUpstreamPatterns`).
+   An unfilled placeholder matches nothing, which is the safe failure.
 4. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
    spoofable for which session within that user gets attributed.** See §4.3.
    Any change to session-tag handling must preserve the "verified against the

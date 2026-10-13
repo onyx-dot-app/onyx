@@ -12,7 +12,6 @@ from onyx.external_apps.providers.actions import (
 )
 from onyx.external_apps.providers.base import (
     AdminDescriptorSpec,
-    AppInstanceConfig,
     OAuthEndpoints,
     OAuthExternalAppProvider,
     OAuthFlowSpec,
@@ -287,10 +286,13 @@ class ZendeskProvider(OAuthExternalAppProvider):
             extra_authorize_params={"response_type": "code"},
         ),
         descriptor=AdminDescriptorSpec(
-            # Resolved per account by `resolve_instance`. There is no
-            # account-agnostic Zendesk host to fall back to, so the static list
-            # stays empty rather than naming one that must never match.
-            upstream_url_patterns=[],
+            # A template, not a finished pattern: the Configure modal fills
+            # `{subdomain}` from the field below before saving the app, so the
+            # gateway matches one account's host rather than every
+            # `*.zendesk.com` — a wildcard there would let a prompt-injected
+            # agent spend this tenant's token on someone else's account. Left
+            # unfilled it matches nothing, which fails closed.
+            upstream_url_patterns=[r"https://{subdomain}\.zendesk\.com/api/v2/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[
                 OrgCredentialField(
@@ -327,7 +329,9 @@ class ZendeskProvider(OAuthExternalAppProvider):
                 "(/craft/v1/apps/oauth/callback) and copy the Secret when "
                 "Zendesk shows it — it is shown only once. Then fill in your "
                 "subdomain, the client's Unique identifier, and the Secret "
-                "below. The agent is granted read access to tickets, users, "
+                "below. The subdomain decides which Zendesk host this app may "
+                "reach, so check it before saving. The agent is granted read "
+                "access to tickets, users, "
                 "organizations, views, and satisfaction ratings, plus write "
                 "access to tickets."
             ),
@@ -342,16 +346,11 @@ class ZendeskProvider(OAuthExternalAppProvider):
     def _subdomain(self, org_credentials: Mapping[str, str]) -> str:
         return normalise_subdomain(org_credentials.get(SUBDOMAIN_FIELD))
 
-    def resolve_instance(self, org_credentials: Mapping[str, str]) -> AppInstanceConfig:
+    def skill_template_values(
+        self, org_credentials: Mapping[str, str]
+    ) -> dict[str, str]:
         subdomain = self._subdomain(org_credentials)
-        host = f"{subdomain}{_ZENDESK_HOST_SUFFIX}"
-        return AppInstanceConfig(
-            # The configured account only: a pattern spanning *.zendesk.com
-            # would let a prompt-injected agent spend this tenant's token on
-            # someone else's Zendesk account.
-            upstream_url_patterns=[rf"https://{re.escape(host)}/api/v2/.*"],
-            skill_template_values={"base_url": f"https://{host}"},
-        )
+        return {"base_url": f"https://{subdomain}{_ZENDESK_HOST_SUFFIX}"}
 
     def resolve_oauth_endpoints(
         self, org_credentials: Mapping[str, str]

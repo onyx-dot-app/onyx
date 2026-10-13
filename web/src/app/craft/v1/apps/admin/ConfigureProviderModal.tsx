@@ -36,6 +36,28 @@ import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 // descriptor-declared credential key.
 const NAME_KEY = "__name";
 
+/** Fill `{field_key}` placeholders in a descriptor's upstream URL patterns from
+ * the credential values the admin just entered.
+ *
+ * Most providers talk to a fixed host and their patterns carry no placeholder,
+ * so this returns them untouched. A provider on a per-account host (Zendesk,
+ * `{subdomain}.zendesk.com`) declares the pattern as a template so the saved
+ * app matches one account rather than every subdomain of the vendor — that
+ * pattern is what makes the egress proxy attach this app's credentials. A
+ * placeholder with no value is left as-is, so an unconfigured app matches
+ * nothing instead of matching too much. */
+function fillUpstreamPatterns(
+  patterns: string[],
+  values: Record<string, string>
+): string[] {
+  return patterns.map((pattern) =>
+    pattern.replace(/\{([A-Za-z0-9_]+)\}/g, (placeholder, key: string) => {
+      const value = values[key]?.trim();
+      return value ? value : placeholder;
+    })
+  );
+}
+
 interface ConfigureProviderModalProps {
   onClose: () => void;
   onSaved: () => void;
@@ -134,7 +156,10 @@ export default function ConfigureProviderModal({
       );
       const shared = {
         name: (values[NAME_KEY] ?? "").trim(),
-        upstream_url_patterns: descriptor.upstream_url_patterns,
+        upstream_url_patterns: fillUpstreamPatterns(
+          descriptor.upstream_url_patterns,
+          credentialValues
+        ),
         auth_template: descriptor.auth_template,
         action_policies: policies,
       };

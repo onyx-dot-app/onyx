@@ -15,8 +15,10 @@ import pytest
 
 from onyx.db.enums import ExternalAppType
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import AppInstanceConfig
-from onyx.external_apps.providers.registry import PROVIDERS, resolve_instance_config
+from onyx.external_apps.providers.registry import (
+    PROVIDERS,
+    skill_template_values_for,
+)
 from onyx.external_apps.providers.zendesk import ZendeskProvider, normalise_subdomain
 
 
@@ -65,19 +67,32 @@ def test_malformed_subdomain_is_rejected(raw: object) -> None:
         normalise_subdomain(raw)
 
 
-def test_gateway_pattern_is_the_configured_account_only() -> None:
-    instance = _provider().resolve_instance({"subdomain": "acme"})
-    (pattern,) = instance.upstream_url_patterns
+def test_descriptor_pattern_is_a_single_account_template() -> None:
+    """The descriptor ships a template, not a finished pattern. Filled with one
+    account it matches that account's API and nothing else — a pattern spanning
+    every `*.zendesk.com` would let the gateway attach this tenant's token to
+    another company's Zendesk."""
+    (template,) = _provider().spec.descriptor.upstream_url_patterns
+    assert "{subdomain}" in template
+
+    pattern = template.replace("{subdomain}", "acme")
     assert re.fullmatch(pattern, "https://acme.zendesk.com/api/v2/tickets.json")
-    # Another account, a look-alike host, and the non-API surface are all out.
     assert not re.fullmatch(pattern, "https://evil.zendesk.com/api/v2/tickets.json")
     assert not re.fullmatch(pattern, "https://acmexzendesk.com/api/v2/tickets")
     assert not re.fullmatch(pattern, "https://acme.zendesk.com/oauth/tokens")
 
 
+def test_an_unfilled_template_matches_nothing() -> None:
+    """An admin who never filled the subdomain leaves the placeholder in place.
+    That must fail closed — match nothing — rather than match too much."""
+    (template,) = _provider().spec.descriptor.upstream_url_patterns
+    assert not re.fullmatch(template, "https://acme.zendesk.com/api/v2/tickets")
+
+
 def test_skill_template_values_carry_the_account_base_url() -> None:
-    instance = _provider().resolve_instance({"subdomain": "acme"})
-    assert instance.skill_template_values == {"base_url": "https://acme.zendesk.com"}
+    assert _provider().skill_template_values({"subdomain": "acme"}) == {
+        "base_url": "https://acme.zendesk.com"
+    }
 
 
 def test_oauth_endpoints_are_on_the_configured_account() -> None:
@@ -96,41 +111,34 @@ def test_spec_urls_stay_templates() -> None:
     assert "{subdomain}" in oauth.token_url
 
 
-def test_descriptor_carries_no_fallback_pattern() -> None:
-    """There is no account-agnostic Zendesk host to fall back to, so the static
-    descriptor stays empty: a row is only ever matched on resolved patterns."""
-    assert _provider().spec.descriptor.upstream_url_patterns == []
-
-
-def test_resolve_instance_config_withholds_secret_fields(
+def test_skill_template_values_withhold_secret_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The registry hands providers only their non-secret fields — an admin form
-    echoes secrets back masked, and nothing resolved here may contain one."""
+    """The registry hands providers only their non-secret fields — the rendered
+    SKILL.md ships to the sandbox, so a secret must never reach it."""
     captured: dict[str, str] = {}
 
     def _spy(
         _self: ZendeskProvider, org_credentials: Mapping[str, str]
-    ) -> AppInstanceConfig | None:
+    ) -> dict[str, str]:
         captured.update(org_credentials)
-        return AppInstanceConfig(upstream_url_patterns=[])
+        return {}
 
-    monkeypatch.setattr(ZendeskProvider, "resolve_instance", _spy)
-    resolve_instance_config(
+    monkeypatch.setattr(ZendeskProvider, "skill_template_values", _spy)
+    skill_template_values_for(
         ExternalAppType.ZENDESK,
         {"subdomain": "acme", "client_id": "cid", "client_secret": "shh"},
     )
     assert captured == {"subdomain": "acme", "client_id": "cid"}
 
 
-def test_resolve_instance_config_leaves_fixed_host_providers_alone() -> None:
-    """The hook resolves nothing by default, so a provider on a fixed host
-    keeps the gateway config an admin authored — only a per-account provider
-    takes ownership of its patterns."""
+def test_providers_on_a_fixed_host_contribute_no_skill_values() -> None:
+    """The hook is a small per-provider contribution, empty unless a provider's
+    skill needs something only its configuration knows."""
     for app_type, provider in PROVIDERS.items():
         if isinstance(provider, ZendeskProvider):
-            continue  # per-account: needs a subdomain, covered above
-        assert resolve_instance_config(app_type, {}) is None
+            continue  # per-account: covered above
+        assert skill_template_values_for(app_type, {}) == {}
 
 
 def test_token_exchange_posts_json_with_an_explicit_expiry() -> None:

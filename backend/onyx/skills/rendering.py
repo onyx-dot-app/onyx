@@ -19,7 +19,7 @@ from onyx.db.models import ExternalApp, Skill, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
     action_policy_views,
-    resolve_instance_config,
+    skill_template_values_for,
     uses_cloud_scope,
     withheld_on_cloud,
 )
@@ -187,7 +187,7 @@ def app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
     if external_app is None:
         return {}
     try:
-        instance = resolve_instance_config(
+        return skill_template_values_for(
             external_app.app_type,
             external_app.organization_credentials.get_value(apply_mask=False),
         )
@@ -198,7 +198,6 @@ def app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
             external_app.id,
         )
         return {}
-    return dict(instance.skill_template_values) if instance else {}
 
 
 def render_external_app_skill_for(

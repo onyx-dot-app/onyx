@@ -454,14 +454,13 @@ there.
   `upstream_url_patterns` in the admin response; an admin on Cloud can only
   toggle enablement and edit policy for these, by design
   (`docs/craft/features/external-apps/cloud-managed-app-credentials.md`).
-- **A per-account built-in owns its gateway config; everything else keeps the
-  admin's.** `_provider_url_patterns` (`external_apps/api.py`) asks the
-  provider on every admin write. Providers on a fixed host resolve nothing, so
-  the submitted patterns stand — a self-hosted admin can still narrow Slack's.
-  A per-account provider (Zendesk) returns the configured account's host, which
-  wins over the submitted value. The derivation runs on mask-restored
-  credentials: the admin response masks secrets and the form echoes them back,
-  so deriving from the raw request would read a mask as configuration.
+- **A built-in's gateway patterns are whatever the client sent.** The backend
+  stores `upstream_url_patterns` for a built-in as submitted (it validates
+  globs only for `CUSTOM`), so the Configure modal is what decides the
+  credential-injection boundary. It fills `{field}` placeholders in the
+  descriptor's patterns from the admin's credential input
+  (`ConfigureProviderModal.tsx:fillUpstreamPatterns`), which is how a provider
+  on a per-account host (Zendesk) ends up pinned to one account.
 - **`app_type` is immutable on update.** `update_external_app` raises rather
   than allowing a cross-edit between built-in and custom; deleting and
   recreating is the only path to change it.

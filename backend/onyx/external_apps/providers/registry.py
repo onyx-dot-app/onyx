@@ -12,11 +12,7 @@ from onyx.external_apps.models import (
     OrgCredentialFieldDescriptor,
 )
 from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.base import (
-    AppInstanceConfig,
-    ExternalAppProvider,
-    OnyxManagedExtApp,
-)
+from onyx.external_apps.providers.base import ExternalAppProvider, OnyxManagedExtApp
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
@@ -71,23 +67,21 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     return provider if isinstance(provider, OnyxManagedExtApp) else None
 
 
-def resolve_instance_config(
+def skill_template_values_for(
     app_type: ExternalAppType,
     org_credentials: Mapping[str, Any],
-) -> AppInstanceConfig | None:
-    """The gateway config a provider derives for one configured app, or
-    ``None`` — the common case — when nothing needs deriving: a CUSTOM or
-    unregistered type, or a provider on a fixed host, both of which leave the
-    app's stored config as the admin authored it.
+) -> dict[str, str]:
+    """The ``{{APP:<key>}}`` values this app's provider contributes to its
+    rendered SKILL.md, or ``{}`` for a CUSTOM / unregistered type.
 
     Only the provider's non-secret credential fields reach
-    ``resolve_instance``: an admin form echoes secrets back masked, so a
-    provider could never read one usefully, and withholding them keeps a
-    secret out of the URL patterns and the rendered SKILL.md.
+    ``skill_template_values``: an admin form echoes secrets back masked, so a
+    provider could never read one usefully, and withholding them keeps a secret
+    out of a file that ships to the sandbox.
     """
     provider = PROVIDERS.get(app_type)
     if provider is None:
-        return None
+        return {}
     public = {
         field.key: value
         if isinstance(value := org_credentials.get(field.key), str)
@@ -95,7 +89,7 @@ def resolve_instance_config(
         for field in provider.spec.descriptor.required_org_credential_fields
         if not field.secret
     }
-    return provider.resolve_instance(public)
+    return provider.skill_template_values(public)
 
 
 def uses_cloud_scope(app_type: ExternalAppType) -> bool:
