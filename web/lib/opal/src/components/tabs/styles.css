@@ -21,7 +21,7 @@
 
 .opal-tabs-list[data-variant="pill"],
 .opal-tabs-list[data-variant="underline"] {
-  @apply relative flex items-center overflow-hidden bg-background-tint-00 rounded-none;
+  @apply relative flex items-center overflow-hidden bg-transparent rounded-none;
 }
 
 /* Pill keeps a 5px rail below its tabs for the indicator. Underline has none:
