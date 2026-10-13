@@ -253,6 +253,62 @@ describe("ConfigureProviderModal", () => {
     );
   });
 
+  it.each([
+    ["a regex metacharacter", "evil\\.com/|x"],
+    ["a wildcard", ".*"],
+    ["a pasted account URL", "https://acme.zendesk.com"],
+  ])(
+    "refuses to splice %s into the gateway pattern",
+    async (_label: string, typed: string) => {
+      // The pattern is a regex and it decides which host gets this app's
+      // credentials. Anything that is not a plain DNS label must leave the
+      // placeholder in place, so the saved app matches nothing at all rather
+      // than a host the admin never meant to reach.
+      const perAccountDescriptor: BuiltInExternalAppDescriptor = {
+        ...DESCRIPTOR,
+        app_type: "ZENDESK",
+        upstream_url_patterns: [
+          "https://{subdomain}\\.zendesk\\.com/api/v2/.*",
+        ],
+        required_org_credential_fields: [
+          {
+            key: "subdomain",
+            label: "Subdomain",
+            description: "Your Zendesk subdomain",
+            secret: false,
+          },
+        ],
+      };
+      jest
+        .mocked(externalAppsService.createBuiltInExternalApp)
+        .mockResolvedValue({ ...APP, associated_skills: [] });
+
+      render(
+        <ConfigureProviderModal
+          onClose={jest.fn()}
+          onSaved={jest.fn()}
+          descriptor={perAccountDescriptor}
+          existingApp={null}
+        />
+      );
+
+      fireEvent.change(screen.getByPlaceholderText("Subdomain"), {
+        target: { value: typed },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+      await waitFor(() =>
+        expect(
+          externalAppsService.createBuiltInExternalApp
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            upstream_url_patterns: perAccountDescriptor.upstream_url_patterns,
+          })
+        )
+      );
+    }
+  );
+
   it("guards unsaved provider edits before skill creation", () => {
     const { onClose } = renderExistingProvider();
     fireEvent.change(screen.getByPlaceholderText("Token"), {

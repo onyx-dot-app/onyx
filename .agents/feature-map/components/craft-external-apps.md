@@ -530,7 +530,10 @@ they can never disagree about which server owns a request; see
    carries a `{field}` template that the Configure modal fills from the
    admin's input rather than shipping a `*.vendor.com` wildcard
    (`external_apps/providers/zendesk.py`, `admin/ConfigureProviderModal.tsx:fillUpstreamPatterns`).
-   An unfilled placeholder matches nothing, which is the safe failure.
+   The modal splices in only a plain DNS label, because the pattern is a regex
+   and a metacharacter in that value would widen it to hosts the admin never
+   named; anything else leaves the placeholder, and a pattern still holding
+   `{...}` matches nothing, which is the safe failure.
 4. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
    spoofable for which session within that user gets attributed.** See §4.3.
    Any change to session-tag handling must preserve the "verified against the
