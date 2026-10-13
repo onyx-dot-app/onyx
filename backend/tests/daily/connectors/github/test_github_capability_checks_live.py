@@ -17,8 +17,13 @@ from onyx.connectors.capability_checks.models import (
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.github.capability_checks import build_github_indexing_checks
+from onyx.connectors.github.capability_checks import (
+    build_github_doc_permission_sync_checks,
+    build_github_group_sync_checks,
+    build_github_indexing_checks,
+)
 from onyx.connectors.github.source_operations import GitHubSourceOperations
+from onyx.db.enums import AccessType
 from tests.utils.secret_names import TestSecret
 
 pytestmark = pytest.mark.secrets(TestSecret.ACCESS_TOKEN_GITHUB)
@@ -45,12 +50,15 @@ def _credential(test_secrets: dict[TestSecret, str]) -> dict[str, Any]:
 
 
 def _results(
-    credential_json: dict[str, Any], config: dict[str, Any]
+    credential_json: dict[str, Any],
+    config: dict[str, Any],
+    perm_sync: bool = False,
 ) -> dict[str, CapabilityCheckResult]:
     context: CapabilityCheckContext = CapabilityCheckContext(
         source=DocumentSource.GITHUB,
         credential_json=credential_json,
         connector_specific_config=config,
+        access_type=AccessType.SYNC if perm_sync else None,
         source_operations=GitHubSourceOperations(
             credentials_provider=OnyxStaticCredentialsProvider(
                 None, DocumentSource.GITHUB.value, credential_json
@@ -58,7 +66,11 @@ def _results(
             connector_specific_config=config,
         ),
     )
-    checks: list[CapabilityCheck] = build_github_indexing_checks()
+    checks: list[CapabilityCheck] = (
+        build_github_doc_permission_sync_checks() + build_github_group_sync_checks()
+        if perm_sync
+        else build_github_indexing_checks()
+    )
     results: list[CapabilityCheckResult] = run_capability_checks(checks, context)
     return {result.check_id: result for result in results}
 
@@ -163,3 +175,42 @@ def test_invalid_configs_fail(
     result: CapabilityCheckResult = by_id[check_id]
     assert result.status == CapabilityCheckStatus.FAILED, result
     assert message in result.message, result.message
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{}, {"repositories": ""}],
+    ids=["listed-repository", "all-repositories"],
+)
+def test_perm_sync_checks_pass_on_the_test_organization(
+    test_secrets: dict[TestSecret, str],
+    overrides: dict[str, Any],
+) -> None:
+    by_id: dict[str, CapabilityCheckResult] = _results(
+        _credential(test_secrets), _form(**overrides), perm_sync=True
+    )
+
+    failures: dict[str, str] = {
+        check_id: result.message
+        for check_id, result in by_id.items()
+        if result.applicable
+        and result.required
+        and result.status != CapabilityCheckStatus.PASSED
+    }
+    assert not failures, failures
+    verdicts: dict[CredentialCapability, CapabilityVerdict] = (
+        compute_capability_verdicts(
+            {
+                CredentialCapability.DOC_PERMISSION_SYNC,
+                CredentialCapability.EXTERNAL_GROUP_SYNC,
+            },
+            list(by_id.values()),
+        )
+    )
+    assert verdicts[CredentialCapability.DOC_PERMISSION_SYNC] == (
+        CapabilityVerdict.PASSED
+    )
+    assert verdicts[CredentialCapability.EXTERNAL_GROUP_SYNC] in (
+        CapabilityVerdict.PASSED,
+        CapabilityVerdict.PASSED_WITH_WARNINGS,
+    )

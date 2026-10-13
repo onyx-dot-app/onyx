@@ -73,9 +73,6 @@ _RETRY_AFTER_HEADER = "retry-after"
 _SSO_HEADER = "x-github-sso"
 
 _ALL_CAPABILITIES = frozenset(CredentialCapability)
-_PERM_SYNC_CHECKS_PENDING = (
-    "Not yet tested: the permission-sync checks land in the next PR."
-)
 _CURSOR_FALLBACK = (
     "Used only when GitHub refuses offset pages for a large listing; it reads "
     "the same endpoint as the offset listing that the checks probe."
@@ -243,6 +240,18 @@ def _token_kind(token: str, scopes: list[str] | None) -> GitHubTokenKind:
     return GitHubTokenKind.OTHER
 
 
+def _logins(
+    listing: Iterator[tuple[dict[str, Any], str | None]], limit: int | None
+) -> list[str]:
+    """The logins of a user listing, up to ``limit``."""
+    logins: list[str] = []
+    for raw, _next_url in listing:
+        logins.append(raw["login"])
+        if limit is not None and len(logins) >= limit:
+            break
+    return logins
+
+
 def _listing_params(state: str) -> dict[str, Any]:
     """The query of a pull request or issue listing: newest update first."""
     return {"state": state, "sort": "updated", "direction": "desc"}
@@ -381,7 +390,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.BOTH,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def get_organization(self, *, login: str) -> GitHubOrganizationRef:
@@ -393,7 +401,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.BOTH,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_organization_repositories(
@@ -406,7 +413,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.BOTH,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def list_user_repositories(
@@ -419,7 +425,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities=_ALL_CAPABILITIES,
         consumes=OperationConsumes.BOTH,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def get_repository(self, *, owner: str, name: str) -> GitHubRepository:
@@ -633,7 +638,6 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.CREDENTIAL,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
     def get_user(self, *, login: str) -> GitHubUser:
@@ -648,33 +652,31 @@ class GitHubSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.BOTH,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
-    def list_repository_collaborators(self, *, repo_full_name: str) -> list[str]:
+    def list_repository_collaborators(
+        self, *, repo_full_name: str, limit: int | None = None
+    ) -> list[str]:
         """The logins of everyone with access to the repository, from any
         grant (``GET /repos/{repo}/collaborators``). GitHub requires push
-        access to the repository."""
-        return [
-            raw["login"]
-            for raw, _next_url in self._paginate(
-                f"/repos/{repo_full_name}/collaborators", {}
-            )
-        ]
+        access to the repository. ``limit`` stops the listing early."""
+        return _logins(
+            self._paginate(f"/repos/{repo_full_name}/collaborators", {}), limit
+        )
 
     @source_operation(
         capabilities={CredentialCapability.EXTERNAL_GROUP_SYNC},
         consumes=OperationConsumes.BOTH,
-        untested=_PERM_SYNC_CHECKS_PENDING,
     )
     @_translated
-    def list_organization_members(self, *, org_login: str) -> list[str]:
+    def list_organization_members(
+        self, *, org_login: str, limit: int | None = None
+    ) -> list[str]:
         """The logins of the organization's members
         (``GET /orgs/{org}/members?filter=all``). Without ``read:org`` or
-        membership, GitHub lists only the public members."""
-        return [
-            raw["login"]
-            for raw, _next_url in self._paginate(
-                f"/orgs/{_quote(org_login)}/members", {"filter": "all"}
-            )
-        ]
+        membership, GitHub lists only the public members. ``limit`` stops the
+        listing early."""
+        return _logins(
+            self._paginate(f"/orgs/{_quote(org_login)}/members", {"filter": "all"}),
+            limit,
+        )
