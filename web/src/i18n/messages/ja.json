@@ -2430,6 +2430,11 @@
         "documents": {
           "label": "直近 / 合計",
           "total": "/ {total}"
+        },
+        "throughput": {
+          "ariaLabel": "時間ごとのインデックス済みドキュメント",
+          "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
+          "loadError": "グラフを読み込めませんでした。"
         }
       },
       "toasts": {

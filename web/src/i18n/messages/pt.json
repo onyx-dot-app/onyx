@@ -2430,6 +2430,11 @@
         "documents": {
           "label": "Recentes / Total",
           "total": "/ {total}"
+        },
+        "throughput": {
+          "ariaLabel": "Documentos indexados ao longo do tempo",
+          "tooltip": "{count, plural, one {# documento} other {# documentos}}",
+          "loadError": "Não foi possível carregar o gráfico."
         }
       },
       "toasts": {

@@ -2430,6 +2430,11 @@
         "documents": {
           "label": "الأخيرة / الإجمالي",
           "total": "/ {total}"
+        },
+        "throughput": {
+          "ariaLabel": "المستندات المفهرسة بمرور الوقت",
+          "tooltip": "{count, plural, one {# مستند} other {# مستندات}}",
+          "loadError": "تعذر تحميل الرسم البياني."
         }
       },
       "toasts": {

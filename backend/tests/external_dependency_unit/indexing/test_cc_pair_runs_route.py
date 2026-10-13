@@ -2,7 +2,8 @@
 merge newest first across pages, another pair's runs stay out unless its source
 shares one group sync history, counts ignore the
 status filter, `since` and `q` narrow the feed, a non-synced pair shows only
-indexing, and cancel acts only on active attempts of a pair the caller operates."""
+indexing, cancel acts only on active attempts of a pair the caller operates,
+and throughput counts only the pair's runs created inside the window."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -35,8 +36,12 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import cc_pair as cc_pair_routes
-from onyx.server.documents.cc_pair import cancel_index_attempt, get_cc_pair_runs
-from onyx.server.documents.models import CCPairRunsResponse
+from onyx.server.documents.cc_pair import (
+    cancel_index_attempt,
+    get_cc_pair_runs,
+    get_cc_pair_throughput,
+)
+from onyx.server.documents.models import CCPairRunsResponse, CCPairThroughputWindow
 from tests.external_dependency_unit.conftest import create_test_user
 
 # The sync kinds come from the EE-only sync_params helpers.
@@ -405,3 +410,39 @@ def test_cancel_refuses_a_caller_who_cannot_operate_the_pair(
     db_session.refresh(attempt)
     assert refused.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
     assert attempt.cancellation_requested is False
+
+
+def test_throughput_counts_only_this_pairs_runs_in_the_window(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
+    other = _create_cc_pair(db_session, AccessType.PUBLIC)
+    now = datetime.now(timezone.utc)
+    recent = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    old = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    foreign = _index_attempt(db_session, other, 0, IndexingStatus.SUCCESS)
+    # Cleanup touched this one days after it ran, as checkpoint cleanup does.
+    cleaned = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    for attempt, ended in [
+        (recent, now - timedelta(hours=2)),
+        (old, now - timedelta(days=2)),
+        (foreign, now - timedelta(hours=2)),
+        (cleaned, now - timedelta(days=9)),
+    ]:
+        attempt.time_created = ended - timedelta(hours=1)
+        attempt.time_started = ended - timedelta(hours=1)
+        attempt.time_updated = ended
+        attempt.total_docs_indexed = 100
+    cleaned.time_updated = now - timedelta(minutes=5)
+    db_session.commit()
+
+    response = get_cc_pair_throughput(
+        cc_pair_id=cc_pair.id,
+        window=CCPairThroughputWindow.HOURS_12,
+        user=admin,
+        db_session=db_session,
+    )
+
+    assert sum(response.docs_indexed) == 100
+    assert [run.started for run in response.runs] == [recent.time_started]

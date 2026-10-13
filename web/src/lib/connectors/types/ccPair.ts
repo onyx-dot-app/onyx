@@ -244,3 +244,14 @@ export interface TargetedReindexJobStatus {
   skipped_count: number;
   resolved_summary: { id: number; document_id: string }[];
 }
+
+/** How far back the status card's throughput chart reaches. */
+export type CCPairThroughputWindow = "12h" | "24h" | "7d";
+
+/** Mirrors `CCPairThroughputResponse`: documents per equal slice of the window, oldest first. */
+export interface CCPairThroughputResponse {
+  window_start: string;
+  window_end: string;
+  docs_indexed: number[];
+  runs: { started: string; status: ValidStatuses }[];
+}

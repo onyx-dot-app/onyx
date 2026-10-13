@@ -2430,6 +2430,11 @@
         "documents": {
           "label": "最近 / 总计",
           "total": "/ {total}"
+        },
+        "throughput": {
+          "ariaLabel": "随时间索引的文档",
+          "tooltip": "{count, plural, one {# 个文档} other {# 个文档}}",
+          "loadError": "无法加载图表。"
         }
       },
       "toasts": {

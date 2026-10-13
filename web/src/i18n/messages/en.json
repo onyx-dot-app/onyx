@@ -2430,6 +2430,11 @@
         "documents": {
           "label": "Recent / Total",
           "total": "/ {total}"
+        },
+        "throughput": {
+          "ariaLabel": "Documents indexed over time",
+          "tooltip": "{count, plural, one {# document} other {# documents}}",
+          "loadError": "The chart could not load."
         }
       },
       "toasts": {
