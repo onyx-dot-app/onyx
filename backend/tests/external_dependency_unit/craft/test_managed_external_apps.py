@@ -111,17 +111,15 @@ def _create_request(
 # ---------------------------------------------------------------------------
 
 
-# Built-ins whose OAuth client Onyx cannot own, so admins supply their own.
-# Zendesk registers OAuth clients per customer account and serves them from
-# that account's own host, leaving nothing for Onyx to hold centrally.
+# Built-ins whose OAuth client Onyx cannot own: Zendesk registers clients per
+# customer account, so admins supply their own.
 _SELF_CONFIGURED_APP_TYPES = {ExternalAppType.ZENDESK}
 
 
 def test_built_ins_are_onyx_managed_except_the_self_configured_ones() -> None:
     """Every built-in skill id has a registered provider, and each is
-    Onyx-managed unless it is listed in ``_SELF_CONFIGURED_APP_TYPES``. A
-    built-in that opts out (not an ``OnyxManagedExtApp``, because admins supply
-    their own OAuth app) belongs in that set — deliberately, not by accident."""
+    Onyx-managed unless listed in ``_SELF_CONFIGURED_APP_TYPES``. A built-in
+    that opts out belongs in that set deliberately, not by accident."""
     built_in = set(EXTERNAL_APP_BUILT_IN_SKILL_IDS)
     assert set(PROVIDERS) == built_in  # provider registry ↔ built-in skill ids
     assert set(_MANAGED_APP_TYPES) == built_in - _SELF_CONFIGURED_APP_TYPES

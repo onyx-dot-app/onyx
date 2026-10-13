@@ -1,8 +1,5 @@
-"""``{{APP:<key>}}`` substitution in an external-app SKILL.md.
-
-Most providers talk to a fixed host and need none of this. A provider hosted per
-account (Zendesk) resolves the host from the admin's configuration, and the
-rendered SKILL.md is how the agent learns which account it is talking to."""
+"""``{{APP:<key>}}`` substitution in an external-app SKILL.md — how a
+per-account provider (Zendesk) tells the agent which account it is on."""
 
 from __future__ import annotations
 
@@ -35,8 +32,7 @@ def test_app_values_are_substituted() -> None:
 
 
 def test_unknown_key_renders_as_unconfigured_rather_than_failing() -> None:
-    """A half-configured app still pushes: the agent reads that the app needs
-    setting up instead of the whole fileset failing to render."""
+    """A half-configured app still pushes, saying it needs setting up."""
     rendered = render_external_app_skill(_TEMPLATE, ExternalAppType.ZENDESK, {}, {})
     assert "{{" not in rendered
     assert "not configured" in rendered
@@ -50,8 +46,7 @@ def test_blank_value_is_treated_as_unconfigured() -> None:
 
 
 def test_zendesk_skill_renders_with_the_configured_account() -> None:
-    """The shipped template resolves end to end — no marker survives the render
-    (``render_external_app_skill`` raises on one that does)."""
+    """The shipped template resolves end to end; a surviving marker raises."""
     template = (BUILTIN_SKILLS_PATH / "zendesk" / "SKILL.md.template").read_text()
     rendered = render_external_app_skill(
         template,
@@ -65,9 +60,8 @@ def test_zendesk_skill_renders_with_the_configured_account() -> None:
 def test_the_push_and_preview_paths_render_the_same_markdown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``render_external_app_skill_for`` is the one renderer both the sandbox
-    push and the library preview call, so a user previewing a skill reads the
-    connected account rather than the template's markers."""
+    """One renderer for both push and preview, so a user previewing a skill
+    reads the connected account rather than the template's markers."""
 
     class _App:
         id = 1
@@ -94,9 +88,8 @@ def test_the_push_and_preview_paths_render_the_same_markdown(
 def test_an_unresolvable_app_config_still_renders(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Rendering is a read-only projection of committed state: a provider that
-    rejects the stored config leaves placeholders unconfigured rather than
-    failing the push for every other skill in the fileset."""
+    """A rejected config leaves placeholders unconfigured rather than failing
+    the push for every other skill in the fileset."""
 
     class _BrokenApp:
         id = 1

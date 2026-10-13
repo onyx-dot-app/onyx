@@ -216,8 +216,8 @@ def test_provider_overrides_only_the_refresh_request(
 def test_refresh_posts_to_a_per_account_token_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A provider whose token endpoint lives on the customer's own host gets it
-    resolved by the caller and passed in; the spec's URL is only the default."""
+    """The caller resolves a per-account token endpoint; the spec's URL is
+    only the default."""
     captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
     GoogleCalendarProvider().refresh_credentials(
         {"refresh_token": "rt"},
@@ -235,8 +235,8 @@ def test_refresh_posts_to_a_per_account_token_url(
 def test_refresh_json_encoded_sends_exactly_one_body(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`refresh_json_encoded` swaps the form body for a JSON one. Only ever one
-    of data/json reaches `requests`, which would otherwise drop the form body."""
+    """Exactly one of data/json reaches `requests`, which would otherwise
+    drop the form body."""
 
     class _JsonProvider(GoogleCalendarProvider, abstract=True):
         refresh_json_encoded = True

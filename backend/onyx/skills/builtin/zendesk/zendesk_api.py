@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Zendesk Support (REST API v2) wrapper for the Onyx Craft sandbox.
 
-Common ticket operations as subcommands. Authentication is handled by the
-egress proxy, which injects the connected user's bearer token on the wire —
-this script sends no credentials itself. User input rides as query params or
-JSON request bodies (ids are percent-encoded into the path, nothing else is),
-so there is no injection risk. Output is JSON on stdout; HTTP failures are
-surfaced as ``{"ok": false, "status": ..., "error": ...}``.
+The egress proxy injects the connected user's bearer token, so this script
+sends no credentials itself. User input rides as query params or JSON bodies;
+only ids reach a URL path, percent-encoded. Output is JSON on stdout.
 """
 
 import argparse
@@ -26,20 +23,16 @@ _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 
 # Zendesk's own limit: a search returns at most 1000 results over 10 pages.
 _SEARCH_RESULT_CAP = 1000
-# Field definitions are a small fixed set; fetch them all rather than page.
 _FIELDS_LIMIT = 200
-# A hard stop on any paged walk. Zendesk can serve an empty page that still
-# carries a next link, which would otherwise loop forever on a `--limit` the
-# results never reach.
+# Zendesk can serve an empty page that still carries a next link, which would
+# otherwise loop forever on a `--limit` the results never reach.
 _MAX_PAGES = 50
 
-# A DNS label, matched with `fullmatch`. This script runs inside the sandbox
-# with no Onyx imports, so it repeats the provider's check rather than
-# sharing it (`external_apps/providers/zendesk.py:normalise_subdomain`).
+# A DNS label. Repeated from the provider's `normalise_subdomain`, which this
+# script cannot import from inside the sandbox.
 _SUBDOMAIN_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 
-# Fields worth keeping off a ticket payload; Zendesk returns ~40 per ticket and
-# the rest are nulls and internal ids.
+# Zendesk returns ~40 fields per ticket; the rest are nulls and internal ids.
 _TICKET_FIELDS = (
     "id",
     "subject",
@@ -66,9 +59,8 @@ class ZendeskError(Exception):
 
 
 def _epoch_seconds(value: str) -> int:
-    """``--since`` as the unix timestamp the incremental export requires. Takes
-    an epoch value already, or an ISO-8601 instant (which the agent is far more
-    likely to have to hand). A naive instant is read as UTC."""
+    """``--since`` as the unix timestamp the incremental export requires, from
+    an epoch value or an ISO-8601 instant. A naive instant is read as UTC."""
     text = value.strip()
     if text.isdigit():
         return int(text)
@@ -84,10 +76,8 @@ def _epoch_seconds(value: str) -> int:
 
 
 def _site_base_url(value: str) -> str:
-    """The API base URL for ``--site``, which accepts either a bare subdomain
-    (``acme``) or the account URL (``https://acme.zendesk.com``). Anything that
-    is not a single Zendesk subdomain is rejected: the proxy only injects this
-    account's token for this account's host."""
+    """The API base URL for ``--site``, from a bare subdomain (``acme``) or an
+    account URL. Anything that is not a single Zendesk subdomain is rejected."""
     host = re.sub(r"^https?://", "", value.strip().lower())
     host = re.split(r"[/?#]", host, maxsplit=1)[0]
     subdomain = host.partition(":")[0].removesuffix(".zendesk.com")
@@ -99,8 +89,7 @@ def _site_base_url(value: str) -> str:
 
 
 def _prune(value: Any) -> Any:
-    """Recursively drop None / "" / [] / {} so LLM-facing output stays small.
-    Booleans and 0 are kept — they carry signal."""
+    """Recursively drop None / "" / [] / {}. Booleans and 0 carry signal."""
     if isinstance(value, dict):
         out = {k: _prune(v) for k, v in value.items()}
         return {k: v for k, v in out.items() if v not in (None, "", [], {})}
@@ -118,9 +107,8 @@ def _slim(ticket: Any, full: bool) -> Any:
 
 def _slim_result(result: Any, full: bool) -> Any:
     """One search hit. Search spans tickets, users and organizations, so only a
-    ticket may be cut down to the ticket field list — slimming a user would
-    drop the very `name` and `email` the agent searched for. `result_type` is
-    kept either way: it is what tells a mixed result set apart."""
+    ticket is cut down — slimming a user would drop its `name` and `email`.
+    `result_type` survives either way; it tells a mixed result set apart."""
     if not isinstance(result, dict):
         return result
     result_type = result.get("result_type")
@@ -135,8 +123,7 @@ def _slim_result(result: Any, full: bool) -> Any:
 def _request(
     base_url: str, method: str, path: str, body: dict[str, Any] | None = None
 ) -> Any:
-    """Make one Zendesk API request and return the parsed JSON body. Transport
-    and HTTP errors propagate to ``main``."""
+    """One Zendesk API request. Transport and HTTP errors reach ``main``."""
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(  # noqa: S310 — https base URL validated above
         f"{base_url}{path}",
@@ -165,13 +152,10 @@ def _query(params: dict[str, Any]) -> str:
 def _paginate(
     base_url: str, path: str, key: str, limit: int, params: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Walk a Zendesk collection up to ``limit`` records, following whichever
-    paging shape the endpoint uses (see ``_next_page_url``). ``per_page`` is the
-    one size parameter all of them honour.
-
-    Truncates mid-page at ``limit``, which suits a browsing read. The
-    incremental export cannot work that way — it has ``_incremental_tickets``,
-    which stops on a page boundary so its cursor stays safe to resume from."""
+    """Walk a collection up to ``limit``, following whichever paging shape the
+    endpoint uses (``_next_page_url``). ``per_page`` is the one size parameter
+    all of them honour. Truncates mid-page, which suits a browsing read; the
+    resumable export needs ``_incremental_tickets`` instead."""
     if limit <= 0:
         raise ZendeskError("limit must be a positive integer")
     results: list[Any] = []
@@ -196,8 +180,8 @@ def _paginate(
 
 
 def _next_page_url(page: dict[str, Any], base_url: str) -> str | None:
-    """The next page's URL, or ``None`` at the end of the collection. A link
-    pointing anywhere but this account is not ours to follow."""
+    """The next page's URL, or ``None`` at the end. A link pointing anywhere
+    but this account is not ours to follow."""
     if page.get("end_of_stream") is True:
         return None
     if (page.get("meta") or {}).get("has_more") is False:
@@ -213,13 +197,10 @@ def _next_page_url(page: dict[str, Any], base_url: str) -> str | None:
 
 
 def _incremental_tickets(base_url: str, a: argparse.Namespace) -> dict[str, Any]:
-    """The cursor incremental export: the one endpoint built for "what moved
-    since last run", which is how a scheduled task should poll.
-
-    Stops only on a page boundary, so the ``cursor`` it returns is always a
-    safe place to resume from: every ticket before it is in this result and
-    none after it is. ``--limit`` is therefore a floor rounded up to the next
-    page, not a hard cap."""
+    """The cursor incremental export — the endpoint built for "what moved since
+    last run". Stops only on a page boundary, so the ``cursor`` it returns is
+    safe to resume from: every ticket before it is in this result and none
+    after. ``--limit`` is a floor rounded up to the next page, not a cap."""
     if a.limit <= 0:
         raise ZendeskError("limit must be a positive integer")
     if (a.since is None) == (a.cursor is None):
@@ -249,8 +230,7 @@ def _incremental_tickets(base_url: str, a: argparse.Namespace) -> dict[str, Any]
         if isinstance(after_cursor, str):
             cursor = after_cursor
         end_of_stream = page.get("end_of_stream") is True
-        # Stop only after consuming a page, never mid-page: the cursor has
-        # already moved past every ticket this page carried.
+        # Never stop mid-page: the cursor has moved past the whole page.
         url = None if len(tickets) >= a.limit else _next_page_url(page, base_url)
 
     return {
@@ -263,8 +243,8 @@ def _incremental_tickets(base_url: str, a: argparse.Namespace) -> dict[str, Any]
 
 
 def _pairs(pairs: list[str]) -> dict[str, Any]:
-    """Parse repeated ``--set key=value`` flags into a field dict. Values that
-    parse as JSON (numbers, booleans, arrays) keep that type."""
+    """Repeated ``--set key=value`` flags as a field dict. A value that parses
+    as JSON keeps that type."""
     fields: dict[str, Any] = {}
     for pair in pairs:
         if "=" not in pair:
@@ -381,8 +361,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
-    """Run the chosen subcommand. Reads and writes are split so each half stays
-    a flat lookup; an unknown command cannot reach here (argparse rejects it)."""
+    """Run the chosen subcommand, reads and writes split so each stays flat."""
     result = _dispatch_read(a)
     return result if result is not None else _dispatch_write(a)
 
@@ -480,9 +459,8 @@ def _dispatch_write(a: argparse.Namespace) -> dict[str, Any]:
         tags = _tags(a.tags)
         if not tags:
             raise ZendeskError("--tags must name at least one tag")
-        # Zendesk reverses the usual REST convention here: PUT is "Add Tags"
-        # (it appends) and POST is "Set Tags" (it replaces the whole list).
-        # Getting this backwards silently erases a ticket's other tags.
+        # Zendesk reverses the usual convention: PUT appends ("Add Tags"),
+        # POST replaces ("Set Tags"). Backwards, this erases a ticket's tags.
         path = _path("/api/v2/tickets/{0}/tags.json", a.id)
         updated = _request(site, "POST" if a.replace else "PUT", path, {"tags": tags})
         return {"ok": True, "tags": updated.get("tags")}
@@ -501,7 +479,6 @@ def _dispatch_write(a: argparse.Namespace) -> dict[str, Any]:
     if a.cmd != "call":
         raise ZendeskError(f"unknown command {a.cmd!r}")
 
-    # `call` raw escape hatch.
     body = None
     if a.body:
         parsed = json.loads(a.body)
@@ -514,8 +491,8 @@ def _dispatch_write(a: argparse.Namespace) -> dict[str, Any]:
 
 
 def _error_message(detail: str) -> str:
-    """The most specific message Zendesk gave. Its error bodies are either
-    ``{"error": "...", "description": "..."}`` or ``{"details": {...}}``."""
+    """The most specific message Zendesk gave: its error bodies carry
+    ``error``/``description`` or ``details``."""
     try:
         parsed = json.loads(detail)
     except ValueError:
@@ -544,8 +521,7 @@ def main(argv: list[str]) -> int:
             "error": _error_message(detail),
         }
         if e.code == 429:
-            # Zendesk throttles per account per minute; tell the agent to wait
-            # rather than hammer the endpoint.
+            # Tell the agent how long to wait rather than let it hammer.
             failure["retry_after_seconds"] = e.headers.get("Retry-After")
         print(json.dumps(failure))
         return 1

@@ -1,7 +1,6 @@
 """The Zendesk provider catalog: REST routes resolve to exactly the intended
 action — including the ``.json`` suffix form Zendesk accepts interchangeably —
-and default policies match the design (reads auto-approve; ticket writes and
-deletes require approval).
+and default policies match the design.
 
 The DB-driven ``recognize_actions`` path is covered elsewhere; here we exercise
 the pure rule layer directly, mirroring ``test_notion_catalog.py``."""
@@ -111,24 +110,20 @@ def test_route_resolves_to_expected_action(
     ],
 )
 def test_json_suffix_resolves_to_the_same_action(method: str, path: str) -> None:
-    """Zendesk serves `/api/v2/tickets` and `/api/v2/tickets.json` as the same
-    endpoint, so the catalog must not let one of them slip the gate."""
+    """The same endpoint either way, so neither spelling may slip the gate."""
     assert _matching_actions(method, path) == _matching_actions(method, f"{path}.json")
 
 
 def test_ticket_id_placeholder_absorbs_the_json_suffix() -> None:
-    """A trailing id already matches `123.json`, so those routes carry no twin
-    and `/api/v2/tickets/123.json` still resolves."""
+    """A trailing id already matches `123.json`, so it carries no twin."""
     assert _matching_actions("GET", "/api/v2/tickets/12345.json") == {
         ZendeskAction.TICKETS_READ
     }
 
 
 def test_tags_cannot_be_changed_outside_the_ticket_update_action() -> None:
-    """Zendesk sets tags both on `/tags` and through a `tags` field on a plain
-    ticket update, and the REST matcher sees method and path only. Every route
-    that can change a tag must therefore resolve to the same action, or an
-    admin's choice would hold on one route and be bypassed on the other."""
+    """The matcher sees method and path only, so every route that can change a
+    tag must resolve to one action or the policy is bypassable."""
     tag_routes = [
         ("PUT", "/api/v2/tickets/12345/tags"),
         ("POST", "/api/v2/tickets/12345/tags"),
@@ -145,8 +140,7 @@ def test_every_catalog_id_is_unique() -> None:
 
 
 def test_reads_auto_approve_and_writes_ask() -> None:
-    """Reads run unattended — a scheduled task is the point of this app — while
-    anything that changes or removes a ticket needs a human."""
+    """Reads run unattended; anything that changes a ticket needs a human."""
     for endpoint in _CATALOG:
         expected = (
             EndpointPolicy.ASK

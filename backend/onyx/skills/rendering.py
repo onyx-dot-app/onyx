@@ -30,9 +30,8 @@ logger = setup_logger()
 ACTION_AVAILABILITY_PLACEHOLDER = "{{ACTION_AVAILABILITY_SECTION}}"
 
 # ``{{APP:<key>}}`` carries a value the provider resolved from the app's own
-# configuration (a Zendesk account's base URL). Unknown keys render as
-# ``_UNCONFIGURED_VALUE`` so a half-configured app tells the agent so instead of
-# failing the whole push.
+# configuration. An unknown key renders as ``_UNCONFIGURED_VALUE`` so a
+# half-configured app says so rather than failing the push.
 _APP_VALUE_RE = re.compile(r"\{\{APP:([A-Za-z0-9_]+)\}\}")
 _UNCONFIGURED_VALUE = "(not configured — ask an admin to finish setting up this app)"
 
@@ -181,9 +180,8 @@ def render_external_app_skill(
 
 def app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
     """The provider's ``{{APP:<key>}}`` values for this app row, or ``{}`` when
-    there is no row or its config no longer resolves. Rendering is a read-only
-    projection of committed state, so a provider that rejects the stored config
-    leaves the placeholders unconfigured rather than failing the render."""
+    there is no row or its config no longer resolves — rendering is a read-only
+    projection, so a rejected config leaves placeholders unconfigured."""
     if external_app is None:
         return {}
     try:
@@ -206,11 +204,9 @@ def render_external_app_skill_for(
     app_type: ExternalAppType,
     source_dir: Path,
 ) -> str:
-    """``skill``'s SKILL.md exactly as the sandbox will see it: the template
-    resolved against this app row's action policies and its configuration.
-
-    Shared by the skill push and the library preview, so what a user previews
-    is what the agent reads — no unresolved ``{{...}}`` markup in either."""
+    """``skill``'s SKILL.md as the sandbox will see it: the template resolved
+    against this app row's action policies and configuration. Shared by the
+    push and the library preview, so a user previews what the agent reads."""
     external_app = get_external_app_by_skill_id(db_session, skill.id)
     stored = (
         get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)

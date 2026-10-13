@@ -1,10 +1,6 @@
-"""The Zendesk provider's per-account resolution.
-
-Every Zendesk account lives on its own `<subdomain>.zendesk.com` host, so the
-OAuth endpoints, the gateway's URL patterns, and the skill's base URL are all
-derived from one admin-supplied field. These tests pin that derivation: the
-subdomain is validated before it reaches a URL, and the gateway pattern stays a
-literal host so the proxy can never spend this tenant's token elsewhere."""
+"""The Zendesk provider's per-account resolution: every account lives on its
+own `<subdomain>.zendesk.com` host, so the OAuth endpoints, the gateway pattern
+and the skill's base URL all come from one admin-supplied field."""
 
 from __future__ import annotations
 
@@ -61,17 +57,15 @@ def test_subdomain_is_read_out_of_whatever_the_admin_pasted(raw: str) -> None:
     ],
 )
 def test_malformed_subdomain_is_rejected(raw: object) -> None:
-    """The value becomes a URL host, so anything that is not a single DNS label
-    fails loudly at configure time rather than silently addressing elsewhere."""
+    """The value becomes a URL host, so it fails loudly rather than silently
+    addressing elsewhere."""
     with pytest.raises(OnyxError):
         normalise_subdomain(raw)
 
 
 def test_descriptor_pattern_is_a_single_account_template() -> None:
-    """The descriptor ships a template, not a finished pattern. Filled with one
-    account it matches that account's API and nothing else — a pattern spanning
-    every `*.zendesk.com` would let the gateway attach this tenant's token to
-    another company's Zendesk."""
+    """Filled with one account, the pattern matches that account's API and
+    nothing else; a `*.zendesk.com` pattern would leak the tenant's token."""
     (template,) = _provider().spec.descriptor.upstream_url_patterns
     assert "{subdomain}" in template
 
@@ -83,8 +77,7 @@ def test_descriptor_pattern_is_a_single_account_template() -> None:
 
 
 def test_an_unfilled_template_matches_nothing() -> None:
-    """An admin who never filled the subdomain leaves the placeholder in place.
-    That must fail closed — match nothing — rather than match too much."""
+    """An unfilled placeholder must match nothing, not match too much."""
     (template,) = _provider().spec.descriptor.upstream_url_patterns
     assert not re.fullmatch(template, "https://acme.zendesk.com/api/v2/tickets")
 
@@ -104,8 +97,7 @@ def test_oauth_endpoints_are_on_the_configured_account() -> None:
 
 
 def test_spec_urls_stay_templates() -> None:
-    """Nothing may "fix" these into literals: there is no one Zendesk host, and
-    `resolve_oauth_endpoints` is the only correct way to read them."""
+    """There is no one Zendesk host, so these must stay templates."""
     oauth = _provider().spec.oauth
     assert "{subdomain}" in oauth.authorize_url
     assert "{subdomain}" in oauth.token_url
@@ -114,8 +106,7 @@ def test_spec_urls_stay_templates() -> None:
 def test_skill_template_values_withhold_secret_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The registry hands providers only their non-secret fields — the rendered
-    SKILL.md ships to the sandbox, so a secret must never reach it."""
+    """The rendered SKILL.md ships to the sandbox, so no secret may reach it."""
     captured: dict[str, str] = {}
 
     def _spy(
@@ -133,8 +124,7 @@ def test_skill_template_values_withhold_secret_fields(
 
 
 def test_providers_on_a_fixed_host_contribute_no_skill_values() -> None:
-    """The hook is a small per-provider contribution, empty unless a provider's
-    skill needs something only its configuration knows."""
+    """Empty unless a provider's skill needs its own configuration."""
     for app_type, provider in PROVIDERS.items():
         if isinstance(provider, ZendeskProvider):
             continue  # per-account: covered above
@@ -142,8 +132,7 @@ def test_providers_on_a_fixed_host_contribute_no_skill_values() -> None:
 
 
 def test_token_exchange_posts_json_with_an_explicit_expiry() -> None:
-    """Zendesk only issues a refresh token when the request names an expiry, and
-    its token endpoint takes a JSON body."""
+    """Zendesk issues a refresh token only when the request names an expiry."""
     request = _provider().build_token_exchange_request(
         "the-code", "cid", "secret", "https://onyx.test/callback"
     )
@@ -191,8 +180,8 @@ def test_extract_credentials_rejects_a_response_without_a_token() -> None:
 
 
 def test_requested_scopes_cover_the_catalog_and_nothing_more() -> None:
-    """Zendesk has no optional-scope mechanism, so every scope here must be one
-    any Support plan can grant — and writes stop at tickets."""
+    """No optional-scope mechanism, so every scope must be grantable on any
+    plan — and writes stop at tickets."""
     scopes = set(_provider().spec.oauth.scope.split())
     assert scopes == {
         "tickets:read",

@@ -74,10 +74,8 @@ def skill_template_values_for(
     """The ``{{APP:<key>}}`` values this app's provider contributes to its
     rendered SKILL.md, or ``{}`` for a CUSTOM / unregistered type.
 
-    Only the provider's non-secret credential fields reach
-    ``skill_template_values``: an admin form echoes secrets back masked, so a
-    provider could never read one usefully, and withholding them keeps a secret
-    out of a file that ships to the sandbox.
+    Only non-secret credential fields are passed through: the rendered file
+    ships to the sandbox, and an admin form echoes secrets back masked anyway.
     """
     provider = PROVIDERS.get(app_type)
     if provider is None:

@@ -196,12 +196,10 @@ def _builtin_instructions(
     definition: BuiltInSkillDefinition,
     db_session: Session,
 ) -> str:
-    """A built-in skill's instructions as the user should read them.
-
-    An external-app built-in is rendered against this app row's policies and
-    configuration, the same way the push path renders it, so the preview shows
-    the connected account and the withheld actions rather than the template's
-    ``{{...}}`` markers. Everything else is read from disk as-is."""
+    """A built-in skill's instructions as the user should read them. An
+    external-app built-in renders through the push path's renderer, so the
+    preview shows resolved values rather than the template's ``{{...}}``
+    markers. Everything else is read from disk as-is."""
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is None or not definition.has_template:
         return read_builtin_skill_instructions(definition)

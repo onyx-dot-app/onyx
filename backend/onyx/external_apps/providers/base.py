@@ -88,9 +88,8 @@ class OAuthFlowSpec(BaseModel):
     code for a token.
 
     ``authorize_url`` and ``token_url`` may carry ``{placeholder}`` fields for a
-    provider whose endpoints live on a per-account host. Read them through
-    :meth:`OAuthExternalAppProvider.resolve_oauth_endpoints`, which fills those
-    in, rather than off the spec."""
+    per-account provider, so read them through
+    :meth:`OAuthExternalAppProvider.resolve_oauth_endpoints`, not off the spec."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -157,9 +156,8 @@ class TokenExchangeRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     headers: dict[str, str]
-    # Values are usually strings, but a JSON body may carry the type the
-    # provider's API documents (Zendesk's `expires_in` is an integer). Form
-    # encoding stringifies them, so both wire formats stay correct.
+    # A JSON body may carry the type the provider's API documents (Zendesk's
+    # `expires_in` is an integer); form encoding stringifies either way.
     body: dict[str, Any]
     # How ``body`` is encoded on the wire: JSON (``requests.post(json=...)``)
     # when True, RFC-6749 form-encoded (``data=...``) when False. The callback
@@ -206,15 +204,12 @@ class ExternalAppProvider(ABC):
         org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
     ) -> dict[str, str]:
         """Values substituted into this provider's ``SKILL.md.template`` as
-        ``{{APP:<key>}}``. Empty by default; override when the skill needs
-        something only this app's configuration knows (Zendesk's account base
-        URL). Sibling of :meth:`payload_decoders` — a small per-provider
-        contribution to a shared pipeline.
+        ``{{APP:<key>}}``. Empty unless the skill needs something only this
+        app's configuration knows (Zendesk's account base URL).
 
-        The rendered SKILL.md ships to the sandbox, so never return a secret.
-        ``org_credentials`` carries only the provider's non-secret fields
-        (``registry.skill_template_values_for`` filters them), and an override
-        may raise ``OnyxError(INVALID_INPUT)`` on a malformed value."""
+        The rendered SKILL.md ships to the sandbox, so never return a secret;
+        ``org_credentials`` holds only the provider's non-secret fields. May
+        raise ``OnyxError(INVALID_INPUT)`` on a malformed value."""
         return {}
 
 
@@ -275,8 +270,7 @@ class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
 
 
 class OAuthEndpoints(BaseModel):
-    """The authorize/token URLs in force for one configured app row. Static for
-    most providers; per-account for a provider hosted on a per-tenant domain."""
+    """The authorize/token URLs in force for one configured app row."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -305,18 +299,15 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     # (RFC 6749 §5.2).
     terminal_refresh_errors: ClassVar[frozenset[str]] = frozenset({"invalid_grant"})
 
-    # How the refresh POST body is encoded: JSON when True, RFC-6749
-    # form-encoded when False. Mirrors ``TokenExchangeRequest.json_encoded``,
-    # which covers the initial grant.
+    # Mirrors ``TokenExchangeRequest.json_encoded``, for the refresh POST.
     refresh_json_encoded: ClassVar[bool] = False
 
     def resolve_oauth_endpoints(
         self,
         org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
     ) -> OAuthEndpoints:
-        """The authorize/token URLs for one app row. The spec's static URLs by
-        default; override for a provider whose endpoints live on a per-account
-        domain. ``org_credentials`` is the app's stored credential map."""
+        """The authorize/token URLs for one app row. The spec's static URLs
+        unless a provider's endpoints live on a per-account domain."""
         return OAuthEndpoints(
             authorize_url=self.spec.oauth.authorize_url,
             token_url=self.spec.oauth.token_url,
@@ -382,8 +373,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         Clockless (the caller stamps ``expires_at``), mirroring
         :meth:`extract_credentials`. Override `build_refresh_request` /
         `classify_token_response` for a divergent provider. ``token_url``
-        overrides the spec's static endpoint for a per-account provider; the
-        caller resolves it via :meth:`resolve_oauth_endpoints`.
+        comes from :meth:`resolve_oauth_endpoints` for a per-account provider.
 
         Raises:
             TokenRefreshTerminalError: the grant is dead (reconnect required).
@@ -410,8 +400,7 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
                     ),
                     "Accept": "application/json",
                 },
-                # Exactly one of data/json, so `requests` can't silently drop
-                # the form body in favour of a JSON one.
+                # Exactly one of data/json, or `requests` drops the form body.
                 data=None if json_encoded else body,
                 json=body if json_encoded else None,
                 timeout=self.refresh_http_timeout_seconds,

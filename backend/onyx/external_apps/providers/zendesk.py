@@ -21,31 +21,27 @@ from onyx.external_apps.providers.base import (
 )
 
 # Every Zendesk account lives on its own `<subdomain>.zendesk.com` host, so the
-# OAuth endpoints, the gateway's URL patterns, and the bundled skill's base URL
-# are all derived from the subdomain an admin configures.
+# OAuth endpoints and the skill's base URL both come from this field.
 SUBDOMAIN_FIELD = "subdomain"
 _ZENDESK_HOST_SUFFIX = ".zendesk.com"
-# A DNS label: lowercase alphanumerics and inner hyphens, at most 63 characters.
+# A DNS label, matched with `fullmatch`.
 _SUBDOMAIN_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _SCHEME_RE = re.compile(r"^https?://", re.IGNORECASE)
 
-# Zendesk mints 30-minute access tokens by default and only issues a refresh
-# token when the token request names an expiry, so ask for one explicitly: a day
-# (within Zendesk's 300s–172800s range) keeps refreshes rare while staying well
-# inside the 30-day refresh-token lifetime.
+# Zendesk issues a refresh token only when the request names an expiry. A day
+# sits inside its 300s–172800s range and its 30-day refresh-token lifetime.
 _ACCESS_TOKEN_TTL_SECONDS = 86400
 
 
 def normalise_subdomain(raw: object) -> str:
-    """The bare account subdomain from what an admin typed, which is as often a
-    pasted URL (``https://acme.zendesk.com/agent``) as the subdomain itself.
+    """The bare account subdomain from what an admin typed — as often a pasted
+    URL (``https://acme.zendesk.com/agent``) as the subdomain itself.
 
     Raises ``OnyxError(INVALID_INPUT)`` on anything that isn't a single DNS
-    label — this value becomes a URL host, so it is never interpolated unchecked.
-    """
+    label: this value becomes a URL host, never interpolated unchecked."""
     value = raw.strip().lower() if isinstance(raw, str) else ""
     value = _SCHEME_RE.sub("", value)
-    # Keep the host only: drop any path, query, fragment, credentials and port.
+    # Host only: drop path, query, fragment, credentials and port.
     value = re.split(r"[/?#]", value, maxsplit=1)[0]
     value = value.rpartition("@")[2].partition(":")[0]
     value = value.removesuffix(_ZENDESK_HOST_SUFFIX)
@@ -60,9 +56,8 @@ def normalise_subdomain(raw: object) -> str:
 
 def _routes(method: str, *paths: str) -> tuple[RestRoute, ...]:
     """Recognition rules for ``paths``, each also in the ``.json`` suffix form
-    Zendesk accepts interchangeably (``/api/v2/tickets.json``). A path ending in
-    a ``{placeholder}`` needs no twin — the placeholder already matches the
-    suffixed segment (``123.json``)."""
+    Zendesk accepts interchangeably. A path ending in a ``{placeholder}`` needs
+    no twin — the placeholder already matches ``123.json``."""
     routes: list[RestRoute] = []
     for path in paths:
         routes.append(RestRoute(method=method, path=path))
@@ -88,8 +83,6 @@ class ZendeskAction(ExternalAppAction):
     TICKETS_DELETE = "zendesk.tickets.delete"
 
 
-# The Zendesk Support API is a path-addressed JSON REST API under
-# `/api/v2`; the action is the HTTP method + path template.
 _ENDPOINTS: list[EndpointSpec] = [
     EndpointSpec(
         id=ZendeskAction.TICKETS_READ,
@@ -221,12 +214,9 @@ _ENDPOINTS: list[EndpointSpec] = [
             "adds both public replies and internal notes through a ticket "
             "update."
         ),
-        # Tags deliberately share this action rather than getting their own.
-        # Zendesk sets tags both through the dedicated `/tags` routes and
-        # through a `tags` field on a plain ticket update, and the REST matcher
-        # recognises a request by method and path only. A separate tag action
-        # would therefore be governed on one route and silently bypassed on the
-        # other, which is worse than one honest action covering both.
+        # Tags share this action: Zendesk sets them both on `/tags` and through
+        # a `tags` field on a plain update, and the matcher sees path only, so a
+        # separate tag action would be bypassable on the other route.
         matches=(
             *_routes(
                 "PUT",
@@ -249,10 +239,8 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
 ]
 
-# Resource scopes rather than Zendesk's broad `read`/`write`, so the grant
-# covers the catalog above and nothing else. Zendesk has no optional-scope
-# mechanism: every scope named here must be grantable, so this stays to
-# features every Support plan has.
+# Resource scopes rather than Zendesk's broad `read`/`write`. Zendesk has no
+# optional-scope mechanism, so every scope here must be grantable on any plan.
 _SCOPES = [
     "tickets:read",
     "tickets:write",
@@ -266,19 +254,14 @@ _SCOPES = [
 class ZendeskProvider(OAuthExternalAppProvider):
     """Zendesk Support, connected with the deployment's own OAuth client.
 
-    Not an ``OnyxManagedExtApp``: Zendesk's authorize and token endpoints live
-    on the customer's own `<subdomain>.zendesk.com` host and its OAuth clients
-    are registered per account, so there is nothing for Onyx to own centrally.
-    An admin registers the client in their Zendesk admin center and fills in the
-    subdomain and client credentials.
-    """
+    Not an ``OnyxManagedExtApp``: Zendesk registers OAuth clients per account on
+    that account's own host, so there is no client for Onyx to own centrally."""
 
     spec = OAuthProviderSpec(
         app_type=ExternalAppType.ZENDESK,
         app_name="Zendesk",
         oauth=OAuthFlowSpec(
-            # Per-account hosts; `resolve_oauth_endpoints` fills in `{subdomain}`
-            # from the app's organization credentials before either is used.
+            # `resolve_oauth_endpoints` fills `{subdomain}` before either is used.
             authorize_url="https://{subdomain}.zendesk.com/oauth/authorizations/new",
             token_url="https://{subdomain}.zendesk.com/oauth/tokens",
             scope=" ".join(_SCOPES),
@@ -286,12 +269,10 @@ class ZendeskProvider(OAuthExternalAppProvider):
             extra_authorize_params={"response_type": "code"},
         ),
         descriptor=AdminDescriptorSpec(
-            # A template, not a finished pattern: the Configure modal fills
-            # `{subdomain}` from the field below before saving the app, so the
-            # gateway matches one account's host rather than every
-            # `*.zendesk.com` — a wildcard there would let a prompt-injected
-            # agent spend this tenant's token on someone else's account. Left
-            # unfilled it matches nothing, which fails closed.
+            # A template the Configure modal fills from the subdomain below, so
+            # the app matches one account rather than every `*.zendesk.com` — a
+            # wildcard would leak this tenant's token to another account.
+            # Unfilled it matches nothing, which fails closed.
             upstream_url_patterns=[r"https://{subdomain}\.zendesk\.com/api/v2/.*"],
             auth_template={"Authorization": "Bearer {access_token}"},
             required_org_credential_fields=[
@@ -339,8 +320,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
         endpoint_catalog=_ENDPOINTS,
     )
 
-    # Zendesk's /oauth/tokens takes a JSON body for both the code exchange and
-    # the refresh.
+    # /oauth/tokens takes a JSON body for the exchange and the refresh alike.
     refresh_json_encoded = True
 
     def _subdomain(self, org_credentials: Mapping[str, str]) -> str:
@@ -376,8 +356,8 @@ class ZendeskProvider(OAuthExternalAppProvider):
                 "code": code,
                 "redirect_uri": redirect_uri,
                 "scope": self.spec.oauth.scope,
-                # Without an explicit expiry an older Zendesk client mints a
-                # non-expiring access token and no refresh token at all.
+                # Without an explicit expiry, an older client issues no refresh
+                # token at all.
                 "expires_in": _ACCESS_TOKEN_TTL_SECONDS,
             },
             json_encoded=True,
@@ -391,8 +371,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
             "client_id": client_id,
             "client_secret": client_secret,
             "refresh_token": refresh_token,
-            # Same reason as the code exchange: each refresh re-states the
-            # expiry, and Zendesk rotates the refresh token with it.
+            # Re-stated per refresh; Zendesk rotates the refresh token with it.
             "expires_in": _ACCESS_TOKEN_TTL_SECONDS,
         }
 
@@ -408,8 +387,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
             "token_type": response_data.get("token_type"),
             "scope": response_data.get("scope"),
         }
-        # Present whenever the client is configured for expiring tokens; absent
-        # for a legacy client, which reads downstream as a non-expiring token.
+        # Absent for a legacy client, which reads as a non-expiring token.
         for key in ("refresh_token", "expires_in"):
             if response_data.get(key):
                 creds[key] = response_data[key]

@@ -36,26 +36,14 @@ import { useSyncedAssociatedSkillIds } from "@/lib/externalApps/hooks";
 // descriptor-declared credential key.
 const NAME_KEY = "__name";
 
-/** A value safe to splice into a regex pattern: a DNS label, which carries no
- * regex metacharacter, so it can only ever widen the pattern by the literal
- * text an admin typed. */
+// Only a DNS label is safe to splice into a pattern: it carries no regex
+// metacharacter, so it cannot widen the pattern beyond the text typed.
 const GATEWAY_VALUE = /^[a-z0-9][a-z0-9-]*$/;
 
 /** Fill `{field_key}` placeholders in a descriptor's upstream URL patterns from
- * the credential values the admin just entered.
- *
- * Most providers talk to a fixed host and their patterns carry no placeholder,
- * so this returns them untouched. A provider on a per-account host (Zendesk,
- * `{subdomain}.zendesk.com`) declares the pattern as a template so the saved
- * app matches one account rather than every subdomain of the vendor.
- *
- * That pattern is a regex, and it is what makes the egress proxy attach this
- * app's credentials — so only a value matching `GATEWAY_VALUE` is spliced in.
- * Anything else (a pasted URL, a regex metacharacter) leaves the placeholder
- * in place, and a pattern still holding `{...}` matches no URL at all. Failing
- * closed on a typo beats turning one into a pattern that matches a host the
- * admin never meant to reach.
- */
+ * the admin's credential values. A rejected or missing value leaves the
+ * placeholder, and a pattern still holding `{...}` matches no URL — the safe
+ * failure, since this pattern decides which host gets the app's credentials. */
 function fillUpstreamPatterns(
   patterns: string[],
   values: Record<string, string>

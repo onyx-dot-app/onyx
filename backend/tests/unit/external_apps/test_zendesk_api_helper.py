@@ -1,7 +1,6 @@
 """The bundled ``zendesk_api.py`` sandbox helper: the pure argument and
-response handling the subcommands rest on. The helper is a standalone script
-under the skills dir (not an importable package), so load it by path. These
-tests require no network and no onyx imports."""
+response handling the subcommands rest on. A standalone script, not an
+importable package, so load it by path. No network, no onyx imports."""
 
 from __future__ import annotations
 
@@ -44,15 +43,13 @@ def test_site_accepts_a_subdomain_or_an_account_url(value: str) -> None:
     "value", ["", "acme corp", "acme.example.com", "https://evil.test/acme"]
 )
 def test_site_rejects_anything_but_a_zendesk_account(value: str) -> None:
-    """The base URL is what the egress proxy matches to inject this account's
-    token, so the helper refuses to address anywhere else."""
+    """The proxy matches this host to inject the account's token."""
     with pytest.raises(argparse.ArgumentTypeError):
         zendesk._site_base_url(value)
 
 
 def test_since_accepts_an_epoch_or_an_iso_instant() -> None:
-    """Zendesk's incremental export takes a unix timestamp; an ISO instant is
-    what the agent is far more likely to have, so both work."""
+    """The export takes a unix timestamp; an agent is likelier to have ISO."""
     assert zendesk._epoch_seconds("1759276800") == 1759276800
     iso = zendesk._epoch_seconds("2026-10-01T00:00:00Z")
     # A naive instant is read as UTC, so the two agree.
@@ -97,8 +94,7 @@ def test_next_page_url_covers_every_paging_shape(
 
 
 def test_changed_requires_exactly_one_starting_point() -> None:
-    """A resuming export must say where it resumes from — a `--since` and a
-    `--cursor` together would silently ignore one of them."""
+    """Both together would silently ignore one of them."""
     parser = zendesk._build_parser()
     for argv in (
         ["--site", "acme", "changed"],
@@ -113,8 +109,8 @@ def test_changed_requires_exactly_one_starting_point() -> None:
 def test_changed_stops_on_a_page_boundary_and_returns_the_cursor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The cursor must be safe to resume from: every ticket before it is in
-    this result, so the walk may never stop part-way through a page."""
+    """The cursor must be safe to resume from, so the walk never stops
+    part-way through a page."""
     pages = [
         {
             "tickets": [{"id": 1}, {"id": 2}],
@@ -166,8 +162,7 @@ def test_changed_resumes_from_a_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_a_page_that_never_ends_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Zendesk can serve an empty page that still carries a next link. The walk
-    must stop rather than spin on a `--limit` the results never reach."""
+    """An empty page can still carry a next link; the walk must stop."""
     calls = 0
 
     def _fake_request(
@@ -202,8 +197,7 @@ def test_a_page_that_never_ends_is_bounded(monkeypatch: pytest.MonkeyPatch) -> N
 def test_tag_uses_zendesks_reversed_tag_methods(
     monkeypatch: pytest.MonkeyPatch, argv: list[str], expected_method: str
 ) -> None:
-    """Zendesk reverses the usual convention: PUT adds tags, POST replaces the
-    whole list. Backwards, the default `tag` would erase a ticket's tags."""
+    """PUT adds, POST replaces. Backwards, `tag` erases a ticket's tags."""
     seen: list[str] = []
 
     def _fake_request(
@@ -219,8 +213,7 @@ def test_tag_uses_zendesks_reversed_tag_methods(
 
 
 def test_changed_rejects_a_blank_cursor() -> None:
-    """An empty `--cursor` passes the "exactly one" check but names no
-    position; it must be an input error, not a traceback."""
+    """It passes the "exactly one" check but names no position."""
     args = zendesk._build_parser().parse_args(
         ["--site", "acme", "changed", "--cursor", ""]
     )
@@ -250,7 +243,7 @@ def test_set_pairs_reject_a_bare_token() -> None:
 
 
 def test_prune_keeps_false_and_zero() -> None:
-    """Empty values are noise; `false` and `0` carry signal."""
+    """`false` and `0` carry signal."""
     assert zendesk._prune({"a": None, "b": "", "c": [], "d": False, "e": 0}) == {
         "d": False,
         "e": 0,
@@ -258,8 +251,7 @@ def test_prune_keeps_false_and_zero() -> None:
 
 
 def test_search_only_slims_ticket_hits() -> None:
-    """Search spans tickets, users and organizations. Cutting a user down to
-    the ticket field list would drop the `name` and `email` that identify it."""
+    """Cutting a user to the ticket field list drops its `name` and `email`."""
     user = {"result_type": "user", "id": 7, "name": "Ada", "email": "a@b.co"}
     assert zendesk._slim_result(user, full=False) == user
 
@@ -275,8 +267,7 @@ def test_search_only_slims_ticket_hits() -> None:
 
 
 def test_search_keeps_result_type_on_a_slimmed_ticket() -> None:
-    """`result_type` is what tells a mixed result set apart, so it survives the
-    ticket field list."""
+    """`result_type` tells a mixed result set apart, so it survives."""
     hit = {"result_type": "ticket", "id": 1, "subject": "s", "ticket_form_id": 9}
     assert zendesk._slim_result(hit, full=False) == {
         "id": 1,

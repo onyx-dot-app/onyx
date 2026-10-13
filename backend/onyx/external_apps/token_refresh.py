@@ -42,7 +42,7 @@ _LOCK_HELD_S = 30.0
 _LOCK_WAIT_S = 5.0
 
 # Gathered inside a session for the POST: provider, stored creds, client
-# id/secret, and the token endpoint (per-account for some providers).
+# id/secret, token endpoint.
 _RefreshInputs = tuple[OAuthExternalAppProvider, dict[str, Any], str, str, str]
 
 
@@ -177,8 +177,7 @@ def _load_refresh_inputs(
             app.organization_credentials.get_value(apply_mask=False)
         ).token_url
     except OnyxError as exc:
-        # A per-account provider whose config an admin has since broken. Nothing
-        # to POST to, so keep the existing token rather than clearing the grant.
+        # Nothing to POST to, so keep the existing token rather than clear it.
         logger.warning(
             "ea_token_refresh.unresolvable_token_url external_app_id=%s error=%s",
             external_app_id,

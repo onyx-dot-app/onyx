@@ -178,9 +178,8 @@ describe("ConfigureProviderModal", () => {
   });
 
   it("pins a per-account provider's gateway pattern to the account entered", async () => {
-    // A provider on a per-account host ships its pattern as a template. The
-    // saved pattern is what makes the egress proxy attach this app's
-    // credentials, so it must name the one account the admin configured.
+    // The saved pattern is what makes the proxy attach this app's
+    // credentials, so it must name the one account configured.
     const perAccountDescriptor: BuiltInExternalAppDescriptor = {
       ...DESCRIPTOR,
       app_type: "ZENDESK",
@@ -260,10 +259,8 @@ describe("ConfigureProviderModal", () => {
   ])(
     "refuses to splice %s into the gateway pattern",
     async (_label: string, typed: string) => {
-      // The pattern is a regex and it decides which host gets this app's
-      // credentials. Anything that is not a plain DNS label must leave the
-      // placeholder in place, so the saved app matches nothing at all rather
-      // than a host the admin never meant to reach.
+      // The pattern is a regex deciding which host gets the credentials, so
+      // anything but a plain DNS label must leave the placeholder in place.
       const perAccountDescriptor: BuiltInExternalAppDescriptor = {
         ...DESCRIPTOR,
         app_type: "ZENDESK",
