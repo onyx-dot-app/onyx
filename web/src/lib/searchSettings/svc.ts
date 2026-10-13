@@ -2,6 +2,8 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 import type { Settings } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
+  CCPairAccessMode,
+  CCPairIdsBackfillStatus,
   EmbeddingModelSpec,
   EmbeddingProviderName,
   ReindexErrorRow,
@@ -267,4 +269,20 @@ export async function updateInferenceSettings(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(settings),
   });
+}
+
+/** Sets the search access mode. Returns the updated backfill status. */
+export async function updateCCPairAccessMode(
+  mode: CCPairAccessMode
+): Promise<CCPairIdsBackfillStatus> {
+  const response = await fetch("/api/search-settings/cc-pair-access-mode", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+  if (!response.ok) {
+    const err: ErrorResponseBody = await response.json();
+    throw new Error(err.detail ?? "Failed to update the search access mode");
+  }
+  return response.json();
 }

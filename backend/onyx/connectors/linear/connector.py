@@ -1,11 +1,9 @@
-import os
 import re
 import time
 from datetime import datetime, timezone
 from typing import Any, cast
 from urllib.parse import urlparse
 
-import requests
 from typing_extensions import override
 
 from onyx.configs.app_configs import (
@@ -14,17 +12,38 @@ from onyx.configs.app_configs import (
     LINEAR_CLIENT_SECRET,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_oauth_callback_uri,
     time_str_to_utc,
 )
 from onyx.connectors.interfaces import (
+    CredentialsConnector,
+    CredentialsProviderInterface,
     GenerateDocumentsOutput,
     LoadConnector,
     NormalizationResult,
     OAuthConnector,
     PollConnector,
     SecondsSinceUnixEpoch,
+)
+from onyx.connectors.linear.scope import (
+    issue_filter,
+    missing_projects,
+    missing_team_keys,
+    normalize_team_keys,
+    project_filter,
+    project_scope,
+    scope_error,
+)
+from onyx.connectors.linear.source_operations import (
+    ACCESS_TOKEN,
+    EXPIRE_AT,
+    EXPIRES_IN,
+    REFRESH_TOKEN,
+    LinearSourceOperations,
+    is_expiring,
+    refresh_oauth_token,
 )
 from onyx.connectors.models import (
     ConnectorMissingCredentialError,
@@ -38,55 +57,73 @@ from onyx.utils.retry_wrapper import request_with_retries
 
 logger = setup_logger()
 
-_NUM_RETRIES = 5
-_TIMEOUT = 60
-_LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
-_ACCESS_TOKEN = "access_token"
-_EXPIRE_AT = "expire_at"
-_REFRESH_TOKEN = "refresh_token"
-_EXPIRES_IN = "expires_in"
 
-
-def _make_query(request_body: dict[str, Any], api_key: str) -> requests.Response:
-    headers = {
-        "Authorization": api_key,
-        "Content-Type": "application/json",
-    }
-
-    for i in range(_NUM_RETRIES):
-        try:
-            response = requests.post(
-                _LINEAR_GRAPHQL_URL,
-                headers=headers,
-                json=request_body,
-                timeout=_TIMEOUT,
-            )
-            if not response.ok:
-                raise RuntimeError(
-                    f"Error fetching issues from Linear: {response.text}"
-                )
-
-            return response
-        except Exception as e:
-            if i == _NUM_RETRIES - 1:
-                raise e
-
-            logger.warning("A Linear GraphQL error occurred: %s. Retrying...", e)
-
-    raise RuntimeError(
-        "Unexpected execution when querying Linear. This should never happen."
-    )
-
-
-class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
+class LinearConnector(
+    LoadConnector, PollConnector, OAuthConnector, CredentialsConnector
+):
     supports_manual_credentials = True
 
     def __init__(
         self,
+        team_keys: list[str] | None = None,
+        projects: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
+        self.team_keys = normalize_team_keys(team_keys)
+        # The entries as configured, for the checks that rerun before a sync.
+        self.projects: list[str] = projects or []
+        self.project_names, self.project_slug_ids = project_scope(projects)
         self.batch_size = batch_size
-        self.linear_api_key: str | None = None
+        self._ops: LinearSourceOperations | None = None
+
+    @property
+    def ops(self) -> LinearSourceOperations:
+        if self._ops is None:
+            raise ConnectorMissingCredentialError("Linear")
+        return self._ops
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        """Manual credentials. An expiring OAuth token is refreshed here and
+        handed back so the caller can store it; the DB provider path refreshes
+        inside the gateway instead."""
+        refreshed: dict[str, Any] | None = None
+        if is_expiring(credentials):
+            refreshed = refresh_oauth_token(credentials)
+            credentials = refreshed
+        self.set_credentials_provider(
+            OnyxStaticCredentialsProvider(
+                None, DocumentSource.LINEAR.value, credentials
+            )
+        )
+        return refreshed
+
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        self._ops = LinearSourceOperations(credentials_provider=credentials_provider)
+
+    def validate_connector_settings(self) -> None:
+        """One message names every missing team and project."""
+        missing_teams: list[str] = (
+            missing_team_keys(self.ops, self.team_keys) if self.team_keys else []
+        )
+        missing: list[str] = (
+            missing_projects(self.ops, self.project_names, self.project_slug_ids)
+            if self.project_names or self.project_slug_ids
+            else []
+        )
+        if missing_teams or missing:
+            raise scope_error(missing_teams, missing)
+
+    def _issue_filter(
+        self, start: datetime | None = None, end: datetime | None = None
+    ) -> dict[str, Any]:
+        return issue_filter(
+            self.team_keys,
+            project_filter(self.project_names, self.project_slug_ids),
+            start,
+            end,
+        )
 
     @classmethod
     def oauth_id(cls) -> DocumentSource:
@@ -146,184 +183,23 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
 
         token_data = response.json()
 
-        expire_at = time.time() + token_data[_EXPIRES_IN]
+        expire_at = time.time() + token_data[EXPIRES_IN]
 
         return {
-            _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
-            _EXPIRE_AT: int(expire_at),
-            _REFRESH_TOKEN: token_data[_REFRESH_TOKEN],
-        }
-
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        new_credentials = None
-
-        if "linear_api_key" in credentials:
-            self.linear_api_key = cast(str, credentials["linear_api_key"])
-        elif _ACCESS_TOKEN in credentials:
-            if _EXPIRE_AT not in credentials:
-                self.linear_api_key = "Bearer " + cast(str, credentials[_ACCESS_TOKEN])
-            elif credentials[_EXPIRE_AT] < time.time() + 300:  # 5-minute buffer
-                new_credentials = self.refresh_token(credentials)
-                self.linear_api_key = "Bearer " + cast(
-                    str, new_credentials[_ACCESS_TOKEN]
-                )
-            elif credentials[_EXPIRE_AT] >= time.time():
-                self.linear_api_key = "Bearer " + cast(str, credentials[_ACCESS_TOKEN])
-        else:
-            # May need to handle case in the future if the OAuth flow expires
-            raise ConnectorMissingCredentialError("Linear")
-
-        return new_credentials
-
-    def refresh_token(self, credentials: dict[str, Any]) -> dict[str, Any]:
-        if _REFRESH_TOKEN not in credentials:
-            raise ConnectorMissingCredentialError("Linear")
-
-        data = {
-            _REFRESH_TOKEN: credentials[_REFRESH_TOKEN],
-            "client_id": LINEAR_CLIENT_ID,
-            "client_secret": LINEAR_CLIENT_SECRET,
-            "grant_type": _REFRESH_TOKEN,
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-        response = request_with_retries(
-            method="POST",
-            url="https://api.linear.app/oauth/token",
-            data=data,
-            headers=headers,
-            backoff=0,
-            delay=0.1,
-        )
-        if not response.ok:
-            raise RuntimeError(f"Failed to refresh token: {response.text}")
-
-        token_data = response.json()
-
-        expire_at = time.time() + token_data[_EXPIRES_IN]
-
-        # Per RFC 6749 §6, the refresh response MAY omit refresh_token, in
-        # which case the existing one remains valid. Linear currently rotates
-        # refresh tokens on every refresh, but fall back defensively so a
-        # missing field doesn't force a full re-OAuth.
-        return {
-            _ACCESS_TOKEN: token_data[_ACCESS_TOKEN],
-            _EXPIRE_AT: int(expire_at),
-            _REFRESH_TOKEN: token_data.get(_REFRESH_TOKEN, credentials[_REFRESH_TOKEN]),
+            ACCESS_TOKEN: token_data[ACCESS_TOKEN],
+            EXPIRE_AT: int(expire_at),
+            REFRESH_TOKEN: token_data[REFRESH_TOKEN],
         }
 
     def _process_issues(
         self, start_str: datetime | None = None, end_str: datetime | None = None
     ) -> GenerateDocumentsOutput:
-        if self.linear_api_key is None:
-            raise ConnectorMissingCredentialError("Linear")
-
-        lte_filter = f'lte: "{end_str}"' if end_str else ""
-        gte_filter = f'gte: "{start_str}"' if start_str else ""
-        updatedAtFilter = f"""
-            {lte_filter}
-            {gte_filter}
-        """
-
-        query = (
-            """
-            query IterateIssueBatches($first: Int, $after: String) {
-                issues(
-                    orderBy: updatedAt,
-                    first: $first,
-                    after: $after,
-                    filter: {
-                        updatedAt: {
-        """
-            + updatedAtFilter
-            + """
-                        },
-
-                    }
-                ) {
-                    edges {
-                        node {
-                            id
-                            createdAt
-                            updatedAt
-                            archivedAt
-                            number
-                            title
-                            priority
-                            estimate
-                            sortOrder
-                            startedAt
-                            completedAt
-                            startedTriageAt
-                            triagedAt
-                            canceledAt
-                            autoClosedAt
-                            autoArchivedAt
-                            dueDate
-                            slaStartedAt
-                            slaBreachesAt
-                            trashed
-                            snoozedUntilAt
-                            team {
-                                name
-                            }
-                            creator {
-                                name
-                                email
-                            }
-                            assignee {
-                                name
-                                email
-                            }
-                            previousIdentifiers
-                            subIssueSortOrder
-                            priorityLabel
-                            identifier
-                            url
-                            branchName
-                            state {
-                                id
-                                name
-                            }
-                            customerTicketCount
-                            description
-                            comments {
-                                nodes {
-                                    url
-                                    body
-                                }
-                            }
-                        }
-                    }
-                    pageInfo {
-                        hasNextPage
-                        endCursor
-                    }
-                }
-            }
-        """
-        )
-
-        has_more = True
-        endCursor = None
-        while has_more:
-            graphql_query = {
-                "query": query,
-                "variables": {
-                    "first": self.batch_size,
-                    "after": endCursor,
-                },
-            }
-            logger.debug("Requesting issues from Linear with query: %s", graphql_query)
-
-            response = _make_query(graphql_query, self.linear_api_key)
-            response_json = response.json()
-            logger.debug("Raw response from Linear: %s", response_json)
-            edges = response_json["data"]["issues"]["edges"]
-
+        for nodes in self.ops.iterate_issues(
+            issue_filter=self._issue_filter(start_str, end_str),
+            page_size=self.batch_size,
+        ):
             documents: list[Document | HierarchyNode] = []
-            for edge in edges:
-                node = edge["node"]
+            for node in nodes:
                 # Create sections for description and comments
                 sections = [
                     TextSection(
@@ -369,6 +245,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                             k: str(v)
                             for k, v in {
                                 "team": (node.get("team") or {}).get("name"),
+                                "project": (node.get("project") or {}).get("name"),
                                 "creator": node.get("creator"),
                                 "assignee": node.get("assignee"),
                                 "state": (node.get("state") or {}).get("name"),
@@ -384,9 +261,6 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                     )
                 )
             yield documents
-
-            endCursor = response_json["data"]["issues"]["pageInfo"]["endCursor"]
-            has_more = response_json["data"]["issues"]["pageInfo"]["hasNextPage"]
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         yield from self._process_issues()
@@ -423,11 +297,3 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                 return NormalizationResult(normalized_url=identifier, use_default=False)
 
         return NormalizationResult(normalized_url=None, use_default=False)
-
-
-if __name__ == "__main__":
-    connector = LinearConnector()
-    connector.load_credentials({"linear_api_key": os.environ["LINEAR_API_KEY"]})
-
-    document_batches = connector.load_from_state()
-    print(next(document_batches))

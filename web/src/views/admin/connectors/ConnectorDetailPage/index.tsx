@@ -1,5 +1,6 @@
 "use client";
 
+import { isEditableSource } from "@/lib/connectors/edit/editable";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageLoader } from "@opal/loaders";
@@ -27,6 +28,7 @@ import {
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
 import InlineFileManagement from "./InlineFileManagement";
+import PendingBackfills from "@/views/admin/connectors/ConnectorDetailPage/PendingBackfills";
 import { SyncAttemptsTabs } from "./SyncAttemptsTabs";
 import { Section } from "@/layouts/general-layouts";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -53,6 +55,7 @@ import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
 import { useReIndexModal } from "./ReIndexModal";
 import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
 import {
+  SvgEdit,
   SvgPauseCircle,
   SvgPlayCircle,
   SvgRefreshCw,
@@ -89,6 +92,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
+  const editT = useTranslations("admin.connectorEdit");
   const locale = useLocale();
   const router = useRouter();
   const { user } = useUser();
@@ -535,6 +539,21 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
 
         <div className="ms-auto flex gap-x-2">
+          {!isDeleting &&
+            can(ccPair, "edit") &&
+            isEditableSource(ccPair.connector.source) && (
+              <Button
+                prominence="secondary"
+                icon={SvgEdit}
+                onClick={() =>
+                  router.push(
+                    `/admin/connectors/${ccPair.connector.source}/edit/${ccPair.id}`
+                  )
+                }
+              >
+                {editT("editButton.label")}
+              </Button>
+            )}
           {can(ccPair, "operate") && (
             <Dropdown>
               <Dropdown.Trigger asChild>
@@ -597,6 +616,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
             )}
           </AlertDescription>
         </Alert>
+      )}
+
+      {ccPair.pending_backfills.length > 0 && (
+        <div className="mt-6">
+          <PendingBackfills backfills={ccPair.pending_backfills} />
+        </div>
       )}
 
       <Title className="mb-2 mt-6" size="md">

@@ -197,7 +197,7 @@ dead (`RUNNER_STALE_AFTER_SECONDS` since its last heartbeat), the attach
 endpoint restarts it (`maybe_start_runner`) rather than waiting for it
 forever.
 
-`POST /sessions/{id}/interrupt` sets a fence the runner's
+`POST /sessions/{id}/interrupt` accepts an optional `turn_id` and sets a turn-scoped fence the runner's
 `interrupt_requested()` closure polls; the runner aborts the opencode turn
 and finishes with `CANCELLED`.
 
@@ -245,6 +245,20 @@ marker: it never reaches the browser as JSON, only as the literal SSE comment
 
 ---
 
+The streamed response remains visible until the server confirms completion and persisted history is available.
+`turnSettlement` owns this handoff with reconciling, failed, and ready states.
+Interactive completion and interruption use the same settlement path. Scheduled runs use their own saved run status as the completion boundary.
+Approval pauses and failed scheduled runs never release queued interactive work.
+Settlement reads turn status and messages independently of runtime discovery, artifacts, and navigation.
+Failures retain the transcript and expose a retry for that same settlement.
+The streaming hook claims ready queue work atomically, so repeated events or multiple mounted hooks cannot duplicate a send.
+A queued prompt remains in the queue until the server accepts its turn.
+Rejected queued starts remain available for explicit retry with the same request identity. Unrelated prompt failures do not authorize queue retries.
+A clean stream close reconnects while the backend turn remains active. A successor turn replaces the old completion owner.
+Stopping a pending start keeps cancellation intent until the accepted turn can be interrupted.
+Earlier session instances and turns cannot publish settlement results.
+Session metadata and artifacts may finish after a newer turn starts without replacing its transcript or status.
+
 ### Output inventory and panel navigation
 
 The frontend keeps a temporary output inventory in each Zustand session.
@@ -273,7 +287,8 @@ revisions. Completed shell and edit tools, including child-agent tools,
 schedule a refresh. The private queue in `useBuildStreaming.ts` combines rapid
 completions and reconciles when the stream settles, even if it missed every tool packet.
 Tool completions during a read coalesce into one pending refresh.
-Settlement replaces that pending work with one final read, queued immediately.
+A terminal stream observation replaces pending work with a final read.
+Canonical completion also starts an authoritative read. This covers recovery without a terminal packet.
 The store serializes all inventory reads per session, including focus and panel reads.
 A silent read cannot consume new files before pending turn discovery selects them.
 An already-settled turn also triggers reconciliation when the attach returns no stream.
@@ -312,6 +327,16 @@ Scheduled runs use fresh sessions; reattaching preserves their selection lock.
 Explicit file clicks still open their preview. The inventory keeps updating while navigation
 is suppressed, so old changes do not appear as new files later.
 Selecting the current history entry preserves Back and Forward history instead of adding a duplicate entry.
+
+Text, image, Markdown, and PDF viewers retain accepted payloads during refreshes and transient failures.
+Retained viewers show refresh progress and failure feedback.
+Welcome inline image and Markdown previews fill a bounded viewer; plain text grows with its content.
+Authorization and not-found responses purge accepted payloads from the viewer cache.
+Within a retained cache, preview remounts reuse matching revisions and reload changed revisions.
+Closing or evicting a viewer releases its cache. Reopening it reads the file again.
+Later transient failures cannot restore invalidated content without a successful read.
+Hidden viewers defer scheduled retries until activation.
+Presentation viewers hide cached slides during conversion because conversion replaces slide files.
 
 CSV files display a sticky-header table limited to 1,000 rows, 100 columns, and 5,000 cells.
 CSV viewers report malformed quoted fields and offer a raw download through the preview toolbar.
@@ -515,6 +540,20 @@ work against the default Kubernetes backend, follow
   deliberate (avoids double-driving a healthy turn) but reads as latency if
   you don't know the constant.
 
+Access-loss results stay in the file cache across remounts. Transient failures cannot restore revoked bytes.
+
+Preview retries stop when a viewer unmounts or its requested revision changes. Development effect replay reuses the pending request.
+
+A scheduled preview retry runs only while its failure remains current. Activation recovery makes the old retry obsolete.
+
 Welcome inline previews offer an original-file download. Presentation slide images own loading state by their URL.
 
 A failed presentation image displays an error. Changing the slide starts a new image load.
+
+
+Live text parts retain their OpenCode part ID across stream attachments. Delta packets append to that part. Authoritative snapshots replace its text in place. Text and thinking parts keep their position relative to tool events. Durable worker events retain delta text and the part ID. Persistence splits text at part or routing boundaries. Restoration combines segments of the same part before live snapshots replace them. Older saved rows without IDs retain their existing display behavior.
+
+Transport failures retain the visible transcript and reconnect while the backend owner remains active. Permanent access and missing-session failures stop observation and use session-load recovery, which blocks submission until a reload succeeds. Terminal packets, including interactive errors, reconcile saved history before clearing the turn. A failed completion read shows the existing retry action. Successful completion starts an authoritative output inventory read before it permits queued work.
+
+Restored child text parts own the child transcript. Parent task completion settles those parts without inserting their combined text again.
+The parent task result supplies a fallback only when no child response was saved.

@@ -592,3 +592,37 @@ def test_get_interactive_turn_events_waits_out_a_reclaimed_sandbox(
         turns_api.SSE_KEEPALIVE,
         'event: message\ndata: {"type":"text_chunk","text":"awake"}\n\n',
     ]
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_known_turn_returns_terminal_outcome_after_active_marker_clears(
+    monkeypatch: pytest.MonkeyPatch, failed: bool
+) -> None:
+    cache = FakeCache()
+    session_id, user_id = uuid4(), uuid4()
+    turn_id = _create_running_turn(cache, session_id=session_id, user_id=user_id)
+    finish_turn(
+        cache=cache,
+        turn_id=turn_id,
+        status=TURN_STATUS_FAILED if failed else TURN_STATUS_SUCCEEDED,
+        error_detail="provider failed" if failed else None,
+    )
+    monkeypatch.setattr(turns_api, "get_cache_backend", lambda: cache)
+    monkeypatch.setattr(
+        turns_api, "get_build_session", lambda *_: SimpleNamespace(id=session_id)
+    )
+    user = cast(User, SimpleNamespace(id=user_id))
+    db = cast(Session, SimpleNamespace())
+    assert turns_api.get_active_interactive_turn(session_id, user, db) is None
+    outcome = turns_api.get_interactive_turn(session_id, turn_id, user, db)
+    assert outcome is not None
+    assert outcome.status == ("FAILED" if failed else "SUCCEEDED")
+    assert outcome.error_detail == ("provider failed" if failed else None)
+    assert turns_api.get_interactive_turn(uuid4(), turn_id, user, db) is None
+    assert (
+        turns_api.get_interactive_turn(
+            session_id, turn_id, cast(User, SimpleNamespace(id=uuid4())), db
+        )
+        is None
+    )
+    assert turns_api.get_interactive_turn(session_id, uuid4(), user, db) is None

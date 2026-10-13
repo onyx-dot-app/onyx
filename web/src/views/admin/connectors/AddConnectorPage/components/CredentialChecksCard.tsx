@@ -28,7 +28,6 @@ import {
   SvgMinusCircle,
   SvgPlay,
   SvgRefreshCw,
-  SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
@@ -84,7 +83,7 @@ const CHECK_LOGS = {
   // A failed required check blocks, so `CheckLog` makes it heavy.
   failed: {
     variant: "error-light",
-    icon: SvgXCircle,
+    icon: SvgXOctagon,
     detail: "status.failed",
     font: OUTCOME_FONT,
     color: "status-error-05",
@@ -312,7 +311,7 @@ function CheckCardView({
   // "2 failed, 1 skipped, 5 successful". Zero counts are left out.
   const summary = useMemo(() => {
     if (notice) return notice;
-    if (!hasChecks) return isRunning ? t("running.label") : t("empty.label");
+    if (!hasChecks) return isRunning ? t("state.inProgress") : t("empty.label");
     const parts: Array<[string, number]> = [
       [t("summary.failed", { count: count("failed") }), count("failed")],
       [
@@ -349,14 +348,17 @@ function CheckCardView({
       title={t("title")}
       suffix={progress.suffix}
       // Expanded, a short state line keeps the header's height steady while
-      // the rows fold. A run that broke reads the same either way.
+      // the rows fold. A run that broke reads the same either way. Checks
+      // that wait for settings have not run, so the run is not complete.
       description={
         notice ??
         (collapsed
           ? summary
           : isRunning || inProgressCount > 0
             ? t("state.inProgress")
-            : t("state.completed"))
+            : expectedCount > 0
+              ? t("state.waiting")
+              : t("state.completed"))
       }
       sizePreset="main-content"
       variant="section"
@@ -466,7 +468,7 @@ function CheckCardView({
             ) : (
               !notice && (
                 <Text font="main-ui-body" color="text-03">
-                  {isRunning ? t("running.label") : t("empty.label")}
+                  {isRunning ? t("state.inProgress") : t("empty.label")}
                 </Text>
               )
             )}
@@ -495,17 +497,20 @@ export interface CredentialChecksCardProps {
   locked: boolean;
   /** Called when Start Checks starts the first run. */
   onStart?: () => void;
+  /** Set when the form edits this pair: the checks are dry runs of it. */
+  ccPairId?: number | null;
 }
 export default function CredentialChecksCard({
   source,
   credential,
   locked,
   onStart,
+  ccPairId = null,
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
   useResetChecksOnCredentialChange({ source, credential });
-  const checks = useConnectorChecks({ source, credential });
+  const checks = useConnectorChecks({ source, credential, ccPairId });
   useConnectorChecksAutoRun(checks);
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {

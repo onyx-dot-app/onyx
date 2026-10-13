@@ -29,8 +29,9 @@ import {
 } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Settings, Tier, toSettings } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Settings, toSettings } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import type { RichStr } from "@opal/types";
 import type {

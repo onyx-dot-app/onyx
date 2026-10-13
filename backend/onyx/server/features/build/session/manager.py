@@ -60,6 +60,10 @@ from onyx.server.features.build.db.sandbox import (
     get_snapshots_for_session,
     update_sandbox_heartbeat,
 )
+from onyx.server.features.build.interactive_turns.state import (
+    acquire_active_turn_lock,
+    get_active_turn,
+)
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     FilesystemEntry,
@@ -1005,32 +1009,50 @@ class SessionManager:
             user_id,
         )
 
-    def interrupt_message(self, session_id: UUID, user_id: UUID) -> bool:
-        """Interrupt the in-flight agent turn for a session.
-
-        Two complementary signals: the interrupt fence covers the whole turn
-        lifecycle (a turn that hasn't POSTed its prompt yet cancels at the
-        fence check; the runner's consume loop polls it ~1/s and records the
-        turn CANCELLED), and a direct best-effort abort to opencode stops the
-        sandbox-side work even when no live runner is polling the fence
-        (dead/blocked runner, other replica).
-        """
+    def interrupt_message(
+        self, session_id: UUID, user_id: UUID, turn_id: UUID | None = None
+    ) -> bool:
+        """Cancel the selected turn without leaving a fence for a successor."""
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        cache = get_cache_backend()
+        lock = acquire_active_turn_lock(cache, session_id)
+        try:
+            active = get_active_turn(
+                cache=cache, session_id=session_id, user_id=user_id
+            )
+            if turn_id is not None and (active is None or active.turn_id != turn_id):
+                return False
+            selected_turn_id = active.turn_id if active is not None else None
+            if active is not None:
+                request_interrupt(active.turn_id, cache)
+        finally:
+            lock.release()
 
-        request_interrupt(session_id, get_cache_backend())
-
-        if session.opencode_session_id:
-            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-            if sandbox is not None and sandbox.status.is_active():
-                start_thread_with_context(
-                    target=self._sandbox_manager.abort_opencode_session,
-                    name=f"interrupt-abort-{session_id}",
-                    daemon=True,
-                    args=(sandbox.id, session_id, session.opencode_session_id),
+        if (
+            not session.opencode_session_id
+            or sandbox is None
+            or not sandbox.status.is_active()
+        ):
+            return selected_turn_id is not None
+        with self._sandbox_manager.prepare_opencode_abort(
+            sandbox.id, session_id, session.opencode_session_id
+        ) as abort:
+            if abort is None:
+                return selected_turn_id is not None
+            lock = acquire_active_turn_lock(cache, session_id)
+            try:
+                active = get_active_turn(
+                    cache=cache, session_id=session_id, user_id=user_id
                 )
-        return True
+                if (active.turn_id if active is not None else None) != selected_turn_id:
+                    return selected_turn_id is not None
+                abort()
+                return True
+            finally:
+                lock.release()
 
     def subscribe_to_existing_session_events(
         self,
@@ -1827,6 +1849,12 @@ class SessionManager:
         Raises:
             ValueError: If session not found or upload limits exceeded
         """
+        # The session row owns stored-file quota across concurrent API requests.
+        session = get_build_session(
+            session_id, user_id, self._db_session, for_update=True
+        )
+        if session is None:
+            raise ValueError("Session not found")
         _, sandbox = self._require_session_and_sandbox(session_id, user_id)
 
         # Check upload limits

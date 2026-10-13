@@ -1,5 +1,6 @@
 import { FiCircle, FiList, FiTool } from "react-icons/fi";
 import type { useTranslations } from "next-intl";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   Packet,
   PacketType,
@@ -132,41 +133,37 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
   }
 }
 
-export function getToolIcon(packets: Packet[]): React.ReactNode {
+export function getToolIcon(packets: Packet[]): IconFunctionComponent {
   const firstPacket = packets[0];
-  if (!firstPacket) return <FiCircle className="w-3.5 h-3.5" />;
+  if (!firstPacket) return FiCircle;
 
   switch (firstPacket.obj.type) {
     case PacketType.SEARCH_TOOL_START: {
       const searchState = constructCurrentSearchState(
         packets as SearchToolPacket[]
       );
-      return searchState.isInternetSearch ? (
-        <SvgGlobe className="w-3.5 h-3.5" />
-      ) : (
-        <SvgSearchMenu className="w-3.5 h-3.5" />
-      );
+      return searchState.isInternetSearch ? SvgGlobe : SvgSearchMenu;
     }
     case PacketType.PYTHON_TOOL_START:
-      return <SvgTerminal className="w-3.5 h-3.5" />;
+      return SvgTerminal;
     case PacketType.FETCH_TOOL_START:
-      return <SvgLink className="w-3.5 h-3.5" />;
+      return SvgLink;
     case PacketType.CUSTOM_TOOL_START:
-      return <FiTool className="w-3.5 h-3.5" />;
+      return FiTool;
     case PacketType.IMAGE_GENERATION_TOOL_START:
-      return <SvgImage className="w-3.5 h-3.5" />;
+      return SvgImage;
     case PacketType.DEEP_RESEARCH_PLAN_START:
-      return <FiList className="w-3.5 h-3.5" />;
+      return FiList;
     case PacketType.RESEARCH_AGENT_START:
-      return <SvgUser className="w-3.5 h-3.5" />;
+      return SvgUser;
     case PacketType.CODING_AGENT_START:
-      return <SvgCode className="w-3.5 h-3.5" />;
+      return SvgCode;
     case PacketType.REASONING_START:
-      return <SvgSlowTime className="w-3.5 h-3.5" />;
+      return SvgSlowTime;
     case PacketType.MEMORY_TOOL_START:
     case PacketType.MEMORY_TOOL_NO_ACCESS:
-      return <SvgBookOpen className="w-3.5 h-3.5" />;
+      return SvgBookOpen;
     default:
-      return <SvgCircle className="w-3.5 h-3.5" />;
+      return SvgCircle;
   }
 }

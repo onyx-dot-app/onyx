@@ -508,10 +508,6 @@ def resolve_model_mode(model_name: str) -> str:
     return _mode_from_name(model_name)
 
 
-def is_embedding_model_name(model_name: str) -> bool:
-    return resolve_model_mode(model_name) == "embedding"
-
-
 def is_non_chat_model_name(model_name: str) -> bool:
     """Should this name stay out of chat-model listings?"""
     return resolve_model_mode(model_name) not in CHAT_MODES

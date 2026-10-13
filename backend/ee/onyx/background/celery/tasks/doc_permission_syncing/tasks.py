@@ -573,6 +573,7 @@ def connector_permission_sync_generator_task(
                     db_session,
                     enforce_creation=False,
                     trigger=CapabilityCheckTrigger.PERM_SYNC_ATTEMPT,
+                    user=None,
                 )
                 if not created:
                     task_logger.warning(

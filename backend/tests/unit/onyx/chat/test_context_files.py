@@ -1,7 +1,7 @@
 """Tests for the unified context file extraction logic (Phase 5).
 
 Covers:
-- resolve_context_user_files: precedence rule (custom persona supersedes project)
+- resolve_context_user_files: combined project and custom persona files
 - extract_context_files: all-or-nothing context window fit check
 - Search filter / search_usage determination in the caller
 """
@@ -9,14 +9,22 @@ Covers:
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
-from onyx.chat.models import ExtractedContextFiles, FileToolMetadata
+import pytest
+
+from onyx.chat.models import (
+    AvailableFiles,
+    ExtractedContextFiles,
+    FileToolMetadata,
+    SearchParams,
+)
 from onyx.chat.process_message import (
+    _collect_available_file_ids,
     determine_search_params,
     extract_context_files,
     resolve_context_user_files,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.db.models import UserFile
+from onyx.db.models import ChatMessage, UserFile
 from onyx.db.user_file import capture_user_file_metadata
 from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
 from onyx.tools.models import SearchToolUsage
@@ -71,84 +79,95 @@ def _make_in_memory_file(
 
 
 class TestResolveContextUserFiles:
-    """Precedence rule: custom persona fully supersedes project."""
-
-    def test_custom_persona_with_files_returns_persona_files(self) -> None:
-        persona_files = [_make_user_file(), _make_user_file()]
-        persona = _make_persona(persona_id=42, user_files=persona_files)
-        db_session = MagicMock()
-
-        result = resolve_context_user_files(
-            persona=persona, project_id=99, user_id=uuid4(), db_session=db_session
-        )
-
-        assert result == persona_files
-
-    def test_custom_persona_without_files_returns_empty(self) -> None:
-        """Custom persona with no files should NOT fall through to project."""
-        persona = _make_persona(persona_id=42, user_files=[])
-        db_session = MagicMock()
-
-        result = resolve_context_user_files(
-            persona=persona, project_id=99, user_id=uuid4(), db_session=db_session
-        )
-
-        assert result == []
-
-    def test_custom_persona_none_files_returns_empty(self) -> None:
-        """Custom persona with user_files=None should NOT fall through."""
-        persona = _make_persona(persona_id=42, user_files=None)
-        db_session = MagicMock()
-
-        result = resolve_context_user_files(
-            persona=persona, project_id=99, user_id=uuid4(), db_session=db_session
-        )
-
-        assert result == []
-
-    @patch("onyx.chat.process_message.get_user_files_from_project")
-    def test_default_persona_in_project_returns_project_files(
-        self, mock_get_files: MagicMock
+    @pytest.mark.parametrize("persona_id", [DEFAULT_PERSONA_ID, 42])
+    @pytest.mark.parametrize("has_project", [False, True])
+    @pytest.mark.parametrize("has_persona_files", [False, True])
+    def test_combines_selected_files(
+        self, persona_id: int, has_project: bool, has_persona_files: bool
     ) -> None:
-        project_files = [_make_user_file(), _make_user_file()]
-        mock_get_files.return_value = project_files
-        persona = _make_persona(persona_id=DEFAULT_PERSONA_ID)
-        user_id = uuid4()
-        db_session = MagicMock()
-
-        result = resolve_context_user_files(
-            persona=persona, project_id=99, user_id=user_id, db_session=db_session
+        project_file: UserFile = _make_user_file()
+        persona_file: UserFile = _make_user_file()
+        persona: MagicMock = _make_persona(
+            persona_id, [persona_file] if has_persona_files else []
         )
+        db_session: MagicMock = MagicMock()
+        user_id: UUID = uuid4()
+        with patch(
+            "onyx.chat.process_message.get_user_files_from_project",
+            return_value=[project_file],
+        ) as get_files:
+            result: list[UserFile] = resolve_context_user_files(
+                persona, 99 if has_project else None, user_id, db_session
+            )
+        expected: list[UserFile] = [project_file] if has_project else []
+        if persona_id != DEFAULT_PERSONA_ID and has_persona_files:
+            expected.append(persona_file)
+        assert result == expected
+        if has_project:
+            get_files.assert_called_once_with(
+                project_id=99, user_id=user_id, db_session=db_session
+            )
+        else:
+            get_files.assert_not_called()
 
-        assert result == project_files
-        mock_get_files.assert_called_once_with(
-            project_id=99, user_id=user_id, db_session=db_session
-        )
+    def test_shared_file_is_selected_once_and_allowlist_keeps_history(self) -> None:
+        shared_file: UserFile = _make_user_file()
+        persona_file: UserFile = _make_user_file()
+        persona: MagicMock = _make_persona(42, [shared_file, persona_file])
+        attachment_id: UUID = uuid4()
+        history: list[ChatMessage] = [
+            ChatMessage(
+                files=[
+                    {"id": str(attachment_id), "type": ChatFileType.PLAIN_TEXT},
+                    {"id": "invalid", "type": ChatFileType.PLAIN_TEXT},
+                ]
+            )
+        ]
+        with patch(
+            "onyx.chat.process_message.get_user_files_from_project",
+            return_value=[shared_file, shared_file],
+        ):
+            selected: list[UserFile] = resolve_context_user_files(
+                persona, 99, uuid4(), MagicMock()
+            )
+        assert selected == [shared_file, persona_file]
+        available: AvailableFiles = _collect_available_file_ids(history, selected)
+        assert set(available.user_file_ids) == {shared_file.id, persona_file.id}
+        assert available.chat_file_ids == [attachment_id]
 
-    def test_default_persona_no_project_returns_empty(self) -> None:
-        persona = _make_persona(persona_id=DEFAULT_PERSONA_ID)
-        db_session = MagicMock()
-
-        result = resolve_context_user_files(
-            persona=persona, project_id=None, user_id=uuid4(), db_session=db_session
-        )
-
-        assert result == []
-
-    @patch("onyx.chat.process_message.get_user_files_from_project")
-    def test_custom_persona_without_files_ignores_project(
-        self, mock_get_files: MagicMock
-    ) -> None:
-        """Even with a project_id, custom persona means project is invisible."""
-        persona = _make_persona(persona_id=7, user_files=[])
-        db_session = MagicMock()
-
-        result = resolve_context_user_files(
-            persona=persona, project_id=99, user_id=uuid4(), db_session=db_session
-        )
-
-        assert result == []
-        mock_get_files.assert_not_called()
+    @pytest.mark.parametrize("tokens_per_file", [100, 4000])
+    def test_combined_files_share_the_prompt_budget(self, tokens_per_file: int) -> None:
+        project_file: UserFile = _make_user_file(tokens_per_file, "project.txt")
+        persona_file: UserFile = _make_user_file(tokens_per_file, "agent.txt")
+        persona: MagicMock = _make_persona(42, [project_file, persona_file])
+        with (
+            patch(
+                "onyx.chat.process_message.get_user_files_from_project",
+                return_value=[project_file],
+            ),
+            patch(
+                "onyx.chat.process_message.load_in_memory_chat_files",
+                return_value=[
+                    _make_in_memory_file(project_file.file_id, "Project evidence"),
+                    _make_in_memory_file(persona_file.file_id, "Agent evidence"),
+                ],
+            ) as load,
+        ):
+            selected: list[UserFile] = resolve_context_user_files(
+                persona, 99, uuid4(), MagicMock()
+            )
+            extracted: ExtractedContextFiles = extract_context_files(
+                capture_user_file_metadata(selected), 10000, 0
+            )
+        assert extracted.uncapped_token_count == 2 * tokens_per_file
+        if tokens_per_file == 100:
+            assert extracted.file_texts == ["Project evidence", "Agent evidence"]
+            assert not extracted.use_as_search_filter
+            load.assert_called_once()
+        else:
+            assert extracted.file_texts == []
+            assert extracted.use_as_search_filter
+            load.assert_not_called()
 
 
 # ===========================================================================
@@ -492,7 +511,7 @@ class TestExtractContextFiles:
 class TestSearchFilterDetermination:
     """Verify that determine_search_params correctly resolves
     project_id_filter, persona_id_filter, and search_usage based on
-    the extraction result and the precedence rule.
+    the extraction result and both file scopes.
     """
 
     @staticmethod
@@ -524,19 +543,19 @@ class TestSearchFilterDetermination:
         assert result.persona_id_filter is None
         assert result.search_usage == SearchToolUsage.AUTO
 
-    def test_custom_persona_files_overflow_persona_filter(self) -> None:
-        """Custom persona, files overflow → persona_id filter, AUTO."""
+    def test_custom_persona_project_files_overflow_combines_filters(self) -> None:
+        """Combined files overflow: search both scopes with the persona policy."""
         result = determine_search_params(
             persona_id=42,
             project_id=99,
             extracted_context_files=self._make_context(use_as_search_filter=True),
         )
         assert result.persona_id_filter == 42
-        assert result.project_id_filter is None
+        assert result.project_id_filter == 99
         assert result.search_usage == SearchToolUsage.AUTO
 
-    def test_custom_persona_no_files_no_project_leak(self) -> None:
-        """Custom persona (no files) in project → nothing leaks from project."""
+    def test_custom_persona_empty_context_keeps_search_policy(self) -> None:
+        """An empty combined context keeps the custom persona search policy."""
         result = determine_search_params(
             persona_id=42,
             project_id=99,
@@ -592,43 +611,24 @@ class TestSearchFilterDetermination:
         )
         assert result.search_usage == SearchToolUsage.DISABLED
 
-    def test_persona_and_project_filters_are_mutually_exclusive(self) -> None:
-        """persona_id_filter and project_id_filter must never both be set.
-
-        The two are knowledge-scope triggers for different ownership models
-        (custom-persona files vs. project files); the precedence rule routes to
-        exactly one. This invariant guards against a future refactor of the
-        if/else in determine_search_params silently setting both — which would
-        OR a custom persona's files together with project files.
-        """
-        scenarios = [
-            # (persona_id, project_id, use_as_search_filter)
-            (42, 99, True),  # custom persona in a project, files overflow
-            (42, 99, False),  # custom persona in a project, files fit
-            (42, None, True),  # custom persona, no project, files overflow
-            (DEFAULT_PERSONA_ID, 99, True),  # default persona, project overflow
-            (DEFAULT_PERSONA_ID, 99, False),  # default persona, project fits
-            (DEFAULT_PERSONA_ID, None, True),  # default persona, no project
-        ]
-        for persona_id, project_id, overflow in scenarios:
-            result = determine_search_params(
-                persona_id=persona_id,
-                project_id=project_id,
-                extracted_context_files=self._make_context(
-                    use_as_search_filter=overflow,
-                    uncapped_token_count=7000 if overflow else 100,
-                ),
-            )
-            assert not (
-                result.persona_id_filter is not None
-                and result.project_id_filter is not None
-            ), (
-                "persona_id_filter and project_id_filter must never both be set "
-                f"(persona_id={persona_id}, project_id={project_id}, "
-                f"overflow={overflow}): got persona_id_filter="
-                f"{result.persona_id_filter}, project_id_filter="
-                f"{result.project_id_filter}"
-            )
+    @pytest.mark.parametrize("persona_id", [DEFAULT_PERSONA_ID, 42])
+    @pytest.mark.parametrize("project_id", [None, 99])
+    @pytest.mark.parametrize("overflow", [False, True])
+    def test_overflow_selects_all_available_scopes(
+        self, persona_id: int, project_id: int | None, overflow: bool
+    ) -> None:
+        result: SearchParams = determine_search_params(
+            persona_id=persona_id,
+            project_id=project_id,
+            extracted_context_files=self._make_context(
+                use_as_search_filter=overflow,
+                uncapped_token_count=7000 if overflow else 100,
+            ),
+        )
+        assert result.project_id_filter == (project_id if overflow else None)
+        assert result.persona_id_filter == (
+            persona_id if overflow and persona_id != DEFAULT_PERSONA_ID else None
+        )
 
 
 class TestContextFileStagingFlag:

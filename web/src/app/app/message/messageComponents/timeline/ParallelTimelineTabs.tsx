@@ -143,12 +143,10 @@ export function ParallelTimelineTabs({
                   <Tabs.Trigger
                     key={step.key}
                     value={step.key}
+                    icon={getToolIcon(step.packets)}
                     isLoading={loadingStates.get(step.key)}
                   >
-                    <span className="flex items-center gap-1.5">
-                      {getToolIcon(step.packets)}
-                      {getToolName(step.packets, t)}
-                    </span>
+                    {getToolName(step.packets, t)}
                   </Tabs.Trigger>
                 ))}
               </Tabs.List>

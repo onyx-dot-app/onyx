@@ -23,7 +23,10 @@ from onyx.connectors.edit_plan.planner import (
     compute_edit_plan,
     ensure_edit_is_plannable,
 )
-from onyx.connectors.edit_plan.state import fetch_current_pair_state
+from onyx.connectors.edit_plan.state import (
+    fetch_current_pair_state,
+    fetch_proposed_credential,
+)
 from onyx.connectors.edit_plan.store import compute_base_state_hash, save_edit_plan
 from onyx.connectors.factory import (
     source_prune_honors_indexing_start,
@@ -39,30 +42,12 @@ from onyx.db.connector_edit_requests import (
     has_restartable_attempt,
     has_scoped_backfill_outstanding,
 )
-from onyx.db.credentials import credential_usable_for_source, fetch_credential_by_id
+from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.models import Credential, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
-
-
-def _fetch_proposed_credential(
-    db_session: Session, current: CurrentPairState, proposed: ProposedPairState
-) -> Credential:
-    credential = fetch_credential_by_id(proposed.credential_id, db_session)
-    if credential is None:
-        raise OnyxError(
-            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
-            f"Credential {proposed.credential_id} does not exist.",
-        )
-    if not credential_usable_for_source(credential, current.source):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Credential {credential.id} cannot be used by a "
-            f"{current.source.value} connector.",
-        )
-    return credential
 
 
 def _validate_proposed_state(
@@ -116,7 +101,8 @@ def plan_connector_edit(
     proposed state, and reads the pair's cached dry-run results for the
     slower checks. Like any connector construction, the validation can store
     a credential that the connector refreshed. The caller authorizes the user
-    for the pair and the proposed credential.
+    for the pair; ``fetch_proposed_credential`` holds them to the credential
+    use rule.
 
     Raises:
         OnyxError: The pair or credential does not exist, the edit cannot be
@@ -152,9 +138,12 @@ def plan_connector_edit(
             source=current.source,
             access_type=proposed.access_type,
             data_access_group_ids=proposed.data_access_group_ids,
+            current_access_type=current.access_type,
         )
 
-    credential = _fetch_proposed_credential(db_session, current, proposed)
+    credential = fetch_proposed_credential(
+        db_session, user=user, current=current, proposed=proposed
+    )
     validation = _validate_proposed_state(db_session, current, proposed, credential)
     dry_run_results = (
         get_cc_pair_dry_run_results(

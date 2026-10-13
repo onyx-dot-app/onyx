@@ -416,8 +416,14 @@ class CCPairManager:
         after: datetime,
         user_performing_action: DATestUser,
         timeout: float = MAX_DELAY,
+        fail_on_repeated_error: bool = False,
     ) -> None:
-        """after: Wait for an indexing success time after this time"""
+        """after: Wait for an indexing success time after this time
+
+        fail_on_repeated_error: raise as soon as the pair enters the repeated
+        error state. A connector without a refresh frequency enters it after one
+        failed attempt, and the scheduler does not retry it, so waiting longer
+        cannot succeed."""
         start = time.monotonic()
         while True:
             fetched_cc_pairs = CCPairManager.get_indexing_statuses(
@@ -436,6 +442,12 @@ class CCPairManager:
                 ):
                     print(f"Indexing complete: cc_pair={cc_pair.id}")
                     return
+
+                if fail_on_repeated_error and fetched_cc_pair.in_repeated_error_state:
+                    raise RuntimeError(
+                        f"Indexing failed and will not be retried: cc_pair={cc_pair.id} "
+                        f"last_status={fetched_cc_pair.last_status}"
+                    )
 
             elapsed = time.monotonic() - start
             if elapsed > timeout:

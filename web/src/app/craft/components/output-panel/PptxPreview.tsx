@@ -69,9 +69,7 @@ export default function PptxPreview({
       ...(await fetchPptxPreview(sessionId, filePath)),
       imageRevision: crypto.randomUUID(),
     }),
-    revision,
-    refreshKey,
-    isActive
+    { revision, refreshKey, isActive }
   );
 
   const layoutVisible: boolean =
@@ -176,7 +174,7 @@ export default function PptxPreview({
     }
   }
 
-  if (isLoading) {
+  if (isLoading && isActive) {
     return (
       <Section
         height="full"

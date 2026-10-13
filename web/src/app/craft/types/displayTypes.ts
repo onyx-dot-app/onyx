@@ -94,8 +94,20 @@ export interface ToolCallState {
  * These are stored in chronological order and rendered directly.
  */
 export type StreamItem =
-  | { type: "text"; id: string; content: string; isStreaming: boolean }
-  | { type: "thinking"; id: string; content: string; isStreaming: boolean }
+  | {
+      type: "text";
+      id: string;
+      content: string;
+      isStreaming: boolean;
+      partId?: string;
+    }
+  | {
+      type: "thinking";
+      id: string;
+      content: string;
+      isStreaming: boolean;
+      partId?: string;
+    }
   | { type: "tool_call"; id: string; toolCall: ToolCallState }
   | { type: "todo_list"; id: string; todoList: TodoListState }
   | {

@@ -83,9 +83,15 @@ export type ToolName =
   | "invalid"
   | "unknown";
 
+export interface TextPartUpdate {
+  partId: string;
+  snapshotText?: string;
+}
+
 export interface ParsedTextChunk {
   type: "text_chunk";
   text: string;
+  part?: TextPartUpdate;
   /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
   sessionId: string | null;
   /** Non-null only for subagent child events — the parent opencode session. */
@@ -95,6 +101,7 @@ export interface ParsedTextChunk {
 export interface ParsedThinkingChunk {
   type: "thinking_chunk";
   text: string;
+  part?: TextPartUpdate;
   /** Opencode session this event was emitted on — child's id for subagent child events, else null. */
   sessionId: string | null;
   /** Non-null only for subagent child events — the parent opencode session. */

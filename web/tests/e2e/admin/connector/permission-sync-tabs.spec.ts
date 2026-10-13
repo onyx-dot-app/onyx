@@ -102,6 +102,7 @@ function syncCCPairFixture() {
     permission_syncing: false,
     last_permission_sync_attempt_finished: null,
     last_permission_sync_attempt_error_message: null,
+    pending_backfills: [],
   };
 }
 

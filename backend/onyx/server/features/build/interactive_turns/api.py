@@ -125,6 +125,22 @@ def get_active_interactive_turn(
     return InteractiveTurnResponse.from_turn(turn) if turn else None
 
 
+@router.get("/sessions/{session_id}/turns/{turn_id}", tags=PUBLIC_API_TAGS)
+def get_interactive_turn(
+    session_id: UUID,
+    turn_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> InteractiveTurnResponse | None:
+    """Return a known turn's outcome, including terminal states."""
+    if get_build_session(session_id, user.id, db_session) is None:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+    turn = get_turn(get_cache_backend(), turn_id)
+    if turn is None or turn.session_id != session_id or turn.user_id != user.id:
+        return None
+    return InteractiveTurnResponse.from_turn(turn)
+
+
 @router.get("/sessions/{session_id}/turns/{turn_id}/events", tags=PUBLIC_API_TAGS)
 def get_interactive_turn_events(
     session_id: UUID,

@@ -181,6 +181,7 @@ export interface ApiInteractiveTurnResponse {
   session_id: string;
   status: InteractiveTurnStatus;
   turn_index: number;
+  error_detail?: string | null;
 }
 
 export interface ApiArtifactResponse {

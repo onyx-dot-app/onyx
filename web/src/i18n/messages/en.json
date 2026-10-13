@@ -1860,9 +1860,6 @@
           "restoreTooltip": "Restore Default"
         },
         "description": "Specify how long {appName} should retain chats in your organization.",
-        "enterprisePlanTag": {
-          "label": "Enterprise Plan"
-        },
         "forever": {
           "label": "Forever"
         },
@@ -1878,16 +1875,11 @@
           "message": "Chats with no activity for longer than {days, plural, one {# day} other {# days}} will be permanently deleted. This cannot be undone.",
           "title": "Reduce chat retention?"
         },
-        "tierTooltip": "Chat history retention is an Enterprise Plan feature.",
         "title": "Keep Chat History"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business Plan"
-        },
         "description": "UI mode for quick document search across your organization.",
         "noConnectorsTooltip": "Set up connectors to use Search Mode",
-        "tierTooltip": "Search Mode requires the Business or Enterprise plan.",
         "title": "Search Mode"
       },
       "systemPrompt": {
@@ -2637,6 +2629,18 @@
           "description": "Microsoft Graph host. Use https://graph.microsoft.us for GCC High or DoD."
         }
       },
+      "linear": {
+        "description": "Configure Linear connector",
+        "teams": {
+          "label": "Teams",
+          "description": "Linear team keys (e.g. ENG) to index. Leave empty to index every team the connected user can see."
+        },
+        "projects": {
+          "label": "Projects",
+          "description": "Linear project names or URLs to index. Leave empty to index every project. With teams set too, an issue must match both."
+        },
+        "syncNotice": "Connect as a workspace member, not a guest, who belongs to every private team you want to index. Onyx cannot see private teams the connected user is not in. Issues in public teams are searchable by every workspace member, and issues in private or restricted teams by their members."
+      },
       "add": {
         "authorizeButton": {
           "label": "Authorize with {source}",
@@ -2763,7 +2767,28 @@
           },
           "rerunFailed": {
             "toast": "Couldn't start the checks. Try again."
+          },
+          "shareSaved": {
+            "toast": "Sharing updated."
+          },
+          "shareFailed": {
+            "toast": "Couldn't change who can use this account. Try again."
+          },
+          "renameSaved": {
+            "toast": "Account renamed."
+          },
+          "renameFailed": {
+            "toast": "Couldn't rename this account. Try again."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Only the person who added this account can make it private."
+          },
+          "shareLocked": {
+            "tooltip": "Only the person who added this account, or an admin it is shared with, can change who may use it."
           }
+        },
+        "accountUnavailable": {
+          "toast": "This account is no longer available to you. Pick another account."
         }
       },
       "credentialRequired": {
@@ -5227,6 +5252,10 @@
         "orSeparator": {
           "label": "or"
         },
+        "quantizationOnly": {
+          "description": "Only the vector quantization changed, so Onyx rebuilds the index from the stored vectors without re-embedding. This is much faster than a full re-index.",
+          "title": "The index will be rebuilt."
+        },
         "reindex": {
           "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "A full re-index will run."
@@ -5447,7 +5476,9 @@
         "cancelButton": {
           "label": "Cancel Re-index & Revert"
         },
+        "copyTitle": "Rebuilding the index…",
         "description": {
+          "copy": "Onyx is rebuilding the index from the stored vectors, without re-embedding. This is much faster than re-embedding.",
           "withModel": "New embedding settings (**{model}**) are being applied as re-indexing progresses. This may take **hours or days** depending on corpus size.",
           "withoutModel": "New embedding settings are being applied as re-indexing progresses. This may take **hours or days** depending on corpus size."
         },
@@ -5569,17 +5600,17 @@
         "googleProjectRequired": "GCP Project ID is required"
       },
       "vectorQuantization": {
-        "description": "Store document vectors with fewer bits to use less memory. Fewer bits can lower search quality.",
+        "description": "Store document vectors with fewer bits so vector search uses less memory. Fewer bits can lower search quality. Changing only this setting rebuilds the index from the stored vectors, without re-embedding.",
         "none": {
           "description": "Full 32-bit precision.",
           "label": "None"
         },
         "scalar1Bit": {
-          "description": "32x less memory. Needs OpenSearch 3.6 or later.",
+          "description": "The least vector search memory, with a small loss in search quality. Recommended for large indexes. Needs OpenSearch 3.6 or later.",
           "label": "1-bit"
         },
         "scalar7Bit": {
-          "description": "4x less memory. Almost no loss in search quality.",
+          "description": "About 4x less vector search memory. Almost no loss in search quality.",
           "label": "7-bit"
         },
         "title": "Vector Quantization"
@@ -5613,6 +5644,62 @@
         "e5SmallV2": "The smallest and fastest version of the E5 line of models. If you're running {appName} on a resource constrained system, then this may be a good choice.",
         "multilingualE5Base": "For corpora in other languages besides English, this is the one to choose.",
         "multilingualE5Small": "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Every chunk in the search index has its connector IDs. Search uses connector-level access.",
+            "off": "Every chunk in the search index has its connector IDs. Search uses the document access lists. Connector-level access is turned off.",
+            "shadow": "Every chunk in the search index has its connector IDs. Search uses the document access lists and compares them with connector-level access."
+          },
+          "title": "Connector access update complete"
+        },
+        "notStarted": {
+          "description": "A background job will add connector IDs to the existing chunks in the search index. It starts within a few minutes.",
+          "title": "Connector access update has not started"
+        },
+        "progress": {
+          "ariaLabel": "Connector access update progress"
+        },
+        "running": {
+          "description": "A background job adds connector IDs to the existing chunks in the search index. Connector-level search access can be enforced only after it completes.",
+          "title": "Updating the search index for connector access…"
+        },
+        "status": {
+          "connectors": "{done, number} of {total, number} connectors done",
+          "connectorsLeft": "{count, plural, one {# connector left} other {# connectors left}}",
+          "current": "Current connector: {name}",
+          "documentsLeft": "{count, plural, one {# document left} other {# documents left}}"
+        },
+        "mode": {
+          "description": "How search decides which documents a user can see.",
+          "enforcePending": "Enforce is set and starts when the update completes.",
+          "enforceUnavailable": "Available after the search index update completes.",
+          "label": "Search access mode",
+          "options": {
+            "enforce": {
+              "description": "Search uses connector-level access.",
+              "title": "Enforce"
+            },
+            "off": {
+              "description": "Search uses the document access lists.",
+              "title": "Off"
+            },
+            "shadow": {
+              "description": "Search uses the document access lists and logs where connector-level access gives a different result.",
+              "title": "Shadow"
+            }
+          },
+          "placeholder": "Select a mode",
+          "toasts": {
+            "error": "Could not update the search access mode.",
+            "success": "Search access mode set to {mode}."
+          }
+        },
+        "loadError": {
+          "description": "Reload the page to try again.",
+          "title": "Could not load the connector access update"
+        }
       }
     },
     "indexing": {
@@ -8989,9 +9076,6 @@
           "description": "When off, every gateway endpoint rejects requests, existing tokens stop working, and the gateway scope is hidden from the token picker. Craft sandbox traffic is controlled separately by the Craft settings."
         }
       },
-      "businessPlanTag": {
-        "label": "Business Plan"
-      },
       "tierTooltip": "The LLM Gateway requires the Business or Enterprise plan.",
       "scopeNote": {
         "title": "Each user configures their own token and connection details under Settings → LLM Gateway."
@@ -9031,9 +9115,6 @@
       "required": {
         "label": "Required"
       },
-      "running": {
-        "label": "Running checks…"
-      },
       "empty": {
         "label": "No checks have run yet."
       },
@@ -9057,7 +9138,235 @@
       "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
       "state": {
         "completed": "Checks completed.",
-        "inProgress": "Checks in progress…"
+        "inProgress": "Checks in progress...",
+        "waiting": "Waiting for connector settings..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Edit connector"
+      },
+      "header": {
+        "title": "Edit {name}",
+        "description": "Change the settings of this {source} connector. You review the plan before the changes are applied.",
+        "reviewButton": {
+          "label": "Review changes"
+        }
+      },
+      "loadError": {
+        "title": "Could not load the connector",
+        "description": "Reload the page, or go back to the connector.",
+        "backButton": {
+          "label": "Back to the connector"
+        }
+      },
+      "credentialSwap": {
+        "title": "You picked another credential",
+        "description": "The plan lets you keep the indexed documents, or re-index everything and prune the documents the new credential cannot see."
+      },
+      "files": {
+        "title": "Files",
+        "description": "Add or remove files. New files are indexed only after you apply the plan.",
+        "empty": "The connector has no files.",
+        "addButton": {
+          "label": "Add files"
+        },
+        "remove": {
+          "tooltip": "Remove {name}"
+        },
+        "uploadFailed": {
+          "toast": "Could not upload the files: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "Could not compute the plan: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Save the new account before you review the changes, or pick a saved account."
+      },
+      "applied": {
+        "toast": "The changes are applied."
+      },
+      "plan": {
+        "title": "Review the plan",
+        "description": "{count, plural, one {The connector has # indexed document.} other {The connector has # indexed documents.}}",
+        "changes": {
+          "list": "Changed: {fields}",
+          "none": "Nothing changed."
+        },
+        "stale": {
+          "title": "The connector changed",
+          "description": "The connector changed after this plan was computed. Compute the plan again before you apply.",
+          "replanButton": {
+            "label": "Plan again"
+          }
+        },
+        "expired": {
+          "title": "The plan expired",
+          "description": "This plan expired or was already applied. Compute the plan again."
+        },
+        "applyFailed": {
+          "title": "Could not apply the changes"
+        },
+        "validation": {
+          "title": "Validation",
+          "blocks": "The new settings failed validation. Fix them before you apply.",
+          "warns": "Some optional checks failed. You can still apply.",
+          "error": {
+            "title": "The settings are not valid"
+          }
+        },
+        "warnings": {
+          "title": "Warnings"
+        },
+        "notes": {
+          "title": "Notes"
+        },
+        "reconciliation": {
+          "title": "Choose how to reconcile the scope change",
+          "description": "The plan cannot tell if the change to {fields} adds or removes documents. Choose what apply does.",
+          "option": {
+            "prune": {
+              "title": "Prune",
+              "description": "Remove the documents that are no longer in scope."
+            },
+            "full_reindex": {
+              "title": "Full re-index",
+              "description": "Index everything again from the start date, to add the documents now in scope."
+            },
+            "both": {
+              "title": "Full re-index, then prune",
+              "description": "Index everything again, then remove the documents that are no longer in scope."
+            },
+            "nothing": {
+              "title": "Do nothing",
+              "description": "Keep the indexed documents. Later runs use the new settings."
+            }
+          }
+        },
+        "credential": {
+          "title": "Credential change",
+          "description": "Choose what happens to the documents indexed with the old credential.",
+          "option": {
+            "keep_indexed": {
+              "title": "Keep the indexed documents",
+              "description": "Later runs use the new credential. This is the fast path."
+            },
+            "full_reindex_and_prune": {
+              "title": "Full re-index and prune",
+              "description": "Index everything again with the new credential, then remove the documents it cannot see."
+            }
+          }
+        },
+        "steps": {
+          "title": "Steps",
+          "description": "What apply does, in order. You can turn off optional steps.",
+          "none": "Apply saves the settings. No indexing work is needed.",
+          "required": {
+            "label": "Required"
+          },
+          "optional": {
+            "label": "Optional"
+          },
+          "include": {
+            "ariaLabel": "Run the step: {step}"
+          },
+          "fields": "Fields: {fields}",
+          "window": "Window: {start} to {end}",
+          "windowFromStart": "Window: everything up to {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Update the data-access groups",
+              "description": "Search applies the new groups at once."
+            },
+            "access_type": {
+              "title": "Change the access type",
+              "description": "Who can read the documents changes."
+            },
+            "enter_perm_sync": {
+              "title": "Start permission sync",
+              "description": "The documents stay hidden until the first permission sync completes."
+            },
+            "leave_perm_sync": {
+              "title": "Stop permission sync",
+              "description": "The source's permissions no longer decide who reads the documents."
+            },
+            "restart_attempt": {
+              "title": "Restart the running index attempt",
+              "description": "The running attempt stops, and a new one starts with the new settings."
+            },
+            "full_reindex_then_prune": {
+              "title": "Full re-index, then prune",
+              "description": "Index everything again, then remove the documents the source no longer returns."
+            },
+            "full_reindex": {
+              "title": "Full re-index",
+              "description": "Index everything again from the start date."
+            },
+            "scoped_backfill": {
+              "title": "Backfill the added items",
+              "description": "Index the history of the added items only."
+            },
+            "window_backfill": {
+              "title": "Backfill the earlier window",
+              "description": "Index the time between the new and the old start date."
+            },
+            "prune": {
+              "title": "Prune",
+              "description": "Remove the documents the source no longer returns."
+            }
+          },
+          "reason": {
+            "identity_changed": "Document ids change",
+            "behavior_changed": "Processing changed",
+            "scope_widened": "Scope widened",
+            "scope_narrowed": "Scope narrowed",
+            "items_added_or_changed": "Items added or changed",
+            "items_removed": "Items removed",
+            "opaque_scope_choice": "Your scope choice",
+            "indexing_start_earlier": "Earlier start date",
+            "credential_full_path": "Credential full path",
+            "access_changed": "Access changed",
+            "permissions_fetched_during_indexing": "Permissions come with indexing",
+            "attempt_running": "An attempt is running",
+            "scoped_backfill_superseded": "An earlier backfill is replaced",
+            "admin_added": "Added by you",
+            "indexing_start_later": "Later start date"
+          }
+        },
+        "extra": {
+          "title": "Extra work",
+          "description": "Add work that the plan does not need.",
+          "fullReindex": {
+            "title": "Add a full re-index",
+            "description": "Index everything again from the start date."
+          },
+          "prune": {
+            "title": "Add a prune",
+            "description": "Remove the documents the source no longer returns."
+          }
+        },
+        "backButton": {
+          "label": "Back to editing"
+        },
+        "applyButton": {
+          "label": "Apply"
+        },
+        "blocked": {
+          "validation": "Fix the validation failures first.",
+          "reconciliation": "Choose how to reconcile the scope change first."
+        }
+      },
+      "pendingBackfills": {
+        "title": "Pending backfills",
+        "description": "An edit requested these runs. Each stays here until a run of it succeeds.",
+        "window": "{start} to {end}",
+        "windowFromStart": "Everything up to {end}",
+        "waiting": "Waits for its run.",
+        "runningNow": "An index attempt runs it now.",
+        "retry": "{count, plural, one {Failed once. Next retry: {time}.} other {Failed # times. Next retry: {time}.}}",
+        "scoped": "Added or changed items only",
+        "failures": "{count, plural, one {# failure} other {# failures}}"
       }
     }
   },
@@ -12081,6 +12390,24 @@
         "empty": "This sheet is empty.",
         "tooLarge": "This sheet is too large to preview — download the file to view it."
       }
+    },
+    "plans": {
+      "free": {
+        "title": "Free Plan",
+        "tooltip": "Available on every plan."
+      },
+      "business": {
+        "title": "Business Plan",
+        "tooltip": "Requires the [Business or Enterprise plan](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Enterprise Plan",
+        "tooltip": "Requires the [Enterprise plan](/admin/billing)."
+      },
+      "upgrade": {
+        "label": "Upgrade Plan"
+      },
+      "availableFor": "Available for {plan}"
     }
   },
   "craft": {
@@ -12424,6 +12751,17 @@
         "operationWait": "Please wait for the current operation to complete.",
         "sandboxWait": "Please wait for sandbox to initialize",
         "scheduledRunWait": "Please wait for the scheduled run to finish."
+      },
+      "loadError": {
+        "title": "Could not load the session",
+        "retry": "Try again"
+      },
+      "queuedSendError": {
+        "title": "Could not send the queued message"
+      },
+      "settlementError": {
+        "title": "Could not confirm task completion",
+        "description": "Try again to check the task and load its saved response."
       }
     },
     "compaction": {

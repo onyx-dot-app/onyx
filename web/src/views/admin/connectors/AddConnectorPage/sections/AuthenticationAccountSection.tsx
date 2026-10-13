@@ -18,6 +18,7 @@ import {
   toast,
 } from "@opal/layouts";
 import { Disabled } from "@opal/core";
+import { cn } from "@opal/utils";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type {
@@ -33,9 +34,10 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
+import { updateCredentialSharing } from "@/lib/credentials/svc";
 import { getIn, useFormikContext } from "formik";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import {
   NEW_ACCOUNT_FIELD,
   NEW_ACCOUNT_NAME_FIELD,
@@ -79,6 +81,8 @@ interface AuthenticationAccountSectionProps {
   checkedCredential: Credential<any> | DraftCredential | null;
   /** Locks the Start Checks prompt, as the configuration below is locked. */
   checksLocked: boolean;
+  /** Set when the form edits this pair: the checks are dry runs of it. */
+  editCCPairId?: number | null;
 }
 
 /**
@@ -95,6 +99,7 @@ export default function AuthenticationAccountSection({
   newAccountReady,
   checkedCredential,
   checksLocked,
+  editCCPairId = null,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const tCreate = useTranslations("admin.credentials.create");
@@ -120,9 +125,17 @@ export default function AuthenticationAccountSection({
   // Expanded, the section lists every account. Folded, only the chosen one
   // (or the new-account card when nothing is chosen) stays.
   const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
-  /** Folds the section. The new-account card closes too; expanding leaves it closed. */
+  // The saved accounts whose details are open.
+  const [openDetailIds, setOpenDetailIds] = useState<ReadonlySet<number>>(
+    () => new Set()
+  );
+  /**
+   * Folds the section. Every card's details close too, the new account's
+   * form and each saved account's; expanding leaves them closed.
+   */
   function foldAccounts() {
     close();
+    setOpenDetailIds(new Set());
     setAccountsExpanded(false);
   }
 
@@ -174,7 +187,31 @@ export default function AuthenticationAccountSection({
     if (currentCredential !== null) onCredentialChange(null);
   }, [newAccountKey, currentCredential, onCredentialChange]);
 
+  // A picked account that drops out of the list was un-shared or deleted by
+  // someone else: say so and drop the pick. Only an account the list has
+  // shown counts, so a just-created pick waits for the list to catch up.
+  const pickSeenRef = useRef<number | null>(null);
+  const deletingIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (credentials === undefined || selectedSavedId === null) return;
+    if (credentials.some((credential) => credential.id === selectedSavedId)) {
+      pickSeenRef.current = selectedSavedId;
+      return;
+    }
+    if (
+      pickSeenRef.current !== selectedSavedId ||
+      deletingIdRef.current === selectedSavedId
+    ) {
+      return;
+    }
+    pickSeenRef.current = null;
+    toast.error(t("add.accountUnavailable.toast"));
+    onCredentialChange(null);
+  }, [credentials, selectedSavedId, onCredentialChange, t]);
+
   async function onDeleteCredential(credential: Credential<any | null>) {
+    // The user's own delete is not an account going missing.
+    deletingIdRef.current = credential.id;
     const error = await remove(credential, t("add.unknownError.toast"));
     if (error === null) {
       // A deleted account cannot stay picked.
@@ -182,6 +219,7 @@ export default function AuthenticationAccountSection({
     } else {
       toast.error(error);
     }
+    deletingIdRef.current = null;
   }
 
   async function onSwap(selectedCredential: Credential<any>) {
@@ -257,12 +295,11 @@ export default function AuthenticationAccountSection({
                   )}
                 />
               </InputVertical>
-              {businessTier && (
-                <ShareAccountField
-                  namePrefix={NEW_ACCOUNT_FIELD}
-                  disabled={!newAccountReady}
-                />
-              )}
+              <ShareAccountField
+                namePrefix={NEW_ACCOUNT_FIELD}
+                disabled={!newAccountReady}
+                groupsLocked={!businessTier}
+              />
             </Section>
           </Disabled>
         </Section>
@@ -343,8 +380,27 @@ export default function AuthenticationAccountSection({
             : setAccountsExpanded(true)
         }
         onDelete={() => onDeleteCredential(credential)}
+        detailsOpen={openDetailIds.has(credential.id)}
+        onDetailsOpenChange={(open) =>
+          setOpenDetailIds((ids) => {
+            const next = new Set(ids);
+            if (open) next.add(credential.id);
+            else next.delete(credential.id);
+            return next;
+          })
+        }
         checkReport={checkReports.reportFor(credential.id)}
         onRerunChecks={() => checkReports.rerun(credential.id)}
+        groupsLocked={!businessTier}
+        // The sharing route also renames: it allows group managers, and
+        // checks that the user may edit the account.
+        onSaveAccount={async (update) => {
+          const response = await updateCredentialSharing(credential.id, update);
+          if (!response.ok) throw new Error(await response.text());
+          const saved: SimilarCredential = await response.json();
+          refresh();
+          return saved;
+        }}
       />
     );
   }
@@ -482,21 +538,23 @@ export default function AuthenticationAccountSection({
         <Section gap={6} alignItems="stretch" width="full">
           {/* One list in a fixed order. Folded, each card that is not the
           chosen one fades, then its height collapses, so the chosen card
-          moves up on its own. Each item holds its own spacing: a closed fold
-          takes no height, but a gap around it would stay. */}
+          moves up on its own. Every item but the first is spaced from the
+          one above inside its fold, so a closed item takes no space. */}
           <div className="flex flex-col">
-            {credentials.map((credential) => (
+            {credentials.map((credential, index) => (
               <Fold
                 key={credential.id}
                 open={accountsExpanded || credential.id === selectedSavedId}
                 keepMounted
               >
-                <div className="pb-2">{renderSavedCard(credential)}</div>
+                <div className={cn(index > 0 && "pt-2")}>
+                  {renderSavedCard(credential)}
+                </div>
               </Fold>
             ))}
             {canAuthorize && (
               <Fold open={accountsExpanded} keepMounted>
-                <div className="pb-2">
+                <div className={cn(credentials.length > 0 && "pt-2")}>
                   <Section flexDirection="row" justifyContent="start" gap={1}>
                     <Button
                       disabled={isAuthorizing}
@@ -519,7 +577,13 @@ export default function AuthenticationAccountSection({
               open={accountsExpanded || selectedSavedId === null}
               keepMounted
             >
-              {newAccountCard}
+              <div
+                className={cn(
+                  (credentials.length > 0 || canAuthorize) && "pt-2"
+                )}
+              >
+                {newAccountCard}
+              </div>
             </Fold>
           </div>
 
@@ -529,6 +593,7 @@ export default function AuthenticationAccountSection({
             locked={checksLocked || !checkedCredential}
             // Starting the checks completes the account step, so it folds.
             onStart={foldAccounts}
+            ccPairId={editCCPairId}
           />
         </Section>
       )}

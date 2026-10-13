@@ -238,4 +238,54 @@ describe("useBoundFieldsGate", () => {
     expect(mockedCheck).toHaveBeenCalledTimes(1);
     expect(result.current.gate.reason).toEqual({ kind: "runChecks" });
   });
+  it("sends no check when every bound field is the form-only realm", async () => {
+    const { result } = renderHook(() =>
+      useBoundFieldsGate(
+        params({
+          source: ValidSources.Zendesk,
+          boundFieldNames: ["zendesk_subdomain"],
+          boundFields: [
+            {
+              name: "zendesk_subdomain",
+              label: "Zendesk Subdomain",
+              missing: false,
+              invalid: false,
+            },
+          ],
+          values: { zendesk_subdomain: "acme" },
+        })
+      )
+    );
+    await flush();
+
+    expect(mockedCheck).not.toHaveBeenCalled();
+    expect(result.current.status).toBe("unlocked");
+  });
+
+  it("still locks while the form-only realm is empty", async () => {
+    const { result } = renderHook(() =>
+      useBoundFieldsGate(
+        params({
+          source: ValidSources.Zendesk,
+          boundFieldNames: ["zendesk_subdomain"],
+          boundFields: [
+            {
+              name: "zendesk_subdomain",
+              label: "Zendesk Subdomain",
+              missing: true,
+              invalid: false,
+            },
+          ],
+          values: { zendesk_subdomain: "" },
+        })
+      )
+    );
+    await flush();
+
+    expect(mockedCheck).not.toHaveBeenCalled();
+    expect(result.current.reason).toEqual({
+      kind: "enterField",
+      label: "Zendesk Subdomain",
+    });
+  });
 });

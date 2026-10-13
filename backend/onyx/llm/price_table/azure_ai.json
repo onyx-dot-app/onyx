@@ -846,6 +846,31 @@
       "temperature": true,
       "tool_call": false
     },
+    "deepseek-v4.1-flash": {
+      "attachment": true,
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek-V4.1-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-09-10",
+      "status": "beta",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "eu/gpt-4o-mini-realtime-preview-2024-12-17": {
       "cost": {
         "cache_read": 0.33,

@@ -13,6 +13,7 @@ import {
   MIN_REFRESH_FREQ_MINUTES,
 } from "@/lib/connectors/connectors";
 import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
+import { getCredentialSpec, realmFields } from "@/lib/credentials/utils";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
   PIPELINE_ORDER,
@@ -64,9 +65,89 @@ export interface CredentialBoundFieldSplit {
 const CREDENTIAL_BOUND_FIELDS: Partial<Record<ValidSources, string[]>> =
   credentialBoundFields;
 
-/** The names of the source's credential-bound config fields. */
+/**
+ * The source's form-only fields: the account's realm (its site, host or
+ * subdomain), one per realm field of the credential spec, under the same key.
+ * The realm lives in the credential only. The form uses it to filter the saved
+ * accounts and to fill in a new account, and never sends it as connector
+ * config (see `withoutFormOnlyFields`).
+ */
+export function formOnlyFieldNames(source: ValidSources): string[] {
+  const spec = getCredentialSpec(source);
+  return spec ? realmFields(spec).map(([key]) => key) : [];
+}
+
+/**
+ * The connector config without the source's form-only fields. Every request
+ * that sends form values as `connector_specific_config` (create, check runs
+ * and plans, binding checks) goes through it.
+ */
+export function withoutFormOnlyFields<V>(
+  source: ValidSources,
+  config: Readonly<Record<string, V>>
+): Record<string, V> {
+  const formOnly: ReadonlySet<string> = new Set(formOnlyFieldNames(source));
+  return Object.fromEntries(
+    Object.entries(config).filter(([name]) => !formOnly.has(name))
+  );
+}
+
+function withoutBlankEntries(items: readonly unknown[]): unknown[] {
+  return items.filter((item) => typeof item !== "string" || item.trim() !== "");
+}
+
+/**
+ * The form keys that are not connector config: the configuration's tab
+ * controls, and `extraNames` (e.g. the typed account).
+ */
+export function connectorFormControlFieldNames(
+  configuration: ConnectionConfiguration,
+  extraNames: readonly string[] = []
+): Set<string> {
+  return new Set([
+    ...[...configuration.values, ...configuration.advanced_values]
+      .filter((field) => field.type === "tab")
+      .map((field) => field.name),
+    ...extraNames,
+  ]);
+}
+
+/**
+ * The `connector_specific_config` that Create sends for the form's config
+ * values: without form controls and form-only fields, without blank list
+ * entries, and with each field's `transform` applied.
+ */
+export function connectorConfigFromForm(
+  source: ValidSources,
+  configuration: ConnectionConfiguration,
+  values: Readonly<Record<string, unknown>>,
+  formControlFieldNames: ReadonlySet<string>
+): Record<string, unknown> {
+  const config: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(values)) {
+    if (formControlFieldNames.has(key)) continue;
+    const value: unknown = Array.isArray(raw) ? withoutBlankEntries(raw) : raw;
+    const field = configuration.values.find((field) => field.name === key);
+    config[key] =
+      field && "transform" in field && field.transform
+        ? field.transform(value as string[])
+        : value;
+  }
+  return withoutFormOnlyFields(source, config);
+}
+
+/**
+ * The names of the source's credential-bound config fields: the backend
+ * binding fields, then the form-only realm fields. The create form shows them
+ * above the credential section and filters the saved accounts with them.
+ */
 export function credentialBoundFieldNames(source: ValidSources): string[] {
-  return CREDENTIAL_BOUND_FIELDS[source] ?? [];
+  return [
+    ...new Set([
+      ...(CREDENTIAL_BOUND_FIELDS[source] ?? []),
+      ...formOnlyFieldNames(source),
+    ]),
+  ];
 }
 
 /**
@@ -79,7 +160,7 @@ export function splitCredentialBoundFields(
   source: ValidSources,
   configuration: ConnectionConfiguration
 ): CredentialBoundFieldSplit {
-  const boundNames = new Set(CREDENTIAL_BOUND_FIELDS[source] ?? []);
+  const boundNames = new Set(credentialBoundFieldNames(source));
   const isBound = (field: ConnectorField) => boundNames.has(field.name);
   return {
     values: configuration.values.filter(isBound),
