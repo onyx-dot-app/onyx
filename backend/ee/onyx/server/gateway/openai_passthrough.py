@@ -261,8 +261,8 @@ def _non_streaming_error_response(response: httpx.Response) -> JSONResponse:
     raise OnyxError(OnyxErrorCode.BAD_GATEWAY, _SANITIZED_ERROR)
 
 
-def _gateway_trace(flow: LLMFlow, model: str, craft_session_id: str | None) -> Trace:
-    return llm_gateway_trace(flow, model, craft_session_id)
+def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
+    return llm_gateway_trace(flow, model)
 
 
 def handle_openai_responses_passthrough(
@@ -271,7 +271,6 @@ def handle_openai_responses_passthrough(
     model_config: ModelConfigurationView,
     flow: LLMFlow,
     user: User,
-    craft_session_id: str | None = None,
 ) -> JSONResponse | StreamingResponse:
     body = _build_upstream_request(
         request, model_config.name, str(user.id), request.stream
@@ -291,7 +290,6 @@ def handle_openai_responses_passthrough(
                 "body": body,
                 "llm": llm,
                 "flow": flow,
-                "craft_session_id": craft_session_id,
                 "input_messages": request.input,
                 "tools": request.tools,
                 "model": request.model,
@@ -299,7 +297,7 @@ def handle_openai_responses_passthrough(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name, craft_session_id),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=request.input, tools=request.tools
         ) as span,
@@ -398,7 +396,6 @@ def _openai_passthrough_stream_worker(
     model: str,
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
-    craft_session_id: str | None = None,
 ) -> None:
     response_id = f"resp_{uuid.uuid4().hex}"
     response_created_at = int(time.time())
@@ -427,7 +424,7 @@ def _openai_passthrough_stream_worker(
     # Runs on its own thread after the endpoint returned, so the trace must be
     # opened here or the generation span sees no active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name, craft_session_id),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=input_messages, tools=tools
         ) as span,

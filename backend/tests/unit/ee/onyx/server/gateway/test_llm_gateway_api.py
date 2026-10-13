@@ -57,6 +57,7 @@ from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
+from onyx.server.gateway.craft_session import CRAFT_SESSION_ID_CONTEXTVAR
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessagesRequest,
@@ -667,26 +668,15 @@ def _assert_gateway_trace(active: Any) -> None:
     }
 
 
-def test_stream_worker_tags_trace_with_craft_session() -> None:
+def test_stream_worker_trace_sees_bound_craft_session() -> None:
+    """The worker runs on its own thread; the bound session must follow it."""
     traces: list[Any] = []
-    with _capture_trace_at_generation_span(traces):
-        frames = list(
-            stream_bridge._run_bridged_stream(
-                gateway_api._stream_worker,
-                {
-                    "llm": _reasoning_stream_llm(),
-                    "flow": LLMFlow.CRAFT_LLM_GENERATION,
-                    "craft_session_id": "sess-1",
-                    "messages": [UserMessage(content="hello")],
-                    "tools": None,
-                    "tool_choice": None,
-                    "structured_response_format": None,
-                    "max_tokens": None,
-                    "reasoning_effort": ReasoningEffort.AUTO,
-                    "model": "1/test",
-                },
-            )
-        )
+    token = CRAFT_SESSION_ID_CONTEXTVAR.set("sess-1")
+    try:
+        with _capture_trace_at_generation_span(traces):
+            frames = list(_gateway_stream(_reasoning_stream_llm()))
+    finally:
+        CRAFT_SESSION_ID_CONTEXTVAR.reset(token)
 
     assert frames[-1] == "data: [DONE]\n\n"
     (active,) = traces
@@ -1028,7 +1018,6 @@ def test_endpoint_threads_authorized_flow_to_handler() -> None:
         provider=provider,
         model_config=model_config,
         flow=LLMFlow.LLM_GATEWAY,
-        craft_session_id=None,
     )
 
 
@@ -2128,7 +2117,6 @@ def test_responses_endpoint_resolves_model_same_way_as_chat_route() -> None:
         provider=provider,
         model_config=model_config,
         flow=LLMFlow.LLM_GATEWAY,
-        craft_session_id=None,
     )
 
 

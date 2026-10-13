@@ -68,10 +68,7 @@ from onyx.server.gateway.configs import (
     GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
     GATEWAY_PATH_PREFIX,
 )
-from onyx.server.gateway.craft_session import (
-    llm_gateway_trace,
-    resolve_craft_session_id,
-)
+from onyx.server.gateway.craft_session import craft_session_binder, llm_gateway_trace
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
     AnthropicContentBlock,
@@ -142,15 +139,23 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
-router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
+# One user dependency object, shared by the endpoints and the Craft session
+# binder, so FastAPI resolves the user once per request.
+_gateway_user = require_permission(Permission.USE_LLM_GATEWAY)
+router = APIRouter(
+    prefix=GATEWAY_PATH_PREFIX,
+    # Binds the calling Craft session (if any) for the traces opened below,
+    # including on the stream worker threads.
+    dependencies=[Depends(craft_session_binder(_gateway_user))],
+)
 
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
 )
 
 
-def _gateway_trace(flow: LLMFlow, model: str, craft_session_id: str | None) -> Trace:
-    return llm_gateway_trace(flow, model, craft_session_id)
+def _gateway_trace(flow: LLMFlow, model: str) -> Trace:
+    return llm_gateway_trace(flow, model)
 
 
 def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
@@ -336,13 +341,12 @@ def _stream_worker(
     model: str,
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
-    craft_session_id: str | None = None,
 ) -> None:
     # Runs on its own thread after the endpoint has returned the
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name, craft_session_id),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -387,7 +391,6 @@ def handle_chat_completion(
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
-    craft_session_id: str | None = None,
 ) -> StreamingResponse | ChatCompletionResponse:
     llm = llm_from_provider(
         model_name=model_config.name,
@@ -406,7 +409,6 @@ def handle_chat_completion(
             {
                 "llm": llm,
                 "flow": flow,
-                "craft_session_id": craft_session_id,
                 "messages": messages,
                 "tools": request.tools,
                 "tool_choice": tool_choice,
@@ -418,7 +420,7 @@ def handle_chat_completion(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name, craft_session_id),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
@@ -577,7 +579,6 @@ def _responses_stream_worker(
     created_at: int,
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
-    craft_session_id: str | None = None,
 ) -> None:
     sequence = count()
 
@@ -644,7 +645,7 @@ def _responses_stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name, craft_session_id),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -757,7 +758,6 @@ def handle_responses_request(
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
-    craft_session_id: str | None = None,
 ) -> StreamingResponse | ResponsesObjectPayload:
     if request.previous_response_id is not None:
         raise OnyxError(
@@ -788,7 +788,6 @@ def handle_responses_request(
             {
                 "llm": llm,
                 "flow": flow,
-                "craft_session_id": craft_session_id,
                 "messages": messages,
                 "tools": tools,
                 "tool_choice": tool_choice,
@@ -801,7 +800,7 @@ def handle_responses_request(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name, craft_session_id),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
@@ -1115,7 +1114,6 @@ def _anthropic_stream_worker(
     message_id: str,
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
-    craft_session_id: str | None = None,
 ) -> None:
     def emit(event: AnthropicStreamEvent) -> bool:
         payload = event.to_wire()
@@ -1148,7 +1146,7 @@ def _anthropic_stream_worker(
     # StreamingResponse, so the trace must be opened here rather than in the
     # endpoint for the generation span to see an active trace.
     with (
-        _gateway_trace(flow, llm.config.model_name, craft_session_id),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm, flow=flow, input_messages=messages, tools=tools
         ) as span,
@@ -1320,7 +1318,6 @@ def handle_anthropic_messages(
     provider: LLMProviderView,
     model_config: ModelConfigurationView,
     flow: LLMFlow,
-    craft_session_id: str | None = None,
 ) -> StreamingResponse | AnthropicMessageResponse:
     llm = llm_from_provider(
         model_name=model_config.name,
@@ -1344,7 +1341,6 @@ def handle_anthropic_messages(
             {
                 "llm": llm,
                 "flow": flow,
-                "craft_session_id": craft_session_id,
                 "messages": messages,
                 "tools": tools,
                 "tool_choice": tool_choice,
@@ -1356,7 +1352,7 @@ def handle_anthropic_messages(
         )
 
     with (
-        _gateway_trace(flow, llm.config.model_name, craft_session_id),
+        _gateway_trace(flow, llm.config.model_name),
         llm_generation_span(
             llm,
             flow=flow,
@@ -1447,7 +1443,7 @@ def _resolve_metered_gateway_model(
 @router.get("/v1/models")
 def gateway_list_models(
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     _authorize_gateway_request(http_request, user)
@@ -1460,12 +1456,11 @@ def gateway_list_models(
 def gateway_chat_completions(
     request: ChatCompletionRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    craft_session_id = resolve_craft_session_id(http_request, user, db_session)
     provider, model_config = _resolve_metered_gateway_model(
         db_session, user, request.model
     )
@@ -1474,7 +1469,6 @@ def gateway_chat_completions(
         provider=provider,
         model_config=model_config,
         flow=flow,
-        craft_session_id=craft_session_id,
     )
     if isinstance(result, StreamingResponse):
         return result
@@ -1487,12 +1481,11 @@ def gateway_chat_completions(
 def gateway_responses(
     request: ResponsesRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    craft_session_id = resolve_craft_session_id(http_request, user, db_session)
     provider, model_config = _resolve_metered_gateway_model(
         db_session, user, request.model
     )
@@ -1502,7 +1495,6 @@ def gateway_responses(
             provider=provider,
             model_config=model_config,
             flow=flow,
-            craft_session_id=craft_session_id,
             user=user,
         )
     result = handle_responses_request(
@@ -1510,7 +1502,6 @@ def gateway_responses(
         provider=provider,
         model_config=model_config,
         flow=flow,
-        craft_session_id=craft_session_id,
     )
     if isinstance(result, StreamingResponse):
         return result
@@ -1521,12 +1512,11 @@ def gateway_responses(
 def gateway_anthropic_messages(
     request: AnthropicMessagesRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     flow = _authorize_gateway_request(http_request, user)
     check_token_rate_limits(user)
-    craft_session_id = resolve_craft_session_id(http_request, user, db_session)
     provider, model_config = _resolve_metered_gateway_model(
         db_session, user, request.model
     )
@@ -1536,7 +1526,6 @@ def gateway_anthropic_messages(
             provider=provider,
             model_config=model_config,
             flow=flow,
-            craft_session_id=craft_session_id,
             http_request=http_request,
             user=user,
         )
@@ -1545,7 +1534,6 @@ def gateway_anthropic_messages(
         provider=provider,
         model_config=model_config,
         flow=flow,
-        craft_session_id=craft_session_id,
     )
     if isinstance(result, StreamingResponse):
         return result
@@ -1558,7 +1546,7 @@ def gateway_anthropic_messages(
 def gateway_anthropic_count_tokens(
     request: AnthropicCountTokensRequest,
     http_request: Request,
-    user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    user: User = Depends(_gateway_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     # No token rate limit check: nothing is generated by this endpoint.
