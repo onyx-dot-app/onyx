@@ -21,7 +21,7 @@ from typing_extensions import override
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.jira.connector import JiraConnector
+from onyx.connectors.jira.connector import JiraConnector, build_jql_query
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.utils.logger import setup_logger
 
@@ -65,12 +65,12 @@ class JiraServiceManagementConnector(JiraConnector):
         if self._service_desk_project_keys is not None:
             return self._service_desk_project_keys
 
-        service_desk_keys: list[str] = []
-        for project in self.jira_client.projects():
-            # projectTypeKey is absent on some Jira Server/DC versions.
-            type_key = getattr(project, "projectTypeKey", None)  # ods: ignore[getattr]
-            if type_key == _SERVICE_DESK_PROJECT_TYPE_KEY:
-                service_desk_keys.append(project.key)
+        # projectTypeKey is absent on some Jira Server/DC versions.
+        service_desk_keys: list[str] = [
+            project["key"]
+            for project in self.source_operations.list_projects()
+            if project.get("projectTypeKey") == _SERVICE_DESK_PROJECT_TYPE_KEY
+        ]
 
         self._service_desk_project_keys = service_desk_keys
         logger.info(
@@ -88,11 +88,11 @@ class JiraServiceManagementConnector(JiraConnector):
 
         # Auto-scoping: one project listing both proves Jira API access and
         # confirms at least one service desk project exists, so the base
-        # validator's separate projects() probe is skipped. Errors go through
+        # validator's separate list_projects() probe is skipped. Errors go through
         # the same mapping as the base validator (401/403/429 -> typed errors).
         # The credential check comes first because ConnectorMissingCredentialError
         # would otherwise be mapped to UnexpectedValidationError.
-        if self._jira_client is None:
+        if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira")
         service_desk_keys: list[str] = []
         try:
@@ -113,24 +113,20 @@ class JiraServiceManagementConnector(JiraConnector):
         is configured, restricts results to service desk projects rather than
         every accessible project.
         """
-        time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
-
-        # An explicit custom JQL query is the admin's responsibility - honor it
-        # exactly as the base connector does.
-        if self.jql_query:
-            return f"({self.jql_query}) AND {time_jql}"
-
-        # An explicit project key wins over auto-discovery so admins can point a
-        # JSM connector at a single service desk project.
-        if self.jira_project:
-            base_jql = f"project = {self.quoted_jira_project}"
-            return f"{base_jql} AND {time_jql}"
+        # A custom JQL query or an explicit project key wins over auto-discovery,
+        # so admins can point a JSM connector at a single service desk project.
+        if self.jql_query or self.jira_project:
+            return super()._get_jql_query(start, end)
 
         # Otherwise auto-scope to every service desk project we can see.
         service_desk_keys = self._get_service_desk_project_keys()
         if not service_desk_keys:
             raise ConnectorValidationError(_NO_SERVICE_DESK_PROJECTS_MESSAGE)
 
+        # With no project or query set, build_jql_query returns just the window.
+        time_jql = build_jql_query(
+            project_key=None, jql_query=None, start=start, end=end
+        )
         quoted_keys = ", ".join(f'"{key}"' for key in service_desk_keys)
         return f"project in ({quoted_keys}) AND {time_jql}"
 

@@ -1,15 +1,14 @@
 """Unit tests for the Jira Service Management connector.
 
 These tests exercise the logic that is specific to JSM (source stamping,
-service-desk project discovery, and JQL scoping) with a mocked Jira client, so
+service-desk project discovery, and JQL scoping) with a mocked Jira source-operations gateway, so
 they run in CI without a live Jira instance or credentials.
 """
 
-from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from jira import JIRAError
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
@@ -17,6 +16,7 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -30,8 +30,8 @@ END = 2_000_000.0
 TIME_JQL = "updated >= 1000000000 AND updated <= 2000000000"
 
 
-def _project(key: str, project_type: str) -> SimpleNamespace:
-    return SimpleNamespace(key=key, projectTypeKey=project_type)
+def _project(key: str, project_type: str) -> dict[str, Any]:
+    return {"key": key, "projectTypeKey": project_type}
 
 
 def _connector(
@@ -50,14 +50,14 @@ def test_document_source_is_jira_service_management() -> None:
 
 def test_service_desk_project_keys_filters_by_type_and_caches() -> None:
     connector = _connector()
-    mock_client = MagicMock()
-    mock_client.projects.return_value = [
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [
         _project("SUP", "service_desk"),
         _project("ENG", "software"),
         _project("OPS", "service_desk"),
         _project("BIZ", "business"),
     ]
-    connector._jira_client = mock_client
+    connector._source_operations = mock_ops
 
     keys = connector._get_service_desk_project_keys()
     assert keys == ["SUP", "OPS"]
@@ -65,7 +65,7 @@ def test_service_desk_project_keys_filters_by_type_and_caches() -> None:
     # Second call should hit the cache, not re-list projects.
     keys_again = connector._get_service_desk_project_keys()
     assert keys_again == ["SUP", "OPS"]
-    mock_client.projects.assert_called_once()
+    mock_ops.list_projects.assert_called_once()
 
 
 def test_jql_uses_custom_query_verbatim() -> None:
@@ -82,13 +82,13 @@ def test_jql_scopes_to_explicit_project_key() -> None:
 
 def test_jql_auto_scopes_to_service_desk_projects() -> None:
     connector = _connector()
-    mock_client = MagicMock()
-    mock_client.projects.return_value = [
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [
         _project("SUP", "service_desk"),
         _project("ENG", "software"),
         _project("OPS", "service_desk"),
     ]
-    connector._jira_client = mock_client
+    connector._source_operations = mock_ops
 
     jql = connector._get_jql_query(START, END)
     assert jql == f'project in ("SUP", "OPS") AND {TIME_JQL}'
@@ -96,12 +96,12 @@ def test_jql_auto_scopes_to_service_desk_projects() -> None:
 
 def test_jql_raises_when_no_service_desk_projects() -> None:
     connector = _connector()
-    mock_client = MagicMock()
-    mock_client.projects.return_value = [
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [
         _project("ENG", "software"),
         _project("BIZ", "business"),
     ]
-    connector._jira_client = mock_client
+    connector._source_operations = mock_ops
 
     with pytest.raises(ConnectorValidationError):
         connector._get_jql_query(START, END)
@@ -109,22 +109,22 @@ def test_jql_raises_when_no_service_desk_projects() -> None:
 
 def test_projects_without_type_key_are_ignored() -> None:
     connector = _connector()
-    mock_client = MagicMock()
-    # A project resource missing projectTypeKey must not crash discovery.
-    mock_client.projects.return_value = [
-        SimpleNamespace(key="LEGACY"),
+    mock_ops = MagicMock()
+    # A raw project missing projectTypeKey must not crash discovery.
+    mock_ops.list_projects.return_value = [
+        {"key": "LEGACY"},
         _project("SUP", "service_desk"),
     ]
-    connector._jira_client = mock_client
+    connector._source_operations = mock_ops
 
     assert connector._get_service_desk_project_keys() == ["SUP"]
 
 
 def test_validate_raises_when_no_service_desk_projects() -> None:
     connector = _connector()
-    mock_client = MagicMock()
-    mock_client.projects.return_value = [_project("ENG", "software")]
-    connector._jira_client = mock_client
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [_project("ENG", "software")]
+    connector._source_operations = mock_ops
 
     with pytest.raises(ConnectorValidationError):
         connector.validate_connector_settings()
@@ -132,9 +132,9 @@ def test_validate_raises_when_no_service_desk_projects() -> None:
 
 def test_validate_passes_with_a_service_desk_project() -> None:
     connector = _connector()
-    mock_client = MagicMock()
-    mock_client.projects.return_value = [_project("SUP", "service_desk")]
-    connector._jira_client = mock_client
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [_project("SUP", "service_desk")]
+    connector._source_operations = mock_ops
 
     # Should not raise.
     connector.validate_connector_settings()
@@ -144,9 +144,9 @@ def test_validate_with_explicit_project_skips_service_desk_check() -> None:
     # An explicit project key means auto-scoping is not used, so the absence of
     # service desk projects must not fail validation.
     connector = _connector(project_key="SUP")
-    mock_client = MagicMock()
-    mock_client.projects.return_value = [_project("ENG", "software")]
-    connector._jira_client = mock_client
+    mock_ops = MagicMock()
+    mock_ops.list_projects.return_value = [_project("ENG", "software")]
+    connector._source_operations = mock_ops
 
     # Should not raise.
     connector.validate_connector_settings()
@@ -163,12 +163,14 @@ def test_validate_with_explicit_project_skips_service_desk_check() -> None:
 def test_validate_maps_jira_errors_when_auto_scoping(
     status_code: int, expected_error: type[Exception], match: str
 ) -> None:
-    # The auto-scope path skips the base validator's projects() probe, so it
+    # The auto-scope path skips the base validator's list_projects() probe, so it
     # must still map Jira HTTP errors to the same typed errors as the base.
     connector = _connector()
-    mock_client = MagicMock()
-    mock_client.projects.side_effect = JIRAError(status_code=status_code, text="err")
-    connector._jira_client = mock_client
+    mock_ops = MagicMock()
+    mock_ops.list_projects.side_effect = JiraApiError(
+        "err", status_code=status_code, text="err"
+    )
+    connector._source_operations = mock_ops
 
     with pytest.raises(expected_error, match=match):
         connector.validate_connector_settings()
