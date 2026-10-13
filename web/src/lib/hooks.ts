@@ -883,7 +883,10 @@ export function useLlmManager(
 EE Only APIs
 */
 
-export const useUserGroups = (): {
+/** `enabled: false` skips the request, e.g. below the plan groups need. */
+export const useUserGroups = (
+  enabled: boolean = true
+): {
   data: UserGroup[] | undefined;
   isLoading: boolean;
   error: string;
@@ -892,7 +895,7 @@ export const useUserGroups = (): {
   const settings = useSettings();
   const isLoading = settings.isLoading;
   const isPaidEnterpriseFeaturesEnabled =
-    !isLoading && settings.enterprise !== null;
+    enabled && !isLoading && settings.enterprise !== null;
 
   const swrResponse = useSWR<UserGroup[]>(
     isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,

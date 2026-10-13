@@ -1,11 +1,14 @@
+import type { CredentialRef } from "@/lib/credentials/types";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import { Formik, useFormikContext } from "formik";
 import type { ReactNode } from "react";
 import { useConnectorChecks } from "@/lib/connectors/checks/hooks";
 import {
+  cancelDraftCheckRun,
   fetchDraftCheckPlan,
   startDraftCheckRun,
+  startPairEditCheckRun,
 } from "@/lib/connectors/checks/svc";
 import type {
   DraftCheckPlan,
@@ -16,15 +19,20 @@ import { ValidSources } from "@/lib/connectors/types/source";
 
 jest.mock("@/lib/connectors/checks/svc", () => ({
   startDraftCheckRun: jest.fn(),
+  startPairEditCheckRun: jest.fn(),
   fetchDraftCheckPlan: jest.fn(),
+  cancelDraftCheckRun: jest.fn(async () => undefined),
 }));
 // A run fetch returns what the latest start request returned.
 jest.mock("@/lib/fetcher", () => ({
   errorHandlingFetcher: jest.fn(async () => {
-    const { startDraftCheckRun } = jest.requireMock(
+    const { startDraftCheckRun, startPairEditCheckRun } = jest.requireMock(
       "@/lib/connectors/checks/svc"
     );
-    return startDraftCheckRun.mock.results.at(-1)?.value;
+    return (
+      startDraftCheckRun.mock.results.at(-1)?.value ??
+      startPairEditCheckRun.mock.results.at(-1)?.value
+    );
   }),
 }));
 // No credential-bound fields: the credential alone binds a result. Every form
@@ -36,11 +44,18 @@ jest.mock("@/lib/connectors/utils", () => ({
   splitCredentialBoundFields: () => ({ values: [], advancedValues: [] }),
 }));
 jest.mock("@/lib/connectors/checks/formState", () => ({
-  connectorFormState: (_configuration: unknown, values: unknown) => values,
+  connectorFormState: (
+    _source: unknown,
+    _configuration: unknown,
+    values: unknown
+  ) => values,
 }));
 
 const startMock = startDraftCheckRun as jest.MockedFunction<
   typeof startDraftCheckRun
+>;
+const pairStartMock = startPairEditCheckRun as jest.MockedFunction<
+  typeof startPairEditCheckRun
 >;
 const planMock = fetchDraftCheckPlan as jest.MockedFunction<
   typeof fetchDraftCheckPlan
@@ -110,12 +125,16 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
+function refFor(credentialId: number | null): CredentialRef | null {
+  return credentialId === null ? null : { credential_id: credentialId };
+}
+
 function renderChecks(credentialId: number | null = 1) {
   return renderHook(
     (props: { credentialId: number | null }) => ({
       checks: useConnectorChecks({
         source: ValidSources.Confluence,
-        credentialId: props.credentialId,
+        credential: refFor(props.credentialId),
       }),
       form: useFormikContext<Record<string, unknown>>(),
     }),
@@ -125,6 +144,7 @@ function renderChecks(credentialId: number | null = 1) {
 
 beforeEach(() => {
   startMock.mockReset();
+  pairStartMock.mockReset();
   planMock.mockReset();
   planMock.mockResolvedValue(plan([BINDING, CONTENT]));
 });
@@ -202,6 +222,40 @@ it("lets Create run without a run when no required check applies", async () => {
   await waitFor(() => expect(result.current.checks.createReady).toBe(true));
 });
 
+it("lets Create run once required checks pass, while optional ones still run", async () => {
+  startMock.mockResolvedValue(
+    run(
+      [
+        check({ ...BINDING, state: "passed" }),
+        check({ ...CONTENT, state: "passed" }),
+        check({ check_id: "discovery", required: false, state: "running" }),
+      ],
+      "running"
+    )
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+
+  await waitFor(() => expect(result.current.checks.createReady).toBe(true));
+});
+
+it("holds Create while a required check still runs", async () => {
+  startMock.mockResolvedValue(
+    run(
+      [
+        check({ ...BINDING, state: "passed" }),
+        check({ ...CONTENT, state: "running" }),
+      ],
+      "running"
+    )
+  );
+  const { result } = renderChecks();
+  act(() => result.current.checks.begin());
+
+  await waitFor(() => expect(result.current.checks.formUnlocked).toBe(true));
+  expect(result.current.checks.createReady).toBe(false);
+});
+
 it("ignores non-required failures and unverified checks for Create", async () => {
   startMock.mockResolvedValue(
     run([
@@ -257,8 +311,14 @@ it("shares one session between every caller for the source", async () => {
   startMock.mockResolvedValue(run([check({ ...BINDING, state: "passed" })]));
   const { result } = renderHook(
     () => [
-      useConnectorChecks({ source: ValidSources.Confluence, credentialId: 1 }),
-      useConnectorChecks({ source: ValidSources.Confluence, credentialId: 1 }),
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+      }),
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+      }),
     ],
     { wrapper }
   );
@@ -266,4 +326,116 @@ it("shares one session between every caller for the source", async () => {
   act(() => result.current[0]!.begin());
   await waitFor(() => expect(result.current[1]!.formUnlocked).toBe(true));
   expect(startMock).toHaveBeenCalledTimes(1);
+});
+
+it("sends a typed account's values with its first run, then names its draft", async () => {
+  startMock.mockResolvedValue({
+    ...run([check({ ...BINDING, state: "passed" }), CONTENT]),
+    credential_id: 7,
+  });
+  const typed: CredentialRef = { credential_json: { api_token: "token" } };
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: typed,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(result.current.status).toBe("passed"));
+  expect(startMock).toHaveBeenLastCalledWith(
+    expect.objectContaining({ credential_json: { api_token: "token" } })
+  );
+  expect(startMock.mock.lastCall?.[0]).not.toHaveProperty("credential_id");
+
+  act(() => result.current.rerun());
+  await waitFor(() => expect(startMock).toHaveBeenCalledTimes(2));
+  expect(startMock.mock.lastCall?.[0]).toHaveProperty("credential_id", 7);
+  expect(startMock.mock.lastCall?.[0]).not.toHaveProperty("credential_json");
+});
+
+it("cancels a run whose start answers after a newer start", async () => {
+  let answerFirst: (snapshot: DraftCheckRunSnapshot) => void = () => {};
+  const passed = run([check({ ...BINDING, state: "passed" }), CONTENT]);
+  startMock
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerFirst = resolve;
+        })
+    )
+    .mockResolvedValueOnce({ ...passed, run_id: "run-2" });
+  const { result } = renderChecks();
+
+  act(() => result.current.checks.begin());
+  await waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
+  act(() => result.current.checks.rerun());
+  await waitFor(() => expect(result.current.checks.status).toBe("passed"));
+
+  await act(async () => answerFirst({ ...passed, run_id: "run-1" }));
+  await waitFor(() =>
+    expect(jest.mocked(cancelDraftCheckRun)).toHaveBeenCalledWith("run-1")
+  );
+  expect(jest.mocked(cancelDraftCheckRun)).not.toHaveBeenCalledWith("run-2");
+});
+
+it("runs the checks of an edit form as dry runs of the pair", async () => {
+  pairStartMock.mockResolvedValue(
+    run([check({ ...BINDING, state: "passed" }), CONTENT])
+  );
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+        ccPairId: 3,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(result.current.status).toBe("passed"));
+  expect(startMock).not.toHaveBeenCalled();
+  expect(pairStartMock).toHaveBeenCalledWith(3, {
+    connector_specific_config: {},
+    access_type: "public",
+    credential_id: 1,
+    rerun: "none",
+  });
+});
+
+it("runs a typed account of an edit form as a draft", async () => {
+  startMock.mockResolvedValue(run([check({ ...BINDING, state: "passed" })]));
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: { credential_json: { token: "typed" } },
+        ccPairId: 3,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
+  expect(pairStartMock).not.toHaveBeenCalled();
+});
+
+it("lets the checks start again after another tab supersedes the run", async () => {
+  pairStartMock.mockResolvedValue(run([BINDING, CONTENT], "superseded"));
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+        ccPairId: 3,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(pairStartMock).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.status).toBe("notStarted"));
 });

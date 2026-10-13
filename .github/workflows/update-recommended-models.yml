@@ -6,10 +6,14 @@
 ###
 ### The agent decides which models each vendor actually recommends today
 ### (web search + OpenRouter catalog digest); the deterministic sibling script
-### is the fallback when the agent can't run. All credentials / repair-loop /
-### PR mechanics live in reusable-agent-task-pr.yml — when the PR's provider
-### chat tests fail on the auto branch, the workflow_run trigger below
-### re-invokes it with the failure logs so the agent fixes its own picks.
+### is the fallback when the agent can't run. Each provider's default_model
+### must sit in the balanced family marked is_default_source in
+### update_recommended_models_rules.json (Sol, Opus, Gemini Pro, GLM); premium
+### tiers such as Astra or Fable cost too much to be the Auto-mode default.
+### All credentials / repair-loop / PR mechanics live in
+### reusable-agent-task-pr.yml — when the PR's provider chat tests fail on the
+### auto branch, the workflow_run trigger below re-invokes it with the failure
+### logs so the agent fixes its own picks.
 
 name: Update Recommended Models
 

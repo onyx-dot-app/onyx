@@ -16,8 +16,10 @@ import useSWR, { type SWRResponse, useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
+  cancelDraftCheckRun,
   fetchDraftCheckPlan,
   startDraftCheckRun,
+  startPairEditCheckRun,
 } from "@/lib/connectors/checks/svc";
 import { INDETERMINATE_CHECKS_BLOCK } from "@/lib/connectors/checks/constants";
 import { connectorFormState } from "@/lib/connectors/checks/formState";
@@ -26,6 +28,9 @@ import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { splitCredentialBoundFields } from "@/lib/connectors/utils";
 import { toWireAccess } from "@/lib/connectors/accessType";
 import { checksProgress } from "@/lib/connectors/checks/progress";
+import type { CredentialRef } from "@/lib/credentials/types";
+import { useSavedDraftCredential } from "@/lib/credentials/hooks";
+import { toCredentialRequest } from "@/lib/credentials/utils";
 import type {
   CapabilityCheckResult,
   CapabilityCheckStatus,
@@ -50,6 +55,8 @@ interface ConnectorChecksSession {
   draftKey: string;
   /** The latest run. */
   runId: string | null;
+  /** The credential the latest run started with (`credentialKey`). */
+  credentialKey: string | null;
   /** The credential and bound fields the latest run started with. */
   ranWith: string | null;
   /** The access type and form values the latest run started with. */
@@ -60,6 +67,8 @@ interface ConnectorChecksSession {
   startFailed: boolean;
   /** Increments per start, so only the newest request applies its result. */
   request: number;
+  /** The next start runs every check again, cached results included. */
+  rerunAll: boolean;
 }
 
 const FINISHED_STATES: ReadonlySet<string> = new Set<CapabilityCheckStatus>([
@@ -149,8 +158,19 @@ function formAccessType(values: Record<string, unknown>): AccessType {
 
 export interface UseConnectorChecksInput {
   source: ConfigurableSources;
-  /** The credential the checks run with; `null` until one is usable. */
-  credentialId: number | null;
+  /** The saved credential or draft the checks run with; `null` until one is usable. */
+  credential: CredentialRef | null;
+  /**
+   * Set when the form edits this pair: a saved credential's runs are dry
+   * runs of the proposed edit. The edit endpoint takes no typed account, so
+   * one still runs as a draft.
+   */
+  ccPairId?: number | null;
+}
+
+/** Names a credential for comparisons; `null` for none. */
+function credentialKeyOf(credential: CredentialRef | null): string | null {
+  return credential === null ? null : JSON.stringify(credential);
 }
 
 export interface UseConnectorChecksResult {
@@ -206,17 +226,21 @@ export interface UseConnectorChecksResult {
  */
 export function useConnectorChecks({
   source,
-  credentialId,
+  credential,
+  ccPairId = null,
 }: UseConnectorChecksInput): UseConnectorChecksResult {
+  // Names the credential; effects follow it rather than the object.
+  const credentialKey: string | null = credentialKeyOf(credential);
   const { values } = useFormikContext<Record<string, unknown>>();
   const configuration = useConnectorConfiguration(source);
   const { mutate } = useSWRConfig();
   const sessionKey = SWR_KEYS.connectorCheckSession(source);
   const { data: session } = useSWR<ConnectorChecksSession>(sessionKey, null);
+  const { savedDraft, rememberDraft } = useSavedDraftCredential(source);
 
   const formState: Record<string, unknown> = useMemo(
-    () => connectorFormState(configuration, values),
-    [configuration, values]
+    () => connectorFormState(source, configuration, values),
+    [source, configuration, values]
   );
   // The credential and its bound fields: what a result is valid for.
   const bindingKey: string = useMemo(() => {
@@ -225,8 +249,8 @@ export function useConnectorChecks({
       .map((field) => field.name)
       .sort()
       .map((name) => values[name]);
-    return JSON.stringify([credentialId, boundValues]);
-  }, [source, configuration, values, credentialId]);
+    return JSON.stringify([credentialKey, boundValues]);
+  }, [source, configuration, values, credentialKey]);
   const accessType: AccessType = formAccessType(values);
   // The whole form a run checks: what Create's result is valid for.
   const formKey: string = useMemo(
@@ -247,50 +271,81 @@ export function useConnectorChecks({
 
   const start = useCallback(
     async (rerun: DraftRerunMode) => {
-      if (credentialId === null) return;
+      if (credential === null) return;
       const draftKey: string = session?.draftKey ?? crypto.randomUUID();
       const request: number = (session?.request ?? 0) + 1;
+      const mode: DraftRerunMode = session?.rerunAll ? "all" : rerun;
       await mutate<ConnectorChecksSession>(
         sessionKey,
         {
           draftKey,
           runId: session?.runId ?? null,
+          credentialKey,
           ranWith: bindingKey,
           ranWithForm: formKey,
           requesting: true,
           startFailed: false,
           request,
+          rerunAll: false,
         },
         { revalidate: false }
       );
-      // Only the newest start request may write its outcome.
-      const settle = (
+      // Only the newest start request may write its outcome. Resolves to
+      // whether this one still was.
+      const settle = async (
         update: (current: ConnectorChecksSession) => ConnectorChecksSession
-      ) =>
-        mutate<ConnectorChecksSession>(
+      ): Promise<boolean> => {
+        let applied = false;
+        await mutate<ConnectorChecksSession>(
           sessionKey,
-          (current) =>
-            current && current.request === request ? update(current) : current,
+          (current) => {
+            if (!current || current.request !== request) return current;
+            applied = true;
+            return update(current);
+          },
           { revalidate: false }
         );
+        return applied;
+      };
       try {
-        const accepted: DraftCheckRunSnapshot = await startDraftCheckRun({
-          source,
-          credential_id: credentialId,
-          access_type: accessType,
-          draft_key: draftKey,
-          form_state: formState,
-          rerun,
-        });
+        // A typed account's values go only with a run, which saves them in
+        // the user's draft; later requests name the draft.
+        const accepted: DraftCheckRunSnapshot =
+          ccPairId !== null && "credential_id" in credential
+            ? await startPairEditCheckRun(ccPairId, {
+                connector_specific_config: formState,
+                access_type: accessType,
+                credential_id: credential.credential_id,
+                rerun: mode,
+              })
+            : await startDraftCheckRun({
+                source,
+                ...toCredentialRequest(credential, savedDraft),
+                access_type: accessType,
+                draft_key: draftKey,
+                form_state: formState,
+                rerun: mode,
+              });
+        if ("credential_json" in credential) {
+          await rememberDraft(
+            accepted.credential_id,
+            credential.credential_json
+          );
+        }
         // Seed the run first, so readers show it at once and poll from it.
         await mutate(SWR_KEYS.connectorCheckRun(accepted.run_id), accepted, {
           revalidate: false,
         });
-        await settle((current) => ({
-          ...current,
+        const current: boolean = await settle((session) => ({
+          ...session,
           runId: accepted.run_id,
           requesting: false,
         }));
+        if (!current) {
+          // The form moved on (e.g. to another account) while this run
+          // started, so nothing reads it and no reset could cancel it.
+          cancelDraftCheckRun(accepted.run_id).catch(() => undefined);
+        }
       } catch {
         await settle((current) => ({
           ...current,
@@ -300,7 +355,11 @@ export function useConnectorChecks({
       }
     },
     [
-      credentialId,
+      // The key, not the object: callers may build a new one each render.
+      credentialKey,
+      ccPairId,
+      savedDraft,
+      rememberDraft,
       session,
       sessionKey,
       bindingKey,
@@ -322,10 +381,15 @@ export function useConnectorChecks({
   const checks: DraftCheckState[] = snapshot?.checks ?? [];
 
   const status: ConnectorChecksStatus = (() => {
-    if (credentialId === null || !session || !current) return "notStarted";
+    if (credential === null || !session || !current) return "notStarted";
     if (session.requesting) return "running";
     if (session.startFailed) return "failedToRun";
     if (!runId) return "notStarted";
+    // Another tab started a run that replaced this one (a pair's dry runs
+    // share one key per user): this run stopped, so it can start again.
+    if (run && run.run_id === runId && run.status === "superseded") {
+      return "notStarted";
+    }
     if (!snapshot || snapshot.status === "running") return "running";
     if (snapshot.status === "failed_to_run") return "failedToRun";
     return checks.some(
@@ -351,11 +415,15 @@ export function useConnectorChecks({
       )
     : plan !== undefined &&
       !applicable.some((check) => check.validates_binding);
+  // A current run of this form that started fine. It need not be finished:
+  // `createReady` waits only on required checks (see `blocks`), so a slow
+  // optional check such as discovery does not hold Create back.
   const ranThisForm: boolean =
     !!session &&
     !session.requesting &&
     session.ranWithForm === formKey &&
-    snapshot?.status === "completed";
+    snapshot !== null &&
+    snapshot.status !== "failed_to_run";
   const createReady: boolean =
     formUnlocked &&
     (!applicable.some((check) => check.required) ||
@@ -397,6 +465,49 @@ export function useConnectorChecks({
     rerun: () => void start("all"),
     refresh: () => void start("none"),
   };
+}
+
+/**
+ * Resets the checks when the form's credential changes: dropped, or swapped
+ * for another. The run started with the old credential is stopped, and the
+ * checks go back to their start prompt, so picking a credential again starts
+ * fresh rather than showing an old run. The first new run re-runs every
+ * check, so no result of the stopped run comes back from the cache. Call it
+ * once per form; `useConnectorChecks` callers share the session it resets.
+ */
+export function useResetChecksOnCredentialChange({
+  source,
+  credential,
+}: UseConnectorChecksInput): void {
+  const { mutate } = useSWRConfig();
+  const sessionKey = SWR_KEYS.connectorCheckSession(source);
+  const { data: session } = useSWR<ConnectorChecksSession>(sessionKey, null);
+  const credentialKey: string | null = credentialKeyOf(credential);
+  const stale: boolean = !!session && session.credentialKey !== credentialKey;
+  const staleRunId: string | null = stale ? (session?.runId ?? null) : null;
+
+  useEffect(() => {
+    if (!stale) return;
+    if (staleRunId !== null) {
+      // Best effort: a run that already ended or expired needs no stop.
+      cancelDraftCheckRun(staleRunId).catch(() => undefined);
+    }
+    void mutate<ConnectorChecksSession>(
+      sessionKey,
+      {
+        draftKey: crypto.randomUUID(),
+        runId: null,
+        credentialKey,
+        ranWith: null,
+        ranWithForm: null,
+        requesting: false,
+        startFailed: false,
+        request: (session?.request ?? 0) + 1,
+        rerunAll: true,
+      },
+      { revalidate: false }
+    );
+  }, [stale, staleRunId, credentialKey, session?.request, sessionKey, mutate]);
 }
 
 const PLAN_DEBOUNCE_MS = 300;

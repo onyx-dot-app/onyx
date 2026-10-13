@@ -1,19 +1,22 @@
+import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Card, Collapsible } from "@opal/components";
 import { Section } from "@opal/layouts";
 import ConnectorConfigFields from "@/views/admin/connectors/AddConnectorPage/form/ConnectorConfigFields";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 
 interface ConnectorContentSectionProps {
   /** The connector's fields that are not bound to the credential. */
   config: ConnectionConfiguration;
   values: Record<string, unknown>;
   connector: ConfigurableSources;
-  currentCredential: Credential<any> | null;
+  currentCredential: CredentialValues | null;
   /** Freezes the section while the page locks the configuration. */
   disabled?: boolean;
+  /** Extra content below the fields, such as an edit's file list. */
+  children?: ReactNode;
 }
 
 /** What the connector indexes: the source-specific configuration fields. */
@@ -23,6 +26,7 @@ export default function ConnectorContentSection({
   connector,
   currentCredential,
   disabled,
+  children,
 }: ConnectorContentSectionProps) {
   const t = useTranslations("admin.connectorsList.content");
 
@@ -40,6 +44,7 @@ export default function ConnectorContentSection({
             connector={connector}
             currentCredential={currentCredential}
           />
+          {children}
         </Section>
       </Card>
     </Collapsible>

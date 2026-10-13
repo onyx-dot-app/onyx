@@ -233,6 +233,9 @@ OPENCODE_SERVE_CONNECT_TIMEOUT = float(
 )
 # Ordinary requests default to 30 seconds. Session initialization gets 90 seconds
 # because session lookup and creation can initialize a cold directory.
+# Stop uses a short request while it holds the interactive admission lock.
+OPENCODE_SERVE_ABORT_TIMEOUT = 2.0
+
 OPENCODE_SERVE_REQUEST_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_REQUEST_TIMEOUT", "30.0")
 )

@@ -1860,9 +1860,6 @@
           "restoreTooltip": "Rétablir la valeur par défaut"
         },
         "description": "Indiquez combien de temps {appName} doit conserver les discussions de votre organisation.",
-        "enterprisePlanTag": {
-          "label": "Forfait Enterprise"
-        },
         "forever": {
           "label": "Toujours"
         },
@@ -1878,16 +1875,11 @@
           "message": "Les discussions sans activité depuis plus de {days, plural, one {# jour} other {# jours}} seront définitivement supprimées. Cette action est irréversible.",
           "title": "Réduire la conservation des discussions ?"
         },
-        "tierTooltip": "La conservation de l'historique des discussions est une fonctionnalité du forfait Enterprise.",
         "title": "Conserver l'historique des discussions"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Forfait Business"
-        },
         "description": "Mode d'interface pour la recherche rapide de documents dans toute votre organisation.",
         "noConnectorsTooltip": "Configurez des connecteurs pour utiliser le mode Recherche",
-        "tierTooltip": "Le mode Recherche nécessite le forfait Business ou Enterprise.",
         "title": "Mode Recherche"
       },
       "systemPrompt": {
@@ -2637,22 +2629,28 @@
           "description": "Hôte Microsoft Graph. Utilisez https://graph.microsoft.us pour GCC High ou DoD."
         }
       },
+      "linear": {
+        "description": "Configurer le connecteur Linear",
+        "teams": {
+          "label": "Équipes",
+          "description": "Clés d'équipe Linear (par ex. ENG) à indexer. Laissez vide pour indexer toutes les équipes visibles par l'utilisateur connecté."
+        },
+        "projects": {
+          "label": "Projets",
+          "description": "Noms ou URL des projets Linear à indexer. Laissez vide pour indexer tous les projets. Si des équipes sont aussi définies, un ticket doit correspondre aux deux."
+        },
+        "syncNotice": "Connectez-vous en tant que membre de l'espace de travail, pas en tant qu'invité, appartenant à chaque équipe privée à indexer. Onyx ne voit pas les équipes privées dont l'utilisateur connecté n'est pas membre. Les tickets des équipes publiques sont consultables par tous les membres de l'espace de travail, ceux des équipes privées ou restreintes par leurs membres."
+      },
       "add": {
         "authorizeButton": {
           "label": "Autoriser avec {source}",
           "pendingLabel": "Autorisation en cours..."
-        },
-        "collapseButton": {
-          "ariaLabel": "Replier"
         },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Créer"
-        },
-        "credentialDeleted": {
-          "toast": "Identifiant supprimé avec succès !"
         },
         "credentialModal": {
           "title": "Créer un identifiant pour {source}"
@@ -2665,14 +2663,8 @@
           "description": "Utilisez un compte de service partagé. {appName} indexe le contenu avec ce compte.",
           "title": "Compte d'authentification"
         },
-        "credentialSwapped": {
-          "toast": "Identifiant remplacé avec succès !"
-        },
         "error": {
           "toast": "Erreur : {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Déplier"
         },
         "federated": {
           "tooltip": {
@@ -2704,14 +2696,99 @@
         "retryButton": {
           "label": "Réessayer"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# compte enregistré} other {# comptes enregistrés}}",
+          "expandButton": {
+            "ariaLabel": "Afficher les comptes enregistrés"
+          },
+          "collapseButton": {
+            "ariaLabel": "Masquer les comptes enregistrés"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Nouveau compte)",
+          "editButton": {
+            "label": "Modifier le compte"
+          }
         },
         "timeout": {
           "toast": "L'opération a expiré après {seconds} secondes. Vérifiez si votre configuration contient des erreurs ?"
         },
         "unknownError": {
           "toast": "Une erreur inconnue est survenue"
+        },
+        "account": {
+          "untitled": {
+            "label": "Sans titre"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Ajouté le {date}"
+          },
+          "selected": {
+            "label": "Sélectionné"
+          },
+          "useButton": {
+            "label": "Utiliser le compte"
+          },
+          "unsupportedRealm": {
+            "label": "Domaine de site non pris en charge"
+          },
+          "expandButton": {
+            "ariaLabel": "Afficher les détails du compte"
+          },
+          "collapseButton": {
+            "ariaLabel": "Masquer les détails du compte"
+          },
+          "deleteButton": {
+            "label": "Supprimer le compte",
+            "inUseTooltip": "Impossible de supprimer cet identifiant, car d’autres connecteurs l’utilisent."
+          },
+          "usedBy": {
+            "label": "Utilisé par {count, plural, one {# connecteur} other {# connecteurs}}"
+          },
+          "owner": {
+            "you": "{name} (vous)"
+          },
+          "lastTested": {
+            "title": "Dernier test {date}"
+          },
+          "notTested": {
+            "title": "Pas encore testé"
+          },
+          "details": {
+            "description": "Les identifiants d’un compte enregistré ne peuvent pas être modifiés ni redirigés vers un autre hôte. Vous pouvez tester le compte avant de le réutiliser ou ajouter un nouveau compte."
+          },
+          "rerunButton": {
+            "label": "Relancer les vérifications"
+          },
+          "authenticationType": {
+            "label": "Type d’authentification"
+          },
+          "rerunFailed": {
+            "toast": "Impossible de lancer les vérifications. Réessayez."
+          },
+          "shareSaved": {
+            "toast": "Partage mis à jour."
+          },
+          "shareFailed": {
+            "toast": "Impossible de modifier qui peut utiliser ce compte. Réessayez."
+          },
+          "renameSaved": {
+            "toast": "Compte renommé."
+          },
+          "renameFailed": {
+            "toast": "Impossible de renommer ce compte. Réessayez."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Seule la personne qui a ajouté ce compte peut le rendre privé."
+          },
+          "shareLocked": {
+            "tooltip": "Seule la personne qui a ajouté ce compte, ou un administrateur avec qui il est partagé, peut modifier qui peut l'utiliser."
+          }
+        },
+        "accountUnavailable": {
+          "toast": "Ce compte n'est plus disponible pour vous. Choisissez un autre compte."
         }
       },
       "credentialRequired": {
@@ -2721,6 +2798,7 @@
         "enterField": "Saisissez le champ « {field} ».",
         "fixField": "Vérifiez le champ « {field} ».",
         "awaitingCheck": "Quittez le champ pour le vérifier avec les identifiants.",
+        "runChecks": "Lancez les vérifications pour vérifier le nouveau compte avec ces paramètres.",
         "checking": "Vérification des identifiants…",
         "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
         "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"
@@ -3323,6 +3401,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "Utilisez l'adresse e-mail du compte propriétaire du jeton d'API."
+        },
+        "nameField": {
+          "title": "Nom d'affichage",
+          "placeholder": "Nommez votre compte d'authentification"
         },
         "apiTokenField": {
           "subDescription": "Collez votre jeton d'API pour accéder à {source}."
@@ -4429,6 +4511,7 @@
           "tooltip": "Les embeddings des documents sont en cours de mise à jour à la suite de modifications récentes de ce groupe."
         },
         "systemGroup": {
+          "basicDescription": "{appName} gère ce groupe. Il ne contient que des membres, et les permissions ci-dessous s'appliquent à tous.",
           "description": "{appName} gère ce groupe. Il ne contient que des membres, et c'est la seule chose que vous pouvez modifier.",
           "title": "Groupe système"
         },
@@ -5169,6 +5252,10 @@
         "orSeparator": {
           "label": "ou"
         },
+        "quantizationOnly": {
+          "description": "Seule la quantification des vecteurs a changé : Onyx reconstruit donc l'index à partir des vecteurs stockés, sans recalculer les embeddings. C'est beaucoup plus rapide qu'une réindexation complète.",
+          "title": "L'index sera reconstruit."
+        },
         "reindex": {
           "description": "La réindexation peut prendre *des heures ou des jours* selon la taille du corpus. [En savoir plus](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Une réindexation complète va s’exécuter."
@@ -5389,7 +5476,9 @@
         "cancelButton": {
           "label": "Annuler la réindexation et rétablir"
         },
+        "copyTitle": "Reconstruction de l'index…",
         "description": {
+          "copy": "Onyx reconstruit l'index à partir des vecteurs stockés, sans recalculer les embeddings. C'est beaucoup plus rapide qu'un nouveau calcul des embeddings.",
           "withModel": "Les nouveaux paramètres d'embedding (**{model}**) sont appliqués au fur et à mesure de la réindexation. Cela peut prendre **des heures ou des jours** selon la taille du corpus.",
           "withoutModel": "Les nouveaux paramètres d'embedding sont appliqués au fur et à mesure de la réindexation. Cela peut prendre **des heures ou des jours** selon la taille du corpus."
         },
@@ -5511,17 +5600,17 @@
         "googleProjectRequired": "L’ID du projet GCP est requis"
       },
       "vectorQuantization": {
-        "description": "Stockez les vecteurs des documents avec moins de bits pour utiliser moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche.",
+        "description": "Stockez les vecteurs des documents avec moins de bits pour que la recherche vectorielle utilise moins de mémoire. Moins de bits peuvent réduire la qualité de la recherche. Si vous modifiez uniquement ce paramètre, l'index est reconstruit à partir des vecteurs stockés, sans recalculer les embeddings.",
         "none": {
           "description": "Précision complète sur 32 bits.",
           "label": "Aucune"
         },
         "scalar1Bit": {
-          "description": "32 fois moins de mémoire. Nécessite OpenSearch 3.6 ou une version ultérieure.",
+          "description": "La plus faible mémoire pour la recherche vectorielle, avec une légère perte de qualité de recherche. Recommandé pour les grands index. Nécessite OpenSearch 3.6 ou une version ultérieure.",
           "label": "1 bit"
         },
         "scalar7Bit": {
-          "description": "4 fois moins de mémoire. Presque aucune perte de qualité de recherche.",
+          "description": "Environ 4 fois moins de mémoire pour la recherche vectorielle. Presque aucune perte de qualité de recherche.",
           "label": "7 bits"
         },
         "title": "Quantification des vecteurs"
@@ -5555,6 +5644,62 @@
         "e5SmallV2": "La version la plus petite et la plus rapide de la gamme E5. Un bon choix si {appName} tourne sur un système aux ressources limitées.",
         "multilingualE5Base": "Pour les corpus dans d'autres langues que l'anglais, c'est le modèle à choisir.",
         "multilingualE5Small": "Pour les corpus dans d'autres langues que l'anglais sur un système aux ressources limitées, c'est le modèle à choisir."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise l’accès par connecteur.",
+            "off": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents. L’accès par connecteur est désactivé.",
+            "shadow": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents et les compare à l’accès par connecteur."
+          },
+          "title": "Mise à jour de l’accès par connecteur terminée"
+        },
+        "notStarted": {
+          "description": "Une tâche en arrière-plan ajoutera les ID de connecteur aux fragments existants de l’index de recherche. Elle démarre dans quelques minutes.",
+          "title": "La mise à jour de l’accès par connecteur n’a pas commencé"
+        },
+        "progress": {
+          "ariaLabel": "Progression de la mise à jour de l’accès par connecteur"
+        },
+        "running": {
+          "description": "Une tâche en arrière-plan ajoute les ID de connecteur aux fragments existants de l’index de recherche. L’accès de recherche par connecteur ne peut être appliqué qu’une fois la tâche terminée.",
+          "title": "Mise à jour de l’index de recherche pour l’accès par connecteur…"
+        },
+        "status": {
+          "connectors": "{done, number} connecteurs terminés sur {total, number}",
+          "connectorsLeft": "{count, plural, one {# connecteur restant} other {# connecteurs restants}}",
+          "current": "Connecteur en cours : {name}",
+          "documentsLeft": "{count, plural, one {# document restant} other {# documents restants}}"
+        },
+        "mode": {
+          "description": "Comment la recherche décide quels documents un utilisateur peut voir.",
+          "enforcePending": "Appliquer est défini et démarre une fois la mise à jour terminée.",
+          "enforceUnavailable": "Disponible une fois la mise à jour de l’index de recherche terminée.",
+          "label": "Mode d’accès à la recherche",
+          "options": {
+            "enforce": {
+              "description": "La recherche utilise l’accès par connecteur.",
+              "title": "Appliquer"
+            },
+            "off": {
+              "description": "La recherche utilise les listes d’accès des documents.",
+              "title": "Désactivé"
+            },
+            "shadow": {
+              "description": "La recherche utilise les listes d’accès des documents et journalise les cas où l’accès par connecteur donne un autre résultat.",
+              "title": "Ombre"
+            }
+          },
+          "placeholder": "Sélectionner un mode",
+          "toasts": {
+            "error": "Impossible de mettre à jour le mode d’accès à la recherche.",
+            "success": "Mode d’accès à la recherche défini sur {mode}."
+          }
+        },
+        "loadError": {
+          "description": "Rechargez la page pour réessayer.",
+          "title": "Impossible de charger la mise à jour de l’accès par connecteur"
+        }
       }
     },
     "indexing": {
@@ -8931,9 +9076,6 @@
           "description": "Lorsque cette option est désactivée, tous les points de terminaison de la passerelle rejettent les requêtes, les jetons existants cessent de fonctionner et la portée de la passerelle est masquée dans le sélecteur de jetons. Le trafic du sandbox Craft est contrôlé séparément par les paramètres Craft."
         }
       },
-      "businessPlanTag": {
-        "label": "Forfait Business"
-      },
       "tierTooltip": "LLM Gateway nécessite le forfait Business ou Enterprise.",
       "scopeNote": {
         "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → LLM Gateway."
@@ -8973,17 +9115,11 @@
       "required": {
         "label": "Obligatoire"
       },
-      "running": {
-        "label": "Vérifications en cours…"
-      },
       "empty": {
         "label": "Aucune vérification n'a encore été exécutée."
       },
       "docsLink": {
         "label": "Documentation"
-      },
-      "rerunButton": {
-        "label": "Relancer les vérifications"
       },
       "foldButton": {
         "fold": "Réduire",
@@ -9001,8 +9137,236 @@
       "failedToRun": "Les vérifications n’ont pas pu s’exécuter. Réessayez.",
       "requiredFailed": "{count, plural, one {# vérification obligatoire en échec} other {# vérifications obligatoires en échec}}",
       "state": {
-        "completed": "Vérifications terminées",
-        "inProgress": "Vérifications en cours…"
+        "completed": "Vérifications terminées.",
+        "inProgress": "Vérifications en cours...",
+        "waiting": "En attente des paramètres du connecteur..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Modifier le connecteur"
+      },
+      "header": {
+        "title": "Modifier {name}",
+        "description": "Modifiez les paramètres de ce connecteur {source}. Vous vérifiez le plan avant l'application des modifications.",
+        "reviewButton": {
+          "label": "Vérifier les modifications"
+        }
+      },
+      "loadError": {
+        "title": "Impossible de charger le connecteur",
+        "description": "Rechargez la page ou revenez au connecteur.",
+        "backButton": {
+          "label": "Retour au connecteur"
+        }
+      },
+      "credentialSwap": {
+        "title": "Vous avez choisi d'autres identifiants",
+        "description": "Le plan vous permet de conserver les documents indexés, ou de tout réindexer et de supprimer les documents que les nouveaux identifiants ne voient pas."
+      },
+      "files": {
+        "title": "Fichiers",
+        "description": "Ajoutez ou supprimez des fichiers. Les nouveaux fichiers sont indexés seulement après l'application du plan.",
+        "empty": "Le connecteur n'a aucun fichier.",
+        "addButton": {
+          "label": "Ajouter des fichiers"
+        },
+        "remove": {
+          "tooltip": "Supprimer {name}"
+        },
+        "uploadFailed": {
+          "toast": "Impossible de téléverser les fichiers : {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "Impossible de calculer le plan : {detail}"
+      },
+      "typedAccount": {
+        "toast": "Enregistrez le nouveau compte avant de vérifier les modifications, ou choisissez un compte enregistré."
+      },
+      "applied": {
+        "toast": "Les modifications sont appliquées."
+      },
+      "plan": {
+        "title": "Vérifier le plan",
+        "description": "{count, plural, one {Le connecteur a # document indexé.} other {Le connecteur a # documents indexés.}}",
+        "changes": {
+          "list": "Modifié : {fields}",
+          "none": "Rien n'a changé."
+        },
+        "stale": {
+          "title": "Le connecteur a changé",
+          "description": "Le connecteur a changé après le calcul de ce plan. Recalculez le plan avant de l'appliquer.",
+          "replanButton": {
+            "label": "Recalculer le plan"
+          }
+        },
+        "expired": {
+          "title": "Le plan a expiré",
+          "description": "Ce plan a expiré ou a déjà été appliqué. Calculez le plan à nouveau."
+        },
+        "applyFailed": {
+          "title": "Impossible d'appliquer les modifications"
+        },
+        "validation": {
+          "title": "Validation",
+          "blocks": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer.",
+          "warns": "Certaines vérifications facultatives ont échoué. Vous pouvez quand même appliquer.",
+          "error": {
+            "title": "Les paramètres ne sont pas valides"
+          }
+        },
+        "warnings": {
+          "title": "Avertissements"
+        },
+        "notes": {
+          "title": "Remarques"
+        },
+        "reconciliation": {
+          "title": "Choisissez comment rapprocher le changement de périmètre",
+          "description": "Le plan ne peut pas savoir si la modification de {fields} ajoute ou retire des documents. Choisissez ce que fait l'application.",
+          "option": {
+            "prune": {
+              "title": "Élaguer",
+              "description": "Supprimer les documents qui ne sont plus dans le périmètre."
+            },
+            "full_reindex": {
+              "title": "Réindexation complète",
+              "description": "Tout réindexer depuis la date de début pour ajouter les documents désormais dans le périmètre."
+            },
+            "both": {
+              "title": "Réindexation complète, puis élagage",
+              "description": "Tout réindexer, puis supprimer les documents qui ne sont plus dans le périmètre."
+            },
+            "nothing": {
+              "title": "Ne rien faire",
+              "description": "Conserver les documents indexés. Les exécutions suivantes utilisent les nouveaux paramètres."
+            }
+          }
+        },
+        "credential": {
+          "title": "Changement d'identifiants",
+          "description": "Choisissez ce qui arrive aux documents indexés avec les anciens identifiants.",
+          "option": {
+            "keep_indexed": {
+              "title": "Conserver les documents indexés",
+              "description": "Les exécutions suivantes utilisent les nouveaux identifiants. C'est la voie rapide."
+            },
+            "full_reindex_and_prune": {
+              "title": "Réindexation complète et élagage",
+              "description": "Tout réindexer avec les nouveaux identifiants, puis supprimer les documents qu'ils ne voient pas."
+            }
+          }
+        },
+        "steps": {
+          "title": "Étapes",
+          "description": "Ce que fait l'application, dans l'ordre. Vous pouvez désactiver les étapes facultatives.",
+          "none": "L'application enregistre les paramètres. Aucune indexation n'est nécessaire.",
+          "required": {
+            "label": "Obligatoire"
+          },
+          "optional": {
+            "label": "Facultative"
+          },
+          "include": {
+            "ariaLabel": "Exécuter l'étape : {step}"
+          },
+          "fields": "Champs : {fields}",
+          "window": "Période : du {start} au {end}",
+          "windowFromStart": "Période : tout jusqu'au {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Mettre à jour les groupes d'accès aux données",
+              "description": "La recherche applique immédiatement les nouveaux groupes."
+            },
+            "access_type": {
+              "title": "Changer le type d'accès",
+              "description": "Les personnes qui peuvent lire les documents changent."
+            },
+            "enter_perm_sync": {
+              "title": "Démarrer la synchronisation des autorisations",
+              "description": "Les documents restent masqués jusqu'à la fin de la première synchronisation des autorisations."
+            },
+            "leave_perm_sync": {
+              "title": "Arrêter la synchronisation des autorisations",
+              "description": "Les autorisations de la source ne décident plus qui lit les documents."
+            },
+            "restart_attempt": {
+              "title": "Redémarrer la tentative d'indexation en cours",
+              "description": "La tentative en cours s'arrête et une nouvelle démarre avec les nouveaux paramètres."
+            },
+            "full_reindex_then_prune": {
+              "title": "Réindexation complète, puis élagage",
+              "description": "Tout réindexer, puis supprimer les documents que la source ne renvoie plus."
+            },
+            "full_reindex": {
+              "title": "Réindexation complète",
+              "description": "Tout réindexer depuis la date de début."
+            },
+            "scoped_backfill": {
+              "title": "Rattraper les éléments ajoutés",
+              "description": "Indexer uniquement l'historique des éléments ajoutés."
+            },
+            "window_backfill": {
+              "title": "Rattraper la période antérieure",
+              "description": "Indexer la période entre la nouvelle et l'ancienne date de début."
+            },
+            "prune": {
+              "title": "Élaguer",
+              "description": "Supprimer les documents que la source ne renvoie plus."
+            }
+          },
+          "reason": {
+            "identity_changed": "Les identifiants des documents changent",
+            "behavior_changed": "Le traitement a changé",
+            "scope_widened": "Périmètre élargi",
+            "scope_narrowed": "Périmètre réduit",
+            "items_added_or_changed": "Éléments ajoutés ou modifiés",
+            "items_removed": "Éléments supprimés",
+            "opaque_scope_choice": "Votre choix de périmètre",
+            "indexing_start_earlier": "Date de début plus ancienne",
+            "credential_full_path": "Voie complète des identifiants",
+            "access_changed": "L'accès a changé",
+            "permissions_fetched_during_indexing": "Les autorisations arrivent avec l'indexation",
+            "attempt_running": "Une tentative est en cours",
+            "scoped_backfill_superseded": "Un rattrapage antérieur est remplacé",
+            "admin_added": "Ajouté par vous",
+            "indexing_start_later": "Date de début plus tardive"
+          }
+        },
+        "extra": {
+          "title": "Travail supplémentaire",
+          "description": "Ajoutez du travail dont le plan n'a pas besoin.",
+          "fullReindex": {
+            "title": "Ajouter une réindexation complète",
+            "description": "Tout réindexer depuis la date de début."
+          },
+          "prune": {
+            "title": "Ajouter un élagage",
+            "description": "Supprimer les documents que la source ne renvoie plus."
+          }
+        },
+        "backButton": {
+          "label": "Retour à la modification"
+        },
+        "applyButton": {
+          "label": "Appliquer"
+        },
+        "blocked": {
+          "validation": "Corrigez d'abord les échecs de validation.",
+          "reconciliation": "Choisissez d'abord comment rapprocher le changement de périmètre."
+        }
+      },
+      "pendingBackfills": {
+        "title": "Rattrapages en attente",
+        "description": "Une modification a demandé ces exécutions. Chacune reste ici jusqu'à ce qu'une exécution réussisse.",
+        "window": "Du {start} au {end}",
+        "windowFromStart": "Tout jusqu'au {end}",
+        "waiting": "En attente de son exécution.",
+        "runningNow": "Une tentative d'indexation l'exécute maintenant.",
+        "retry": "{count, plural, one {Échec une fois. Prochaine tentative : {time}.} other {Échec # fois. Prochaine tentative : {time}.}}",
+        "scoped": "Éléments ajoutés ou modifiés uniquement",
+        "failures": "{count, plural, one {# échec} other {# échecs}}"
       }
     }
   },
@@ -12026,6 +12390,24 @@
         "empty": "Cette feuille est vide.",
         "tooLarge": "Cette feuille est trop volumineuse pour l'aperçu. Téléchargez le fichier pour la consulter."
       }
+    },
+    "plans": {
+      "free": {
+        "title": "Offre gratuite",
+        "tooltip": "Disponible dans toutes les offres."
+      },
+      "business": {
+        "title": "Offre Business",
+        "tooltip": "Nécessite l'[offre Business ou Enterprise](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Offre Enterprise",
+        "tooltip": "Nécessite l'[offre Enterprise](/admin/billing)."
+      },
+      "upgrade": {
+        "label": "Mettre à niveau l'offre"
+      },
+      "availableFor": "Disponible avec l’{plan}"
     }
   },
   "craft": {
@@ -12369,6 +12751,17 @@
         "operationWait": "Veuillez attendre la fin de l'opération en cours.",
         "sandboxWait": "Veuillez attendre l'initialisation du bac à sable",
         "scheduledRunWait": "Veuillez attendre la fin de l'exécution planifiée."
+      },
+      "loadError": {
+        "title": "Impossible de charger la session",
+        "retry": "Réessayer"
+      },
+      "queuedSendError": {
+        "title": "Impossible d’envoyer le message en attente"
+      },
+      "settlementError": {
+        "title": "Impossible de confirmer la fin de la tâche",
+        "description": "Réessayez pour vérifier la tâche et charger sa réponse enregistrée."
       }
     },
     "compaction": {

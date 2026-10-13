@@ -1,8 +1,12 @@
 import threading
 from queue import Queue
+from typing import TYPE_CHECKING
 
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import Packet
+
+if TYPE_CHECKING:
+    from onyx.utils.fleet_query_telemetry import QueryObservation
 
 
 class Emitter:
@@ -24,10 +28,16 @@ class Emitter:
         merged_queue: Queue[tuple[int, Packet | Exception | object]],
         model_idx: int = 0,
         drain_done: threading.Event | None = None,
+        query_observation: "QueryObservation | None" = None,
     ) -> None:
         self._model_idx = model_idx
         self._merged_queue = merged_queue
         self._drain_done = drain_done
+        self._query_observation = query_observation
+
+    def tool_started(self, *, is_search: bool) -> None:
+        if self._query_observation is not None:
+            self._query_observation.tool_started(is_search=is_search)
 
     def emit(self, packet: Packet) -> None:
         if self._drain_done is not None and self._drain_done.is_set():
@@ -51,6 +61,7 @@ class NullEmitter(Emitter):
         self._model_idx = 0
         self._merged_queue = None
         self._drain_done = None
+        self._query_observation = None
 
     def emit(self, packet: Packet) -> None:
         pass

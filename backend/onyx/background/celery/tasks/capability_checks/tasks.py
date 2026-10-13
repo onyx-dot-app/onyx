@@ -18,18 +18,29 @@ from uuid import UUID
 from celery import Task, shared_task
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import DocumentSource, OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_CHECK_TIMEOUT_SECONDS,
+    DRAFT_RUN_TTL_SECONDS,
+    DraftCheckState,
     DraftCheckStateKind,
     DraftRunPairScope,
     DraftRunStatus,
     apply_check_result,
     cache_draft_result,
+    cached_check_result,
+    clear_draft_result_in_flight,
+    form_draft_result_keys,
+    is_draft_result_in_flight,
     is_superseded,
     load_draft_run,
+    mark_draft_results_in_flight,
+    pending_in_run_order,
+    required_check_failed,
     save_draft_run,
+    wait_for_draft_result,
 )
+from onyx.connectors.capability_checks.form_state import validate_form_state
 from onyx.connectors.capability_checks.models import CapabilityCheckResult
 from onyx.connectors.capability_checks.registry import get_capability_checks
 from onyx.connectors.capability_checks.runner import (
@@ -41,6 +52,7 @@ from onyx.connectors.capability_checks.runner import (
 )
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
+from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.credential_capability import (
@@ -55,6 +67,50 @@ from onyx.db.credentials import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
+from onyx.db.models import Credential
+
+
+def _await_draft_results(
+    check_ids: list[str],
+    *,
+    credential: Credential,
+    source: DocumentSource,
+    access_type: AccessType | None,
+    connector_specific_config: dict[str, Any] | None,
+) -> tuple[list[CapabilityCheckResult], list[str]]:
+    """The results a create-form draft run of the same form is still to write
+    for ``check_ids``, awaited up to each check's draft timeout, and the ids
+    of the checks that still need to run."""
+    checks = get_capability_checks(source)
+    keys = form_draft_result_keys(
+        [check for check in checks if check.check_id in check_ids],
+        credential_id=credential.id,
+        credential_updated_at=credential.time_updated,
+        source=source,
+        access_type=access_type,
+        form_values=validate_form_state(
+            CONNECTOR_CLASS_MAP[source].config_class, connector_specific_config or {}
+        ).values,
+        cc_pair_id=None,
+    )
+    awaited: list[CapabilityCheckResult] = []
+    to_run: list[str] = []
+    for check_id in check_ids:
+        key = keys.get(check_id)
+        cached = (
+            wait_for_draft_result(key, DRAFT_CHECK_TIMEOUT_SECONDS)
+            if key is not None and is_draft_result_in_flight(key)
+            else None
+        )
+        if cached is None:
+            to_run.append(check_id)
+            continue
+        awaited.extend(
+            cached_check_result(check, cached)
+            for check in checks
+            if check.check_id == check_id
+        )
+    return awaited, to_run
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -132,6 +188,18 @@ def run_capability_checks_task(
                 )
                 if cc_pair is not None and parsed_access_type is None:
                     parsed_access_type = cc_pair.access_type
+        # A run of the checks creation left unfinished first waits for the
+        # ones a draft run of the same form is still running.
+        awaited_results: list[CapabilityCheckResult] = []
+        run_check_ids = check_ids
+        if check_ids is not None:
+            awaited_results, run_check_ids = _await_draft_results(
+                check_ids,
+                credential=credential,
+                source=source,
+                access_type=parsed_access_type,
+                connector_specific_config=config,
+            )
         report = generate_capability_report(
             credential,
             source=source,
@@ -140,16 +208,17 @@ def run_capability_checks_task(
             input_type=input_type,
             trigger=parsed_trigger,
             access_type=parsed_access_type,
-            check_ids=frozenset(check_ids) if check_ids is not None else None,
+            check_ids=frozenset(run_check_ids) if run_check_ids is not None else None,
         )
-        if prior_results:
-            report = merge_capability_results(
-                report,
-                [
-                    CapabilityCheckResult.model_validate(result)
-                    for result in prior_results
-                ],
-            )
+        merged_prior: list[CapabilityCheckResult] = [
+            *awaited_results,
+            *(
+                CapabilityCheckResult.model_validate(result)
+                for result in prior_results or []
+            ),
+        ]
+        if merged_prior:
+            report = merge_capability_results(report, merged_prior)
         with get_session_with_current_tenant() as db_session:
             completed_row = upsert_completed_capability_report(
                 db_session,
@@ -213,15 +282,9 @@ def run_draft_capability_checks_task(
         task_logger.info(f"Draft capability run {run_id} expired (tenant {tenant_id}).")
         return
     snapshot = run.snapshot
-    pending = [
-        check for check in snapshot.checks if check.state == DraftCheckStateKind.PENDING
-    ]
-    timeout_by_check_id = {
-        check.check_id: min(
-            effective_check_timeout_seconds(check), DRAFT_CHECK_TIMEOUT_SECONDS
-        )
-        for check in get_capability_checks(snapshot.source)
-    }
+    pending: list[DraftCheckState] = []
+    pending_result_keys: list[str] = []
+    timeout_by_check_id: dict[str, float] = {}
 
     def mark_next_running() -> None:
         if (
@@ -246,13 +309,27 @@ def run_draft_capability_checks_task(
             and check.capability == result.capability
         )
         apply_check_result(check_state, result)
-        cache_draft_result(run.result_cache_keys[result.check_id], result)
+        result_key = run.result_cache_keys[result.check_id]
+        cache_draft_result(result_key, result)
+        clear_draft_result_in_flight(result_key)
         if is_superseded(run):
             raise _DraftRunSupersededError()
         mark_next_running()
         save_draft_run(run)
 
     try:
+        # Inside the try, so a failure here marks the run FAILED_TO_RUN rather
+        # than leaving it RUNNING until its lease runs out.
+        pending = pending_in_run_order(snapshot)
+        pending_result_keys = list(
+            dict.fromkeys(run.result_cache_keys[check.check_id] for check in pending)
+        )
+        timeout_by_check_id = {
+            check.check_id: min(
+                effective_check_timeout_seconds(check), DRAFT_CHECK_TIMEOUT_SECONDS
+            )
+            for check in get_capability_checks(snapshot.source)
+        }
         if is_superseded(run):
             raise _DraftRunSupersededError()
         with get_session_with_current_tenant() as db_session:
@@ -265,6 +342,9 @@ def run_draft_capability_checks_task(
             snapshot.status = DraftRunStatus.FAILED_TO_RUN
             save_draft_run(run)
             return
+        # A validation of the same form waits for these results instead of
+        # running the checks again.
+        mark_draft_results_in_flight(pending_result_keys, DRAFT_RUN_TTL_SECONDS)
         mark_next_running()
         save_draft_run(run)
         pair_scope: DraftRunPairScope | None = run.pair_scope
@@ -278,6 +358,7 @@ def run_draft_capability_checks_task(
             on_result=on_result,
             check_ids=frozenset(check.check_id for check in pending),
             timeout_cap_seconds=DRAFT_CHECK_TIMEOUT_SECONDS,
+            required_check_failed=required_check_failed(snapshot),
         )
         snapshot.status = DraftRunStatus.COMPLETED
         save_draft_run(run)
@@ -292,6 +373,10 @@ def run_draft_capability_checks_task(
         snapshot.status = DraftRunStatus.FAILED_TO_RUN
         save_draft_run(run)
         raise
+    finally:
+        # A check the run did not finish is not coming.
+        for result_key in pending_result_keys:
+            clear_draft_result_in_flight(result_key)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]

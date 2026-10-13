@@ -2880,6 +2880,23 @@
       "mode": "audio_transcription",
       "name": "gpt-realtime-whisper"
     },
+    "gpt-rosalind-discovery": {
+      "cost": {
+        "cache_read": 0.5,
+        "input": 5.0,
+        "output": 25.0
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-rosalind-discovery"
+    },
     "gpt-rosalind-research": {
       "cost": {
         "cache_read": 0.5,

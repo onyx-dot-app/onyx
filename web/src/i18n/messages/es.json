@@ -1860,9 +1860,6 @@
           "restoreTooltip": "Restaurar el valor predeterminado"
         },
         "description": "Indica cuánto tiempo debe conservar {appName} los chats de tu organización.",
-        "enterprisePlanTag": {
-          "label": "Plan Enterprise"
-        },
         "forever": {
           "label": "Para siempre"
         },
@@ -1878,16 +1875,11 @@
           "message": "Los chats sin actividad durante más de {days, plural, one {# día} other {# días}} se eliminarán de forma permanente. Esta acción no se puede deshacer.",
           "title": "¿Reducir la retención de chats?"
         },
-        "tierTooltip": "La retención del historial de chats es una función del plan Enterprise.",
         "title": "Conservar el historial de chats"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Plan Business"
-        },
         "description": "Modo de interfaz para buscar documentos rápidamente en tu organización.",
         "noConnectorsTooltip": "Configura conectores para usar el modo de búsqueda",
-        "tierTooltip": "El modo de búsqueda requiere el plan Business o Enterprise.",
         "title": "Modo de búsqueda"
       },
       "systemPrompt": {
@@ -2637,22 +2629,28 @@
           "description": "Host de Microsoft Graph. Usa https://graph.microsoft.us para GCC High o DoD."
         }
       },
+      "linear": {
+        "description": "Configurar el conector de Linear",
+        "teams": {
+          "label": "Equipos",
+          "description": "Claves de equipo de Linear (p. ej. ENG) a indexar. Déjalo vacío para indexar todos los equipos que el usuario conectado puede ver."
+        },
+        "projects": {
+          "label": "Proyectos",
+          "description": "Nombres o URL de proyectos de Linear a indexar. Déjalo vacío para indexar todos los proyectos. Si también hay equipos, un issue debe coincidir con ambos."
+        },
+        "syncNotice": "Conéctate como miembro del espacio de trabajo, no como invitado, que pertenezca a cada equipo privado que quieras indexar. Onyx no puede ver los equipos privados en los que el usuario conectado no está. Los issues de equipos públicos pueden buscarlos todos los miembros del espacio de trabajo, y los de equipos privados o restringidos, sus miembros."
+      },
       "add": {
         "authorizeButton": {
           "label": "Autorizar con {source}",
           "pendingLabel": "Autorizando..."
-        },
-        "collapseButton": {
-          "ariaLabel": "Contraer"
         },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Crear una nueva"
-        },
-        "credentialDeleted": {
-          "toast": "¡Credencial eliminada!"
         },
         "credentialModal": {
           "title": "Crear una credencial de {source}"
@@ -2665,14 +2663,8 @@
           "description": "Usa una cuenta de servicio compartida. {appName} indexa el contenido como esta cuenta.",
           "title": "Cuenta de autenticación"
         },
-        "credentialSwapped": {
-          "toast": "¡Credencial cambiada!"
-        },
         "error": {
           "toast": "Error: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Expandir"
         },
         "federated": {
           "tooltip": {
@@ -2704,14 +2696,99 @@
         "retryButton": {
           "label": "Reintentar"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# cuenta guardada} other {# cuentas guardadas}}",
+          "expandButton": {
+            "ariaLabel": "Mostrar cuentas guardadas"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar cuentas guardadas"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Cuenta nueva)",
+          "editButton": {
+            "label": "Editar cuenta"
+          }
         },
         "timeout": {
           "toast": "La operación agotó el tiempo de espera tras {seconds} segundos. ¿Quieres revisar tu configuración por si hay errores?"
         },
         "unknownError": {
           "toast": "Ocurrió un error desconocido"
+        },
+        "account": {
+          "untitled": {
+            "label": "Sin título"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Añadida el {date}"
+          },
+          "selected": {
+            "label": "Seleccionada"
+          },
+          "useButton": {
+            "label": "Usar cuenta"
+          },
+          "unsupportedRealm": {
+            "label": "Dominio del sitio no compatible"
+          },
+          "expandButton": {
+            "ariaLabel": "Mostrar detalles de la cuenta"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar detalles de la cuenta"
+          },
+          "deleteButton": {
+            "label": "Eliminar cuenta",
+            "inUseTooltip": "No se puede eliminar esta credencial porque hay otros conectores que la están usando."
+          },
+          "usedBy": {
+            "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
+          },
+          "owner": {
+            "you": "{name} (tú)"
+          },
+          "lastTested": {
+            "title": "Última prueba {date}"
+          },
+          "notTested": {
+            "title": "Aún no probada"
+          },
+          "details": {
+            "description": "Las credenciales de una cuenta guardada no se pueden editar ni redirigir a otro host. Puedes probar la cuenta antes de reutilizarla o añadir una cuenta nueva."
+          },
+          "rerunButton": {
+            "label": "Volver a ejecutar comprobaciones"
+          },
+          "authenticationType": {
+            "label": "Tipo de autenticación"
+          },
+          "rerunFailed": {
+            "toast": "No se pudieron iniciar las comprobaciones. Inténtalo de nuevo."
+          },
+          "shareSaved": {
+            "toast": "Uso compartido actualizado."
+          },
+          "shareFailed": {
+            "toast": "No se pudo cambiar quién puede usar esta cuenta. Inténtalo de nuevo."
+          },
+          "renameSaved": {
+            "toast": "Cuenta renombrada."
+          },
+          "renameFailed": {
+            "toast": "No se pudo cambiar el nombre de esta cuenta. Inténtalo de nuevo."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Solo quien añadió esta cuenta puede hacerla privada."
+          },
+          "shareLocked": {
+            "tooltip": "Solo quien añadió esta cuenta, o un administrador con quien está compartida, puede cambiar quién puede usarla."
+          }
+        },
+        "accountUnavailable": {
+          "toast": "Esta cuenta ya no está disponible para ti. Elige otra cuenta."
         }
       },
       "credentialRequired": {
@@ -2721,6 +2798,7 @@
         "enterField": "Introduce el campo «{field}».",
         "fixField": "Revisa el campo «{field}».",
         "awaitingCheck": "Sal del campo para comprobarlo con la credencial.",
+        "runChecks": "Ejecuta las comprobaciones para comprobar la cuenta nueva con esta configuración.",
         "checking": "Comprobando la credencial…",
         "fieldInvalid": "Revisa el campo «{field}»: {detail}",
         "rejected": "Esta credencial no se puede usar con esta configuración. {detail}"
@@ -3323,6 +3401,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "Usa el correo de la cuenta a la que pertenece el token de API."
+        },
+        "nameField": {
+          "title": "Nombre visible",
+          "placeholder": "Ponle nombre a tu cuenta de autenticación"
         },
         "apiTokenField": {
           "subDescription": "Pega tu token de API para acceder a {source}."
@@ -4429,6 +4511,7 @@
           "tooltip": "Los embeddings de los documentos se están actualizando por los cambios recientes en este grupo."
         },
         "systemGroup": {
+          "basicDescription": "{appName} gestiona este grupo. Solo contiene miembros, y los permisos de abajo se aplican a todos ellos.",
           "description": "{appName} gestiona este grupo. Solo contiene miembros y es lo único que puedes cambiar.",
           "title": "Grupo del sistema"
         },
@@ -5169,6 +5252,10 @@
         "orSeparator": {
           "label": "o"
         },
+        "quantizationOnly": {
+          "description": "Solo cambió la cuantización de vectores, así que Onyx reconstruye el índice a partir de los vectores almacenados, sin volver a generar embeddings. Esto es mucho más rápido que una reindexación completa.",
+          "title": "Se reconstruirá el índice."
+        },
         "reindex": {
           "description": "La reindexación puede tardar *horas o días* según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Se ejecutará una reindexación completa."
@@ -5389,7 +5476,9 @@
         "cancelButton": {
           "label": "Cancelar la reindexación y revertir"
         },
+        "copyTitle": "Reconstruyendo el índice…",
         "description": {
+          "copy": "Onyx está reconstruyendo el índice a partir de los vectores almacenados, sin volver a generar embeddings. Esto es mucho más rápido que volver a generarlos.",
           "withModel": "La nueva configuración de embeddings (**{model}**) se aplica a medida que avanza la reindexación. Esto puede tardar **horas o días** según el tamaño del corpus.",
           "withoutModel": "La nueva configuración de embeddings se aplica a medida que avanza la reindexación. Esto puede tardar **horas o días** según el tamaño del corpus."
         },
@@ -5511,17 +5600,17 @@
         "googleProjectRequired": "Se requiere el ID del proyecto de GCP"
       },
       "vectorQuantization": {
-        "description": "Almacena los vectores de los documentos con menos bits para usar menos memoria. Menos bits pueden reducir la calidad de la búsqueda.",
+        "description": "Almacena los vectores de los documentos con menos bits para que la búsqueda vectorial use menos memoria. Menos bits pueden reducir la calidad de la búsqueda. Si solo cambias este ajuste, el índice se reconstruye a partir de los vectores almacenados, sin volver a generar embeddings.",
         "none": {
           "description": "Precisión completa de 32 bits.",
           "label": "Ninguna"
         },
         "scalar1Bit": {
-          "description": "32 veces menos memoria. Requiere OpenSearch 3.6 o posterior.",
+          "description": "La menor memoria para la búsqueda vectorial, con una pequeña pérdida de calidad de búsqueda. Recomendado para índices grandes. Requiere OpenSearch 3.6 o posterior.",
           "label": "1 bit"
         },
         "scalar7Bit": {
-          "description": "4 veces menos memoria. Casi sin pérdida de calidad de búsqueda.",
+          "description": "Unas 4 veces menos memoria para la búsqueda vectorial. Casi sin pérdida de calidad de búsqueda.",
           "label": "7 bits"
         },
         "title": "Cuantización de vectores"
@@ -5555,6 +5644,62 @@
         "e5SmallV2": "La versión más pequeña y rápida de la línea de modelos E5. Si ejecutas {appName} en un sistema con recursos limitados, puede ser una buena opción.",
         "multilingualE5Base": "Para corpus en idiomas distintos del inglés, esta es la opción indicada.",
         "multilingualE5Small": "Para corpus en idiomas distintos del inglés en un sistema con recursos limitados, esta es la opción indicada."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Todos los fragmentos del índice de búsqueda tienen sus ID de conector. La búsqueda usa el acceso por conector.",
+            "off": "Todos los fragmentos del índice de búsqueda tienen sus ID de conector. La búsqueda usa las listas de acceso de los documentos. El acceso por conector está desactivado.",
+            "shadow": "Todos los fragmentos del índice de búsqueda tienen sus ID de conector. La búsqueda usa las listas de acceso de los documentos y las compara con el acceso por conector."
+          },
+          "title": "Actualización del acceso por conector completada"
+        },
+        "notStarted": {
+          "description": "Un proceso en segundo plano añadirá los ID de conector a los fragmentos existentes del índice de búsqueda. Comenzará en unos minutos.",
+          "title": "La actualización del acceso por conector no ha comenzado"
+        },
+        "progress": {
+          "ariaLabel": "Progreso de la actualización del acceso por conector"
+        },
+        "running": {
+          "description": "Un proceso en segundo plano añade los ID de conector a los fragmentos existentes del índice de búsqueda. El acceso de búsqueda por conector solo se puede aplicar cuando termine.",
+          "title": "Actualizando el índice de búsqueda para el acceso por conector…"
+        },
+        "status": {
+          "connectors": "{done, number} de {total, number} conectores completados",
+          "connectorsLeft": "{count, plural, one {Queda # conector} other {Quedan # conectores}}",
+          "current": "Conector actual: {name}",
+          "documentsLeft": "{count, plural, one {Queda # documento} other {Quedan # documentos}}"
+        },
+        "mode": {
+          "description": "Cómo decide la búsqueda qué documentos puede ver un usuario.",
+          "enforcePending": "Aplicar está configurado y empieza cuando termine la actualización.",
+          "enforceUnavailable": "Disponible cuando termine la actualización del índice de búsqueda.",
+          "label": "Modo de acceso de búsqueda",
+          "options": {
+            "enforce": {
+              "description": "La búsqueda usa el acceso por conector.",
+              "title": "Aplicar"
+            },
+            "off": {
+              "description": "La búsqueda usa las listas de acceso de los documentos.",
+              "title": "Desactivado"
+            },
+            "shadow": {
+              "description": "La búsqueda usa las listas de acceso de los documentos y registra dónde el acceso por conector da un resultado distinto.",
+              "title": "Sombra"
+            }
+          },
+          "placeholder": "Selecciona un modo",
+          "toasts": {
+            "error": "No se pudo actualizar el modo de acceso de búsqueda.",
+            "success": "Modo de acceso de búsqueda establecido en {mode}."
+          }
+        },
+        "loadError": {
+          "description": "Recarga la página para intentarlo de nuevo.",
+          "title": "No se pudo cargar la actualización del acceso por conector"
+        }
       }
     },
     "indexing": {
@@ -8931,9 +9076,6 @@
           "description": "Cuando está desactivado, todos los endpoints de la puerta de enlace rechazan las solicitudes, los tokens existentes dejan de funcionar y el ámbito de la puerta de enlace se oculta del selector de tokens. El tráfico del sandbox de Craft se controla por separado en la configuración de Craft."
         }
       },
-      "businessPlanTag": {
-        "label": "Plan Business"
-      },
       "tierTooltip": "LLM Gateway requiere el plan Business o Enterprise.",
       "scopeNote": {
         "title": "Cada usuario configura su propio token y los datos de conexión en Configuración → LLM Gateway."
@@ -8973,17 +9115,11 @@
       "required": {
         "label": "Obligatoria"
       },
-      "running": {
-        "label": "Ejecutando comprobaciones…"
-      },
       "empty": {
         "label": "Aún no se han ejecutado comprobaciones."
       },
       "docsLink": {
         "label": "Documentación"
-      },
-      "rerunButton": {
-        "label": "Volver a ejecutar las comprobaciones"
       },
       "foldButton": {
         "fold": "Contraer",
@@ -9001,8 +9137,236 @@
       "failedToRun": "No se pudieron ejecutar las comprobaciones. Inténtalo de nuevo.",
       "requiredFailed": "{count, plural, one {# comprobación obligatoria fallida} other {# comprobaciones obligatorias fallidas}}",
       "state": {
-        "completed": "Comprobaciones completadas",
-        "inProgress": "Comprobaciones en curso…"
+        "completed": "Comprobaciones completadas.",
+        "inProgress": "Comprobaciones en curso...",
+        "waiting": "Esperando la configuración del conector..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Editar conector"
+      },
+      "header": {
+        "title": "Editar {name}",
+        "description": "Cambia la configuración de este conector de {source}. Revisarás el plan antes de aplicar los cambios.",
+        "reviewButton": {
+          "label": "Revisar cambios"
+        }
+      },
+      "loadError": {
+        "title": "No se pudo cargar el conector",
+        "description": "Vuelve a cargar la página o regresa al conector.",
+        "backButton": {
+          "label": "Volver al conector"
+        }
+      },
+      "credentialSwap": {
+        "title": "Elegiste otra credencial",
+        "description": "El plan te permite conservar los documentos indexados, o volver a indexar todo y eliminar los documentos que la nueva credencial no puede ver."
+      },
+      "files": {
+        "title": "Archivos",
+        "description": "Agrega o quita archivos. Los archivos nuevos se indexan solo después de aplicar el plan.",
+        "empty": "El conector no tiene archivos.",
+        "addButton": {
+          "label": "Agregar archivos"
+        },
+        "remove": {
+          "tooltip": "Quitar {name}"
+        },
+        "uploadFailed": {
+          "toast": "No se pudieron subir los archivos: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "No se pudo calcular el plan: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Guarde la cuenta nueva antes de revisar los cambios o elija una cuenta guardada."
+      },
+      "applied": {
+        "toast": "Se aplicaron los cambios."
+      },
+      "plan": {
+        "title": "Revisar el plan",
+        "description": "{count, plural, one {El conector tiene # documento indexado.} other {El conector tiene # documentos indexados.}}",
+        "changes": {
+          "list": "Cambios: {fields}",
+          "none": "No hay cambios."
+        },
+        "stale": {
+          "title": "El conector cambió",
+          "description": "El conector cambió después de calcular este plan. Vuelve a calcular el plan antes de aplicarlo.",
+          "replanButton": {
+            "label": "Volver a planificar"
+          }
+        },
+        "expired": {
+          "title": "El plan caducó",
+          "description": "Este plan caducó o ya se aplicó. Vuelva a calcular el plan."
+        },
+        "applyFailed": {
+          "title": "No se pudieron aplicar los cambios"
+        },
+        "validation": {
+          "title": "Validación",
+          "blocks": "La nueva configuración no superó la validación. Corrígela antes de aplicar.",
+          "warns": "Algunas comprobaciones opcionales fallaron. Aún puedes aplicar.",
+          "error": {
+            "title": "La configuración no es válida"
+          }
+        },
+        "warnings": {
+          "title": "Advertencias"
+        },
+        "notes": {
+          "title": "Notas"
+        },
+        "reconciliation": {
+          "title": "Elige cómo conciliar el cambio de alcance",
+          "description": "El plan no puede saber si el cambio en {fields} agrega o quita documentos. Elige qué hace la aplicación.",
+          "option": {
+            "prune": {
+              "title": "Depurar",
+              "description": "Quitar los documentos que ya no están en el alcance."
+            },
+            "full_reindex": {
+              "title": "Reindexación completa",
+              "description": "Indexar todo de nuevo desde la fecha de inicio para agregar los documentos que ahora están en el alcance."
+            },
+            "both": {
+              "title": "Reindexación completa y luego depurar",
+              "description": "Indexar todo de nuevo y luego quitar los documentos que ya no están en el alcance."
+            },
+            "nothing": {
+              "title": "No hacer nada",
+              "description": "Conservar los documentos indexados. Las ejecuciones posteriores usan la nueva configuración."
+            }
+          }
+        },
+        "credential": {
+          "title": "Cambio de credencial",
+          "description": "Elige qué pasa con los documentos indexados con la credencial anterior.",
+          "option": {
+            "keep_indexed": {
+              "title": "Conservar los documentos indexados",
+              "description": "Las ejecuciones posteriores usan la nueva credencial. Es la opción rápida."
+            },
+            "full_reindex_and_prune": {
+              "title": "Reindexación completa y depuración",
+              "description": "Indexar todo de nuevo con la nueva credencial y luego quitar los documentos que no puede ver."
+            }
+          }
+        },
+        "steps": {
+          "title": "Pasos",
+          "description": "Lo que hace la aplicación, en orden. Puedes desactivar los pasos opcionales.",
+          "none": "La aplicación guarda la configuración. No se necesita indexar.",
+          "required": {
+            "label": "Obligatorio"
+          },
+          "optional": {
+            "label": "Opcional"
+          },
+          "include": {
+            "ariaLabel": "Ejecutar el paso: {step}"
+          },
+          "fields": "Campos: {fields}",
+          "window": "Ventana: de {start} a {end}",
+          "windowFromStart": "Ventana: todo hasta {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Actualizar los grupos de acceso a datos",
+              "description": "La búsqueda aplica los nuevos grupos de inmediato."
+            },
+            "access_type": {
+              "title": "Cambiar el tipo de acceso",
+              "description": "Cambia quién puede leer los documentos."
+            },
+            "enter_perm_sync": {
+              "title": "Iniciar la sincronización de permisos",
+              "description": "Los documentos quedan ocultos hasta que termine la primera sincronización de permisos."
+            },
+            "leave_perm_sync": {
+              "title": "Detener la sincronización de permisos",
+              "description": "Los permisos de la fuente ya no deciden quién lee los documentos."
+            },
+            "restart_attempt": {
+              "title": "Reiniciar el intento de indexación en curso",
+              "description": "El intento en curso se detiene y comienza uno nuevo con la nueva configuración."
+            },
+            "full_reindex_then_prune": {
+              "title": "Reindexación completa y luego depurar",
+              "description": "Indexar todo de nuevo y luego quitar los documentos que la fuente ya no devuelve."
+            },
+            "full_reindex": {
+              "title": "Reindexación completa",
+              "description": "Indexar todo de nuevo desde la fecha de inicio."
+            },
+            "scoped_backfill": {
+              "title": "Rellenar los elementos agregados",
+              "description": "Indexar solo el historial de los elementos agregados."
+            },
+            "window_backfill": {
+              "title": "Rellenar la ventana anterior",
+              "description": "Indexar el periodo entre la nueva y la antigua fecha de inicio."
+            },
+            "prune": {
+              "title": "Depurar",
+              "description": "Quitar los documentos que la fuente ya no devuelve."
+            }
+          },
+          "reason": {
+            "identity_changed": "Cambian los ID de los documentos",
+            "behavior_changed": "Cambió el procesamiento",
+            "scope_widened": "Alcance ampliado",
+            "scope_narrowed": "Alcance reducido",
+            "items_added_or_changed": "Elementos agregados o cambiados",
+            "items_removed": "Elementos quitados",
+            "opaque_scope_choice": "Tu elección de alcance",
+            "indexing_start_earlier": "Fecha de inicio anterior",
+            "credential_full_path": "Opción completa de credencial",
+            "access_changed": "Cambió el acceso",
+            "permissions_fetched_during_indexing": "Los permisos llegan con la indexación",
+            "attempt_running": "Hay un intento en curso",
+            "scoped_backfill_superseded": "Se reemplaza un relleno anterior",
+            "admin_added": "Agregado por ti",
+            "indexing_start_later": "Fecha de inicio posterior"
+          }
+        },
+        "extra": {
+          "title": "Trabajo adicional",
+          "description": "Agrega trabajo que el plan no necesita.",
+          "fullReindex": {
+            "title": "Agregar una reindexación completa",
+            "description": "Indexar todo de nuevo desde la fecha de inicio."
+          },
+          "prune": {
+            "title": "Agregar una depuración",
+            "description": "Quitar los documentos que la fuente ya no devuelve."
+          }
+        },
+        "backButton": {
+          "label": "Volver a editar"
+        },
+        "applyButton": {
+          "label": "Aplicar"
+        },
+        "blocked": {
+          "validation": "Corrige primero los errores de validación.",
+          "reconciliation": "Elige primero cómo conciliar el cambio de alcance."
+        }
+      },
+      "pendingBackfills": {
+        "title": "Rellenos pendientes",
+        "description": "Una edición solicitó estas ejecuciones. Cada una permanece aquí hasta que una ejecución tenga éxito.",
+        "window": "De {start} a {end}",
+        "windowFromStart": "Todo hasta {end}",
+        "waiting": "Espera su ejecución.",
+        "runningNow": "Un intento de indexación lo ejecuta ahora.",
+        "retry": "{count, plural, one {Falló una vez. Próximo reintento: {time}.} other {Falló # veces. Próximo reintento: {time}.}}",
+        "scoped": "Solo elementos añadidos o cambiados",
+        "failures": "{count, plural, one {# fallo} other {# fallos}}"
       }
     }
   },
@@ -12026,6 +12390,24 @@
         "empty": "Esta hoja está vacía.",
         "tooLarge": "Esta hoja es demasiado grande para la vista previa. Descarga el archivo para verla."
       }
+    },
+    "plans": {
+      "free": {
+        "title": "Plan gratuito",
+        "tooltip": "Disponible en todos los planes."
+      },
+      "business": {
+        "title": "Plan Business",
+        "tooltip": "Requiere el [plan Business o Enterprise](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Plan Enterprise",
+        "tooltip": "Requiere el [plan Enterprise](/admin/billing)."
+      },
+      "upgrade": {
+        "label": "Mejorar plan"
+      },
+      "availableFor": "Disponible en el {plan}"
     }
   },
   "craft": {
@@ -12369,6 +12751,17 @@
         "operationWait": "Espera a que se complete la operación actual.",
         "sandboxWait": "Espera a que se inicialice el sandbox",
         "scheduledRunWait": "Espera a que termine la ejecución programada."
+      },
+      "loadError": {
+        "title": "No se pudo cargar la sesión",
+        "retry": "Volver a intentar"
+      },
+      "queuedSendError": {
+        "title": "No se pudo enviar el mensaje en cola"
+      },
+      "settlementError": {
+        "title": "No se pudo confirmar que la tarea terminó",
+        "description": "Vuelve a intentarlo para comprobar la tarea y cargar su respuesta guardada."
       }
     },
     "compaction": {

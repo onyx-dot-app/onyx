@@ -167,6 +167,9 @@ gateway error.
 
 ### 4.4 Proxying the HMR websocket
 
+The managed Next.js scaffold disables the development React debug channel, keeping hydration data in the document.
+Startup migrates the old managed empty-config declaration without replacing custom settings.
+
 `websocket_webapp_hmr` requires an authenticated user
 (`current_user_from_websocket_cookie`, `onyx/auth/users.py`). That dependency
 checks the websocket origin and reads the session cookie. On multi-tenant
@@ -322,7 +325,7 @@ Updated decks clamp the current slide to their new bounds.
 | changes what is cached or its TTL | the cache-eviction-on-502/503/504 path in `get_webapp`, and whether a stale grant could outlive a sharing-scope change |
 | changes `webapp_base_path` | `nextjs_dev.py`'s start script, the template `next.config.ts`, and every place `_webapp_next_path` builds an upstream path |
 | changes port allocation | `[[craft-sandboxes]]`, and whether headless (scheduled) sessions still correctly skip provisioning |
-| touches the HMR websocket proxy | verify hydration still works; this is the trap in §9, and it fails silently, not loudly |
+| touches the HMR websocket proxy | verify live updates through both supported endpoints; check initial interactivity separately with the managed debug channel disabled (§9) |
 | changes response header filtering | re-check `set-cookie` stripping and cache-control handling together; a change to one filter can undo the other's intent |
 
 ---
@@ -346,12 +349,10 @@ Use manual reproduction for the cache and hot-reload behaviour below.
 
 1. Confirm services are up: `tail -f backend/log/api_server_debug.log`.
 2. In a Craft session, ask the agent to scaffold a simple Next.js page.
-3. Open the Preview tab. Confirm the app renders and that editing a
-   component (ask the agent to change some visible text) hot-reloads
-   without a manual refresh. If it renders once but never updates after an
-   edit, the HMR websocket is not reaching the sandbox; check
-   `_next/hmr` (or `_next/webpack-hmr`) in the browser's network panel for a failed
-   upgrade.
+3. Open the session app preview. Confirm the app renders and its controls respond.
+   If `experimental.reactDebugChannel` is false, block the HMR WebSocket and reload; controls should still respond.
+   Unblock the WebSocket. Ask the agent to change visible text and confirm hot reload without a manual refresh.
+   If edits do not appear, check `/_next/hmr` or `/_next/webpack-hmr` for a failed WebSocket upgrade.
 4. Open the same session URL as a second, unrelated user account (or in an
    incognito window with no session). Confirm the second user gets a 404
    and the logged-out window is redirected to `/auth/login`, not rendered.
@@ -366,6 +367,7 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
 - An unauthorized logged-in viewer gets a 404 and a logged-out viewer gets a
   redirect to `/auth/login`. Neither sees a rendered frame.
 - Hot reload works after a file edit without a manual page reload.
+- With the managed debug channel disabled, initial controls work even when the HMR WebSocket is unavailable.
 - No stale JS/CSS after an edit, confirmed by a hard content check, not
   just "the page still looks fine."
 
@@ -373,17 +375,14 @@ Drive the browser with `claude-in-chrome` against the user's real Chrome.
 
 ## 9. Footguns
 
-- **Websocket upgrade is required for hydration, and failing to provide it
-  does not look like an error.** Next.js 16 with Turbopack and React 19
-  needs its HMR websocket connected for the page to
-  hydrate correctly in dev. If a deployment's proxy or ingress fails to
-  upgrade that connection, the page still renders (the initial HTML and
-  JS load fine over plain HTTP), but no event handlers attach: dropdowns
-  don't open, buttons don't respond. This looks like a broken feature in
-  the generated app, not a proxy problem. `websocket_webapp_hmr`
-  (`webapp_proxy.py`) is confirmed to implement the upgrade and pump both
-  directions; a regression here would reproduce exactly this symptom.
-- **Next.js HMR paths vary by version.** Newer sandbox apps use `/_next/hmr`; older apps use `/_next/webpack-hmr`. Both the frontend development rewrite and backend WebSocket route must preserve the requested endpoint. Missing the new path leaves server-rendered headers visible while client components never initialize.
+- **Initial hydration and hot reload have different requirements.** The managed
+  scaffold disables `experimental.reactDebugChannel`. Initial interactivity should
+  not require the HMR WebSocket, but live source updates still require it.
+  Older or custom configurations that enable the debug channel can still delay
+  hydration when that connection fails. Check the effective configuration before diagnosing unresponsive controls.
+- **Next.js HMR paths vary by version.** Newer sandbox apps use `/_next/hmr`;
+  older apps use `/_next/webpack-hmr`. Frontend rewrites and backend WebSocket
+  routes must preserve the endpoint so source edits update the running app.
 - **Only `_next/static/media/*` is safe to cache immutably.** `_proxy_request`
   checks `rel_path.startswith("_next/static/media/")` before setting
   `cache-control: public, max-age=31536000, immutable`; every other path,

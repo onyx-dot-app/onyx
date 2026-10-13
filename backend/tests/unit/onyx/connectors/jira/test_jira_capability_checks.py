@@ -69,6 +69,17 @@ def _api_error(status: int, text: str | None = None) -> JiraApiError:
     return JiraApiError(f"HTTP {status}", status_code=status, text=text)
 
 
+def _advisories(result: CapabilityCheckResult) -> list[str]:
+    return [advisory.message for advisory in result.advisories]
+
+
+def _match_nothing(gateway: MagicMock) -> None:
+    gateway.search_issue_ids.return_value = JiraIssueIdPage(
+        issue_ids=[], next_page_token=None
+    )
+    gateway.search_issues.return_value = []
+
+
 # --- jira_auth / jira_scoped_token_auth ---
 
 
@@ -342,17 +353,29 @@ def test_jql_query_fails_with_the_jira_message() -> None:
     assert "reserved JQL word" in result.message
 
 
-def test_jql_query_is_indeterminate_when_it_matches_nothing() -> None:
-    gateway: MagicMock = _gateway(is_cloud=True)
-    gateway.search_issue_ids.return_value = JiraIssueIdPage(
-        issue_ids=[], next_page_token=None
-    )
+@pytest.mark.parametrize("is_cloud", [True, False], ids=["cloud", "server"])
+def test_jql_query_passes_with_an_advisory_when_it_matches_nothing(
+    is_cloud: bool,
+) -> None:
+    gateway: MagicMock = _gateway(is_cloud=is_cloud)
+    _match_nothing(gateway)
 
     result: CapabilityCheckResult = _run(
         "jira_jql_query", gateway, _config(jql_query="project = EMPTY")
     )
 
-    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = _advisories(result)
+    assert "matched no issue" in advisory
+
+
+def test_jql_query_has_no_advisory_when_it_matches_an_issue() -> None:
+    result: CapabilityCheckResult = _run(
+        "jira_jql_query", _gateway(is_cloud=True), _config(jql_query="project = X")
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    assert _advisories(result) == []
 
 
 # --- jira_issue_read ---
@@ -453,3 +476,51 @@ def test_optional_jsm_attachment_probe_cannot_gate_jira_indexing() -> None:
 
     assert result.status == CapabilityCheckStatus.FAILED
     assert result.error_type == "InsufficientPermissionsError"
+@pytest.mark.parametrize(
+    "scoped_token,hint",
+    [(False, "Browse Projects"), (True, "read:jira-work")],
+    ids=["classic", "scoped"],
+)
+@pytest.mark.parametrize(
+    "scope",
+    [{"project_key": "AS"}, {"jql_query": "project = AS"}],
+    ids=["project", "jql"],
+)
+def test_issue_read_passes_with_an_advisory_for_an_empty_scope(
+    scope: dict[str, str], scoped_token: bool, hint: str
+) -> None:
+    gateway: MagicMock = _gateway(is_cloud=True)
+    _match_nothing(gateway)
+
+    result: CapabilityCheckResult = _run(
+        "jira_issue_read",
+        gateway,
+        _config(scoped_token=scoped_token, **scope),
+    )
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = _advisories(result)
+    assert "did not verify that issues are readable" in advisory
+    assert hint in advisory
+    gateway.bulk_fetch_issues.assert_not_called()
+
+
+@pytest.mark.parametrize("is_cloud", [True, False], ids=["cloud", "server"])
+def test_issue_read_fails_when_no_issue_is_readable_without_a_scope(
+    is_cloud: bool,
+) -> None:
+    gateway: MagicMock = _gateway(is_cloud=is_cloud)
+    _match_nothing(gateway)
+
+    result: CapabilityCheckResult = _run(
+        "jira_issue_read",
+        gateway,
+        _config(jira_base_url=_CLOUD_URL if is_cloud else _DC_URL),
+        credential_json=_CLOUD_CREDENTIAL if is_cloud else _DC_CREDENTIAL,
+    )
+
+    assert result.status == CapabilityCheckStatus.FAILED
+    assert result.error_type == "ConnectorValidationError"
+    assert "indexing would add no documents" in result.message
+    assert "Browse Projects" in result.message
+    assert _advisories(result) == []

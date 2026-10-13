@@ -13,8 +13,8 @@ off while keeping the trigger mounted.
 | Prop            | Type                                     | Default    | Description                                                                                                    |
 | --------------- | ---------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------- |
 | `tooltip`       | `ReactNode \| RichStr`                   | —          | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
-| `side`          | `"top" \| "bottom" \| "left" \| "right"` | `"right"`  | Which side the tooltip appears on                                                                              |
-| `align`         | `"start" \| "center" \| "end"`           | `"center"` | Alignment along the tooltip's side axis                                                                        |
+| `side`          | `"top" \| "bottom" \| "start" \| "end"`   | `"end"`    | Which side the tooltip appears on. `start`/`end` are logical: in a right-to-left layout `start` is the right side |
+| `align`         | `"start" \| "center" \| "end" \| "follow"` | `"center"` | Alignment along the tooltip's side axis. `follow` slides it to stay level with the pointer, for a tall or wide trigger |
 | `suppressed`    | `boolean`                                | `false`    | Shows nothing on hover, but keeps the trigger mounted                                                          |
 | `delayDuration` | `number`                                 | —          | Delay in ms before the tooltip appears on hover                                                                |
 | `sideOffset`    | `number`                                 | `4`        | Distance in pixels between the trigger and the tooltip                                                         |
@@ -45,7 +45,7 @@ import { Tooltip } from "@opal/components";
   that forwards refs).
 - `string` and `RichStr` content is rendered via `Text font="secondary-body" color="inherit"`.
 - `ReactNode` content is rendered as-is for custom tooltip layouts.
-- The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap.
+- The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap. Text with no spaces, such as a URL, breaks at that edge rather than running past it.
 - The surface is dark in both themes, so content renders inside a `dark` theme scope. Adaptive
   tokens (`text-03` and friends) resolve to their dark values; `text-inverted-*` resolves
   backwards and is wrong here.

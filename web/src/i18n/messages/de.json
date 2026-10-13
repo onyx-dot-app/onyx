@@ -1860,9 +1860,6 @@
           "restoreTooltip": "Standard wiederherstellen"
         },
         "description": "Legen Sie fest, wie lange {appName} Chats in Ihrer Organisation aufbewahren soll.",
-        "enterprisePlanTag": {
-          "label": "Enterprise-Tarif"
-        },
         "forever": {
           "label": "Unbegrenzt"
         },
@@ -1878,16 +1875,11 @@
           "message": "Chats ohne Aktivität über mehr als {days, plural, one {# Tag} other {# Tage}} werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
           "title": "Chat-Aufbewahrung verkürzen?"
         },
-        "tierTooltip": "Die Aufbewahrung des Chat-Verlaufs ist eine Funktion des Enterprise-Tarifs.",
         "title": "Chat-Verlauf aufbewahren"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business-Tarif"
-        },
         "description": "Oberflächenmodus für die schnelle Dokumentensuche in Ihrer Organisation.",
         "noConnectorsTooltip": "Richten Sie Konnektoren ein, um den Suchmodus zu verwenden",
-        "tierTooltip": "Der Suchmodus erfordert den Business- oder Enterprise-Tarif.",
         "title": "Suchmodus"
       },
       "systemPrompt": {
@@ -2637,22 +2629,28 @@
           "description": "Microsoft Graph-Host. Verwenden Sie für GCC High oder DoD https://graph.microsoft.us."
         }
       },
+      "linear": {
+        "description": "Linear-Connector konfigurieren",
+        "teams": {
+          "label": "Teams",
+          "description": "Linear-Teamschlüssel (z. B. ENG), die indexiert werden sollen. Leer lassen, um jedes Team zu indexieren, das der verbundene Benutzer sehen kann."
+        },
+        "projects": {
+          "label": "Projekte",
+          "description": "Namen oder URLs der Linear-Projekte, die indexiert werden sollen. Leer lassen, um jedes Projekt zu indexieren. Sind auch Teams gesetzt, muss ein Issue beiden entsprechen."
+        },
+        "syncNotice": "Verbinden Sie sich als Workspace-Mitglied, nicht als Gast, das jedem privaten Team angehört, das Sie indexieren möchten. Onyx kann private Teams nicht sehen, in denen der verbundene Benutzer nicht ist. Issues in öffentlichen Teams sind für jedes Workspace-Mitglied durchsuchbar, Issues in privaten oder eingeschränkten Teams für deren Mitglieder."
+      },
       "add": {
         "authorizeButton": {
           "label": "Mit {source} autorisieren",
           "pendingLabel": "Wird autorisiert..."
-        },
-        "collapseButton": {
-          "ariaLabel": "Einklappen"
         },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Neu erstellen"
-        },
-        "credentialDeleted": {
-          "toast": "Anmeldedaten erfolgreich gelöscht!"
         },
         "credentialModal": {
           "title": "Anmeldedaten für {source} erstellen"
@@ -2665,14 +2663,8 @@
           "description": "Verwenden Sie ein gemeinsames Dienstkonto. {appName} indexiert Inhalte als dieses Konto.",
           "title": "Authentifizierungskonto"
         },
-        "credentialSwapped": {
-          "toast": "Anmeldedaten erfolgreich gewechselt!"
-        },
         "error": {
           "toast": "Fehler: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Ausklappen"
         },
         "federated": {
           "tooltip": {
@@ -2704,14 +2696,99 @@
         "retryButton": {
           "label": "Erneut versuchen"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# gespeichertes Konto} other {# gespeicherte Konten}}",
+          "expandButton": {
+            "ariaLabel": "Gespeicherte Konten anzeigen"
+          },
+          "collapseButton": {
+            "ariaLabel": "Gespeicherte Konten ausblenden"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Neues Konto)",
+          "editButton": {
+            "label": "Konto bearbeiten"
+          }
         },
         "timeout": {
           "toast": "Zeitüberschreitung des Vorgangs nach {seconds} Sekunden. Prüfen Sie Ihre Konfiguration auf Fehler."
         },
         "unknownError": {
           "toast": "Ein unbekannter Fehler ist aufgetreten"
+        },
+        "account": {
+          "untitled": {
+            "label": "Ohne Titel"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Hinzugefügt am {date}"
+          },
+          "selected": {
+            "label": "Ausgewählt"
+          },
+          "useButton": {
+            "label": "Konto verwenden"
+          },
+          "unsupportedRealm": {
+            "label": "Nicht unterstützte Website-Domain"
+          },
+          "expandButton": {
+            "ariaLabel": "Kontodetails anzeigen"
+          },
+          "collapseButton": {
+            "ariaLabel": "Kontodetails ausblenden"
+          },
+          "deleteButton": {
+            "label": "Konto löschen",
+            "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Connectors sie verwenden."
+          },
+          "usedBy": {
+            "label": "Verwendet von {count, plural, one {# Connector} other {# Connectors}}"
+          },
+          "owner": {
+            "you": "{name} (Sie)"
+          },
+          "lastTested": {
+            "title": "Zuletzt getestet {date}"
+          },
+          "notTested": {
+            "title": "Noch nicht getestet"
+          },
+          "details": {
+            "description": "Gespeicherte Kontozugangsdaten können nicht bearbeitet oder an einen anderen Host umgeleitet werden. Sie können das Konto vor der Wiederverwendung testen oder stattdessen ein neues Konto hinzufügen."
+          },
+          "rerunButton": {
+            "label": "Prüfungen erneut ausführen"
+          },
+          "authenticationType": {
+            "label": "Authentifizierungstyp"
+          },
+          "rerunFailed": {
+            "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
+          },
+          "shareSaved": {
+            "toast": "Freigabe aktualisiert."
+          },
+          "shareFailed": {
+            "toast": "Die Freigabe dieses Kontos konnte nicht geändert werden. Versuchen Sie es erneut."
+          },
+          "renameSaved": {
+            "toast": "Konto umbenannt."
+          },
+          "renameFailed": {
+            "toast": "Das Konto konnte nicht umbenannt werden. Versuche es erneut."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, kann es privat machen."
+          },
+          "shareLocked": {
+            "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, oder ein Admin, mit dem es geteilt ist, kann ändern, wer es nutzen darf."
+          }
+        },
+        "accountUnavailable": {
+          "toast": "Dieses Konto ist für Sie nicht mehr verfügbar. Wählen Sie ein anderes Konto."
         }
       },
       "credentialRequired": {
@@ -2721,6 +2798,7 @@
         "enterField": "Geben Sie das Feld „{field}“ ein.",
         "fixField": "Prüfen Sie das Feld „{field}“.",
         "awaitingCheck": "Verlassen Sie das Feld, um es mit den Anmeldedaten zu prüfen.",
+        "runChecks": "Führen Sie die Prüfungen aus, um das neue Konto mit diesen Einstellungen zu prüfen.",
         "checking": "Die Anmeldedaten werden geprüft…",
         "fieldInvalid": "Prüfen Sie das Feld „{field}“: {detail}",
         "rejected": "Diese Anmeldedaten können mit diesen Einstellungen nicht verwendet werden. {detail}"
@@ -3323,6 +3401,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "Verwenden Sie die E-Mail-Adresse des Kontos, dem das API-Token gehört."
+        },
+        "nameField": {
+          "title": "Anzeigename",
+          "placeholder": "Geben Sie Ihrem Authentifizierungskonto einen Namen"
         },
         "apiTokenField": {
           "subDescription": "Fügen Sie Ihr API-Token ein, um auf {source} zuzugreifen."
@@ -4429,6 +4511,7 @@
           "tooltip": "Die Dokument-Embeddings werden aufgrund kürzlicher Änderungen an dieser Gruppe aktualisiert."
         },
         "systemGroup": {
+          "basicDescription": "{appName} verwaltet diese Gruppe. Sie enthält nur Mitglieder, und die Berechtigungen unten gelten für alle darin.",
           "description": "{appName} verwaltet diese Gruppe. Sie enthält nur Mitglieder, und nur diese können Sie ändern.",
           "title": "Systemgruppe"
         },
@@ -5169,6 +5252,10 @@
         "orSeparator": {
           "label": "oder"
         },
+        "quantizationOnly": {
+          "description": "Nur die Vektorquantisierung hat sich geändert. Onyx baut den Index daher aus den gespeicherten Vektoren neu auf, ohne erneutes Embedding. Das geht viel schneller als eine vollständige Neuindizierung.",
+          "title": "Der Index wird neu aufgebaut."
+        },
         "reindex": {
           "description": "Die Neuindexierung kann je nach Korpusgröße *Stunden oder Tage* dauern. [Mehr erfahren](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Eine vollständige Neuindexierung wird ausgeführt."
@@ -5389,7 +5476,9 @@
         "cancelButton": {
           "label": "Neuindizierung abbrechen & zurücksetzen"
         },
+        "copyTitle": "Index wird neu aufgebaut…",
         "description": {
+          "copy": "Onyx baut den Index aus den gespeicherten Vektoren neu auf, ohne erneutes Embedding. Das geht viel schneller als ein erneutes Embedding.",
           "withModel": "Die neuen Embedding-Einstellungen (**{model}**) werden im Verlauf der Neuindizierung angewendet. Dies kann je nach Korpusgröße **Stunden oder Tage** dauern.",
           "withoutModel": "Die neuen Embedding-Einstellungen werden im Verlauf der Neuindizierung angewendet. Dies kann je nach Korpusgröße **Stunden oder Tage** dauern."
         },
@@ -5511,17 +5600,17 @@
         "googleProjectRequired": "GCP-Projekt-ID ist erforderlich"
       },
       "vectorQuantization": {
-        "description": "Speichern Sie Dokumentvektoren mit weniger Bits, um Speicher zu sparen. Weniger Bits können die Suchqualität verringern.",
+        "description": "Speichern Sie Dokumentvektoren mit weniger Bits, damit die Vektorsuche weniger Speicher benötigt. Weniger Bits können die Suchqualität verringern. Wenn Sie nur diese Einstellung ändern, wird der Index aus den gespeicherten Vektoren neu aufgebaut, ohne erneutes Embedding.",
         "none": {
           "description": "Volle 32-Bit-Genauigkeit.",
           "label": "Keine"
         },
         "scalar1Bit": {
-          "description": "32-mal weniger Speicher. Erfordert OpenSearch 3.6 oder höher.",
+          "description": "Der geringste Speicherbedarf für die Vektorsuche, mit leichtem Verlust an Suchqualität. Empfohlen für große Indizes. Erfordert OpenSearch 3.6 oder höher.",
           "label": "1 Bit"
         },
         "scalar7Bit": {
-          "description": "4-mal weniger Speicher. Fast kein Verlust an Suchqualität.",
+          "description": "Etwa 4-mal weniger Speicher für die Vektorsuche. Fast kein Verlust an Suchqualität.",
           "label": "7 Bit"
         },
         "title": "Vektorquantisierung"
@@ -5555,6 +5644,62 @@
         "e5SmallV2": "Die kleinste und schnellste Variante der E5-Modellreihe. Eine gute Wahl, wenn {appName} auf einem System mit begrenzten Ressourcen läuft.",
         "multilingualE5Base": "Für Korpora in anderen Sprachen als Englisch ist dies die richtige Wahl.",
         "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet den Zugriff auf Konnektorebene.",
+            "off": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente. Der Zugriff auf Konnektorebene ist ausgeschaltet.",
+            "shadow": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente und vergleicht sie mit dem Zugriff auf Konnektorebene."
+          },
+          "title": "Aktualisierung des Konnektorzugriffs abgeschlossen"
+        },
+        "notStarted": {
+          "description": "Ein Hintergrundjob fügt den vorhandenen Chunks im Suchindex Konnektor-IDs hinzu. Er startet in wenigen Minuten.",
+          "title": "Aktualisierung des Konnektorzugriffs noch nicht gestartet"
+        },
+        "progress": {
+          "ariaLabel": "Fortschritt der Aktualisierung des Konnektorzugriffs"
+        },
+        "running": {
+          "description": "Ein Hintergrundjob fügt den vorhandenen Chunks im Suchindex Konnektor-IDs hinzu. Der Suchzugriff auf Konnektorebene kann erst danach erzwungen werden.",
+          "title": "Suchindex wird für den Konnektorzugriff aktualisiert…"
+        },
+        "status": {
+          "connectors": "{done, number} von {total, number} Konnektoren fertig",
+          "connectorsLeft": "{count, plural, one {# Konnektor übrig} other {# Konnektoren übrig}}",
+          "current": "Aktueller Konnektor: {name}",
+          "documentsLeft": "{count, plural, one {# Dokument übrig} other {# Dokumente übrig}}"
+        },
+        "mode": {
+          "description": "Wie die Suche entscheidet, welche Dokumente ein Benutzer sehen kann.",
+          "enforcePending": "Erzwingen ist eingestellt und beginnt, wenn die Aktualisierung abgeschlossen ist.",
+          "enforceUnavailable": "Verfügbar, nachdem die Aktualisierung des Suchindex abgeschlossen ist.",
+          "label": "Suchzugriffsmodus",
+          "options": {
+            "enforce": {
+              "description": "Die Suche verwendet den Zugriff auf Konnektorebene.",
+              "title": "Erzwingen"
+            },
+            "off": {
+              "description": "Die Suche verwendet die Zugriffslisten der Dokumente.",
+              "title": "Aus"
+            },
+            "shadow": {
+              "description": "Die Suche verwendet die Zugriffslisten der Dokumente und protokolliert, wo der Zugriff auf Konnektorebene ein anderes Ergebnis liefert.",
+              "title": "Schatten"
+            }
+          },
+          "placeholder": "Modus auswählen",
+          "toasts": {
+            "error": "Der Suchzugriffsmodus konnte nicht aktualisiert werden.",
+            "success": "Suchzugriffsmodus auf {mode} gesetzt."
+          }
+        },
+        "loadError": {
+          "description": "Laden Sie die Seite neu, um es erneut zu versuchen.",
+          "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden"
+        }
       }
     },
     "indexing": {
@@ -8931,9 +9076,6 @@
           "description": "Wenn deaktiviert, lehnen alle Gateway-Endpunkte Anfragen ab, vorhandene Token funktionieren nicht mehr, und der Gateway-Bereich wird in der Token-Auswahl ausgeblendet. Der Craft-Sandbox-Datenverkehr wird separat über die Craft-Einstellungen gesteuert."
         }
       },
-      "businessPlanTag": {
-        "label": "Business-Tarif"
-      },
       "tierTooltip": "Das LLM Gateway erfordert den Business- oder Enterprise-Tarif.",
       "scopeNote": {
         "title": "Jeder Benutzer konfiguriert sein eigenes Token und die Verbindungsdetails unter Einstellungen → LLM Gateway."
@@ -8973,17 +9115,11 @@
       "required": {
         "label": "Erforderlich"
       },
-      "running": {
-        "label": "Prüfungen laufen…"
-      },
       "empty": {
         "label": "Es wurden noch keine Prüfungen ausgeführt."
       },
       "docsLink": {
         "label": "Dokumentation"
-      },
-      "rerunButton": {
-        "label": "Prüfungen erneut ausführen"
       },
       "foldButton": {
         "fold": "Einklappen",
@@ -9001,8 +9137,236 @@
       "failedToRun": "Die Prüfungen konnten nicht ausgeführt werden. Versuchen Sie es erneut.",
       "requiredFailed": "{count, plural, one {# erforderliche Prüfung fehlgeschlagen} other {# erforderliche Prüfungen fehlgeschlagen}}",
       "state": {
-        "completed": "Prüfungen abgeschlossen",
-        "inProgress": "Prüfungen laufen…"
+        "completed": "Prüfungen abgeschlossen.",
+        "inProgress": "Prüfungen laufen...",
+        "waiting": "Warten auf Connector-Einstellungen..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Connector bearbeiten"
+      },
+      "header": {
+        "title": "{name} bearbeiten",
+        "description": "Ändern Sie die Einstellungen dieses {source}-Connectors. Sie prüfen den Plan, bevor die Änderungen angewendet werden.",
+        "reviewButton": {
+          "label": "Änderungen prüfen"
+        }
+      },
+      "loadError": {
+        "title": "Der Connector konnte nicht geladen werden",
+        "description": "Laden Sie die Seite neu oder kehren Sie zum Connector zurück.",
+        "backButton": {
+          "label": "Zurück zum Connector"
+        }
+      },
+      "credentialSwap": {
+        "title": "Sie haben andere Anmeldedaten gewählt",
+        "description": "Im Plan können Sie die indexierten Dokumente behalten oder alles neu indexieren und die Dokumente entfernen, die die neuen Anmeldedaten nicht sehen."
+      },
+      "files": {
+        "title": "Dateien",
+        "description": "Fügen Sie Dateien hinzu oder entfernen Sie sie. Neue Dateien werden erst indexiert, nachdem Sie den Plan angewendet haben.",
+        "empty": "Der Connector hat keine Dateien.",
+        "addButton": {
+          "label": "Dateien hinzufügen"
+        },
+        "remove": {
+          "tooltip": "{name} entfernen"
+        },
+        "uploadFailed": {
+          "toast": "Die Dateien konnten nicht hochgeladen werden: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "Der Plan konnte nicht berechnet werden: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Speichern Sie das neue Konto, bevor Sie die Änderungen prüfen, oder wählen Sie ein gespeichertes Konto."
+      },
+      "applied": {
+        "toast": "Die Änderungen wurden angewendet."
+      },
+      "plan": {
+        "title": "Plan prüfen",
+        "description": "{count, plural, one {Der Connector hat # indexiertes Dokument.} other {Der Connector hat # indexierte Dokumente.}}",
+        "changes": {
+          "list": "Geändert: {fields}",
+          "none": "Nichts wurde geändert."
+        },
+        "stale": {
+          "title": "Der Connector wurde geändert",
+          "description": "Der Connector wurde nach der Berechnung dieses Plans geändert. Berechnen Sie den Plan neu, bevor Sie ihn anwenden.",
+          "replanButton": {
+            "label": "Neu planen"
+          }
+        },
+        "expired": {
+          "title": "Der Plan ist abgelaufen",
+          "description": "Dieser Plan ist abgelaufen oder wurde bereits angewendet. Berechnen Sie den Plan erneut."
+        },
+        "applyFailed": {
+          "title": "Die Änderungen konnten nicht angewendet werden"
+        },
+        "validation": {
+          "title": "Validierung",
+          "blocks": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden.",
+          "warns": "Einige optionale Prüfungen sind fehlgeschlagen. Sie können trotzdem anwenden.",
+          "error": {
+            "title": "Die Einstellungen sind ungültig"
+          }
+        },
+        "warnings": {
+          "title": "Warnungen"
+        },
+        "notes": {
+          "title": "Hinweise"
+        },
+        "reconciliation": {
+          "title": "Wählen Sie, wie die Bereichsänderung abgeglichen wird",
+          "description": "Der Plan kann nicht erkennen, ob die Änderung an {fields} Dokumente hinzufügt oder entfernt. Wählen Sie, was beim Anwenden geschieht.",
+          "option": {
+            "prune": {
+              "title": "Bereinigen",
+              "description": "Die Dokumente entfernen, die nicht mehr im Bereich liegen."
+            },
+            "full_reindex": {
+              "title": "Vollständige Neuindexierung",
+              "description": "Alles ab dem Startdatum neu indexieren, um die Dokumente im neuen Bereich hinzuzufügen."
+            },
+            "both": {
+              "title": "Vollständige Neuindexierung, dann bereinigen",
+              "description": "Alles neu indexieren und dann die Dokumente entfernen, die nicht mehr im Bereich liegen."
+            },
+            "nothing": {
+              "title": "Nichts tun",
+              "description": "Die indexierten Dokumente behalten. Spätere Läufe verwenden die neuen Einstellungen."
+            }
+          }
+        },
+        "credential": {
+          "title": "Änderung der Anmeldedaten",
+          "description": "Wählen Sie, was mit den Dokumenten geschieht, die mit den alten Anmeldedaten indexiert wurden.",
+          "option": {
+            "keep_indexed": {
+              "title": "Indexierte Dokumente behalten",
+              "description": "Spätere Läufe verwenden die neuen Anmeldedaten. Das ist der schnelle Weg."
+            },
+            "full_reindex_and_prune": {
+              "title": "Vollständige Neuindexierung und Bereinigung",
+              "description": "Alles mit den neuen Anmeldedaten neu indexieren und dann die Dokumente entfernen, die sie nicht sehen."
+            }
+          }
+        },
+        "steps": {
+          "title": "Schritte",
+          "description": "Was beim Anwenden geschieht, in Reihenfolge. Sie können optionale Schritte ausschalten.",
+          "none": "Beim Anwenden werden die Einstellungen gespeichert. Keine Indexierung ist nötig.",
+          "required": {
+            "label": "Erforderlich"
+          },
+          "optional": {
+            "label": "Optional"
+          },
+          "include": {
+            "ariaLabel": "Schritt ausführen: {step}"
+          },
+          "fields": "Felder: {fields}",
+          "window": "Zeitraum: {start} bis {end}",
+          "windowFromStart": "Zeitraum: alles bis {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Datenzugriffsgruppen aktualisieren",
+              "description": "Die Suche wendet die neuen Gruppen sofort an."
+            },
+            "access_type": {
+              "title": "Zugriffstyp ändern",
+              "description": "Es ändert sich, wer die Dokumente lesen kann."
+            },
+            "enter_perm_sync": {
+              "title": "Berechtigungssynchronisierung starten",
+              "description": "Die Dokumente bleiben verborgen, bis die erste Berechtigungssynchronisierung abgeschlossen ist."
+            },
+            "leave_perm_sync": {
+              "title": "Berechtigungssynchronisierung beenden",
+              "description": "Die Berechtigungen der Quelle bestimmen nicht mehr, wer die Dokumente liest."
+            },
+            "restart_attempt": {
+              "title": "Laufenden Indexierungsversuch neu starten",
+              "description": "Der laufende Versuch stoppt, und ein neuer startet mit den neuen Einstellungen."
+            },
+            "full_reindex_then_prune": {
+              "title": "Vollständige Neuindexierung, dann bereinigen",
+              "description": "Alles neu indexieren und dann die Dokumente entfernen, die die Quelle nicht mehr liefert."
+            },
+            "full_reindex": {
+              "title": "Vollständige Neuindexierung",
+              "description": "Alles ab dem Startdatum neu indexieren."
+            },
+            "scoped_backfill": {
+              "title": "Hinzugefügte Elemente nachindexieren",
+              "description": "Nur den Verlauf der hinzugefügten Elemente indexieren."
+            },
+            "window_backfill": {
+              "title": "Früheren Zeitraum nachindexieren",
+              "description": "Den Zeitraum zwischen dem neuen und dem alten Startdatum indexieren."
+            },
+            "prune": {
+              "title": "Bereinigen",
+              "description": "Die Dokumente entfernen, die die Quelle nicht mehr liefert."
+            }
+          },
+          "reason": {
+            "identity_changed": "Dokument-IDs ändern sich",
+            "behavior_changed": "Verarbeitung geändert",
+            "scope_widened": "Bereich erweitert",
+            "scope_narrowed": "Bereich eingeschränkt",
+            "items_added_or_changed": "Elemente hinzugefügt oder geändert",
+            "items_removed": "Elemente entfernt",
+            "opaque_scope_choice": "Ihre Bereichsauswahl",
+            "indexing_start_earlier": "Früheres Startdatum",
+            "credential_full_path": "Vollständiger Weg für Anmeldedaten",
+            "access_changed": "Zugriff geändert",
+            "permissions_fetched_during_indexing": "Berechtigungen kommen mit der Indexierung",
+            "attempt_running": "Ein Versuch läuft",
+            "scoped_backfill_superseded": "Eine frühere Nachindexierung wird ersetzt",
+            "admin_added": "Von Ihnen hinzugefügt",
+            "indexing_start_later": "Späteres Startdatum"
+          }
+        },
+        "extra": {
+          "title": "Zusätzliche Arbeit",
+          "description": "Fügen Sie Arbeit hinzu, die der Plan nicht benötigt.",
+          "fullReindex": {
+            "title": "Vollständige Neuindexierung hinzufügen",
+            "description": "Alles ab dem Startdatum neu indexieren."
+          },
+          "prune": {
+            "title": "Bereinigung hinzufügen",
+            "description": "Die Dokumente entfernen, die die Quelle nicht mehr liefert."
+          }
+        },
+        "backButton": {
+          "label": "Zurück zur Bearbeitung"
+        },
+        "applyButton": {
+          "label": "Anwenden"
+        },
+        "blocked": {
+          "validation": "Beheben Sie zuerst die Validierungsfehler.",
+          "reconciliation": "Wählen Sie zuerst, wie die Bereichsänderung abgeglichen wird."
+        }
+      },
+      "pendingBackfills": {
+        "title": "Ausstehende Nachindexierungen",
+        "description": "Eine Bearbeitung hat diese Läufe angefordert. Jeder bleibt hier, bis ein Lauf erfolgreich ist.",
+        "window": "{start} bis {end}",
+        "windowFromStart": "Alles bis {end}",
+        "waiting": "Wartet auf den Lauf.",
+        "runningNow": "Ein Indexierungsversuch führt ihn jetzt aus.",
+        "retry": "{count, plural, one {Einmal fehlgeschlagen. Nächster Versuch: {time}.} other {# Mal fehlgeschlagen. Nächster Versuch: {time}.}}",
+        "scoped": "Nur hinzugefügte oder geänderte Elemente",
+        "failures": "{count, plural, one {# Fehler} other {# Fehler}}"
       }
     }
   },
@@ -12026,6 +12390,24 @@
         "empty": "Dieses Blatt ist leer.",
         "tooLarge": "Dieses Blatt ist zu groß für die Vorschau. Laden Sie die Datei herunter, um es anzusehen."
       }
+    },
+    "plans": {
+      "free": {
+        "title": "Free-Tarif",
+        "tooltip": "In allen Tarifen verfügbar."
+      },
+      "business": {
+        "title": "Business-Tarif",
+        "tooltip": "Erfordert den [Business- oder Enterprise-Tarif](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Enterprise-Tarif",
+        "tooltip": "Erfordert den [Enterprise-Tarif](/admin/billing)."
+      },
+      "upgrade": {
+        "label": "Tarif upgraden"
+      },
+      "availableFor": "Verfügbar im {plan}"
     }
   },
   "craft": {
@@ -12369,6 +12751,17 @@
         "operationWait": "Bitte warte, bis der aktuelle Vorgang abgeschlossen ist.",
         "sandboxWait": "Bitte warte, bis die Sandbox initialisiert ist",
         "scheduledRunWait": "Bitte warte, bis die geplante Ausführung abgeschlossen ist."
+      },
+      "loadError": {
+        "title": "Die Sitzung konnte nicht geladen werden",
+        "retry": "Erneut versuchen"
+      },
+      "queuedSendError": {
+        "title": "Die Nachricht in der Warteschlange konnte nicht gesendet werden"
+      },
+      "settlementError": {
+        "title": "Aufgabenabschluss konnte nicht bestätigt werden",
+        "description": "Versuche es erneut, um die Aufgabe zu prüfen und ihre gespeicherte Antwort zu laden."
       }
     },
     "compaction": {

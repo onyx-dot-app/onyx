@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
+import { IconLoader } from "@opal/loaders";
 import { Section } from "@/layouts/general-layouts";
 import { buildArtifactUrl } from "@/app/craft/services/apiServices";
 
@@ -76,9 +77,7 @@ export default function PdfPreview({
       }
       return nextBlob;
     },
-    revision,
-    refreshKey,
-    isActive
+    { revision, refreshKey, isActive }
   );
 
   // Object URLs belong only to the mounted viewer.
@@ -93,7 +92,7 @@ export default function PdfPreview({
   }, [blob]);
   const blobUrl = objectUrl?.blob === blob ? objectUrl?.url : undefined;
 
-  if (error) {
+  if (error && !blob) {
     return (
       <Section
         height="full"
@@ -114,7 +113,7 @@ export default function PdfPreview({
     );
   }
 
-  if (isLoading || !blobUrl) {
+  if ((!blob && isLoading) || !blobUrl) {
     return (
       <Section
         height="full"
@@ -130,10 +129,29 @@ export default function PdfPreview({
   }
 
   return (
-    <iframe
-      src={blobUrl}
-      title={filePath.split("/").pop() || t("frame.title")}
-      className={cn("w-full h-full border-none")}
-    />
+    <div className="flex h-full flex-col">
+      {error && (
+        <div
+          role="alert"
+          className="shrink-0 bg-background-neutral-00 px-4 py-2"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("error.description")}
+          </Text>
+        </div>
+      )}
+      <div className="relative min-h-0 flex-1">
+        <iframe
+          src={blobUrl}
+          title={filePath.split("/").pop() || t("frame.title")}
+          className={cn("w-full h-full border-none")}
+        />
+        {isLoading && (
+          <div className="absolute top-2 end-2">
+            <IconLoader aria-label={t("loading.label")} />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

@@ -80,6 +80,12 @@ echo {nextjs_port} > {session_path}/.nextjs-port
 # unrelated live process and skip the spawn forever.
 (
 flock -x 9
+# Migrate only the managed scaffold's empty config; preserve custom settings.
+NEXT_CONFIG="{session_path}/outputs/web/next.config.ts"
+if grep -q "resolveWebappBasePath" "$NEXT_CONFIG" 2>/dev/null && \\
+   grep -Fxq 'const nextConfig: NextConfig = {{}};' "$NEXT_CONFIG"; then
+    sed -i 's/^const nextConfig: NextConfig = {{}};$/const nextConfig: NextConfig = {{ experimental: {{ reactDebugChannel: false }} }};/' "$NEXT_CONFIG"
+fi
 NEXTJS_PID=""
 if [ -f {session_path}/nextjs.pid ]; then
     NEXTJS_PID="$(cat {session_path}/nextjs.pid)"

@@ -1,5 +1,7 @@
 /** @jest-environment jsdom */
 import {
+  uploadFile,
+  deleteFile,
   fetchDirectoryListing,
   fetchFileContent,
   fetchPptxPreview,
@@ -77,4 +79,26 @@ it("bypasses HTTP cache for artifact content and presentation conversions", asyn
     "/api/build/sessions/session/pptx-preview/outputs/slides.pptx",
     { cache: "no-store" }
   );
+});
+
+it("preserves the HTTP status of attachment upload failures", async () => {
+  jest
+    .mocked(fetch)
+    .mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Access denied" }), { status: 401 })
+    );
+  await expect(
+    uploadFile("session", new File(["body"], "notes.txt"))
+  ).rejects.toMatchObject({ status: 401, message: "Access denied" });
+});
+
+it("preserves the HTTP status of attachment deletion failures", async () => {
+  jest
+    .mocked(fetch)
+    .mockResolvedValue(
+      new Response(JSON.stringify({ detail: "No such file" }), { status: 404 })
+    );
+  await expect(
+    deleteFile("session", "attachments/notes.txt")
+  ).rejects.toMatchObject({ status: 404, message: "No such file" });
 });

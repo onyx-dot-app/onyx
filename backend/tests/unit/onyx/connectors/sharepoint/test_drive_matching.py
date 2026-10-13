@@ -1,20 +1,10 @@
-from __future__ import annotations
-
-import json
 from collections import deque
 from collections.abc import Callable, Generator, Sequence
 from datetime import datetime
-from typing import Any, NoReturn
+from typing import Any
 from urllib.parse import quote
 
 import pytest
-import requests
-from office365.graph_client import GraphClient
-from office365.onedrive.drives.drive import Drive
-from office365.onedrive.lists.list import List as GraphList
-from office365.runtime.client_request_exception import ClientRequestException
-from requests import Response
-from requests.exceptions import HTTPError
 
 from onyx.connectors.microsoft_utils.drive_delta import (
     DriveDeltaFetchResult,
@@ -25,7 +15,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveFolderReference,
     DriveItemData,
 )
-from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.models import (
     Document,
     DocumentSource,
@@ -34,96 +24,34 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.sharepoint import connector as sp_connector
 from onyx.connectors.sharepoint.connector import (
-    DRIVE_EXPAND_FIELDS,
-    DRIVE_LIST_PROPERTY,
-    DRIVE_SELECT_FIELDS,
     SHARED_DOCUMENTS_MAP,
     SharepointConnector,
     SharepointConnectorCheckpoint,
     SiteDescriptor,
     SiteDrive,
 )
+from onyx.connectors.sharepoint.models import SharepointDrive
 from onyx.db.enums import HierarchyNodeType
+from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
+    connector_with_gateway,
+    stub_operation,
+)
 
 
-class _FakeQuery:
-    def __init__(self, payload: Sequence[Any]) -> None:
-        self._payload = payload
-
-    def execute_query(self) -> Sequence[Any]:
-        return self._payload
-
-
-class _FakeDrive:
-    def __init__(
-        self,
-        name: str,
-        drive_type: str | None = None,
-        url_name: str | None = None,
-        list_id: str | None = None,
-    ) -> None:
-        self.name = name
-        self.drive_type = drive_type
-        self.id = f"fake-drive-id-{name}"
-        graph_list = GraphList(GraphClient(lambda: {"access_token": "unused"}))
-        graph_list.properties["id"] = list_id or f"list-id-{name}"
-        self.properties = {DRIVE_LIST_PROPERTY: graph_list}
-        self.web_url = (
-            f"https://example.sharepoint.com/sites/sample/{quote(url_name or name)}"
-        )
-
-
-class _FakeDrivesCollection:
-    def __init__(
-        self,
-        drives: Sequence[_FakeDrive],
-        first_page_size: int | None = None,
-    ) -> None:
-        self._drives = drives
-        self._first_page_size = first_page_size
-        self.selected_fields: list[str] | None = None
-        self.expanded_fields: list[str] | None = None
-
-    def select(self, fields: list[str]) -> "_FakeDrivesCollection":
-        self.selected_fields = fields
-        return self
-
-    def expand(self, fields: list[str]) -> "_FakeDrivesCollection":
-        self.expanded_fields = fields
-        return self
-
-    def get(self) -> _FakeQuery:
-        return _FakeQuery(list(self._drives[: self._first_page_size]))
-
-    def get_all(self, page_loaded: Callable[[Any], None]) -> _FakeQuery:
-        page_loaded(self)
-        return _FakeQuery(list(self._drives))
-
-
-class _FakeSite:
-    def __init__(self, drives: _FakeDrivesCollection) -> None:
-        self.drives = drives
-
-
-class _FakeSites:
-    def __init__(
-        self,
-        drives: Sequence[_FakeDrive],
-        first_page_size: int | None = None,
-    ) -> None:
-        self.drives = _FakeDrivesCollection(drives, first_page_size)
-
-    def get_by_url(self, _url: str) -> _FakeSite:
-        return _FakeSite(self.drives)
-
-
-class _FakeGraphClient:
-    def __init__(
-        self,
-        drives: Sequence[_FakeDrive],
-        first_page_size: int | None = None,
-    ) -> None:
-        self.sites = _FakeSites(drives, first_page_size)
+def _drive(
+    name: str,
+    drive_type: str | None = None,
+    url_name: str | None = None,
+    list_id: str | None = None,
+    with_list: bool = True,
+) -> SharepointDrive:
+    return SharepointDrive(
+        id=f"fake-drive-id-{name}",
+        name=name,
+        web_url=f"https://example.sharepoint.com/sites/sample/{quote(url_name or name)}",
+        drive_type=drive_type,
+        list_id=(list_id or f"list-id-{name}") if with_list else None,
+    )
 
 
 _SAMPLE_ITEM = DriveItemData(
@@ -151,37 +79,29 @@ def _delta_fetch_result(item: DriveItemData) -> DriveDeltaFetchResult:
     return DriveDeltaFetchResult(page=page)
 
 
-def _build_connector(
-    drives: Sequence[_FakeDrive],
-    first_page_size: int | None = None,
-) -> SharepointConnector:
+def _build_connector(drives: Sequence[SharepointDrive]) -> SharepointConnector:
     connector = SharepointConnector()
-    connector._graph_client = _FakeGraphClient(  # ty: ignore[invalid-assignment]
-        drives, first_page_size
-    )
+    gateway = connector_with_gateway(connector)
+    stub_operation(gateway, "list_drives", lambda *, site_url: list(drives))  # noqa: ARG005
     return connector
 
 
-def _fake_iter_drive_items_paged(
-    client: GraphApiClient,  # noqa: ARG001
+def _fake_iter_delta_items(
+    *,
     drive_id: str,  # noqa: ARG001
-    folder_path: str | None = None,  # noqa: ARG001
-    folder_id: str | None = None,  # noqa: ARG001
-    start: datetime | None = None,  # noqa: ARG001
-    end: datetime | None = None,  # noqa: ARG001
-    page_size: int = 200,  # noqa: ARG001
+    start: datetime | None,  # noqa: ARG001
+    end: datetime | None,  # noqa: ARG001
 ) -> Generator[DriveItemData, None, None]:
     yield _SAMPLE_ITEM
 
 
-def _fake_iter_drive_items_delta(
-    client: GraphApiClient,  # noqa: ARG001
+def _fake_get_delta_page(
+    *,
     drive_id: str,  # noqa: ARG001
-    start: datetime | None = None,  # noqa: ARG001
-    end: datetime | None = None,  # noqa: ARG001
-    page_size: int = 200,  # noqa: ARG001
-) -> Generator[DriveItemData, None, None]:
-    yield _SAMPLE_ITEM
+    page_url: str,  # noqa: ARG001
+    allow_full_resync: bool,  # noqa: ARG001
+) -> DriveDeltaFetchResult:
+    return _delta_fetch_result(_SAMPLE_ITEM)
 
 
 @pytest.mark.parametrize(
@@ -195,22 +115,16 @@ def _fake_iter_drive_items_delta(
 def test_fetch_driveitems_matches_international_drive_names(
     requested_drive_name: str,
     graph_drive_name: str,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     connector = _build_connector(
-        [_FakeDrive(graph_drive_name, url_name=requested_drive_name)]
+        [_drive(graph_drive_name, url_name=requested_drive_name)]
     )
     site_descriptor = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
         drive_name=requested_drive_name,
         folder_path=None,
     )
-
-    monkeypatch.setattr(
-        sp_connector,
-        "iter_drive_items_delta",
-        _fake_iter_drive_items_delta,
-    )
+    stub_operation(connector.ops, "iter_delta_items", _fake_iter_delta_items)
 
     results = list(connector._fetch_driveitems(site_descriptor=site_descriptor))
 
@@ -220,25 +134,21 @@ def test_fetch_driveitems_matches_international_drive_names(
     assert results[0].drive.web_url is not None
 
 
-def test_fetch_driveitems_uses_drive_id_without_list_id(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    drive = _FakeDrive("System")
-    drive.properties = {}
+def test_fetch_driveitems_uses_drive_id_without_list_id() -> None:
+    drive = _drive("System", with_list=False)
     connector = _build_connector([drive])
     traversed_drive_ids: list[str] = []
 
     def fake_delta(
-        client: GraphApiClient,  # noqa: ARG001
+        *,
         drive_id: str,
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
+        start: datetime | None,  # noqa: ARG001
+        end: datetime | None,  # noqa: ARG001
     ) -> Generator[DriveItemData, None, None]:
         traversed_drive_ids.append(drive_id)
         yield _SAMPLE_ITEM
 
-    monkeypatch.setattr(sp_connector, "iter_drive_items_delta", fake_delta)
+    stub_operation(connector.ops, "iter_delta_items", fake_delta)
 
     results = list(connector._fetch_driveitems(site_descriptor=_site()))
 
@@ -247,30 +157,18 @@ def test_fetch_driveitems_uses_drive_id_without_list_id(
 
 
 def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    connector = _build_connector([_FakeDrive("Documents")])
+    connector = _build_connector([_drive("Documents")])
     connector.include_site_pages = False
 
     captured_drive_names: list[str] = []
-    sample_item = DriveItemData(
-        id="doc-1",
-        name="sample.pdf",
-        web_url="https://example.sharepoint.com/sites/sample/sample.pdf",
-        parent_reference_path=None,
-        drive_id="fake-drive-id",
-    )
-
-    def fake_fetch_delta_page(*_args: Any, **_kwargs: Any) -> DriveDeltaFetchResult:
-        return _delta_fetch_result(sample_item)
 
     def fake_convert(
         driveitem: DriveItemData,  # noqa: ARG001
         drive: SiteDrive,
-        ctx: Any,  # noqa: ARG001
-        graph_client: Any,  # noqa: ARG001
-        graph_api_base: str,  # noqa: ARG001
-        include_permissions: bool,  # noqa: ARG001
+        ops: Any,  # noqa: ARG001
+        site_url: str,  # noqa: ARG001
+        include_permissions: bool = False,  # noqa: ARG001
         parent_hierarchy_raw_node_id: str | None = None,  # noqa: ARG001
-        access_token: str | None = None,  # noqa: ARG001
         treat_sharing_link_as_public: bool = False,  # noqa: ARG001
         raw_file_callback: Any = None,  # noqa: ARG001
         permission_cache: Any = None,  # noqa: ARG001
@@ -284,22 +182,9 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
             sections=[TextSection(link="https://example.com", text="content")],
         )
 
-    def fake_get_access_token(self: SharepointConnector) -> str:  # noqa: ARG001
-        return "fake-access-token"
-
+    stub_operation(connector.ops, "get_delta_page", _fake_get_delta_page)
     monkeypatch.setattr(
-        sp_connector,
-        "fetch_drive_delta_checkpoint_page",
-        fake_fetch_delta_page,
-    )
-    monkeypatch.setattr(
-        "onyx.connectors.sharepoint.connector._convert_driveitem_to_document_with_permissions",
-        fake_convert,
-    )
-    monkeypatch.setattr(
-        SharepointConnector,
-        "_get_graph_access_token",
-        fake_get_access_token,
+        sp_connector, "_convert_driveitem_to_document_with_permissions", fake_convert
     )
 
     checkpoint = SharepointConnectorCheckpoint(has_more=True)
@@ -312,21 +197,11 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
     checkpoint.legacy_cached_drive_names = deque(["Documents"])
     checkpoint.process_site_pages = False
 
-    generator = connector._load_from_checkpoint(
-        start=0,
-        end=0,
-        checkpoint=checkpoint,
-        include_permissions=False,
+    all_yielded = list(
+        connector._load_from_checkpoint(
+            start=0, end=0, checkpoint=checkpoint, include_permissions=False
+        )
     )
-
-    all_yielded: list[Any] = []
-    try:
-        while True:
-            all_yielded.append(next(generator))
-    except StopIteration:
-        pass
-
-    from onyx.connectors.models import HierarchyNode
 
     documents = [item for item in all_yielded if not isinstance(item, HierarchyNode)]
     hierarchy_nodes = [item for item in all_yielded if isinstance(item, HierarchyNode)]
@@ -339,14 +214,10 @@ def test_load_from_checkpoint_maps_drive_name(monkeypatch: pytest.MonkeyPatch) -
 def test_deleted_legacy_current_drive_preserves_queue_after_resume(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    remaining = _FakeDrive("Remaining")
+    remaining = _drive("Remaining")
     connector = _build_connector([remaining])
     connector.include_site_pages = False
-    monkeypatch.setattr(
-        sp_connector,
-        "fetch_drive_delta_checkpoint_page",
-        lambda *_, **__: _delta_fetch_result(_SAMPLE_ITEM),
-    )
+    stub_operation(connector.ops, "get_delta_page", _fake_get_delta_page)
     monkeypatch.setattr(
         sp_connector,
         "_convert_driveitem_to_document_with_permissions",
@@ -357,9 +228,6 @@ def test_deleted_legacy_current_drive_preserves_queue_after_resume(
             metadata={},
             sections=[TextSection(link=item.web_url, text="content")],
         ),
-    )
-    monkeypatch.setattr(
-        SharepointConnector, "_get_graph_access_token", lambda _self: "token"
     )
     checkpoint = SharepointConnectorCheckpoint.model_validate(
         {
@@ -392,7 +260,7 @@ def test_deleted_legacy_current_drive_preserves_queue_after_resume(
 _PERSONAL_SITE_URL = "https://example-my.sharepoint.com/personal/user_example_com"
 
 
-def _resolve_personal(drives: list[_FakeDrive]) -> SiteDrive | None:
+def _resolve_personal(drives: list[SharepointDrive]) -> SiteDrive | None:
     connector = _build_connector(drives)
     site_descriptor = SiteDescriptor(
         url=_PERSONAL_SITE_URL,
@@ -404,8 +272,8 @@ def _resolve_personal(drives: list[_FakeDrive]) -> SiteDrive | None:
 
 def test_resolve_drive_personal_picks_by_drive_type_not_position() -> None:
     """The user's OneDrive must be selected by driveType regardless of order."""
-    extra_library = _FakeDrive("Extra Library", drive_type="documentLibrary")
-    onedrive = _FakeDrive("OneDrive", drive_type="business")
+    extra_library = _drive("Extra Library", drive_type="documentLibrary")
+    onedrive = _drive("OneDrive", drive_type="business")
 
     # OneDrive is second in the (unordered) response; positional selection would
     # have picked the wrong library.
@@ -416,8 +284,8 @@ def test_resolve_drive_personal_picks_by_drive_type_not_position() -> None:
 
 
 def test_resolve_drive_personal_selects_url_segment_between_business_drives() -> None:
-    onedrive = _FakeDrive("OneDrive", drive_type="business", url_name="Documents")
-    cache = _FakeDrive(
+    onedrive = _drive("OneDrive", drive_type="business", url_name="Documents")
+    cache = _drive(
         "PersonalCacheLibrary",
         drive_type="business",
         url_name="PersonalCacheLibrary",
@@ -432,8 +300,8 @@ def test_resolve_drive_personal_selects_url_segment_between_business_drives() ->
 
 
 def test_resolve_drive_personal_does_not_fall_back_to_name() -> None:
-    extra_library = _FakeDrive("Extra Library", drive_type="documentLibrary")
-    onedrive = _FakeDrive("OneDrive", drive_type=None)
+    extra_library = _drive("Extra Library", drive_type="documentLibrary")
+    onedrive = _drive("OneDrive", drive_type=None)
 
     result = _resolve_personal([extra_library, onedrive])
 
@@ -443,10 +311,10 @@ def test_resolve_drive_personal_does_not_fall_back_to_name() -> None:
 def test_resolve_drive_personal_prefers_type_over_name_collision() -> None:
     """A uniquely-typed primary drive wins even if another library reuses a name."""
     # Localized primary drive name so resolution must rely on driveType.
-    primary = _FakeDrive("Mon lecteur OneDrive", drive_type="business")
+    primary = _drive("Mon lecteur OneDrive", drive_type="business")
     # An extra library that happens to carry a fallback OneDrive name but is not
     # the user's primary drive.
-    extra_library = _FakeDrive("OneDrive", drive_type="documentLibrary")
+    extra_library = _drive("OneDrive", drive_type="documentLibrary")
 
     result = _resolve_personal([extra_library, primary])
 
@@ -456,15 +324,25 @@ def test_resolve_drive_personal_prefers_type_over_name_collision() -> None:
 
 def test_resolve_drive_personal_ambiguous_raises() -> None:
     """Refuse to guess when multiple primary-OneDrive candidates exist."""
-    first = _FakeDrive("OneDrive", drive_type="business")
-    second = _FakeDrive("Second OneDrive", drive_type="personal")
+    first = _drive("OneDrive", drive_type="business")
+    second = _drive("Second OneDrive", drive_type="personal")
 
     with pytest.raises(ValueError, match="unambiguously"):
         _resolve_personal([first, second])
 
 
 # SharePoint strips "&" from the library URL, so "R&D Library" lives at "RD Library".
-_STRIPPED_URL_DRIVE = _FakeDrive("R&D Library", url_name="RD Library")
+_STRIPPED_URL_DRIVE = _drive("R&D Library", url_name="RD Library")
+_DOCUMENTS_SITE = SiteDescriptor(
+    url="https://example.sharepoint.com/sites/sample",
+    drive_name="Documents",
+    folder_path=None,
+)
+_BARE_SITE = SiteDescriptor(
+    url="https://example.sharepoint.com/sites/sample",
+    drive_name=None,
+    folder_path=None,
+)
 _STRIPPED_URL_SITE = SiteDescriptor(
     url="https://example.sharepoint.com/sites/sample",
     drive_name="RD Library",
@@ -472,66 +350,32 @@ _STRIPPED_URL_SITE = SiteDescriptor(
 )
 
 
+def test_resolve_drive_ignores_unrelated_libraries_without_metadata() -> None:
+    bare = SharepointDrive(id="bare-drive")
+    connector = _build_connector([bare, _drive("Documents")])
+
+    result = connector._resolve_drive(_DOCUMENTS_SITE, "Documents")
+
+    assert result is not None
+    assert result.drive_id == "fake-drive-id-Documents"
+
+
+def test_resolve_drive_requires_metadata_on_the_selected_library() -> None:
+    bare = SharepointDrive(id="bare-drive", name="Documents")
+    connector = _build_connector([bare])
+
+    with pytest.raises(ValueError, match="traversal metadata"):
+        connector._fetch_driveitems(_BARE_SITE).__next__()
+
+
 def test_resolve_drive_matches_library_url_and_returns_display_name() -> None:
-    connector = _build_connector([_FakeDrive("Documents"), _STRIPPED_URL_DRIVE])
+    connector = _build_connector([_drive("Documents"), _STRIPPED_URL_DRIVE])
 
     result = connector._resolve_drive(_STRIPPED_URL_SITE, "RD Library")
 
     assert result is not None
     assert result.drive_id == _STRIPPED_URL_DRIVE.id
     assert result.display_name == "R&D Library"
-
-
-def _odata_mapped_drive(include_list: bool) -> Drive:
-    graph_client = GraphClient(lambda: {"access_token": "unused"})
-    drives = (
-        graph_client.sites["site-id"]
-        .drives.select(DRIVE_SELECT_FIELDS)
-        .expand(DRIVE_EXPAND_FIELDS)
-        .get()
-    )
-    properties: dict[str, Any] = {
-        "id": "drive-id",
-        "name": "Documents",
-        "webUrl": "https://example.sharepoint.com/sites/sample/Documents",
-        "driveType": "documentLibrary",
-    }
-    if include_list:
-        properties[DRIVE_LIST_PROPERTY] = {"id": "list-id"}
-
-    response = Response()
-    response.status_code = 200
-    response.headers["Content-Type"] = "application/json"
-    response._content = json.dumps({"value": [properties]}).encode()
-    graph_client.pending_request().process_response(response, graph_client._queries[0])
-    return drives[0]
-
-
-def test_site_drive_reads_expanded_odata_mapped_list() -> None:
-    drive = _odata_mapped_drive(include_list=True)
-
-    result = SharepointConnector._site_drive_from_graph(drive)
-
-    expanded_list = drive.properties[DRIVE_LIST_PROPERTY]
-    assert isinstance(expanded_list, GraphList)
-    assert expanded_list.id == "list-id"
-    assert result.list_id == "list-id"
-
-
-def test_site_drive_without_expanded_list_has_no_list_id() -> None:
-    drive = _odata_mapped_drive(include_list=False)
-
-    result = SharepointConnector._site_drive_from_graph(drive)
-
-    assert result.list_id is None
-
-
-def test_site_drive_rejects_unmapped_expanded_list() -> None:
-    drive = _odata_mapped_drive(include_list=False)
-    drive.properties[DRIVE_LIST_PROPERTY] = {"id": "list-id"}
-
-    with pytest.raises(ValueError, match="unexpected type"):
-        SharepointConnector._site_drive_from_graph(drive)
 
 
 def test_graph_sharepoint_ids_parser_reads_valid_facet() -> None:
@@ -551,46 +395,9 @@ def test_graph_sharepoint_ids_parser_rejects_malformed_dict() -> None:
         parse_graph_sharepoint_ids({"listId": {"unexpected": "object"}})
 
 
-def test_configured_drive_selection_reads_later_page() -> None:
-    target = _FakeDrive("Target")
-    graph_client = _FakeGraphClient(
-        [_FakeDrive("First Page"), target], first_page_size=1
-    )
-    connector = SharepointConnector()
-    connector._graph_client = graph_client  # ty: ignore[invalid-assignment]
-    site = SiteDescriptor(
-        url="https://example.sharepoint.com/sites/sample",
-        drive_name="Target",
-        folder_path=None,
-    )
-
-    result = connector._resolve_drive(site, "Target")
-
-    assert result is not None
-    assert result.drive_id == target.id
-    assert graph_client.sites.drives.selected_fields == DRIVE_SELECT_FIELDS
-    assert graph_client.sites.drives.expanded_fields == DRIVE_EXPAND_FIELDS
-
-
-def test_slim_all_drive_traversal_reads_later_page(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    drives = [_FakeDrive("First Page"), _FakeDrive("Second Page")]
-    connector = _build_connector(drives, first_page_size=1)
-    monkeypatch.setattr(
-        sp_connector, "iter_drive_items_delta", _fake_iter_drive_items_delta
-    )
-
-    results = list(connector._fetch_driveitems(_site()))
-
-    assert [result.drive.drive_id for result in results] == [
-        drive.id for drive in drives
-    ]
-
-
 def test_resolve_drive_prefers_library_url_over_display_name() -> None:
-    renamed = _FakeDrive("Archive", url_name="Reports")
-    reports = _FakeDrive("Reports", url_name="Reports2")
+    renamed = _drive("Archive", url_name="Reports")
+    reports = _drive("Reports", url_name="Reports2")
     connector = _build_connector([renamed, reports])
 
     result = connector._resolve_drive(_STRIPPED_URL_SITE, "Reports")
@@ -600,13 +407,9 @@ def test_resolve_drive_prefers_library_url_over_display_name() -> None:
     assert result.display_name == "Archive"
 
 
-def test_fetch_driveitems_matches_library_url(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    connector = _build_connector([_FakeDrive("Documents"), _STRIPPED_URL_DRIVE])
-    monkeypatch.setattr(
-        sp_connector, "iter_drive_items_delta", _fake_iter_drive_items_delta
-    )
+def test_fetch_driveitems_matches_library_url() -> None:
+    connector = _build_connector([_drive("Documents"), _STRIPPED_URL_DRIVE])
+    stub_operation(connector.ops, "iter_delta_items", _fake_iter_delta_items)
 
     results = list(connector._fetch_driveitems(site_descriptor=_STRIPPED_URL_SITE))
 
@@ -619,7 +422,7 @@ def test_load_from_checkpoint_uses_display_name_for_library_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Drive nodes and documents carry the display name SharePoint list lookups need."""
-    connector = _build_connector([_FakeDrive("Documents"), _STRIPPED_URL_DRIVE])
+    connector = _build_connector([_drive("Documents"), _STRIPPED_URL_DRIVE])
     connector.include_site_pages = False
     captured_drive_names: list[str] = []
 
@@ -635,16 +438,9 @@ def test_load_from_checkpoint_uses_display_name_for_library_url(
             sections=[TextSection(link="https://example.com", text="content")],
         )
 
-    monkeypatch.setattr(
-        sp_connector,
-        "fetch_drive_delta_checkpoint_page",
-        lambda *_, **__: _delta_fetch_result(_SAMPLE_ITEM),
-    )
+    stub_operation(connector.ops, "get_delta_page", _fake_get_delta_page)
     monkeypatch.setattr(
         sp_connector, "_convert_driveitem_to_document_with_permissions", fake_convert
-    )
-    monkeypatch.setattr(
-        SharepointConnector, "_get_graph_access_token", lambda _self: "fake-token"
     )
 
     checkpoint = SharepointConnectorCheckpoint(has_more=True)
@@ -653,15 +449,11 @@ def test_load_from_checkpoint_uses_display_name_for_library_url(
     checkpoint.legacy_cached_drive_names = deque(["RD Library"])
     checkpoint.process_site_pages = False
 
-    yielded: list[Any] = []
-    generator = connector._load_from_checkpoint(
-        start=0, end=0, checkpoint=checkpoint, include_permissions=False
+    yielded = list(
+        connector._load_from_checkpoint(
+            start=0, end=0, checkpoint=checkpoint, include_permissions=False
+        )
     )
-    try:
-        while True:
-            yielded.append(next(generator))
-    except StopIteration:
-        pass
 
     drive_nodes = [
         item
@@ -672,90 +464,65 @@ def test_load_from_checkpoint_uses_display_name_for_library_url(
     assert captured_drive_names == ["R&D Library"]
 
 
-def test_fetch_driveitems_uses_delta_when_no_folder_path(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _recording_walkers(
+    called_method: list[str],
+) -> tuple[Callable[..., Any], Callable[..., Any]]:
+    def fake_delta(
+        *,
+        drive_id: str,  # noqa: ARG001
+        start: datetime | None,  # noqa: ARG001
+        end: datetime | None,  # noqa: ARG001
+    ) -> Generator[DriveItemData, None, None]:
+        called_method.append("delta")
+        yield _SAMPLE_ITEM
+
+    def fake_folder(
+        *,
+        drive_id: str,  # noqa: ARG001
+        folder_id: str | None,  # noqa: ARG001
+        start: datetime | None,  # noqa: ARG001
+        end: datetime | None,  # noqa: ARG001
+    ) -> Generator[DriveItemData, None, None]:
+        called_method.append("paged")
+        yield _SAMPLE_ITEM
+
+    return fake_delta, fake_folder
+
+
+def test_fetch_driveitems_uses_delta_when_no_folder_path() -> None:
     """When folder_path is None, _fetch_driveitems should use delta."""
-    connector = _build_connector([_FakeDrive("Documents")])
+    connector = _build_connector([_drive("Documents")])
     site = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
         drive_name="Documents",
         folder_path=None,
     )
-
     called_method: list[str] = []
-
-    def fake_delta(
-        client: GraphApiClient,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
-    ) -> Generator[DriveItemData, None, None]:
-        called_method.append("delta")
-        yield _SAMPLE_ITEM
-
-    def fake_paged(
-        client: GraphApiClient,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        folder_path: str | None = None,  # noqa: ARG001
-        folder_id: str | None = None,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
-    ) -> Generator[DriveItemData, None, None]:
-        called_method.append("paged")
-        yield _SAMPLE_ITEM
-
-    monkeypatch.setattr(sp_connector, "iter_drive_items_delta", fake_delta)
-    monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_paged)
+    fake_delta, fake_folder = _recording_walkers(called_method)
+    stub_operation(connector.ops, "iter_delta_items", fake_delta)
+    stub_operation(connector.ops, "iter_folder_items", fake_folder)
 
     list(connector._fetch_driveitems(site))
 
     assert called_method == ["delta"]
 
 
-def test_fetch_driveitems_uses_paged_when_folder_path_set(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_fetch_driveitems_uses_paged_when_folder_path_set() -> None:
     """When folder_path is set, _fetch_driveitems should use BFS."""
-    connector = _build_connector([_FakeDrive("Documents")])
+    connector = _build_connector([_drive("Documents")])
     site = SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
         drive_name="Documents",
         folder_path="Engineering/Docs",
     )
-
     called_method: list[str] = []
-
-    def fake_delta(
-        client: GraphApiClient,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
-    ) -> Generator[DriveItemData, None, None]:
-        called_method.append("delta")
-        yield _SAMPLE_ITEM
-
-    def fake_paged(
-        client: GraphApiClient,  # noqa: ARG001
-        drive_id: str,  # noqa: ARG001
-        folder_path: str | None = None,  # noqa: ARG001
-        folder_id: str | None = None,  # noqa: ARG001
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
-    ) -> Generator[DriveItemData, None, None]:
-        called_method.append("paged")
-        yield _SAMPLE_ITEM
-
-    monkeypatch.setattr(sp_connector, "iter_drive_items_delta", fake_delta)
-    monkeypatch.setattr(sp_connector, "iter_drive_items_paged", fake_paged)
-    monkeypatch.setattr(
-        sp_connector,
-        "resolve_drive_folder",
-        lambda *_args, **_kwargs: DriveFolderReference(
+    fake_delta, fake_folder = _recording_walkers(called_method)
+    stub_operation(connector.ops, "iter_delta_items", fake_delta)
+    stub_operation(connector.ops, "iter_folder_items", fake_folder)
+    stub_operation(
+        connector.ops,
+        "resolve_folder",
+        lambda *, drive_id, folder_path: DriveFolderReference(  # noqa: ARG005
             id="folder-id",
             web_url="https://example.sharepoint.com/sites/sample/Engineering/Docs",
         ),
@@ -770,31 +537,6 @@ def test_fetch_driveitems_uses_paged_when_folder_path_set(
 # or lock out whatever a run did not reach, so a swallowed error costs a site.
 
 
-def _graph_error(status_code: int) -> HTTPError:
-    response = Response()
-    response.status_code = status_code
-    return HTTPError(response=response)
-
-
-def _sdk_error(status_code: int) -> ClientRequestException:
-    response = Response()
-    response.status_code = status_code
-    return ClientRequestException(f"{status_code} Client Error", response=response)
-
-
-class _RefusingSites:
-    def __init__(self, error: Exception) -> None:
-        self._error = error
-
-    def get_by_url(self, _url: str) -> NoReturn:
-        raise self._error
-
-
-class _RefusingGraphClient:
-    def __init__(self, error: Exception) -> None:
-        self.sites = _RefusingSites(error)
-
-
 def _site() -> SiteDescriptor:
     return SiteDescriptor(
         url="https://example.sharepoint.com/sites/sample",
@@ -805,7 +547,12 @@ def _site() -> SiteDescriptor:
 
 def _connector_whose_site_lookup_raises(error: Exception) -> SharepointConnector:
     connector = SharepointConnector()
-    connector._graph_client = _RefusingGraphClient(error)  # ty: ignore[invalid-assignment]
+    gateway = connector_with_gateway(connector)
+
+    def refuse(*, site_url: str) -> list[SharepointDrive]:  # noqa: ARG001
+        raise error
+
+    stub_operation(gateway, "list_drives", refuse)
     return connector
 
 
@@ -813,22 +560,28 @@ def _connector_whose_site_lookup_raises(error: Exception) -> SharepointConnector
 def test_fetch_driveitems_leaves_out_a_site_graph_refuses_for_good(
     status_code: int,
 ) -> None:
-    connector = _connector_whose_site_lookup_raises(_sdk_error(status_code))
+    connector = _connector_whose_site_lookup_raises(
+        MicrosoftGraphError(status_code, "accessDenied", "refused")
+    )
 
     assert list(connector._fetch_driveitems(_site())) == []
 
 
 @pytest.mark.parametrize(
     "error",
-    [_sdk_error(401), _sdk_error(503), requests.ConnectionError("reset")],
+    [
+        MicrosoftGraphError(401, "accessDenied", "refused"),
+        MicrosoftGraphError(503, "accessDenied", "refused"),
+        MicrosoftGraphError(None, "ConnectionError", "reset"),
+    ],
     ids=["401", "503", "transport"],
 )
 def test_fetch_driveitems_raises_when_the_site_lookup_fails_otherwise(
-    error: Exception,
+    error: MicrosoftGraphError,
 ) -> None:
     connector = _connector_whose_site_lookup_raises(error)
 
-    with pytest.raises(type(error)):
+    with pytest.raises(MicrosoftGraphError):
         list(connector._fetch_driveitems(_site()))
 
 
@@ -836,11 +589,10 @@ def _delta_that_raises(
     error: Exception,
 ) -> Callable[..., Generator[DriveItemData, None, None]]:
     def fake_delta(
-        client: GraphApiClient,  # noqa: ARG001
+        *,
         drive_id: str,
-        start: datetime | None = None,  # noqa: ARG001
-        end: datetime | None = None,  # noqa: ARG001
-        page_size: int = 200,  # noqa: ARG001
+        start: datetime | None,  # noqa: ARG001
+        end: datetime | None,  # noqa: ARG001
     ) -> Generator[DriveItemData, None, None]:
         if drive_id == "fake-drive-id-Refused":
             raise error
@@ -850,19 +602,16 @@ def _delta_that_raises(
 
 
 @pytest.mark.parametrize("status_code", [404, 423, 401, 500])
-def test_fetch_driveitems_raises_when_a_drive_fails(
-    status_code: int,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_fetch_driveitems_raises_when_a_drive_fails(status_code: int) -> None:
     """A drive error is never a skip: the walk has already answered for the
     site, and files counted so far cannot tell a refused drive from a refused
     page, so the slim callers would prune what the walk did not reach."""
-    connector = _build_connector([_FakeDrive("Refused"), _FakeDrive("Readable")])
-    monkeypatch.setattr(
-        sp_connector,
-        "iter_drive_items_delta",
-        _delta_that_raises(_graph_error(status_code)),
+    connector = _build_connector([_drive("Refused"), _drive("Readable")])
+    stub_operation(
+        connector.ops,
+        "iter_delta_items",
+        _delta_that_raises(MicrosoftGraphError(status_code, "accessDenied", "refused")),
     )
 
-    with pytest.raises(HTTPError):
+    with pytest.raises(MicrosoftGraphError):
         list(connector._fetch_driveitems(_site()))

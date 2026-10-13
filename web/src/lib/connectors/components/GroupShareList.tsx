@@ -12,6 +12,8 @@ import { Content, InputErrorText, Section } from "@opal/layouts";
 import { SvgUsers, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { useUserGroups } from "@/lib/hooks";
+import { useTierAtLeast, useTierLockedOptions } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 
 /** A fixed row shown before the picked groups, which cannot be removed. */
 export interface GroupShareLockedRow {
@@ -54,6 +56,11 @@ interface GroupShareListProps {
    */
   rowAction?: (group: GroupShareGroup, remove: () => void) => React.ReactNode;
   disabled?: boolean;
+  /**
+   * The tier groups need. Below it the workspace has no groups to pick, so
+   * the picker offers only an upgrade link.
+   */
+  requiredTier?: Tier;
 }
 
 /**
@@ -67,9 +74,13 @@ export default function GroupShareList({
   lockedRows = [],
   rowAction,
   disabled,
+  requiredTier = Tier.COMMUNITY,
 }: GroupShareListProps) {
   const t = useTranslations("admin.connector.groupRestriction");
-  const { data: userGroups, isLoading, error } = useUserGroups();
+  const locked: boolean = !useTierAtLeast(requiredTier);
+  const lockForTier = useTierLockedOptions(requiredTier);
+  // Below the tier the groups request is refused, so it is not sent.
+  const { data: userGroups, isLoading, error } = useUserGroups(!locked);
   // Without the groups there is nothing to pick from, and the rows already
   // added cannot show; say so rather than show an empty picker.
   const loadFailed = !isLoading && !!error;
@@ -84,6 +95,18 @@ export default function GroupShareList({
       description: t("memberCount", { count: group.users.length }),
       icon: SvgUsers,
     }));
+
+  // Below the tier the fixed rows sit locked under the upgrade link, so the
+  // list names what the plan adds to.
+  const lockedOptions = lockedRows.map((row) => ({
+    value: row.id,
+    title: row.name,
+    description:
+      row.memberCount === undefined
+        ? undefined
+        : t("memberCount", { count: row.memberCount }),
+    icon: row.icon,
+  }));
 
   const rows: GroupShareRow[] = [
     ...lockedRows,
@@ -202,7 +225,7 @@ export default function GroupShareList({
       <InputSingleComboBox
         value=""
         onValueChange={addGroup}
-        options={options}
+        options={locked ? lockForTier(lockedOptions) : options}
         placeholder={placeholder}
         disabled={disabled || isLoading || loadFailed}
       />
