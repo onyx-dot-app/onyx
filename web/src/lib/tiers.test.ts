@@ -1,5 +1,5 @@
-import { Tier } from "@/lib/tiers/types";
-import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers/utils";
+import { Tier } from "@/lib/settings/types";
+import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers";
 
 describe("LLM Gateway tier", () => {
   it("allows Business and Enterprise, but not Community", () => {

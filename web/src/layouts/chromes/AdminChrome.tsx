@@ -20,7 +20,7 @@ import {
   getFirstPermittedAdminRoute,
   hasAnyAdminPermission,
   hasPermission,
-} from "@/lib/permissions/utils";
+} from "@/lib/permissions";
 import { OpenSearchResourceBanner } from "@/sections/banners/OpenSearchResourceWarning";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
 import { useTranslations } from "next-intl";

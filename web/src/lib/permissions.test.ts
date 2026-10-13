@@ -2,9 +2,9 @@ import {
   hasAnyAdminPermission,
   hasPermission,
   getFirstPermittedAdminRoute,
-} from "@/lib/permissions/utils";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Permission } from "@/lib/types";
+} from "./permissions";
+import { ADMIN_ROUTES } from "./admin-routes";
+import { Permission } from "./types";
 
 describe("hasPermission", () => {
   it("returns false for an empty permission set", () => {

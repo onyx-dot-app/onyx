@@ -13,7 +13,7 @@ import type { UserGroup } from "@/lib/types";
 import { Permission } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions/utils";
+import { hasPermission } from "@/lib/permissions";
 import { can } from "@/lib/permissions/resource-actions";
 import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";

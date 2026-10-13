@@ -5,11 +5,10 @@ import {
   AdminRouteEntry,
   FeatureFlags,
 } from "@/lib/admin-routes";
-import { hasPermission } from "@/lib/permissions/utils";
+import { hasPermission } from "@/lib/permissions";
 import { Permission } from "@/lib/types";
-import { Settings } from "@/lib/settings/types";
-import { Tier } from "@/lib/tiers/types";
-import { tierAtLeast } from "@/lib/tiers/utils";
+import { Settings, Tier } from "@/lib/settings/types";
+import { tierAtLeast } from "@/lib/tiers";
 
 export type { FeatureFlags } from "@/lib/admin-routes";
 

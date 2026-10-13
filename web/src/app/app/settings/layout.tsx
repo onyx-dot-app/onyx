@@ -9,8 +9,8 @@ import { SvgSliders } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
-import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers/utils";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 

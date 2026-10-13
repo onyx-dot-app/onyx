@@ -1872,11 +1872,13 @@
           "message": "Chats with no activity for longer than {days, plural, one {# day} other {# days}} will be permanently deleted. This cannot be undone.",
           "title": "Reduce chat retention?"
         },
+        "tierTooltip": "Chat history retention is an Enterprise Plan feature.",
         "title": "Keep Chat History"
       },
       "searchMode": {
         "description": "UI mode for quick document search across your organization.",
         "noConnectorsTooltip": "Set up connectors to use Search Mode",
+        "tierTooltip": "Search Mode requires the Business or Enterprise plan.",
         "title": "Search Mode"
       },
       "systemPrompt": {

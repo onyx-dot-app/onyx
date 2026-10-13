@@ -10,8 +10,8 @@ import {
 } from "@/lib/search/types";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 import { useAppPosition } from "@/lib/position/hooks";
-import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/tiers/types";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
 import {

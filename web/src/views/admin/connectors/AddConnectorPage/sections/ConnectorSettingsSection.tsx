@@ -7,6 +7,8 @@ import ManageAccessField from "@/views/admin/connectors/AddConnectorPage/compone
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
 import { getSourceDisplayName } from "@/lib/sources";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 
 interface ConnectorSettingsSectionProps {
   connector: ConfigurableSources;
@@ -22,6 +24,8 @@ export default function ConnectorSettingsSection({
   disabled,
 }: ConnectorSettingsSectionProps) {
   const t = useTranslations("admin.connectorsList.settings");
+  // Below Business every connector is public and only admins manage it.
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
 
   return (
     <Collapsible
@@ -52,10 +56,11 @@ export default function ConnectorSettingsSection({
           </Section>
         </Card>
 
-        {/* Shown on every tier; below Business its groups are locked. */}
-        <Card border="solid" rounding={4} padding={4} disabled={disabled}>
-          <ManageAccessField disabled={disabled} />
-        </Card>
+        {businessTier && (
+          <Card border="solid" rounding={4} padding={4} disabled={disabled}>
+            <ManageAccessField disabled={disabled} />
+          </Card>
+        )}
       </Section>
     </Collapsible>
   );

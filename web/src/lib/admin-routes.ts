@@ -1,5 +1,5 @@
 import { Permission } from "@/lib/types";
-import { Tier } from "@/lib/tiers/types";
+import { Tier } from "@/lib/settings/types";
 import { IconFunctionComponent } from "@opal/types";
 import {
   SvgActions,

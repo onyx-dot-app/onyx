@@ -36,8 +36,8 @@ import { AccountType } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/tiers/types";
-import { tierAtLeast } from "@/lib/tiers/utils";
+import { Tier } from "@/lib/settings/types";
+import { tierAtLeast } from "@/lib/tiers";
 import type { MemberRow, TokenRateLimitDisplay } from "./types";
 import {
   makeBaseColumns,

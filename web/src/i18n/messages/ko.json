@@ -1872,11 +1872,13 @@
           "message": "{days, plural, one {#일} other {#일}} 넘게 활동이 없는 채팅은 영구 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
           "title": "채팅 보관 기간을 단축할까요?"
         },
+        "tierTooltip": "채팅 기록 보관은 Enterprise 플랜 기능입니다.",
         "title": "채팅 기록 보관"
       },
       "searchMode": {
         "description": "조직 전체 문서를 빠르게 검색하는 UI 모드입니다.",
         "noConnectorsTooltip": "검색 모드를 사용하려면 커넥터를 설정하세요",
+        "tierTooltip": "검색 모드는 Business 또는 Enterprise 플랜이 필요합니다.",
         "title": "검색 모드"
       },
       "systemPrompt": {

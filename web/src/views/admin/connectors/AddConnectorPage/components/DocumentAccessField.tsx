@@ -3,12 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
-import {
-  InputSingleSelect,
-  Tooltip,
-  type SelectOption,
-} from "@opal/components";
-import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import { InputSingleSelect, type SelectOption } from "@opal/components";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { SvgOrganization, SvgUserSync, SvgUsers } from "@opal/icons";
 import { AccessType, Permission } from "@/lib/types";
@@ -21,7 +16,8 @@ import AutoSyncOptions from "@/views/admin/connectors/AddConnectorPage/component
 import ConnectorGroupRestrictionPicker from "@/lib/connectors/components/ConnectorGroupRestrictionPicker";
 import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import GroupShareList from "@/lib/connectors/components/GroupShareList";
-import { Tier } from "@/lib/tiers/types";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 import type { CredentialValues } from "@/lib/credentials/types";
 import { getCredentialSpec } from "@/lib/credentials/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -42,9 +38,8 @@ interface DocumentAccessFieldProps {
 
 /**
  * Who can read the connector's documents: synced from the source, specific
- * groups (private, with a group picker), or everyone (public). Below the
- * Business tier every connector is public: the field still shows, locked on
- * Everyone, with the Business plan tag.
+ * groups (private, with a group picker), or everyone (public). Renders nothing
+ * below the Business tier, where every connector is public.
  */
 export default function DocumentAccessField({
   connector,
@@ -54,7 +49,6 @@ export default function DocumentAccessField({
   const t = useTranslations("admin.connectorsList.settings.documentAccess");
   const tRestriction = useTranslations("admin.connector.groupRestriction");
   const { appName } = useSettings();
-  const plans = usePlans();
   const [accessType, , accessTypeHelpers] = useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -161,37 +155,32 @@ export default function DocumentAccessField({
     accessTypeHelpers,
   ]);
 
+  if (!businessTier) return null;
+
   return (
     <Section gap={3} alignItems="stretch" height="fit">
       <InputHorizontal
         withLabel="access_type"
         title={t("title")}
         description={t("description")}
-        tag={businessTier ? undefined : plans[Tier.BUSINESS].tag}
         disabled={disabled}
         fillInput
         center
       >
-        <Tooltip
-          tooltip={businessTier ? undefined : plans[Tier.BUSINESS].tooltip}
-        >
-          <div className="w-full">
-            <InputSingleSelect
-              id="access_type"
-              value={accessType.value}
-              onValueChange={(value) => {
-                // A re-pick emits "": the pick stands.
-                const option = options.find((o) => o.value === value);
-                if (!option) return;
-                userChoseRef.current = true;
-                accessTypeHelpers.setValue(option.value as AccessType);
-              }}
-              options={options}
-              placeholder={t("title")}
-              disabled={disabled || !businessTier}
-            />
-          </div>
-        </Tooltip>
+        <InputSingleSelect
+          id="access_type"
+          value={accessType.value}
+          onValueChange={(value) => {
+            // A re-pick emits "": the pick stands.
+            const option = options.find((o) => o.value === value);
+            if (!option) return;
+            userChoseRef.current = true;
+            accessTypeHelpers.setValue(option.value as AccessType);
+          }}
+          options={options}
+          placeholder={t("title")}
+          disabled={disabled}
+        />
       </InputHorizontal>
 
       {accessType.value === "private" && (

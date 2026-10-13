@@ -42,7 +42,7 @@ import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { IconLoader } from "@opal/loaders";
 import { getSourceMetadata } from "@/lib/sources";
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions/utils";
+import { hasPermission } from "@/lib/permissions";
 import { Permission } from "@/lib/types";
 
 interface DetailRowProps {

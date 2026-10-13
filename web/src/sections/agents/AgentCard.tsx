@@ -9,8 +9,8 @@ import { usePinnedAgents } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { can } from "@/lib/permissions/resource-actions";
-import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/tiers/types";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 import {
   SvgActions,
   SvgBarChart,

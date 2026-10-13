@@ -4,11 +4,11 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { EmptyMessageCard } from "@opal/components";
-import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers/utils";
+import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
 import { LLMGatewaySettings } from "@/views/SettingsPage";
 
 export default function LLMGatewayPage() {

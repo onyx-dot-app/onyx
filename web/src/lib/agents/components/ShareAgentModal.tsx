@@ -17,7 +17,7 @@ import {
 } from "@/lib/agents/svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Permission, type MinimalUserSnapshot } from "@/lib/types";
-import { hasPermission } from "@/lib/permissions/utils";
+import { hasPermission } from "@/lib/permissions";
 import { can } from "@/lib/permissions/resource-actions";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
