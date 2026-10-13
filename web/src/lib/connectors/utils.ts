@@ -97,6 +97,22 @@ function withoutBlankEntries(items: readonly unknown[]): unknown[] {
 }
 
 /**
+ * The form keys that are not connector config: the configuration's tab
+ * controls, and `extraNames` (e.g. the typed account).
+ */
+export function connectorFormControlFieldNames(
+  configuration: ConnectionConfiguration,
+  extraNames: readonly string[] = []
+): Set<string> {
+  return new Set([
+    ...[...configuration.values, ...configuration.advanced_values]
+      .filter((field) => field.type === "tab")
+      .map((field) => field.name),
+    ...extraNames,
+  ]);
+}
+
+/**
  * The `connector_specific_config` that Create sends for the form's config
  * values: without form controls and form-only fields, without blank list
  * entries, and with each field's `transform` applied.

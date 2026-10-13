@@ -16,7 +16,13 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { usesDataAccessGroups } from "@/lib/connectors/edit/prefill";
 import { AddConnectorForm } from "@/views/admin/connectors/AddConnectorPage/components/AddConnectorWrapper";
+
+interface CCPairDataAccess {
+  groups: { id: number }[];
+}
 
 export interface EditConnectorPageProps {
   /** The source in the URL; it must match the pair's source. */
@@ -41,9 +47,22 @@ export default function EditConnectorPage({
     { revalidateOnFocus: false, revalidateOnReconnect: false }
   );
 
+  // A failed load of the groups fails the page: guessing none would let an
+  // unchanged form propose to drop them.
+  const loadDataAccess =
+    ccPair !== undefined && usesDataAccessGroups(ccPair.access_type);
+  const { data: dataAccess, error: dataAccessError } = useSWR<CCPairDataAccess>(
+    loadDataAccess ? SWR_KEYS.ccPairDataAccess(ccPairId) : null,
+    errorHandlingFetcher,
+    { revalidateOnFocus: false, revalidateOnReconnect: false }
+  );
+  const dataAccessLoading =
+    loadDataAccess && dataAccess === undefined && dataAccessError === undefined;
+
   const pairSource = ccPair?.connector.source;
   const failed =
     error !== undefined ||
+    dataAccessError !== undefined ||
     (pairSource !== undefined &&
       (pairSource !== source || !isEditableSource(pairSource)));
 
@@ -78,11 +97,20 @@ export default function EditConnectorPage({
 
   if (
     ccPair === undefined ||
+    dataAccessLoading ||
     pairSource === undefined ||
     !isEditableSource(pairSource)
   ) {
     return <PageLoader />;
   }
 
-  return <AddConnectorForm connector={pairSource} edit={{ ccPair }} />;
+  return (
+    <AddConnectorForm
+      connector={pairSource}
+      edit={{
+        ccPair,
+        dataAccessGroupIds: (dataAccess?.groups ?? []).map((group) => group.id),
+      }}
+    />
+  );
 }
