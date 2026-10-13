@@ -28,7 +28,9 @@ function renderCard(overrides: Partial<SimilarCredential> = {}) {
   const props = {
     onSelect: jest.fn(),
     onDeselect: jest.fn(),
-    onRename: jest.fn().mockResolvedValue(undefined),
+    onSaveAccount: jest
+      .fn()
+      .mockResolvedValue({ admin_public: false, groups: [] }),
   };
   render(
     <AuthenticationAccountCard
@@ -42,11 +44,10 @@ function renderCard(overrides: Partial<SimilarCredential> = {}) {
       onDelete={jest.fn()}
       detailsOpen={false}
       onDetailsOpenChange={jest.fn()}
-      onRename={props.onRename}
       checkReport={null}
       onRerunChecks={jest.fn().mockResolvedValue(undefined)}
       groupsLocked={false}
-      onUpdateSharing={jest.fn()}
+      onSaveAccount={props.onSaveAccount}
     />
   );
   return props;
@@ -55,18 +56,53 @@ function renderCard(overrides: Partial<SimilarCredential> = {}) {
 describe("AuthenticationAccountCard rename", () => {
   it("renames the account in place without picking it", async () => {
     const user = userEvent.setup({ delay: null });
-    const { onSelect, onRename } = renderCard();
+    const { onSelect, onSaveAccount } = renderCard();
 
     await user.click(screen.getByText("Prod Confluence"));
     const input = screen.getByDisplayValue("Prod Confluence");
     await user.clear(input);
     await user.type(input, "Staging Confluence{Enter}");
 
+    // Through the sharing route, with the sharing as stored.
     await waitFor(() =>
-      expect(onRename).toHaveBeenCalledWith("Staging Confluence")
+      expect(onSaveAccount).toHaveBeenCalledWith({
+        admin_public: false,
+        groups: [],
+        name: "Staging Confluence",
+      })
     );
     expect(screen.getByText("Staging Confluence")).toBeInTheDocument();
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("sends a rename made during another only after it, with the newest name shown", async () => {
+    const user = userEvent.setup({ delay: null });
+    const { onSaveAccount } = renderCard();
+    let finishFirst: () => void = () => {};
+    onSaveAccount.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishFirst = () => resolve({ admin_public: false, groups: [] });
+        })
+    );
+
+    const rename = async (from: string, to: string) => {
+      await user.click(screen.getByText(from));
+      const input = screen.getByDisplayValue(from);
+      await user.clear(input);
+      await user.type(input, `${to}{Enter}`);
+    };
+    await rename("Prod Confluence", "First");
+    await rename("First", "Second");
+
+    // The second waits for the first.
+    expect(onSaveAccount).toHaveBeenCalledTimes(1);
+    finishFirst();
+    await waitFor(() => expect(onSaveAccount).toHaveBeenCalledTimes(2));
+    expect(onSaveAccount).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "Second" })
+    );
+    expect(screen.getByText("Second")).toBeInTheDocument();
   });
 
   it("starts a rename from the pencil without picking the account", async () => {

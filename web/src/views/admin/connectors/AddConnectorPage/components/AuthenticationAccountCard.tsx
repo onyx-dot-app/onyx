@@ -103,11 +103,6 @@ interface AuthenticationAccountCardProps {
   detailsOpen: boolean;
   /** Called when the chevron opens or closes the details. */
   onDetailsOpenChange: (open: boolean) => void;
-  /**
-   * Saves a new name for the account; resolves once it is stored and
-   * rejects when the save fails.
-   */
-  onRename: (name: string) => Promise<void>;
   /** The account's stored check report, or null if it was never checked. */
   checkReport: CredentialCheckReport | null;
   /** Starts the checks on this account; resolves once the run is queued. */
@@ -115,11 +110,11 @@ interface AuthenticationAccountCardProps {
   /** Locks sharing with groups, which needs the Business plan. */
   groupsLocked: boolean;
   /**
-   * Saves who may reuse the account; resolves to what the server stored and
-   * rejects when the save fails.
+   * Saves who may reuse the account, and its name when given; resolves to
+   * what the server stored and rejects when the save fails.
    */
-  onUpdateSharing: (
-    sharing: Pick<CredentialSharing, "admin_public" | "groups">
+  onSaveAccount: (
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
   ) => Promise<{ admin_public: boolean; groups?: number[] }>;
 }
 /**
@@ -139,11 +134,10 @@ export default function AuthenticationAccountCard({
   onDelete,
   detailsOpen,
   onDetailsOpenChange,
-  onRename,
   checkReport,
   onRerunChecks,
   groupsLocked,
-  onUpdateSharing,
+  onSaveAccount,
 }: AuthenticationAccountCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
@@ -200,65 +194,83 @@ export default function AuthenticationAccountCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverSharing]);
 
-  // One save at a time, without locking the select: a change made while a
-  // save runs waits, and only the latest waiting change is sent next.
-  const savedSharingRef = useRef<ShareAccountFormValues>(savedSharing);
-  const sharingInFlightRef = useRef<boolean>(false);
-  const queuedSharingRef = useRef<ShareAccountFormValues | null>(null);
-  // Group edits not yet sent: they wait for the picker's blur, so a save
-  // that lands meanwhile must not replace them.
-  const unsentGroupEditsRef = useRef<boolean>(false);
-  async function saveSharing(next: ShareAccountFormValues) {
-    unsentGroupEditsRef.current = false;
-    setSharing(next);
-    if (sharingInFlightRef.current) {
-      queuedSharingRef.current = next;
-      return;
-    }
-    sharingInFlightRef.current = true;
-    setSavingSharing(true);
-    let target: ShareAccountFormValues | null = next;
-    while (target !== null) {
-      queuedSharingRef.current = null;
-      try {
-        const stored = shareAccountValues(
-          await onUpdateSharing(shareAccountPayload(target))
-        );
-        savedSharingRef.current = stored;
-        setSavedSharing(stored);
-        // A newer change, sent or not, keeps what the select shows.
-        if (queuedSharingRef.current === null && !unsentGroupEditsRef.current) {
-          setSharing(stored);
-        }
-        toast.success(t("shareSaved.toast"));
-      } catch {
-        if (queuedSharingRef.current === null && !unsentGroupEditsRef.current) {
-          setSharing(savedSharingRef.current);
-        }
-        toast.error(t("shareFailed.toast"));
-      }
-      target = queuedSharingRef.current;
-    }
-    sharingInFlightRef.current = false;
-    setSavingSharing(false);
-  }
-  const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
-
-  // A saved rename shows at once; the list refetch then brings it back.
+  // A rename shows at once, until the list refetch brings the stored name.
   const [pendingName, setPendingName] = useState<string | null>(null);
   useEffect(() => {
     setPendingName(null);
   }, [credential.name]);
-  async function rename(name: string) {
-    setPendingName(name);
-    try {
-      await onRename(name);
-      toast.success(t("renameSaved.toast"));
-    } catch {
-      setPendingName(null);
-      toast.error(t("renameFailed.toast"));
-    }
+
+  // Sharing and the name save through one route, one save at a time, without
+  // locking the controls: a change made while a save runs waits, and the
+  // waiting changes merge, so only the latest of each is sent next. Saves
+  // therefore land in order, and only the newest decides what shows.
+  const savedSharingRef = useRef<ShareAccountFormValues>(savedSharing);
+  const saveInFlightRef = useRef<boolean>(false);
+  const queuedSaveRef = useRef<{
+    sharing: ShareAccountFormValues | null;
+    name: string | null;
+  } | null>(null);
+  // Group edits not yet sent: they wait for the picker's blur, so a save
+  // that lands meanwhile must not replace them.
+  const unsentGroupEditsRef = useRef<boolean>(false);
+  // Read fresh: a change can queue while a save is awaited.
+  function waitingSave() {
+    return queuedSaveRef.current;
   }
+  async function saveAccount(change: {
+    sharing?: ShareAccountFormValues;
+    name?: string;
+  }) {
+    if (change.sharing) {
+      unsentGroupEditsRef.current = false;
+      setSharing(change.sharing);
+    }
+    if (change.name !== undefined) setPendingName(change.name);
+    queuedSaveRef.current = {
+      sharing: change.sharing ?? queuedSaveRef.current?.sharing ?? null,
+      name: change.name ?? queuedSaveRef.current?.name ?? null,
+    };
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    setSavingSharing(true);
+    while (queuedSaveRef.current !== null) {
+      const target = queuedSaveRef.current;
+      queuedSaveRef.current = null;
+      try {
+        // A rename alone sends the stored sharing, so it changes nothing else.
+        const stored = await onSaveAccount({
+          ...shareAccountPayload(target.sharing ?? savedSharingRef.current),
+          ...(target.name !== null && { name: target.name }),
+        });
+        const storedSharing = shareAccountValues(stored);
+        savedSharingRef.current = storedSharing;
+        setSavedSharing(storedSharing);
+        // A newer change, sent or not, keeps what the select shows.
+        if (waitingSave()?.sharing == null && !unsentGroupEditsRef.current) {
+          setSharing(storedSharing);
+        }
+        if (target.sharing) toast.success(t("shareSaved.toast"));
+        if (target.name !== null) toast.success(t("renameSaved.toast"));
+      } catch {
+        if (
+          target.sharing &&
+          waitingSave()?.sharing == null &&
+          !unsentGroupEditsRef.current
+        ) {
+          setSharing(savedSharingRef.current);
+        }
+        if (target.sharing) toast.error(t("shareFailed.toast"));
+        if (target.name !== null) {
+          // A newer rename still waiting keeps showing.
+          if (waitingSave()?.name == null) setPendingName(null);
+          toast.error(t("renameFailed.toast"));
+        }
+      }
+    }
+    saveInFlightRef.current = false;
+    setSavingSharing(false);
+  }
+  const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
   const addedOn: string = format.dateTime(new Date(credential.time_created), {
     year: "numeric",
@@ -418,14 +430,14 @@ export default function AuthenticationAccountCard({
                             next.groups.length === 0
                           )
                         ) {
-                          void saveSharing(next);
+                          void saveAccount({ sharing: next });
                           return;
                         }
                         unsentGroupEditsRef.current = true;
                         setSharing(next);
                       }}
                       onGroupsBlur={() => {
-                        if (hasUnsavedSharing) void saveSharing(sharing);
+                        if (hasUnsavedSharing) void saveAccount({ sharing });
                       }}
                       disabled={!canEditAccount}
                       onlyMeDisabledReason={
@@ -466,7 +478,7 @@ export default function AuthenticationAccountCard({
                 // One line; a long name is cut, in full on hover.
                 titleMaxLines={1}
                 editable={canEditAccount}
-                onTitleChange={(name) => void rename(name)}
+                onTitleChange={(name) => void saveAccount({ name })}
                 suffix={t("sourceSuffix", { source: sourceName })}
                 description={t("addedOn.label", { date: addedOn })}
                 sizePreset="main-ui"
