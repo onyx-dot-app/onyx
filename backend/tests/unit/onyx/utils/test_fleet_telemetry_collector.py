@@ -480,15 +480,18 @@ def test_an_invalid_row_does_not_stop_its_read(
 
 @pytest.mark.parametrize("deployment_type", list(fleet.DeploymentType))
 @pytest.mark.parametrize("indexed", [False, True])
+@pytest.mark.parametrize("service", ["api", "worker", "collector"])
 def test_deployment_snapshot_reports_type_and_indexed_connectors_each_pass(
     monkeypatch: pytest.MonkeyPatch,
     source: _Source,
     sender: fleet.BoundedTelemetry,
     deployment_type: fleet.DeploymentType,
     indexed: bool,
+    service: str,
 ) -> None:
     monkeypatch.setattr(collector, "DEPLOYMENT_TYPE", deployment_type)
     source.has_indexed_connectors = indexed
+    sender.service = service
     for _ in range(2):
         collector.collect_snapshots("public")
         events = sender._take_batch()
@@ -496,6 +499,6 @@ def test_deployment_snapshot_reports_type_and_indexed_connectors_each_pass(
             event for event in events if event["event_type"] == "heartbeat"
         )
         assert heartbeat["data"] == {
-            "deployment_type": deployment_type.value,
+            **({"deployment_type": deployment_type.value} if service == "api" else {}),
             "has_indexed_connectors": indexed,
         }

@@ -19,6 +19,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     DocPermissionSyncAttempt,
+    DocumentByConnectorCredentialPair,
     ExternalGroupPermissionSyncAttempt,
     HierarchyFetchAttempt,
     IndexAttempt,
@@ -93,9 +94,20 @@ def has_indexed_connectors__no_commit(db_session: Session) -> bool:
         db_session.scalar(
             select(
                 select(ConnectorCredentialPair.id)
+                .join(
+                    DocumentByConnectorCredentialPair,
+                    (
+                        DocumentByConnectorCredentialPair.connector_id
+                        == ConnectorCredentialPair.connector_id
+                    )
+                    & (
+                        DocumentByConnectorCredentialPair.credential_id
+                        == ConnectorCredentialPair.credential_id
+                    ),
+                )
                 .where(
                     ConnectorCredentialPair.connector_id > 0,
-                    ConnectorCredentialPair.total_docs_indexed > 0,
+                    DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
                 )
                 .exists()
             )

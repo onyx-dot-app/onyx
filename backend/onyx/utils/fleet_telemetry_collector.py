@@ -443,7 +443,12 @@ def collect_snapshots(tenant_id: str) -> None:
         sender.emit(
             "heartbeat",
             {
-                "deployment_type": DEPLOYMENT_TYPE.value,
+                # Workers can have different Lite settings from the API.
+                **(
+                    {"deployment_type": DEPLOYMENT_TYPE.value}
+                    if sender.service == "api"
+                    else {}
+                ),
                 "has_indexed_connectors": has_indexed_connectors,
             },
             tenant_id=tenant_id,
