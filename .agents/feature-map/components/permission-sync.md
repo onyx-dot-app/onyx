@@ -581,6 +581,15 @@ document to the wrong person.
    row is still `IN_PROGRESS`, and `mark_*_failed` keeps an existing
    `FAILED`/`CANCELED` reason. Do not write a terminal status without this
    check.
+   The same renewal writes the running counts (`total_docs_synced`, or the
+   group counts) and `last_progress_at` from an in-memory
+   `DocPermissionSyncProgress` / `ExternalGroupSyncProgress`, so the admin UI
+   and fleet telemetry see progress mid-run; `complete_*` replaces the counts
+   with the final values. One doc or group sync stops after
+   `PERMISSION_SYNC_TIMEOUT` (`PERMISSION_SYNC_TIMEOUT_SECONDS`, default
+   `JOB_TIMEOUT`); the attempt's `error_message` names the real stop cause
+   (timeout, stop signal, or lost lease), because connectors raise a generic
+   "Stop signal detected" for all of them.
 
 ---
 

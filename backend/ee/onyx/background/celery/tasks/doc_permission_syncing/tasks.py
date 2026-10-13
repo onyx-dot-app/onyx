@@ -38,7 +38,7 @@ from onyx.background.celery.celery_redis import (
 )
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
 from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
-from onyx.configs.app_configs import JOB_TIMEOUT
+from onyx.configs.app_configs import JOB_TIMEOUT, PERMISSION_SYNC_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT,
@@ -79,6 +79,7 @@ from onyx.db.hierarchy import (
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import (
+    DocPermissionSyncProgress,
     complete_doc_permission_sync_attempt,
     create_doc_permission_sync_attempt,
     fail_expired_doc_permission_sync_attempts,
@@ -169,9 +170,11 @@ def _fail_doc_permission_sync_attempt(
         )
 
 
-def _renew_doc_permission_sync_lease(attempt_id: int) -> bool:
+def _renew_doc_permission_sync_lease(
+    attempt_id: int, progress: DocPermissionSyncProgress
+) -> bool:
     with get_session_with_current_tenant() as db_session:
-        return renew_doc_permission_sync_attempt_lease(attempt_id, db_session)
+        return renew_doc_permission_sync_attempt_lease(attempt_id, db_session, progress)
 
 
 def fail_expired_doc_permission_sync_attempts_for_tenant() -> None:
@@ -579,7 +582,9 @@ def connector_permission_sync_generator_task(
     connector_type: str = "unknown"
     tasks_generated = 0
     docs_with_errors = 0
+    progress = DocPermissionSyncProgress()
     heartbeat: LeaseHeartbeat | None = None
+    callback: PermissionSyncCallback | None = None
     try:
         # Scoped to setup, never across the crawl below: on multi-tenant this session
         # is bound to one checked-out Connection, which PgBouncer closes once the gaps
@@ -666,7 +671,7 @@ def connector_permission_sync_generator_task(
 
             heartbeat = LeaseHeartbeat(
                 f"doc_permission_sync_attempt={attempt_id}",
-                renew=partial(_renew_doc_permission_sync_lease, attempt_id),
+                renew=partial(_renew_doc_permission_sync_lease, attempt_id, progress),
                 interval=PERMISSION_SYNC_HEARTBEAT_INTERVAL,
                 max_silence=PERMISSION_SYNC_LEASE_SELF_EXPIRY,
                 max_duration=JOB_TIMEOUT + PERMISSION_SYNC_LEASE_OVERRUN,
@@ -677,8 +682,9 @@ def connector_permission_sync_generator_task(
                 redis_connector,
                 lock,
                 r,
-                timeout_seconds=JOB_TIMEOUT,
+                timeout_seconds=PERMISSION_SYNC_TIMEOUT,
                 lease=heartbeat,
+                sync_progress=progress,
             )
 
             connector_id = cc_pair.connector.id
@@ -722,9 +728,10 @@ def connector_permission_sync_generator_task(
         )
 
         for doc_external_access in document_external_accesses:
-            if callback.should_stop():
+            stop_reason = callback.stop_reason()
+            if stop_reason is not None:
                 raise RuntimeError(
-                    f"Permission sync task timed out or stop signal detected: "
+                    f"Permission sync stopped: {stop_reason}: "
                     f"cc_pair={cc_pair_id} "
                     f"tasks_generated={tasks_generated}"
                 )
@@ -739,6 +746,9 @@ def connector_permission_sync_generator_task(
             )
             tasks_generated += result.num_updated
             docs_with_errors += result.num_errors
+            progress.total_docs_synced = tasks_generated
+            progress.docs_with_permission_errors = docs_with_errors
+            progress.last_progress_at = datetime.now(timezone.utc)
 
         task_logger.info(
             f"RedisConnector.permissions.generate_tasks finished. "
@@ -765,6 +775,10 @@ def connector_permission_sync_generator_task(
     except Exception as e:
         error_msg = format_error_for_logging(e)
         full_exception_trace = traceback.format_exc()
+        # Connectors raise a generic "stop signal" error for every stop cause
+        stop_reason = callback.stop_reason() if callback is not None else None
+        if stop_reason is not None:
+            error_msg = f"Permission sync stopped: {stop_reason}. {error_msg}"
 
         task_logger.warning(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id} {error_msg}"
@@ -1094,6 +1108,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         redis_client: TenantRedisClient,
         timeout_seconds: int | None = None,
         lease: LeaseHeartbeat | None = None,
+        sync_progress: DocPermissionSyncProgress | None = None,
     ):
         super().__init__()
         self.redis_connector: RedisConnector = redis_connector
@@ -1109,13 +1124,15 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         self.start_monotonic = time.monotonic()
         self.timeout_seconds = timeout_seconds
         self.lease = lease
+        self.sync_progress = sync_progress
 
-    def should_stop(self) -> bool:
+    def stop_reason(self) -> str | None:
+        """Why the sync must stop, or None when it may continue."""
         if self.redis_connector.stop.fenced:
-            return True
+            return "stop signal set (the connector is being deleted or paused)"
 
         if self.lease is not None and self.lease.is_lost():
-            return True
+            return "attempt lost its lease (the reaper failed it)"
 
         # Check if the task has exceeded its timeout
         # NOTE: Celery's soft_time_limit does not work with thread pools,
@@ -1129,11 +1146,19 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
                     self.timeout_seconds,
                     self.redis_connector.cc_pair_id,
                 )
-                return True
+                return (
+                    f"timed out after {elapsed:.0f}s "
+                    f"(PERMISSION_SYNC_TIMEOUT_SECONDS={self.timeout_seconds})"
+                )
 
-        return False
+        return None
+
+    def should_stop(self) -> bool:
+        return self.stop_reason() is not None
 
     def progress(self, tag: str, amount: int) -> None:  # noqa: ARG002
+        if self.sync_progress is not None and amount > 0:
+            self.sync_progress.last_progress_at = datetime.now(timezone.utc)
         try:
             self.redis_connector.permissions.set_active()
 

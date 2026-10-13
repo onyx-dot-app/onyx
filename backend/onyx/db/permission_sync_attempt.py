@@ -4,6 +4,7 @@ This module contains all CRUD operations for both DocPermissionSyncAttempt
 and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 
@@ -33,6 +34,27 @@ _FAILURE_STATUSES = (PermissionSyncStatus.FAILED, PermissionSyncStatus.CANCELED)
 _AttemptModel = (
     type[DocPermissionSyncAttempt] | type[ExternalGroupPermissionSyncAttempt]
 )
+
+
+@dataclass
+class DocPermissionSyncProgress:
+    """Running counts the worker updates in memory. The lease heartbeat writes
+    them, so the attempt row shows progress while the sync runs."""
+
+    total_docs_synced: int = 0
+    docs_with_permission_errors: int = 0
+    last_progress_at: datetime | None = None
+
+
+@dataclass
+class ExternalGroupSyncProgress:
+    """Running counts the worker updates in memory. The lease heartbeat writes
+    them, so the attempt row shows progress while the sync runs."""
+
+    total_users_processed: int = 0
+    total_groups_processed: int = 0
+    total_group_memberships_synced: int = 0
+    last_progress_at: datetime | None = None
 
 
 class PermissionSyncAttemptLostError(RuntimeError):
@@ -224,11 +246,9 @@ def complete_doc_permission_sync_attempt(
                 f"Doc permission sync attempt {attempt_id} is {attempt.status}, not IN_PROGRESS"
             )
 
-        # Update progress counters
-        attempt.total_docs_synced = (attempt.total_docs_synced or 0) + total_docs_synced
-        attempt.docs_with_permission_errors = (
-            attempt.docs_with_permission_errors or 0
-        ) + docs_with_permission_errors
+        # Final counts replace the running counts the heartbeat wrote
+        attempt.total_docs_synced = total_docs_synced
+        attempt.docs_with_permission_errors = docs_with_permission_errors
 
         # Set final status based on whether there were errors
         if docs_with_permission_errors > 0:
@@ -491,16 +511,10 @@ def complete_external_group_sync_attempt(
                 f"External group sync attempt {attempt_id} is {attempt.status}, not IN_PROGRESS"
             )
 
-        # Update progress counters
-        attempt.total_users_processed = (
-            attempt.total_users_processed or 0
-        ) + total_users_processed
-        attempt.total_groups_processed = (
-            attempt.total_groups_processed or 0
-        ) + total_groups_processed
-        attempt.total_group_memberships_synced = (
-            attempt.total_group_memberships_synced or 0
-        ) + total_group_memberships_synced
+        # Final counts replace the running counts the heartbeat wrote
+        attempt.total_users_processed = total_users_processed
+        attempt.total_groups_processed = total_groups_processed
+        attempt.total_group_memberships_synced = total_group_memberships_synced
 
         # Set final status based on whether there were errors
         if errors_encountered > 0:
@@ -522,12 +536,17 @@ def complete_external_group_sync_attempt(
 # =============================================================================
 
 
-def _renew_lease(model: _AttemptModel, attempt_id: int, db_session: Session) -> bool:
+def _renew_lease(
+    model: _AttemptModel,
+    attempt_id: int,
+    db_session: Session,
+    progress_values: dict[str, Any],
+) -> bool:
     renewed = db_session.execute(
         update(model)
         .where(model.id == attempt_id)
         .where(model.status == PermissionSyncStatus.IN_PROGRESS)
-        .values(heartbeat_at=func.now())
+        .values(heartbeat_at=func.now(), **progress_values)
         .returning(model.id)
     ).first()
     db_session.commit()
@@ -568,19 +587,44 @@ def lock_external_group_sync_attempt_if_owned(
 
 
 def renew_doc_permission_sync_attempt_lease(
-    attempt_id: int, db_session: Session
+    attempt_id: int,
+    db_session: Session,
+    progress: DocPermissionSyncProgress | None = None,
 ) -> bool:
-    """Renews the lease of a running attempt. Returns False when the attempt is
-    no longer IN_PROGRESS, which means the caller has lost it."""
-    return _renew_lease(DocPermissionSyncAttempt, attempt_id, db_session)
+    """Renews the lease of a running attempt and writes its progress. Returns
+    False when the attempt is no longer IN_PROGRESS, which means the caller has
+    lost it."""
+    progress_values: dict[str, Any] = {}
+    if progress is not None:
+        progress_values = {
+            "total_docs_synced": progress.total_docs_synced,
+            "docs_with_permission_errors": progress.docs_with_permission_errors,
+            "last_progress_at": progress.last_progress_at,
+        }
+    return _renew_lease(
+        DocPermissionSyncAttempt, attempt_id, db_session, progress_values
+    )
 
 
 def renew_external_group_sync_attempt_lease(
-    attempt_id: int, db_session: Session
+    attempt_id: int,
+    db_session: Session,
+    progress: ExternalGroupSyncProgress | None = None,
 ) -> bool:
-    """Renews the lease of a running attempt. Returns False when the attempt is
-    no longer IN_PROGRESS, which means the caller has lost it."""
-    return _renew_lease(ExternalGroupPermissionSyncAttempt, attempt_id, db_session)
+    """Renews the lease of a running attempt and writes its progress. Returns
+    False when the attempt is no longer IN_PROGRESS, which means the caller has
+    lost it."""
+    progress_values: dict[str, Any] = {}
+    if progress is not None:
+        progress_values = {
+            "total_users_processed": progress.total_users_processed,
+            "total_groups_processed": progress.total_groups_processed,
+            "total_group_memberships_synced": progress.total_group_memberships_synced,
+            "last_progress_at": progress.last_progress_at,
+        }
+    return _renew_lease(
+        ExternalGroupPermissionSyncAttempt, attempt_id, db_session, progress_values
+    )
 
 
 def _fail_expired_attempts(
