@@ -105,19 +105,25 @@ CACHE_BACKEND = CacheBackendType(
 QUERY_EMBEDDING_CACHE_ENABLED = (
     os.environ.get("QUERY_EMBEDDING_CACHE_ENABLED", "true").lower() == "true"
 )
-PASSAGE_EMBEDDING_CACHE_ENABLED = (
-    os.environ.get("PASSAGE_EMBEDDING_CACHE_ENABLED", "true").lower() == "true"
-)
-assert (
-    PASSAGE_EMBEDDING_CACHE_TTL_S := int(
-        os.environ.get("PASSAGE_EMBEDDING_CACHE_TTL_S", "86400")
-    )
-) > 0, "PASSAGE_EMBEDDING_CACHE_TTL_S must be positive."
 assert (
     QUERY_EMBEDDING_CACHE_TTL_S := int(
         os.environ.get("QUERY_EMBEDDING_CACHE_TTL_S", "900")
     )
 ) > 0, "QUERY_EMBEDDING_CACHE_TTL_S must be positive."
+
+# Passage caches can be large. Enable explicitly after sizing the cache backend.
+try:
+    PASSAGE_EMBEDDING_CACHE_TTL_S = int(
+        os.environ.get("PASSAGE_EMBEDDING_CACHE_TTL_S", "86400")
+    )
+except ValueError:
+    PASSAGE_EMBEDDING_CACHE_TTL_S = 0
+if PASSAGE_EMBEDDING_CACHE_TTL_S <= 0:
+    logger.warning("Invalid PASSAGE_EMBEDDING_CACHE_TTL_S; passage cache disabled")
+PASSAGE_EMBEDDING_CACHE_ENABLED = (
+    os.environ.get("PASSAGE_EMBEDDING_CACHE_ENABLED", "false").lower() == "true"
+    and PASSAGE_EMBEDDING_CACHE_TTL_S > 0
+)
 
 # If set to true, will show extra/uncommon connectors in the "Other" category
 SHOW_EXTRA_CONNECTORS = os.environ.get("SHOW_EXTRA_CONNECTORS", "").lower() == "true"

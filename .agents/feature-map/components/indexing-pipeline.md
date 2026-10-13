@@ -77,6 +77,8 @@ is already local.
 |---|---|---|
 | `INDEX_BATCH_SIZE` | 16 | Documents per connector-fetch batch, and thus per `docprocessing` task. |
 | `MAX_CHUNKS_PER_DOC_BATCH` | 1000 | Sub-batch size for the embed step inside one docprocessing task; see §4.4. |
+| `PASSAGE_EMBEDDING_CACHE_ENABLED` | false | Opt-in reuse of enriched passage vectors through the tenant-scoped CacheBackend. Size cache storage before enabling. |
+| `PASSAGE_EMBEDDING_CACHE_TTL_S` | 86400 | Passage vector expiry in seconds; invalid or non-positive values disable the passage cache. |
 | `MAX_DOCUMENT_CHARS` | set | A document above this char count is skipped with a `ConnectorFailure`, not chunked. |
 | `PERSISTENT_INDEXING` | see configs | When true, an unhandled docprocessing batch exception is converted into per-doc failures and the attempt can finish (`COMPLETED_WITH_ERRORS`) instead of `FAILED`. Unhandled connector-generator exceptions in docfetching still mark the attempt `FAILED`. See `indexing/persistent_indexing.py` and §4.5. |
 | `ENABLE_CONTEXTUAL_RAG` | see configs | Contextual RAG is on when this global flag or `SearchSettings.enable_contextual_rag` is true. A per-model false does not turn off a true global flag (`indexing_pipeline.py`). |
@@ -334,7 +336,17 @@ enrichment (`_partition_documents_blocked_by_llm_spend_limit`).
 **Embedding** (`embedder.py:DefaultIndexingEmbedder.embed_chunks`, called via
 `embed_chunks_with_failure_handling` -> `_embed_chunks_to_store` in
 `indexing_pipeline.py`). Chunks are split into sub-batches of at most
-`MAX_CHUNKS_PER_DOC_BATCH` (1000) and each sub-batch is embedded in one call to
+`MAX_CHUNKS_PER_DOC_BATCH` (1000). When the passage cache is enabled and the
+embedder has a persisted SearchSettings ID and vector dimension,
+`natural_language_processing/passage_embedding_cache.py:embed_cached_passages`
+hashes the exact enriched passage text (and each mini-chunk). Keys are scoped by
+tenant, settings generation, provider/model/endpoint options, dimension and
+trimming settings. Only unique misses are encoded; hits and misses are restored
+to their original positions without merging documents or changing IDs or ACLs.
+Cache operations use a 0.2-second operation timeout and stop for the batch after
+a transient cache error. Malformed vectors are treated as misses. The cache is
+optional, expires entries, and does not prevent concurrent workers from encoding
+the same miss. With caching disabled, each sub-batch is embedded in one call to
 `EmbeddingModel.encode` (`natural_language_processing/search_nlp_models.py`), which
 reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Titles
 get no separate embedding: the title reaches the vector only through the chunk's
