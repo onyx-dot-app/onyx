@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.gateway import api as gateway_api
 from ee.onyx.server.gateway import stream_bridge
 from ee.onyx.server.gateway.api import _MESSAGES_ADAPTER
-from ee.onyx.server.middleware.tier_gate import _required_tier
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -56,14 +55,13 @@ from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
-from onyx.server.gateway.configs import CRAFT_GATEWAY_PATH_PREFIX, GATEWAY_PATH_PREFIX
+from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
 from onyx.server.gateway.models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
     ResponsesRequest,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
-from onyx.server.settings.models import Tier
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import get_current_trace
 
@@ -937,7 +935,6 @@ def test_handle_chat_completion_rejects_named_tool_choice_for_unknown_tool() -> 
 def test_gateway_route_exposes_standard_auth_dependency() -> None:
     application = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     application.include_router(gateway_api.router)
-    application.include_router(gateway_api.craft_router)
 
     check_router_auth(application, public_endpoint_specs=[])
 
@@ -2088,55 +2085,3 @@ def test_responses_tool_round_trip_assistant_content_is_flattened() -> None:
     assert assistant, raw
     for message in assistant:
         assert not isinstance(message["content"], list)
-
-
-@pytest.mark.parametrize(
-    ("mount_flow", "credential_flow"),
-    [
-        (LLMFlow.LLM_GATEWAY, LLMFlow.CRAFT_LLM_GENERATION),
-        (LLMFlow.CRAFT_LLM_GENERATION, LLMFlow.LLM_GATEWAY),
-        (LLMFlow.CRAFT_LLM_GENERATION, None),
-    ],
-)
-def test_mount_rejects_other_credential_types(
-    mount_flow: LLMFlow, credential_flow: LLMFlow | None
-) -> None:
-    dependency = gateway_api._require_mount_flow(mount_flow)
-    with (
-        patch.object(
-            gateway_api,
-            "gateway_request_flow",
-            MagicMock(return_value=credential_flow),
-        ),
-        pytest.raises(OnyxError) as exc_info,
-    ):
-        dependency(
-            cast(Request, MagicMock(spec=Request)), cast(User, MagicMock(spec=User))
-        )
-    assert exc_info.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-
-
-@pytest.mark.parametrize("flow", [LLMFlow.LLM_GATEWAY, LLMFlow.CRAFT_LLM_GENERATION])
-def test_mount_accepts_its_own_credential_type(flow: LLMFlow) -> None:
-    dependency = gateway_api._require_mount_flow(flow)
-    with patch.object(
-        gateway_api, "gateway_request_flow", MagicMock(return_value=flow)
-    ):
-        dependency(
-            cast(Request, MagicMock(spec=Request)), cast(User, MagicMock(spec=User))
-        )
-
-
-def test_craft_mount_serves_gateway_routes_without_tier_gate() -> None:
-    """Craft works in Community Edition; third-party PAT access stays Business+."""
-    pat_paths = {
-        cast(APIRoute, route).path.removeprefix(GATEWAY_PATH_PREFIX)
-        for route in gateway_api.router.routes
-    }
-    craft_paths = {
-        cast(APIRoute, route).path.removeprefix(CRAFT_GATEWAY_PATH_PREFIX)
-        for route in gateway_api.craft_router.routes
-    }
-    assert craft_paths == pat_paths
-    assert _required_tier(f"{GATEWAY_PATH_PREFIX}/v1/models") is Tier.BUSINESS
-    assert _required_tier(f"{CRAFT_GATEWAY_PATH_PREFIX}/v1/models") is None

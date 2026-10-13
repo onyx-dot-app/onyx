@@ -3,7 +3,6 @@ import queue
 import threading
 import time
 import uuid
-from collections.abc import Callable
 from contextlib import closing
 from functools import partial
 from itertools import count
@@ -65,7 +64,6 @@ from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import (
-    CRAFT_GATEWAY_PATH_PREFIX,
     GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
     GATEWAY_PATH_PREFIX,
 )
@@ -139,7 +137,7 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
-_routes = APIRouter()
+router = APIRouter(prefix=GATEWAY_PATH_PREFIX)
 
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatCompletionMessage]] = TypeAdapter(
     list[ChatCompletionMessage]
@@ -1420,7 +1418,7 @@ def _resolve_metered_gateway_model(
     return provider, model_config
 
 
-@_routes.get("/v1/models")
+@router.get("/v1/models")
 def gateway_list_models(
     http_request: Request,
     user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
@@ -1432,7 +1430,7 @@ def gateway_list_models(
     return JSONResponse(content=ModelListResponse.from_catalog(catalog).to_wire())
 
 
-@_routes.post("/v1/chat/completions")
+@router.post("/v1/chat/completions")
 def gateway_chat_completions(
     request: ChatCompletionRequest,
     http_request: Request,
@@ -1457,7 +1455,7 @@ def gateway_chat_completions(
     return JSONResponse(content=result.to_wire())
 
 
-@_routes.post("/v1/responses")
+@router.post("/v1/responses")
 def gateway_responses(
     request: ResponsesRequest,
     http_request: Request,
@@ -1488,7 +1486,7 @@ def gateway_responses(
     return JSONResponse(content=result.to_wire())
 
 
-@_routes.post("/v1/messages")
+@router.post("/v1/messages")
 def gateway_anthropic_messages(
     request: AnthropicMessagesRequest,
     http_request: Request,
@@ -1522,7 +1520,7 @@ def gateway_anthropic_messages(
     return JSONResponse(content=result.to_wire())
 
 
-@_routes.post("/v1/messages/count_tokens")
+@router.post("/v1/messages/count_tokens")
 def gateway_anthropic_count_tokens(
     request: AnthropicCountTokensRequest,
     http_request: Request,
@@ -1567,32 +1565,3 @@ def gateway_anthropic_count_tokens(
             countable_input["tools"] = tools
         input_tokens = len(json.dumps(countable_input)) // 4
     return JSONResponse(content={"input_tokens": input_tokens})
-
-
-def _require_mount_flow(expected: LLMFlow) -> Callable[..., None]:
-    def dependency(
-        http_request: Request,
-        user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
-    ) -> None:
-        if gateway_request_flow(http_request, user) is not expected:
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "This credential is not authorized for this gateway endpoint.",
-            )
-
-    return dependency
-
-
-# Third-party PAT traffic; tier-gated by PATH_PREFIX_MIN_TIER.
-router = APIRouter(
-    prefix=GATEWAY_PATH_PREFIX,
-    dependencies=[Depends(_require_mount_flow(LLMFlow.LLM_GATEWAY))],
-)
-router.include_router(_routes)
-
-# Craft sandbox traffic; available on every tier.
-craft_router = APIRouter(
-    prefix=CRAFT_GATEWAY_PATH_PREFIX,
-    dependencies=[Depends(_require_mount_flow(LLMFlow.CRAFT_LLM_GENERATION))],
-)
-craft_router.include_router(_routes)
