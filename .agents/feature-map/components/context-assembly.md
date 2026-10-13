@@ -110,8 +110,9 @@ Per cycle, `llm_loop.py:construct_message_history` produces this order:
 
 ```
 [system]                     -- base prompt + dynamic sections, or persona's own
-                                 replacement prompt (§4.1); byte-identical across
-                                 users so its prompt-cache entry is shared
+                                 replacement prompt (§4.1); identical for every
+                                 user with the same base prompt, tool set and
+                                 date, so its prompt-cache entry is shared
 [user information]           -- SYSTEM message with the per-user block (§4.1);
                                  absent when the persona replaces the base prompt
 [history before last user]   -- truncated oldest-first, budget permitting (§4.6)
@@ -149,8 +150,10 @@ once per turn. A turn that runs three tool cycles calls
    `run_llm_loop` emits it via `build_user_information_prompt` as a second
    `MessageType.SYSTEM` message right after it (`user_info_prompt` in
    `construct_message_history`). Keeping names, emails and memories out of the
-   system message makes it identical for every user, so the head cache
-   breakpoint (`llm/prompt_cache`) is shared org-wide instead of per user.
+   system message makes it identical for every user with the same base
+   prompt, tool guidance (e.g. `enable_memory_tool` toggles the memory
+   section) and resolved date, so the head cache breakpoint
+   (`llm/prompt_cache`) is shared across those users instead of per user.
    `include_user_info=True` (token estimation, tests) inlines the per-user part
    into the returned string instead.
 3. Citation guidance (`prompts/chat_prompts.py:REQUIRE_CITATION_GUIDANCE`, then

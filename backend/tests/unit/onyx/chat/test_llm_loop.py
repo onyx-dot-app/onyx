@@ -27,6 +27,7 @@ from onyx.chat.models import (
 )
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.db.memory import UserInfo, UserMemoryContext
 from onyx.file_store.models import ChatFileType
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.models import ToolChoiceOptions
@@ -2078,6 +2079,87 @@ def test_head_prompts_byte_stable_across_citeable_tool_round() -> None:
 
 
 @pytest.mark.parametrize("replace_base", [False, True])
+def _history_for_user(
+    user_memory_context: UserMemoryContext,
+) -> list[ChatMessageSimple]:
+    llm: Mock = Mock()
+    llm.config = LLMConfig(
+        model_provider="openai",
+        model_name="gpt-5.2",
+        temperature=0,
+        max_input_tokens=100000,
+    )
+    with (
+        patch("onyx.chat.llm_loop.trace", return_value=nullcontext()),
+        patch("onyx.llm.litellm_singleton.config.initialize_litellm"),
+        patch(
+            "onyx.chat.llm_loop.get_session_with_current_tenant",
+            return_value=nullcontext(),
+        ),
+        patch(
+            "onyx.chat.llm_loop.get_default_base_system_prompt",
+            return_value="Base prompt.",
+        ),
+        patch("onyx.chat.prompt_utils.get_company_context", return_value="Acme Inc"),
+        patch("onyx.chat.llm_loop.compute_all_tool_tokens", return_value=0),
+        patch("onyx.chat.llm_loop.select_reminder_text", return_value=None),
+        patch(
+            "onyx.chat.llm_loop.run_llm_step",
+            return_value=(
+                LlmStepResult(answer="Done", tool_calls=None, reasoning=None),
+                False,
+            ),
+        ) as step,
+    ):
+        run_llm_loop(
+            emitter=Mock(),
+            state_container=Mock(),
+            simple_chat_history=[create_message("Question", MessageType.USER, 5)],
+            tools=[],
+            custom_agent_prompt=None,
+            context_files=create_context_files(),
+            persona=None,
+            user_memory_context=user_memory_context,
+            llm=llm,
+            token_counter=lambda _: 10,
+        )
+    return step.call_args.kwargs["history"]
+
+
+def test_user_information_is_split_out_of_the_shared_system_prompt() -> None:
+    alice = UserMemoryContext(
+        user_info=UserInfo(name="Alice Example", email="alice@example.com"),
+        user_preferences="Prefers bullet points.",
+        memories=["Alice works on billing."],
+    )
+    bob = UserMemoryContext(
+        user_info=UserInfo(name="Bob Example", email="bob@example.com"),
+        memories=["Bob is on the data team."],
+    )
+    alice_history = _history_for_user(alice)
+    bob_history = _history_for_user(bob)
+
+    assert alice_history[0].message == bob_history[0].message
+    assert alice_history[0].message_type == MessageType.SYSTEM
+    assert alice_history[0].should_cache
+    assert "Acme Inc" in alice_history[0].message
+    assert "Alice" not in alice_history[0].message
+    assert "Bob" not in bob_history[0].message
+
+    for history, mine, theirs in (
+        (alice_history, "Alice", "Bob"),
+        (bob_history, "Bob", "Alice"),
+    ):
+        assert history[1].message_type == MessageType.SYSTEM
+        assert history[1].should_cache
+        assert mine in history[1].message
+        assert theirs not in history[1].message
+    assert "Prefers bullet points." in alice_history[1].message
+    assert "Alice works on billing." in alice_history[1].message
+    assert "Bob is on the data team." in bob_history[1].message
+    assert alice_history[2].message == "Question"
+
+
 @pytest.mark.parametrize("base_prompt", ["Base prompt", ""])
 def test_project_instructions_supplement_agent_prompt(
     replace_base: bool, base_prompt: str

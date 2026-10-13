@@ -186,7 +186,8 @@ The reasoning behind each position is in `backend/onyx/chat/README.md` and in
 
 - The per-user block (name, email, directory profile, language, preferences,
   memories) is its own SYSTEM message after the system prompt, so the system
-  prompt itself is byte-identical across users and its cache entry is shared.
+  prompt itself is identical for users sharing a base prompt, tool set and
+  date, and its cache entry is shared among them.
 - The custom agent prompt is a **user message**, not part of the system prompt, and
   it **moves** to sit just above the newest user message each turn. If
   `persona.replace_base_system_prompt` is set, agent instructions form the system
