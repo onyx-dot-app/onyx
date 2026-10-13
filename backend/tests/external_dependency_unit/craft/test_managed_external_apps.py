@@ -214,10 +214,8 @@ def test_self_hosted_built_in_response_shows_config_and_masked_creds(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Off cloud, a built-in app is admin-owned: config is visible and secret
-    creds are masked (not blanked). A field the provider declares non-secret —
-    a client id — stays readable, so the admin can see what their own app is
-    pointed at. This pins the managed-vs-not distinction in
+    """Off cloud, a built-in app is admin-owned: config is visible and creds are
+    masked (not blanked). This pins the managed-vs-not distinction in
     ``_to_admin_response``."""
     _seed_built_in(db_session, ExternalAppType.GMAIL, _GMAIL_CREDS)
     gmail = get_built_in_external_app(db_session, ExternalAppType.GMAIL)

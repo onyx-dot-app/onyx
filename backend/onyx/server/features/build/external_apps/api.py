@@ -83,28 +83,6 @@ def _get_app_or_404(db_session: Session, external_app_id: int) -> ExternalApp:
     return app
 
 
-def _visible_org_credentials(app: ExternalApp) -> dict[str, str]:
-    """An app's organization credentials for the admin UI: masked, except the
-    fields its provider declares non-secret.
-
-    A client id or a Zendesk account subdomain is configuration, not a secret —
-    masking it hides from the admin what their own app is pointed at, and the
-    form then echoes the mask back on save."""
-    masked = app.organization_credentials.get_value(apply_mask=True)
-    provider = get_provider_for_app(app)
-    if provider is None:
-        return masked
-    raw = app.organization_credentials.get_value(apply_mask=False)
-    return {
-        **masked,
-        **{
-            field.key: raw[field.key]
-            for field in provider.spec.descriptor.required_org_credential_fields
-            if not field.secret and field.key in raw
-        },
-    }
-
-
 def _to_admin_response(
     app: ExternalApp,
     *,
@@ -116,12 +94,13 @@ def _to_admin_response(
         id=app.id,
         name=app.name,
         app_type=app.app_type,
-        # Managed built-ins: hide Onyx-owned config/creds. Else mask the
-        # secrets (see ``_visible_org_credentials``) — the write path restores
-        # masked values echoed back unchanged.
+        # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
+        # write path restores masked values echoed back unchanged.
         upstream_url_patterns=[] if managed else list(app.upstream_url_patterns),
         auth_template={} if managed else app.auth_template,
-        organization_credentials=({} if managed else _visible_org_credentials(app)),
+        organization_credentials=(
+            {} if managed else app.organization_credentials.get_value(apply_mask=True)
+        ),
         credential_placeholder_keys=(
             [] if managed else sorted(placeholders_in_template(app.auth_template))
         ),
