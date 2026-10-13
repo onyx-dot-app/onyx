@@ -13,11 +13,9 @@ from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.server.features.build.configs import ENABLE_CRAFT, MAX_UPLOAD_FILE_SIZE_BYTES
 from onyx.server.gateway.configs import LLM_GATEWAY_MIN_TIER
-from onyx.server.settings.models import Tier
 from onyx.server.settings.store import load_settings
-from onyx.server.settings.tier_order import tier_at_least
+from onyx.server.settings.tier_order import get_current_tier, tier_at_least
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -111,14 +109,6 @@ ONYX_CRAFT_ENABLED_FLAG = "onyx-craft-enabled"
 BUILD_MODE_FEATURE_ID = "build_mode"
 
 
-def _deployment_tier() -> Tier:
-    if not global_version.is_ee_version():
-        return Tier.COMMUNITY
-    from ee.onyx.utils.tier import get_tier
-
-    return get_tier()
-
-
 def _craft_flag_enabled(user: User) -> bool:
     """
     Flag logic for "onyx-craft-enabled":
@@ -160,7 +150,17 @@ def is_craft_available_for_deployment(user: User) -> bool:
     """
     if not _craft_flag_enabled(user):
         return False
-    return tier_at_least(_deployment_tier(), LLM_GATEWAY_MIN_TIER)
+    return tier_at_least(get_current_tier(), LLM_GATEWAY_MIN_TIER)
+
+
+def is_craft_locked_by_tier(user: User) -> bool:
+    """Craft is switched on but the tier is below LLM_GATEWAY_MIN_TIER, so the
+    UI shows an upgrade prompt instead of Craft."""
+    if user.account_type == AccountType.ANONYMOUS:
+        return False
+    if not _craft_flag_enabled(user):
+        return False
+    return not tier_at_least(get_current_tier(), LLM_GATEWAY_MIN_TIER)
 
 
 def is_craft_enabled_for_user(

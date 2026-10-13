@@ -28,7 +28,7 @@ def _enable_craft_deployment(monkeypatch: pytest.MonkeyPatch) -> None:
         "get_default_feature_flag_provider",
         lambda: NoOpFeatureFlagProvider(),
     )
-    monkeypatch.setattr(build_utils, "_deployment_tier", lambda: Tier.BUSINESS)
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.BUSINESS)
 
 
 def test_admin_batch_disable_and_reset_to_default(
