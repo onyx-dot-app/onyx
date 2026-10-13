@@ -3,8 +3,7 @@
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { Divider, MessageCard, Tooltip } from "@opal/components";
-import { usePlans } from "@/lib/app/plans";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/settings/types";
 import { Content, Section } from "@opal/layouts";
 import { SvgBarChart, SvgEditBig, SvgUserManage } from "@opal/icons";

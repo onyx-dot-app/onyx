@@ -1,6 +1,6 @@
 "use client";
 
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/settings/types";
 import { ComponentType, ReactNode, createElement } from "react";
 

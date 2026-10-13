@@ -8,12 +8,11 @@ import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content, InputHorizontal } from "@opal/layouts";
 import { Card, InputSwitch, MessageCard } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { usePlans } from "@/lib/app/plans";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 
 const route = ADMIN_ROUTES.LLM_GATEWAY;

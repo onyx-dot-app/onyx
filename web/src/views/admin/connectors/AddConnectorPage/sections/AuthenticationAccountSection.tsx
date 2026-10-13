@@ -36,7 +36,7 @@ import { CredentialFieldsRenderer } from "@/lib/credentials/components/Credentia
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
 import { updateCredentialSharing } from "@/lib/credentials/svc";
 import { getIn, useFormikContext } from "formik";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/settings/types";
 import {
   NEW_ACCOUNT_FIELD,

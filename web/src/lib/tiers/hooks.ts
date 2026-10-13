@@ -2,15 +2,26 @@
 
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { Tag, type TagProps } from "@opal/components";
 import { SvgOrganization, SvgUsers } from "@opal/icons";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import { markdown } from "@opal/utils";
+import type { Plan, PlanColor, PlanMetadata } from "@/lib/tiers/types";
+import { Tier } from "@/lib/settings/types";
+import { tierAtLeast } from "@/lib/tiers/utils";
+import { useSettings } from "@/lib/settings/hooks";
 
-/** The plans a feature can be limited to, lowest first. */
-export type Plan = "free" | "business" | "enterprise";
-
-type PlanColor = NonNullable<TagProps["color"]>;
+/**
+ * True when the current tenant's tier is `required` or higher.
+ *
+ *   useTierAtLeast(Tier.BUSINESS)   // BUSINESS or ENTERPRISE
+ *   useTierAtLeast(Tier.ENTERPRISE) // ENTERPRISE only
+ *
+ * Returns false when the tier is undefined (loading, no license).
+ */
+export function useTierAtLeast(required: Tier): boolean {
+  const settings = useSettings();
+  return tierAtLeast(settings.tier, required);
+}
 
 const PLAN_STYLES: Record<
   Plan,
@@ -20,17 +31,6 @@ const PLAN_STYLES: Record<
   business: { color: "green", icon: SvgUsers },
   enterprise: { color: "amber", icon: SvgOrganization },
 };
-
-/** Everything that marks a feature as limited to a plan. */
-export interface PlanMetadata {
-  title: string;
-  icon: IconFunctionComponent | undefined;
-  color: PlanColor;
-  /** For a `tag` slot, such as `Content`'s or an option's. */
-  tag: TagProps;
-  /** Why the feature is off below this plan, linking to billing. */
-  tooltip: RichStr;
-}
 
 /**
  * The app's plan badges and their copy, by plan. Use these wherever a
@@ -56,15 +56,4 @@ export function usePlans(): Record<Plan, PlanMetadata> {
       enterprise: metadata("enterprise"),
     };
   }, [t]);
-}
-
-export interface PlanTagProps {
-  plan: Plan;
-  size?: TagProps["size"];
-}
-
-/** A plan's badge. */
-export function PlanTag({ plan, size }: PlanTagProps) {
-  const { tag } = usePlans()[plan];
-  return <Tag {...tag} size={size} />;
 }

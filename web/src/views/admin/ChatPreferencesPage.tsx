@@ -1,6 +1,6 @@
 "use client";
 
-import { usePlans } from "@/lib/app/plans";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { markdown } from "@opal/utils";
 import React, {
@@ -83,7 +83,6 @@ import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;

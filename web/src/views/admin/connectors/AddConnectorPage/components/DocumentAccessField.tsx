@@ -8,7 +8,7 @@ import {
   Tooltip,
   type SelectOption,
 } from "@opal/components";
-import { usePlans } from "@/lib/app/plans";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { SvgOrganization, SvgUserSync, SvgUsers } from "@opal/icons";
 import { AccessType, Permission } from "@/lib/types";
@@ -21,7 +21,6 @@ import AutoSyncOptions from "@/views/admin/connectors/AddConnectorPage/component
 import ConnectorGroupRestrictionPicker from "@/lib/connectors/components/ConnectorGroupRestrictionPicker";
 import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import GroupShareList from "@/lib/connectors/components/GroupShareList";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import type { CredentialValues } from "@/lib/credentials/types";
 import { getCredentialSpec } from "@/lib/credentials/utils";

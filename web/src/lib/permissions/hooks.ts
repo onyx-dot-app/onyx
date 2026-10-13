@@ -1,7 +1,7 @@
 import { useUser } from "@/providers/UserProvider";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/settings/types";
 
 export interface PermissionAuthority {

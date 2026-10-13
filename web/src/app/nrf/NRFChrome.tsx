@@ -13,7 +13,7 @@ import { useCustomFooterContent } from "@/lib/app/hooks";
 import { useAppPosition } from "@/lib/position/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/settings/types";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";

@@ -5,7 +5,7 @@ import { Button, Tabs, Text } from "@opal/components";
 import { toast } from "@opal/layouts";
 import { useState } from "react";
 import { mutate } from "swr";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Section } from "@/layouts/general-layouts";

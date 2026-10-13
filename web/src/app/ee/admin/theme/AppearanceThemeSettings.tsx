@@ -26,9 +26,9 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/settings/types";
-import { PlanTag } from "@/lib/app/plans";
+import { PlanTag } from "@/lib/tiers/components";
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;

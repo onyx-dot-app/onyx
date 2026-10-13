@@ -1,4 +1,4 @@
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/settings/types";
 import React, { useEffect } from "react";
 import { useTranslations } from "next-intl";

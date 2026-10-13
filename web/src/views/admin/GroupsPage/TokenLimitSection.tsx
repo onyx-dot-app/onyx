@@ -6,7 +6,7 @@ import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button, Card } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
-import { usePlans } from "@/lib/app/plans";
+import { usePlans } from "@/lib/tiers/hooks";
 import { Section } from "@/layouts/general-layouts";
 import { InputNumber } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";

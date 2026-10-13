@@ -19,7 +19,7 @@ import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import type { SSOProviderResponse } from "@/lib/sso/interfaces";
-import { tierAtLeast } from "@/lib/tiers";
+import { tierAtLeast } from "@/lib/tiers/utils";
 import { setSSOProviderEnabled } from "@/lib/sso/svc";
 import { copyRedirectUri, SSO_PROVIDER_DETAILS } from "@/lib/sso/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
