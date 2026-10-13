@@ -194,6 +194,11 @@ INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 # is older than the timeout.
 PERMISSION_SYNC_HEARTBEAT_INTERVAL = 60  # seconds
 PERMISSION_SYNC_LEASE_TIMEOUT = 15 * 60  # seconds
+# A worker that could not renew for this long stops writing, before the reaper
+# can fail its attempt and let a replacement start.
+PERMISSION_SYNC_LEASE_SELF_EXPIRY = (
+    PERMISSION_SYNC_LEASE_TIMEOUT - 2 * PERMISSION_SYNC_HEARTBEAT_INTERVAL
+)
 
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min

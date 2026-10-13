@@ -45,6 +45,7 @@ from onyx.configs.constants import (
     CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
     PERMISSION_SYNC_HEARTBEAT_INTERVAL,
+    PERMISSION_SYNC_LEASE_SELF_EXPIRY,
     PERMISSION_SYNC_LEASE_TIMEOUT,
     DocumentSource,
     OnyxCeleryPriority,
@@ -666,6 +667,7 @@ def connector_permission_sync_generator_task(
                 f"doc_permission_sync_attempt={attempt_id}",
                 renew=partial(_renew_doc_permission_sync_lease, attempt_id),
                 interval=PERMISSION_SYNC_HEARTBEAT_INTERVAL,
+                max_silence=PERMISSION_SYNC_LEASE_SELF_EXPIRY,
             )
             heartbeat.start()
 
@@ -1110,7 +1112,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
         if self.redis_connector.stop.fenced:
             return True
 
-        if self.lease is not None and self.lease.lost.is_set():
+        if self.lease is not None and self.lease.is_lost():
             return True
 
         # Check if the task has exceeded its timeout

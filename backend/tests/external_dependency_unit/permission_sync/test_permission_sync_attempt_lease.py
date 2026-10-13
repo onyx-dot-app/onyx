@@ -10,13 +10,24 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.external_perm import (
+    ExternalUserGroup,
+    mark_old_external_groups_as_stale,
+    remove_stale_external_groups,
+    upsert_external_groups,
+)
 from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
+from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import PermissionSyncStatus
-from onyx.db.models import DocPermissionSyncAttempt, ExternalGroupPermissionSyncAttempt
+from onyx.db.models import (
+    DocPermissionSyncAttempt,
+    ExternalGroupPermissionSyncAttempt,
+    User__ExternalUserGroupId,
+)
 from onyx.db.permission_sync_attempt import (
     PermissionSyncAttemptLostError,
     complete_doc_permission_sync_attempt,
@@ -189,9 +200,62 @@ def test_heartbeat_sets_lost_when_attempt_is_reaped(
         with get_session_with_current_tenant() as thread_session:
             return kind.renew(attempt_id, thread_session)
 
-    with LeaseHeartbeat("test", renew=renew, interval=0.05) as heartbeat:
+    with LeaseHeartbeat(
+        "test", renew=renew, interval=0.05, max_silence=60
+    ) as heartbeat:
         time.sleep(0.2)
         assert not heartbeat.lost.is_set()
 
         kind.fail(attempt_id, db_session, "reaped")
         assert heartbeat.lost.wait(timeout=2)
+
+
+def test_heartbeat_expires_when_renewals_keep_failing() -> None:
+    """A worker that cannot reach the DB stops before the reaper can fail its
+    attempt and let a replacement start."""
+
+    def renew() -> bool:
+        raise ConnectionError("db unreachable")
+
+    with LeaseHeartbeat(
+        "test", renew=renew, interval=0.05, max_silence=0.3
+    ) as heartbeat:
+        assert not heartbeat.is_lost()
+        time.sleep(0.5)
+        assert heartbeat.is_lost()
+
+
+def test_group_writes_are_refused_after_the_attempt_is_lost(
+    db_session: Session,
+) -> None:
+    cc_pair = create_test_connector_credential_pair(db_session)
+    attempt_id = create_external_group_sync_attempt(cc_pair.id, db_session)
+    mark_external_group_sync_attempt_in_progress(attempt_id, db_session)
+    group = ExternalUserGroup(id="group-a", user_emails=["lease-user@example.com"])
+
+    upsert_external_groups(
+        db_session, cc_pair.id, [group], DocumentSource.GOOGLE_DRIVE, attempt_id
+    )
+    mark_old_external_groups_as_stale(db_session, cc_pair.id)
+
+    mark_external_group_sync_attempt_failed(attempt_id, db_session, "reaped")
+
+    with pytest.raises(PermissionSyncAttemptLostError):
+        upsert_external_groups(
+            db_session, cc_pair.id, [group], DocumentSource.GOOGLE_DRIVE, attempt_id
+        )
+    db_session.rollback()
+    with pytest.raises(PermissionSyncAttemptLostError):
+        remove_stale_external_groups(
+            db_session, cc_pair.id, owning_attempt_id=attempt_id
+        )
+    db_session.rollback()
+
+    # The stale rows a replacement sync would refresh are still there
+    remaining = db_session.scalars(
+        select(User__ExternalUserGroupId).where(
+            User__ExternalUserGroupId.cc_pair_id == cc_pair.id
+        )
+    ).all()
+    assert len(remaining) == 1
+    assert remaining[0].stale

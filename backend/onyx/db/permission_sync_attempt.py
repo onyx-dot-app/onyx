@@ -534,6 +534,39 @@ def _renew_lease(model: _AttemptModel, attempt_id: int, db_session: Session) -> 
     return renewed is not None
 
 
+def _lock_if_owned(model: _AttemptModel, attempt_id: int, db_session: Session) -> None:
+    owned = db_session.execute(
+        select(model.id)
+        .where(model.id == attempt_id)
+        .where(model.status == PermissionSyncStatus.IN_PROGRESS)
+        .with_for_update(read=True)
+    ).first()
+    if owned is None:
+        raise PermissionSyncAttemptLostError(
+            f"{model.__name__} {attempt_id} is no longer IN_PROGRESS"
+        )
+
+
+def lock_doc_permission_sync_attempt_if_owned(
+    attempt_id: int, db_session: Session
+) -> None:
+    """Takes a share lock on a running attempt, or raises
+    PermissionSyncAttemptLostError. Call it in the transaction of a sync write:
+    the reaper cannot fail the attempt until that write commits, and a write
+    after the reaper failed it is refused."""
+    _lock_if_owned(DocPermissionSyncAttempt, attempt_id, db_session)
+
+
+def lock_external_group_sync_attempt_if_owned(
+    attempt_id: int, db_session: Session
+) -> None:
+    """Takes a share lock on a running attempt, or raises
+    PermissionSyncAttemptLostError. Call it in the transaction of a sync write:
+    the reaper cannot fail the attempt until that write commits, and a write
+    after the reaper failed it is refused."""
+    _lock_if_owned(ExternalGroupPermissionSyncAttempt, attempt_id, db_session)
+
+
 def renew_doc_permission_sync_attempt_lease(
     attempt_id: int, db_session: Session
 ) -> bool:

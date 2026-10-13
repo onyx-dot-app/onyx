@@ -568,7 +568,14 @@ document to the wrong person.
    that old. A worker that dies therefore cannot leave its attempt open. A
    worker that lost its row (renewal updates no row) stops: the heartbeat
    sets `lost`, which `PermissionSyncCallback.should_stop` and the group-sync
-   loop read. `complete_*` raises `PermissionSyncAttemptLostError` unless the
+   loop read through `LeaseHeartbeat.is_lost()`. `is_lost()` is also true when
+   no renewal has succeeded for `PERMISSION_SYNC_LEASE_SELF_EXPIRY`, which is
+   shorter than the reaper's timeout, so a worker that cannot reach the DB
+   stops first. Group sync writes (`upsert_external_groups`,
+   `remove_stale_external_groups` with `owning_attempt_id`) take a share lock
+   on the attempt row in the write's own transaction
+   (`lock_external_group_sync_attempt_if_owned`). The reaper cannot fail the
+   attempt while such a write is open, and a write after it is refused. `complete_*` raises `PermissionSyncAttemptLostError` unless the
    row is still `IN_PROGRESS`, and `mark_*_failed` keeps an existing
    `FAILED`/`CANCELED` reason. Do not write a terminal status without this
    check.
