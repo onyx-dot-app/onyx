@@ -116,8 +116,9 @@ def _to_admin_response(
         id=app.id,
         name=app.name,
         app_type=app.app_type,
-        # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
-        # write path restores masked values echoed back unchanged.
+        # Managed built-ins: hide Onyx-owned config/creds. Else mask the
+        # secrets (see ``_visible_org_credentials``) — the write path restores
+        # masked values echoed back unchanged.
         upstream_url_patterns=[] if managed else list(app.upstream_url_patterns),
         auth_template={} if managed else app.auth_template,
         organization_credentials=({} if managed else _visible_org_credentials(app)),
