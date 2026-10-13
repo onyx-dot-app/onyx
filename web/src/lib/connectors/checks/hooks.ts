@@ -385,6 +385,11 @@ export function useConnectorChecks({
     if (session.requesting) return "running";
     if (session.startFailed) return "failedToRun";
     if (!runId) return "notStarted";
+    // Another tab started a run that replaced this one (a pair's dry runs
+    // share one key per user): this run stopped, so it can start again.
+    if (run && run.run_id === runId && run.status === "superseded") {
+      return "notStarted";
+    }
     if (!snapshot || snapshot.status === "running") return "running";
     if (snapshot.status === "failed_to_run") return "failedToRun";
     return checks.some(

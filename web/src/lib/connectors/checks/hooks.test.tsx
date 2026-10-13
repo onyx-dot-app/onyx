@@ -422,3 +422,20 @@ it("runs a typed account of an edit form as a draft", async () => {
   await waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
   expect(pairStartMock).not.toHaveBeenCalled();
 });
+
+it("lets the checks start again after another tab supersedes the run", async () => {
+  pairStartMock.mockResolvedValue(run([BINDING, CONTENT], "superseded"));
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+        ccPairId: 3,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(pairStartMock).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(result.current.status).toBe("notStarted"));
+});
