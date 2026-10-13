@@ -22,7 +22,7 @@ import {
 } from "@/app/craft/v1/tasks/api";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
 import PreApprovalSummary from "@/app/craft/v1/tasks/components/PreApprovalSummary";
-import { TaskStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
+import { taskStatusTag } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
   ScheduledTaskDetail,
@@ -136,13 +136,11 @@ export default function ScheduledTaskDetailPage() {
         icon={SvgClock}
         title={data?.name ?? t("fallbackTitle")}
         description={scheduleDescription}
+        descriptionTag={data ? taskStatusTag(data.status) : undefined}
         cancel={handleBack}
         actions={
           data
             ? [
-                <div key="status" className="flex items-center self-stretch">
-                  <TaskStatusBadge status={data.status} />
-                </div>,
                 <Button
                   key="run"
                   icon={SvgPlayCircle}
