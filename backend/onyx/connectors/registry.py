@@ -129,6 +129,11 @@ CONNECTOR_CLASS_MAP = {
         class_name="JiraConnector",
         config_class=JiraConnectorConfig,
     ),
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: ConnectorMapping(
+        module_path="onyx.connectors.jira_service_management.connector",
+        class_name="JiraServiceManagementConnector",
+        config_class=JiraConnectorConfig,
+    ),
     DocumentSource.PRODUCTBOARD: ConnectorMapping(
         module_path="onyx.connectors.productboard.connector",
         class_name="ProductboardConnector",
