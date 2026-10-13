@@ -12,6 +12,8 @@ import { Content, InputErrorText, Section } from "@opal/layouts";
 import { SvgUsers, SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { useUserGroups } from "@/lib/hooks";
+import { useTierAtLeast, useTierLockedOptions } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 
 /** A fixed row shown before the picked groups, which cannot be removed. */
 export interface GroupShareLockedRow {
@@ -54,6 +56,11 @@ interface GroupShareListProps {
    */
   rowAction?: (group: GroupShareGroup, remove: () => void) => React.ReactNode;
   disabled?: boolean;
+  /**
+   * The tier groups need. Below it the workspace has no groups to pick, so
+   * the picker offers only an upgrade link.
+   */
+  requiredTier?: Tier;
 }
 
 /**
@@ -67,12 +74,16 @@ export default function GroupShareList({
   lockedRows = [],
   rowAction,
   disabled,
+  requiredTier = Tier.COMMUNITY,
 }: GroupShareListProps) {
   const t = useTranslations("admin.connector.groupRestriction");
   const { data: userGroups, isLoading, error } = useUserGroups();
   // Without the groups there is nothing to pick from, and the rows already
   // added cannot show; say so rather than show an empty picker.
-  const loadFailed = !isLoading && !!error;
+  const locked: boolean = !useTierAtLeast(requiredTier);
+  const lockForTier = useTierLockedOptions(requiredTier);
+  // Below the tier the groups request is refused, which is expected.
+  const loadFailed = !locked && !isLoading && !!error;
   const [field, meta, helpers] = useField<number[]>(name);
 
   const selectedIds = new Set(field.value);
@@ -202,9 +213,9 @@ export default function GroupShareList({
       <InputSingleComboBox
         value=""
         onValueChange={addGroup}
-        options={options}
+        options={locked ? lockForTier([]) : options}
         placeholder={placeholder}
-        disabled={disabled || isLoading || loadFailed}
+        disabled={disabled || (!locked && (isLoading || loadFailed))}
       />
       {loadFailed && <InputErrorText>{t("loadError")}</InputErrorText>}
       {rows.length > 0 && (

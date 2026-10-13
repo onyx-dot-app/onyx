@@ -12111,7 +12111,11 @@
       "enterprise": {
         "title": "Enterprise-Tarif",
         "tooltip": "Erfordert den [Enterprise-Tarif](/admin/billing)."
-      }
+      },
+      "upgrade": {
+        "label": "Tarif upgraden"
+      },
+      "availableFor": "Verfügbar im {plan}"
     }
   },
   "craft": {

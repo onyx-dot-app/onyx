@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
+import { InputSingleSelect, type SelectOption } from "@opal/components";
 import {
-  InputSingleSelect,
-  Tooltip,
-  type SelectOption,
-} from "@opal/components";
-import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+  usePlans,
+  useTierAtLeast,
+  useTierLockedOptions,
+} from "@/lib/tiers/hooks";
 import { InputHorizontal, Section } from "@opal/layouts";
 import { SvgOrganization, SvgUserSync, SvgUsers } from "@opal/icons";
 import { AccessType, Permission } from "@/lib/types";
@@ -85,9 +85,10 @@ export default function DocumentAccessField({
       ? "private"
       : "public";
 
-  const options = useMemo(() => {
+  // Auto Sync and Specific Groups need Business; Everyone is on every tier.
+  const businessOptions = useMemo(() => {
     const built: SelectOption[] = [];
-    if (showAutoSync) {
+    if (isValidAutoSyncSource(connector)) {
       built.push({
         value: "sync",
         title: t("sync.title", {
@@ -100,35 +101,46 @@ export default function DocumentAccessField({
         disabled: isSyncDisabledByAuth,
       });
     }
-    if (businessTier) {
-      built.push({
-        value: "private",
-        title: t("specificGroups.title"),
-        description: t("specificGroups.description"),
-        icon: SvgUsers,
-      });
-    }
-    // A scoped manager's authority stops at the groups they manage, so the
-    // backend rejects a public connector from them. Offering it would only
-    // produce a 403 on submit.
-    if (!isScopedManager) {
-      built.push({
-        value: "public",
-        title: t("everyone.title"),
-        description: t("everyone.description"),
-        icon: SvgOrganization,
-      });
-    }
+    built.push({
+      value: "private",
+      title: t("specificGroups.title"),
+      description: t("specificGroups.description"),
+      icon: SvgUsers,
+    });
     return built;
-  }, [
-    businessTier,
-    isScopedManager,
-    showAutoSync,
-    isSyncDisabledByAuth,
-    connector,
-    t,
-    appName,
-  ]);
+  }, [isSyncDisabledByAuth, connector, t, appName]);
+  // A scoped manager's authority stops at the groups they manage, so the
+  // backend rejects a public connector from them. Offering it would only
+  // produce a 403 on submit.
+  const everyTierOptions = useMemo(
+    (): SelectOption[] =>
+      isScopedManager
+        ? []
+        : [
+            {
+              value: "public",
+              title: t("everyone.title"),
+              description: t("everyone.description"),
+              icon: SvgOrganization,
+            },
+          ],
+    [isScopedManager, t]
+  );
+  // What can be picked: below Business, only Everyone, which is the value.
+  const options = useMemo(
+    () =>
+      businessTier
+        ? [...everyTierOptions, ...businessOptions]
+        : everyTierOptions,
+    [businessTier, businessOptions, everyTierOptions]
+  );
+  // What the list shows: every option in one order. Below Business they all
+  // sit locked under an upgrade link, Everyone selected.
+  const lockForBusiness = useTierLockedOptions(Tier.BUSINESS);
+  const listedOptions = useMemo(
+    () => lockForBusiness([...everyTierOptions, ...businessOptions]),
+    [everyTierOptions, businessOptions, lockForBusiness]
+  );
 
   // Sync is the default wherever it is offered and enabled, until the user
   // picks an option themselves.
@@ -172,26 +184,20 @@ export default function DocumentAccessField({
         fillInput
         center
       >
-        <Tooltip
-          tooltip={businessTier ? undefined : plans[Tier.BUSINESS].tooltip}
-        >
-          <div className="w-full">
-            <InputSingleSelect
-              id="access_type"
-              value={accessType.value}
-              onValueChange={(value) => {
-                // A re-pick emits "": the pick stands.
-                const option = options.find((o) => o.value === value);
-                if (!option) return;
-                userChoseRef.current = true;
-                accessTypeHelpers.setValue(option.value as AccessType);
-              }}
-              options={options}
-              placeholder={t("title")}
-              disabled={disabled || !businessTier}
-            />
-          </div>
-        </Tooltip>
+        <InputSingleSelect
+          id="access_type"
+          value={accessType.value}
+          onValueChange={(value) => {
+            // A re-pick emits "": the pick stands.
+            const option = options.find((o) => o.value === value);
+            if (!option) return;
+            userChoseRef.current = true;
+            accessTypeHelpers.setValue(option.value as AccessType);
+          }}
+          options={listedOptions}
+          placeholder={t("title")}
+          disabled={disabled}
+        />
       </InputHorizontal>
 
       {accessType.value === "private" && (

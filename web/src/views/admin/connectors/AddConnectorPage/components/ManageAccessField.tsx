@@ -2,7 +2,7 @@
 
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
-import { Divider, MessageCard, Tooltip } from "@opal/components";
+import { Divider, MessageCard } from "@opal/components";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { Content, Section } from "@opal/layouts";
@@ -27,8 +27,8 @@ interface ManageAccessFieldProps {
 /**
  * Who can operate or edit the connector: admins always, plus the groups added
  * here (sent as `groups`, so each is an Editor). Groups need the Business
- * tier: below it the field still shows, with the picker locked and the
- * Business plan tag.
+ * tier: below it the field still shows, with the Business plan tag, and its
+ * picker offers an upgrade link.
  */
 export default function ManageAccessField({
   disabled,
@@ -108,22 +108,15 @@ export default function ManageAccessField({
         sizePreset="main-ui"
         variant="section"
       />
-      {/* The list is tall, so the tooltip stays level with the pointer. */}
-      <Tooltip
-        tooltip={businessTier ? undefined : plans[Tier.BUSINESS].tooltip}
-        align="follow"
-      >
-        <div className="w-full">
-          <GroupShareList
-            name="groups"
-            label={t("title")}
-            placeholder={t("placeholder")}
-            lockedRows={[adminsRow]}
-            rowAction={renderRoleMenu}
-            disabled={groupsLocked}
-          />
-        </div>
-      </Tooltip>
+      <GroupShareList
+        name="groups"
+        label={t("title")}
+        placeholder={t("placeholder")}
+        lockedRows={[adminsRow]}
+        rowAction={renderRoleMenu}
+        disabled={disabled}
+        requiredTier={Tier.BUSINESS}
+      />
       <Divider paddingParallel={0} paddingPerpendicular={0} />
       <MessageCard
         variant="default"

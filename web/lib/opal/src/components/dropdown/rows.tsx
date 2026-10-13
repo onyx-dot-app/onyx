@@ -154,5 +154,9 @@ export const Row = React.memo(function Row({
     // middle-click, modifier-click and copy-link work.
     return <LineItemButton {...content} href={row.href} target={row.target} />;
   }
+  if (row.kind === "option" && row.href !== undefined) {
+    // A link among the options, the same way.
+    return <LineItemButton {...content} href={row.href} />;
+  }
   return <LineItemButton presentational {...content} />;
 });

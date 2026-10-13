@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@tests/setup/test-utils";
+import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/components/DocumentAccessField";
 import {
@@ -97,13 +97,25 @@ describe("DocumentAccessField", () => {
     );
   });
 
-  it("shows the field locked on Everyone, with the Business plan tag, below Business", () => {
+  it("lists the Business options locked under an upgrade link below Business", async () => {
     useTierAtLeast.mockReturnValue(false);
-    renderForm(ValidSources.Web as ConfigurableSources);
+    const user = userEvent.setup();
+    renderForm(ValidSources.Confluence as ConfigurableSources);
 
-    // The field is there, not hidden, and its select cannot be changed.
-    expect(screen.getByRole("combobox")).toBeDisabled();
     expect(screen.getByText("Business Plan")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox"));
+
+    // Every option shows, locked, with Everyone selected.
+    const everyone = screen.getByRole("option", { name: /Everyone/ });
+    expect(everyone).toHaveAttribute("aria-disabled", "true");
+    expect(everyone).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("option", { name: /Specific Groups/ })
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("option", { name: /Upgrade Plan/ })
+    ).toHaveAttribute("href", "/admin/billing");
+    expect(screen.getByText("Available for Business Plan")).toBeInTheDocument();
     expect(screen.getByTestId("access-type")).toHaveTextContent("public");
   });
 });

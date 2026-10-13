@@ -12111,7 +12111,11 @@
       "enterprise": {
         "title": "Plan Enterprise",
         "tooltip": "Requiere el [plan Enterprise](/admin/billing)."
-      }
+      },
+      "upgrade": {
+        "label": "Mejorar plan"
+      },
+      "availableFor": "Disponible en el {plan}"
     }
   },
   "craft": {

@@ -1,6 +1,10 @@
 "use client";
 
-import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import {
+  usePlans,
+  useTierAtLeast,
+  useTierLockedOptions,
+} from "@/lib/tiers/hooks";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { markdown } from "@opal/utils";
 import React, {
@@ -436,7 +440,7 @@ const isRetentionReduction = (
 
 interface RetentionFieldProps {
   value: number | null;
-  disabled: boolean;
+  disabled?: boolean;
   onSave: (value: number | null) => void;
 }
 
@@ -444,8 +448,16 @@ interface RetentionFieldProps {
 // the dropdown in place into a numeric "days" input (with revert + reopen
 // affordances). The persisted shape (number | null) is unchanged, so any
 // existing value — preset or not — round-trips correctly.
-function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
+function RetentionField({
+  value,
+  disabled = false,
+  onSave,
+}: RetentionFieldProps) {
   const t = useTranslations("admin.chatPreferences");
+  // Retention needs Enterprise: below it, the choices stay on show, locked
+  // under an upgrade link.
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const lockForEnterprise = useTierLockedOptions(Tier.ENTERPRISE);
   const tInputSelect = useTranslations("common.inputSelect");
   const retentionPresets = useMemo(
     () => [
@@ -635,6 +647,19 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
   const customInvalid =
     customDays !== "" && !isValidCustomRetention(customDays);
 
+  const presetOptions: SelectOption[] = retentionPresets.map((preset) => ({
+    value: String(preset.days),
+    title: preset.label,
+  }));
+  const foreverOption: SelectOption = {
+    value: FOREVER_RETENTION_VALUE,
+    title: t("retention.forever.label"),
+  };
+  const customOption: SelectOption = {
+    value: CUSTOM_RETENTION_VALUE,
+    title: t("retention.custom.label"),
+  };
+
   const iconButtonProps = {
     prominence: "tertiary",
     size: "xs",
@@ -691,26 +716,17 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
             onBlur={handleSelectBlur}
             disabled={disabled}
             placeholder={tInputSelect("placeholder.fallback")}
-            options={[
-              {
-                value: FOREVER_RETENTION_VALUE,
-                title: t("retention.forever.label"),
-              },
-              ...retentionPresets.map(
-                (preset): SelectOption => ({
-                  value: String(preset.days),
-                  title: preset.label,
-                })
-              ),
-              {
-                options: [
-                  {
-                    value: CUSTOM_RETENTION_VALUE,
-                    title: t("retention.custom.label"),
-                  },
-                ],
-              },
-            ]}
+            options={
+              enterpriseTier
+                ? [foreverOption, ...presetOptions, { options: [customOption] }]
+                : // Below Enterprise every choice sits locked under an
+                  // upgrade link, Forever selected.
+                  lockForEnterprise([
+                    foreverOption,
+                    ...presetOptions,
+                    customOption,
+                  ])
+            }
           />
         </div>
       )}
@@ -1492,23 +1508,12 @@ export default function ChatPreferencesPage() {
                     withLabel
                     fillInput
                   >
-                    <Tooltip
-                      tooltip={
-                        enterpriseTier
-                          ? undefined
-                          : plans[Tier.ENTERPRISE].tooltip
+                    <RetentionField
+                      value={s.maximum_chat_retention_days ?? null}
+                      onSave={(maximum_chat_retention_days) =>
+                        void saveSettings({ maximum_chat_retention_days })
                       }
-                    >
-                      <div className="w-full">
-                        <RetentionField
-                          value={s.maximum_chat_retention_days ?? null}
-                          disabled={!enterpriseTier}
-                          onSave={(maximum_chat_retention_days) =>
-                            void saveSettings({ maximum_chat_retention_days })
-                          }
-                        />
-                      </div>
-                    </Tooltip>
+                    />
                   </InputHorizontal>
 
                   <InputHorizontal
