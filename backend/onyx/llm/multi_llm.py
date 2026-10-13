@@ -1411,7 +1411,7 @@ class LitellmLLM(LLM):
 
         from onyx.llm.model_response import (
             from_litellm_model_response,
-            served_model_from_litellm_chunk,
+            served_model_from_litellm_response,
         )
 
         # HTTPHandler Threading & Connection Pool Notes:
@@ -1495,7 +1495,14 @@ class LitellmLLM(LLM):
                 response = cast(LiteLLMModelResponse, built)
                 # stream_chunk_builder reports the requested model; keep the served one
                 served_model: str | None = next(
-                    (m for m in map(served_model_from_litellm_chunk, chunks) if m),
+                    (
+                        m
+                        for m in (
+                            served_model_from_litellm_response(c.model_dump())
+                            for c in chunks
+                        )
+                        if m
+                    ),
                     None,
                 )
                 if served_model:
