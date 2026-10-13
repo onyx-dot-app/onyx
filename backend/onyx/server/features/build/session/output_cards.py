@@ -104,6 +104,7 @@ def persist_turn_outputs(
             ):
                 continue
             source = after.get(path)
+            source_changed = snapshot.sources.get(path) != source
             if source is None:
                 # A complete inventory repairs deletions missed by an earlier scan.
                 if artifact is None or artifact.deleted:
@@ -111,7 +112,7 @@ def persist_turn_outputs(
                 mark_artifact_deleted(
                     db_session, session_id=snapshot.session_id, path=path
                 )
-            elif snapshot.sources.get(path) != source:
+            elif source_changed or (artifact is not None and artifact.deleted):
                 upsert_artifact(
                     db_session,
                     session_id=snapshot.session_id,
@@ -120,7 +121,10 @@ def persist_turn_outputs(
                     else ArtifactType.FILE,
                     path=path,
                     name="App" if path == "outputs/web" else PurePosixPath(path).name,
-                    turn_index=snapshot.turn_index,
+                    # A recovered file keeps its last known producing turn.
+                    turn_index=snapshot.turn_index
+                    if source_changed or artifact is None
+                    else artifact.turn_index,
                     size_bytes=source.size,
                     source_revision=source.revision,
                 )

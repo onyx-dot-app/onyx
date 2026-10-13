@@ -168,7 +168,8 @@ def mark_outputs_viewed(
             Artifact.turn_index.is_not(None),
             Artifact.deleted.is_(False),
         )
-        .order_by(Artifact.id)
+        # Match the bytewise path order used by turn output persistence.
+        .order_by(Artifact.path.collate("C"))
         .with_for_update()
     ).all()
     if any(revisions[artifact_id] > version for artifact_id, version in rows):

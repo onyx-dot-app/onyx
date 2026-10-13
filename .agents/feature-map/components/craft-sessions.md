@@ -550,6 +550,8 @@ Complete scans mark missing indexed paths deleted. Revisions detect filesystem w
 
 `GET /build/sessions/{id}/output-cards` reads indexed cards without waking the sandbox. It omits rows without a producing turn.
 `PATCH /build/sessions/{id}/output-cards/{artifact_id}/viewed` records the opened revision; `/output-cards/viewed` accepts up to 10,000 ID/revision pairs.
+Bulk acknowledgements lock rows in bytewise path order, matching output capture.
+A complete capture restores indexed files missed by failed scans without changing their last known producing turn.
 Both routes advance viewed revisions monotonically and reject future revisions with 409. Bulk requests fail before changing any row.
 Bulk requests skip deleted, unknown, and foreign-session IDs. All three routes require session ownership.
 The older `/artifacts` endpoint discovers the local webapp; it does not supply durable cards.

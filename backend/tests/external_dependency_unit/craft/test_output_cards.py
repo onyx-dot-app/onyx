@@ -1,14 +1,19 @@
 """Persist turn output cards and viewed revisions against PostgreSQL."""
 
+import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Artifact, BuildSession, User
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.db.artifact import mark_outputs_viewed
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     OutputsManifestEntry,
@@ -157,6 +162,44 @@ def test_complete_inventory_recovers_a_previously_missed_deletion(
     card = get_output_cards(session.id, test_user, db_session).cards[0]
     assert card.deleted
     assert (card.turn_index, card.revision) == (0, 1)
+
+
+@pytest.mark.parametrize("failed_capture", ["before", "after"])
+def test_complete_inventory_recovers_a_recreated_file_without_changing_its_turn(
+    db_session: Session,
+    test_user: User,
+    build_session_with_user: Callable[..., BuildSession],
+    failed_capture: str,
+) -> None:
+    session = build_session_with_user()
+    original = manifest(**{"report.pdf": 1})
+    recreated = manifest(**{"report.pdf": 2})
+    persist_capture(
+        db_session, session, 0, manifest(), original, owns_turn=lambda: True
+    )
+    persist_capture(
+        db_session, session, 1, original, manifest(), owns_turn=lambda: True
+    )
+    incomplete = OutputsManifestResponse(entries=[], complete=False)
+    persist_capture(
+        db_session,
+        session,
+        2,
+        incomplete if failed_capture == "before" else manifest(),
+        incomplete if failed_capture == "after" else recreated,
+        owns_turn=lambda: True,
+    )
+    assert get_output_cards(session.id, test_user, db_session).cards[0].deleted
+    persist_capture(
+        db_session, session, 3, recreated, recreated, owns_turn=lambda: True
+    )
+    persist_capture(
+        db_session, session, 4, recreated, recreated, owns_turn=lambda: True
+    )
+    card = get_output_cards(session.id, test_user, db_session).cards[0]
+    assert not card.deleted
+    assert card.turn_index == 0
+    assert card.revision == 2
 
 
 # Exact viewed revisions and authorization.
@@ -345,3 +388,57 @@ def test_bulk_viewed_uses_exact_revisions_and_session_owner(
         next(card for card in repeated.cards if card.id == newer.id).viewed_revision
         == 2
     )
+
+
+def test_bulk_viewed_locks_in_capture_path_order(
+    db_session: Session,
+    build_session_with_user: Callable[..., BuildSession],
+) -> None:
+    session = build_session_with_user()
+    session_id = session.id
+    files = manifest(**{"Z.md": 1, "a.md": 1})
+    persist_capture(db_session, session, 0, manifest(), files, owns_turn=lambda: True)
+    artifacts = list(
+        db_session.scalars(select(Artifact).where(Artifact.session_id == session_id))
+    )
+    artifacts.sort(key=lambda artifact: artifact.path)
+    ids = sorted([uuid4(), uuid4()], reverse=True)
+    for artifact, artifact_id in zip(artifacts, ids, strict=True):
+        artifact.id = artifact_id
+    db_session.commit()
+    worker_pid: Queue[int] = Queue()
+
+    def acknowledge() -> None:
+        with Session(db_session.get_bind()) as worker:
+            pid = worker.scalar(text("SELECT pg_backend_pid()"))
+            assert isinstance(pid, int)
+            worker_pid.put(pid)
+            mark_outputs_viewed(
+                worker, session_id=session_id, revisions=dict.fromkeys(ids, 1)
+            )
+            worker.commit()
+
+    # Hold the first capture row. Bulk viewed must wait here without locking the second.
+    db_session.execute(
+        select(Artifact.id).where(Artifact.id == ids[0]).with_for_update()
+    )
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(acknowledge)
+        try:
+            pid = worker_pid.get(timeout=5)
+            deadline = time.monotonic() + 5
+            while not db_session.scalar(
+                text("SELECT cardinality(pg_blocking_pids(:pid))"), {"pid": pid}
+            ):
+                assert time.monotonic() < deadline, (
+                    "viewed request did not wait for capture"
+                )
+                time.sleep(0.01)
+            db_session.execute(
+                select(Artifact.id)
+                .where(Artifact.id == ids[1])
+                .with_for_update(nowait=True)
+            )
+        finally:
+            db_session.rollback()
+        future.result(timeout=5)
