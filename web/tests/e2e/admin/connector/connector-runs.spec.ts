@@ -151,7 +151,7 @@ test.describe("Connector runs", () => {
     try {
       const detail = new AdminConnectorDetailPage(page);
       await detail.goto(ccPairId);
-      await detail.expectRunsVisible();
+      await detail.expectNoRuns();
       await expect(detail.runKindFilter).toHaveCount(0);
     } finally {
       await apiClient.deleteCCPair(ccPairId);

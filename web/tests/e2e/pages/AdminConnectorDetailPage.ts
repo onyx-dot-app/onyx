@@ -17,6 +17,8 @@ export class AdminConnectorDetailPage {
   readonly runKindFilter: Locator;
   /** The logs action of every run that has logs, newest first. */
   readonly runLogsButtons: Locator;
+  /** The run list's empty state, shown once the feed has loaded with no runs. */
+  readonly noRunsMessage: Locator;
   /** Opens the action menu. Present only when the caller may operate. */
   readonly manageButton: Locator;
   readonly deleteMenuItem: Locator;
@@ -33,6 +35,7 @@ export class AdminConnectorDetailPage {
     this.runsSection = page.getByText("Index Runs", { exact: true });
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
+    this.noRunsMessage = page.getByText("No runs yet", { exact: true });
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
       name: "Manage Index",
@@ -76,6 +79,11 @@ export class AdminConnectorDetailPage {
 
   async expectRunsVisible(): Promise<void> {
     await expect(this.runsSection).toBeVisible({ timeout: 30000 });
+  }
+
+  /** Waits for the feed to load and show no runs. */
+  async expectNoRuns(): Promise<void> {
+    await expect(this.noRunsMessage).toBeVisible({ timeout: 30000 });
   }
 
   /** Opens the `index`-th logs button, newest first, and returns its trace dialog. */

@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
   Card,
   Dropdown,
-  EmptyMessageCard,
   FilterButton,
   InputTypeIn,
   MessageCard,
@@ -14,7 +13,8 @@ import {
   Tag,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
-import { Section, toast } from "@opal/layouts";
+import { IllustrationContent, Section, toast } from "@opal/layouts";
+import SvgNoResult from "@opal/illustrations/no-result";
 import { CardLoader, IconLoader } from "@opal/loaders";
 import {
   SvgActivity,
@@ -150,6 +150,10 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
   const kinds = data?.kinds ?? ["indexing"];
   const totalItems = data?.total_items ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  // Polling can shrink the feed under an open page.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   const filtered =
     kind !== null ||
     statusGroup !== null ||
@@ -314,7 +318,7 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
           </Dropdown>
         </Section>
 
-        {error !== undefined && data === undefined ? (
+        {error !== undefined ? (
           <MessageCard variant="error" title={t("loadError.title")} />
         ) : isLoading && data === undefined ? (
           <Section alignItems="stretch" gap={1} height="fit">
@@ -329,15 +333,11 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
             ))}
           </Section>
         ) : (data?.items.length ?? 0) === 0 ? (
-          filtered ? (
-            <EmptyMessageCard title={t("empty.filteredTitle")} />
-          ) : (
-            <EmptyMessageCard
-              sizePreset="main-ui"
-              title={t("empty.title")}
-              description={t("empty.description")}
-            />
-          )
+          <IllustrationContent
+            illustration={SvgNoResult}
+            title={filtered ? t("empty.filteredTitle") : t("empty.title")}
+            description={filtered ? undefined : t("empty.description")}
+          />
         ) : (
           <Section alignItems="stretch" gap={1} height="fit">
             {data?.items.map((run) => (

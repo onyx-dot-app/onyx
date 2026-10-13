@@ -398,8 +398,9 @@ access via a synced group.
 (`source_group_sync_is_cc_pair_agnostic` returns `True` for these sources in
 `sync_params.py`). `group_sync_utils.py:mark_all_relevant_cc_pairs_as_external_group_synced`
 looks up every cc_pair for that source and marks all of them synced after one
-successful run, and `permission_sync_attempt.py:get_relevant_external_group_sync_attempts_for_cc_pair`
-widens its query to the whole source for these two, with a documented caveat:
+successful run, and `permission_sync_attempt.py:relevant_external_group_sync_attempts_filter`
+(used by the run feed in `db/cc_pair_runs.py`) widens the attempt filter to
+the whole source for these two, with a documented caveat:
 two independent Confluence sites in the same deployment share one merged
 attempt history.
 

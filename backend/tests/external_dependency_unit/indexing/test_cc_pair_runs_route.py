@@ -1,10 +1,12 @@
 """Coverage for a pair's run feed and the single-attempt cancel route: kinds
-merge newest first across pages, another pair's runs stay out, counts ignore the
+merge newest first across pages, another pair's runs stay out unless its source
+shares one group sync history, counts ignore the
 status filter, `since` and `q` narrow the feed, a non-synced pair shows only
 indexing, and cancel acts only on active attempts of a pair the caller operates."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -43,12 +45,14 @@ _T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 def _create_cc_pair(
-    db_session: Session, access_type: AccessType
+    db_session: Session,
+    access_type: AccessType,
+    source: DocumentSource = DocumentSource.GOOGLE_DRIVE,
 ) -> ConnectorCredentialPair:
     owner = create_test_user(db_session, "runs_owner")
     connector = Connector(
         name="Runs Test Connector",
-        source=DocumentSource.GOOGLE_DRIVE,
+        source=source,
         input_type=InputType.POLL,
         connector_specific_config={},
         refresh_freq=None,
@@ -118,9 +122,12 @@ def _group_sync(
     cc_pair: ConnectorCredentialPair,
     minutes: int,
     status: PermissionSyncStatus,
+    error_message: str | None = None,
 ) -> ExternalGroupPermissionSyncAttempt:
     attempt = ExternalGroupPermissionSyncAttempt(
-        connector_credential_pair_id=cc_pair.id, status=status
+        connector_credential_pair_id=cc_pair.id,
+        status=status,
+        error_message=error_message,
     )
     db_session.add(attempt)
     db_session.flush()
@@ -200,6 +207,30 @@ def test_leaves_out_another_pairs_runs(db_session: Session) -> None:
 
     assert _order(response) == [(CCPairRunKind.INDEXING, own.id)]
     assert response.total_items == 1
+
+
+def test_source_wide_group_sync_shows_on_every_pair_of_the_source(
+    db_session: Session,
+) -> None:
+    """Jira logs one group sync per source against whichever pair ran it. The
+    search token keeps the shared history from other runs of this test out."""
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.SYNC, DocumentSource.JIRA)
+    sibling = _create_cc_pair(db_session, AccessType.SYNC, DocumentSource.JIRA)
+    other_source = _create_cc_pair(db_session, AccessType.SYNC)
+    token = f"run {uuid4().hex}"
+    shared = _group_sync(
+        db_session, sibling, 0, PermissionSyncStatus.FAILED, f"{token} sibling"
+    )
+    _group_sync(
+        db_session, other_source, 1, PermissionSyncStatus.FAILED, f"{token} other"
+    )
+
+    response = _runs(db_session, admin, cc_pair, q=token)
+
+    assert _order(response) == [(CCPairRunKind.GROUP_SYNC, shared.id)]
+    assert response.total_items == 1
+    assert response.status_counts[CCPairRunStatusGroup.FAILED] == 1
 
 
 def test_status_filter_keeps_counts(db_session: Session) -> None:
