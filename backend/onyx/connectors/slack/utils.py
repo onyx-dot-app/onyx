@@ -33,6 +33,15 @@ _SUBTEAM_MENTION_PATTERN = re.compile(
     r"<!subteam\^(?P<id>[^<>|]+)(?:\|(?P<label>[^<>]*))?>"
 )
 
+# Message markup patterns. No group can cross a "<" or ">", so each match
+# attempt stops at the next delimiter and matching stays linear in the length.
+_TAG_PATTERN = re.compile(r"<@([^<>]*)>")
+_CHANNEL_MENTION_PATTERN = re.compile(r"<#([^|<>]*)\|([^<>]*)>")
+_SPECIAL_CATCHALL_PATTERN = re.compile(r"<!([^|<>]+)\|([^<>]+)>")
+_SLACK_USER_ID_PATTERN = re.compile(r"[UW][A-Z0-9]{2,}")
+# Bounds the users.info calls that one message can cause
+_MAX_USER_LOOKUPS_PER_MESSAGE = 50
+
 
 def _defang_mentions(text: str) -> str:
     return _MENTION_AT_PATTERN.sub("@​", text)
@@ -158,19 +167,21 @@ class SlackTextCleaner:
         return self._id_to_name_map[user_id]
 
     def _replace_user_ids_with_names(self, message: str) -> str:
-        # Find user IDs in the message
-        user_ids = re.findall("<@(.*?)>", message)
+        lookups = 0
 
-        # Iterate over each user ID found
-        for user_id in user_ids:
+        def _replace(match: re.Match[str]) -> str:
+            nonlocal lookups
+            user_id = match.group(1)
+            if user_id not in self._id_to_name_map:
+                if (
+                    not _SLACK_USER_ID_PATTERN.fullmatch(user_id)
+                    or lookups >= _MAX_USER_LOOKUPS_PER_MESSAGE
+                ):
+                    # replace_tags_basic handles the tag
+                    return match.group(0)
+                lookups += 1
             try:
-                if user_id in self._id_to_name_map:
-                    user_name = self._id_to_name_map[user_id]
-                else:
-                    user_name = self._get_slack_name(user_id)
-
-                # Replace the user ID with the username in the message
-                message = message.replace(f"<@{user_id}>", f"@{user_name}")
+                return f"@{self._get_slack_name(user_id)}"
             except Exception as e:
                 # _get_slack_name no longer raises on SlackApiError, so this
                 # only fires on unexpected errors (e.g. malformed response);
@@ -180,8 +191,9 @@ class SlackTextCleaner:
                     user_id,
                     e,
                 )
+                return match.group(0)
 
-        return message
+        return _TAG_PATTERN.sub(_replace, message)
 
     def index_clean(self, message: str) -> str:
         """During indexing, replace pattern sets that may cause confusion to the model
@@ -199,23 +211,13 @@ class SlackTextCleaner:
     def replace_tags_basic(message: str) -> str:
         """Simply replaces all tags with `@<USER_ID>` in order to prevent us from
         tagging users in Slack when we don't want to"""
-        # Find user IDs in the message
-        user_ids = re.findall("<@(.*?)>", message)
-        for user_id in user_ids:
-            message = message.replace(f"<@{user_id}>", f"@{user_id}")
-        return message
+        return _TAG_PATTERN.sub(r"@\1", message)
 
     @staticmethod
     def replace_channels_basic(message: str) -> str:
         """Simply replaces all channel mentions with `#<CHANNEL_ID>` in order
         to make a message work as part of a link"""
-        # Find user IDs in the message
-        channel_matches = re.findall(r"<#(.*?)\|(.*?)>", message)
-        for channel_id, channel_name in channel_matches:
-            message = message.replace(
-                f"<#{channel_id}|{channel_name}>", f"#{channel_name}"
-            )
-        return message
+        return _CHANNEL_MENTION_PATTERN.sub(r"#\2", message)
 
     @staticmethod
     def replace_special_mentions(message: str) -> str:
@@ -235,9 +237,7 @@ class SlackTextCleaner:
         """Replaces pattern of <!something|another-thing> with another-thing
         This is added for <!subteam^TEAM-ID|@team-name> but may match other cases as well
         """
-
-        pattern = r"<!([^|]+)\|([^>]+)>"
-        return re.sub(pattern, r"\2", message)
+        return _SPECIAL_CATCHALL_PATTERN.sub(r"\2", message)
 
     @staticmethod
     def add_zero_width_whitespace_after_tag(message: str) -> str:
