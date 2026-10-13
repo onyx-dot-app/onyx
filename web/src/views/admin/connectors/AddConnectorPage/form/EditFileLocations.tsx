@@ -18,6 +18,8 @@ import { stageEditFiles } from "@/lib/connectors/edit/svc";
 
 export interface EditFileLocationsProps {
   ccPairId: number;
+  /** Told when an upload starts and ends, so the page can wait for it. */
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
 /**
@@ -27,6 +29,7 @@ export interface EditFileLocationsProps {
  */
 export default function EditFileLocations({
   ccPairId,
+  onUploadingChange,
 }: EditFileLocationsProps) {
   const t = useTranslations("admin.connectorEdit.files");
   const [locations, , locationsHelpers] = useField<string[] | undefined>(
@@ -38,7 +41,11 @@ export default function EditFileLocations({
   const [zipMetadata, , zipMetadataHelpers] = useField<
     string | null | undefined
   >("zip_metadata_file_id");
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploadingState] = useState(false);
+  const setUploading = (next: boolean) => {
+    setUploadingState(next);
+    onUploadingChange?.(next);
+  };
   const inputRef = useRef<HTMLInputElement>(null);
 
   const list = storedFileList(locations.value ?? [], names.value ?? null);

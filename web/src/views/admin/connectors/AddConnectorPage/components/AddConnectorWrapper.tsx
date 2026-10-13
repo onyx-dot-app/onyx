@@ -891,6 +891,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 {edit && editsFileList && (
                                   <EditFileLocations
                                     ccPairId={edit.ccPair.id}
+                                    // Review waits for the upload: a plan
+                                    // made earlier would miss its files.
+                                    onUploadingChange={setUploading}
                                   />
                                 )}
                               </ConnectorContentSection>
