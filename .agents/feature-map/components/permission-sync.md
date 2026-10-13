@@ -68,7 +68,7 @@ admin UI renders from `PermissionSyncAttempt` rows (owned by
 | `CHECK_FOR_DOC_PERMISSIONS_SYNC` | Beat, every 30s, EE-gated | `doc_permission_syncing/tasks.py:check_for_doc_permissions_sync`. Scans perm-synced cc_pairs (`get_all_auto_sync_cc_pairs`), fails expired attempts (§5.9), decides which are due (`_is_external_doc_permissions_sync_due`) among pairs with no open attempt, and dispatches one generator task per due cc_pair. |
 | `CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK` | Dispatched by the check task | `doc_permission_syncing/tasks.py:connector_permission_sync_generator_task`. Runs one source's `doc_sync_func`, streams `DocExternalAccess`/`NodeExternalAccess` into Postgres. |
 | `CHECK_FOR_EXTERNAL_GROUP_SYNC` | Beat, every 20s, EE-gated | `external_group_syncing/tasks.py:check_for_external_group_sync`. Same shape as the doc check task, for group sync; dispatches one cc_pair per cc_pair-agnostic source. |
-| `CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK` | Dispatched by the check task | `external_group_syncing/tasks.py:connector_external_group_sync_generator_task` -> `_perform_external_group_sync` -> `_timed_perform_external_group_sync`. Runs one source's `group_sync_func`, upserts `ExternalUserGroup` rows. |
+| `CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK` | Dispatched by the check task | `external_group_syncing/tasks.py:connector_external_group_sync_generator_task` (claims the attempt, runs the lease) -> `_timed_perform_external_group_sync`. Runs one source's `group_sync_func`, upserts `ExternalUserGroup` rows. |
 
 Both beat entries are registered in `backend/onyx/background/celery/tasks/beat_schedule.py`
 (not the `ee/` file of the same name, which is empty of these entries) and are
@@ -604,11 +604,12 @@ document to the wrong person.
    The partial unique indexes `uq_doc_permission_sync_attempt_open_cc_pair`
    and `uq_group_sync_attempt_open_cc_pair` allow one `NOT_STARTED`/`IN_PROGRESS`
    row per cc_pair. Dispatch creates that row before it sends the task, so
-   there is no Redis fence. Pruning, connector deletion, and the manual
-   `sync-permissions`/`sync-groups` endpoints read
-   `get_open_doc_permission_sync_attempt` / `get_open_external_group_sync_attempt`.
-   Deletion revokes the row's `celery_task_id`, and after its stop timeout it
-   cancels the row (`cancel_open_*`), which makes the worker lose its lease.
+   there is no Redis fence. An open doc attempt blocks pruning and connector
+   deletion (`get_open_doc_permission_sync_attempt`); an open group attempt
+   blocks neither. The manual `sync-permissions` / `sync-groups` endpoints
+   return 409 while the matching attempt is open. Deletion revokes the
+   `celery_task_id` of both open attempts, and after its stop timeout it
+   cancels both (`cancel_open_*`), which makes their workers lose their leases.
    A `NOT_STARTED` attempt older than `PERMISSION_SYNC_LOST_TASK_GRACE` whose
    `celery_task_id` is in neither the broker queue nor the unacked set lost
    its task, and the beat fails it (`fail_lost_queued_*_attempts`). A task a
