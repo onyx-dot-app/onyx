@@ -1872,13 +1872,11 @@
           "message": "Chats ohne Aktivität über mehr als {days, plural, one {# Tag} other {# Tage}} werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
           "title": "Chat-Aufbewahrung verkürzen?"
         },
-        "tierTooltip": "Die Aufbewahrung des Chat-Verlaufs ist eine Funktion des Enterprise-Tarifs.",
         "title": "Chat-Verlauf aufbewahren"
       },
       "searchMode": {
         "description": "Oberflächenmodus für die schnelle Dokumentensuche in Ihrer Organisation.",
         "noConnectorsTooltip": "Richten Sie Konnektoren ein, um den Suchmodus zu verwenden",
-        "tierTooltip": "Der Suchmodus erfordert den Business- oder Enterprise-Tarif.",
         "title": "Suchmodus"
       },
       "systemPrompt": {

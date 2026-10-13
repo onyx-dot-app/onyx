@@ -95,4 +95,14 @@ describe("DocumentAccessField", () => {
       expect(screen.getByTestId("access-type")).toHaveTextContent("sync")
     );
   });
+
+  it("shows the field locked on Everyone, with the Business plan tag, below Business", () => {
+    useTierAtLeast.mockReturnValue(false);
+    renderForm(ValidSources.Web as ConfigurableSources);
+
+    // The field is there, not hidden, and its select cannot be changed.
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(screen.getByText("Business Plan")).toBeInTheDocument();
+    expect(screen.getByTestId("access-type")).toHaveTextContent("public");
+  });
 });

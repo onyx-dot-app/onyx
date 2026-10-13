@@ -1872,13 +1872,11 @@
           "message": "Les discussions sans activité depuis plus de {days, plural, one {# jour} other {# jours}} seront définitivement supprimées. Cette action est irréversible.",
           "title": "Réduire la conservation des discussions ?"
         },
-        "tierTooltip": "La conservation de l'historique des discussions est une fonctionnalité du forfait Enterprise.",
         "title": "Conserver l'historique des discussions"
       },
       "searchMode": {
         "description": "Mode d'interface pour la recherche rapide de documents dans toute votre organisation.",
         "noConnectorsTooltip": "Configurez des connecteurs pour utiliser le mode Recherche",
-        "tierTooltip": "Le mode Recherche nécessite le forfait Business ou Enterprise.",
         "title": "Mode Recherche"
       },
       "systemPrompt": {
