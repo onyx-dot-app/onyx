@@ -78,12 +78,11 @@
   @apply absolute bottom-0 start-0 h-px bg-border-02 pointer-events-none;
 }
 
-/* Underline's indicator track: the bottom 2px of the list, ending where the
-   scroll arrows and right children begin, so the indicator never runs under
-   them. */
-.opal-tabs-indicator-track {
-  @apply absolute bottom-0 start-0 z-10 overflow-hidden pointer-events-none;
-  height: 2px;
+/* Pill and underline: the surface and indicator sit in this layer, which
+   ends where the scroll arrows and right children begin, so neither runs
+   under them when a tab scrolls out of view. */
+.opal-tabs-clip {
+  @apply absolute top-0 bottom-0 start-0 overflow-hidden pointer-events-none;
 }
 
 /* left-0, not start-0: the hook measures offsets from the list's physical

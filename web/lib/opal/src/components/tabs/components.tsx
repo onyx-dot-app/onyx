@@ -168,6 +168,30 @@ function TabsList({
     return () => resizeObserver.disconnect();
   }, [isPill, rightChildren, showScrollArrows]);
 
+  // The clip layer starts at the list's left edge, except in RTL, where its
+  // end side (cut short by the arrows and right children) is on the left.
+  const clipStart = isRtl ? rightOffset : 0;
+
+  // The active tab's surface. It slides from tab to tab behind the triggers,
+  // which only change their text colour. Underline has none.
+  function renderSurface(offsetLeft: number) {
+    return (
+      <div
+        className="opal-tabs-surface"
+        data-variant={variant}
+        {...indicatorState}
+        style={{
+          // A transform, not left/top: the browser composites it on the
+          // GPU and moves it by sub-pixels, so the slide does not stutter.
+          transform: `translate(${indicatorStyle.left - offsetLeft}px, ${indicatorStyle.top}px)`,
+          width: indicatorStyle.width,
+          height: indicatorStyle.height,
+          opacity: indicatorStyle.opacity,
+        }}
+      />
+    );
+  }
+
   return (
     <TabsPrimitive.List
       ref={mergeRefs(listRef, ref)}
@@ -184,27 +208,15 @@ function TabsList({
     >
       {/* The active tab's surface. It slides from tab to tab behind the
           triggers, which only change their text colour. Underline has none. */}
-      {variant !== "underline" && (
-        <div
-          className="opal-tabs-surface"
-          data-variant={variant}
-          {...indicatorState}
-          style={{
-            // A transform, not left/top: the browser composites it on the
-            // GPU and moves it by sub-pixels, so the slide does not stutter.
-            transform: `translate(${indicatorStyle.left}px, ${indicatorStyle.top}px)`,
-            width: indicatorStyle.width,
-            height: indicatorStyle.height,
-            opacity: indicatorStyle.opacity,
-          }}
-        />
-      )}
+      {variant === "contained" && renderSurface(0)}
 
       {isPill ? (
         enableScrollArrows ? (
           <div
             ref={tabsContainerRef}
-            className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0"
+            // No elastic overscroll: the surface and indicator follow
+            // scrollLeft, which a bounce past either end does not move.
+            className="flex items-center gap-2 overflow-x-auto overscroll-x-none flex-1 min-w-0"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
             {children}
@@ -261,34 +273,24 @@ function TabsList({
               style={{ insetInlineEnd: rightOffset }}
             />
           )}
-          {variant === "underline" ? (
-            <div
-              className="opal-tabs-indicator-track"
-              style={{ insetInlineEnd: rightOffset }}
-            >
-              <div
-                className="opal-tabs-pill-indicator"
-                {...indicatorState}
-                style={{
-                  // The track starts at the list's left edge, except in RTL,
-                  // where its end side is on the left.
-                  transform: `translateX(${indicatorStyle.left - (isRtl ? rightOffset : 0)}px)`,
-                  width: indicatorStyle.width,
-                  opacity: indicatorStyle.opacity,
-                }}
-              />
-            </div>
-          ) : (
+          {/* Clipped to the tabs' visible area, so a tab scrolled under
+              the arrows or right children does not show its surface or
+              indicator over them. */}
+          <div
+            className="opal-tabs-clip"
+            style={{ insetInlineEnd: rightOffset }}
+          >
+            {variant === "pill" && renderSurface(clipStart)}
             <div
               className="opal-tabs-pill-indicator"
               {...indicatorState}
               style={{
-                transform: `translateX(${indicatorStyle.left}px)`,
+                transform: `translateX(${indicatorStyle.left - clipStart}px)`,
                 width: indicatorStyle.width,
                 opacity: indicatorStyle.opacity,
               }}
             />
-          )}
+          </div>
         </>
       )}
     </TabsPrimitive.List>
