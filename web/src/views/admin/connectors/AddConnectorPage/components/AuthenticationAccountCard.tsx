@@ -445,7 +445,15 @@ export default function AuthenticationAccountCard({
             gap={4}
             width="full"
           >
-            <Section alignItems="start" gap={0} padding={2} width="full">
+            {/* Stretched, and free to shrink beside the buttons, so a long
+            name is cut at the column's edge rather than widening the card. */}
+            <Section
+              alignItems="stretch"
+              gap={0}
+              padding={2}
+              width="full"
+              className="min-w-0"
+            >
               <Content
                 icon={getSourceMetadata(source).icon}
                 // The account's name, which its editors can change in place;
@@ -455,6 +463,8 @@ export default function AuthenticationAccountCard({
                   credential.user_email ||
                   t("untitled.label")
                 }
+                // One line; a long name is cut, in full on hover.
+                titleMaxLines={1}
                 editable={canEditAccount}
                 onTitleChange={(name) => void rename(name)}
                 suffix={t("sourceSuffix", { source: sourceName })}

@@ -86,7 +86,10 @@ interface ContentMdProps {
   /** Tag rendered beside the title. */
   tag?: TagProps;
 
-  /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
+  /**
+   * Clamp the title to N lines with ellipsis; a cut title shows in full in a
+   * tooltip. Omit to wrap freely.
+   */
   titleMaxLines?: number;
 
   /** Strike the title through, for a row whose option is switched off. */
@@ -212,10 +215,7 @@ function ContentMd({
           : undefined
       }
     >
-      <div
-        className="opal-content-md-header"
-        data-editing={editing || undefined}
-      >
+      <div className="opal-content-md-header">
         {Icon && (
           <div
             className="opal-content-md-icon-container shrink-0"
@@ -262,13 +262,25 @@ function ContentMd({
                 style={{ height: config.lineHeight }}
               />
             </div>
-          ) : (
-            <Text
+          ) : titleMaxLines ? (
+            // Clamped, the full title shows in a tooltip when it is cut, as
+            // the description's does.
+            <OverflowText
               // Lets a host (a toast) measure whether a clamped title overflows.
               data-opal-content-title=""
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
+              strikethrough={strikethrough}
+              onClick={editable ? handleTitleClick : undefined}
+            >
+              {title}
+            </OverflowText>
+          ) : (
+            <Text
+              data-opal-content-title=""
+              font={config.titleFont}
+              color="inherit"
               strikethrough={strikethrough}
               title={toPlainString(title)}
               onClick={editable ? handleTitleClick : undefined}
