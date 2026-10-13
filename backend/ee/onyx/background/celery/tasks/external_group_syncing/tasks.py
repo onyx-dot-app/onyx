@@ -529,6 +529,11 @@ def _timed_perform_external_group_sync(
         if cc_pair is None:
             raise ValueError(f"No connector credential pair found for id: {cc_pair_id}")
 
+        if not cc_pair.access_type.is_perm_synced():
+            msg = f"cc_pair={cc_pair_id} is not perm-synced: {cc_pair.access_type}"
+            _fail_external_group_sync_attempt(attempt_id, msg)
+            raise ValueError(msg)
+
         source_type = cc_pair.connector.source
         connector_type = source_type.value
         sync_config = get_source_perm_sync_config(source_type)
