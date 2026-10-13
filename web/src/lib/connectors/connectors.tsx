@@ -1751,7 +1751,7 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
         name: "file_locations",
         optional: false,
         description:
-          "Upload a zip file containing the HTML of your Google Site",
+          "Upload a `.zip` file containing the HTML of your Google Site.",
         multiple: false,
         accept: ".zip",
       },
