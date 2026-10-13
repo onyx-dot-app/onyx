@@ -9112,6 +9112,185 @@
         "uploadFailed": {
           "toast": "Impossible de téléverser les fichiers : {detail}"
         }
+      },
+      "planFailed": {
+        "toast": "Impossible de calculer le plan : {detail}"
+      },
+      "typedAccount": {
+        "toast": "Enregistrez le nouveau compte avant de vérifier les modifications, ou choisissez un compte enregistré."
+      },
+      "applied": {
+        "toast": "Les modifications sont appliquées."
+      },
+      "plan": {
+        "title": "Vérifier le plan",
+        "description": "{count, plural, one {Le connecteur a # document indexé.} other {Le connecteur a # documents indexés.}}",
+        "changes": {
+          "list": "Modifié : {fields}",
+          "none": "Rien n'a changé."
+        },
+        "stale": {
+          "title": "Le connecteur a changé",
+          "description": "Le connecteur a changé après le calcul de ce plan. Recalculez le plan avant de l'appliquer.",
+          "replanButton": {
+            "label": "Recalculer le plan"
+          }
+        },
+        "expired": {
+          "title": "Le plan a expiré",
+          "description": "Ce plan a expiré ou a déjà été appliqué. Calculez le plan à nouveau."
+        },
+        "applyFailed": {
+          "title": "Impossible d'appliquer les modifications"
+        },
+        "validation": {
+          "title": "Validation",
+          "blocks": "Les nouveaux paramètres ont échoué à la validation. Corrigez-les avant d'appliquer.",
+          "warns": "Certaines vérifications facultatives ont échoué. Vous pouvez quand même appliquer.",
+          "error": {
+            "title": "Les paramètres ne sont pas valides"
+          }
+        },
+        "warnings": {
+          "title": "Avertissements"
+        },
+        "notes": {
+          "title": "Remarques"
+        },
+        "reconciliation": {
+          "title": "Choisissez comment rapprocher le changement de périmètre",
+          "description": "Le plan ne peut pas savoir si la modification de {fields} ajoute ou retire des documents. Choisissez ce que fait l'application.",
+          "option": {
+            "prune": {
+              "title": "Élaguer",
+              "description": "Supprimer les documents qui ne sont plus dans le périmètre."
+            },
+            "full_reindex": {
+              "title": "Réindexation complète",
+              "description": "Tout réindexer depuis la date de début pour ajouter les documents désormais dans le périmètre."
+            },
+            "both": {
+              "title": "Réindexation complète, puis élagage",
+              "description": "Tout réindexer, puis supprimer les documents qui ne sont plus dans le périmètre."
+            },
+            "nothing": {
+              "title": "Ne rien faire",
+              "description": "Conserver les documents indexés. Les exécutions suivantes utilisent les nouveaux paramètres."
+            }
+          }
+        },
+        "credential": {
+          "title": "Changement d'identifiants",
+          "description": "Choisissez ce qui arrive aux documents indexés avec les anciens identifiants.",
+          "option": {
+            "keep_indexed": {
+              "title": "Conserver les documents indexés",
+              "description": "Les exécutions suivantes utilisent les nouveaux identifiants. C'est la voie rapide."
+            },
+            "full_reindex_and_prune": {
+              "title": "Réindexation complète et élagage",
+              "description": "Tout réindexer avec les nouveaux identifiants, puis supprimer les documents qu'ils ne voient pas."
+            }
+          }
+        },
+        "steps": {
+          "title": "Étapes",
+          "description": "Ce que fait l'application, dans l'ordre. Vous pouvez désactiver les étapes facultatives.",
+          "none": "L'application enregistre les paramètres. Aucune indexation n'est nécessaire.",
+          "required": {
+            "label": "Obligatoire"
+          },
+          "optional": {
+            "label": "Facultative"
+          },
+          "include": {
+            "ariaLabel": "Exécuter l'étape : {step}"
+          },
+          "fields": "Champs : {fields}",
+          "window": "Période : du {start} au {end}",
+          "windowFromStart": "Période : tout jusqu'au {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Mettre à jour les groupes d'accès aux données",
+              "description": "La recherche applique immédiatement les nouveaux groupes."
+            },
+            "access_type": {
+              "title": "Changer le type d'accès",
+              "description": "Les personnes qui peuvent lire les documents changent."
+            },
+            "enter_perm_sync": {
+              "title": "Démarrer la synchronisation des autorisations",
+              "description": "Les documents restent masqués jusqu'à la fin de la première synchronisation des autorisations."
+            },
+            "leave_perm_sync": {
+              "title": "Arrêter la synchronisation des autorisations",
+              "description": "Les autorisations de la source ne décident plus qui lit les documents."
+            },
+            "restart_attempt": {
+              "title": "Redémarrer la tentative d'indexation en cours",
+              "description": "La tentative en cours s'arrête et une nouvelle démarre avec les nouveaux paramètres."
+            },
+            "full_reindex_then_prune": {
+              "title": "Réindexation complète, puis élagage",
+              "description": "Tout réindexer, puis supprimer les documents que la source ne renvoie plus."
+            },
+            "full_reindex": {
+              "title": "Réindexation complète",
+              "description": "Tout réindexer depuis la date de début."
+            },
+            "scoped_backfill": {
+              "title": "Rattraper les éléments ajoutés",
+              "description": "Indexer uniquement l'historique des éléments ajoutés."
+            },
+            "window_backfill": {
+              "title": "Rattraper la période antérieure",
+              "description": "Indexer la période entre la nouvelle et l'ancienne date de début."
+            },
+            "prune": {
+              "title": "Élaguer",
+              "description": "Supprimer les documents que la source ne renvoie plus."
+            }
+          },
+          "reason": {
+            "identity_changed": "Les identifiants des documents changent",
+            "behavior_changed": "Le traitement a changé",
+            "scope_widened": "Périmètre élargi",
+            "scope_narrowed": "Périmètre réduit",
+            "items_added_or_changed": "Éléments ajoutés ou modifiés",
+            "items_removed": "Éléments supprimés",
+            "opaque_scope_choice": "Votre choix de périmètre",
+            "indexing_start_earlier": "Date de début plus ancienne",
+            "credential_full_path": "Voie complète des identifiants",
+            "access_changed": "L'accès a changé",
+            "permissions_fetched_during_indexing": "Les autorisations arrivent avec l'indexation",
+            "attempt_running": "Une tentative est en cours",
+            "scoped_backfill_superseded": "Un rattrapage antérieur est remplacé",
+            "admin_added": "Ajouté par vous",
+            "indexing_start_later": "Date de début plus tardive"
+          }
+        },
+        "extra": {
+          "title": "Travail supplémentaire",
+          "description": "Ajoutez du travail dont le plan n'a pas besoin.",
+          "fullReindex": {
+            "title": "Ajouter une réindexation complète",
+            "description": "Tout réindexer depuis la date de début."
+          },
+          "prune": {
+            "title": "Ajouter un élagage",
+            "description": "Supprimer les documents que la source ne renvoie plus."
+          }
+        },
+        "backButton": {
+          "label": "Retour à la modification"
+        },
+        "applyButton": {
+          "label": "Appliquer"
+        },
+        "blocked": {
+          "validation": "Corrigez d'abord les échecs de validation.",
+          "reconciliation": "Choisissez d'abord comment rapprocher le changement de périmètre."
+        }
       }
     }
   },

@@ -9112,6 +9112,185 @@
         "uploadFailed": {
           "toast": "Could not upload the files: {detail}"
         }
+      },
+      "planFailed": {
+        "toast": "Could not compute the plan: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Save the new account before you review the changes, or pick a saved account."
+      },
+      "applied": {
+        "toast": "The changes are applied."
+      },
+      "plan": {
+        "title": "Review the plan",
+        "description": "{count, plural, one {The connector has # indexed document.} other {The connector has # indexed documents.}}",
+        "changes": {
+          "list": "Changed: {fields}",
+          "none": "Nothing changed."
+        },
+        "stale": {
+          "title": "The connector changed",
+          "description": "The connector changed after this plan was computed. Compute the plan again before you apply.",
+          "replanButton": {
+            "label": "Plan again"
+          }
+        },
+        "expired": {
+          "title": "The plan expired",
+          "description": "This plan expired or was already applied. Compute the plan again."
+        },
+        "applyFailed": {
+          "title": "Could not apply the changes"
+        },
+        "validation": {
+          "title": "Validation",
+          "blocks": "The new settings failed validation. Fix them before you apply.",
+          "warns": "Some optional checks failed. You can still apply.",
+          "error": {
+            "title": "The settings are not valid"
+          }
+        },
+        "warnings": {
+          "title": "Warnings"
+        },
+        "notes": {
+          "title": "Notes"
+        },
+        "reconciliation": {
+          "title": "Choose how to reconcile the scope change",
+          "description": "The plan cannot tell if the change to {fields} adds or removes documents. Choose what apply does.",
+          "option": {
+            "prune": {
+              "title": "Prune",
+              "description": "Remove the documents that are no longer in scope."
+            },
+            "full_reindex": {
+              "title": "Full re-index",
+              "description": "Index everything again from the start date, to add the documents now in scope."
+            },
+            "both": {
+              "title": "Full re-index, then prune",
+              "description": "Index everything again, then remove the documents that are no longer in scope."
+            },
+            "nothing": {
+              "title": "Do nothing",
+              "description": "Keep the indexed documents. Later runs use the new settings."
+            }
+          }
+        },
+        "credential": {
+          "title": "Credential change",
+          "description": "Choose what happens to the documents indexed with the old credential.",
+          "option": {
+            "keep_indexed": {
+              "title": "Keep the indexed documents",
+              "description": "Later runs use the new credential. This is the fast path."
+            },
+            "full_reindex_and_prune": {
+              "title": "Full re-index and prune",
+              "description": "Index everything again with the new credential, then remove the documents it cannot see."
+            }
+          }
+        },
+        "steps": {
+          "title": "Steps",
+          "description": "What apply does, in order. You can turn off optional steps.",
+          "none": "Apply saves the settings. No indexing work is needed.",
+          "required": {
+            "label": "Required"
+          },
+          "optional": {
+            "label": "Optional"
+          },
+          "include": {
+            "ariaLabel": "Run the step: {step}"
+          },
+          "fields": "Fields: {fields}",
+          "window": "Window: {start} to {end}",
+          "windowFromStart": "Window: everything up to {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Update the data-access groups",
+              "description": "Search applies the new groups at once."
+            },
+            "access_type": {
+              "title": "Change the access type",
+              "description": "Who can read the documents changes."
+            },
+            "enter_perm_sync": {
+              "title": "Start permission sync",
+              "description": "The documents stay hidden until the first permission sync completes."
+            },
+            "leave_perm_sync": {
+              "title": "Stop permission sync",
+              "description": "The source's permissions no longer decide who reads the documents."
+            },
+            "restart_attempt": {
+              "title": "Restart the running index attempt",
+              "description": "The running attempt stops, and a new one starts with the new settings."
+            },
+            "full_reindex_then_prune": {
+              "title": "Full re-index, then prune",
+              "description": "Index everything again, then remove the documents the source no longer returns."
+            },
+            "full_reindex": {
+              "title": "Full re-index",
+              "description": "Index everything again from the start date."
+            },
+            "scoped_backfill": {
+              "title": "Backfill the added items",
+              "description": "Index the history of the added items only."
+            },
+            "window_backfill": {
+              "title": "Backfill the earlier window",
+              "description": "Index the time between the new and the old start date."
+            },
+            "prune": {
+              "title": "Prune",
+              "description": "Remove the documents the source no longer returns."
+            }
+          },
+          "reason": {
+            "identity_changed": "Document ids change",
+            "behavior_changed": "Processing changed",
+            "scope_widened": "Scope widened",
+            "scope_narrowed": "Scope narrowed",
+            "items_added_or_changed": "Items added or changed",
+            "items_removed": "Items removed",
+            "opaque_scope_choice": "Your scope choice",
+            "indexing_start_earlier": "Earlier start date",
+            "credential_full_path": "Credential full path",
+            "access_changed": "Access changed",
+            "permissions_fetched_during_indexing": "Permissions come with indexing",
+            "attempt_running": "An attempt is running",
+            "scoped_backfill_superseded": "An earlier backfill is replaced",
+            "admin_added": "Added by you",
+            "indexing_start_later": "Later start date"
+          }
+        },
+        "extra": {
+          "title": "Extra work",
+          "description": "Add work that the plan does not need.",
+          "fullReindex": {
+            "title": "Add a full re-index",
+            "description": "Index everything again from the start date."
+          },
+          "prune": {
+            "title": "Add a prune",
+            "description": "Remove the documents the source no longer returns."
+          }
+        },
+        "backButton": {
+          "label": "Back to editing"
+        },
+        "applyButton": {
+          "label": "Apply"
+        },
+        "blocked": {
+          "validation": "Fix the validation failures first.",
+          "reconciliation": "Choose how to reconcile the scope change first."
+        }
       }
     }
   },

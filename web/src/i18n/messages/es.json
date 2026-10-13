@@ -9112,6 +9112,185 @@
         "uploadFailed": {
           "toast": "No se pudieron subir los archivos: {detail}"
         }
+      },
+      "planFailed": {
+        "toast": "No se pudo calcular el plan: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Guarde la cuenta nueva antes de revisar los cambios o elija una cuenta guardada."
+      },
+      "applied": {
+        "toast": "Se aplicaron los cambios."
+      },
+      "plan": {
+        "title": "Revisar el plan",
+        "description": "{count, plural, one {El conector tiene # documento indexado.} other {El conector tiene # documentos indexados.}}",
+        "changes": {
+          "list": "Cambios: {fields}",
+          "none": "No hay cambios."
+        },
+        "stale": {
+          "title": "El conector cambió",
+          "description": "El conector cambió después de calcular este plan. Vuelve a calcular el plan antes de aplicarlo.",
+          "replanButton": {
+            "label": "Volver a planificar"
+          }
+        },
+        "expired": {
+          "title": "El plan caducó",
+          "description": "Este plan caducó o ya se aplicó. Vuelva a calcular el plan."
+        },
+        "applyFailed": {
+          "title": "No se pudieron aplicar los cambios"
+        },
+        "validation": {
+          "title": "Validación",
+          "blocks": "La nueva configuración no superó la validación. Corrígela antes de aplicar.",
+          "warns": "Algunas comprobaciones opcionales fallaron. Aún puedes aplicar.",
+          "error": {
+            "title": "La configuración no es válida"
+          }
+        },
+        "warnings": {
+          "title": "Advertencias"
+        },
+        "notes": {
+          "title": "Notas"
+        },
+        "reconciliation": {
+          "title": "Elige cómo conciliar el cambio de alcance",
+          "description": "El plan no puede saber si el cambio en {fields} agrega o quita documentos. Elige qué hace la aplicación.",
+          "option": {
+            "prune": {
+              "title": "Depurar",
+              "description": "Quitar los documentos que ya no están en el alcance."
+            },
+            "full_reindex": {
+              "title": "Reindexación completa",
+              "description": "Indexar todo de nuevo desde la fecha de inicio para agregar los documentos que ahora están en el alcance."
+            },
+            "both": {
+              "title": "Reindexación completa y luego depurar",
+              "description": "Indexar todo de nuevo y luego quitar los documentos que ya no están en el alcance."
+            },
+            "nothing": {
+              "title": "No hacer nada",
+              "description": "Conservar los documentos indexados. Las ejecuciones posteriores usan la nueva configuración."
+            }
+          }
+        },
+        "credential": {
+          "title": "Cambio de credencial",
+          "description": "Elige qué pasa con los documentos indexados con la credencial anterior.",
+          "option": {
+            "keep_indexed": {
+              "title": "Conservar los documentos indexados",
+              "description": "Las ejecuciones posteriores usan la nueva credencial. Es la opción rápida."
+            },
+            "full_reindex_and_prune": {
+              "title": "Reindexación completa y depuración",
+              "description": "Indexar todo de nuevo con la nueva credencial y luego quitar los documentos que no puede ver."
+            }
+          }
+        },
+        "steps": {
+          "title": "Pasos",
+          "description": "Lo que hace la aplicación, en orden. Puedes desactivar los pasos opcionales.",
+          "none": "La aplicación guarda la configuración. No se necesita indexar.",
+          "required": {
+            "label": "Obligatorio"
+          },
+          "optional": {
+            "label": "Opcional"
+          },
+          "include": {
+            "ariaLabel": "Ejecutar el paso: {step}"
+          },
+          "fields": "Campos: {fields}",
+          "window": "Ventana: de {start} a {end}",
+          "windowFromStart": "Ventana: todo hasta {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Actualizar los grupos de acceso a datos",
+              "description": "La búsqueda aplica los nuevos grupos de inmediato."
+            },
+            "access_type": {
+              "title": "Cambiar el tipo de acceso",
+              "description": "Cambia quién puede leer los documentos."
+            },
+            "enter_perm_sync": {
+              "title": "Iniciar la sincronización de permisos",
+              "description": "Los documentos quedan ocultos hasta que termine la primera sincronización de permisos."
+            },
+            "leave_perm_sync": {
+              "title": "Detener la sincronización de permisos",
+              "description": "Los permisos de la fuente ya no deciden quién lee los documentos."
+            },
+            "restart_attempt": {
+              "title": "Reiniciar el intento de indexación en curso",
+              "description": "El intento en curso se detiene y comienza uno nuevo con la nueva configuración."
+            },
+            "full_reindex_then_prune": {
+              "title": "Reindexación completa y luego depurar",
+              "description": "Indexar todo de nuevo y luego quitar los documentos que la fuente ya no devuelve."
+            },
+            "full_reindex": {
+              "title": "Reindexación completa",
+              "description": "Indexar todo de nuevo desde la fecha de inicio."
+            },
+            "scoped_backfill": {
+              "title": "Rellenar los elementos agregados",
+              "description": "Indexar solo el historial de los elementos agregados."
+            },
+            "window_backfill": {
+              "title": "Rellenar la ventana anterior",
+              "description": "Indexar el periodo entre la nueva y la antigua fecha de inicio."
+            },
+            "prune": {
+              "title": "Depurar",
+              "description": "Quitar los documentos que la fuente ya no devuelve."
+            }
+          },
+          "reason": {
+            "identity_changed": "Cambian los ID de los documentos",
+            "behavior_changed": "Cambió el procesamiento",
+            "scope_widened": "Alcance ampliado",
+            "scope_narrowed": "Alcance reducido",
+            "items_added_or_changed": "Elementos agregados o cambiados",
+            "items_removed": "Elementos quitados",
+            "opaque_scope_choice": "Tu elección de alcance",
+            "indexing_start_earlier": "Fecha de inicio anterior",
+            "credential_full_path": "Opción completa de credencial",
+            "access_changed": "Cambió el acceso",
+            "permissions_fetched_during_indexing": "Los permisos llegan con la indexación",
+            "attempt_running": "Hay un intento en curso",
+            "scoped_backfill_superseded": "Se reemplaza un relleno anterior",
+            "admin_added": "Agregado por ti",
+            "indexing_start_later": "Fecha de inicio posterior"
+          }
+        },
+        "extra": {
+          "title": "Trabajo adicional",
+          "description": "Agrega trabajo que el plan no necesita.",
+          "fullReindex": {
+            "title": "Agregar una reindexación completa",
+            "description": "Indexar todo de nuevo desde la fecha de inicio."
+          },
+          "prune": {
+            "title": "Agregar una depuración",
+            "description": "Quitar los documentos que la fuente ya no devuelve."
+          }
+        },
+        "backButton": {
+          "label": "Volver a editar"
+        },
+        "applyButton": {
+          "label": "Aplicar"
+        },
+        "blocked": {
+          "validation": "Corrige primero los errores de validación.",
+          "reconciliation": "Elige primero cómo conciliar el cambio de alcance."
+        }
       }
     }
   },

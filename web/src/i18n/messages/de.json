@@ -9112,6 +9112,185 @@
         "uploadFailed": {
           "toast": "Die Dateien konnten nicht hochgeladen werden: {detail}"
         }
+      },
+      "planFailed": {
+        "toast": "Der Plan konnte nicht berechnet werden: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Speichern Sie das neue Konto, bevor Sie die Änderungen prüfen, oder wählen Sie ein gespeichertes Konto."
+      },
+      "applied": {
+        "toast": "Die Änderungen wurden angewendet."
+      },
+      "plan": {
+        "title": "Plan prüfen",
+        "description": "{count, plural, one {Der Connector hat # indexiertes Dokument.} other {Der Connector hat # indexierte Dokumente.}}",
+        "changes": {
+          "list": "Geändert: {fields}",
+          "none": "Nichts wurde geändert."
+        },
+        "stale": {
+          "title": "Der Connector wurde geändert",
+          "description": "Der Connector wurde nach der Berechnung dieses Plans geändert. Berechnen Sie den Plan neu, bevor Sie ihn anwenden.",
+          "replanButton": {
+            "label": "Neu planen"
+          }
+        },
+        "expired": {
+          "title": "Der Plan ist abgelaufen",
+          "description": "Dieser Plan ist abgelaufen oder wurde bereits angewendet. Berechnen Sie den Plan erneut."
+        },
+        "applyFailed": {
+          "title": "Die Änderungen konnten nicht angewendet werden"
+        },
+        "validation": {
+          "title": "Validierung",
+          "blocks": "Die neuen Einstellungen haben die Validierung nicht bestanden. Korrigieren Sie sie vor dem Anwenden.",
+          "warns": "Einige optionale Prüfungen sind fehlgeschlagen. Sie können trotzdem anwenden.",
+          "error": {
+            "title": "Die Einstellungen sind ungültig"
+          }
+        },
+        "warnings": {
+          "title": "Warnungen"
+        },
+        "notes": {
+          "title": "Hinweise"
+        },
+        "reconciliation": {
+          "title": "Wählen Sie, wie die Bereichsänderung abgeglichen wird",
+          "description": "Der Plan kann nicht erkennen, ob die Änderung an {fields} Dokumente hinzufügt oder entfernt. Wählen Sie, was beim Anwenden geschieht.",
+          "option": {
+            "prune": {
+              "title": "Bereinigen",
+              "description": "Die Dokumente entfernen, die nicht mehr im Bereich liegen."
+            },
+            "full_reindex": {
+              "title": "Vollständige Neuindexierung",
+              "description": "Alles ab dem Startdatum neu indexieren, um die Dokumente im neuen Bereich hinzuzufügen."
+            },
+            "both": {
+              "title": "Vollständige Neuindexierung, dann bereinigen",
+              "description": "Alles neu indexieren und dann die Dokumente entfernen, die nicht mehr im Bereich liegen."
+            },
+            "nothing": {
+              "title": "Nichts tun",
+              "description": "Die indexierten Dokumente behalten. Spätere Läufe verwenden die neuen Einstellungen."
+            }
+          }
+        },
+        "credential": {
+          "title": "Änderung der Anmeldedaten",
+          "description": "Wählen Sie, was mit den Dokumenten geschieht, die mit den alten Anmeldedaten indexiert wurden.",
+          "option": {
+            "keep_indexed": {
+              "title": "Indexierte Dokumente behalten",
+              "description": "Spätere Läufe verwenden die neuen Anmeldedaten. Das ist der schnelle Weg."
+            },
+            "full_reindex_and_prune": {
+              "title": "Vollständige Neuindexierung und Bereinigung",
+              "description": "Alles mit den neuen Anmeldedaten neu indexieren und dann die Dokumente entfernen, die sie nicht sehen."
+            }
+          }
+        },
+        "steps": {
+          "title": "Schritte",
+          "description": "Was beim Anwenden geschieht, in Reihenfolge. Sie können optionale Schritte ausschalten.",
+          "none": "Beim Anwenden werden die Einstellungen gespeichert. Keine Indexierung ist nötig.",
+          "required": {
+            "label": "Erforderlich"
+          },
+          "optional": {
+            "label": "Optional"
+          },
+          "include": {
+            "ariaLabel": "Schritt ausführen: {step}"
+          },
+          "fields": "Felder: {fields}",
+          "window": "Zeitraum: {start} bis {end}",
+          "windowFromStart": "Zeitraum: alles bis {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Datenzugriffsgruppen aktualisieren",
+              "description": "Die Suche wendet die neuen Gruppen sofort an."
+            },
+            "access_type": {
+              "title": "Zugriffstyp ändern",
+              "description": "Es ändert sich, wer die Dokumente lesen kann."
+            },
+            "enter_perm_sync": {
+              "title": "Berechtigungssynchronisierung starten",
+              "description": "Die Dokumente bleiben verborgen, bis die erste Berechtigungssynchronisierung abgeschlossen ist."
+            },
+            "leave_perm_sync": {
+              "title": "Berechtigungssynchronisierung beenden",
+              "description": "Die Berechtigungen der Quelle bestimmen nicht mehr, wer die Dokumente liest."
+            },
+            "restart_attempt": {
+              "title": "Laufenden Indexierungsversuch neu starten",
+              "description": "Der laufende Versuch stoppt, und ein neuer startet mit den neuen Einstellungen."
+            },
+            "full_reindex_then_prune": {
+              "title": "Vollständige Neuindexierung, dann bereinigen",
+              "description": "Alles neu indexieren und dann die Dokumente entfernen, die die Quelle nicht mehr liefert."
+            },
+            "full_reindex": {
+              "title": "Vollständige Neuindexierung",
+              "description": "Alles ab dem Startdatum neu indexieren."
+            },
+            "scoped_backfill": {
+              "title": "Hinzugefügte Elemente nachindexieren",
+              "description": "Nur den Verlauf der hinzugefügten Elemente indexieren."
+            },
+            "window_backfill": {
+              "title": "Früheren Zeitraum nachindexieren",
+              "description": "Den Zeitraum zwischen dem neuen und dem alten Startdatum indexieren."
+            },
+            "prune": {
+              "title": "Bereinigen",
+              "description": "Die Dokumente entfernen, die die Quelle nicht mehr liefert."
+            }
+          },
+          "reason": {
+            "identity_changed": "Dokument-IDs ändern sich",
+            "behavior_changed": "Verarbeitung geändert",
+            "scope_widened": "Bereich erweitert",
+            "scope_narrowed": "Bereich eingeschränkt",
+            "items_added_or_changed": "Elemente hinzugefügt oder geändert",
+            "items_removed": "Elemente entfernt",
+            "opaque_scope_choice": "Ihre Bereichsauswahl",
+            "indexing_start_earlier": "Früheres Startdatum",
+            "credential_full_path": "Vollständiger Weg für Anmeldedaten",
+            "access_changed": "Zugriff geändert",
+            "permissions_fetched_during_indexing": "Berechtigungen kommen mit der Indexierung",
+            "attempt_running": "Ein Versuch läuft",
+            "scoped_backfill_superseded": "Eine frühere Nachindexierung wird ersetzt",
+            "admin_added": "Von Ihnen hinzugefügt",
+            "indexing_start_later": "Späteres Startdatum"
+          }
+        },
+        "extra": {
+          "title": "Zusätzliche Arbeit",
+          "description": "Fügen Sie Arbeit hinzu, die der Plan nicht benötigt.",
+          "fullReindex": {
+            "title": "Vollständige Neuindexierung hinzufügen",
+            "description": "Alles ab dem Startdatum neu indexieren."
+          },
+          "prune": {
+            "title": "Bereinigung hinzufügen",
+            "description": "Die Dokumente entfernen, die die Quelle nicht mehr liefert."
+          }
+        },
+        "backButton": {
+          "label": "Zurück zur Bearbeitung"
+        },
+        "applyButton": {
+          "label": "Anwenden"
+        },
+        "blocked": {
+          "validation": "Beheben Sie zuerst die Validierungsfehler.",
+          "reconciliation": "Wählen Sie zuerst, wie die Bereichsänderung abgeglichen wird."
+        }
       }
     }
   },
