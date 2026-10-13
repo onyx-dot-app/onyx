@@ -11,9 +11,9 @@ from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.server.gateway.craft_session import (
     CRAFT_SESSION_ID_CONTEXTVAR,
     craft_session_binder,
-    llm_gateway_trace,
     resolve_craft_session_id,
 )
+from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.tracing.flows import LLMFlow
 
 
