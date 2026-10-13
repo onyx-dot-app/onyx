@@ -166,7 +166,7 @@ export default function UploadControl({
               triggerRef.current?.focus();
             })}
             type="button"
-            prominence="internal"
+            prominence="tertiary"
             size="sm"
             aria-label={strings.clearFile}
           />
