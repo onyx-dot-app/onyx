@@ -96,10 +96,10 @@ export interface PendingBackfillSnapshot {
   retry_after: string | null;
 }
 
+/** Mirrors `PaginatedReturn[IndexAttemptSnapshot]`. */
 export interface PaginatedIndexAttempts {
-  index_attempts: IndexAttemptSnapshot[];
-  page: number;
-  total_pages: number;
+  items: IndexAttemptSnapshot[];
+  total_items: number;
 }
 
 /**

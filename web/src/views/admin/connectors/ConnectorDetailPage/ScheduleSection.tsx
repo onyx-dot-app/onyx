@@ -48,14 +48,19 @@ function FrequencyField({
   onSave,
 }: FrequencyFieldProps) {
   const [draft, setDraft] = useState<number | null>(value);
-  // What the server is believed to hold, and the latest typed value.
+  // The last fetched value, what the server is believed to hold, and the latest typed value.
+  const serverRef = useRef<number | null>(value);
   const storedRef = useRef<number | null>(value);
   const draftRef = useRef<number | null>(value);
+  // Saves run one at a time, so the last value typed is the last one stored.
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const lastSaveRef = useRef(0);
   function change(next: number | null) {
     draftRef.current = next;
     setDraft(next);
   }
   useEffect(() => {
+    serverRef.current = value;
     if (draftRef.current !== storedRef.current) return;
     storedRef.current = value;
     change(value);
@@ -70,13 +75,14 @@ function FrequencyField({
     if (draft === null || draft === storedRef.current) return;
     if (draft < min || draft > max) return;
     const timer = setTimeout(() => {
-      const previous = storedRef.current;
       storedRef.current = draft;
-      void onSaveRef.current(draft).then((stored) => {
-        if (stored) return;
-        storedRef.current = previous;
-        // A newer edit stays on screen and saves on its own.
-        if (draftRef.current === draft) change(previous);
+      const save = ++lastSaveRef.current;
+      queueRef.current = queueRef.current.then(async () => {
+        if (await onSaveRef.current(draft)) return;
+        // A newer save owns the field, so only the latest failure rolls back.
+        if (lastSaveRef.current !== save) return;
+        storedRef.current = serverRef.current;
+        if (draftRef.current === draft) change(serverRef.current);
       });
     }, SAVE_DELAY_MS);
     return () => clearTimeout(timer);
@@ -100,6 +106,7 @@ function FrequencyField({
         decimalPlaces={decimalPlaces}
         suffix={suffix}
         disabled={disabled}
+        allowEmpty={false}
       />
     </InputHorizontal>
   );

@@ -22,6 +22,8 @@ export class AdminConnectorDetailPage {
   readonly filesEditButton: Locator;
   /** Opens the connector in the creation form in edit mode. */
   readonly editConnectorMenuItem: Locator;
+  /** Unfolds the section listing the connector's settings. */
+  readonly indexConfigurationsToggle: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -39,6 +41,13 @@ export class AdminConnectorDetailPage {
       name: "Edit connector",
       exact: true,
     });
+    this.indexConfigurationsToggle = page.getByRole("button", {
+      name: "Expand Index Configurations",
+    });
+  }
+
+  async openIndexConfigurations(): Promise<void> {
+    await this.indexConfigurationsToggle.click();
   }
 
   async openFilesEditor(): Promise<void> {
@@ -83,7 +92,7 @@ export class AdminConnectorDetailPage {
     }
   }
 
-  /** The error callout the page renders when the cc-pair fetch is refused. */
+  /** The error page the detail page renders when the cc-pair fetch is refused. */
   async expectNotAccessible(): Promise<void> {
     await expect(
       this.page.getByText(/Failed to fetch info on Connector with ID/i)

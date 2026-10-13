@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
+import { AdminConnectorDetailPage } from "@tests/e2e/pages/AdminConnectorDetailPage";
 
 /**
  * Full UI workflow for configuring a web connector: fill in the setup page,
@@ -65,11 +66,12 @@ test.describe("Web connector setup", () => {
       timeout: 15_000,
     });
 
-    // Clicking the row opens the detail page for the same cc-pair, which
-    // shows the configured base URL.
+    // Clicking the row opens the detail page for the same cc-pair. Its
+    // folded index configurations show the configured base URL.
     const openedCcPairId = await statusPage.openConnector(connectorName);
     expect(openedCcPairId).toBe(ccPairId);
     await expect(page.getByText(connectorName).first()).toBeVisible();
+    await new AdminConnectorDetailPage(page).openIndexConfigurations();
     await expect(page.getByText(DOCS_URL).first()).toBeVisible();
   });
 });

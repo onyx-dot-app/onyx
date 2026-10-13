@@ -20,10 +20,9 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { IconLoader, PageLoader } from "@opal/loaders";
+import { CardLoader, IconLoader, PageLoader } from "@opal/loaders";
 import { SvgPlugBroken } from "@opal/illustrations";
 import {
-  SvgAlertCircle,
   SvgArrowLeft,
   SvgEdit,
   SvgPauseCircle,
@@ -38,7 +37,11 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { triggerIndexing } from "@/lib/connectors/svc";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
-import type { CCPairFullInfo, IndexAttemptError } from "@/lib/connectors/types";
+import type {
+  CCPairFullInfo,
+  IndexAttemptError,
+  PaginatedIndexAttempts,
+} from "@/lib/connectors/types";
 import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
@@ -93,6 +96,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
     pagesPerBatch: PAGES_PER_BATCH,
     endpoint: SWR_KEYS.ccPairIndexAttempts(ccPairId),
   });
+
+  // The status card and the error notice read the latest attempt, whatever history page is open.
+  const { data: latestIndexAttempts, error: latestIndexAttemptError } =
+    useSWR<PaginatedIndexAttempts>(
+      SWR_KEYS.ccPairLatestIndexAttempt(ccPairId),
+      errorHandlingFetcher,
+      { refreshInterval: CC_PAIR_POLL_MS }
+    );
 
   const {
     currentPageData: indexAttemptErrorsPage,
@@ -151,7 +162,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     finishConnectorDeletion();
   }, [ccPair, finishConnectorDeletion, t]);
 
-  const latestIndexAttempt = indexAttempts?.[0];
+  const latestIndexAttempt = latestIndexAttempts?.items[0];
   const isResolvingErrors =
     (latestIndexAttempt?.status === "in_progress" ||
       latestIndexAttempt?.status === "not_started") &&
@@ -232,7 +243,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     const title = t("loadError.title", { ccPairId: String(ccPairId) });
     return (
       <SettingsLayouts.Root width="sm">
-        <SettingsLayouts.Header icon={SvgAlertCircle} title={title} />
+        <BackToConnectors />
         <SettingsLayouts.Body>
           <PageCenter>
             <IllustrationContent
@@ -385,15 +396,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         />
       )}
 
-      <Section alignItems="start" height="fit" padding={4}>
-        <Button
-          icon={SvgArrowLeft}
-          prominence="tertiary"
-          href={ADMIN_ROUTES.INDEXING_STATUS.path}
-        >
-          {t("backButton.label")}
-        </Button>
-      </Section>
+      <BackToConnectors />
       <SettingsLayouts.Header
         icon={getSourceMetadata(source).icon}
         title={ccPair.name}
@@ -467,7 +470,13 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <PendingBackfills backfills={ccPair.pending_backfills} />
         )}
 
-        <StatusCard ccPair={ccPair} latestIndexAttempt={latestIndexAttempt} />
+        {/* Waits for the latest attempt, so a running pair never flashes as indexed. */}
+        {latestIndexAttempts === undefined &&
+        latestIndexAttemptError === undefined ? (
+          <CardLoader descriptionLines={2} />
+        ) : (
+          <StatusCard ccPair={ccPair} latestIndexAttempt={latestIndexAttempt} />
+        )}
         <PairChecksCard
           source={source}
           credentialId={ccPair.credential.id}
@@ -512,6 +521,21 @@ function Main({ ccPairId }: { ccPairId: number }) {
         )}
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
+  );
+}
+
+function BackToConnectors() {
+  const t = useTranslations("admin.connector");
+  return (
+    <Section alignItems="start" height="fit" padding={4}>
+      <Button
+        icon={SvgArrowLeft}
+        prominence="tertiary"
+        href={ADMIN_ROUTES.INDEXING_STATUS.path}
+      >
+        {t("backButton.label")}
+      </Button>
+    </Section>
   );
 }
 
