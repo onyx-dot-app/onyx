@@ -7,7 +7,8 @@ import { Button, SelectCard, Text } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import type { RichStr } from "@opal/types";
 import { Hoverable } from "@opal/core";
-import { SvgDownloadCloud, SvgFolder } from "@opal/icons";
+import { cn } from "@opal/utils";
+import { SvgDownloadCloud, SvgFolder, SvgGlobe } from "@opal/icons";
 import { MarkdownContent } from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import { getFileIcon } from "@/lib/utils";
 import { useFilePreview } from "@/lib/build/hooks";
@@ -17,13 +18,14 @@ import {
   fetchFileContent,
   fetchOutputThumbnail,
 } from "@/app/craft/services/apiServices";
-import type { OutputFile } from "@/app/craft/types/streamingTypes";
+import type { OutputFile, OutputCard } from "@/app/craft/types/streamingTypes";
 
 interface OutputTileProps {
   sessionId: string;
   file: OutputFile;
   isActive: boolean;
   showPath?: boolean;
+  isUnseen?: boolean;
   onFileOpen: (path: string, fileName: string) => void;
 }
 
@@ -33,6 +35,7 @@ export function OutputTile({
   isActive,
   onFileOpen,
   showPath = false,
+  isUnseen = false,
 }: OutputTileProps) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { margin: "200px" });
@@ -67,6 +70,7 @@ export function OutputTile({
       ref={ref}
       label={file.path}
       name={showPath ? file.path.replace(/^outputs\//, "") : name}
+      isUnseen={isUnseen}
       onOpen={() => onFileOpen(file.path, name)}
       onDownload={() => downloadArtifactFile(sessionId, file.path)}
       preview={
@@ -145,9 +149,11 @@ function OutputImageThumbnail({
 export function OutputFolderTile({
   name,
   onOpen,
+  isUnseen = false,
 }: {
   name: string | RichStr;
   onOpen: () => void;
+  isUnseen?: boolean;
 }) {
   return (
     <SelectCard
@@ -161,16 +167,75 @@ export function OutputFolderTile({
     >
       <div className="flex min-w-0 items-center gap-2">
         <SvgFolder size={20} className="shrink-0 stroke-text-03" aria-hidden />
-        <Text
-          font="secondary-body"
-          color="text-04"
-          maxLines={1}
-          wordWrap="wrap-anywhere"
-        >
-          {name}
-        </Text>
+        <div className="min-w-0 flex-1">
+          <Text
+            font="secondary-body"
+            color="text-04"
+            maxLines={1}
+            wordWrap="wrap-anywhere"
+          >
+            {name}
+          </Text>
+        </div>
+        {isUnseen && <OutputUnseenMarker className="shrink-0" />}
       </div>
     </SelectCard>
+  );
+}
+
+export function OutputAppTile({
+  name,
+  isUnseen,
+  onOpen,
+}: {
+  name: string | RichStr;
+  isUnseen: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <OutputTileFrame
+      label={toPlainString(name)}
+      name={name}
+      isUnseen={isUnseen}
+      onOpen={onOpen}
+      preview={
+        <SvgGlobe
+          size={32}
+          className="size-8 stroke-text-03 @[40rem]:size-10"
+        />
+      }
+    />
+  );
+}
+
+export function OutputUnavailableTile({
+  card,
+  showPath = false,
+}: {
+  card: OutputCard;
+  showPath?: boolean;
+}) {
+  const t = useTranslations("craft.turnOutputs");
+  const name =
+    card.kind === "app"
+      ? t("appTitle")
+      : showPath
+        ? card.path.replace(/^outputs\//, "")
+        : card.name;
+  const Icon = card.kind === "app" ? SvgGlobe : getFileIcon(card.name);
+  return (
+    <OutputTileFrame
+      label={card.kind === "app" ? name : card.path}
+      name={name}
+      preview={
+        <div className="flex flex-col items-center gap-2 p-2 text-center">
+          <Icon size={32} className="stroke-text-03" aria-hidden />
+          <Text font="secondary-body" color="text-03">
+            {t("unavailable")}
+          </Text>
+        </div>
+      }
+    />
   );
 }
 
@@ -179,8 +244,9 @@ interface OutputTileFrameProps {
   label: string;
   name: string | RichStr;
   preview: ReactNode;
-  onOpen: () => void;
+  onOpen?: () => void;
   onDownload?: () => void;
+  isUnseen?: boolean;
 }
 
 function OutputTileFrame({
@@ -190,6 +256,7 @@ function OutputTileFrame({
   preview,
   onOpen,
   onDownload,
+  isUnseen = false,
 }: OutputTileFrameProps) {
   const t = useTranslations("craft.filesTab");
   return (
@@ -197,8 +264,8 @@ function OutputTileFrame({
       <Hoverable.Root group="output-tile">
         <SelectCard
           ref={ref}
-          role="button"
-          tabIndex={0}
+          role={onOpen ? "button" : "group"}
+          disabled={!onOpen}
           aria-label={label}
           state="filled"
           border="none"
@@ -206,13 +273,16 @@ function OutputTileFrame({
           rounding={3}
           onClick={onOpen}
         >
-          <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="relative flex min-w-0 flex-col gap-1.5">
             <div
               className="flex aspect-[3/2] min-h-0 items-center justify-center overflow-hidden rounded-md bg-background-neutral-03"
-              aria-hidden
+              aria-hidden={onOpen ? true : undefined}
             >
               {preview}
             </div>
+            {isUnseen && (
+              <OutputUnseenMarker className="absolute end-2 top-2" />
+            )}
             <div className="min-w-0 pe-7">
               <Text
                 font="secondary-body"
@@ -244,5 +314,16 @@ function OutputTileFrame({
         )}
       </Hoverable.Root>
     </div>
+  );
+}
+
+function OutputUnseenMarker({ className }: { className: string }) {
+  const t = useTranslations("craft.outputsTab");
+  return (
+    <span
+      role="img"
+      aria-label={t("unseen")}
+      className={cn("size-2 rounded-full bg-status-info-05", className)}
+    />
   );
 }

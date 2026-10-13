@@ -13773,6 +13773,10 @@
       }
     },
     "outputsTab": {
+      "markAllViewed": {
+        "label": "Marcar todos como vistos",
+        "error": "Não foi possível marcar os resultados como vistos. Tente novamente."
+      },
       "home": {
         "description": "Arquivos criados pelo seu agente"
       },
@@ -13806,7 +13810,18 @@
       },
       "search": {
         "placeholder": "Pesquisar resultados"
-      }
+      },
+      "scope": {
+        "turn": "Resultados do turno {turn, number}",
+        "all": "Todos os resultados"
+      },
+      "unseen": "Novo ou atualizado"
+    },
+    "turnOutputs": {
+      "showAll": "Ver todos os {count} resultados",
+      "app": "Aplicativo",
+      "unavailable": "Não está mais disponível",
+      "appTitle": "Prévia do seu aplicativo"
     }
   },
   "knowledge": {

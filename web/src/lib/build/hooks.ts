@@ -1,13 +1,13 @@
 import {
-  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useCallback,
 } from "react";
-import useSWR, { unstable_serialize, type Key } from "swr";
+import useSWR, { unstable_serialize, useSWRConfig, type Key } from "swr";
 import {
   isAuthStatusError,
   isNotFoundError,
@@ -20,14 +20,93 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useUser } from "@/providers/UserProvider";
 import { saveOutputPanelPreferences } from "@/app/craft/services/outputPanelPreferences";
-import type { ApiWebappInfoResponse } from "@/app/craft/types/streamingTypes";
-import { fetchWebappInfo } from "@/app/craft/services/apiServices";
+import type {
+  ApiWebappInfoResponse,
+  OutputCard,
+} from "@/app/craft/types/streamingTypes";
+import {
+  fetchWebappInfo,
+  fetchOutputCards,
+  markOutputViewed,
+  markOutputsViewed,
+} from "@/app/craft/services/apiServices";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   RegisteredWebapp,
   AppDiscoveryState,
   FilePreviewResult,
 } from "@/lib/build/types";
+
+const EMPTY_OUTPUT_CARDS: readonly OutputCard[] = [];
+
+/** The persisted turn index is independent of sandbox and preview lifecycles. */
+export function useOutputCards(sessionId: string | null) {
+  const { user } = useUser();
+  const userId = user?.id;
+  const { mutate } = useSWRConfig();
+  const { data, error } = useSWR<OutputCard[], Error>(
+    sessionId && user?.id
+      ? [SWR_KEYS.buildSessionOutputCards(sessionId), user.id]
+      : null,
+    sessionId ? () => fetchOutputCards(sessionId) : null,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+  const saveViewed = useCallback(
+    async (cards: readonly OutputCard[]) => {
+      const pending = cards.filter(
+        (card) => !card.deleted && (card.viewed_revision ?? 0) < card.revision
+      );
+      if (!sessionId || !userId || pending.length === 0) return;
+      const first = pending[0];
+      const acknowledged =
+        first && pending.length === 1
+          ? [await markOutputViewed(sessionId, first)]
+          : await markOutputsViewed(sessionId, pending);
+      const revisions = new Map(
+        acknowledged.map((card) => [card.id, card.viewed_revision ?? 0])
+      );
+      // Update the captured session key; late acknowledgements cannot replace newer output revisions.
+      await mutate<OutputCard[]>(
+        [SWR_KEYS.buildSessionOutputCards(sessionId), userId],
+        (current) =>
+          current?.map((item) => {
+            const viewed = revisions.get(item.id);
+            return viewed === undefined
+              ? item
+              : {
+                  ...item,
+                  viewed_revision: Math.max(item.viewed_revision ?? 0, viewed),
+                };
+          }),
+        { revalidate: true }
+      );
+    },
+    [sessionId, userId, mutate]
+  );
+  const markViewed = useCallback(
+    async (card: OutputCard) => {
+      try {
+        await saveViewed([card]);
+      } catch (error) {
+        console.warn("Failed to save output viewed revision", error);
+      }
+    },
+    [saveViewed]
+  );
+  const markAllViewed = useCallback(
+    () => saveViewed(data ?? []),
+    [saveViewed, data]
+  );
+
+  return {
+    cards:
+      isAuthStatusError(error) || isNotFoundError(error)
+        ? EMPTY_OUTPUT_CARDS
+        : (data ?? EMPTY_OUTPUT_CARDS),
+    markViewed,
+    markAllViewed,
+  };
+}
 
 /** Saves panel UI preferences independently of workspace layout. */
 export function useOutputPanelPersistence() {

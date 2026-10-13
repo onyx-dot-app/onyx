@@ -208,6 +208,8 @@ export const SWR_KEYS = {
     `/api/build/sessions/${sessionId}/webapp-info`,
   buildSessionArtifacts: (sessionId: string) =>
     `/api/build/sessions/${sessionId}/artifacts`,
+  buildSessionOutputCards: (sessionId: string) =>
+    `/api/build/sessions/${sessionId}/output-cards`,
   buildSessionArtifactFile: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/artifacts/${filePath}`,
   buildSessionOutputThumbnail: (sessionId: string, filePath: string) =>

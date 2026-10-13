@@ -51,76 +51,28 @@ over; the entire agentic loop runs inside the sandbox's `opencode serve`
 process, and the backend's job is to start it, stream its events, persist
 them, and know when to stop.
 
-The output panel starts closed when no saved preferences exist. Opening it creates one closeable Outputs resource tab. All Files browses the whole sandbox.
-Browser session storage preserves panel mode, tab order, active selection, and split width per session across hard reloads.
-Restored panel geometry appears without an opening animation. Transitions start after the first measured, restored layout paints.
-Session creation restores these preferences before loading server data. Explicit initial panel state takes precedence.
-Saved Files expansion and scroll also survive reload. History selection never inherits unrelated welcome-panel preferences.
-The compact plus menu opens Files or a new Apps tab. Explicit file links open closeable file tabs.
-Resource tabs and their active ID are the only tab-selection model.
-Chat subscribes only to conversation fields, so output tab and layout changes do not rerender its transcript.
-Files stays unique; normalized paths identify file tabs within each session.
-Browser tabs have separate identities and independent app selections.
-Hovering a tab replaces its resource icon with a close button. Keyboard focus reveals the same button.
-The shared drag-and-drop library previews horizontal tab order while the pointer stays down.
-Dropping commits the order. Dragging back restores the preview without changing saved order.
-The strip bounds dragging and scrolls only its own overflow. Closing tabs shifts neighbors without movement animations.
-Tab labels keep their color on hover. Active tab pills keep their appearance. The close button highlights only when directly hovered.
-Closing the active tab selects the most recently viewed tab that remains open.
-Without viewing history, it selects the preceding neighbor, or the first remaining tab.
-Closing an inactive tab keeps the current selection. Viewing history persists with the session's tab preferences.
-Closing an inactive tab restores keyboard focus to the selected tab.
-Closing the last tab keeps the panel open with an empty state.
+The output panel starts closed. Its first opening shows Outputs, which lists agent-created files under `outputs/`.
+All Files browses the complete workspace; Apps opens the local webapp. Files open in individual, closeable tabs.
+Closing the active tab returns to the last viewed open tab. Closing the last tab leaves an empty panel.
+Panel layout, tab order, selection, viewing history, and Files expansion survive reload in browser session storage.
+Session creation restores saved preferences before server data arrives. Explicit initial preferences take precedence.
+Unrelated sessions never inherit welcome-panel preferences.
 
-`web/src/app/craft/components/CraftWorkspace.tsx` owns the shared header and closed, medium, and full layouts.
-Sandbox status belongs to the chat header and shows its full label.
-Opening outputs moves it with chat; full output mode hides it with the covered chat.
-The panel toggle stays visible. Expand appears while the panel is open.
-Medium shares space with chat; its divider preserves the saved split proportion.
-The divider hit target stays inside outputs so users can drag the chat scrollbar.
-The output shell isolates content layers so sticky file elements cannot cover the divider.
-Chat uses a persistent scrollbar thumb with a transparent track in WebKit browsers.
-Its viewport includes the sticky composer, so the thumb reaches the input area.
-Pointer resizing previews once per animation frame and saves the split only on release.
-Cancellation or session changes discard the drag preview. Keyboard resizing remains available.
-Memoized chat and output roots avoid rendering their children for split-only changes.
-The split keeps chat at least 400 px wide and outputs at least 280 px wide.
-Below their combined minimum, the workspace shows one surface.
-Full covers the conversation while leaving the actual navigation and history columns usable.
-Covered chat and closed output content are inert and hidden from assistive technology.
-Restore returns to the saved medium split. Closing full makes the next manual open use medium.
-Panel transitions keep retained resource bodies mounted.
-Opening and closing use one 180 ms ease-out width transition. Chat header padding and the divider use the same timing.
-Output content keeps its target width while the shell clips the reveal. Reduced motion skips these transitions.
+`CraftWorkspace.tsx` owns chat/output layout and resizing; `OutputPanel.tsx` owns resource tabs and viewers.
+Medium mode shares space with chat. Full mode hides chat while preserving navigation and history access.
+Hidden surfaces are inert. Sandbox status moves with the chat header and disappears in full output mode.
+The resize handle supports pointer and keyboard input without covering the chat scrollbar.
+Restored geometry does not animate. Reduced motion disables panel transitions.
+See [[craft-webapp-proxy]] §4 for retained viewers, directory caches, and preview behavior.
 
-The welcome panel can browse a pre-provisioned workspace without selecting a conversation.
-Claiming that workspace transfers its tabs, selection, split, folder expansion, scroll, and search into the session.
-Its logical output workspace identity stays stable during provisioning and claim.
-Backend requests and cache keys still use the actual session ID. New welcome workspaces and unrelated sessions have separate identities.
-Files uses the shared SWR listing cache keyed by session and directory. Fresh listings survive session switches.
-The selected workspace keeps one Files browser mounted, even without an open Files tab.
-Its root and expanded folders load when the filesystem is ready. Tab switches and panel closure do not cancel those reads.
-Collapsed directories and retired workspaces still abort their requests. Search runs only while its view is active.
-Opening a folder reuses a fresh listing or fetches when stale or invalidated. A fresh empty listing is valid.
-A claimed welcome sandbox stays available until the URL selects the session.
-Late validity checks cannot reset it.
-Composer attachments retain MIME type and size for message attachments.
-The composer owns draft selections, not the persisted session directory.
-Opening a session starts an empty draft; directory listings never select attachments.
-Removing a chip or clearing a sent draft leaves stored files available to earlier messages.
-Only explicit selections enter the current turn’s attachment context. Stored files do not become new selections. Subagent follow-ups carry an empty current selection while retaining references to earlier attachments.
-Uploads hold the session row lock through quota checks and file writes, so concurrent requests share one session limit.
-URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
-Replacing that destination preserves selected source files and uploads them into the replacement.
-New Build, another session, or visit end clears the previous draft.
-Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
-Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
-ChatPanel owns its UploadFilesProvider. Unmounting chat releases its draft, including pending welcome files and navigation to Craft apps.
+A pre-provisioned welcome workspace can display files before a conversation exists.
+Claiming it preserves tabs, split width, folder expansion, search, and scroll state.
+The logical workspace identity stays stable; backend requests and data caches use the actual session ID.
+A claimed sandbox remains available until the URL selects the session. Late checks cannot reset it.
 
 The composer moves from the welcome position to the conversation footer with
 a shared layout animation. Reduced-motion users get an immediate transition.
-Conversation scrolling spans the full chat body, including the sticky composer.
-The scrollbar uses a thin thumb with a transparent track. The composer stays visible during scrolling.
+The chat scrollbar spans the body and sticky composer, with a thin thumb and transparent track.
 
 A session with stale skills shows a blue information notice after its active turn
 ends. Its Reload action refreshes that session’s skills.
@@ -383,12 +335,6 @@ last flush. So there is no single "save the whole turn" transaction to point
 to the way `save_chat_turn` is one; correctness instead rests on: no
 streamed terminal path may skip its `finalize_persist` + `finish_turn` pair.
 
-The turn events endpoint emits `turn_completed` only after backend finalization reaches a terminal state.
-It releases the sandbox subscription before waiting for that state and can replay a completed turn on attachment.
-The packet carries the owned turn ID, status, index, and error detail. Transport errors remain stream errors.
-Both runners close the producer and commit the transcript before the separate output-index transaction.
-They persist output metadata before publishing terminal status, while retaining prompt ownership.
-
 ### 4.3 Locking
 
 Three independent locks/leases, at three different scopes:
@@ -469,7 +415,10 @@ Overlapping Stop requests for a pending local start are serialized before the ac
 Local stream ownership ends when its stream function exits. The provider then watches visible or queued turns.
 Session deletion stops local observation only after the server confirms deletion. A rejected delete preserves the live owner.
 Provider attachment pauses while Stop is pending and resumes when stopping clears, including after a failed request.
-Interactive settlement reads the known turn's terminal outcome before replacing history or granting queue permission.
+Interactive settlement requires a terminal outcome before replacing history or granting queue permission.
+Normally, the attach stream supplies this outcome in `turn_completed` after backend finalization.
+Recovery reads the known turn when that event is unavailable.
+Settlement still checks for a successor after reading history. See [[craft-streaming]] §4.3.
 Backend failures block queued prompts even after stream disconnection. Unknown outcomes require explicit recovery.
 Expired terminal records require a page refresh to clear local recovery state. Saved history remains; unsent local queues do not.
 The streaming hook atomically claims that permission; component mounting and status transitions do not authorize sends.
@@ -487,18 +436,18 @@ Discarding a rejected queue head checks server completion and saved history befo
 
 If the post-history turn check finds a different turn, loading rereads history before attaching to include its prompt.
 
-Session loading reads history before waiting for runtime discovery and sandbox restoration.
-It checks the active turn again after history loads, so another tab's start is not missed.
+Session loading reads persisted messages before waiting for runtime discovery or sandbox restoration.
+It checks the active turn again after history loads, so another tab’s start is not missed.
 A completed second check retains the first observed turn for canonical settlement.
-Runtime failures preserve the loaded transcript and permit another load when the user revisits.
-History renders before session metadata is ready.
-Load failures use `loadError`; they do not replace turn errors or discard rejected prompts.
-The retry action preserves displayed history. Turn errors do not invalidate cached sessions.
-Sleeping, terminated, and failed cached sandboxes load again on entry, including return from New build.
+Runtime failures keep the loaded transcript and permit another load when the user revisits.
+History renders before session metadata is ready; the model picker waits for the saved model.
+Existing-session sends omit the model unless the user explicitly selects one, preserving the server-owned session model.
+Load failures use `loadError` and show a retry action without erasing history.
+Turn errors do not invalidate cached sessions or discard rejected prompts.
+Sleeping, terminated, and failed cached sandboxes also load again on entry, including return from New build.
 Transcript and turn-status writes require the same session instance, turn generation, settlement identity, and latest load generation.
 Metadata and artifact responses require the same session instance and latest load generation.
 Settlement owns its transcript until completion; metadata failures do not block confirmed queue continuation.
-The model picker waits for saved metadata. Existing-session sends use the saved model unless the user selects another.
 Accepted starts update the cached model selection; older metadata reads cannot replace that choice.
 Restoration refreshes files and output inventory when the sandbox is running, even if a newer turn has started.
 App readiness runs separately and controls only the iframe remount.
@@ -630,6 +579,19 @@ Drive file), inserted `PENDING` before the action executes
 `try_record_decision`). A `PENDING` row older than 10 minutes is swept to
 `UNKNOWN` (`sweep_stale_pending_receipts`) so a crashed recorder never looks
 like a silently-still-in-progress send.
+
+Frontend attachments in `web/src/app/craft/contexts/UploadFilesContext.tsx` use a separate scope for each session visit.
+The composer owns draft selections, not the persisted session directory.
+Opening a session starts an empty draft; directory listings never select attachments.
+Removing a chip or clearing a sent draft leaves stored files available to earlier messages.
+Only explicit selections enter the current turn’s attachment context. Stored files do not become new selections. Subagent follow-ups carry an empty current selection while retaining references to earlier attachments.
+Uploads hold the session row lock through quota checks and file writes, so concurrent requests share one session limit.
+URL session identity owns the draft; a welcome sandbox is its replaceable upload destination.
+Replacing that destination preserves selected source files and uploads them into the replacement.
+New Build, another session, or visit end clears the previous draft.
+Upload completion updates only still-selected files in the same visit and refreshes the file inventory.
+Pending file status prevents duplicate uploads. Upload errors retain HTTP status and subscription error details.
+ChatPanel owns its UploadFilesProvider. Unmounting chat releases its draft, including pending welcome files and navigation to Craft apps.
 
 ### 4.8 User library
 
@@ -952,22 +914,12 @@ processing and blocking sandbox egress during OpenCode startup.
   metadata handling, permission sync) can silently affect Craft's user
   library, and vice versa.
 
-### Frontend loading and layout boundaries
+### Frontend layout ownership
 
-`CraftWorkspace` owns chat/output geometry and resizing. `OutputPanel` owns
-resource tabs, previews, reloads, and exports. The persistence hook in
-`web/src/lib/build/hooks.ts` saves panel preferences independently of layout.
-
-Session loading starts runtime discovery and chat history reads together.
-Active-turn lookup precedes message reads to protect completed response handoff.
-The store publishes history before runtime discovery or artifact listing finishes.
-Runtime failures retain history; revisiting the session retries discovery.
-Returning from New build also retries failed sessions.
-Restore readiness refreshes directories and remounts previews without replacing newer turn state.
-Output resource reads wait for a running sandbox, while cached rows remain visible.
-
-Resize release commits the final pointer position, including moves made before
-the next animation frame. Cancellation keeps the previous saved width.
+`CraftWorkspace` owns geometry and resizing; `OutputPanel` owns resource tabs, previews, reloads, and exports.
+`useOutputPanelPersistence` in `web/src/lib/build/hooks.ts` saves preferences independently of layout.
+Resize release commits the final pointer position, including moves before the next animation frame.
+Cancellation preserves the saved width. Hidden surfaces remain inert and cannot retain keyboard focus.
 
 ### Output document thumbnails
 

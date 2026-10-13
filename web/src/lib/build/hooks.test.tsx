@@ -1,12 +1,20 @@
 import { StrictMode } from "react";
 import { act, deferred, renderHook, waitFor } from "@tests/setup/test-utils";
-import { SWRConfig, type State } from "swr";
+import { SWRConfig, useSWRConfig, type State } from "swr";
 import {
   useFilePreview,
   useWorkspaceListing,
   useOutputWebapps,
+  useOutputCards,
 } from "@/lib/build/hooks";
-import { fetchWebappInfo } from "@/app/craft/services/apiServices";
+import {
+  fetchWebappInfo,
+  fetchOutputCards,
+  markOutputViewed,
+  markOutputsViewed,
+} from "@/app/craft/services/apiServices";
+import type { OutputCard } from "@/app/craft/types/streamingTypes";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { FetchError, skipRetryOnAuthError } from "@/lib/fetcher";
 
 let mockPreviewUserId: string | undefined = "test-user";
@@ -18,7 +26,153 @@ jest.mock("@/providers/UserProvider", () => ({
 jest.mock("@/app/craft/services/apiServices", () => ({
   ...jest.requireActual("@/app/craft/services/apiServices"),
   fetchWebappInfo: jest.fn(),
+  fetchOutputCards: jest.fn(),
+  markOutputViewed: jest.fn(),
+  markOutputsViewed: jest.fn(),
 }));
+
+it("reports a failed viewed save and retains the unread revision", async () => {
+  const card: OutputCard = {
+    id: "failed",
+    kind: "file",
+    path: "outputs/report.md",
+    name: "report.md",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 10,
+    deleted: false,
+    viewed_revision: null,
+  };
+  const error = new Error("offline");
+  const warning = jest.spyOn(console, "warn").mockImplementation(() => {});
+  jest.mocked(fetchOutputCards).mockResolvedValue([card]);
+  jest.mocked(markOutputViewed).mockRejectedValueOnce(error);
+  const { result } = renderHook(() => useOutputCards("failed-save"));
+  await waitFor(() => expect(result.current.cards).toEqual([card]));
+  await act(async () => {
+    await result.current.markViewed(card);
+  });
+  expect(result.current.cards).toEqual([card]);
+  expect(warning).toHaveBeenCalledWith(
+    "Failed to save output viewed revision",
+    error
+  );
+  warning.mockRestore();
+});
+
+// Persisted output ownership and viewed revisions.
+it("applies a delayed viewed acknowledgement to its original session without reverting a newer revision", async () => {
+  const cache = new Map<string, State>();
+  const card: OutputCard = {
+    id: "a",
+    kind: "file",
+    path: "outputs/report.md",
+    name: "report.md",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 10,
+    deleted: false,
+    viewed_revision: null,
+  };
+  const nextCard = { ...card, revision: 2, turn_index: 1 };
+  const other = { ...card, id: "b" };
+  const acknowledgement = deferred<OutputCard>();
+  jest
+    .mocked(fetchOutputCards)
+    .mockImplementation(async (id) =>
+      id === "session-a" ? [nextCard] : [other]
+    );
+  jest.mocked(markOutputViewed).mockReturnValue(acknowledgement.promise);
+  const { result, rerender } = renderHook(
+    ({ id }) => ({ ...useOutputCards(id), mutate: useSWRConfig().mutate }),
+    {
+      initialProps: { id: "session-a" },
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => cache }}>{children}</SWRConfig>
+      ),
+    }
+  );
+  await waitFor(() => expect(result.current.cards).toEqual([nextCard]));
+  let pending: Promise<void> | undefined;
+  act(() => {
+    pending = result.current.markViewed(card);
+  });
+  await act(async () => {
+    await result.current.mutate(
+      [SWR_KEYS.buildSessionOutputCards("session-a"), "test-user"],
+      [nextCard],
+      false
+    );
+  });
+  rerender({ id: "session-b" });
+  await waitFor(() => expect(result.current.cards).toEqual([other]));
+  const requests = jest.mocked(fetchOutputCards).mock.calls.length;
+  await act(async () => {
+    acknowledgement.resolve({ ...card, viewed_revision: 1 });
+    await pending;
+  });
+  expect(result.current.cards).toEqual([other]);
+  expect(fetchOutputCards).toHaveBeenCalledTimes(requests);
+  rerender({ id: "session-a" });
+  expect(result.current.cards).toEqual([{ ...nextCard, viewed_revision: 1 }]);
+  expect(markOutputViewed).toHaveBeenCalledWith("session-a", card);
+});
+
+it("marks the loaded revisions in one request without clearing a newer output", async () => {
+  const cache = new Map<string, State>();
+  const first: OutputCard = {
+    id: "a",
+    kind: "file",
+    path: "outputs/a.md",
+    name: "a.md",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 10,
+    deleted: false,
+    viewed_revision: null,
+  };
+  const second = { ...first, id: "b", path: "outputs/b.md" };
+  const seen = { ...first, id: "seen", viewed_revision: 1 };
+  const removed = { ...first, id: "removed", deleted: true };
+  const loaded = [first, second, seen, removed];
+  jest.mocked(fetchOutputCards).mockResolvedValue(loaded);
+  const acknowledgement = deferred<OutputCard[]>();
+  jest.mocked(markOutputsViewed).mockReturnValue(acknowledgement.promise);
+  const { result } = renderHook(
+    () => ({ ...useOutputCards("bulk"), mutate: useSWRConfig().mutate }),
+    {
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => cache }}>{children}</SWRConfig>
+      ),
+    }
+  );
+  await waitFor(() => expect(result.current.cards).toEqual(loaded));
+  let pending: Promise<void> | undefined;
+  act(() => {
+    pending = result.current.markAllViewed();
+  });
+  expect(markOutputsViewed).toHaveBeenCalledWith("bulk", [first, second]);
+  const newer = { ...first, revision: 2, turn_index: 1 };
+  await act(async () => {
+    await result.current.mutate(
+      [SWR_KEYS.buildSessionOutputCards("bulk"), "test-user"],
+      [newer, second],
+      false
+    );
+  });
+  jest.mocked(fetchOutputCards).mockResolvedValue([
+    { ...newer, viewed_revision: 1 },
+    { ...second, viewed_revision: 1 },
+  ]);
+  await act(async () => {
+    acknowledgement.resolve([
+      { ...first, viewed_revision: 1 },
+      { ...second, viewed_revision: 1 },
+    ]);
+    await pending;
+  });
+  expect(result.current.cards[0]).toEqual({ ...newer, viewed_revision: 1 });
+});
 
 it("replaces cached bytes across revisions and rejects late responses", async () => {
   const cache = new Map<string, State>();

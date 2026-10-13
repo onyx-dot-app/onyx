@@ -69,6 +69,30 @@ export function parsePacket(raw: unknown): ParsedPacket {
     case "prompt_response":
       return { type: "prompt_response" };
 
+    case "turn_completed": {
+      const { session_id, turn_id, turn_index, status, error_detail } = p;
+      if (
+        typeof session_id !== "string" ||
+        !session_id ||
+        typeof turn_id !== "string" ||
+        !turn_id ||
+        typeof turn_index !== "number" ||
+        !Number.isSafeInteger(turn_index) ||
+        turn_index < 0 ||
+        (status !== "SUCCEEDED" &&
+          status !== "FAILED" &&
+          status !== "CANCELLED") ||
+        (error_detail !== undefined &&
+          error_detail !== null &&
+          typeof error_detail !== "string")
+      )
+        return { type: "unknown" };
+      return {
+        type: "turn_completed",
+        turn: { session_id, turn_id, turn_index, status, error_detail },
+      };
+    }
+
     case "artifact_created":
       return parseArtifact(p);
 

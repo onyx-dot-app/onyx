@@ -10,7 +10,8 @@ import {
 } from "@/app/craft/services/outputThumbnailCache";
 import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Button, Dropdown, Text } from "@opal/components";
+import { Button, Dropdown, Tag, Text } from "@opal/components";
+import { toast } from "@opal/layouts";
 import { SvgLoader, SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
@@ -23,13 +24,21 @@ import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome
 import {
   OutputTile,
   OutputFolderTile,
+  OutputAppTile,
+  OutputUnavailableTile,
 } from "@/app/craft/components/output-panel/OutputTile";
+import type { OutputCard } from "@/app/craft/types/streamingTypes";
 
 interface OutputsTabProps {
   sessionId: string | null;
   isActive: boolean;
   searchQuery?: string;
   onFileOpen: (path: string, fileName: string) => void;
+  outputCards?: readonly OutputCard[];
+  onMarkAllViewed?: () => Promise<void>;
+  turnIndex?: number | null;
+  onTurnChange?: (turnIndex: number | null) => void;
+  onAppOpen?: (output: OutputCard) => void;
 }
 
 export default function OutputsTab(props: OutputsTabProps) {
@@ -63,13 +72,40 @@ function OutputsBrowser({
   searchQuery = "",
   userId,
   cache,
+  outputCards,
+  onMarkAllViewed,
+  turnIndex = null,
+  onTurnChange,
+  onAppOpen,
 }: OutputsTabProps & {
   userId: string | undefined;
   cache: OutputThumbnailCache;
 }) {
   const t = useTranslations("craft.outputsTab");
-  const [folder, setFolder] = useState("");
-  const [fileType, setFileType] = useState("all");
+  const turnT = useTranslations("craft.turnOutputs");
+  const [markingViewed, setMarkingViewed] = useState(false);
+  const filters = useBuildSessionStore((state) =>
+    sessionId ? state.sessions.get(sessionId)?.outputsTabState : undefined
+  );
+  const [standaloneFilters, setStandaloneFilters] = useState({
+    folder: "",
+    fileType: "all",
+  });
+  const { folder, fileType } = filters ?? standaloneFilters;
+  const setFolder = (folder: string) => {
+    if (sessionId && filters)
+      useBuildSessionStore
+        .getState()
+        .updateOutputsTabState(sessionId, { folder });
+    else setStandaloneFilters((current) => ({ ...current, folder }));
+  };
+  const setFileType = (fileType: string) => {
+    if (sessionId && filters)
+      useBuildSessionStore
+        .getState()
+        .updateOutputsTabState(sessionId, { fileType });
+    else setStandaloneFilters((current) => ({ ...current, fileType }));
+  };
   const [snapshot, setSnapshot] = useState(() =>
     userId && sessionId
       ? readOutputInventorySnapshot(userId, sessionId)
@@ -103,12 +139,35 @@ function OutputsBrowser({
     else if (liveInventory !== null && status === "complete")
       saveOutputInventorySnapshot(userId, sessionId, liveInventory);
   }, [userId, sessionId, liveInventory, status, terminal]);
-  const files = Object.values(inventory ?? {}).sort((first, second) =>
-    first.path.localeCompare(second.path)
+  const cards = terminal ? [] : (outputCards ?? []);
+  const fileCards = new Map(
+    cards
+      .filter((card) => card.kind === "file")
+      .map((card) => [card.path, card])
   );
-
+  const hasCompleteInventory = liveInventory !== null && status === "complete";
+  const indexedFiles = { ...inventory };
+  for (const card of fileCards.values()) {
+    if (
+      !indexedFiles[card.path] &&
+      (card.turn_index === turnIndex ||
+        (!card.deleted && !hasCompleteInventory))
+    )
+      indexedFiles[card.path] = {
+        path: card.path,
+        size: card.size_bytes ?? 0,
+        revision: `card:${card.revision}`,
+      };
+  }
+  const files = Object.values(indexedFiles)
+    .filter((file) =>
+      turnIndex === null
+        ? !!liveInventory?.[file.path] || !fileCards.get(file.path)?.deleted
+        : fileCards.get(file.path)?.turn_index === turnIndex
+    )
+    .sort((first, second) => first.path.localeCompare(second.path));
   const query = searchQuery.trim().toLocaleLowerCase();
-  const filtered = Boolean(query) || fileType !== "all";
+  const filtered = Boolean(query) || fileType !== "all" || turnIndex !== null;
   const prefix = folder ? `outputs/${folder}/` : "outputs/";
   const scoped = files.filter((file) => file.path.startsWith(prefix));
   const extensionOptions = [
@@ -150,6 +209,16 @@ function OutputsBrowser({
           .sort()
       : [];
   const segments = folder ? folder.split("/") : [];
+  const apps = cards.filter(
+    (card) =>
+      card.kind === "app" &&
+      (!card.deleted || turnIndex !== null) &&
+      !folder &&
+      fileType === "all" &&
+      (turnIndex === null || card.turn_index === turnIndex) &&
+      (card.name.toLocaleLowerCase().includes(query) ||
+        turnT("appTitle").toLocaleLowerCase().includes(query))
+  );
 
   return (
     <WorkspaceHome title={t("home.description")} wide>
@@ -191,32 +260,74 @@ function OutputsBrowser({
             </div>
           ))}
         </nav>
-        <Dropdown align="end">
-          <Dropdown.Trigger asChild>
+        <div className="flex items-center gap-1">
+          {onMarkAllViewed && (
             <Button
               prominence="tertiary"
               size="xs"
-              rightIcon={SvgChevronDown}
-              aria-label={t("filter.label")}
+              disabled={
+                markingViewed ||
+                !cards.some(
+                  (card) =>
+                    !card.deleted && (card.viewed_revision ?? 0) < card.revision
+                )
+              }
+              aria-busy={markingViewed}
+              onClick={async () => {
+                if (markingViewed) return;
+                setMarkingViewed(true);
+                try {
+                  await onMarkAllViewed();
+                } catch {
+                  toast.error(t("markAllViewed.error"));
+                } finally {
+                  setMarkingViewed(false);
+                }
+              }}
             >
-              {filterLabel(fileType)}
+              {t("markAllViewed.label")}
             </Button>
-          </Dropdown.Trigger>
-          <Dropdown.Data
-            label={t("filter.label")}
-            value={fileType}
-            items={filterOptions.map((type) => ({
-              kind: "option",
-              value: type,
-              title: filterLabel(type),
-            }))}
-            onSelect={(option) => {
-              setFileType(option.value);
-            }}
-          />
-        </Dropdown>
+          )}
+          <Dropdown align="end">
+            <Dropdown.Trigger asChild>
+              <Button
+                prominence="tertiary"
+                size="xs"
+                rightIcon={SvgChevronDown}
+                aria-label={t("filter.label")}
+              >
+                {filterLabel(fileType)}
+              </Button>
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("filter.label")}
+              value={fileType}
+              items={filterOptions.map((type) => ({
+                kind: "option",
+                value: type,
+                title: filterLabel(type),
+              }))}
+              onSelect={(option) => {
+                setFileType(option.value);
+              }}
+            />
+          </Dropdown>
+        </div>
       </div>
-      {visibleFiles.length === 0 && folders.length === 0 ? (
+      {turnIndex !== null && (
+        <div className="flex items-center ps-0.5 pb-3">
+          <Tag
+            title={t("scope.turn", { turn: turnIndex + 1 })}
+            color="blue"
+            size="md"
+            font="secondary-body"
+            onRemove={onTurnChange ? () => onTurnChange(null) : undefined}
+          />
+        </div>
+      )}
+      {visibleFiles.length === 0 &&
+      folders.length === 0 &&
+      apps.length === 0 ? (
         <div
           className="flex items-center justify-center gap-2 text-center"
           role="status"
@@ -230,7 +341,7 @@ function OutputsBrowser({
           )}
           <Text font="main-ui-muted" color="text-03">
             {t(
-              filtered && files.length > 0
+              turnIndex !== null || (filtered && files.length > 0)
                 ? "filtered.empty"
                 : status === "error"
                   ? "error.description"
@@ -252,23 +363,59 @@ function OutputsBrowser({
                 <OutputFolderTile
                   key={name}
                   name={name}
+                  isUnseen={cards.some(
+                    (card) =>
+                      !card.deleted &&
+                      (turnIndex === null || card.turn_index === turnIndex) &&
+                      (card.viewed_revision ?? 0) < card.revision &&
+                      card.path.startsWith(`${prefix}${name}/`)
+                  )}
                   onOpen={() => setFolder(folder ? `${folder}/${name}` : name)}
                 />
               ))}
             </div>
           )}
-          {sessionId && visibleFiles.length > 0 && (
+          {sessionId && (visibleFiles.length > 0 || apps.length > 0) && (
             <div className="grid grid-cols-2 gap-2 @[24rem]:grid-cols-3">
-              {visibleFiles.map((file) => (
-                <OutputTile
-                  key={file.path}
-                  sessionId={sessionId}
-                  file={file}
-                  showPath={filtered}
-                  isActive={isActive && liveInventory !== null}
-                  onFileOpen={onFileOpen}
-                />
-              ))}
+              {apps.map((app) =>
+                app.deleted ? (
+                  <OutputUnavailableTile key={app.id} card={app} />
+                ) : (
+                  <OutputAppTile
+                    key={app.id}
+                    name={turnT("appTitle")}
+                    isUnseen={(app.viewed_revision ?? 0) < app.revision}
+                    onOpen={() => onAppOpen?.(app)}
+                  />
+                )
+              )}
+              {visibleFiles.map((file) => {
+                const card = fileCards.get(file.path);
+                return card &&
+                  !liveInventory?.[file.path] &&
+                  (card.deleted || hasCompleteInventory) ? (
+                  <OutputUnavailableTile
+                    key={file.path}
+                    card={card}
+                    showPath={filtered}
+                  />
+                ) : (
+                  <OutputTile
+                    key={file.path}
+                    sessionId={sessionId}
+                    file={file}
+                    showPath={filtered}
+                    isActive={isActive && !!liveInventory?.[file.path]}
+                    isUnseen={
+                      !!card &&
+                      !card.deleted &&
+                      (turnIndex === null || card.turn_index === turnIndex) &&
+                      (card.viewed_revision ?? 0) < card.revision
+                    }
+                    onFileOpen={onFileOpen}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

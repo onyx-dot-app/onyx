@@ -18,6 +18,7 @@ import {
   SharingScope,
   ApiSessionSkillsState,
   type OutputInventory,
+  type OutputCard,
 } from "@/app/craft/types/streamingTypes";
 import {
   ApprovalListResponse,
@@ -622,6 +623,69 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
 // =============================================================================
 // Webapp API
 // =============================================================================
+
+export async function fetchOutputCards(
+  sessionId: string
+): Promise<OutputCard[]> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards`
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to fetch output cards: ${response.status}`,
+      response.status,
+      null
+    );
+  const result: { cards: OutputCard[] } = await response.json();
+  return result.cards;
+}
+
+export async function markOutputsViewed(
+  sessionId: string,
+  cards: readonly OutputCard[]
+): Promise<OutputCard[]> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards/viewed`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        revisions: Object.fromEntries(
+          cards.map((card) => [card.id, card.revision])
+        ),
+      }),
+    }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to mark outputs viewed: ${response.status}`,
+      response.status,
+      null
+    );
+  const result: { cards: OutputCard[] } = await response.json();
+  return result.cards;
+}
+
+export async function markOutputViewed(
+  sessionId: string,
+  card: OutputCard
+): Promise<OutputCard> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards/${card.id}/viewed`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revision: card.revision }),
+    }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to mark output viewed: ${response.status}`,
+      response.status,
+      null
+    );
+  return response.json();
+}
 
 export async function fetchWebappInfo(
   sessionId: string,

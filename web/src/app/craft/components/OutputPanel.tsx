@@ -1,14 +1,21 @@
 "use client";
 
 import { useUser } from "@/providers/UserProvider";
-import { memo, useState, useEffect, useCallback, useRef } from "react";
+import {
+  memo,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+} from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { SelectCard, Text } from "@opal/components";
 import { SvgFiles, SvgFolder, SvgGlobe } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { downloadFile } from "@/lib/download";
-import { useOutputWebapps } from "@/lib/build/hooks";
+import { useOutputWebapps, useOutputCards } from "@/lib/build/hooks";
 import {
   useOutputSession,
   useSessionId,
@@ -150,6 +157,17 @@ function OutputResources({
   const preProvisionedSessionId = usePreProvisionedSessionId();
   const isProvisioning = useIsPreProvisioning();
   const contentSessionId = sessionId ?? preProvisionedSessionId;
+  const {
+    cards: outputCards,
+    markViewed,
+    markAllViewed,
+  } = useOutputCards(contentSessionId);
+  const outputsTabState = useBuildSessionStore((state) =>
+    contentSessionId
+      ? state.sessions.get(contentSessionId)?.outputsTabState
+      : undefined
+  );
+  const outputsTurnIndex = outputsTabState?.turnIndex ?? null;
   const runtimeReady = sessionId
     ? session?.sandbox?.status === "running"
     : !!preProvisionedSessionId && !isProvisioning;
@@ -171,7 +189,44 @@ function OutputResources({
     (state) => state.navigateBrowserTab
   );
   const [search, setSearch] = useState("");
-  const [outputsSearch, setOutputsSearch] = useState("");
+  const [sessionlessOutputsSearch, setSessionlessOutputsSearch] = useState("");
+  // Move the welcome query into its provisioned session before the next paint.
+  useLayoutEffect(() => {
+    if (
+      sessionId ||
+      !contentSessionId ||
+      !outputsTabState ||
+      !sessionlessOutputsSearch
+    )
+      return;
+    useBuildSessionStore.getState().updateOutputsTabState(contentSessionId, {
+      searchQuery: sessionlessOutputsSearch,
+    });
+    setSessionlessOutputsSearch("");
+  }, [sessionId, contentSessionId, outputsTabState, sessionlessOutputsSearch]);
+  const outputsSearch =
+    outputsTabState?.searchQuery ?? sessionlessOutputsSearch;
+  const setOutputsSearch = (searchQuery: string) => {
+    if (!contentSessionId || !outputsTabState) {
+      setSessionlessOutputsSearch(searchQuery);
+      return;
+    }
+    useBuildSessionStore
+      .getState()
+      .updateOutputsTabState(contentSessionId, { searchQuery });
+  };
+  const openFile = (path: string, name: string) => {
+    useBuildSessionStore.getState().openFilePreview(sessionId, path, name);
+    const card = outputCards.find(
+      (output) => output.kind === "file" && output.path === path
+    );
+    if (card) void markViewed(card);
+  };
+  const markAppViewed = (appId: string | null) => {
+    if (appId !== contentSessionId) return;
+    const card = outputCards.find((output) => output.kind === "app");
+    if (card) void markViewed(card);
+  };
   const visitedId = isOpen && active?.kind === "file" ? activeId : null;
   const [storedResources, setResources] = useState(() =>
     reconcileResources(undefined, tabs, visitedId)
@@ -373,7 +428,16 @@ function OutputResources({
         <ResourceTabStrip
           tabs={tabs}
           activeTabId={activeId}
-          onSelect={(id) => select(sessionId, id)}
+          onSelect={(id) => {
+            select(sessionId, id);
+            const tab = tabs.find((candidate) => panelTabId(candidate) === id);
+            if (tab?.kind === "file") {
+              const card = outputCards.find(
+                (output) => output.kind === "file" && output.path === tab.path
+              );
+              if (card) void markViewed(card);
+            } else if (tab?.kind === "browser") markAppViewed(tab.appId);
+          }}
           onClose={(id) => close(sessionId, id)}
           onReorder={(id, index) => reorder(sessionId, id, index)}
           onOpenOutputs={() => openOutputs(sessionId)}
@@ -526,25 +590,27 @@ function OutputResources({
                 <OutputsTab
                   sessionId={contentSessionId}
                   searchQuery={outputsSearch}
+                  outputCards={outputCards}
+                  onMarkAllViewed={markAllViewed}
+                  turnIndex={outputsTurnIndex}
+                  onTurnChange={(turnIndex) => {
+                    if (contentSessionId)
+                      useBuildSessionStore
+                        .getState()
+                        .updateOutputsTabState(contentSessionId, { turnIndex });
+                  }}
+                  onAppOpen={(card) => {
+                    openBrowser(sessionId, contentSessionId ?? undefined);
+                    void markViewed(card);
+                  }}
                   isActive={visible && runtimeReady}
-                  onFileOpen={(path, name) =>
-                    useBuildSessionStore
-                      .getState()
-                      .openFilePreview(sessionId, path, name)
-                  }
+                  onFileOpen={openFile}
                 />
               ) : tab.kind === "files" ? (
                 <FilesTab
                   sessionId={contentSessionId}
                   searchQuery={search}
-                  onFileClick={
-                    contentSessionId
-                      ? (path, fileName) =>
-                          useBuildSessionStore
-                            .getState()
-                            .openFilePreview(sessionId, path, fileName)
-                      : undefined
-                  }
+                  onFileClick={contentSessionId ? openFile : undefined}
                   refreshKey={resource.refreshKey}
                   onRefreshingChange={onFilesLoading}
                   isProvisioning={!sessionId && isProvisioning}
@@ -580,14 +646,15 @@ function OutputResources({
                   refreshKey={
                     resource.refreshKey + (session?.webappNeedsRemount ?? 0)
                   }
-                  onNavigate={(appId) =>
+                  onNavigate={(appId) => {
+                    markAppViewed(appId);
                     navigateBrowser(
                       sessionId,
                       id,
                       appId,
                       apps.find((app) => app.id === appId)?.name
-                    )
-                  }
+                    );
+                  }}
                 />
               ) : null}
             </div>

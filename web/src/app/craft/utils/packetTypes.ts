@@ -8,6 +8,7 @@
  */
 
 import type { TodoItem } from "@/app/craft/types/displayTypes";
+import type { CompletedInteractiveTurn } from "@/app/craft/types/streamingTypes";
 
 // ─── Raw Packet Field Access ─────────────────────────────────────────
 // Every backend field name variant is listed ONCE here.
@@ -160,6 +161,11 @@ export interface ParsedPromptResponse {
   type: "prompt_response";
 }
 
+export interface ParsedTurnCompleted {
+  type: "turn_completed";
+  turn: CompletedInteractiveTurn;
+}
+
 export interface ParsedArtifact {
   type: "artifact_created";
   artifact: {
@@ -215,6 +221,7 @@ export type ParsedPacket =
   | ParsedToolCallStart
   | ParsedToolCallProgress
   | ParsedPromptResponse
+  | ParsedTurnCompleted
   | ParsedArtifact
   | ParsedApprovalRequested
   | ParsedSubagentStarted

@@ -19,6 +19,7 @@ import {
   fetchFileContent,
   fetchOutputInventory,
   fetchPptxPreview,
+  fetchOutputCards,
 } from "@/app/craft/services/apiServices";
 import type { OutputInventory } from "@/app/craft/types/streamingTypes";
 
@@ -42,6 +43,7 @@ jest.mock("@/lib/download", () => ({ downloadFile: jest.fn() }));
 jest.mock("@/app/craft/services/apiServices", () => ({
   ...jest.requireActual("@/app/craft/services/apiServices"),
   fetchArtifacts: jest.fn().mockResolvedValue([]),
+  fetchOutputCards: jest.fn().mockResolvedValue([]),
   fetchDirectoryListing: jest.fn(),
   fetchFileContent: jest.fn(),
   fetchOutputInventory: jest.fn(),
@@ -164,6 +166,7 @@ const runningSandbox = {
 
 beforeEach(() => {
   mockRenderActualResources = false;
+  jest.mocked(fetchOutputCards).mockResolvedValue([]);
   jest
     .mocked(fetchDirectoryListing)
     .mockResolvedValue({ path: "", entries: [] });
@@ -185,6 +188,51 @@ beforeEach(() => {
 });
 
 // Resource lifecycle and toolbar callbacks
+
+it("clears all collection filters when opening the same turn again", () => {
+  mockRenderActualResources = true;
+  store().openOutputsTab(sessionId, 0);
+  store().updateOutputsTabState(sessionId, {
+    searchQuery: "hidden",
+    folder: "reports",
+    fileType: "extension:pdf",
+  });
+  render(<BuildOutputPanel panelMode="medium" />);
+  expect(screen.getByPlaceholderText("Search outputs")).toHaveValue("hidden");
+  act(() => store().openOutputsTab(sessionId, 0));
+  expect(screen.getByPlaceholderText("Search outputs")).toHaveValue("");
+  expect(store().sessions.get(sessionId)?.outputsTabState).toEqual({
+    turnIndex: 0,
+    searchQuery: "",
+    folder: "",
+    fileType: "all",
+  });
+});
+
+it("clears only the turn filter from the colored Outputs pill", async () => {
+  mockRenderActualResources = true;
+  store().openOutputsTab(sessionId, 3);
+  store().updateOutputsTabState(sessionId, {
+    searchQuery: "report",
+    folder: "reports",
+    fileType: "extension:pdf",
+  });
+  render(<BuildOutputPanel panelMode="medium" />);
+  expect(
+    screen.getByText("Turn 4 outputs").closest("[data-color]")
+  ).toHaveAttribute("data-color", "blue");
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove Turn 4 outputs" })
+  );
+  expect(screen.queryByText("Turn 4 outputs")).not.toBeInTheDocument();
+  expect(store().sessions.get(sessionId)?.outputsTabState).toEqual({
+    turnIndex: null,
+    searchQuery: "report",
+    folder: "reports",
+    fileType: "extension:pdf",
+  });
+  await act(async () => {});
+});
 
 it.each([false, true])(
   "disables reload while a Files read is pending (welcome: %s)",
@@ -809,6 +857,67 @@ describe("Files integration", () => {
       expect(refresh).toHaveAttribute("aria-busy", "false");
     }
   );
+
+  it("preserves welcome Outputs filters through provisioning and claim", async () => {
+    const store = () => useBuildSessionStore.getState();
+    useBuildSessionStore.setState({
+      sessions: new Map(),
+      preProvisioning: { status: "idle" },
+    });
+    store().setCurrentSession(null);
+    store().openOutputsTab(null);
+    render(<BuildOutputPanel panelMode="medium" />);
+    const search = screen.getByRole("textbox", { name: "Search outputs" });
+    fireEvent.change(search, { target: { value: "notes" } });
+    act(() => {
+      store().createSession("provisioned");
+      useBuildSessionStore.setState({
+        preProvisioning: { status: "ready", sessionId: "provisioned" },
+      });
+    });
+    expect(search).toHaveValue("notes");
+    act(() =>
+      store().updateOutputsTabState("provisioned", {
+        folder: "reports",
+        fileType: "extension:md",
+      })
+    );
+    act(() => {
+      useBuildSessionStore.setState({
+        preProvisioning: { status: "starting", sessionId: "provisioned" },
+      });
+      store().createSession("provisioned");
+      store().setCurrentSession("provisioned");
+    });
+    expect(search).toHaveValue("notes");
+    expect(store().sessions.get("provisioned")?.outputsTabState).toEqual({
+      searchQuery: "notes",
+      folder: "reports",
+      fileType: "extension:md",
+      turnIndex: null,
+    });
+    act(() => {
+      store().createSession("saved");
+      store().updateOutputsTabState("saved", { searchQuery: "saved query" });
+      store().setCurrentSession("saved");
+      store().openOutputsTab("saved");
+      store().updateOutputsTabState("saved", { searchQuery: "saved query" });
+    });
+    expect(screen.getByRole("textbox", { name: "Search outputs" })).toHaveValue(
+      "saved query"
+    );
+    act(() => {
+      store().setCurrentSession(null);
+      store().openOutputsTab(null);
+    });
+    expect(screen.getByRole("textbox", { name: "Search outputs" })).toHaveValue(
+      ""
+    );
+    expect(store().sessions.get("saved")?.outputsTabState.searchQuery).toBe(
+      "saved query"
+    );
+    await act(async () => {});
+  });
 
   it("preserves welcome search through provisioning and claim, and clears it for another session", async () => {
     const store = () => useBuildSessionStore.getState();

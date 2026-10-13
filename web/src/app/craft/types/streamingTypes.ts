@@ -144,6 +144,10 @@ export interface ApiInteractiveTurnResponse {
   error_detail?: string | null;
 }
 
+export interface CompletedInteractiveTurn extends ApiInteractiveTurnResponse {
+  status: "SUCCEEDED" | "FAILED" | "CANCELLED";
+}
+
 export interface ApiArtifactResponse {
   id: string;
   session_id: string;
@@ -167,6 +171,18 @@ export interface OutputFile {
   path: string;
   revision: string;
   size: number;
+}
+
+export interface OutputCard {
+  id: string;
+  kind: "file" | "app";
+  path: string;
+  name: string;
+  turn_index: number;
+  revision: number;
+  size_bytes: number | null;
+  deleted: boolean;
+  viewed_revision: number | null;
 }
 
 export interface OutputInventory {
