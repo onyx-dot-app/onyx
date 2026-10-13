@@ -454,6 +454,13 @@ there.
   `upstream_url_patterns` in the admin response; an admin on Cloud can only
   toggle enablement and edit policy for these, by design
   (`docs/craft/features/external-apps/cloud-managed-app-credentials.md`).
+- **A built-in's gateway config comes from its provider, not the form.**
+  `upstream_url_patterns` for a built-in are derived on every admin write
+  (`external_apps/api.py:_provider_url_patterns`), so a provider on a
+  per-account host narrows them to the account configured. The derivation runs
+  on mask-restored credentials — the admin response masks secrets and the form
+  echoes them back, so deriving from the raw request would read a mask as
+  configuration.
 - **`app_type` is immutable on update.** `update_external_app` raises rather
   than allowing a cross-edit between built-in and custom; deleting and
   recreating is the only path to change it.

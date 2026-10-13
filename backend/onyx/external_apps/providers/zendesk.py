@@ -86,7 +86,6 @@ class ZendeskAction(ExternalAppAction):
     TICKET_FIELDS_READ = "zendesk.ticket_fields.read"
     TICKETS_CREATE = "zendesk.tickets.create"
     TICKETS_UPDATE = "zendesk.tickets.update"
-    TICKET_TAGS_UPDATE = "zendesk.tickets.tags.update"
     TICKETS_DELETE = "zendesk.tickets.delete"
 
 
@@ -219,21 +218,23 @@ _ENDPOINTS: list[EndpointSpec] = [
         id=ZendeskAction.TICKETS_UPDATE,
         normalised_name="Update a ticket",
         description=(
-            "Change a ticket's fields or add a comment to it — Zendesk adds "
-            "both public replies and internal notes through a ticket update."
+            "Change a ticket's fields, tags, or add a comment to it — Zendesk "
+            "adds both public replies and internal notes through a ticket "
+            "update."
         ),
-        matches=_routes(
-            "PUT",
-            "/api/v2/tickets/{ticket_id}",
-            "/api/v2/tickets/update_many",
-        ),
-    ),
-    EndpointSpec(
-        id=ZendeskAction.TICKET_TAGS_UPDATE,
-        normalised_name="Change a ticket's tags",
-        description="Add or replace the tags on a ticket.",
+        # Tags deliberately share this action rather than getting their own.
+        # Zendesk sets tags both through the dedicated `/tags` routes and
+        # through a `tags` field on a plain ticket update, and the REST matcher
+        # recognises a request by method and path only. A separate tag action
+        # would therefore be governed on one route and silently bypassed on the
+        # other, which is worse than one honest action covering both.
         matches=(
-            *_routes("PUT", "/api/v2/tickets/{ticket_id}/tags"),
+            *_routes(
+                "PUT",
+                "/api/v2/tickets/{ticket_id}",
+                "/api/v2/tickets/update_many",
+                "/api/v2/tickets/{ticket_id}/tags",
+            ),
             *_routes("POST", "/api/v2/tickets/{ticket_id}/tags"),
         ),
     ),

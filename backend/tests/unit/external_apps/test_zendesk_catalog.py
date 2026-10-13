@@ -21,7 +21,6 @@ _CATALOG = get_endpoint_catalog(ExternalAppType.ZENDESK)
 _WRITE_ACTIONS = {
     ZendeskAction.TICKETS_CREATE,
     ZendeskAction.TICKETS_UPDATE,
-    ZendeskAction.TICKET_TAGS_UPDATE,
     ZendeskAction.TICKETS_DELETE,
 }
 
@@ -83,8 +82,9 @@ def _matching_actions(method: str, path: str) -> set[str]:
         ("POST", "/api/v2/tickets/create_many", {ZendeskAction.TICKETS_CREATE}),
         ("PUT", "/api/v2/tickets/12345", {ZendeskAction.TICKETS_UPDATE}),
         ("PUT", "/api/v2/tickets/update_many", {ZendeskAction.TICKETS_UPDATE}),
-        ("PUT", "/api/v2/tickets/12345/tags", {ZendeskAction.TICKET_TAGS_UPDATE}),
-        ("POST", "/api/v2/tickets/12345/tags", {ZendeskAction.TICKET_TAGS_UPDATE}),
+        # Tags share the ticket-update action; see the catalog comment.
+        ("PUT", "/api/v2/tickets/12345/tags", {ZendeskAction.TICKETS_UPDATE}),
+        ("POST", "/api/v2/tickets/12345/tags", {ZendeskAction.TICKETS_UPDATE}),
         ("DELETE", "/api/v2/tickets/12345", {ZendeskAction.TICKETS_DELETE}),
         # A read route under a write method (or vice versa) matches nothing, so
         # the gate falls back to asking about the whole domain.
@@ -122,6 +122,21 @@ def test_ticket_id_placeholder_absorbs_the_json_suffix() -> None:
     assert _matching_actions("GET", "/api/v2/tickets/12345.json") == {
         ZendeskAction.TICKETS_READ
     }
+
+
+def test_tags_cannot_be_changed_outside_the_ticket_update_action() -> None:
+    """Zendesk sets tags both on `/tags` and through a `tags` field on a plain
+    ticket update, and the REST matcher sees method and path only. Every route
+    that can change a tag must therefore resolve to the same action, or an
+    admin's choice would hold on one route and be bypassed on the other."""
+    tag_routes = [
+        ("PUT", "/api/v2/tickets/12345/tags"),
+        ("POST", "/api/v2/tickets/12345/tags"),
+        ("PUT", "/api/v2/tickets/12345"),
+        ("PUT", "/api/v2/tickets/update_many"),
+    ]
+    for method, path in tag_routes:
+        assert _matching_actions(method, path) == {ZendeskAction.TICKETS_UPDATE}
 
 
 def test_every_catalog_id_is_unique() -> None:

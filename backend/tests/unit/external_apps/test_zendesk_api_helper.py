@@ -96,6 +96,75 @@ def test_next_page_url_covers_every_paging_shape(
     assert zendesk._next_page_url(page, _BASE) == expected
 
 
+def test_changed_requires_exactly_one_starting_point() -> None:
+    """A resuming export must say where it resumes from — a `--since` and a
+    `--cursor` together would silently ignore one of them."""
+    parser = zendesk._build_parser()
+    for argv in (
+        ["--site", "acme", "changed"],
+        ["--site", "acme", "changed", "--since", "1759276800", "--cursor", "c"],
+    ):
+        with pytest.raises(zendesk.ZendeskError):
+            zendesk._incremental_tickets(
+                "https://acme.zendesk.com", parser.parse_args(argv)
+            )
+
+
+def test_changed_stops_on_a_page_boundary_and_returns_the_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cursor must be safe to resume from: every ticket before it is in
+    this result, so the walk may never stop part-way through a page."""
+    pages = [
+        {
+            "tickets": [{"id": 1}, {"id": 2}],
+            "after_cursor": "c1",
+            "after_url": f"{_BASE}/api/v2/incremental/tickets/cursor.json?cursor=c1",
+            "end_of_stream": False,
+        },
+        {"tickets": [{"id": 3}], "after_cursor": "c2", "end_of_stream": True},
+    ]
+    calls: list[str] = []
+
+    def _fake_request(
+        _base: str, _method: str, path: str, _body: object = None
+    ) -> object:
+        calls.append(path)
+        return pages[len(calls) - 1]
+
+    monkeypatch.setattr(zendesk, "_request", _fake_request)
+    args = zendesk._build_parser().parse_args(
+        ["--site", "acme", "changed", "--since", "1759276800", "--limit", "1"]
+    )
+    result = zendesk._incremental_tickets(_BASE, args)
+
+    # --limit 1 is a floor: the first page is consumed whole, then the walk stops.
+    assert result["count"] == 2
+    assert result["cursor"] == "c1"
+    assert result["end_of_stream"] is False
+    assert len(calls) == 1
+
+
+def test_changed_resumes_from_a_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[str] = []
+
+    def _fake_request(
+        _base: str, _method: str, path: str, _body: object = None
+    ) -> object:
+        captured.append(path)
+        return {"tickets": [], "after_cursor": "c9", "end_of_stream": True}
+
+    monkeypatch.setattr(zendesk, "_request", _fake_request)
+    args = zendesk._build_parser().parse_args(
+        ["--site", "acme", "changed", "--cursor", "c8"]
+    )
+    result = zendesk._incremental_tickets(_BASE, args)
+    assert "cursor=c8" in captured[0]
+    assert "start_time" not in captured[0]
+    assert result["cursor"] == "c9"
+    assert result["end_of_stream"] is True
+
+
 def test_ids_are_percent_encoded_into_the_path() -> None:
     assert (
         zendesk._path("/api/v2/tickets/{0}.json", "12/3?x")
@@ -132,10 +201,25 @@ def test_search_only_slims_ticket_hits() -> None:
     assert zendesk._slim_result(user, full=False) == user
 
     ticket = {"result_type": "ticket", "id": 1, "subject": "s", "ticket_form_id": 9}
-    assert zendesk._slim_result(ticket, full=False) == {"id": 1, "subject": "s"}
+    assert zendesk._slim_result(ticket, full=False) == {
+        "id": 1,
+        "subject": "s",
+        "result_type": "ticket",
+    }
 
     # A payload with no result_type (a plain ticket list) still slims.
     assert zendesk._slim_result({"id": 1, "ticket_form_id": 9}, full=False) == {"id": 1}
+
+
+def test_search_keeps_result_type_on_a_slimmed_ticket() -> None:
+    """`result_type` is what tells a mixed result set apart, so it survives the
+    ticket field list."""
+    hit = {"result_type": "ticket", "id": 1, "subject": "s", "ticket_form_id": 9}
+    assert zendesk._slim_result(hit, full=False) == {
+        "id": 1,
+        "subject": "s",
+        "result_type": "ticket",
+    }
 
 
 def test_slim_keeps_the_readable_subset_unless_full() -> None:

@@ -151,7 +151,12 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
   their static descriptor patterns; one hosted per account (Zendesk) narrows
   them to the configured account's host. `organization_credentials` and (on
   `ExternalAppUserCredential`) `user_credentials` are `EncryptedJson` /
-  `SensitiveValue`, read only via `.get_value(apply_mask=False)`.
+  `SensitiveValue`, read only via `.get_value(apply_mask=False)`. The admin
+  response masks them, except the fields a provider declares non-secret
+  (`OrgCredentialField.secret=False` — a client id, a Zendesk subdomain), which
+  go back in the clear so the admin can read their own configuration and the
+  form does not echo a mask back on save
+  (`external_apps/api.py:_visible_org_credentials`).
 - `ExternalAppUserCredential` (`models.py`): one row per `(external_app_id,
   user_id)`. `granted_scopes` is `NULL` when the provider didn't report a
   scope grant, a list when it did; the two must not be conflated.

@@ -115,10 +115,17 @@ def _slim(ticket: Any, full: bool) -> Any:
 def _slim_result(result: Any, full: bool) -> Any:
     """One search hit. Search spans tickets, users and organizations, so only a
     ticket may be cut down to the ticket field list — slimming a user would
-    drop the very `name` and `email` the agent searched for."""
-    if isinstance(result, dict) and result.get("result_type") not in (None, "ticket"):
+    drop the very `name` and `email` the agent searched for. `result_type` is
+    kept either way: it is what tells a mixed result set apart."""
+    if not isinstance(result, dict):
         return result
-    return _slim(result, full)
+    result_type = result.get("result_type")
+    if result_type not in (None, "ticket"):
+        return result
+    slimmed = _slim(result, full)
+    if result_type is not None and isinstance(slimmed, dict):
+        slimmed["result_type"] = result_type
+    return slimmed
 
 
 def _request(
@@ -198,6 +205,50 @@ def _next_page_url(page: dict[str, Any], base_url: str) -> str | None:
     return candidate
 
 
+def _incremental_tickets(base_url: str, a: argparse.Namespace) -> dict[str, Any]:
+    """The cursor incremental export: the one endpoint built for "what moved
+    since last run", which is how a scheduled task should poll.
+
+    Stops only on a page boundary, so the ``cursor`` it returns is always a
+    safe place to resume from: every ticket before it is in this result and
+    none after it is. ``--limit`` is therefore a floor rounded up to the next
+    page, not a hard cap."""
+    if a.limit <= 0:
+        raise ZendeskError("limit must be a positive integer")
+    if (a.since is None) == (a.cursor is None):
+        raise ZendeskError("pass exactly one of --since or --cursor")
+
+    params: dict[str, Any] = (
+        {"cursor": a.cursor} if a.cursor else {"start_time": _epoch_seconds(a.since)}
+    )
+    params["per_page"] = min(_PAGE_SIZE, a.limit)
+    url: str | None = (
+        f"{base_url}/api/v2/incremental/tickets/cursor.json{_query(params)}"
+    )
+
+    tickets: list[Any] = []
+    cursor: str | None = a.cursor
+    end_of_stream = False
+    while url:
+        page = _request(base_url, "GET", url[len(base_url) :])
+        tickets.extend(page.get("tickets") or [])
+        after_cursor = page.get("after_cursor")
+        if isinstance(after_cursor, str):
+            cursor = after_cursor
+        end_of_stream = page.get("end_of_stream") is True
+        # Break after consuming the page, never mid-page: the cursor has
+        # already moved past every ticket this page carried.
+        url = None if len(tickets) >= a.limit else _next_page_url(page, base_url)
+
+    return {
+        "ok": True,
+        "tickets": [_slim(ticket, a.full) for ticket in tickets],
+        "count": len(tickets),
+        "cursor": cursor,
+        "end_of_stream": end_of_stream,
+    }
+
+
 def _pairs(pairs: list[str]) -> dict[str, Any]:
     """Parse repeated ``--set key=value`` flags into a field dict. Values that
     parse as JSON (numbers, booleans, arrays) keep that type."""
@@ -254,8 +305,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument(
         "--since",
-        required=True,
         help="unix timestamp or ISO-8601 instant, e.g. 2026-10-01T00:00:00Z",
+    )
+    sp.add_argument(
+        "--cursor",
+        help="resume from the `cursor` a previous run returned",
     )
     sp.add_argument("--limit", type=int, default=_DEFAULT_LIMIT)
 
@@ -352,12 +406,7 @@ def _dispatch_read(a: argparse.Namespace) -> dict[str, Any] | None:
         return {"ok": True, "ticket_metric": metric}
 
     if a.cmd == "changed":
-        # Cursor-based incremental export: the one endpoint built for "what
-        # moved since last run", which is how a scheduled task should poll.
-        params = {"start_time": _epoch_seconds(a.since)}
-        return _paginate(
-            site, "/api/v2/incremental/tickets/cursor.json", "tickets", a.limit, params
-        )
+        return _incremental_tickets(site, a)
 
     if a.cmd == "views":
         return _paginate(site, "/api/v2/views.json", "views", a.limit)

@@ -44,12 +44,21 @@ python zendesk_api.py --site acme metrics 12345
 ### What changed since last time
 
 For a scheduled task, poll the incremental export rather than re-searching the
-whole backlog. `--since` takes a unix timestamp or an ISO-8601 instant, and
-must be at least a minute in the past.
+whole backlog. Start from a time, then resume from the `cursor` the previous
+run returned — that is what makes a repeating task skip nothing and re-read
+nothing.
 
 ```
 python zendesk_api.py --site acme changed --since 2026-10-01T00:00:00Z [--limit N]
+python zendesk_api.py --site acme changed --cursor <cursor from last run>
 ```
+
+`--since` takes a unix timestamp or an ISO-8601 instant and must be at least a
+minute in the past. Pass exactly one of `--since` and `--cursor`. The result
+carries `cursor` and `end_of_stream`: keep calling with the new `cursor` until
+`end_of_stream` is true, and store that last `cursor` for the next run. Here
+`--limit` is a floor — the export stops at a page boundary, so the `cursor` is
+always safe to resume from.
 
 ### Queues, people, and feedback
 
@@ -91,6 +100,7 @@ next call.
 - `--set key=value` is repeatable and takes Zendesk ticket field names
   (`status`, `priority`, `assignee_id`, `group_id`). A value that parses as JSON
   keeps its type, so `--set assignee_id=123` sends a number.
-- `tag` adds tags; `--replace` overwrites the whole tag set.
+- `tag` adds tags; `--replace` overwrites the whole tag set. Zendesk treats a
+  tag change as a ticket update, so it follows the "Update a ticket" setting.
 - `call` lets you hit any v2 endpoint: `call <METHOD> /api/v2/... [json_body]`.
   Pass user input as the JSON body, not by string-formatting into the path.
