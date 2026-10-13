@@ -25,9 +25,16 @@ from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
 from typing import TypeVar
 
+from onyx.connectors.capability_checks.findings import bounded_count
+from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
+    CheckFindingKey,
+    CheckOutput,
+    CountFinding,
     CredentialCapability,
 )
 from onyx.connectors.exceptions import (
@@ -87,6 +94,10 @@ _PROBE_PAGE_SIZE = 1
 # mailbox that opens. Graph may hand back empty continuation pages, so the
 # bound is on pages rather than users.
 _CANDIDATE_PAGES = 20
+
+# A bound on the pages the mailbox count reads. Pages hold up to 999 users, so
+# the count reaches its cap long before this unless Graph sends empty pages.
+_COUNT_PAGES = 20
 
 _TOKEN_ENDPOINT_DENIED = "Microsoft's token endpoint refused the request."
 
@@ -306,10 +317,82 @@ class _MailboxListingCheck(CapabilityCheck):
             raise_for_graph_error(e, USER_LISTING_DENIED)
 
 
+def _tenant_mailboxes(
+    gateway: OutlookSourceOperations,
+) -> Generator[OutlookMailbox, None, None]:
+    """The tenant's mailbox users, read one page at a time."""
+    next_link: str | None = None
+    for _ in range(_COUNT_PAGES):
+        page: OutlookMailboxPage = gateway.list_mailbox_users(next_link=next_link)
+        yield from page.mailboxes
+        next_link = page.next_link
+        if next_link is None:
+            return
+    raise UnexpectedValidationError(
+        f"The tenant's user listing did not end within {_COUNT_PAGES} pages."
+    )
+
+
+class _MailboxCountCheck(CapabilityCheck[OutlookConnectorConfig]):
+    """Counts the enabled users with a mail address: the mailboxes indexing
+    walks in every-mailbox mode. It does not probe each mailbox, so a mailbox
+    outside the app's Exchange scope still counts. Separate from
+    ``outlook_mailbox_listing``, which reads one user to validate. A config
+    that lists mailboxes or groups walks only those, so the tenant count does
+    not apply to it."""
+
+    config_class = OutlookConnectorConfig
+
+    def __init__(self) -> None:
+        super().__init__(
+            capability=CredentialCapability.INDEXING,
+            check_id="outlook_mailbox_count",
+            display_name="Counts the tenant's mailboxes",
+            requires_connector_instance=False,
+            remediation=(
+                "Grant the `User.Read.All` application permission to the app "
+                "registration and admin-consent it."
+            ),
+            docs_link=_OUTLOOK_DOCS_LINK,
+            discovery=True,
+        )
+
+    def applies(self, form_state: FormState[OutlookConnectorConfig]) -> bool:
+        config: OutlookConnectorConfig = form_state.config
+        return not configured_addresses(config) and not configured_groups(config)
+
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        try:
+            finding: CountFinding = bounded_count(
+                _tenant_mailboxes(_gateway(context)),
+                key=CheckFindingKey.READABLE_MAILBOXES,
+                cap=MAX_FINDING_OPTIONS,
+            )
+        except OutlookGraphError as e:
+            raise_for_graph_error(e, USER_LISTING_DENIED)
+        return CheckOutput(findings=[finding])
+
+
+_ATTACHMENTS_NOT_VERIFIED_NO_ATTACHMENTS = (
+    "The sample message has no attachments, so the check did not verify that "
+    "the app can read attachments."
+)
+_ATTACHMENTS_NOT_VERIFIED_GONE = (
+    "The sample message was not found when the check read its attachments, so "
+    "the check did not verify that the app can read attachments."
+)
+
+
+def _advise(message: str) -> CheckOutput:
+    return CheckOutput(advisories=[CheckAdvisory(message=message)])
+
+
 class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     """Reads folders, one delta page, one message body and, when that message
     has any, its attachment records. Proves ``Mail.Read`` and that the mailbox
-    is inside the app's Exchange scope. A config-less run reads any mailbox."""
+    is inside the app's Exchange scope. A config-less run reads any mailbox.
+    A read it cannot make (an empty mailbox, a sample without attachments)
+    passes with an advisory."""
 
     config_class = OutlookConnectorConfig
 
@@ -323,9 +406,10 @@ class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
             docs_link=_OUTLOOK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
         gateway = _gateway(context)
-        mailbox, inbox = _open_sample_mailbox(gateway, self.config(context))
+        config = self.config(context)
+        mailbox, inbox = _open_sample_mailbox(gateway, config)
         try:
             gateway.get_well_known_folder(
                 mailbox_id=mailbox.id, name=_PROBE_WELL_KNOWN_FOLDER
@@ -343,14 +427,21 @@ class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
             sample = gateway.read_any_message(mailbox_id=mailbox.id)
         except OutlookGraphError as e:
             raise_for_graph_error(e, _BODY_DENIED)
-        # Nothing to read means nothing proven, which is not a pass.
         if sample is None:
-            raise UnexpectedValidationError(
-                f"`{mailbox.address}` holds no messages, so body access could not "
-                "be proven. List a mailbox that has mail to verify it."
+            # The admin typed a configured address, so the advisory may name
+            # it. A mailbox the walk sampled stays unnamed.
+            subject = (
+                f"`{mailbox.address}`"
+                if configured_addresses(config)
+                else "The sampled mailbox"
+            )
+            return _advise(
+                f"{subject} holds no messages, so the check did not verify that "
+                "the app can read message bodies and attachments. List a mailbox "
+                "that has mail to verify it."
             )
         if not sample.has_attachments:
-            return
+            return _advise(_ATTACHMENTS_NOT_VERIFIED_NO_ATTACHMENTS)
         try:
             gateway.list_message_attachments(
                 mailbox_id=mailbox.id, message_id=sample.id, limit=1
@@ -359,8 +450,9 @@ class _MailReadCheck(CapabilityCheck[OutlookConnectorConfig]):
             # The sample can be deleted between the two reads. The body read
             # already proved the grant, so that is not a failure.
             if e.status == 404:
-                return
+                return _advise(_ATTACHMENTS_NOT_VERIFIED_GONE)
             raise_for_graph_error(e, _denied(mailbox))
+        return CheckOutput()
 
 
 # Calendars.ReadBasic.All lists events but withholds their bodies, so the
@@ -393,7 +485,8 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
     then one event with its body, which ``Calendars.ReadBasic.All`` withholds.
     Together they prove ``Calendars.Read``. An empty calendar proves the
     listing only, so in every-mailbox mode the walk moves on to one with
-    events. A connector that does not index calendars needs no such grant, so
+    events, and a configured mailbox with no events passes with an advisory.
+    A connector that does not index calendars needs no such grant, so
     the check passes without a call for it."""
 
     config_class = OutlookConnectorConfig
@@ -409,10 +502,10 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
             docs_link=_OUTLOOK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config = self.config(context)
         if not config.include_calendar:
-            return
+            return None
         gateway = _gateway(context)
         now = datetime.now(timezone.utc)
 
@@ -437,13 +530,13 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
                 raise_for_graph_error(
                     e, _calendar_denied(mailbox), CALENDAR_READ_REMEDIATION
                 )
-            # Nothing to read means nothing proven, which is not a pass.
             if _event_with_body(gateway, mailbox) is None:
-                raise UnexpectedValidationError(
-                    f"`{mailbox.address}` holds no events, so body access could "
-                    "not be proven. List a mailbox that has events to verify it."
+                return _advise(
+                    f"`{mailbox.address}` holds no events, so the check did not "
+                    "verify that the app can read event bodies. List a mailbox "
+                    "that has events to verify it."
                 )
-            return
+            return None
         _first_mailbox_that(
             _Candidates(gateway, config),
             calendar_with_event,
@@ -455,6 +548,7 @@ class _CalendarReadCheck(CapabilityCheck[OutlookConnectorConfig]):
                 "probe. List a mailbox that has events to verify it."
             ),
         )
+        return None
 
 
 class _ConfiguredMailboxesCheck(CapabilityCheck[OutlookConnectorConfig]):
@@ -515,6 +609,7 @@ def build_outlook_indexing_checks() -> list[CapabilityCheck]:
     return [
         _TokenAuthCheck(),
         _MailboxListingCheck(),
+        _MailboxCountCheck(),
         _MailReadCheck(),
         _CalendarReadCheck(),
         _ConfiguredMailboxesCheck(),

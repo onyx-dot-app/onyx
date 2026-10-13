@@ -927,6 +927,24 @@ def run_llm_loop(
             # prefix must be byte-stable across loop iterations for prompt
             # caching. Citation guidance lives in the uncached trailing
             # reminder instead.
+            processed_custom_agent_prompt = (
+                process_prompt_template(
+                    custom_agent_prompt,
+                    datetime_aware=persona_datetime_aware,
+                    append_datetime_if_aware=False,
+                )
+                if custom_agent_prompt
+                else None
+            )
+            custom_agent_prompt_msg = (
+                ChatMessageSimple(
+                    message=processed_custom_agent_prompt,
+                    token_count=token_counter(processed_custom_agent_prompt),
+                    message_type=MessageType.USER,
+                )
+                if processed_custom_agent_prompt
+                else None
+            )
             if persona and persona.replace_base_system_prompt:
                 # Handles the case where user has checked off the "Replace base system prompt" checkbox
                 processed_system_prompt = (
@@ -947,7 +965,6 @@ def run_llm_loop(
                     if processed_system_prompt
                     else None
                 )
-                custom_agent_prompt_msg = None
             else:
                 # If it's an empty string, we assume the user does not want to include it as an empty System message
                 if default_base_system_prompt:
@@ -970,24 +987,6 @@ def run_llm_loop(
                         message=system_prompt_str,
                         token_count=token_counter(system_prompt_str),
                         message_type=MessageType.SYSTEM,
-                    )
-                    processed_custom_agent_prompt = (
-                        process_prompt_template(
-                            custom_agent_prompt,
-                            datetime_aware=persona_datetime_aware,
-                            append_datetime_if_aware=False,
-                        )
-                        if custom_agent_prompt
-                        else None
-                    )
-                    custom_agent_prompt_msg = (
-                        ChatMessageSimple(
-                            message=processed_custom_agent_prompt,
-                            token_count=token_counter(processed_custom_agent_prompt),
-                            message_type=MessageType.USER,
-                        )
-                        if processed_custom_agent_prompt
-                        else None
                     )
                 else:
                     # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty

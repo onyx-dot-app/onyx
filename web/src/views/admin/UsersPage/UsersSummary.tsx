@@ -43,7 +43,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
               prominence="tertiary"
               icon={SvgFilterPlus}
               tooltip={t("summary.filterButton.tooltip")}
-              tooltipSide="left"
+              tooltipSide="start"
               onClick={(e) => {
                 e.stopPropagation();
                 onFilter();

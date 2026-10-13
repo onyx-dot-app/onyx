@@ -1857,9 +1857,6 @@
           "restoreTooltip": "기본값 복원"
         },
         "description": "{appName}가 조직의 채팅을 보관할 기간을 지정하세요.",
-        "enterprisePlanTag": {
-          "label": "Enterprise 플랜"
-        },
         "forever": {
           "label": "무기한"
         },
@@ -1875,16 +1872,11 @@
           "message": "{days, plural, one {#일} other {#일}} 넘게 활동이 없는 채팅은 영구 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
           "title": "채팅 보관 기간을 단축할까요?"
         },
-        "tierTooltip": "채팅 기록 보관은 Enterprise 플랜 기능입니다.",
         "title": "채팅 기록 보관"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business 플랜"
-        },
         "description": "조직 전체 문서를 빠르게 검색하는 UI 모드입니다.",
         "noConnectorsTooltip": "검색 모드를 사용하려면 커넥터를 설정하세요",
-        "tierTooltip": "검색 모드는 Business 또는 Enterprise 플랜이 필요합니다.",
         "title": "검색 모드"
       },
       "systemPrompt": {
@@ -2634,6 +2626,18 @@
           "description": "Microsoft Graph 호스트입니다. GCC High 또는 DoD에는 https://graph.microsoft.us를 사용하세요."
         }
       },
+      "linear": {
+        "description": "Linear 커넥터 구성",
+        "teams": {
+          "label": "팀",
+          "description": "인덱싱할 Linear 팀 키(예: ENG)입니다. 비워 두면 연결된 사용자가 볼 수 있는 모든 팀을 인덱싱합니다."
+        },
+        "projects": {
+          "label": "프로젝트",
+          "description": "인덱싱할 Linear 프로젝트 이름 또는 URL입니다. 비워 두면 모든 프로젝트를 인덱싱합니다. 팀도 설정된 경우 이슈는 둘 다에 일치해야 합니다."
+        },
+        "syncNotice": "인덱싱할 모든 비공개 팀에 속한 워크스페이스 멤버(게스트가 아님)로 연결하세요. 연결된 사용자가 속하지 않은 비공개 팀은 Onyx에서 볼 수 없습니다. 공개 팀의 이슈는 모든 워크스페이스 멤버가, 비공개 또는 제한된 팀의 이슈는 해당 팀 멤버가 검색할 수 있습니다."
+      },
       "add": {
         "authorizeButton": {
           "label": "{source}(으)로 인증",
@@ -2760,7 +2764,22 @@
           },
           "rerunFailed": {
             "toast": "검사를 시작할 수 없습니다. 다시 시도하세요."
+          },
+          "shareSaved": {
+            "toast": "공유가 업데이트되었습니다."
+          },
+          "shareFailed": {
+            "toast": "이 계정을 사용할 수 있는 사용자를 변경하지 못했습니다. 다시 시도하세요."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "이 계정을 추가한 사람만 비공개로 설정할 수 있습니다."
+          },
+          "shareLocked": {
+            "tooltip": "이 계정을 추가한 사람 또는 공유된 관리자만 사용할 수 있는 사람을 변경할 수 있습니다."
           }
+        },
+        "accountUnavailable": {
+          "toast": "이 계정을 더 이상 사용할 수 없습니다. 다른 계정을 선택하세요."
         }
       },
       "credentialRequired": {
@@ -5224,6 +5243,10 @@
         "orSeparator": {
           "label": "또는"
         },
+        "quantizationOnly": {
+          "description": "벡터 양자화만 변경되었으므로 Onyx는 저장된 벡터로 인덱스를 다시 구축하며, 다시 임베딩하지 않습니다. 전체 재인덱싱보다 훨씬 빠릅니다.",
+          "title": "인덱스를 다시 구축합니다."
+        },
         "reindex": {
           "description": "재인덱싱은 코퍼스 크기에 따라 *몇 시간에서 며칠*이 걸릴 수 있습니다. [자세히 알아보기](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "전체 재인덱싱이 실행됩니다."
@@ -5444,7 +5467,9 @@
         "cancelButton": {
           "label": "재인덱싱 취소 및 되돌리기"
         },
+        "copyTitle": "인덱스를 다시 구축하는 중…",
         "description": {
+          "copy": "Onyx가 저장된 벡터로 인덱스를 다시 구축하고 있으며, 다시 임베딩하지 않습니다. 다시 임베딩하는 것보다 훨씬 빠릅니다.",
           "withModel": "재인덱싱이 진행되면서 새 embedding 설정(**{model}**)이 적용됩니다. 문서 규모에 따라 **몇 시간에서 며칠**이 걸릴 수 있습니다.",
           "withoutModel": "재인덱싱이 진행되면서 새 embedding 설정이 적용됩니다. 문서 규모에 따라 **몇 시간에서 며칠**이 걸릴 수 있습니다."
         },
@@ -5566,17 +5591,17 @@
         "googleProjectRequired": "GCP 프로젝트 ID가 필요합니다"
       },
       "vectorQuantization": {
-        "description": "문서 벡터를 더 적은 비트로 저장하여 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다.",
+        "description": "문서 벡터를 더 적은 비트로 저장하여 벡터 검색의 메모리 사용량을 줄입니다. 비트 수가 적을수록 검색 품질이 낮아질 수 있습니다. 이 설정만 변경하면 저장된 벡터로 인덱스를 다시 구축하며, 다시 임베딩하지 않습니다.",
         "none": {
           "description": "32비트 전체 정밀도.",
           "label": "없음"
         },
         "scalar1Bit": {
-          "description": "메모리 사용량 32배 감소. OpenSearch 3.6 이상이 필요합니다.",
+          "description": "벡터 검색 메모리 사용량이 가장 적으며, 검색 품질이 약간 낮아집니다. 대규모 인덱스에 권장. OpenSearch 3.6 이상이 필요합니다.",
           "label": "1비트"
         },
         "scalar7Bit": {
-          "description": "메모리 사용량 4배 감소. 검색 품질 저하가 거의 없습니다.",
+          "description": "벡터 검색 메모리 사용량 약 4배 감소. 검색 품질 저하가 거의 없습니다.",
           "label": "7비트"
         },
         "title": "벡터 양자화"
@@ -5610,6 +5635,62 @@
         "e5SmallV2": "E5 모델 계열 중 가장 작고 빠른 버전입니다. 리소스가 제한된 시스템에서 {appName}를 실행한다면 좋은 선택입니다.",
         "multilingualE5Base": "영어 이외의 언어로 된 코퍼스에는 이 모델을 선택하세요.",
         "multilingualE5Small": "영어 이외의 언어로 된 코퍼스이면서 리소스가 제한된 시스템이라면 이 모델을 선택하세요."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 커넥터 수준 액세스를 사용합니다.",
+            "off": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 문서 액세스 목록을 사용합니다. 커넥터 수준 액세스는 꺼져 있습니다.",
+            "shadow": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 문서 액세스 목록을 사용하고 커넥터 수준 액세스와 비교합니다."
+          },
+          "title": "커넥터 액세스 업데이트 완료"
+        },
+        "notStarted": {
+          "description": "백그라운드 작업이 검색 인덱스의 기존 청크에 커넥터 ID를 추가합니다. 몇 분 안에 시작됩니다.",
+          "title": "커넥터 액세스 업데이트가 시작되지 않았습니다"
+        },
+        "progress": {
+          "ariaLabel": "커넥터 액세스 업데이트 진행률"
+        },
+        "running": {
+          "description": "백그라운드 작업이 검색 인덱스의 기존 청크에 커넥터 ID를 추가하고 있습니다. 커넥터 수준 검색 액세스는 작업이 완료된 후에만 적용할 수 있습니다.",
+          "title": "커넥터 액세스를 위해 검색 인덱스를 업데이트하는 중…"
+        },
+        "status": {
+          "connectors": "커넥터 {total, number}개 중 {done, number}개 완료",
+          "connectorsLeft": "{count, plural, one {커넥터 #개 남음} other {커넥터 #개 남음}}",
+          "current": "현재 커넥터: {name}",
+          "documentsLeft": "{count, plural, one {문서 #개 남음} other {문서 #개 남음}}"
+        },
+        "mode": {
+          "description": "사용자가 볼 수 있는 문서를 검색이 결정하는 방식입니다.",
+          "enforcePending": "적용이 설정되어 있으며 업데이트가 완료되면 시작됩니다.",
+          "enforceUnavailable": "검색 인덱스 업데이트가 완료된 후 사용할 수 있습니다.",
+          "label": "검색 액세스 모드",
+          "options": {
+            "enforce": {
+              "description": "검색은 커넥터 수준 액세스를 사용합니다.",
+              "title": "적용"
+            },
+            "off": {
+              "description": "검색은 문서 액세스 목록을 사용합니다.",
+              "title": "끔"
+            },
+            "shadow": {
+              "description": "검색은 문서 액세스 목록을 사용하고, 커넥터 수준 액세스의 결과가 다른 경우를 기록합니다.",
+              "title": "섀도"
+            }
+          },
+          "placeholder": "모드 선택",
+          "toasts": {
+            "error": "검색 액세스 모드를 업데이트할 수 없습니다.",
+            "success": "검색 액세스 모드를 {mode}(으)로 설정했습니다."
+          }
+        },
+        "loadError": {
+          "description": "페이지를 새로 고쳐 다시 시도하세요.",
+          "title": "커넥터 액세스 업데이트를 불러올 수 없습니다"
+        }
       }
     },
     "indexing": {
@@ -8986,9 +9067,6 @@
           "description": "끄면 모든 게이트웨이 엔드포인트가 요청을 거부하고, 기존 토큰이 작동을 멈추며, 토큰 선택기에서 게이트웨이 범위가 숨겨집니다. Craft 샌드박스 트래픽은 Craft 설정에서 별도로 제어됩니다."
         }
       },
-      "businessPlanTag": {
-        "label": "Business 플랜"
-      },
       "tierTooltip": "LLM 게이트웨이는 Business 또는 Enterprise 플랜이 필요합니다.",
       "scopeNote": {
         "title": "각 사용자는 설정 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
@@ -9028,9 +9106,6 @@
       "required": {
         "label": "필수"
       },
-      "running": {
-        "label": "검사 실행 중…"
-      },
       "empty": {
         "label": "아직 실행된 검사가 없습니다."
       },
@@ -9054,7 +9129,235 @@
       "requiredFailed": "{count, plural, one {필수 검사 #개 실패} other {필수 검사 #개 실패}}",
       "state": {
         "completed": "검사가 완료되었습니다.",
-        "inProgress": "검사 진행 중…"
+        "inProgress": "검사 진행 중...",
+        "waiting": "커넥터 설정을 기다리는 중..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "커넥터 편집"
+      },
+      "header": {
+        "title": "{name} 편집",
+        "description": "이 {source} 커넥터의 설정을 변경합니다. 변경 사항을 적용하기 전에 계획을 검토합니다.",
+        "reviewButton": {
+          "label": "변경 사항 검토"
+        }
+      },
+      "loadError": {
+        "title": "커넥터를 불러올 수 없습니다",
+        "description": "페이지를 새로 고치거나 커넥터로 돌아가세요.",
+        "backButton": {
+          "label": "커넥터로 돌아가기"
+        }
+      },
+      "credentialSwap": {
+        "title": "다른 자격 증명을 선택했습니다",
+        "description": "계획에서 색인된 문서를 유지하거나, 모두 다시 색인하고 새 자격 증명으로 볼 수 없는 문서를 정리할 수 있습니다."
+      },
+      "files": {
+        "title": "파일",
+        "description": "파일을 추가하거나 제거합니다. 새 파일은 계획을 적용한 후에만 색인됩니다.",
+        "empty": "커넥터에 파일이 없습니다.",
+        "addButton": {
+          "label": "파일 추가"
+        },
+        "remove": {
+          "tooltip": "{name} 제거"
+        },
+        "uploadFailed": {
+          "toast": "파일을 업로드할 수 없습니다: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "계획을 계산할 수 없습니다: {detail}"
+      },
+      "typedAccount": {
+        "toast": "변경 사항을 검토하기 전에 새 계정을 저장하거나 저장된 계정을 선택하세요."
+      },
+      "applied": {
+        "toast": "변경 사항을 적용했습니다."
+      },
+      "plan": {
+        "title": "계획 검토",
+        "description": "{count, plural, other {커넥터에 색인된 문서가 #개 있습니다.}}",
+        "changes": {
+          "list": "변경됨: {fields}",
+          "none": "변경된 내용이 없습니다."
+        },
+        "stale": {
+          "title": "커넥터가 변경되었습니다",
+          "description": "이 계획을 계산한 후 커넥터가 변경되었습니다. 적용하기 전에 계획을 다시 계산하세요.",
+          "replanButton": {
+            "label": "다시 계획"
+          }
+        },
+        "expired": {
+          "title": "계획이 만료되었습니다",
+          "description": "이 계획은 만료되었거나 이미 적용되었습니다. 계획을 다시 계산하세요."
+        },
+        "applyFailed": {
+          "title": "변경 사항을 적용할 수 없습니다"
+        },
+        "validation": {
+          "title": "유효성 검사",
+          "blocks": "새 설정이 유효성 검사에 실패했습니다. 적용하기 전에 수정하세요.",
+          "warns": "일부 선택 검사에 실패했습니다. 그래도 적용할 수 있습니다.",
+          "error": {
+            "title": "설정이 유효하지 않습니다"
+          }
+        },
+        "warnings": {
+          "title": "경고"
+        },
+        "notes": {
+          "title": "참고"
+        },
+        "reconciliation": {
+          "title": "범위 변경을 조정할 방법 선택",
+          "description": "{fields} 변경으로 문서가 추가되는지 제거되는지 계획에서 알 수 없습니다. 적용 시 수행할 작업을 선택하세요.",
+          "option": {
+            "prune": {
+              "title": "정리",
+              "description": "더 이상 범위에 없는 문서를 제거합니다."
+            },
+            "full_reindex": {
+              "title": "전체 재색인",
+              "description": "시작일부터 모두 다시 색인하여 이제 범위에 있는 문서를 추가합니다."
+            },
+            "both": {
+              "title": "전체 재색인 후 정리",
+              "description": "모두 다시 색인한 다음 더 이상 범위에 없는 문서를 제거합니다."
+            },
+            "nothing": {
+              "title": "아무것도 하지 않음",
+              "description": "색인된 문서를 유지합니다. 이후 실행에서는 새 설정을 사용합니다."
+            }
+          }
+        },
+        "credential": {
+          "title": "자격 증명 변경",
+          "description": "이전 자격 증명으로 색인된 문서를 어떻게 처리할지 선택하세요.",
+          "option": {
+            "keep_indexed": {
+              "title": "색인된 문서 유지",
+              "description": "이후 실행에서 새 자격 증명을 사용합니다. 빠른 방법입니다."
+            },
+            "full_reindex_and_prune": {
+              "title": "전체 재색인 및 정리",
+              "description": "새 자격 증명으로 모두 다시 색인한 다음 볼 수 없는 문서를 제거합니다."
+            }
+          }
+        },
+        "steps": {
+          "title": "단계",
+          "description": "적용 시 수행하는 작업 순서입니다. 선택 단계는 끌 수 있습니다.",
+          "none": "적용하면 설정이 저장됩니다. 색인 작업은 필요하지 않습니다.",
+          "required": {
+            "label": "필수"
+          },
+          "optional": {
+            "label": "선택"
+          },
+          "include": {
+            "ariaLabel": "단계 실행: {step}"
+          },
+          "fields": "필드: {fields}",
+          "window": "기간: {start} ~ {end}",
+          "windowFromStart": "기간: {end}까지 전체",
+          "kind": {
+            "access_groups": {
+              "title": "데이터 액세스 그룹 업데이트",
+              "description": "검색에 새 그룹이 즉시 적용됩니다."
+            },
+            "access_type": {
+              "title": "액세스 유형 변경",
+              "description": "문서를 읽을 수 있는 사람이 바뀝니다."
+            },
+            "enter_perm_sync": {
+              "title": "권한 동기화 시작",
+              "description": "첫 번째 권한 동기화가 완료될 때까지 문서가 숨겨집니다."
+            },
+            "leave_perm_sync": {
+              "title": "권한 동기화 중지",
+              "description": "원본의 권한이 더 이상 문서를 읽을 수 있는 사람을 결정하지 않습니다."
+            },
+            "restart_attempt": {
+              "title": "실행 중인 색인 시도 다시 시작",
+              "description": "실행 중인 시도가 중지되고 새 설정으로 새 시도가 시작됩니다."
+            },
+            "full_reindex_then_prune": {
+              "title": "전체 재색인 후 정리",
+              "description": "모두 다시 색인한 다음 원본이 더 이상 반환하지 않는 문서를 제거합니다."
+            },
+            "full_reindex": {
+              "title": "전체 재색인",
+              "description": "시작일부터 모두 다시 색인합니다."
+            },
+            "scoped_backfill": {
+              "title": "추가된 항목 백필",
+              "description": "추가된 항목의 기록만 색인합니다."
+            },
+            "window_backfill": {
+              "title": "이전 기간 백필",
+              "description": "새 시작일과 이전 시작일 사이의 기간을 색인합니다."
+            },
+            "prune": {
+              "title": "정리",
+              "description": "원본이 더 이상 반환하지 않는 문서를 제거합니다."
+            }
+          },
+          "reason": {
+            "identity_changed": "문서 ID 변경",
+            "behavior_changed": "처리 방식 변경",
+            "scope_widened": "범위 확대",
+            "scope_narrowed": "범위 축소",
+            "items_added_or_changed": "항목 추가 또는 변경",
+            "items_removed": "항목 제거",
+            "opaque_scope_choice": "범위 선택",
+            "indexing_start_earlier": "더 이른 시작일",
+            "credential_full_path": "자격 증명 전체 경로",
+            "access_changed": "액세스 변경",
+            "permissions_fetched_during_indexing": "권한은 색인 중에 가져옴",
+            "attempt_running": "시도 실행 중",
+            "scoped_backfill_superseded": "이전 백필이 대체됨",
+            "admin_added": "직접 추가함",
+            "indexing_start_later": "더 늦은 시작 날짜"
+          }
+        },
+        "extra": {
+          "title": "추가 작업",
+          "description": "계획에 필요하지 않은 작업을 추가합니다.",
+          "fullReindex": {
+            "title": "전체 재색인 추가",
+            "description": "시작일부터 모두 다시 색인합니다."
+          },
+          "prune": {
+            "title": "정리 추가",
+            "description": "원본이 더 이상 반환하지 않는 문서를 제거합니다."
+          }
+        },
+        "backButton": {
+          "label": "편집으로 돌아가기"
+        },
+        "applyButton": {
+          "label": "적용"
+        },
+        "blocked": {
+          "validation": "먼저 유효성 검사 실패를 수정하세요.",
+          "reconciliation": "먼저 범위 변경을 조정할 방법을 선택하세요."
+        }
+      },
+      "pendingBackfills": {
+        "title": "대기 중인 백필",
+        "description": "편집에서 이 실행을 요청했습니다. 실행이 성공할 때까지 여기에 표시됩니다.",
+        "window": "{start} ~ {end}",
+        "windowFromStart": "{end}까지 전체",
+        "waiting": "실행을 기다리는 중입니다.",
+        "runningNow": "인덱싱 시도가 지금 실행 중입니다.",
+        "retry": "{count, plural, other {#회 실패했습니다. 다음 재시도: {time}.}}",
+        "scoped": "추가되거나 변경된 항목만",
+        "failures": "{count, plural, other {실패 #회}}"
       }
     }
   },
@@ -12078,6 +12381,24 @@
         "empty": "이 시트는 비어 있습니다.",
         "tooLarge": "이 시트는 너무 커서 미리 볼 수 없습니다. 파일을 다운로드하여 확인하세요."
       }
+    },
+    "plans": {
+      "free": {
+        "title": "무료 플랜",
+        "tooltip": "모든 플랜에서 사용할 수 있습니다."
+      },
+      "business": {
+        "title": "비즈니스 플랜",
+        "tooltip": "[비즈니스 또는 엔터프라이즈 플랜](/admin/billing)이 필요합니다."
+      },
+      "enterprise": {
+        "title": "엔터프라이즈 플랜",
+        "tooltip": "[엔터프라이즈 플랜](/admin/billing)이 필요합니다."
+      },
+      "upgrade": {
+        "label": "플랜 업그레이드"
+      },
+      "availableFor": "{plan}에서 사용 가능"
     }
   },
   "craft": {
@@ -12421,6 +12742,17 @@
         "operationWait": "현재 작업이 완료될 때까지 기다려 주세요.",
         "sandboxWait": "샌드박스가 초기화될 때까지 기다려 주세요",
         "scheduledRunWait": "예약된 실행이 완료될 때까지 기다려 주세요."
+      },
+      "loadError": {
+        "title": "세션을 불러올 수 없습니다",
+        "retry": "다시 시도"
+      },
+      "queuedSendError": {
+        "title": "대기 중인 메시지를 보내지 못했습니다"
+      },
+      "settlementError": {
+        "title": "작업 완료를 확인할 수 없습니다",
+        "description": "다시 시도하여 작업을 확인하고 저장된 응답을 불러오세요."
       }
     },
     "compaction": {

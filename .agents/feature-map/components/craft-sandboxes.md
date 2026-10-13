@@ -750,3 +750,15 @@ Both providers validate conversion status and session-relative JPEG paths with o
 Thumbnails live under `outputs/.document-thumbnails`, which inventory rules hide.
 Both providers exclude this root cache from snapshots. Nested user directories
 with the same name remain in snapshots.
+
+A complete-file probe avoids repeated deployment. Failed pushes cannot become ready bundles.
+Deployment uses the existing managed-content push retry policy.
+Docker classifies transport and Engine server errors as retriable writes.
+Rejected requests and failed extraction are permanent errors.
+Docker publishes bundles with a symlink swap, matching Kubernetes.
+Updates to an existing symlink are atomic. Replacing a legacy directory first removes that directory.
+Previous directories remain available for 60 seconds so active readers can finish.
+Cleanup accepts only direct bundle children, not paths with nested components.
+Container lookup uses the same retry classification as archive transfer.
+Concurrent publications can leave an unused bundle until the container is removed;
+publication remains atomic, but cleanup is best effort.

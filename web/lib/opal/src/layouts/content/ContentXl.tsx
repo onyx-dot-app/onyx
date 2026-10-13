@@ -239,7 +239,7 @@ function ContentXl({
               prominence="internal"
               size={config.editButtonSize}
               tooltip={strings.edit}
-              tooltipSide="right"
+              tooltipSide="end"
               onClick={startEditing}
             />
           </div>

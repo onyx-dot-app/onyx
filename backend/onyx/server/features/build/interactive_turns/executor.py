@@ -270,7 +270,7 @@ def _drive_interactive_turn(
                 deadline_exceeded = True
                 return True
             try:
-                return is_interrupt_requested(session_id, cache)
+                return is_interrupt_requested(turn_id, cache)
             except CACHE_TRANSIENT_ERRORS:
                 logger.warning(
                     "[SANDBOX-SERVE] interrupt fence check failed for session %s",
@@ -577,7 +577,7 @@ def _drive_interactive_turn(
                 still_owns_turn = False
             if still_owns_turn:
                 try:
-                    clear_interrupt(session_id, cache)
+                    clear_interrupt(turn_id, cache)
                 except CACHE_TRANSIENT_ERRORS:
                     logger.warning(
                         "[SANDBOX-SERVE] failed to clear interrupt fence for session %s",

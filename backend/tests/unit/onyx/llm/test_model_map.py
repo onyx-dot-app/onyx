@@ -536,7 +536,7 @@ def test_modeless_non_chat_ids_infer_mode_from_name() -> None:
             chat = find_model_obj(model_map, "vercel_ai_gateway", "cohere/command-a")
             assert chat is not None
             assert chat["mode"] == "chat"
-            assert model_catalog.is_embedding_model_name("cohere/command-a") is False
+            assert model_catalog.resolve_model_mode("cohere/command-a") == "chat"
         finally:
             _reset_caches()
             model_catalog.reset_remote_cache()

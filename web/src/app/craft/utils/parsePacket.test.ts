@@ -191,3 +191,19 @@ describe("parsePacket", () => {
     });
   });
 });
+
+it("decodes typed text part metadata including empty snapshots", () => {
+  const packet = {
+    type: "agent_message_chunk",
+    content: { type: "text", text: "delta" },
+  };
+  expect(
+    parsePacket({ ...packet, _meta: { partId: "p", snapshotText: "" } })
+  ).toMatchObject({ part: { partId: "p", snapshotText: "" } });
+  expect(
+    parsePacket({ ...packet, _meta: { partId: "p", snapshotText: 12 } })
+  ).toMatchObject({ part: { partId: "p" } });
+  expect(
+    parsePacket({ ...packet, _meta: { partId: 12, snapshotText: "text" } })
+  ).not.toHaveProperty("part");
+});

@@ -75,6 +75,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/indexing/` | indexing-pipeline |
 | `backend/onyx/background/indexing/`, `backend/onyx/db/index_attempt*.py`, `db/indexing_coordination.py` | indexing-pipeline |
 | `backend/onyx/db/connector.py`, `db/credentials.py`, `db/connector_credential_pair.py`, `db/credential_capability.py`, `db/connector_alerts.py` | cc-pairs-and-credentials |
+| `backend/ee/onyx/db/credentials.py` | cc-pairs-and-credentials |
 | `backend/onyx/db/document.py`, `db/chunk.py`, `db/tag.py` | indexing-pipeline, document-index |
 | `backend/onyx/file_processing/`, `backend/onyx/file_store/`, `backend/onyx/db/file_record.py`, `db/file_content.py`, `db/user_file.py` | file-store-and-user-files |
 | `backend/onyx/server/documents/` | cc-pairs-and-credentials, indexing-pipeline |

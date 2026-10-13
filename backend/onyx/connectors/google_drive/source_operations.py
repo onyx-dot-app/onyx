@@ -39,6 +39,7 @@ from onyx.connectors.google_drive.models import (
     GoogleDriveAuth,
     GoogleDriveFileType,
     GoogleGroupMember,
+    GoogleSharedDrive,
 )
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import (
@@ -65,6 +66,7 @@ from onyx.connectors.source_operations import (
     source_operation,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -80,6 +82,12 @@ _CHUNK_SIZE_BUFFER = 64
 _DOCS_API_DOCUMENT_URL = "https://docs.googleapis.com/v1/documents/{doc_id}"
 _DOCS_FETCH_TIMEOUT_SECONDS = 60
 _DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
+# The Docs API's per-user read quota resets each minute; these waits add up to
+# about half a minute.
+_DOCS_FETCH_TRIES = 5
+_DOCS_FETCH_RETRY_DELAY_SECONDS = 2
+_DOCS_FETCH_RETRY_MAX_DELAY_SECONDS = 16
+_RATE_LIMIT_REASONS = frozenset({"userRateLimitExceeded", "rateLimitExceeded"})
 
 # What a requested target probe needs to decide who should crawl it.
 _TARGET_PROBE_FIELDS = "id, mimeType, driveId, owners(emailAddress)"
@@ -112,6 +120,18 @@ class GoogleDriveHttpError(Exception):
         self.reasons = reasons
         # A 403 or 404 that is not a rate limit in disguise.
         self.access_denied = access_denied
+
+    @property
+    def rate_limited(self) -> bool:
+        """A 429, or a 403 that Google uses for a rate limit."""
+        return self.status_code == 429 or any(
+            reason in _RATE_LIMIT_REASONS for reason in self.reasons
+        )
+
+    @property
+    def transient(self) -> bool:
+        """Worth a retry: a rate limit or a server error."""
+        return self.rate_limited or self.status_code >= 500
 
 
 class GoogleDriveRefreshError(Exception):
@@ -171,7 +191,7 @@ def _from_requests_error(error: requests.HTTPError) -> GoogleDriveHttpError:
                 error_body.get("details")
             )
     rate_limited = status == 429 or any(
-        reason in ("userRateLimitExceeded", "rateLimitExceeded") for reason in reasons
+        reason in _RATE_LIMIT_REASONS for reason in reasons
     )
     return GoogleDriveHttpError(
         status_code=status,
@@ -189,6 +209,39 @@ def _translate(error: Exception) -> Exception:
     if isinstance(error, requests.HTTPError):
         return _from_requests_error(error)
     return error
+
+
+# A lost connection, a timeout, or a body stream that broke partway.
+_TRANSIENT_REQUEST_ERRORS = (
+    requests.ConnectionError,
+    requests.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
+
+
+def _is_transient_docs_error(error: BaseException) -> bool:
+    if isinstance(error, _TRANSIENT_REQUEST_ERRORS):
+        return True
+    return isinstance(error, requests.HTTPError) and (
+        _from_requests_error(error).transient
+    )
+
+
+def is_transient_google_error(error: BaseException) -> bool:
+    """A gateway error worth trying again later: a rate limit, a server error,
+    or a lost connection."""
+    if isinstance(error, GoogleDriveHttpError):
+        return error.transient
+    return isinstance(error, _TRANSIENT_REQUEST_ERRORS)
+
+
+_retry_transient_docs_fetch = retry_builder(
+    tries=_DOCS_FETCH_TRIES,
+    delay=_DOCS_FETCH_RETRY_DELAY_SECONDS,
+    max_delay=_DOCS_FETCH_RETRY_MAX_DELAY_SECONDS,
+    exceptions=requests.RequestException,
+    retry_if=_is_transient_docs_error,
+)
 
 
 @contextmanager
@@ -554,6 +607,23 @@ class GoogleDriveSourceOperations(SourceOperations):
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
+    )
+    @_translated
+    def list_named_drives(
+        self, *, user_email: str, use_domain_admin_access: bool
+    ) -> Iterator[GoogleSharedDrive]:
+        """The shared drives ``list_drives`` lists, with their names."""
+        for drive in execute_paginated_retrieval(
+            retrieval_function=self._drive(user_email).drives().list,
+            list_key="drives",
+            useDomainAdminAccess=use_domain_admin_access,
+            fields="drives(id, name),nextPageToken",
+        ):
+            yield GoogleSharedDrive(id=drive["id"], name=drive.get("name") or "")
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
         untested=_DEGRADES_ON_DENIAL,
     )
     @_translated
@@ -714,7 +784,17 @@ class GoogleDriveSourceOperations(SourceOperations):
     ) -> dict[str, Any] | None:
         """A Google Doc from the Docs API, with the content of every tab. None
         when the response exceeds ``max_response_bytes``; it is streamed, so an
-        oversized one is never held whole."""
+        oversized one is never held whole. A rate limit or a server error is
+        retried with backoff; the last one raises."""
+        return _retry_transient_docs_fetch(self._fetch_google_doc_once)(
+            user_email=user_email,
+            doc_id=doc_id,
+            max_response_bytes=max_response_bytes,
+        )
+
+    def _fetch_google_doc_once(
+        self, *, user_email: str, doc_id: str, max_response_bytes: int
+    ) -> dict[str, Any] | None:
         with get_google_authorized_session(self._creds(), user_email) as session:
             with session.get(
                 _DOCS_API_DOCUMENT_URL.format(doc_id=doc_id),

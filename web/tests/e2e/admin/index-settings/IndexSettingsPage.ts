@@ -264,11 +264,27 @@ export class IndexSettingsPage {
   // Vector quantization
   // ---------------------------------------------------------------------------
 
-  /** The Vector Quantization control is not rendered. */
-  async expectVectorQuantizationHidden(): Promise<void> {
+  /** The staged-change banner calls a quantization-only change a rebuild. */
+  async expectQuantizationRebuildBanner(): Promise<void> {
     await expect(
-      this.page.locator("label").filter({ hasText: "Vector Quantization" })
-    ).toHaveCount(0);
+      this.page.getByText("The index will be rebuilt.")
+    ).toBeVisible();
+    await expect(this.page.getByText("A full re-index will run.")).toHaveCount(
+      0
+    );
+  }
+
+  /** Pick a Vector Quantization level by its option title, e.g. "1-bit". */
+  async selectVectorQuantization(label: string): Promise<void> {
+    await this.page
+      .locator("label")
+      .filter({ hasText: "Vector Quantization" })
+      .getByRole("combobox")
+      .click();
+    await this.page
+      .getByRole("listbox", { name: "Select an option" })
+      .getByRole("option", { name: label })
+      .click();
   }
 
   // ---------------------------------------------------------------------------

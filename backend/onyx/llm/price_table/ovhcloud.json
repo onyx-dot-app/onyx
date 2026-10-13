@@ -183,32 +183,6 @@
       "temperature": true,
       "tool_call": false
     },
-    "qwen3-coder-30b-a3b-instruct": {
-      "attachment": false,
-      "cost": {
-        "input": 0.07,
-        "output": 0.26
-      },
-      "limit": {
-        "context": 262144,
-        "output": 262144
-      },
-      "modalities": {
-        "input": [
-          "text"
-        ],
-        "output": [
-          "text"
-        ]
-      },
-      "name": "Qwen3-Coder-30B-A3B-Instruct",
-      "open_weights": true,
-      "reasoning": false,
-      "release_date": "2025-10-28",
-      "structured_output": true,
-      "temperature": true,
-      "tool_call": true
-    },
     "qwen3.5-397b-a17b": {
       "attachment": true,
       "cost": {

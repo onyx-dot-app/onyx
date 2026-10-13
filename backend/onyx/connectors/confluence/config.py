@@ -1,3 +1,4 @@
+import re
 from enum import Enum
 from typing import Annotated, Any
 from urllib.parse import urlparse
@@ -8,7 +9,11 @@ from onyx.configs.app_configs import (
     CONTINUE_ON_CONNECTOR_FAILURE,
     INDEX_BATCH_SIZE,
 )
-from onyx.connectors.connector_config import ConnectorConfig, CredentialBinding
+from onyx.connectors.connector_config import (
+    ConnectorConfig,
+    CredentialBinding,
+    HierarchyBreakdownSection,
+)
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.field_policy import (
     FieldClass,
@@ -20,6 +25,7 @@ from onyx.connectors.field_policy import (
     ScopeToggle,
 )
 from onyx.connectors.planning_rule import ConnectorChangeOverride
+from onyx.db.enums import HierarchyNodeType
 
 # Set by the Confluence Cloud OAuth finalize step to the site the user authorized.
 _OAUTH_WIKI_BASE_KEY = "wiki_base"
@@ -31,6 +37,23 @@ _INDEX_RECURSIVELY = "index_recursively"
 _CQL_QUERY = "cql_query"
 _LABELS_TO_SKIP = "labels_to_skip"
 _INDEXING_SCOPE_FIELDS = (_SPACE, _PAGE_ID, _INDEX_RECURSIVELY, _CQL_QUERY)
+
+# Confluence document_id is the page URL. Reindex inputs come from
+# IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
+#   - /spaces/KEY/pages/<id>/Title-slug  (Cloud + modern Server/DC)
+#   - /pages/viewpage.action?pageId=<id> (legacy Server)
+_PAGE_ID_FROM_URL_PATTERNS = [
+    re.compile(r"/pages/(\d+)(?:/|$)"),
+    re.compile(r"[?&]pageId=(\d+)"),
+]
+
+
+def extract_page_id_from_url(doc_id: str) -> str | None:
+    for pat in _PAGE_ID_FROM_URL_PATTERNS:
+        match = pat.search(doc_id)
+        if match:
+            return match.group(1)
+    return None
 
 
 class ConfluenceIndexingMode(str, Enum):
@@ -130,6 +153,45 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
         return get_indexing_mode(
             space=self.space, page_id=self.page_id, cql_query=self.cql_query
         )
+
+    def hierarchy_breakdown_sections(self) -> list[HierarchyBreakdownSection]:
+        """Every space, plus the configured page. Only the field of the
+        indexing mode in use names a node: the form also sends the other tabs'
+        fields."""
+        mode = self.indexing_mode()
+        configured_space = (
+            (self.space.strip(),) if mode == ConfluenceIndexingMode.SPACE else ()
+        )
+        configured_page = (
+            (self.page_id.strip(),) if mode == ConfluenceIndexingMode.PAGE else ()
+        )
+        return [
+            # Two spaces cannot have keys that differ only in case
+            # (CONFSERVER-40303), so a match without case cannot pick the
+            # wrong space. A space that the indexing did not find has no
+            # node, so it shows as not indexed with either rule.
+            HierarchyBreakdownSection(
+                node_type=HierarchyNodeType.SPACE,
+                expected_node_keys=configured_space,
+                case_insensitive_keys=True,
+            ),
+            HierarchyBreakdownSection(
+                node_type=HierarchyNodeType.PAGE,
+                expected_node_keys=configured_page,
+                include_unexpected_nodes=False,
+                # A page gets a hierarchy node only when it has child pages or
+                # attachments. A leaf page is only a document.
+                nodes_can_be_documents=True,
+            ),
+        ]
+
+    @classmethod
+    def hierarchy_node_key(cls, node_type: HierarchyNodeType, raw_node_id: str) -> str:
+        """A page node's raw id is the page URL (the document id). The config
+        names a page by its numeric id. A space node's raw id is the space key."""
+        if node_type == HierarchyNodeType.PAGE:
+            return extract_page_id_from_url(raw_node_id) or raw_node_id
+        return raw_node_id
 
 
 def _indexing_scope_direction(

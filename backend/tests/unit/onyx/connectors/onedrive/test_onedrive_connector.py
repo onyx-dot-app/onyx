@@ -12,14 +12,23 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
+    MAX_FINDING_OPTIONS,
+    CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckStatus,
+    CheckAdvisory,
+    CheckFinding,
+    CheckFindingKey,
+    CheckOutput,
+    CountFinding,
 )
 from onyx.connectors.capability_checks.runner import run_capability_checks
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
+    CredentialExpiredError,
     CredentialInvalidError,
     InsufficientPermissionsError,
+    UnexpectedValidationError,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DEFAULT_DRIVE_DELTA_PAGE_SIZE,
@@ -75,6 +84,23 @@ from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 OneDriveGroupPage = EntraPage[OneDriveGroup]
 OneDriveGroupMemberPage = EntraPage[EntraDirectoryObject]
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "tenant_spike.json"
+
+
+def _findings(output: CheckOutput | None) -> list[CheckFinding]:
+    assert output is not None
+    return output.findings
+
+
+def _advisories(output: CheckOutput | None) -> list[CheckAdvisory]:
+    return [] if output is None else output.advisories
+
+
+def _group_members_check() -> CapabilityCheck:
+    return next(
+        check
+        for check in build_onedrive_group_sync_checks()
+        if check.check_id == "onedrive_group_members"
+    )
 
 
 def _run_step(
@@ -1003,11 +1029,131 @@ def test_onedrive_checks_and_registration_are_named() -> None:
     assert {check.check_id for check in checks} == {
         "onedrive_token_auth",
         "onedrive_users",
+        "onedrive_drive_count",
         "onedrive_configured_users",
         "onedrive_drive",
         "onedrive_delta",
     }
+    assert {check.check_id for check in checks if check.discovery} == {
+        "onedrive_drive_count"
+    }
+    assert not any(
+        check.discovery
+        for check in build_onedrive_doc_permission_sync_checks()
+        + build_onedrive_group_sync_checks()
+    )
     assert DocumentSource.ONEDRIVE in CONNECTOR_CLASS_MAP
+
+
+def _drive_count_context(gateway: Any) -> CapabilityCheckContext:
+    return CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config=None,
+        source_operations=gateway,
+    )
+
+
+def _drive_count_check() -> CapabilityCheck[Any]:
+    return next(
+        check
+        for check in build_onedrive_indexing_checks()
+        if check.check_id == "onedrive_drive_count"
+    )
+
+
+@pytest.mark.parametrize(
+    "config, applies",
+    [
+        (None, True),
+        ({}, True),
+        ({"users": [" "]}, True),
+        ({"users": ["a@x.com"]}, False),
+    ],
+    ids=["no-config", "every-user", "blank-entry", "users"],
+)
+def test_onedrive_drive_count_applies_only_when_every_user_is_walked(
+    config: dict[str, Any] | None, applies: bool
+) -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_users.return_value = OneDriveUserPage(users=[_user("a@x.com")])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        connector_specific_config=config,
+        source_operations=gateway,
+    )
+
+    result = run_capability_checks([_drive_count_check()], context)[0]
+
+    assert result.applicable is applies
+    assert bool(result.findings) is applies
+
+
+def test_onedrive_drive_count_counts_every_page_of_the_listing() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_users.side_effect = [
+        OneDriveUserPage(users=[_user("a@x.com"), _user("b@x.com")], next_link="n1"),
+        OneDriveUserPage(users=[], next_link="n2"),
+        OneDriveUserPage(users=[_user("c@x.com")]),
+    ]
+
+    findings = _findings(_drive_count_check().run(_drive_count_context(gateway)))
+
+    assert findings == [CountFinding(key=CheckFindingKey.READABLE_DRIVES, count=3)]
+    assert [call.kwargs["next_link"] for call in gateway.list_users.call_args_list] == [
+        None,
+        "n1",
+        "n2",
+    ]
+    gateway.get_default_drive.assert_not_called()
+
+
+def test_onedrive_drive_count_stops_at_the_cap() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_users.return_value = OneDriveUserPage(
+        users=[_user(f"u{number}@x.com") for number in range(999)], next_link="next"
+    )
+
+    findings = _findings(_drive_count_check().run(_drive_count_context(gateway)))
+
+    assert findings == [
+        CountFinding(
+            key=CheckFindingKey.READABLE_DRIVES,
+            count=MAX_FINDING_OPTIONS,
+            at_least=True,
+        )
+    ]
+    assert gateway.list_users.call_count == 2
+
+
+def test_onedrive_drive_count_is_indeterminate_when_the_listing_does_not_end() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_users.return_value = OneDriveUserPage(users=[], next_link="next")
+
+    with pytest.raises(UnexpectedValidationError, match="did not end"):
+        _drive_count_check().run(_drive_count_context(gateway))
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (401, CredentialExpiredError),
+        (403, InsufficientPermissionsError),
+        (429, UnexpectedValidationError),
+    ],
+)
+def test_onedrive_drive_count_maps_listing_errors(
+    status: int, expected: type[Exception]
+) -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_users.side_effect = OneDriveGraphError(status, "error", "denied")
+    check = _drive_count_check()
+
+    with pytest.raises(expected):
+        check.run(_drive_count_context(gateway))
+    assert check.discovery is True
+    assert check.required is False
 
 
 def test_onedrive_named_capability_checks_pass_through_gateway() -> None:
@@ -1232,7 +1378,7 @@ def test_onedrive_permission_and_group_checks_use_gateway() -> None:
         build_onedrive_doc_permission_sync_checks() + build_onedrive_group_sync_checks()
     )
     for check in checks:
-        check.run(context)
+        assert _advisories(check.run(context)) == []
 
     gateway.list_permissions.assert_called_once_with(
         drive_id="drive-1", item_id="raw-item-id"
@@ -1283,8 +1429,15 @@ def test_onedrive_permission_check_accepts_empty_drive_at_end_cursor() -> None:
         source_operations=gateway,
     )
 
-    build_onedrive_doc_permission_sync_checks()[0].run(context)
+    (result,) = run_capability_checks(
+        build_onedrive_doc_permission_sync_checks(), context
+    )
 
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "did not read item permissions" in advisory.message
+    # The admin must know which drives the check samples.
+    assert "first 20 configured users" in advisory.message
     gateway.get_delta_page.assert_called_once()
     gateway.list_permissions.assert_not_called()
 
@@ -1313,8 +1466,9 @@ def test_onedrive_permission_check_probes_past_empty_drive() -> None:
         source_operations=gateway,
     )
 
-    build_onedrive_doc_permission_sync_checks()[0].run(context)
+    output = build_onedrive_doc_permission_sync_checks()[0].run(context)
 
+    assert _advisories(output) == []
     assert gateway.get_delta_page.call_count == 2
     gateway.list_permissions.assert_called_once_with(
         drive_id="populated-drive", item_id="raw-item-id"
@@ -1359,14 +1513,29 @@ def test_onedrive_hidden_group_check_does_not_require_optional_scope() -> None:
         credential_json={},
         source_operations=gateway,
     )
-    check = next(
-        check
-        for check in build_onedrive_group_sync_checks()
-        if check.check_id == "onedrive_group_members"
+    (result,) = run_capability_checks([_group_members_check()], context)
+
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "did not read transitive group members" in advisory.message
+    gateway.list_transitive_group_members.assert_not_called()
+
+
+def test_onedrive_group_check_reports_tenant_without_groups() -> None:
+    gateway: Any = create_autospec(OneDriveSourceOperations, instance=True)
+    gateway.list_groups.return_value = OneDriveGroupPage(items=[])
+    context = CapabilityCheckContext(
+        source=DocumentSource.ONEDRIVE,
+        credential_json={},
+        source_operations=gateway,
     )
 
-    check.run(context)
+    (result,) = run_capability_checks([_group_members_check()], context)
 
+    assert result.status == CapabilityCheckStatus.PASSED
+    (advisory,) = result.advisories
+    assert "did not read transitive group members" in advisory.message
+    gateway.list_groups.assert_called_once()
     gateway.list_transitive_group_members.assert_not_called()
 
 
@@ -1460,8 +1629,9 @@ def test_onedrive_group_check_bounds_hidden_group_discovery() -> None:
         if check.check_id == "onedrive_group_members"
     )
 
-    check.run(context)
+    output = check.run(context)
 
+    assert len(_advisories(output)) == 1
     assert gateway.list_groups.call_count == 20
     gateway.list_transitive_group_members.assert_not_called()
 

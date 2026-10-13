@@ -19,18 +19,31 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field, field_validator
 from pydantic_core import to_jsonable_python
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.applicability import (
+    get_applicable_capabilities,
+)
+from onyx.connectors.capability_checks.findings_setting import (
+    check_findings_enabled,
+    hide_findings_if_disabled,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CapabilityVerdict,
+    CheckAdvisory,
+    CheckFinding,
+    CheckNotApplicableError,
     CredentialCapability,
+    compute_capability_verdicts,
+    parse_known_findings,
 )
 from onyx.connectors.capability_checks.runner import (
     CheckReadinessKind,
@@ -91,14 +104,30 @@ _STATE_BY_STATUS: dict[CapabilityCheckStatus, DraftCheckStateKind] = {
     CapabilityCheckStatus.SKIPPED: DraftCheckStateKind.SKIPPED,
 }
 _STATUS_BY_STATE = {state: status for status, state in _STATE_BY_STATUS.items()}
+_UNFINISHED_STATES = frozenset(
+    {DraftCheckStateKind.PENDING, DraftCheckStateKind.RUNNING}
+)
 # Indeterminate results are transient, so they are not cached.
 _CACHEABLE_STATES = frozenset(
     {
         DraftCheckStateKind.PASSED,
         DraftCheckStateKind.FAILED,
         DraftCheckStateKind.SKIPPED,
+        DraftCheckStateKind.NOT_APPLICABLE,
     }
 )
+
+
+def _draft_state(result: CapabilityCheckResult) -> DraftCheckStateKind:
+    """A check that found out at run time that it does not apply is
+    NOT_APPLICABLE, as the same decision made before the run is."""
+    if result.error_type == CheckNotApplicableError.__name__:
+        return DraftCheckStateKind.NOT_APPLICABLE
+    return _STATE_BY_STATUS[result.status]
+
+
+def _result_status(state: DraftCheckStateKind) -> CapabilityCheckStatus:
+    return _STATUS_BY_STATE.get(state, CapabilityCheckStatus.SKIPPED)
 
 
 class DraftRunStatus(str, Enum):
@@ -124,6 +153,9 @@ class DraftCheckState(BaseModel):
     required: bool
     state: DraftCheckStateKind
     message: str = ""
+    # Exception class name of a failure, for support diagnosis.
+    error_type: str | None = None
+    is_fallback: bool = False
     missing_fields: list[str] = []
     invalid_fields: list[str] = []
     remediation: str | None = None
@@ -132,6 +164,17 @@ class DraftCheckState(BaseModel):
     from_cache: bool = False
     # The check proves the credential works with the credential-bound fields.
     validates_binding: bool = False
+    # A discovery check: it finds what the credential reaches and never
+    # gates the form.
+    discovery: bool = False
+    # What the check found, once it passed.
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _known_findings(cls, findings: Any) -> Any:
+        return parse_known_findings(findings)
 
 
 class DraftCheckRunSnapshot(BaseModel):
@@ -145,6 +188,38 @@ class DraftCheckRunSnapshot(BaseModel):
     form_errors: dict[str, str]
     unknown_fields: list[str]
     checks: list[DraftCheckState]
+
+    @computed_field
+    @property
+    def verdicts(self) -> dict[CredentialCapability, CapabilityVerdict]:
+        """Each capability's verdict, as a stored report computes it. A
+        capability with a check that is still pending or running has none."""
+        unfinished: set[CredentialCapability] = set()
+        results: list[CapabilityCheckResult] = []
+        for check in self.checks:
+            if check.state in _UNFINISHED_STATES:
+                unfinished.add(check.capability)
+                continue
+            results.append(
+                CapabilityCheckResult(
+                    capability=check.capability,
+                    check_id=check.check_id,
+                    display_name=check.display_name,
+                    required=check.required,
+                    # A waiting check has not verified anything yet.
+                    status=_result_status(check.state),
+                    applicable=check.state != DraftCheckStateKind.NOT_APPLICABLE,
+                    discovery=check.discovery,
+                )
+            )
+        verdicts = compute_capability_verdicts(
+            get_applicable_capabilities(self.source), results
+        )
+        return {
+            capability: verdict
+            for capability, verdict in verdicts.items()
+            if capability not in unfinished
+        }
 
 
 class DraftCheckPlan(BaseModel):
@@ -188,6 +263,13 @@ class CachedDraftResult(BaseModel):
     message: str
     duration_ms: int | None
     error_type: str | None = None
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _known_findings(cls, findings: Any) -> Any:
+        return parse_known_findings(findings)
 
 
 def decide_draft_check_state(
@@ -206,7 +288,9 @@ def decide_draft_check_state(
         state=DraftCheckStateKind.PENDING,
         remediation=check.remediation,
         docs_link=check.docs_link,
+        is_fallback=check.is_fallback,
         validates_binding=check.validates_binding,
+        discovery=check.discovery,
     )
     match readiness.kind:
         case CheckReadinessKind.RUNNABLE:
@@ -289,15 +373,21 @@ def get_cached_draft_result(key: str) -> CachedDraftResult | None:
 
 
 def cache_draft_result(key: str, result: CapabilityCheckResult) -> None:
-    """Caches a terminal result; INDETERMINATE is not cached."""
-    state = _STATE_BY_STATUS[result.status]
+    """Caches a terminal result; INDETERMINATE is not cached. Neither is a
+    SKIPPED discovery check: its skip (a failed required check, findings
+    turned off) says nothing about the listing once the cause is gone."""
+    state = _draft_state(result)
     if state not in _CACHEABLE_STATES:
+        return
+    if result.discovery and state == DraftCheckStateKind.SKIPPED:
         return
     cached = CachedDraftResult(
         state=state,
         message=result.message,
         duration_ms=result.duration_ms,
         error_type=result.error_type,
+        findings=result.findings,
+        advisories=result.advisories,
     )
     get_cache_backend().set(
         key, cached.model_dump_json(), ex=DRAFT_RESULT_CACHE_TTL_SECONDS
@@ -378,23 +468,31 @@ def cached_check_result(
         check_id=check.check_id,
         display_name=check.display_name,
         required=check.required,
-        status=_STATUS_BY_STATE[cached.state],
+        status=_result_status(cached.state),
         message=cached.message,
         error_type=cached.error_type,
         is_fallback=check.is_fallback,
         remediation=check.remediation,
         docs_link=check.docs_link,
         duration_ms=cached.duration_ms,
+        applicable=cached.state != DraftCheckStateKind.NOT_APPLICABLE,
         validates_binding=check.validates_binding,
+        discovery=check.discovery,
+        # Cached before the workspace turned findings off.
+        findings=cached.findings if check_findings_enabled() else [],
+        advisories=cached.advisories,
     )
 
 
 def apply_check_result(
     check_state: DraftCheckState, result: CapabilityCheckResult
 ) -> None:
-    check_state.state = _STATE_BY_STATUS[result.status]
+    check_state.state = _draft_state(result)
     check_state.message = result.message
+    check_state.error_type = result.error_type
     check_state.duration_ms = result.duration_ms
+    check_state.findings = result.findings
+    check_state.advisories = result.advisories
 
 
 def apply_cached_result(
@@ -402,8 +500,33 @@ def apply_cached_result(
 ) -> None:
     check_state.state = cached.state
     check_state.message = cached.message
+    check_state.error_type = cached.error_type
     check_state.duration_ms = cached.duration_ms
+    check_state.findings = cached.findings if check_findings_enabled() else []
+    check_state.advisories = cached.advisories
     check_state.from_cache = True
+
+
+def pending_in_run_order(snapshot: DraftCheckRunSnapshot) -> list[DraftCheckState]:
+    """The run's PENDING checks in the order the runner executes them:
+    discovery checks last."""
+    return sorted(
+        (
+            check
+            for check in snapshot.checks
+            if check.state == DraftCheckStateKind.PENDING
+        ),
+        key=lambda check: check.discovery,
+    )
+
+
+def required_check_failed(snapshot: DraftCheckRunSnapshot) -> bool:
+    """A required check of the run already FAILED, from the cache: its
+    discovery checks then do not run."""
+    return any(
+        check.required and check.state == DraftCheckStateKind.FAILED
+        for check in snapshot.checks
+    )
 
 
 def cc_pair_draft_key(cc_pair_id: int) -> str:
@@ -505,4 +628,5 @@ def read_draft_run_for_user(
             and datetime.now(timezone.utc) > run.lease_expires_at
         ):
             snapshot.status = DraftRunStatus.FAILED_TO_RUN
+    hide_findings_if_disabled(snapshot.checks)
     return snapshot

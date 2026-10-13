@@ -92,7 +92,7 @@ export function realmFields(
 
 /**
  * A realm as typed or stored, compared without case, scheme, a trailing slash
- * or the field's host suffix. Mirrors the backend `RealmCredentialBinding`.
+ * or the field's host suffix.
  */
 function normalizeRealm(value: string, hostSuffix?: string): string {
   const host = value
@@ -110,7 +110,7 @@ function normalizeRealm(value: string, hostSuffix?: string): string {
  * such as its realm: for each one the form fills in with text, the account's
  * value under the same key (or the realm's default when it stores none) is
  * the same. A field the account has no value for cannot tell, so it does not
- * restrict. The backend binding rule makes the same comparison.
+ * restrict. The realm is form-only, so only this filter compares it.
  */
 export function credentialMatchesBoundFields(
   boundFieldNames: readonly string[],

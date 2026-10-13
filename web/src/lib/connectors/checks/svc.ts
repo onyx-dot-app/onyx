@@ -3,6 +3,7 @@ import type {
   DraftCheckPlanRequest,
   DraftCheckRunRequest,
   DraftCheckRunSnapshot,
+  PairEditCheckRunRequest,
 } from "@/lib/connectors/checks/types";
 
 /**
@@ -18,6 +19,28 @@ export async function startDraftCheckRun(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
   });
+  if (!response.ok) {
+    throw new Error(`Capability check run request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
+ * Starts the capability checks for a proposed edit of an existing pair: a
+ * dry run that writes no report. Poll it as a draft run.
+ */
+export async function startPairEditCheckRun(
+  ccPairId: number,
+  request: PairEditCheckRunRequest
+): Promise<DraftCheckRunSnapshot> {
+  const response = await fetch(
+    `/api/manage/admin/cc-pair/${ccPairId}/edit/checks`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
   if (!response.ok) {
     throw new Error(`Capability check run request failed: ${response.status}`);
   }

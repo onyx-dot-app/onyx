@@ -2,7 +2,7 @@ from typing import Annotated, Any
 
 from pydantic import field_validator
 
-from onyx.connectors.connector_config import ConnectorConfig, RealmCredentialBinding
+from onyx.connectors.connector_config import ConnectorConfig
 from onyx.connectors.field_policy import (
     FieldClass,
     FieldPolicy,
@@ -10,21 +10,14 @@ from onyx.connectors.field_policy import (
     ScopeOpaque,
     ScopeToggle,
 )
+from onyx.connectors.github.utils import parse_repository_names
 
 _DOCUMENT_TYPE_TOGGLE = FieldPolicy(
     FieldClass.SCOPE, scope=ScopeToggle(widens_when=True)
 )
 
 
-class GithubCredentialBinding(RealmCredentialBinding):
-    REALM_KEY = "github_base_url"
-    DEFAULT_REALM = "https://github.com"
-
-    # Where the account works. The connector reads it from the credential.
-    github_base_url: Annotated[str | None, FieldPolicy(FieldClass.COSMETIC)] = None
-
-
-class GithubConnectorConfig(GithubCredentialBinding, ConnectorConfig):
+class GithubConnectorConfig(ConnectorConfig):
     repo_owner: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
     repositories: Annotated[
         str | None,
@@ -39,9 +32,22 @@ class GithubConnectorConfig(GithubCredentialBinding, ConnectorConfig):
     # File document ids contain the branch.
     branch: Annotated[str | None, FieldPolicy(FieldClass.IDENTITY)] = None
 
-    # A blank value means every repository or the default branch, as in the
-    # connector.
-    @field_validator("repositories", "branch", mode="before")
+    @field_validator("repo_owner", mode="before")
+    @classmethod
+    def _strip_owner(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+    # A list with no names (blank, or only commas) means every repository, as
+    # in the connector.
+    @field_validator("repositories", mode="before")
+    @classmethod
+    def _no_names_to_none(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        return value.strip() if parse_repository_names(value) else None
+
+    # A blank value means the default branch, as in the connector.
+    @field_validator("branch", mode="before")
     @classmethod
     def _strip_blank_to_none(cls, value: Any) -> Any:
         if not isinstance(value, str):

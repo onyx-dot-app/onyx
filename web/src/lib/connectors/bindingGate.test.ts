@@ -1,3 +1,4 @@
+import { ValidSources } from "@/lib/connectors/types/source";
 import {
   UNLOCKED_GATE,
   bindingCheckInput,
@@ -148,19 +149,36 @@ describe("decideBindingGate", () => {
 });
 
 describe("bindingCheckInput", () => {
+  const confluence = ValidSources.Confluence;
+
   it("sends only the bound values and keys on the credential", () => {
     const values = { wiki_base: "https://a", is_cloud: true, space: "ENG" };
-    const first = bindingCheckInput("1", ["wiki_base", "is_cloud"], values);
+    const first = bindingCheckInput(
+      confluence,
+      "1",
+      ["wiki_base", "is_cloud"],
+      values
+    );
     expect(first.config).toEqual({ is_cloud: true, wiki_base: "https://a" });
     expect(
-      bindingCheckInput("2", ["wiki_base", "is_cloud"], values).key
+      bindingCheckInput(confluence, "2", ["wiki_base", "is_cloud"], values).key
     ).not.toBe(first.key);
     expect(
-      bindingCheckInput("1", ["is_cloud", "wiki_base"], {
+      bindingCheckInput(confluence, "1", ["is_cloud", "wiki_base"], {
         ...values,
         space: "X",
       }).key
     ).toBe(first.key);
+  });
+
+  it("never sends the form-only realm", () => {
+    const input = bindingCheckInput(
+      ValidSources.Zendesk,
+      "1",
+      ["zendesk_subdomain"],
+      { zendesk_subdomain: "acme" }
+    );
+    expect(input.config).toEqual({});
   });
 });
 

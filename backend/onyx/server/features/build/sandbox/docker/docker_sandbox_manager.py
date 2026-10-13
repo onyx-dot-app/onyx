@@ -78,6 +78,8 @@ from docker import DockerClient
 from docker.errors import APIError, NotFound
 from docker.models.containers import Container
 from docker.models.networks import Network
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
 
 from onyx.configs.app_configs import DEV_MODE
 from onyx.db.enums import SandboxStatus
@@ -130,7 +132,9 @@ from onyx.server.features.build.sandbox.labels import (
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
+    FatalWriteError,
     FileSet,
+    RetriableWriteError,
     SandboxInfo,
     SnapshotResult,
 )
@@ -1995,7 +1999,6 @@ echo WRITE_OK"""
             raise ValueError("mount_path is required")
         if ".." in Path(mount_path).parts:
             raise ValueError("mount_path may not contain '..'")
-        container = self._require_container(sandbox_id)
 
         # Build a deterministic tar (sorted, fixed mtime) like the K8s push.
         buf = io.BytesIO()
@@ -2011,32 +2014,51 @@ echo WRITE_OK"""
                 tar.addfile(info, io.BytesIO(data))
         tar_bytes = buf.getvalue()
 
-        target = mount_path
-        # Land atomically: extract into a temp dir alongside the target, then
-        # rename. Matches the K8s push daemon's atomic-swap semantics.
+        # Publish a symlink atomically, matching the daemon's bundle writer.
         script = (
             f"set -e\n"
-            f'target="{target}"\n'
-            f'parent=$(dirname "$target")\n'
-            f'mkdir -p "$parent"\n'
-            f'tmpdir=$(mktemp -d -p "$parent")\n'
-            f"trap 'rm -rf \"$tmpdir\"' EXIT\n"
-            f'tar -xzf - -C "$tmpdir"\n'
-            f'if [ -e "$target" ] && [ ! -L "$target" ]; then\n'
-            f'    rm -rf "$target"\n'
-            f"fi\n"
-            f'if [ -L "$target" ]; then rm -f "$target"; fi\n'
-            f'mv "$tmpdir" "$target"\n'
-            f"trap - EXIT\n"
+            f"target={shlex.quote(mount_path)}\n"
+            'parent=$(dirname "$target")\n'
+            'mkdir -p "$parent"\n'
+            'bundle_prefix="$parent/.bundle-$(basename "$target")-"\n'
+            'tmpdir=$(mktemp -d "${bundle_prefix}XXXXXXXXXX")\n'
+            'link="$tmpdir.link"\n'
+            'trap \'rm -rf "$tmpdir" "$link"\' EXIT\n'
+            'tar -xzf - -C "$tmpdir"\n'
+            'old_target=""\n'
+            'if [ -L "$target" ]; then old_target=$(readlink "$target"); fi\n'
+            'if [ -e "$target" ] && [ ! -L "$target" ]; then\n'
+            '    rm -rf "$target"\n'
+            "fi\n"
+            'ln -s "$tmpdir" "$link"\n'
+            'mv -Tf "$link" "$target"\n'
+            "trap - EXIT\n"
+            # Readers can finish against the prior directory during the grace period.
+            'case "$old_target" in "$bundle_prefix"*)\n'
+            '    case "${old_target#"$bundle_prefix"}" in ""|*/*) ;; *)\n'
+            '        (sleep 60; rm -rf "$old_target") </dev/null >/dev/null 2>&1 &\n'
+            "    ;; esac\n"
+            ";; esac\n"
         )
+
         try:
+            container = self._require_container(sandbox_id)
             _stream_stdin_to_container_as_sandbox_user(
                 container,
                 ["/bin/sh", "-c", script],
                 tar_bytes,
             )
         except ExecError as e:
-            raise RuntimeError(f"write_files_to_sandbox failed: {e}") from e
+            cause = e.__cause__
+            if isinstance(cause, APIError) and not cause.is_client_error():
+                raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
+            raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
+        except APIError as e:
+            if not e.is_client_error():
+                raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
+            raise FatalWriteError(f"write_files_to_sandbox failed: {e}") from e
+        except (OSError, RequestsConnectionError, Timeout) as e:
+            raise RetriableWriteError(f"write_files_to_sandbox failed: {e}") from e
 
     def get_webapp_url(self, sandbox_id: UUID, port: int) -> str:
         """Returns an http URL the api_server can reach the sandbox on.

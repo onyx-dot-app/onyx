@@ -1,5 +1,4 @@
 import copy
-import re
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -23,6 +22,7 @@ from onyx.connectors.confluence.access import (
 )
 from onyx.connectors.confluence.config import (
     ConfluenceIndexingMode,
+    extract_page_id_from_url,
     get_indexing_mode,
 )
 from onyx.connectors.confluence.source_operations import (
@@ -132,15 +132,6 @@ PRUNING_EXPANSION_FIELDS = [
 _SLIM_DOC_BATCH_SIZE = 5000
 _SLIM_ATTACHMENT_MAX_ATTEMPTS = 3
 
-# Confluence document_id is the page URL. Reindex inputs come from
-# IndexAttemptError rows (also URLs). Two URL shapes show up in the wild:
-#   - /spaces/KEY/pages/<id>/Title-slug  (Cloud + modern Server/DC)
-#   - /pages/viewpage.action?pageId=<id> (legacy Server)
-_PAGE_ID_FROM_URL_PATTERNS = [
-    re.compile(r"/pages/(\d+)(?:/|$)"),
-    re.compile(r"[?&]pageId=(\d+)"),
-]
-
 ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
 
@@ -229,14 +220,6 @@ def build_page_retrieval_url(page_query: str, limit: int) -> str:
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
     next_page_url: str | None
-
-
-def _extract_page_id_from_url(doc_id: str) -> str | None:
-    for pat in _PAGE_ID_FROM_URL_PATTERNS:
-        match = pat.search(doc_id)
-        if match:
-            return match.group(1)
-    return None
 
 
 class ConfluenceConnector(
@@ -980,7 +963,7 @@ class ConfluenceConnector(
             if failure.failed_document is None:
                 continue
             doc_id = failure.failed_document.document_id
-            page_id = _extract_page_id_from_url(doc_id)
+            page_id = extract_page_id_from_url(doc_id)
             if page_id is None:
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
