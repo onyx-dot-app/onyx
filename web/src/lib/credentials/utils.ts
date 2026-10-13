@@ -587,3 +587,18 @@ export function bindingCheckCredentialId(
     ? request.credential_id
     : null;
 }
+
+/** A file's bytes as base64 text, as an account stores a .pfx certificate. */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    // A data URL is "data:<type>;base64,<content>"; the content follows the
+    // first comma.
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
