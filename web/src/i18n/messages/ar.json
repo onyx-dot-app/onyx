@@ -11867,12 +11867,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {اختر ملفات} other {اختر ملفًا}}"
-      },
-      "prompt": "{multiple, select, true {أو اسحب الملفات وأفلتها هنا.} other {أو اسحب ملفًا وأفلته هنا.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "إضافة جديد"
@@ -14146,6 +14140,11 @@
     },
     "inputFile": {
       "clearFile": "مسح الملف"
+    },
+    "inputMultiUpload": {
+      "placeholder": "أضف ملفات…",
+      "dropToAdd": "أفلت الملفات هنا لإضافتها",
+      "dropToAddMore": "أفلت هنا لإضافة مزيد من الملفات"
     },
     "inputUpload": {
       "placeholder": "أضف ملفًا…",

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { InputUpload } from "@opal/components";
+import { InputSingleUpload } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputVertical } from "@opal/layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
@@ -201,7 +201,7 @@ export default function LicenseActivationCard({
               }
               withLabel
             >
-              <InputUpload
+              <InputSingleUpload
                 placeholder="eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
                 setValue={(value) => {
                   setLicenseKey(value);

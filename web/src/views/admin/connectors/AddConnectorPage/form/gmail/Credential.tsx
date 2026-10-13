@@ -1,6 +1,6 @@
 import { Button, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { InputUpload } from "@opal/components";
+import { InputSingleUpload } from "@opal/components";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
@@ -86,7 +86,7 @@ export const GmailAuthSection = ({
             })
           )}
         </Text>
-        <InputUpload
+        <InputSingleUpload
           accept="application/json,.json"
           placeholder={t("gmail.oauthUpload.placeholder")}
           setValue={(value) => {
@@ -136,7 +136,7 @@ export const GmailAuthSection = ({
         <Text as="p" font="main-ui-action">
           {t("gmail.serviceAccountOption.title")}
         </Text>
-        <InputUpload
+        <InputSingleUpload
           accept="application/json,.json"
           placeholder={t("gmail.serviceAccountUpload.placeholder")}
           setValue={(value) => {

@@ -1,7 +1,7 @@
-# InputUpload
+# InputSingleUpload
 
-**Import:** `import { InputUpload, type InputUploadProps } from "@opal/components";`
-**Formik:** `import { InputUploadField } from "@opal/form";`
+**Import:** `import { InputSingleUpload, type InputSingleUploadProps } from "@opal/components";`
+**Formik:** `import { InputSingleUploadField } from "@opal/form";`
 
 An upload control in the input chrome, for one file in a form row. Nothing is typed: a click, Enter
 or Space opens the file picker, and a file can be dropped on it. With a value, Delete or Backspace
@@ -44,7 +44,7 @@ A dropped file must match `accept`, and is refused above `maxSizeKb`, as a picke
 | `onFileSizeExceeded` | both | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                                 |
 | `id`, `name`, `onBlur`, `data-testid` | both | —              | Passed to the control (`name` to the hidden file input)                     |
 
-Without `value`, the control keeps its own. `InputUploadField` binds it to Formik: a `string` field in
+Without `value`, the control keeps its own. `InputSingleUploadField` binds it to Formik: a `string` field in
 text mode, a `File | null` field in file mode. An upload, paste or clear marks the field touched; a
 touched field with an error shows the error variant.
 
@@ -54,9 +54,9 @@ Labels come from `OpalStrings`: `inputUploadPlaceholder`, `clearFile`, `inputUpl
 ## Usage
 
 ```tsx
-<InputUpload accept="application/json" placeholder="Upload a key file" setValue={setKey} />
+<InputSingleUpload accept="application/json" placeholder="Upload a key file" setValue={setKey} />
 
-<InputUpload mode="file" accept=".pfx" onFileChange={setCertificate} />
+<InputSingleUpload mode="file" accept=".pfx" onFileChange={setCertificate} />
 
-<InputUploadField name="apiKey" accept=".json" />
+<InputSingleUploadField name="apiKey" accept=".json" />
 ```

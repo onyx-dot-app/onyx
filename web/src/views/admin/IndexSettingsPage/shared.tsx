@@ -5,7 +5,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
 import { Divider } from "@opal/components";
-import { InputUploadField } from "@opal/form";
+import { InputSingleUploadField } from "@opal/form";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
 import type {
@@ -79,7 +79,7 @@ export function GoogleCredentialsField() {
       title={t("fields.googleCredentials.title")}
       withLabel="apiKey"
     >
-      <InputUploadField name="apiKey" accept=".json" />
+      <InputSingleUploadField name="apiKey" accept=".json" />
     </InputVertical>
   );
 }

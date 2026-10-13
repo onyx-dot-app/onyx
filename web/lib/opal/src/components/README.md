@@ -22,7 +22,8 @@ The barrel file at `index.ts` re-exports each component and its prop types. Each
 | [OpenButton](./buttons/open-button/)           | Trigger button with rotating chevron for popovers            | [README](./buttons/open-button/README.md)      |
 | [Tag](./tag/)                                  | Small colored label for status/category metadata             | [README](./tag/README.md)                      |
 | [InputDateRangePicker](./inputs/chrono/input-date-range-picker/) | Preset date-range strip with a custom-range calendar popover | [README](./inputs/chrono/input-date-range-picker/README.md) |
-| [InputUpload](./inputs/input-upload/)              | Upload control in the input chrome: pick, drop or paste      | [README](./inputs/input-upload/README.md)        |
+| [InputSingleUpload](./inputs/uploads/input-single-upload/)              | Upload control in the input chrome: pick, drop or paste      | [README](./inputs/uploads/input-single-upload/README.md)        |
+| [InputMultiUpload](./inputs/uploads/input-multi-upload/)                | Upload control for many files, shown as removable tags       | [README](./inputs/uploads/input-multi-upload/README.md)         |
 | [InputAvatar](./inputs/input-avatar/)          | Avatar frame with primary input chrome                       | [README](./inputs/input-avatar/README.md)      |
 | [InputImage](./inputs/input-image/)            | Circular image dropzone with edit overlay                    | [README](./inputs/input-image/README.md)       |
 | [InputKeyValue](./inputs/input-key-value/)     | Key/value pair editor with validation                        | [README](./inputs/input-key-value/README.md)   |
