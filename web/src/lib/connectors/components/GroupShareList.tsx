@@ -96,6 +96,18 @@ export default function GroupShareList({
       icon: SvgUsers,
     }));
 
+  // Below the tier the fixed rows sit locked under the upgrade link, so the
+  // list names what the plan adds to.
+  const lockedOptions = lockedRows.map((row) => ({
+    value: row.id,
+    title: row.name,
+    description:
+      row.memberCount === undefined
+        ? undefined
+        : t("memberCount", { count: row.memberCount }),
+    icon: row.icon,
+  }));
+
   const rows: GroupShareRow[] = [
     ...lockedRows,
     ...(userGroups ?? [])
@@ -213,7 +225,7 @@ export default function GroupShareList({
       <InputSingleComboBox
         value=""
         onValueChange={addGroup}
-        options={locked ? lockForTier([]) : options}
+        options={locked ? lockForTier(lockedOptions) : options}
         placeholder={placeholder}
         disabled={disabled || isLoading || loadFailed}
       />

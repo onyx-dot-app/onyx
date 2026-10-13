@@ -12115,7 +12115,7 @@
       "upgrade": {
         "label": "Mettre à niveau l'offre"
       },
-      "availableFor": "Disponible avec l'{plan}"
+      "availableFor": "Disponible avec l’{plan}"
     }
   },
   "craft": {

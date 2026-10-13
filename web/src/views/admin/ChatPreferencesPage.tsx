@@ -552,11 +552,15 @@ function RetentionField({
   // Only read while in select mode. A stored custom value (transiently visible
   // here after "More") maps to no option, so the select is left empty and the
   // trigger shows the placeholder until the user picks.
+  // Below Enterprise a stored custom value cannot change, so the locked list
+  // shows it as "Custom Retention" rather than the editable input.
   const selectValue =
     value === null
       ? FOREVER_RETENTION_VALUE
       : valueIsCustomRetention(value)
-        ? ""
+        ? enterpriseTier
+          ? ""
+          : CUSTOM_RETENTION_VALUE
         : String(value);
 
   const persist = (next: number | null) => {
@@ -669,7 +673,7 @@ function RetentionField({
 
   return (
     <div className="flex flex-col gap-2 w-full">
-      {showCustom ? (
+      {enterpriseTier && showCustom ? (
         <div className="flex flex-col gap-1 w-full">
           <InputTypeIn
             ref={customInputRef}
@@ -720,7 +724,7 @@ function RetentionField({
               enterpriseTier
                 ? [foreverOption, ...presetOptions, { options: [customOption] }]
                 : // Below Enterprise every choice sits locked under an
-                  // upgrade link, Forever selected.
+                  // upgrade link, the stored value selected.
                   lockForEnterprise([
                     foreverOption,
                     ...presetOptions,
