@@ -30,10 +30,9 @@ Use when you need a real database or real API calls but want control over setup.
 uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit
 ```
 
-Craft scheduler tests use `@pytest.mark.craft_isolated_database` to create a temporary database with current migrations.
-The PostgreSQL user needs `CREATEDB` permission. Each marked module drops its database after testing, including test failures.
-Local workers cannot see committed test schedules. If pytest is forcibly stopped, the isolated database can remain.
-Redis and other services are not isolated by this marker. Keep application processes stopped for the remaining external dependency tests.
+Craft database fixtures delete the schedules each test creates, including committed rows after assertion or transaction failures.
+Cleanup uses exact task IDs and also removes dependent runs and pre-approval grants through database cascades.
+Cleanup failures fail the test. Keep application processes stopped while running external dependency tests; cleanup cannot run after a forced process kill.
 
 ### Integration Tests (`tests/integration/`)
 

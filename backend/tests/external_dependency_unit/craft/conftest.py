@@ -6,28 +6,17 @@ import hashlib
 import io
 import zipfile
 from collections.abc import Callable, Generator, Iterable
-from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from alembic import command
-from alembic.config import Config
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine import sql_engine
-from onyx.db.engine.sql_engine import (
-    SYNC_DB_API,
-    SqlEngine,
-    build_connection_string,
-    get_session_with_current_tenant,
-)
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
     AccountType,
     BuildSessionStatus,
@@ -65,7 +54,7 @@ from tests.common.craft.skill_table_isolation import (
     snapshot_skill_tables,
 )
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.db.shard_test_utils import temporary_database
+from tests.external_dependency_unit.craft.db_helpers import scheduled_task_cleanup
 
 
 def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
@@ -100,50 +89,8 @@ def _isolate_skill_tables(
     restore_skill_tables(db_session, snapshot)
 
 
-@pytest.fixture(scope="module")
-def craft_database(
-    request: pytest.FixtureRequest,
-) -> Generator[Engine | None, None, None]:
-    """Keep committed schedules outside the database used by local workers."""
-    if request.node.get_closest_marker("craft_isolated_database") is None:
-        yield None
-        return
-
-    with contextmanager(temporary_database)("onyx_craft_test") as database:
-        engine = create_engine(
-            build_connection_string(db_api=SYNC_DB_API, db=database),
-            pool_size=10,
-            max_overflow=5,
-        )
-        try:
-            config = Config()
-            config.set_main_option(
-                "script_location", str(Path(__file__).resolve().parents[3] / "alembic")
-            )
-            config.attributes["connection"] = engine
-            command.upgrade(config, "head")
-
-            def test_engine_for_tenant(tenant_id: str) -> Engine:
-                if tenant_id != POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
-                    raise ValueError(f"Unexpected test tenant: {tenant_id}")
-                return engine
-
-            with pytest.MonkeyPatch.context() as patch:
-                patch.setattr(SqlEngine, "_engine", engine)
-                patch.setattr(SqlEngine, "_readonly_engine", engine)
-                patch.setattr(
-                    sql_engine, "get_engine_for_tenant", test_engine_for_tenant
-                )
-                patch.setattr(sql_engine, "get_catalog_engine", lambda: engine)
-                yield engine
-        finally:
-            engine.dispose()
-
-
 @pytest.fixture(scope="module", autouse=True)
-def _seed_default_llm_provider(
-    craft_database: Engine | None,  # noqa: ARG001
-) -> Generator[None, None, None]:
+def _seed_default_llm_provider() -> Generator[None, None, None]:
     """Seed a default LLM provider (no-op if one exists); fake key, never invoked."""
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
@@ -196,7 +143,8 @@ def _set_onyx_server_url(monkeypatch: pytest.MonkeyPatch) -> None:
 def db_session() -> Generator[Session, None, None]:
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     with get_session_with_current_tenant() as session:
-        yield session
+        with scheduled_task_cleanup(session):
+            yield session
 
 
 @pytest.fixture(scope="function")

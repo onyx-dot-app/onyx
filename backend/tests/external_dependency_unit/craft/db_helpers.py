@@ -16,12 +16,14 @@ Conventions:
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete, update
+from sqlalchemy import delete, event, update
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
@@ -47,6 +49,7 @@ from onyx.db.models import (
     ExternalAppUserCredential,
     GatedActionPolicy,
     Sandbox,
+    ScheduledTask,
     Skill,
     Skill__User,
     Skill__UserGroup,
@@ -57,6 +60,29 @@ from onyx.db.models import (
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.users import assign_user_to_default_groups__no_commit
+
+
+@contextmanager
+def scheduled_task_cleanup(db_session: Session) -> Generator[None, None, None]:
+    """Delete schedules created through this session, including committed rows."""
+    task_ids: set[UUID] = set()
+
+    def track_task(session: Session, instance: object) -> None:  # noqa: ARG001
+        if isinstance(instance, ScheduledTask):
+            task_ids.add(instance.id)
+
+    event.listen(db_session, "pending_to_persistent", track_task)
+    try:
+        yield
+    finally:
+        event.remove(db_session, "pending_to_persistent", track_task)
+        db_session.rollback()
+        if task_ids:
+            # Foreign keys also remove runs and pre-approved targets.
+            db_session.execute(
+                delete(ScheduledTask).where(ScheduledTask.id.in_(task_ids))
+            )
+            db_session.commit()
 
 
 def force_approval_created_at(

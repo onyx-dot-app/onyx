@@ -49,8 +49,6 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_user,
 )
 
-pytestmark = pytest.mark.craft_isolated_database
-
 
 def _make_app(db_session: Session) -> int:
     """Create a real ``ExternalApp`` and return its id. Grants now FK to
