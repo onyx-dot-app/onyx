@@ -165,6 +165,33 @@ def test_changed_resumes_from_a_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result["end_of_stream"] is True
 
 
+def test_a_page_that_never_ends_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zendesk can serve an empty page that still carries a next link. The walk
+    must stop rather than spin on a `--limit` the results never reach."""
+    calls = 0
+
+    def _fake_request(
+        _base: str, _method: str, _path: str, _body: object = None
+    ) -> object:
+        nonlocal calls
+        calls += 1
+        return {
+            "tickets": [],
+            "after_cursor": "c",
+            "after_url": f"{_BASE}/api/v2/incremental/tickets/cursor.json?cursor=c",
+            "end_of_stream": False,
+        }
+
+    monkeypatch.setattr(zendesk, "_request", _fake_request)
+    args = zendesk._build_parser().parse_args(
+        ["--site", "acme", "changed", "--since", "1759276800"]
+    )
+    result = zendesk._incremental_tickets(_BASE, args)
+    assert calls == zendesk._MAX_PAGES
+    assert result["count"] == 0
+    assert result["cursor"] == "c"
+
+
 def test_ids_are_percent_encoded_into_the_path() -> None:
     assert (
         zendesk._path("/api/v2/tickets/{0}.json", "12/3?x")

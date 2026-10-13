@@ -28,6 +28,10 @@ _METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 _SEARCH_RESULT_CAP = 1000
 # Field definitions are a small fixed set; fetch them all rather than page.
 _FIELDS_LIMIT = 200
+# A hard stop on any paged walk. Zendesk can serve an empty page that still
+# carries a next link, which would otherwise loop forever on a `--limit` the
+# results never reach.
+_MAX_PAGES = 50
 
 # A DNS label, matched with `fullmatch`. This script runs inside the sandbox
 # with no Onyx imports, so it repeats the provider's check rather than
@@ -173,7 +177,9 @@ def _paginate(
     page_params = dict(params or {})
     page_params["per_page"] = min(_PAGE_SIZE, limit)
     url: str | None = f"{base_url}{path}{_query(page_params)}"
-    while url and len(results) < limit:
+    for _ in range(_MAX_PAGES):
+        if url is None or len(results) >= limit:
+            break
         page = _request(base_url, "GET", url[len(base_url) :])
         records = page.get(key) or []
         if not isinstance(records, list):
@@ -229,14 +235,16 @@ def _incremental_tickets(base_url: str, a: argparse.Namespace) -> dict[str, Any]
     tickets: list[Any] = []
     cursor: str | None = a.cursor
     end_of_stream = False
-    while url:
+    for _ in range(_MAX_PAGES):
+        if url is None:
+            break
         page = _request(base_url, "GET", url[len(base_url) :])
         tickets.extend(page.get("tickets") or [])
         after_cursor = page.get("after_cursor")
         if isinstance(after_cursor, str):
             cursor = after_cursor
         end_of_stream = page.get("end_of_stream") is True
-        # Break after consuming the page, never mid-page: the cursor has
+        # Stop only after consuming a page, never mid-page: the cursor has
         # already moved past every ticket this page carried.
         url = None if len(tickets) >= a.limit else _next_page_url(page, base_url)
 
