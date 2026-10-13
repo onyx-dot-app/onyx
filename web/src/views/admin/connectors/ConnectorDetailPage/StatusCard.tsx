@@ -1,12 +1,18 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
+import useSWR from "swr";
 import { Card, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { CardLoader } from "@opal/loaders";
 import { timeAgo } from "@opal/time";
-import type { CCPairFullInfo } from "@/lib/connectors/types";
+import type {
+  CCPairFullInfo,
+  PaginatedIndexAttempts,
+} from "@/lib/connectors/types";
 import { isPermSynced } from "@/lib/connectors/accessType";
-import type { IndexAttemptSnapshot } from "@/lib/types";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { PermissionSyncStatusBadge } from "@/views/admin/connectors/ConnectorDetailPage/PermissionSyncStatusBadge";
 import { ccPairStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 
@@ -31,19 +37,28 @@ function StatBlock({ children }: StatBlockProps) {
   );
 }
 
+// Matches the page's own poll of the pair.
+const POLL_MS = 5000;
+
 export interface StatusCardProps {
   ccPair: CCPairFullInfo;
-  latestIndexAttempt: IndexAttemptSnapshot | undefined;
 }
 
 /** The pair at a glance: status, latest and total documents, last run, and sync state when synced. */
-export default function StatusCard({
-  ccPair,
-  latestIndexAttempt,
-}: StatusCardProps) {
+export default function StatusCard({ ccPair }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
   const locale = useLocale();
+  const { data: latestIndexAttempts, error } = useSWR<PaginatedIndexAttempts>(
+    SWR_KEYS.ccPairLatestIndexAttempt(ccPair.id),
+    errorHandlingFetcher,
+    { refreshInterval: POLL_MS }
+  );
+  // Waits for the latest attempt, so a running pair never flashes as indexed.
+  if (latestIndexAttempts === undefined && error === undefined) {
+    return <CardLoader descriptionLines={2} />;
+  }
+  const latestIndexAttempt = latestIndexAttempts?.items[0];
   const status = ccPairStatusTag(
     ccPair.status,
     ccPair.in_repeated_error_state,

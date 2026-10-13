@@ -20,7 +20,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { CardLoader, IconLoader, PageLoader } from "@opal/loaders";
+import { IconLoader, PageLoader } from "@opal/loaders";
 import { SvgPlugBroken } from "@opal/illustrations";
 import {
   SvgArrowLeft,
@@ -97,13 +97,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
     endpoint: SWR_KEYS.ccPairIndexAttempts(ccPairId),
   });
 
-  // The status card and the error notice read the latest attempt, whatever history page is open.
-  const { data: latestIndexAttempts, error: latestIndexAttemptError } =
-    useSWR<PaginatedIndexAttempts>(
-      SWR_KEYS.ccPairLatestIndexAttempt(ccPairId),
-      errorHandlingFetcher,
-      { refreshInterval: CC_PAIR_POLL_MS }
-    );
+  // The error notice reads the latest attempt. The status card shares this key.
+  const { data: latestIndexAttempts } = useSWR<PaginatedIndexAttempts>(
+    SWR_KEYS.ccPairLatestIndexAttempt(ccPairId),
+    errorHandlingFetcher,
+    { refreshInterval: CC_PAIR_POLL_MS }
+  );
 
   const {
     currentPageData: indexAttemptErrorsPage,
@@ -470,13 +469,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <PendingBackfills backfills={ccPair.pending_backfills} />
         )}
 
-        {/* Waits for the latest attempt, so a running pair never flashes as indexed. */}
-        {latestIndexAttempts === undefined &&
-        latestIndexAttemptError === undefined ? (
-          <CardLoader descriptionLines={2} />
-        ) : (
-          <StatusCard ccPair={ccPair} latestIndexAttempt={latestIndexAttempt} />
-        )}
+        <StatusCard ccPair={ccPair} />
         <PairChecksCard
           source={source}
           credentialId={ccPair.credential.id}

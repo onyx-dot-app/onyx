@@ -17,9 +17,6 @@ import {
   MIN_REFRESH_FREQ_MINUTES,
 } from "@/lib/connectors/connectors";
 
-// A typed value saves once typing pauses, so each keystroke is not a request.
-const SAVE_DELAY_MS = 800;
-
 interface FrequencyFieldProps {
   id: string;
   title: string | RichStr;
@@ -34,7 +31,7 @@ interface FrequencyFieldProps {
   onSave: (value: number) => Promise<boolean>;
 }
 
-/** One schedule frequency, saved once typing settles. A refetch never overwrites unsaved typing. */
+/** One schedule frequency. It saves when the field loses focus. A blank or out of range value is dropped. */
 function FrequencyField({
   id,
   title,
@@ -48,45 +45,25 @@ function FrequencyField({
   onSave,
 }: FrequencyFieldProps) {
   const [draft, setDraft] = useState<number | null>(value);
-  // The last fetched value, what the server is believed to hold, and the latest typed value.
-  const serverRef = useRef<number | null>(value);
-  const storedRef = useRef<number | null>(value);
+  // Read on blur, which fires in the same event as the input's last change.
   const draftRef = useRef<number | null>(value);
-  // Saves run one at a time, so the last value typed is the last one stored.
-  const queueRef = useRef<Promise<void>>(Promise.resolve());
-  const lastSaveRef = useRef(0);
   function change(next: number | null) {
     draftRef.current = next;
     setDraft(next);
   }
-  useEffect(() => {
-    serverRef.current = value;
-    if (draftRef.current !== storedRef.current) return;
-    storedRef.current = value;
-    change(value);
-  }, [value]);
-  // Read at save time, so a parent render does not restart the timer.
-  const onSaveRef = useRef(onSave);
-  useEffect(() => {
-    onSaveRef.current = onSave;
-  }, [onSave]);
+  useEffect(() => change(value), [value]);
 
-  useEffect(() => {
-    if (draft === null || draft === storedRef.current) return;
-    if (draft < min || draft > max) return;
-    const timer = setTimeout(() => {
-      storedRef.current = draft;
-      const save = ++lastSaveRef.current;
-      queueRef.current = queueRef.current.then(async () => {
-        if (await onSaveRef.current(draft)) return;
-        // A newer save owns the field, so only the latest failure rolls back.
-        if (lastSaveRef.current !== save) return;
-        storedRef.current = serverRef.current;
-        if (draftRef.current === draft) change(serverRef.current);
-      });
-    }, SAVE_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [draft, min, max]);
+  async function commit() {
+    const next = draftRef.current;
+    // The input restores a blank field itself.
+    if (next === null) return;
+    if (next < min || next > max) {
+      change(value);
+      return;
+    }
+    if (next === value) return;
+    if (!(await onSave(next))) change(value);
+  }
 
   return (
     <InputHorizontal
@@ -97,17 +74,20 @@ function FrequencyField({
       fillInput
       center
     >
-      <InputNumber
-        id={id}
-        value={draft}
-        onChange={change}
-        min={min}
-        max={max}
-        decimalPlaces={decimalPlaces}
-        suffix={suffix}
-        disabled={disabled}
-        allowEmpty={false}
-      />
+      {/* Blur bubbles up from the input. */}
+      <Section height="fit" alignItems="stretch" onBlur={() => void commit()}>
+        <InputNumber
+          id={id}
+          value={draft}
+          onChange={change}
+          min={min}
+          max={max}
+          decimalPlaces={decimalPlaces}
+          suffix={suffix}
+          disabled={disabled}
+          allowEmpty={false}
+        />
+      </Section>
     </InputHorizontal>
   );
 }

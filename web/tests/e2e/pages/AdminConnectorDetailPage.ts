@@ -46,8 +46,10 @@ export class AdminConnectorDetailPage {
     });
   }
 
-  async openIndexConfigurations(): Promise<void> {
+  /** Unfolds Index Configurations and checks that a setting shows `value`. */
+  async expectIndexConfigurationValue(value: string): Promise<void> {
     await this.indexConfigurationsToggle.click();
+    await expect(this.page.getByText(value).first()).toBeVisible();
   }
 
   async openFilesEditor(): Promise<void> {

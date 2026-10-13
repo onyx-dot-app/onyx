@@ -6,6 +6,7 @@ import { Button, Divider, OverflowText, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
 import { ValidSources } from "@/lib/connectors/types/source";
+import type { RichStr } from "@opal/types";
 import type { ConfigEntries, ConfigValue } from "@/lib/connectors/types";
 
 // Arrays past this length fold behind a "Show all" button.
@@ -36,7 +37,7 @@ export function buildConfigEntries(
 }
 
 interface ConfigItemProps {
-  label: string;
+  label: string | RichStr;
   value: ConfigValue;
 }
 

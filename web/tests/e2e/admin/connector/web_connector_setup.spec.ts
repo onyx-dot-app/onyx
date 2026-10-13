@@ -71,7 +71,8 @@ test.describe("Web connector setup", () => {
     const openedCcPairId = await statusPage.openConnector(connectorName);
     expect(openedCcPairId).toBe(ccPairId);
     await expect(page.getByText(connectorName).first()).toBeVisible();
-    await new AdminConnectorDetailPage(page).openIndexConfigurations();
-    await expect(page.getByText(DOCS_URL).first()).toBeVisible();
+    await new AdminConnectorDetailPage(page).expectIndexConfigurationValue(
+      DOCS_URL
+    );
   });
 });
