@@ -33,6 +33,7 @@ from onyx.prompts.user_info import (
     ORGANIZATION_PROFILE_PROMPT,
     QUERY_LANGUAGE_PROMPT,
     TEAM_INFORMATION_PROMPT,
+    USER_INFORMATION_FRAMING,
     USER_INFORMATION_HEADER,
     USER_LANGUAGE_PROMPT,
     USER_MEMORIES_PROMPT,
@@ -190,12 +191,21 @@ def with_language_section(prompt: str, language_section: str) -> str:
     return f"{prompt}\n\n{language_section}"
 
 
-def _build_user_information_section(
-    user_memory_context: UserMemoryContext | None,
-    company_context: str | None,
-) -> str:
-    """'# User Information' sub-sections, in order: Basic Info → Organization Profile →
-    Team Info → Language → Preferences → Memories."""
+def _build_shared_user_information_section(company_context: str | None) -> str:
+    """Org-wide part of '# User Information': the framing for the per-user block
+    and the company context. Identical for every user, so it lives in the system
+    prompt and shares its cache entry."""
+    section = USER_INFORMATION_HEADER + USER_INFORMATION_FRAMING
+    if company_context:
+        section += "\n" + TEAM_INFORMATION_PROMPT.format(
+            team_information=company_context.strip()
+        )
+    return section
+
+
+def _build_user_specific_section(user_memory_context: UserMemoryContext | None) -> str:
+    """Per-user sub-sections, in order: Basic Info → Organization Profile →
+    Language → Preferences → Memories."""
     sections: list[str] = []
 
     if user_memory_context:
@@ -229,11 +239,6 @@ def _build_user_information_section(
                 )
             )
 
-    if company_context:
-        sections.append(
-            TEAM_INFORMATION_PROMPT.format(team_information=company_context.strip())
-        )
-
     # Language sits before Preferences so an explicit preference wins over the hint.
     # Every prompt carries one line, so the model never infers whether a language was set.
     sections.append(
@@ -256,16 +261,16 @@ def _build_user_information_section(
                 USER_MEMORIES_PROMPT.format(user_memories=formatted_memories)
             )
 
-    return USER_INFORMATION_HEADER + "\n".join(sections)
+    return "\n".join(sections)
 
 
 def build_user_information_prompt(
     user_memory_context: UserMemoryContext | None,
 ) -> str:
-    """The '# User Information' block (identity, org profile, language,
-    preferences, memories, company context). Empty string if there is nothing
-    to say about the user."""
-    return _build_user_information_section(user_memory_context, get_company_context())
+    """The per-user part of '# User Information' (identity, org profile,
+    language, preferences, memories), sent as its own system message after the
+    shared system prompt."""
+    return _build_user_specific_section(user_memory_context)
 
 
 def build_system_prompt(
@@ -282,6 +287,7 @@ def build_system_prompt(
 
     With include_user_info=False the per-user block is left out so the result is
     byte-identical across users; emit it separately via build_user_information_prompt.
+    The org-wide framing (and company context) for that block stays here.
     """
     system_prompt, should_append_citation_guidance = apply_prompt_placeholders(
         base_system_prompt,
@@ -292,8 +298,9 @@ def build_system_prompt(
         append_citation_if_missing=True,
     )
 
+    system_prompt += _build_shared_user_information_section(get_company_context())
     if include_user_info:
-        system_prompt += build_user_information_prompt(user_memory_context)
+        system_prompt += "\n" + _build_user_specific_section(user_memory_context)
 
     # Append citation guidance after company context if placeholder was not present
     # This maintains backward compatibility and ensures citations are always enforced when needed
