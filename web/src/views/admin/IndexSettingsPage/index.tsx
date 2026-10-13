@@ -2096,6 +2096,12 @@ export default function IndexSettingsPage() {
                                           gap={2}
                                           padding={2}
                                         >
+                                          <Text
+                                            font="secondary-body"
+                                            color="text-03"
+                                          >
+                                            {t("modelPicker.cpuEstimateHint")}
+                                          </Text>
                                           {filteredSelfHostedProviders.map(
                                             (shProvider) => (
                                               <ProviderGroup
