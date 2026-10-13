@@ -579,7 +579,11 @@ document to the wrong person.
    `remove_stale_external_groups` with `owning_attempt_id`) take a share lock
    on the attempt row in the write's own transaction
    (`lock_external_group_sync_attempt_if_owned`). The reaper cannot fail the
-   attempt while such a write is open, and a write after it is refused. `complete_*` raises `PermissionSyncAttemptLostError` unless the
+   attempt while such a write is open, and a write after it is refused. Doc
+   sync does the same per element: `element_update_permissions` calls
+   `lock_doc_permission_sync_attempt_if_owned` before it writes, and
+   `update_element_permissions_batch` re-raises `PermissionSyncAttemptLostError`
+   instead of counting it as an element error. `complete_*` raises `PermissionSyncAttemptLostError` unless the
    row is still `IN_PROGRESS`, and `mark_*_failed` keeps an existing
    `FAILED`/`CANCELED` reason. Do not write a terminal status without this
    check.

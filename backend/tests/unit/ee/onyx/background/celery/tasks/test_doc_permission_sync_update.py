@@ -42,6 +42,7 @@ def test_oversized_acl_counts_as_error_and_continues(element_kind: str) -> None:
     with patch.object(perm_tasks, "element_update_permissions") as update_element:
         result = perm_tasks.update_element_permissions_batch(
             tenant_id="public",
+            attempt_id=7,
             new_permissions=[rejected, accepted],
             source_string="test",
             connector_id=2,
@@ -49,4 +50,4 @@ def test_oversized_acl_counts_as_error_and_continues(element_kind: str) -> None:
         )
 
     assert result == perm_tasks.PermissionSyncResult(num_updated=1, num_errors=1)
-    update_element.assert_called_once_with("public", accepted, "test", 2, 3)
+    update_element.assert_called_once_with("public", 7, accepted, "test", 2, 3)

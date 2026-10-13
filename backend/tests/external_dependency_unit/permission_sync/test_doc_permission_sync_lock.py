@@ -16,16 +16,22 @@ from ee.onyx.external_permissions.perm_sync_types import (
     FetchAllDocumentsIdsFunction,
 )
 from ee.onyx.external_permissions.sync_params import DocSyncConfig, SyncConfig
-from onyx.access.models import ElementExternalAccess
+from onyx.access.models import (
+    DocExternalAccess,
+    ElementExternalAccess,
+    ExternalAccess,
+)
 from onyx.configs.constants import PERMISSION_SYNC_TASK_EXPIRES, DocumentSource
 from onyx.db.enums import AccessType, PermissionSyncStatus
-from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import ConnectorCredentialPair, Document
 from onyx.db.permission_sync_attempt import (
+    PermissionSyncAttemptLostError,
     cancel_open_doc_permission_sync_attempt,
     get_cc_pair_ids_with_open_doc_permission_sync_attempt,
     get_doc_permission_sync_attempt,
     get_open_doc_permission_sync_attempt,
     mark_doc_permission_sync_attempt_failed,
+    mark_doc_permission_sync_attempt_in_progress,
     try_create_doc_permission_sync_attempt,
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -175,3 +181,39 @@ def test_task_skips_an_attempt_closed_while_queued(
     attempt = get_doc_permission_sync_attempt(db_session, attempt_id)
     assert attempt is not None
     assert attempt.error_message == "reaped while queued"
+
+
+def test_writes_are_refused_after_the_attempt_is_lost(
+    cc_pair: ConnectorCredentialPair, db_session: Session
+) -> None:
+    """A worker whose attempt was failed (and maybe replaced) must not write an
+    older permission snapshot over the replacement's."""
+    attempt_id = try_create_doc_permission_sync_attempt(
+        cc_pair.id, _task_id(), db_session
+    )
+    assert attempt_id is not None
+    mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
+    doc_id = f"lease-doc-{uuid4().hex[:8]}"
+
+    def write(element_id: str) -> perm_tasks.PermissionSyncResult:
+        return perm_tasks.update_element_permissions_batch(
+            tenant_id=TEST_TENANT_ID,
+            attempt_id=attempt_id,
+            new_permissions=[
+                DocExternalAccess(
+                    doc_id=element_id, external_access=ExternalAccess.empty()
+                )
+            ],
+            source_string=DocumentSource.JIRA.value,
+            connector_id=cc_pair.connector_id,
+            credential_id=cc_pair.credential_id,
+        )
+
+    assert write(doc_id).num_updated == 1
+
+    mark_doc_permission_sync_attempt_failed(
+        attempt_id, db_session, error_message="reaped"
+    )
+    with pytest.raises(PermissionSyncAttemptLostError):
+        write(f"{doc_id}-late")
+    assert db_session.get(Document, f"{doc_id}-late") is None
