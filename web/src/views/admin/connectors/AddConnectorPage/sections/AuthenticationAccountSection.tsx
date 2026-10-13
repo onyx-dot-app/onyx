@@ -2,24 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  Divider,
-  Fold,
-  InputTypeIn,
-  SelectCard,
-  Tabs,
-} from "@opal/components";
-import {
-  Content,
-  ContentAction,
-  InputVertical,
-  Section,
-  toast,
-} from "@opal/layouts";
+import { Button, Divider, Fold, SelectCard, Tabs } from "@opal/components";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import { cn } from "@opal/utils";
-import { FormikField } from "@/refresh-components/form/FormikField";
 import { SvgExpand, SvgFold, SvgListTree, SvgPlusCircle } from "@opal/icons";
 import type {
   Credential,
@@ -34,6 +20,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
+import { AccountNameField } from "@/lib/credentials/components/AccountNameField";
 import { updateCredentialSharing } from "@/lib/credentials/svc";
 import { getIn, useFormikContext } from "formik";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
@@ -102,7 +89,6 @@ export default function AuthenticationAccountSection({
   editCCPairId = null,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
-  const tCreate = useTranslations("admin.credentials.create");
   const newAccountNameField = `${NEW_ACCOUNT_FIELD}.${NEW_ACCOUNT_NAME_FIELD}`;
   const settings = useSettings();
   const {
@@ -278,23 +264,7 @@ export default function AuthenticationAccountSection({
           {/* Opens once the account's own fields are valid. */}
           <Disabled disabled={!newAccountReady}>
             <Section alignItems="stretch" gap={4}>
-              <InputVertical
-                withLabel={newAccountNameField}
-                title={tCreate("nameField.title")}
-                suffix="optional"
-              >
-                <FormikField<string>
-                  name={newAccountNameField}
-                  render={(formikField) => (
-                    <InputTypeIn
-                      {...formikField}
-                      id={newAccountNameField}
-                      value={formikField.value ?? ""}
-                      placeholder={tCreate("nameField.placeholder")}
-                    />
-                  )}
-                />
-              </InputVertical>
+              <AccountNameField name={newAccountNameField} />
               <ShareAccountField
                 namePrefix={NEW_ACCOUNT_FIELD}
                 disabled={!newAccountReady}
