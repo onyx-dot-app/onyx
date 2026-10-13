@@ -3134,6 +3134,9 @@
           "title": "Connector Manage Access"
         },
         "title": "Connector Settings"
+      },
+      "optionsListInput": {
+        "placeholder": "Pick {label} from the list, or type one"
       }
     },
     "costOverrides": {

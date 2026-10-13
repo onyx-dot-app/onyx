@@ -26,6 +26,8 @@ import FileDropzoneField from "@/refresh-components/form/FileDropzoneField";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
+import FindingListField from "@/views/admin/connectors/AddConnectorPage/form/FindingListField";
+import type { StoredReportScope } from "@/lib/connectors/checks/findings";
 import { getSourceDisplayName } from "@/lib/sources";
 import { markdown } from "@opal/utils";
 
@@ -37,6 +39,7 @@ interface TabsFieldProps {
   values: any;
   connector: ConfigurableSources;
   currentCredential: CredentialValues | null;
+  reportScope: StoredReportScope | null;
 }
 
 const TabsField: FC<TabsFieldProps> = ({
@@ -44,6 +47,7 @@ const TabsField: FC<TabsFieldProps> = ({
   values,
   connector,
   currentCredential,
+  reportScope,
 }) => {
   const t = useTranslations("admin.connectorsList");
   const { setFieldTouched, setFieldValue } = useFormikContext<FormValues>();
@@ -126,6 +130,7 @@ const TabsField: FC<TabsFieldProps> = ({
                       values={values}
                       connector={connector}
                       currentCredential={currentCredential}
+                      reportScope={reportScope}
                     />
                   );
                 })}
@@ -257,6 +262,8 @@ interface RenderFieldProps {
   values: any;
   connector: ConfigurableSources;
   currentCredential: CredentialValues | null;
+  /** The stored check reports that can list a field's options. */
+  reportScope: StoredReportScope | null;
 }
 
 export const RenderField: FC<RenderFieldProps> = ({
@@ -264,6 +271,7 @@ export const RenderField: FC<RenderFieldProps> = ({
   values,
   connector,
   currentCredential,
+  reportScope,
 }) => {
   const t = useTranslations("admin.connectorsList");
   const { setFieldValue } = useFormikContext<FormValues>(); // Get Formik's context functions
@@ -315,6 +323,7 @@ export const RenderField: FC<RenderFieldProps> = ({
         values={values}
         connector={connector}
         currentCredential={currentCredential}
+        reportScope={reportScope}
       />
     );
   }
@@ -345,13 +354,30 @@ export const RenderField: FC<RenderFieldProps> = ({
           subDescription={richDescription}
           suffix={optionalSuffix}
         >
-          <TextListField
-            name={field.name}
-            placeholder={t("listInput.placeholder", {
-              label: label.toLowerCase(),
-            })}
-            disabled={disabled}
-          />
+          {field.optionsFinding !== undefined ? (
+            <FindingListField
+              name={field.name}
+              connector={connector}
+              findingKey={field.optionsFinding}
+              reportScope={reportScope}
+              plain={field.plainListCondition?.(values) === true}
+              placeholder={t("optionsListInput.placeholder", {
+                label: label.toLowerCase(),
+              })}
+              plainPlaceholder={t("listInput.placeholder", {
+                label: label.toLowerCase(),
+              })}
+              disabled={disabled}
+            />
+          ) : (
+            <TextListField
+              name={field.name}
+              placeholder={t("listInput.placeholder", {
+                label: label.toLowerCase(),
+              })}
+              disabled={disabled}
+            />
+          )}
         </InputVertical>
       ) : field.type === "string_pair_list" ? (
         <InputVertical

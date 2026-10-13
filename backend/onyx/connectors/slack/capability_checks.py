@@ -52,6 +52,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.connectors.slack.connector import (
+    channel_keys,
     get_channels,
     get_channels_across_teams,
     list_grid_team_ids,
@@ -661,7 +662,7 @@ class _ChannelPatternsCheck(CapabilityCheck[SlackConnectorConfig]):
 
 
 class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
-    """Verifies every configured channel name is visible to the bot.
+    """Verifies every configured channel id or name is visible to the bot.
 
     Existed only as commented-out code in ``validate_connector_settings``
     (removed as too slow for a synchronous request); resurrected here where slow
@@ -713,9 +714,9 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
                 "(`conversations.list`), so the configured channels could not "
                 "be verified.",
             )
-        visible_names = {channel["name"] for channel in all_channels}
-        configured_names = [name.removeprefix("#") for name in channels_to_include]
-        missing = sorted(set(configured_names) - visible_names)
+        visible_channels = channel_keys(all_channels)
+        configured = [entry.removeprefix("#") for entry in channels_to_include]
+        missing = sorted(set(configured) - visible_channels)
         if missing:
             raise ConnectorValidationError(
                 f"Configured channels are not visible to the bot: {missing}. "
@@ -730,15 +731,14 @@ def _iter_public_channels(
     slack_client: SlackSourceOperations,
 ) -> Iterator[dict[str, Any]]:
     """Every unarchived public channel, read page by page. On Enterprise Grid,
-    lists each workspace in turn, as the connector does. The connector matches
-    ``channels`` by name, so channels that share a name across workspaces are
-    one option."""
+    lists each workspace in turn, as the connector does. A channel shared into
+    several workspaces is listed once, by id."""
     team_ids: list[str | None] = (
         [*list_grid_team_ids(slack_client)]
         if _auth_test(slack_client).enterprise_id
         else [None]
     )
-    seen_names: set[str] = set()
+    seen_ids: set[str] = set()
     for team_id in team_ids:
         for page in slack_client.list_channels(
             variant=SlackChannelVariant.PUBLIC,
@@ -747,9 +747,9 @@ def _iter_public_channels(
             team_id=team_id,
         ):
             for channel in page.channels:
-                if channel["name"] in seen_names:
+                if channel["id"] in seen_ids:
                     continue
-                seen_names.add(channel["name"])
+                seen_ids.add(channel["id"])
                 yield channel
 
 
@@ -771,12 +771,12 @@ class _ReadableChannelListingCheck(CapabilityCheck):
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         try:
-            # The connector matches ``channels`` against bare channel names.
+            # The id survives a rename. The label is the name the admin reads.
             finding: OptionsFinding = bounded_options(
                 _iter_public_channels(_slack_client(context)),
                 key=CheckFindingKey.READABLE_CHANNELS,
                 field_name=_CHANNELS_FIELD,
-                value=lambda channel: channel["name"],
+                value=lambda channel: channel["id"],
                 label=lambda channel: channel["name"],
             )
         except SlackApiError as e:

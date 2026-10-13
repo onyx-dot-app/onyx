@@ -32,6 +32,7 @@ function ZoomForm() {
               values={values}
               connector={ValidSources.Zoom}
               currentCredential={null}
+              reportScope={null}
             />
           ))}
         </>

@@ -472,30 +472,33 @@ def filter_channels(
         filtered_channels = [
             channel
             for channel in filtered_channels
-            if _channel_name_matches(
-                channel["name"], channels_to_include, include_regex_enabled
-            )
+            if _channel_matches(channel, channels_to_include, include_regex_enabled)
         ]
 
-    # unlike includes, exclude names aren't validated — excluding a missing channel is harmless
+    # unlike includes, exclude entries aren't validated: excluding a missing channel is harmless
     if channels_to_exclude:
         filtered_channels = [
             channel
             for channel in filtered_channels
-            if not _channel_name_matches(
-                channel["name"], channels_to_exclude, exclude_regex_enabled
-            )
+            if not _channel_matches(channel, channels_to_exclude, exclude_regex_enabled)
         ]
 
     return filtered_channels
 
 
-def _channel_name_matches(
-    channel_name: str, patterns: list[str], regex_enabled: bool
+def _channel_matches(
+    channel: ChannelType, patterns: list[str], regex_enabled: bool
 ) -> bool:
+    """An exact entry names the channel by id, which survives a rename, or by
+    name. A regex matches the name only."""
     if regex_enabled:
-        return any(re.fullmatch(pattern, channel_name) for pattern in patterns)
-    return channel_name in patterns
+        return any(re.fullmatch(pattern, channel["name"]) for pattern in patterns)
+    return channel["id"] in patterns or channel["name"] in patterns
+
+
+def channel_keys(channels: list[ChannelType]) -> set[str]:
+    """Every string an exact config entry may use for one of ``channels``."""
+    return {key for channel in channels for key in (channel["id"], channel["name"])}
 
 
 def _validate_channels_exist(
@@ -503,9 +506,10 @@ def _validate_channels_exist(
 ) -> None:
     # fail loudly on an unknown channel so the user knows one of the
     # channels they've specified is typo'd or private
+    known_channels = channel_keys(all_channels)
     all_channel_names = {channel["name"] for channel in all_channels}
     for channel in channels_to_include:
-        if channel not in all_channel_names:
+        if channel not in known_channels:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
                 f"Available channels (Showing {len(all_channel_names)} of "

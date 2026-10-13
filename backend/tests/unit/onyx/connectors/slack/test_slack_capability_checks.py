@@ -977,6 +977,19 @@ def test_configured_channels_all_visible_passes() -> None:
     _run("slack_configured_channels_visible", context)
 
 
+def test_configured_channels_by_id_pass_after_a_rename() -> None:
+    """Verifies the config check accepts a channel id whose name changed."""
+    # Precondition.
+    gateway = _gateway()
+    gateway.list_channels.side_effect = _pages(
+        SlackChannelsPage(channels=[{"id": "C1", "name": "general-renamed"}])
+    )
+    context = _context(gateway, connector_specific_config={"channels": ["C1"]})
+
+    # Under test and postcondition.
+    _run("slack_configured_channels_visible", context)
+
+
 def test_configured_channels_missing_channel_fails() -> None:
     """Verifies invisible configured channels are named in the failure."""
     # Precondition.
@@ -1017,7 +1030,7 @@ def test_configured_channels_regex_mode_skips_probe() -> None:
 # slack_readable_channel_listing
 
 
-def test_readable_channel_listing_finds_channel_names_as_channel_options() -> None:
+def test_readable_channel_listing_finds_channel_ids_as_channel_options() -> None:
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = lambda **_: iter(
@@ -1038,8 +1051,8 @@ def test_readable_channel_listing_finds_channel_names_as_channel_options() -> No
             key=CheckFindingKey.READABLE_CHANNELS,
             field_name="channels",
             options=[
-                FindingOption(value="general", label="general"),
-                FindingOption(value="random", label="random"),
+                FindingOption(value="C1", label="general"),
+                FindingOption(value="C2", label="random"),
             ],
         )
     ]
@@ -1060,8 +1073,8 @@ def test_readable_channel_listing_lists_each_grid_workspace() -> None:
     )
     channels_by_team = {
         "T1": [{"id": "C1", "name": "general"}],
-        # A shared channel appears in both workspaces, and another workspace
-        # has its own channel with the same name: both are one option.
+        # A shared channel appears in both workspaces and is one option. Another
+        # workspace's own channel with the same name is a second option.
         "T2": [
             {"id": "C1", "name": "general"},
             {"id": "C3", "name": "general"},
@@ -1080,7 +1093,11 @@ def test_readable_channel_listing_lists_each_grid_workspace() -> None:
     # Postcondition.
     listing: CheckFinding = findings[0]
     assert isinstance(listing, OptionsFinding)
-    assert [option.value for option in listing.options] == ["general", "eng"]
+    assert [(option.value, option.label) for option in listing.options] == [
+        ("C1", "general"),
+        ("C3", "general"),
+        ("C2", "eng"),
+    ]
 
 
 def test_readable_channel_listing_stops_at_the_option_cap() -> None:

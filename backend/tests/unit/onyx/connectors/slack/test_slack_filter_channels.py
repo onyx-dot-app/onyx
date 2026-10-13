@@ -1,6 +1,7 @@
 """Channel include/exclude filtering for the Slack connector: excludes apply
-after includes, support exact-name and full-match regex modes, and never fail
-on names absent from the workspace."""
+after includes, exact entries match a channel id or name, regex entries match
+the name in full, and excludes never fail on entries absent from the
+workspace."""
 
 from typing import Any, cast
 
@@ -114,6 +115,37 @@ def test_exclude_regex_is_full_match() -> None:
         exclude_regex_enabled=True,
     )
     assert result == CHANNELS
+
+
+def test_include_exact_matches_channel_id() -> None:
+    result = filter_channels(CHANNELS, ["C-support", "C-billing-alerts"], False)
+    assert _names(result) == ["support", "billing-alerts"]
+
+
+def test_include_exact_mixes_ids_and_names() -> None:
+    result = filter_channels(CHANNELS, ["C-support", "general"], False)
+    assert _names(result) == ["general", "support"]
+
+
+def test_include_regex_never_matches_channel_id() -> None:
+    result = filter_channels(CHANNELS, ["C-.*"], True)
+    assert result == []
+
+
+def test_exclude_exact_matches_channel_id() -> None:
+    result = filter_channels(
+        CHANNELS,
+        None,
+        False,
+        channels_to_exclude=["C-support", "infra-alerts"],
+        exclude_regex_enabled=False,
+    )
+    assert _names(result) == ["general", "billing-alerts", "deploy-notifications"]
+
+
+def test_include_validation_raises_for_unknown_channel_id() -> None:
+    with pytest.raises(ValueError, match="C-renamed.*not found in workspace"):
+        filter_channels(CHANNELS, ["C-support", "C-renamed"], False)
 
 
 def test_include_validation_still_raises_for_unknown_channel() -> None:

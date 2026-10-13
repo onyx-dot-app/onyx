@@ -406,8 +406,11 @@ const CREDENTIAL_CHECK_POLL_MS = 2000;
 
 /** What `useCredentialCheckReports` returns. */
 export interface CredentialCheckReports {
-  /** A credential's own report (not a connector's), or null if it has none. */
-  reportFor: (credentialId: number) => CredentialCheckReport | null;
+  /** The credential's report for `connectorId`, or its own for null. */
+  reportFor: (
+    credentialId: number,
+    connectorId?: number | null
+  ) => CredentialCheckReport | null;
   /** Starts the checks on one credential; resolves once the run is queued. */
   rerun: (credentialId: number) => Promise<void>;
 }
@@ -431,12 +434,18 @@ export function useCredentialCheckReports(
     }
   );
 
-  return {
-    reportFor: (credentialId) =>
+  // Stable per load, so a consumer can memoize on it.
+  const reportFor = useCallback(
+    (credentialId: number, connectorId: number | null = null) =>
       data?.find(
         (report) =>
-          report.credential_id === credentialId && report.connector_id === null
+          report.credential_id === credentialId &&
+          report.connector_id === connectorId
       ) ?? null,
+    [data]
+  );
+  return {
+    reportFor,
     rerun: async (credentialId) => {
       await startCredentialCheckRun(credentialId);
       await refresh();

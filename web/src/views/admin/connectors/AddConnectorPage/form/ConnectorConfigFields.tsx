@@ -3,6 +3,7 @@ import CredentialSubText from "@/lib/credentials/components/CredentialFields";
 import type { ConnectionConfiguration } from "@/lib/connectors/types";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
+import type { StoredReportScope } from "@/lib/connectors/checks/findings";
 import { RenderField } from "./FieldRendering";
 import { useFormikContext } from "formik";
 
@@ -13,6 +14,8 @@ export interface ConnectorConfigFieldsProps {
   values: any;
   connector: ConfigurableSources;
   currentCredential: CredentialValues | null;
+  /** The stored check reports that can list a field's options. */
+  reportScope: StoredReportScope | null;
 }
 
 export default function ConnectorConfigFields({
@@ -20,6 +23,7 @@ export default function ConnectorConfigFields({
   values,
   connector,
   currentCredential,
+  reportScope,
 }: ConnectorConfigFieldsProps) {
   const { setFieldValue } = useFormikContext<any>(); // Get Formik's context functions
 
@@ -68,6 +72,7 @@ export default function ConnectorConfigFields({
           values={values}
           connector={connector}
           currentCredential={currentCredential}
+          reportScope={reportScope}
         />
       ))}
     </>
