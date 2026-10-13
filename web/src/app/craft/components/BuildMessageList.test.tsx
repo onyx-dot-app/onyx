@@ -303,3 +303,29 @@ describe("BuildMessageList thinking visibility", () => {
     );
   });
 });
+
+// Finalization uses the existing assistant block until canonical history is ready.
+test("keeps one assistant cursor during finalization and removes it when finalization stops", () => {
+  const props = {
+    sessionId: "session-1",
+    messages: [savedAssistantMessage],
+    streamItems: [],
+    scrollContainerRef: scrollRef(),
+    autoScrollEnabled: false,
+  };
+  const { rerender } = render(
+    <TooltipProvider>
+      <BuildMessageList {...props} isStreaming isFinalizing />
+    </TooltipProvider>
+  );
+  expect(screen.getAllByText("Final answer")).toHaveLength(1);
+  expect(screen.getAllByTestId("onyx-logo")).toHaveLength(1);
+  expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
+  rerender(
+    <TooltipProvider>
+      <BuildMessageList {...props} isFinalizing={false} />
+    </TooltipProvider>
+  );
+  expect(screen.getByText("Final answer")).toBeInTheDocument();
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
+});

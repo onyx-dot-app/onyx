@@ -16,6 +16,22 @@ export class CraftChatOutputsPage {
     return this.page.getByTestId(`craft-output-card-${id}`);
   }
 
+  async send(message: string): Promise<void> {
+    await this.page
+      .getByRole("textbox", { name: "Message input" })
+      .fill(message);
+    await this.page.getByRole("button", { name: "Send", exact: true }).click();
+  }
+
+  async expectFinalizing(answer: string, finalizing: boolean): Promise<void> {
+    const message = this.page
+      .getByTestId("craft-assistant-message")
+      .filter({ hasText: answer });
+    await expect(message).toHaveCount(1);
+    await expect(message).toBeVisible();
+    await expect(message).toHaveAttribute("aria-busy", String(finalizing));
+  }
+
   async expectCards(index: number, names: string[]): Promise<void> {
     await expect(
       this.turn(index).getByTestId(/^craft-output-card-/)

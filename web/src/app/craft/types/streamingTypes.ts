@@ -144,6 +144,10 @@ export interface ApiInteractiveTurnResponse {
   error_detail?: string | null;
 }
 
+export interface CompletedInteractiveTurn extends ApiInteractiveTurnResponse {
+  status: "SUCCEEDED" | "FAILED" | "CANCELLED";
+}
+
 export interface ApiArtifactResponse {
   id: string;
   session_id: string;

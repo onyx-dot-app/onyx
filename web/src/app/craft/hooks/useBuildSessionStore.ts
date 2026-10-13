@@ -22,6 +22,7 @@ import {
   SessionOrigin,
   SessionStatus,
   SandboxRuntimeState,
+  type CompletedInteractiveTurn,
   type OutputFile,
   type OutputInventory,
 } from "@/app/craft/types/streamingTypes";
@@ -819,12 +820,15 @@ const completedTranscriptReads: Map<string, Promise<void>> = new Map();
 
 function reconcileCompletedTranscript(
   sessionId: string,
-  started: BuildSessionData
+  started: BuildSessionData,
+  completion?: CompletedInteractiveTurn
 ): Promise<void> {
   const owner = started.turnSettlement?.owner;
   const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${owner?.kind}:${owner?.kind === "interactive" ? owner.turnId : owner?.runId}`;
   const existing = completedTranscriptReads.get(requestKey);
   if (existing) return existing;
+  // Final discovery supersedes reads started before the completion boundary.
+  outputInventoryRequests.get(sessionId)?.controller.abort();
   const ownsCompletion = () => {
     const current = useBuildSessionStore.getState().sessions.get(sessionId);
     return (
@@ -859,7 +863,7 @@ function reconcileCompletedTranscript(
         const retryDelay = attempt < 4 ? 250 : 1000;
         if (!ownsCompletion()) return;
         if (!owner) return;
-        let waiting: boolean;
+        let waiting = false;
         let approvalPause = false;
         let scheduledFailure = false;
         let interactiveFailure: string | null = null;
@@ -873,7 +877,7 @@ function reconcileCompletedTranscript(
             run.status === "FAILED" || run.status === "SKIPPED";
           waiting = run.status === "RUNNING" || run.status === "QUEUED";
           approvalPause = run.status === "AWAITING_APPROVAL";
-        } else {
+        } else if (!completion) {
           const activeTurn = await fetchActiveTurn(sessionId);
           if (!ownsCompletion()) return;
           successor =
@@ -888,7 +892,8 @@ function reconcileCompletedTranscript(
           continue;
         }
         if (owner.kind === "interactive" && owner.turnId !== null) {
-          const completedTurn = await fetchKnownTurn(sessionId, owner.turnId);
+          const completedTurn =
+            completion ?? (await fetchKnownTurn(sessionId, owner.turnId));
           if (!ownsCompletion()) return;
           if (!completedTurn) {
             fail(null);
@@ -1193,7 +1198,8 @@ interface BuildSessionStore {
   beginTurnSettlement: (
     sessionId: string,
     owner: CompletionOwner,
-    generation: number
+    generation: number,
+    completion?: CompletedInteractiveTurn
   ) => Promise<void>;
   retryTurnSettlement: (sessionId: string) => Promise<void>;
 
@@ -2020,7 +2026,14 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     return claimed;
   },
 
-  beginTurnSettlement: async (sessionId, owner, generation) => {
+  beginTurnSettlement: async (sessionId, owner, generation, completion) => {
+    if (
+      completion &&
+      (owner.kind !== "interactive" ||
+        completion.session_id !== sessionId ||
+        completion.turn_id !== owner.turnId)
+    )
+      return;
     const session = get().sessions.get(sessionId);
     if (
       !session ||
@@ -2046,7 +2059,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       },
     });
     const started = get().sessions.get(sessionId);
-    if (started) await reconcileCompletedTranscript(sessionId, started);
+    if (started)
+      await reconcileCompletedTranscript(sessionId, started, completion);
   },
 
   retryTurnSettlement: async (sessionId) => {
@@ -2695,6 +2709,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   ) => {
     const started: BuildSessionData | undefined = get().sessions.get(sessionId);
     if (!started || signal?.aborted) return;
+    // Committed completion owns discovery; passive reads must not consume new files first.
+    if (silent && started.turnSettlement?.phase === "reconciling") return;
     const matchesRuntime = (session: BuildSessionData): boolean =>
       sameSessionRuntime(session, started);
     const previousRequest = outputInventoryRequests.get(sessionId);

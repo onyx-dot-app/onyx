@@ -688,6 +688,9 @@ function ChatPanelContent({
                           .openOutputsTab(outputSessionId, turnIndex)
                       }
                       isStreaming={displayIsRunning}
+                      isFinalizing={
+                        session?.turnSettlement?.phase === "reconciling"
+                      }
                       autoScrollEnabled={isAtBottom}
                       scrollContainerRef={scrollContainerRef}
                       trailingAssistantSlot={

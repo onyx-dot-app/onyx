@@ -50,6 +50,7 @@ interface BuildMessageListProps {
   messages: BuildMessage[];
   streamItems: StreamItem[];
   isStreaming?: boolean;
+  isFinalizing?: boolean;
   /** Whether auto-scroll is enabled (user is at bottom) */
   autoScrollEnabled?: boolean;
   /**
@@ -85,6 +86,7 @@ export default function BuildMessageList({
   messages,
   streamItems,
   isStreaming = false,
+  isFinalizing = false,
   autoScrollEnabled = true,
   scrollContainerRef,
   trailingAssistantSlot,
@@ -321,6 +323,8 @@ export default function BuildMessageList({
     trailing?: React.ReactNode
   ) => {
     const turnIndex = message.turn_index;
+    const finalizing =
+      isFinalizing && !showStreamingArea && message.id === lastMessage?.id;
     const outputs =
       turnIndex === undefined ||
       lastAssistantByTurn.get(turnIndex) !== message.id
@@ -342,7 +346,12 @@ export default function BuildMessageList({
         : null;
 
     return (
-      <div key={message.id} className="flex flex-col gap-2 py-4">
+      <div
+        key={message.id}
+        className="flex flex-col gap-2 py-4"
+        data-testid="craft-assistant-message"
+        aria-busy={finalizing}
+      >
         <Hoverable.Root group="craftAgentMessage" width="full">
           <div className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3">
             <div className="relative">
@@ -387,6 +396,7 @@ export default function BuildMessageList({
                   onFileOpen={onFileOpen}
                 />
               )}
+              {finalizing && <BlinkingBar />}
             </div>
           </div>
         </Hoverable.Root>
@@ -484,7 +494,11 @@ export default function BuildMessageList({
         })}
 
         {showStreamingArea && (
-          <div className="flex items-start gap-3 py-4">
+          <div
+            className="flex items-start gap-3 py-4"
+            data-testid="craft-assistant-message"
+            aria-busy={isStreaming}
+          >
             <div className="shrink-0 mt-2">
               <FoldableLogo onyxBranded folded size={24} />
             </div>
