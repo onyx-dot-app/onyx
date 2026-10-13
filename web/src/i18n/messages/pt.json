@@ -3128,6 +3128,9 @@
           "title": "Acesso de gerenciamento do conector"
         },
         "title": "Configurações do conector"
+      },
+      "optionsListInput": {
+        "placeholder": "Escolha {label} na lista ou digite"
       }
     },
     "costOverrides": {

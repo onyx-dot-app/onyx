@@ -3128,6 +3128,9 @@
           "title": "コネクタの管理アクセス"
         },
         "title": "コネクタ設定"
+      },
+      "optionsListInput": {
+        "placeholder": "リストから {label} を選択するか入力"
       }
     },
     "costOverrides": {

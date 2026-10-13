@@ -1,4 +1,5 @@
 import type { SWRResponse } from "swr";
+import type { CapabilityCheckResult } from "@/lib/connectors/checks/types";
 import type { CredentialSpec } from "@/lib/credentials/types/spec";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import type { TypedFile } from "@/lib/connectors/fileTypes";
@@ -176,7 +177,10 @@ export interface CredentialCheckReport {
   connector_id: number | null;
   run_status: CredentialCheckRunStatus;
   run_started_at: string | null;
-  report: { checked_at: string } | null;
+  report: {
+    checked_at: string;
+    check_results: CapabilityCheckResult[];
+  } | null;
   time_updated: string;
 }
 

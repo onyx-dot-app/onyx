@@ -20,11 +20,7 @@ import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import useSWR, { mutate } from "swr";
-import {
-  AdvancedConfigDisplay,
-  buildConfigEntries,
-  ConfigDisplay,
-} from "./ConfigDisplay";
+import { AdvancedConfigDisplay, ConnectorConfigDisplay } from "./ConfigDisplay";
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
 import InlineFileManagement from "./InlineFileManagement";
@@ -734,11 +730,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
             </Title>
 
             <Card className="px-8 py-4">
-              <ConfigDisplay
-                configEntries={buildConfigEntries(
-                  ccPair.connector.connector_specific_config,
-                  ccPair.connector.source
-                )}
+              <ConnectorConfigDisplay
+                source={ccPair.connector.source}
+                config={ccPair.connector.connector_specific_config}
+                credentialId={ccPair.credential.id}
+                connectorId={ccPair.connector.id}
               />
 
               {/* Inline file management for file connectors */}

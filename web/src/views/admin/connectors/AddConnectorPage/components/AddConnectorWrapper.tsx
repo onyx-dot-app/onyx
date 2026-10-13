@@ -707,6 +707,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       {(formikProps) => {
         const busy = uploading || creatingConnector || planning;
         const formCredential = accountFor(formikProps.values);
+        const formCredentialId: number | null =
+          formCredential !== null && !isDraftCredential(formCredential)
+            ? formCredential.id
+            : null;
         const canCreate = noCredentials || formCredential !== null;
         const newAccountReady =
           typedDraft(connector, accountSchema, formikProps.values) !== null;
@@ -730,10 +734,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         const credentialSwapped: boolean =
           edit !== undefined &&
           formCredential !== null &&
-          !(
-            "id" in formCredential &&
-            formCredential.id === edit.ccPair.credential.id
-          );
+          formCredentialId !== edit.ccPair.credential.id;
         return (
           <ConnectorChecksGate
             source={connector}
@@ -952,6 +953,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 values={formikProps.values}
                                 connector={connector}
                                 currentCredential={formCredential}
+                                reportScope={
+                                  formCredentialId === null
+                                    ? null
+                                    : {
+                                        credentialId: formCredentialId,
+                                        connectorId:
+                                          edit?.ccPair.connector.id ?? null,
+                                      }
+                                }
                                 disabled={!formUnlocked}
                               >
                                 {edit && editsFileList && (
