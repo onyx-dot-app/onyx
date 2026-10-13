@@ -171,7 +171,10 @@ class TokenExchangeRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     headers: dict[str, str]
-    body: dict[str, str]
+    # Values are usually strings, but a JSON body may carry the type the
+    # provider's API documents (Zendesk's `expires_in` is an integer). Form
+    # encoding stringifies them, so both wire formats stay correct.
+    body: dict[str, Any]
     # How ``body`` is encoded on the wire: JSON (``requests.post(json=...)``)
     # when True, RFC-6749 form-encoded (``data=...``) when False. The callback
     # route maps this to exactly one of `data`/`json` so `requests` never sees
@@ -461,9 +464,10 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
 
     def build_refresh_request(
         self, refresh_token: str, client_id: str, client_secret: str
-    ) -> dict[str, str]:
-        """The refresh POST form body. Override to add provider-specific params
-        (scope, resource, audience, …) or change the grant."""
+    ) -> dict[str, Any]:
+        """The refresh POST body. Override to add provider-specific params
+        (scope, resource, audience, …) or change the grant. Same value-typing
+        rule as :class:`TokenExchangeRequest.body`."""
         return {
             "grant_type": "refresh_token",
             "client_id": client_id,

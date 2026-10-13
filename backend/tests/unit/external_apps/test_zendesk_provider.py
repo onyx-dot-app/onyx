@@ -115,6 +115,20 @@ def test_resolve_instance_config_withholds_secret_fields(
     assert captured == {"subdomain": "acme", "client_id": "cid"}
 
 
+def test_resolve_instance_config_leaves_fixed_host_providers_alone() -> None:
+    """The hook defaults to the descriptor, so deriving a built-in's patterns
+    from the provider is a no-op for every provider on a fixed host."""
+    for app_type, provider in PROVIDERS.items():
+        if isinstance(provider, ZendeskProvider):
+            continue  # per-account: needs a subdomain, covered above
+        instance = resolve_instance_config(app_type, {})
+        assert instance is not None
+        assert (
+            instance.upstream_url_patterns
+            == provider.spec.descriptor.upstream_url_patterns
+        )
+
+
 def test_token_exchange_posts_json_with_an_explicit_expiry() -> None:
     """Zendesk only issues a refresh token when the request names an expiry, and
     its token endpoint takes a JSON body."""
@@ -126,14 +140,21 @@ def test_token_exchange_posts_json_with_an_explicit_expiry() -> None:
     assert request.body["grant_type"] == "authorization_code"
     assert request.body["code"] == "the-code"
     assert request.body["redirect_uri"] == "https://onyx.test/callback"
-    assert int(request.body["expires_in"]) >= 300
+    # An integer, as Zendesk's JSON token endpoint documents it.
+    assert isinstance(request.body["expires_in"], int)
+    assert 300 <= request.body["expires_in"] <= 172800
 
 
 def test_refresh_request_restates_the_expiry() -> None:
     body = _provider().build_refresh_request("rt", "cid", "secret")
     assert body["grant_type"] == "refresh_token"
     assert body["refresh_token"] == "rt"
-    assert int(body["expires_in"]) >= 300
+    assert (
+        body["expires_in"]
+        == _provider()
+        .build_token_exchange_request("c", "cid", "s", "https://onyx.test/callback")
+        .body["expires_in"]
+    )
     assert _provider().refresh_json_encoded is True
 
 

@@ -378,14 +378,14 @@ class ZendeskProvider(OAuthExternalAppProvider):
                 "scope": self.spec.oauth.scope,
                 # Without an explicit expiry an older Zendesk client mints a
                 # non-expiring access token and no refresh token at all.
-                "expires_in": str(_ACCESS_TOKEN_TTL_SECONDS),
+                "expires_in": _ACCESS_TOKEN_TTL_SECONDS,
             },
             json_encoded=True,
         )
 
     def build_refresh_request(
         self, refresh_token: str, client_id: str, client_secret: str
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
         return {
             "grant_type": "refresh_token",
             "client_id": client_id,
@@ -393,7 +393,7 @@ class ZendeskProvider(OAuthExternalAppProvider):
             "refresh_token": refresh_token,
             # Same reason as the code exchange: each refresh re-states the
             # expiry, and Zendesk rotates the refresh token with it.
-            "expires_in": str(_ACCESS_TOKEN_TTL_SECONDS),
+            "expires_in": _ACCESS_TOKEN_TTL_SECONDS,
         }
 
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
