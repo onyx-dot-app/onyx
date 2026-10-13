@@ -5663,6 +5663,31 @@
           "connectorsLeft": "{count, plural, one {残り # 個のコネクタ} other {残り # 個のコネクタ}}",
           "current": "現在のコネクタ: {name}",
           "documentsLeft": "{count, plural, one {残り # 件のドキュメント} other {残り # 件のドキュメント}}"
+        },
+        "mode": {
+          "description": "ユーザーが閲覧できるドキュメントを検索がどのように判断するか。",
+          "enforcePending": "適用が設定されており、更新の完了時に開始されます。",
+          "enforceUnavailable": "検索インデックスの更新完了後に利用できます。",
+          "label": "検索アクセスモード",
+          "options": {
+            "enforce": {
+              "description": "検索はコネクタ単位のアクセスを使用します。",
+              "title": "適用"
+            },
+            "off": {
+              "description": "検索はドキュメントのアクセスリストを使用します。",
+              "title": "オフ"
+            },
+            "shadow": {
+              "description": "検索はドキュメントのアクセスリストを使用し、コネクタ単位のアクセスで結果が異なる場合を記録します。",
+              "title": "シャドウ"
+            }
+          },
+          "placeholder": "モードを選択",
+          "toasts": {
+            "error": "検索アクセスモードを更新できませんでした。",
+            "success": "検索アクセスモードを{mode}に設定しました。"
+          }
         }
       }
     },

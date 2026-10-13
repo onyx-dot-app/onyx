@@ -5663,6 +5663,31 @@
           "connectorsLeft": "{count, plural, one {剩余 # 个连接器} other {剩余 # 个连接器}}",
           "current": "当前连接器：{name}",
           "documentsLeft": "{count, plural, one {剩余 # 个文档} other {剩余 # 个文档}}"
+        },
+        "mode": {
+          "description": "搜索如何决定用户可以看到哪些文档。",
+          "enforcePending": "已设置强制，将在更新完成后开始。",
+          "enforceUnavailable": "搜索索引更新完成后可用。",
+          "label": "搜索访问模式",
+          "options": {
+            "enforce": {
+              "description": "搜索使用连接器级访问。",
+              "title": "强制"
+            },
+            "off": {
+              "description": "搜索使用文档访问列表。",
+              "title": "关闭"
+            },
+            "shadow": {
+              "description": "搜索使用文档访问列表，并记录连接器级访问结果不同的情况。",
+              "title": "影子"
+            }
+          },
+          "placeholder": "选择模式",
+          "toasts": {
+            "error": "无法更新搜索访问模式。",
+            "success": "搜索访问模式已设置为{mode}。"
+          }
         }
       }
     },

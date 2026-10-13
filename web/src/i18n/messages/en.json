@@ -5663,6 +5663,31 @@
           "connectorsLeft": "{count, plural, one {# connector left} other {# connectors left}}",
           "current": "Current connector: {name}",
           "documentsLeft": "{count, plural, one {# document left} other {# documents left}}"
+        },
+        "mode": {
+          "description": "How search decides which documents a user can see.",
+          "enforcePending": "Enforce is set and starts when the update completes.",
+          "enforceUnavailable": "Available after the search index update completes.",
+          "label": "Search access mode",
+          "options": {
+            "enforce": {
+              "description": "Search uses connector-level access.",
+              "title": "Enforce"
+            },
+            "off": {
+              "description": "Search uses the document access lists.",
+              "title": "Off"
+            },
+            "shadow": {
+              "description": "Search uses the document access lists and logs where connector-level access gives a different result.",
+              "title": "Shadow"
+            }
+          },
+          "placeholder": "Select a mode",
+          "toasts": {
+            "error": "Could not update the search access mode.",
+            "success": "Search access mode set to {mode}."
+          }
         }
       }
     },

@@ -2,6 +2,7 @@
 progress computed from the stored progress and the current Postgres rows."""
 
 from collections.abc import Generator
+from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -10,6 +11,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
 from onyx.context.search.models import CCPairAccessMode
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.models import ConnectorCredentialPair
@@ -19,14 +21,41 @@ from onyx.document_index.opensearch.cc_pair_ids_backfill import (
     CCPairIdsBackfillProgress,
     store_cc_pair_ids_backfill_progress,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage import search_settings as search_settings_api
-from onyx.server.manage.models import CCPairIdsBackfillStatus
+from onyx.server.manage.models import (
+    CCPairAccessModeUpdateRequest,
+    CCPairIdsBackfillStatus,
+)
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
 )
 
 _SEARCH_SETTINGS = SimpleNamespace(id=1, index_name="test_backfill_status_index")
+_FLAG_KEYS = [
+    f"{ONYX_CLOUD_REDIS_RUNTIME}:cc_pair_access_filter:{axis}"
+    for axis in ("enabled", "enforce")
+]
+
+
+@pytest.fixture
+def flags_restored(
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[None, None, None]:
+    """Keeps the developer's cc-pair access filter flags unchanged."""
+    cache = OnyxRuntime._request_path_flag_cache()
+    saved = {key: cache.get(key) for key in _FLAG_KEYS}
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                cache.delete(key)
+            else:
+                cache.set(key, value)
 
 
 class _Pairs(BaseModel):
@@ -68,6 +97,26 @@ def pairs(
         db_session.rollback()
         for pair in (done, current):
             cleanup_cc_pair(db_session, pair)
+
+
+def _settings_patches() -> ExitStack:
+    stack = ExitStack()
+    for module in (search_settings_api, cc_pair_ids_backfill):
+        stack.enter_context(
+            patch.object(
+                module, "get_current_search_settings", return_value=_SEARCH_SETTINGS
+            )
+        )
+    return stack
+
+
+def _set_mode(db_session: Session, mode: CCPairAccessMode) -> CCPairIdsBackfillStatus:
+    with _settings_patches():
+        return search_settings_api.update_cc_pair_access_mode(
+            CCPairAccessModeUpdateRequest(mode=mode),
+            user=MagicMock(),
+            db_session=db_session,
+        )
 
 
 def _status(db_session: Session) -> CCPairIdsBackfillStatus:
@@ -152,3 +201,42 @@ def test_status_before_start_and_after_completion(db_session: Session) -> None:
     status = _status(db_session)
     assert status.started and status.completed
     assert status.remaining_documents is None
+
+
+@pytest.mark.usefixtures("kv_progress_restored", "flags_restored")
+def test_mode_update_sets_both_flags(db_session: Session) -> None:
+    _store(pending=[], snapshot=[1])
+
+    for mode, enabled, enforce in (
+        (CCPairAccessMode.ENFORCE, True, True),
+        (CCPairAccessMode.SHADOW, True, False),
+        (CCPairAccessMode.OFF, False, False),
+    ):
+        status = _set_mode(db_session, mode)
+        assert status.access_mode == mode
+        assert OnyxRuntime.get_cc_pair_access_filter_enabled() is enabled
+        assert OnyxRuntime.get_cc_pair_access_filter_enforce() is enforce
+
+
+@pytest.mark.usefixtures("kv_progress_restored", "flags_restored")
+def test_enforce_needs_a_complete_backfill(db_session: Session) -> None:
+    _store(pending=[1])
+
+    with pytest.raises(OnyxError) as exc_info:
+        _set_mode(db_session, CCPairAccessMode.ENFORCE)
+    assert exc_info.value.error_code is OnyxErrorCode.FEATURE_NOT_AVAILABLE
+    # Shadow does not depend on the backfill.
+    assert _set_mode(db_session, CCPairAccessMode.SHADOW).access_mode == (
+        CCPairAccessMode.SHADOW
+    )
+
+
+@pytest.mark.usefixtures("kv_progress_restored", "flags_restored")
+def test_mode_is_operator_controlled_in_multi_tenant(db_session: Session) -> None:
+    _store(pending=[], snapshot=[1])
+
+    with patch.object(search_settings_api, "MULTI_TENANT", True):
+        with pytest.raises(OnyxError) as exc_info:
+            _set_mode(db_session, CCPairAccessMode.SHADOW)
+        assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+        assert not _status(db_session).mode_editable

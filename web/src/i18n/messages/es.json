@@ -5663,6 +5663,31 @@
           "connectorsLeft": "{count, plural, one {Queda # conector} other {Quedan # conectores}}",
           "current": "Conector actual: {name}",
           "documentsLeft": "{count, plural, one {Queda # documento} other {Quedan # documentos}}"
+        },
+        "mode": {
+          "description": "Cómo decide la búsqueda qué documentos puede ver un usuario.",
+          "enforcePending": "Aplicar está configurado y empieza cuando termine la actualización.",
+          "enforceUnavailable": "Disponible cuando termine la actualización del índice de búsqueda.",
+          "label": "Modo de acceso de búsqueda",
+          "options": {
+            "enforce": {
+              "description": "La búsqueda usa el acceso por conector.",
+              "title": "Aplicar"
+            },
+            "off": {
+              "description": "La búsqueda usa las listas de acceso de los documentos.",
+              "title": "Desactivado"
+            },
+            "shadow": {
+              "description": "La búsqueda usa las listas de acceso de los documentos y registra dónde el acceso por conector da un resultado distinto.",
+              "title": "Sombra"
+            }
+          },
+          "placeholder": "Selecciona un modo",
+          "toasts": {
+            "error": "No se pudo actualizar el modo de acceso de búsqueda.",
+            "success": "Modo de acceso de búsqueda establecido en {mode}."
+          }
         }
       }
     },

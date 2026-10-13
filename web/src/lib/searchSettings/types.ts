@@ -238,6 +238,8 @@ export interface CCPairIdsBackfillStatus {
   access_mode: CCPairAccessMode;
   filter_enabled: boolean;
   enforce_requested: boolean;
+  /** False in multi-tenant deployments, where operators own the mode. */
+  mode_editable: boolean;
 }
 
 /** Mirrors backend `ReindexErrorRow`; exactly one of cc_pair_id / user_id set. */

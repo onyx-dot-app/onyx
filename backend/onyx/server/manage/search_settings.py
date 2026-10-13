@@ -98,6 +98,7 @@ from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.server.manage.models import (
+    CCPairAccessModeUpdateRequest,
     CCPairIdsBackfillStatus,
     FullModelVersionResponse,
     ReindexProgress,
@@ -663,6 +664,7 @@ def get_cc_pair_ids_backfill_status(
         access_mode=get_cc_pair_access_mode(db_session) or CCPairAccessMode.OFF,
         filter_enabled=OnyxRuntime.get_cc_pair_access_filter_enabled(),
         enforce_requested=OnyxRuntime.get_cc_pair_access_filter_enforce(),
+        mode_editable=not MULTI_TENANT,
     )
     pending = progress.pending_cc_pair_ids
     if not pending:
@@ -689,6 +691,51 @@ def get_cc_pair_ids_backfill_status(
         status.total_documents = sum(doc_counts.values())
         status.completed_documents = status.total_documents - status.remaining_documents
     return status
+
+
+@router.put("/cc-pair-access-mode")
+def update_cc_pair_access_mode(
+    request: CCPairAccessModeUpdateRequest,
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CCPairIdsBackfillStatus:
+    """Sets the search access mode of a self-hosted deployment. ENFORCE takes
+    effect only once the cc_pair_ids backfill is complete, so it is refused
+    before then."""
+    if MULTI_TENANT:
+        # The flags are shared by every tenant of a multi-tenant deployment.
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "The search access mode is operator-controlled in multi-tenant "
+            "deployments.",
+        )
+    if request.mode == CCPairAccessMode.ENFORCE and not (
+        load_cc_pair_ids_backfill_progress(
+            get_current_search_settings(db_session)
+        ).completed
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Connector-level access can be enforced only after the search index "
+            "update is complete.",
+        )
+
+    previous_mode = get_cc_pair_access_mode(db_session) or CCPairAccessMode.OFF
+    OnyxRuntime.set_cc_pair_access_filter_flags(
+        enabled=request.mode != CCPairAccessMode.OFF,
+        enforce=request.mode == CCPairAccessMode.ENFORCE,
+    )
+    logger.info(
+        "Updated the cc-pair access mode: %s -> %s", previous_mode, request.mode
+    )
+    emit_audit_event(
+        AuditAction.CC_PAIR_ACCESS_MODE_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="search_settings",
+        extra={"previous_mode": previous_mode.value, "mode": request.mode.value},
+    )
+    return get_cc_pair_ids_backfill_status(_=user, db_session=db_session)
 
 
 @router.get("/reindex-errors")

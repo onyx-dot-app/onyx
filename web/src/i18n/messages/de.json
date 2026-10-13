@@ -5663,6 +5663,31 @@
           "connectorsLeft": "{count, plural, one {# Konnektor übrig} other {# Konnektoren übrig}}",
           "current": "Aktueller Konnektor: {name}",
           "documentsLeft": "{count, plural, one {# Dokument übrig} other {# Dokumente übrig}}"
+        },
+        "mode": {
+          "description": "Wie die Suche entscheidet, welche Dokumente ein Benutzer sehen kann.",
+          "enforcePending": "Erzwingen ist eingestellt und beginnt, wenn die Aktualisierung abgeschlossen ist.",
+          "enforceUnavailable": "Verfügbar, nachdem die Aktualisierung des Suchindex abgeschlossen ist.",
+          "label": "Suchzugriffsmodus",
+          "options": {
+            "enforce": {
+              "description": "Die Suche verwendet den Zugriff auf Konnektorebene.",
+              "title": "Erzwingen"
+            },
+            "off": {
+              "description": "Die Suche verwendet die Zugriffslisten der Dokumente.",
+              "title": "Aus"
+            },
+            "shadow": {
+              "description": "Die Suche verwendet die Zugriffslisten der Dokumente und protokolliert, wo der Zugriff auf Konnektorebene ein anderes Ergebnis liefert.",
+              "title": "Schatten"
+            }
+          },
+          "placeholder": "Modus auswählen",
+          "toasts": {
+            "error": "Der Suchzugriffsmodus konnte nicht aktualisiert werden.",
+            "success": "Suchzugriffsmodus auf {mode} gesetzt."
+          }
         }
       }
     },

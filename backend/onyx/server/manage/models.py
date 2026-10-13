@@ -633,3 +633,9 @@ class CCPairIdsBackfillStatus(BaseModel):
     access_mode: CCPairAccessMode
     filter_enabled: bool
     enforce_requested: bool
+    # False in multi-tenant deployments, where operators own the mode.
+    mode_editable: bool
+
+
+class CCPairAccessModeUpdateRequest(BaseModel):
+    mode: CCPairAccessMode

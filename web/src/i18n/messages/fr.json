@@ -5663,6 +5663,31 @@
           "connectorsLeft": "{count, plural, one {# connecteur restant} other {# connecteurs restants}}",
           "current": "Connecteur en cours : {name}",
           "documentsLeft": "{count, plural, one {# document restant} other {# documents restants}}"
+        },
+        "mode": {
+          "description": "Comment la recherche décide quels documents un utilisateur peut voir.",
+          "enforcePending": "Appliquer est défini et démarre une fois la mise à jour terminée.",
+          "enforceUnavailable": "Disponible une fois la mise à jour de l’index de recherche terminée.",
+          "label": "Mode d’accès à la recherche",
+          "options": {
+            "enforce": {
+              "description": "La recherche utilise l’accès par connecteur.",
+              "title": "Appliquer"
+            },
+            "off": {
+              "description": "La recherche utilise les listes d’accès des documents.",
+              "title": "Désactivé"
+            },
+            "shadow": {
+              "description": "La recherche utilise les listes d’accès des documents et journalise les cas où l’accès par connecteur donne un autre résultat.",
+              "title": "Ombre"
+            }
+          },
+          "placeholder": "Sélectionner un mode",
+          "toasts": {
+            "error": "Impossible de mettre à jour le mode d’accès à la recherche.",
+            "success": "Mode d’accès à la recherche défini sur {mode}."
+          }
         }
       }
     },
