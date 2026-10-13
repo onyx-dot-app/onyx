@@ -87,6 +87,22 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
     return [dict(row) for row in db_session.execute(statement).mappings()]
 
 
+def has_indexed_connectors__no_commit(db_session: Session) -> bool:
+    # Exclude the seeded upload connector; scan beyond the inventory reporting cap.
+    return bool(
+        db_session.scalar(
+            select(
+                select(ConnectorCredentialPair.id)
+                .where(
+                    ConnectorCredentialPair.connector_id > 0,
+                    ConnectorCredentialPair.total_docs_indexed > 0,
+                )
+                .exists()
+            )
+        )
+    )
+
+
 def attempt_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:
     """Index attempts updated since `since`, and the ones that are still running."""
     unresolved = (IndexAttemptError.index_attempt_id == IndexAttempt.id) & (

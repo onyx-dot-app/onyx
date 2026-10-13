@@ -21,6 +21,7 @@ from onyx.db.enums import SyncType
 from onyx.db.fleet_telemetry import (
     attempt_rows,
     email_domain_rows,
+    has_indexed_connectors__no_commit,
     job_rows,
     license_row,
     limit_statement_time,
@@ -215,6 +216,7 @@ def test_one_pass_sends_only_safe_events(
     for event in events:
         by_type.setdefault(event["event_type"], []).append(event["data"])
     assert {key: len(value) for key, value in by_type.items()} == {
+        "heartbeat": 1,
         "connector": 2,
         "tenant_domain": 2,
         "license": 1,
@@ -246,3 +248,51 @@ def test_deployment_key_is_persistent_and_race_safe(
         )
     assert len(set(keys)) == 1 and len(keys[0]) == 64
     assert fleet_enrollment.get_or_create_deployment_key() == keys[0]
+
+
+def test_indexed_connector_presence_excludes_uploads_and_empty_connectors(
+    schema: str,
+) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        assert has_indexed_connectors__no_commit(db_session)
+        db_session.execute(
+            text(
+                f'UPDATE "{schema}".connector_credential_pair SET total_docs_indexed=0'
+            )
+        )
+        assert not has_indexed_connectors__no_commit(db_session)
+        db_session.execute(
+            text(
+                f'UPDATE "{schema}".connector_credential_pair '
+                "SET connector_id=0,total_docs_indexed=10 WHERE id=1"
+            )
+        )
+        assert not has_indexed_connectors__no_commit(db_session)
+        db_session.execute(
+            text(
+                f'UPDATE "{schema}".connector_credential_pair '
+                "SET total_docs_indexed=1 WHERE id=2"
+            )
+        )
+        assert has_indexed_connectors__no_commit(db_session)
+
+
+def test_indexed_connector_presence_scans_beyond_inventory_cap(schema: str) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        db_session.execute(
+            text(
+                f'UPDATE "{schema}".connector_credential_pair SET total_docs_indexed=0'
+            )
+        )
+        db_session.execute(
+            text(
+                f'INSERT INTO "{schema}".connector_credential_pair '
+                "(id,name,status,connector_id,credential_id,access_type,total_docs_indexed) "
+                "SELECT id,'Test connector','ACTIVE',2,id,'PUBLIC',CASE WHEN id=1002 THEN 1 ELSE 0 END "
+                "FROM generate_series(3,1002) id"
+            )
+        )
+        assert all(
+            row["doc_count"] == 0 for row in collector.connector_rows(db_session)
+        )
+        assert has_indexed_connectors__no_commit(db_session)
