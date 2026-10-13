@@ -128,8 +128,7 @@ run could saturate would stall dispatch for every tenant
 
 Scheduled execution shares `backend/onyx/server/features/build/session/output_cards.py` (`capture_turn_outputs` and `persist_turn_outputs`) with interactive turns.
 The runner captures output metadata before the prompt and after the producer closes, while retaining prompt ownership.
-It commits the transcript before the independent output-index transaction, then reports terminal run status.
-Capture failure preserves earlier cards and cannot roll back the committed transcript.
+It saves latest-turn card ownership before reporting terminal run status. Capture failure preserves earlier cards.
 
 ### 4.1 Creating a task and its schedule
 
