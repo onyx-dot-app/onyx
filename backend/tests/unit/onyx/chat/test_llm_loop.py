@@ -2078,7 +2078,6 @@ def test_head_prompts_byte_stable_across_citeable_tool_round() -> None:
         assert REQUIRE_CITATION_GUIDANCE.strip() not in msg.message
 
 
-@pytest.mark.parametrize("replace_base", [False, True])
 def _history_for_user(
     user_memory_context: UserMemoryContext,
 ) -> list[ChatMessageSimple]:
@@ -2160,6 +2159,7 @@ def test_user_information_is_split_out_of_the_shared_system_prompt() -> None:
     assert alice_history[2].message == "Question"
 
 
+@pytest.mark.parametrize("replace_base", [False, True])
 @pytest.mark.parametrize("base_prompt", ["Base prompt", ""])
 def test_project_instructions_supplement_agent_prompt(
     replace_base: bool, base_prompt: str
