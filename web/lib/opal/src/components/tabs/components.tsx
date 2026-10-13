@@ -6,6 +6,7 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn, mergeRefs } from "@opal/utils";
 import {
   IconFunctionComponent,
+  type RichStr,
   type Spacing,
   type WithoutStyles,
 } from "@opal/types";
@@ -245,8 +246,12 @@ function TabsList({
    ============================================================================= */
 
 interface TabsTriggerProps extends WithoutStyles<
-  React.ComponentProps<typeof TabsPrimitive.Trigger>
+  Omit<React.ComponentProps<typeof TabsPrimitive.Trigger>, "children">
 > {
+  /** The tab's label. */
+  children: string | RichStr;
+  /** Smaller text below the label. Contained tabs only; other variants ignore it. */
+  description?: string | RichStr;
   /** Tooltip shown on hover. */
   tooltip?: string;
   /** Side where the tooltip appears. @default "top" */
@@ -260,8 +265,9 @@ interface TabsTriggerProps extends WithoutStyles<
 function TabsTrigger({
   tooltip,
   tooltipSide = "top",
-  icon: Icon,
+  icon,
   isLoading,
+  description,
 
   ref,
   children,
@@ -270,31 +276,47 @@ function TabsTrigger({
 }: TabsTriggerProps) {
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const strings = useOpalStrings();
+  const sizePreset = variant === "contained" ? "main-ui" : "secondary";
+  // Only contained tabs have room for a description.
+  const shownDescription = variant === "contained" ? description : undefined;
 
-  // A string label renders as Content, which takes its title and icon
-  // colours from this trigger's interactive foregrounds (set per state in
-  // styles.css) and its font from the variant's size.
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      description !== undefined &&
+      variant !== "contained"
+    ) {
+      console.warn(
+        `Tabs.Trigger: description is only shown on contained tabs, not "${variant}".`
+      );
+    }
+  }, [description, variant]);
+
+  // The label is always a Content, which takes its title and icon colours
+  // from this trigger's interactive foregrounds (set per state in styles.css)
+  // and its font from the variant's size. Fit, so the trigger's
+  // justify-center centres it.
   const inner = (
     <>
-      {typeof children === "string" ? (
+      {shownDescription === undefined ? (
         <Content
-          icon={Icon}
+          icon={icon}
           title={children}
           color="interactive"
-          sizePreset={variant === "contained" ? "main-ui" : "secondary"}
+          sizePreset={sizePreset}
           variant="body"
-          // Fit, so the trigger's justify-center centres the label.
           width="fit"
         />
       ) : (
-        <>
-          {Icon && (
-            <div className="p-0.5">
-              <Icon size={14} className="interactive-foreground-icon" />
-            </div>
-          )}
-          {children}
-        </>
+        <Content
+          icon={icon}
+          title={children}
+          description={shownDescription}
+          color="interactive"
+          sizePreset={sizePreset}
+          variant="section"
+          width="fit"
+        />
       )}
       {isLoading && (
         <span

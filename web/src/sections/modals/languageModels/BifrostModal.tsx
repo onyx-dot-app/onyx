@@ -5,7 +5,7 @@ import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
-import { Tabs, Text } from "@opal/components";
+import { Tabs } from "@opal/components";
 import {
   BifrostApiMode,
   LLMProviderFormProps,
@@ -101,15 +101,12 @@ function BifrostModalInternals({
       >
         <Tabs.List>
           {API_MODE_TABS.map((tab) => (
-            <Tabs.Trigger key={tab.value} value={tab.value}>
-              <div className="flex flex-col items-start">
-                <Text font="main-ui-action" color="inherit">
-                  {t(tab.titleKey)}
-                </Text>
-                <Text font="secondary-body" color="text-03">
-                  {tab.subtitle}
-                </Text>
-              </div>
+            <Tabs.Trigger
+              key={tab.value}
+              value={tab.value}
+              description={tab.subtitle}
+            >
+              {t(tab.titleKey)}
             </Tabs.Trigger>
           ))}
         </Tabs.List>

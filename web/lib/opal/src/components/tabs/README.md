@@ -62,7 +62,7 @@ Like pill, but at least 2.25rem tall and without the filled active background �
 
 The active state slides from the old tab to the new one: in `contained` the white card, in `pill` both the filled background and the underline bar, in `underline` the bar. It moves with a `transform`, holds still on its first placement and while the tabs scroll, and turns off for reduced motion. Panels (`Tabs.Content`) swap without animation.
 
-A string label renders as an Opal `Content` with `color="interactive"`: each tab is an interactive surface whose state sets `--interactive-foreground` and `--interactive-foreground-icon`, so title and icon colours fade with the slide. Contained labels use the `main-ui` size (16px icon); pill and underline use `secondary` (12px icon).
+Every label renders as an Opal `Content` with `color="interactive"`: each tab is an interactive surface whose state sets `--interactive-foreground` and `--interactive-foreground-icon`, so title and icon colours fade with the slide. Contained labels use the `main-ui` size (16px icon); pill and underline use `secondary` (12px icon).
 
 ## Features
 
@@ -162,6 +162,8 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 | Prop          | Type                                     | Default      | Description                            |
 | ------------- | ---------------------------------------- | ------------ | -------------------------------------- |
 | `value`       | `string`                                 | **required** | Tab value                              |
+| `children`    | `string \| RichStr`                      | **required** | The label; always rendered as `Content` |
+| `description` | `string \| RichStr`                      | —            | Smaller text below the label; contained tabs only, other variants ignore it |
 | `icon`        | `FunctionComponent<IconProps>`           | —            | Icon before the label                  |
 | `tooltip`     | `string`                                 | —            | Tooltip on hover                       |
 | `tooltipSide` | `"top" \| "bottom" \| "start" \| "end"` | `"top"`      | Tooltip placement; `start`/`end` follow the text direction |
