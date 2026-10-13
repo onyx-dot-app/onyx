@@ -2036,23 +2036,11 @@
           "days": "{count, plural, one {# 天} other {# 天}}",
           "hours": "{count, plural, one {# 小时} other {# 小时}}",
           "minutes": "{count, plural, one {# 分钟} other {# 分钟}}"
-        },
-        "indexingStart": {
-          "label": "索引起始时间"
-        },
-        "pruningFrequency": {
-          "label": "清理频率"
-        },
-        "refreshFrequency": {
-          "label": "刷新频率"
         }
       },
       "configItem": {
         "booleanFalse": "否",
         "booleanTrue": "是",
-        "edit": {
-          "tooltip": "编辑"
-        },
         "showAll": {
           "label": "显示全部（{count} 项）"
         },
@@ -2250,9 +2238,12 @@
         }
       },
       "indexErrorsAlert": {
-        "description": "处理部分文档时遇到问题。<details>查看详情。</details>",
+        "description": "处理部分文档时遇到问题。",
         "resolvingStatus": "正在解决失败项",
-        "title": "部分文档索引失败"
+        "title": "部分文档索引失败",
+        "detailsButton": {
+          "label": "查看详情"
+        }
       },
       "invalidState": {
         "description": "此连接器处于无效状态。请先更新凭据或创建新连接器，然后再重新索引。",
@@ -2315,10 +2306,6 @@
           "label": "成功"
         }
       },
-      "pruningFrequencyModal": {
-        "description": "连接器执行清理的频率（以小时为单位）",
-        "title": "清理频率"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "重新启用"
@@ -2340,30 +2327,6 @@
         },
         "updateButton": {
           "label": "运行更新"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "连接器执行刷新的频率（以分钟为单位）",
-        "title": "刷新频率"
-      },
-      "sections": {
-        "advanced": {
-          "title": "高级"
-        },
-        "advancedConfiguration": {
-          "title": "高级配置"
-        },
-        "connectorConfiguration": {
-          "title": "连接器配置"
-        },
-        "credential": {
-          "title": "凭据"
-        },
-        "indexing": {
-          "title": "索引"
-        },
-        "indexingAttempts": {
-          "title": "索引尝试"
         }
       },
       "stageMetrics": {
@@ -2526,18 +2489,20 @@
         "documentsIndexed": {
           "label": "已索引文档数"
         },
-        "indexingSpeed": "（{speed} 文档 / 分钟）",
+        "indexingSpeed": "{speed} 文档/分钟",
         "lastIndexed": {
-          "label": "上次索引"
+          "value": "上次索引 {when}"
         },
         "lastSynced": {
-          "label": "上次同步"
+          "value": "上次同步 {when}"
         },
         "permissionSyncing": {
           "label": "权限同步"
         },
-        "status": {
-          "label": "状态"
+        "title": "索引状态",
+        "documents": {
+          "label": "最近 / 总计",
+          "total": "/ {total}"
         }
       },
       "syncTables": {
@@ -2573,8 +2538,6 @@
         "indexingStartUnexpectedError": "尝试启动索引时发生意外错误",
         "indexingUpdateStarted": "已成功启动索引更新",
         "indexingUpdateStarting": "正在启动索引更新…",
-        "invalidPruningFrequency": "清理频率无效：必须是有效数字",
-        "invalidRefreshFrequency": "刷新频率无效：必须是整数",
         "nameUpdateFailed": "更新连接器名称失败",
         "nameUpdated": "已成功更新连接器名称",
         "noUnresolvedErrors": "没有可重试的未解决错误。",
@@ -2584,6 +2547,50 @@
         "refreshFrequencyUpdated": "已成功更新连接器刷新频率",
         "targetedReindexFailed": "定向重新索引失败：{message}",
         "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。"
+      },
+      "backButton": {
+        "label": "所有连接器"
+      },
+      "account": {
+        "title": "认证账户",
+        "editButton": {
+          "label": "编辑账户"
+        }
+      },
+      "configuration": {
+        "title": "索引配置",
+        "description": "{source} • {count, plural, one {# 项设置} other {# 项设置}}",
+        "editButton": {
+          "label": "编辑配置"
+        }
+      },
+      "sharing": {
+        "title": "共享设置",
+        "summary": {
+          "everyone": "文档与**所有人**共享",
+          "groups": "文档与 **{count, plural, one {# 个群组} other {# 个群组}}** 共享",
+          "sync": "文档访问**与 {source} 同步**",
+          "managedByAdmins": "由**管理员**管理",
+          "managedByGroups": "由 **{count, plural, one {# 个群组} other {# 个群组}}** 管理",
+          "syncRestricted": "文档访问**与 {source} 同步**，并限制为 **{count, plural, one {# 个群组} other {# 个群组}}**",
+          "groupsPending": "文档与**特定群组**共享",
+          "syncRestrictedPending": "文档访问**与 {source} 同步**，并限制为**特定群组**"
+        },
+        "manageAccess": {
+          "title": "连接器管理权限",
+          "unavailable": "你无法查看谁在管理此连接器。"
+        },
+        "editButton": {
+          "label": "编辑权限"
+        },
+        "groupsUnavailable": "无法加载群组。"
+      },
+      "schedule": {
+        "refresh": "每 **{every}** 刷新一次",
+        "prune": "每 **{every}** 清理一次"
+      },
+      "runs": {
+        "title": "索引运行"
       }
     },
     "connectorTitle": {
@@ -3361,9 +3368,6 @@
         },
         "createdOnBy": {
           "label": "由 <i>{email}</i> 创建于 <i>{date}</i>"
-        },
-        "unnamed": {
-          "label": "凭据 #{id}"
         }
       },
       "create": {
@@ -3417,23 +3421,6 @@
           "label": "确认"
         },
         "confirmTitle": "确认删除"
-      },
-      "edit": {
-        "name": {
-          "label": "名称(可选):"
-        },
-        "permissions": {
-          "note": "请确保更新为具有适当权限的凭据!"
-        },
-        "resetButton": {
-          "label": "重置更改"
-        },
-        "updateButton": {
-          "label": "更新"
-        },
-        "updateError": {
-          "toast": "更新凭据时出错"
-        }
       },
       "displayNames": {
         "accessKeyId": "{source} 访问密钥 ID",
@@ -3514,22 +3501,6 @@
           "s3AssumeRole": "选择此模式后，Amazon EC2 实例将代入其现有角色来访问 S3。无需其他凭据。"
         }
       },
-      "modal": {
-        "createTitle": "创建 {source} 凭据",
-        "editTitle": "编辑凭据",
-        "updateTitle": "更新凭据"
-      },
-      "modify": {
-        "createButton": {
-          "label": "创建"
-        },
-        "instructions": {
-          "message": "请根据需要选择凭据!请确保为此连接器选择了具有适当权限的凭据!"
-        },
-        "selectButton": {
-          "label": "选择"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "连接"
@@ -3537,66 +3508,12 @@
         "connectError": {
           "title": "无法连接"
         },
-        "redirectFailed": {
-          "message": "无法重定向到 {source} 登录。请重试。"
-        },
-        "retryButton": {
-          "label": "重试"
-        },
         "signIn": {
           "description": "{appName} 需要只读权限范围。",
           "title": "使用 {source} 登录"
         },
         "startError": {
           "message": "无法启动 OAuth"
-        }
-      },
-      "swap": {
-        "error": {
-          "toast": "切换凭据时出现问题:{detail}"
-        },
-        "success": {
-          "toast": "已成功切换凭据!"
-        }
-      },
-      "table": {
-        "actions": {
-          "label": "操作"
-        },
-        "created": {
-          "header": "创建时间"
-        },
-        "edit": {
-          "ariaLabel": "编辑凭据"
-        },
-        "empty": {
-          "message": "此连接器不存在任何凭据!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "最后更新"
-        },
-        "name": {
-          "header": "名称"
-        },
-        "select": {
-          "label": "选择"
-        },
-        "selected": {
-          "badge": "已选择"
-        },
-        "untitled": {
-          "label": "未命名"
-        }
-      },
-      "update": {
-        "error": {
-          "toast": "更新凭据时出现问题"
-        },
-        "success": {
-          "toast": "已更新凭据"
         }
       },
       "validation": {
@@ -11289,18 +11206,6 @@
         },
         "modifyAction": {
           "label": "修改"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "编辑{property}"
-        },
-        "submitButton": {
-          "label": "更新属性",
-          "loadingLabel": "正在更新..."
-        },
-        "valueInput": {
-          "placeholder": "属性值"
         }
       },
       "feedback": {

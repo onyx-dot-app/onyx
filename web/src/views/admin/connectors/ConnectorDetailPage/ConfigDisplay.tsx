@@ -1,108 +1,91 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
-
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { Button, Divider, OverflowText, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { connectorConfigs } from "@/lib/connectors/connectors";
-import { isEditableSource } from "@/lib/connectors/edit/editable";
-import {
-  labelFindingValues,
-  storedCheckResults,
-} from "@/lib/connectors/checks/findings";
-import { useCredentialCheckReports } from "@/lib/credentials/hooks";
-import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { Button, Divider } from "@opal/components";
-import { SvgChevronUp, SvgChevronDown, SvgEdit } from "@opal/icons";
-import Truncated from "@/refresh-components/texts/Truncated";
+import type { ConfigEntries, ConfigValue } from "@/lib/connectors/types";
 
-function convertObjectToString(obj: any): string | any {
-  if (typeof obj === "object" && obj !== null) {
-    if (!Array.isArray(obj)) {
-      return JSON.stringify(obj);
-    } else {
-      if (obj.length === 0) {
-        return null;
-      }
-      return obj.map((item) => convertObjectToString(item)).join(", ");
-    }
+// Arrays past this length fold behind a "Show all" button.
+const FOLDED_LIST_LENGTH = 5;
+
+function convertObjectToString(value: ConfigValue): string | null {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    return value.map((item) => convertObjectToString(item)).join(", ");
   }
-  if (typeof obj === "boolean") {
-    return obj.toString();
+  if (typeof value === "object" && value !== null) {
+    return JSON.stringify(value);
   }
-  return obj;
+  if (value === null || value === undefined) return null;
+  return String(value);
 }
 
-function buildConfigEntries(
-  obj: any,
+/** The rows to show: a file connector's files have their own manager, Google Sites shows only its URL. */
+export function buildConfigEntries(
+  config: ConfigEntries,
   sourceType: ValidSources
-): { [key: string]: string } {
-  if (sourceType === ValidSources.File) {
-    return {};
-  } else if (sourceType === ValidSources.GoogleSites) {
-    return {
-      base_url: obj.base_url,
-    };
+): ConfigEntries {
+  if (sourceType === ValidSources.File) return {};
+  if (sourceType === ValidSources.GoogleSites) {
+    return { base_url: config.base_url };
   }
-  return obj;
+  return config;
 }
 
 interface ConfigItemProps {
   label: string;
-  value: any;
-  onEdit?: () => void;
+  value: ConfigValue;
 }
 
-function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
+function ConfigItem({ label, value }: ConfigItemProps) {
   const t = useTranslations("admin.connector");
   const [isExpanded, setIsExpanded] = useState(false);
-  const isExpandable = Array.isArray(value) && value.length > 5;
+  const isExpandable =
+    Array.isArray(value) && value.length > FOLDED_LIST_LENGTH;
 
-  const renderValue = () => {
+  function renderValue() {
     if (Array.isArray(value)) {
-      const displayedItems = isExpanded ? value : value.slice(0, 5);
+      const displayedItems = isExpanded
+        ? value
+        : value.slice(0, FOLDED_LIST_LENGTH);
       return (
-        <Section
-          flexDirection="row"
-          gap={1}
-          justifyContent="end"
-          alignItems="center"
-          height="fit"
-        >
-          <Text secondaryBody text03 className="wrap-break-word">
-            {displayedItems
-              .map((item) => convertObjectToString(item))
-              .join(", ")}
-          </Text>
-        </Section>
+        <Text font="secondary-body" color="text-03">
+          {displayedItems.map((item) => convertObjectToString(item)).join(", ")}
+        </Text>
       );
-    } else if (typeof value === "object" && value !== null) {
+    }
+    if (typeof value === "object" && value !== null) {
       return (
         <Section gap={1} alignItems="end" height="fit">
           {Object.entries(value).map(([key, val]) => (
-            <Text key={key} secondaryBody text03 className="wrap-break-word">
-              <Text mainContentEmphasis text03>
-                {key}:
-              </Text>{" "}
-              {convertObjectToString(val)}
+            <Text key={key} font="secondary-body" color="text-03">
+              {`${key}: ${convertObjectToString(val) ?? ""}`}
             </Text>
           ))}
         </Section>
       );
-    } else if (typeof value === "boolean") {
+    }
+    if (typeof value === "boolean") {
       return (
-        <Text secondaryBody text03 className="text-end">
+        <Text font="secondary-body" color="text-03">
           {value ? t("configItem.booleanTrue") : t("configItem.booleanFalse")}
         </Text>
       );
     }
     return (
-      <Truncated secondaryBody text03 className="text-end">
+      <OverflowText
+        as="p"
+        font="secondary-body"
+        color="text-03"
+        textPosition="text-end"
+      >
         {convertObjectToString(value) || "-"}
-      </Truncated>
+      </OverflowText>
     );
-  };
+  }
 
   return (
     <Section
@@ -110,9 +93,10 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
       justifyContent="between"
       alignItems="center"
       gap={4}
+      height="fit"
     >
-      <Section alignItems="start">
-        <Text mainUiBody text04>
+      <Section alignItems="start" width="fit" height="fit">
+        <Text font="main-ui-body" color="text-04">
           {label}
         </Text>
       </Section>
@@ -121,13 +105,13 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
         justifyContent="end"
         alignItems="center"
         gap={2}
+        height="fit"
+        className="min-w-0"
       >
         {renderValue()}
-
         {isExpandable && (
           <Button
             prominence="tertiary"
-            size="md"
             icon={isExpanded ? SvgChevronUp : SvgChevronDown}
             onClick={() => setIsExpanded(!isExpanded)}
           >
@@ -136,172 +120,30 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
               : t("configItem.showAll.label", { count: value.length })}
           </Button>
         )}
-        {onEdit && (
-          <Button
-            prominence="tertiary"
-            icon={SvgEdit}
-            onClick={onEdit}
-            tooltip={t("configItem.edit.tooltip")}
-          />
-        )}
       </Section>
     </Section>
   );
 }
 
-export function AdvancedConfigDisplay({
-  pruneFreq,
-  refreshFreq,
-  indexingStart,
-  onRefreshEdit,
-  onPruningEdit,
-}: {
-  pruneFreq: number | null;
-  refreshFreq: number | null;
-  indexingStart: Date | null;
-  // Omit to hide the pencil for a caller who may not edit.
-  onRefreshEdit?: () => void;
-  onPruningEdit?: () => void;
-}) {
-  const t = useTranslations("admin.connector");
-  const locale = useLocale();
-
-  const formatRefreshFrequency = (seconds: number | null): string => {
-    if (seconds === null) return "-";
-    const totalMinutes = seconds / 60;
-
-    // If it's 60 minutes or more and evenly divisible by 60, show in hours
-    if (totalMinutes >= 60 && totalMinutes % 60 === 0) {
-      return t("advancedConfig.duration.hours", {
-        count: totalMinutes / 60,
-      });
-    }
-
-    // Otherwise show in minutes
-    return t("advancedConfig.duration.minutes", {
-      count: Math.round(totalMinutes),
-    });
-  };
-  const formatPruneFrequency = (seconds: number | null): string => {
-    if (seconds === null) return "-";
-    const totalHours = seconds / 3600;
-
-    // If less than 1 hour, show in minutes
-    if (totalHours < 1) {
-      return t("advancedConfig.duration.minutes", {
-        count: Math.round(seconds / 60),
-      });
-    }
-
-    const hours = Math.round(totalHours);
-
-    // If it's 24 hours or more and evenly divisible by 24, show in days
-    if (hours >= 24 && hours % 24 === 0) {
-      return t("advancedConfig.duration.days", { count: hours / 24 });
-    }
-
-    // Otherwise show in hours
-    return t("advancedConfig.duration.hours", { count: hours });
-  };
-
-  const formatDate = (date: Date | null): string => {
-    if (date === null) return "-";
-    return date.toLocaleString(locale, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZoneName: "short",
-    });
-  };
-
-  const items = [
-    pruneFreq !== null && {
-      label: t("advancedConfig.pruningFrequency.label"),
-      value: formatPruneFrequency(pruneFreq),
-      onEdit: onPruningEdit,
-    },
-    refreshFreq && {
-      label: t("advancedConfig.refreshFrequency.label"),
-      value: formatRefreshFrequency(refreshFreq),
-      onEdit: onRefreshEdit,
-    },
-    indexingStart && {
-      label: t("advancedConfig.indexingStart.label"),
-      value: formatDate(indexingStart),
-    },
-  ].filter(Boolean) as ConfigItemProps[];
-
-  return (
-    <Section gap={0} height="fit">
-      {items.map((item, index) => (
-        <div key={item.label} className="w-full">
-          <div className="py-4">
-            <ConfigItem
-              label={item.label}
-              value={item.value}
-              onEdit={item.onEdit}
-            />
-          </div>
-          {index < items.length - 1 && (
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-          )}
-        </div>
-      ))}
-    </Section>
-  );
+export interface ConfigDisplayProps {
+  configEntries: ConfigEntries;
 }
 
-interface ConnectorConfigDisplayProps {
-  source: ValidSources;
-  config: Record<string, unknown>;
-  credentialId: number;
-  connectorId: number;
-}
-
-/** A pair's config with listing-backed entries shown by name. The pair's report is read before the credential's. */
-export function ConnectorConfigDisplay({
-  source,
-  config,
-  credentialId,
-  connectorId,
-}: ConnectorConfigDisplayProps) {
-  const { reportFor } = useCredentialCheckReports(source);
-  const configEntries = useMemo(() => {
-    const checks = storedCheckResults(reportFor, { credentialId, connectorId });
-    const labeled = isEditableSource(source)
-      ? labelFindingValues(connectorConfigs[source], config, checks)
-      : config;
-    return buildConfigEntries(labeled, source);
-  }, [source, config, credentialId, connectorId, reportFor]);
-  return <ConfigDisplay configEntries={configEntries} />;
-}
-
-function ConfigDisplay({
-  configEntries,
-  onEdit,
-}: {
-  configEntries: { [key: string]: string };
-  onEdit?: (key: string) => void;
-}) {
+/** The connector's settings as label and value rows. */
+export function ConfigDisplay({ configEntries }: ConfigDisplayProps) {
   const entries = Object.entries(configEntries);
 
   return (
-    <Section gap={0} height="fit">
+    <Section gap={0} height="fit" alignItems="stretch">
       {entries.map(([key, value], index) => (
-        <div key={key} className="w-full">
-          <div className="py-4">
-            <ConfigItem
-              label={key}
-              value={value}
-              onEdit={onEdit ? () => onEdit(key) : undefined}
-            />
-          </div>
+        <Section key={key} gap={0} height="fit" alignItems="stretch">
+          <Section padding={2} height="fit" alignItems="stretch">
+            <ConfigItem label={key} value={value} />
+          </Section>
           {index < entries.length - 1 && (
             <Divider paddingParallel={0} paddingPerpendicular={0} />
           )}
-        </div>
+        </Section>
       ))}
     </Section>
   );

@@ -65,6 +65,10 @@ export interface SettingsHeaderProps {
   description?: string | RichStr;
   /** Tag inline after the description, e.g. a status. */
   descriptionTag?: TagProps;
+  /** The title can be edited in place, as `Content` does it. */
+  editable?: boolean;
+  /** Called when the user commits a title edit. */
+  onTitleChange?: (newTitle: string) => void;
   children?: React.ReactNode;
   /**
    * Controls on the right of the title block, left to right. The header lays
@@ -92,6 +96,8 @@ function SettingsHeader({
   title,
   description,
   descriptionTag,
+  editable,
+  onTitleChange,
   children,
   actions,
   cancel,
@@ -149,6 +155,8 @@ function SettingsHeader({
               title={title}
               description={description}
               descriptionTag={descriptionTag}
+              editable={editable}
+              onTitleChange={onTitleChange}
               sizePreset="headline"
               variant="heading"
             />

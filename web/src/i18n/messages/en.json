@@ -2036,23 +2036,11 @@
           "days": "{count, plural, one {# day} other {# days}}",
           "hours": "{count, plural, one {# hour} other {# hours}}",
           "minutes": "{count, plural, one {# minute} other {# minutes}}"
-        },
-        "indexingStart": {
-          "label": "Indexing Start"
-        },
-        "pruningFrequency": {
-          "label": "Pruning Frequency"
-        },
-        "refreshFrequency": {
-          "label": "Refresh Frequency"
         }
       },
       "configItem": {
         "booleanFalse": "False",
         "booleanTrue": "True",
-        "edit": {
-          "tooltip": "Edit"
-        },
         "showAll": {
           "label": "Show all ({count} items)"
         },
@@ -2250,9 +2238,12 @@
         }
       },
       "indexErrorsAlert": {
-        "description": "We ran into some issues while processing some documents. <details>View details.</details>",
+        "description": "We ran into some issues while processing some documents.",
         "resolvingStatus": "Resolving failures",
-        "title": "Some documents failed to index"
+        "title": "Some documents failed to index",
+        "detailsButton": {
+          "label": "View details"
+        }
       },
       "invalidState": {
         "description": "This connector is in an invalid state. Please update your credentials or create a new connector before re-indexing.",
@@ -2315,10 +2306,6 @@
           "label": "Succeeded"
         }
       },
-      "pruningFrequencyModal": {
-        "description": "How often the connector should be pruned (in hours)",
-        "title": "Pruning Frequency"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Re-Enable"
@@ -2340,30 +2327,6 @@
         },
         "updateButton": {
           "label": "Run Update"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "How often the connector should refresh (in minutes)",
-        "title": "Refresh Frequency"
-      },
-      "sections": {
-        "advanced": {
-          "title": "Advanced"
-        },
-        "advancedConfiguration": {
-          "title": "Advanced Configuration"
-        },
-        "connectorConfiguration": {
-          "title": "Connector Configuration"
-        },
-        "credential": {
-          "title": "Credential"
-        },
-        "indexing": {
-          "title": "Indexing"
-        },
-        "indexingAttempts": {
-          "title": "Indexing Attempts"
         }
       },
       "stageMetrics": {
@@ -2526,18 +2489,20 @@
         "documentsIndexed": {
           "label": "Documents Indexed"
         },
-        "indexingSpeed": "({speed} docs / min)",
+        "indexingSpeed": "{speed} docs/min",
         "lastIndexed": {
-          "label": "Last Indexed"
+          "value": "Last indexed {when}"
         },
         "lastSynced": {
-          "label": "Last Synced"
+          "value": "Last synced {when}"
         },
         "permissionSyncing": {
           "label": "Permission Syncing"
         },
-        "status": {
-          "label": "Status"
+        "title": "Indexing Status",
+        "documents": {
+          "label": "Recent / Total",
+          "total": "/ {total}"
         }
       },
       "syncTables": {
@@ -2573,8 +2538,6 @@
         "indexingStartUnexpectedError": "An unexpected error occurred while trying to start indexing",
         "indexingUpdateStarted": "Indexing update started successfully",
         "indexingUpdateStarting": "Starting indexing update...",
-        "invalidPruningFrequency": "Invalid pruning frequency: must be a valid number",
-        "invalidRefreshFrequency": "Invalid refresh frequency: must be an integer",
         "nameUpdateFailed": "Failed to update connector name",
         "nameUpdated": "Connector name updated successfully",
         "noUnresolvedErrors": "No unresolved errors to retry.",
@@ -2584,6 +2547,50 @@
         "refreshFrequencyUpdated": "Connector refresh frequency updated successfully",
         "targetedReindexFailed": "Targeted reindex failed: {message}",
         "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing."
+      },
+      "backButton": {
+        "label": "All Connectors"
+      },
+      "account": {
+        "title": "Authentication Account",
+        "editButton": {
+          "label": "Edit Account"
+        }
+      },
+      "configuration": {
+        "title": "Index Configurations",
+        "description": "{source} • {count, plural, one {# setting} other {# settings}}",
+        "editButton": {
+          "label": "Edit Configs"
+        }
+      },
+      "sharing": {
+        "title": "Sharing Settings",
+        "summary": {
+          "everyone": "Documents shared with **everyone**",
+          "groups": "Documents shared with **{count, plural, one {# group} other {# groups}}**",
+          "sync": "Document access **synced with {source}**",
+          "managedByAdmins": "Managed by **admins**",
+          "managedByGroups": "Managed by **{count, plural, one {# group} other {# groups}}**",
+          "syncRestricted": "Document access **synced with {source}**, restricted to **{count, plural, one {# group} other {# groups}}**",
+          "groupsPending": "Documents shared with **specific groups**",
+          "syncRestrictedPending": "Document access **synced with {source}**, restricted to **specific groups**"
+        },
+        "manageAccess": {
+          "title": "Connector Manage Access",
+          "unavailable": "You can't see who manages this connector."
+        },
+        "editButton": {
+          "label": "Edit Access"
+        },
+        "groupsUnavailable": "Couldn't load the groups."
+      },
+      "schedule": {
+        "refresh": "Refresh every **{every}**",
+        "prune": "Prune every **{every}**"
+      },
+      "runs": {
+        "title": "Index Runs"
       }
     },
     "connectorTitle": {
@@ -3361,9 +3368,6 @@
         },
         "createdOnBy": {
           "label": "Created <i>{date}</i> by <i>{email}</i>"
-        },
-        "unnamed": {
-          "label": "Credential #{id}"
         }
       },
       "create": {
@@ -3417,23 +3421,6 @@
           "label": "Confirm"
         },
         "confirmTitle": "Confirm Deletion"
-      },
-      "edit": {
-        "name": {
-          "label": "Name (optional):"
-        },
-        "permissions": {
-          "note": "Ensure that you update to a credential with the proper permissions!"
-        },
-        "resetButton": {
-          "label": "Reset Changes"
-        },
-        "updateButton": {
-          "label": "Update"
-        },
-        "updateError": {
-          "toast": "Error updating credential"
-        }
       },
       "displayNames": {
         "accessKeyId": "{source} Access Key ID",
@@ -3514,22 +3501,6 @@
           "s3AssumeRole": "If you select this mode, the Amazon EC2 instance will assume its existing role to access S3. No additional credentials are required."
         }
       },
-      "modal": {
-        "createTitle": "Create {source} Credential",
-        "editTitle": "Edit Credential",
-        "updateTitle": "Update Credentials"
-      },
-      "modify": {
-        "createButton": {
-          "label": "Create"
-        },
-        "instructions": {
-          "message": "Select a credential as needed! Ensure that you have selected a credential with the proper permissions for this connector!"
-        },
-        "selectButton": {
-          "label": "Select"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "Connect"
@@ -3537,66 +3508,12 @@
         "connectError": {
           "title": "Could not connect"
         },
-        "redirectFailed": {
-          "message": "We couldn't redirect you to sign in with {source}. Please try again."
-        },
-        "retryButton": {
-          "label": "Retry"
-        },
         "signIn": {
           "description": "{appName} requires read-only scopes.",
           "title": "Sign in with {source}"
         },
         "startError": {
           "message": "Unable to start OAuth"
-        }
-      },
-      "swap": {
-        "error": {
-          "toast": "Issue swapping credential: {detail}"
-        },
-        "success": {
-          "toast": "Swapped credential successfully!"
-        }
-      },
-      "table": {
-        "actions": {
-          "label": "Actions"
-        },
-        "created": {
-          "header": "Created"
-        },
-        "edit": {
-          "ariaLabel": "Edit credential"
-        },
-        "empty": {
-          "message": "No credentials exist for this connector!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "Last Updated"
-        },
-        "name": {
-          "header": "Name"
-        },
-        "select": {
-          "label": "Select"
-        },
-        "selected": {
-          "badge": "selected"
-        },
-        "untitled": {
-          "label": "Untitled"
-        }
-      },
-      "update": {
-        "error": {
-          "toast": "Issue updating credential"
-        },
-        "success": {
-          "toast": "Updated credential"
         }
       },
       "validation": {
@@ -11289,18 +11206,6 @@
         },
         "modifyAction": {
           "label": "modify"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "Edit {property}"
-        },
-        "submitButton": {
-          "label": "Update property",
-          "loadingLabel": "Updating..."
-        },
-        "valueInput": {
-          "placeholder": "Property value"
         }
       },
       "feedback": {

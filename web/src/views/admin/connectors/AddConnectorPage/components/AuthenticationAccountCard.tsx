@@ -97,6 +97,8 @@ interface AuthenticationAccountCardProps {
   onSelect: () => void;
   /** Called when the user picks the selected account again, to drop it. */
   onDeselect: () => void;
+  /** Shown in place of the pick button on a card that shows an account rather than offers it. `null` shows nothing. */
+  action?: React.ReactNode;
   /** Called once the user confirms the deletion. */
   onDelete: () => void;
   /** Whether the details below the header are open. */
@@ -131,6 +133,7 @@ export default function AuthenticationAccountCard({
   quietSelection = false,
   onSelect,
   onDeselect,
+  action,
   onDelete,
   detailsOpen,
   onDetailsOpenChange,
@@ -294,6 +297,42 @@ export default function AuthenticationAccountCard({
     isOwnAccount ||
     (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
       (credential.admin_public || credential.user_id === null));
+
+  // The control beside the chevron: a caller's own, else the pick state.
+  function pickControl(): React.ReactNode {
+    if (action !== undefined) return action;
+    if (selected) {
+      return (
+        <Button
+          variant="action"
+          prominence="tertiary"
+          rightIcon={SvgCheckSquare}
+          tabIndex={-1}
+        >
+          {t("selected.label")}
+        </Button>
+      );
+    }
+    if (selectable) {
+      // Repeats the card's own action, so it leaves the tab order.
+      return (
+        <Button
+          prominence="tertiary"
+          rightIcon={SvgArrowRightCircle}
+          tabIndex={-1}
+        >
+          {t("useButton.label")}
+        </Button>
+      );
+    }
+    return (
+      <div className="p-1.5">
+        <Text font="secondary-body" color="text-03">
+          {t("unsupportedRealm.label")}
+        </Text>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -516,31 +555,7 @@ export default function AuthenticationAccountCard({
               gap={1}
               width="fit"
             >
-              {selected ? (
-                <Button
-                  variant="action"
-                  prominence="tertiary"
-                  rightIcon={SvgCheckSquare}
-                  tabIndex={-1}
-                >
-                  {t("selected.label")}
-                </Button>
-              ) : selectable ? (
-                // Repeats the card's own action, so it leaves the tab order.
-                <Button
-                  prominence="tertiary"
-                  rightIcon={SvgArrowRightCircle}
-                  tabIndex={-1}
-                >
-                  {t("useButton.label")}
-                </Button>
-              ) : (
-                <div className="p-1.5">
-                  <Text font="secondary-body" color="text-03">
-                    {t("unsupportedRealm.label")}
-                  </Text>
-                </div>
-              )}
+              {pickControl()}
               <Button
                 icon={detailsOpen ? SvgChevronUp : SvgChevronDown}
                 prominence="tertiary"

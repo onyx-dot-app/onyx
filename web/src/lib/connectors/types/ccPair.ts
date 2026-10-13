@@ -1,3 +1,4 @@
+import type { ConnectorManageRole } from "@/lib/connectors/accessType";
 import type { UUID } from "crypto";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 import type {
@@ -65,6 +66,21 @@ export interface CCPairFullInfo {
 
   // Backfills that applied edits requested, until an attempt of each succeeds.
   pending_backfills: PendingBackfillSnapshot[];
+}
+
+/** Mirrors `CCPairDataAccess` in `backend/ee/onyx/server/documents/models.py`. */
+export interface CCPairDataAccess {
+  /** Only the groups the caller can see. */
+  groups: { id: number; name: string; is_default: boolean }[];
+}
+
+/** Mirrors `CCPairManageAccessRow` in `backend/ee/onyx/server/documents/manage_access.py`. */
+export interface CCPairManageAccessRow {
+  group_id: number;
+  group_name: string;
+  role: ConnectorManageRole;
+  /** Granted by a global connector-management grant: not stored, cannot be removed. */
+  is_fixed: boolean;
 }
 
 /** Mirrors `PendingBackfillSnapshot` in `backend/onyx/server/documents/models.py`. */

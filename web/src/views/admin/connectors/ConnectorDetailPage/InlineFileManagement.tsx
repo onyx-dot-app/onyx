@@ -178,6 +178,7 @@ export default function InlineFileManagement({
               prominence="secondary"
               onClick={() => setIsEditing(true)}
               icon={SvgEdit}
+              data-testid="file-manager-edit"
             >
               {t("fileManagement.editButton.label")}
             </Button>

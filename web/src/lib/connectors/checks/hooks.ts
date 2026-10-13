@@ -128,7 +128,7 @@ function toCheckResult(
   };
 }
 
-const NO_CHECKS: Record<DraftCheckStateKind, number> = {
+export const NO_CHECKS: Record<DraftCheckStateKind, number> = {
   pending: 0,
   running: 0,
   passed: 0,

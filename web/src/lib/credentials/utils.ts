@@ -490,19 +490,6 @@ export function getCredentialCreationMethods(
   return methods;
 }
 
-export function getCredentialCreationActionLabel(
-  method: CredentialCreationMethod,
-  sourceDisplayName: string,
-  explicitMethod: boolean
-): string {
-  if (!explicitMethod) {
-    return "Create New";
-  }
-  return method === CredentialCreationMethod.OAuth
-    ? `Connect with ${sourceDisplayName}`
-    : "Enter credentials manually";
-}
-
 export function shouldRedirectToOAuth(details: OAuthDetails): boolean {
   return details.additional_kwargs.length === 0;
 }

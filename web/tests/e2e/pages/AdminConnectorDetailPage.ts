@@ -13,29 +13,29 @@ export class AdminConnectorDetailPage {
 
   /** Rendered only once the cc-pair has resolved. */
   readonly indexingSection: Locator;
+  /** The attempt history at the bottom of the page. */
+  readonly runsSection: Locator;
   /** Opens the action menu; present only when the caller may edit. */
   readonly manageButton: Locator;
   readonly deleteMenuItem: Locator;
   /** Enters the inline file editor of a file connector. */
   readonly filesEditButton: Locator;
   /** Opens the connector in the creation form in edit mode. */
-  readonly editConnectorButton: Locator;
+  readonly editConnectorMenuItem: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.indexingSection = page.getByText("Documents Indexed", { exact: true });
+    this.indexingSection = page.getByTestId("connector-indexing-status");
+    this.runsSection = page.getByText("Index Runs", { exact: true });
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
       name: "Manage",
       exact: true,
     });
     this.deleteMenuItem = page.getByRole("menuitem", { name: /Delete/i });
-    // exact: the header's "Edit connector" button also contains "Edit"
-    this.filesEditButton = page.getByRole("button", {
-      name: "Edit",
-      exact: true,
-    });
-    this.editConnectorButton = page.getByRole("button", {
+    // By id: the header's title pencil is also a button named "Edit".
+    this.filesEditButton = page.getByTestId("file-manager-edit");
+    this.editConnectorMenuItem = page.getByRole("menuitem", {
       name: "Edit connector",
       exact: true,
     });
@@ -53,14 +53,19 @@ export class AdminConnectorDetailPage {
     await expect(this.indexingSection).toBeVisible({ timeout: 30000 });
   }
 
+  async expectRunsVisible(): Promise<void> {
+    await expect(this.runsSection).toBeVisible({ timeout: 30000 });
+  }
+
   async openManageMenu(): Promise<void> {
     await expect(this.manageButton).toBeVisible({ timeout: 30000 });
     await this.manageButton.click();
   }
 
   async openEditForm(): Promise<void> {
-    await expect(this.editConnectorButton).toBeVisible({ timeout: 30000 });
-    await this.editConnectorButton.click();
+    await this.openManageMenu();
+    await expect(this.editConnectorMenuItem).toBeVisible({ timeout: 30000 });
+    await this.editConnectorMenuItem.click();
   }
 
   /** The connector name in the page header. */

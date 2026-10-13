@@ -251,7 +251,7 @@ interface CheckCardViewProps {
   stateCounts: Record<DraftCheckStateKind, number>;
   onRerun: () => void;
 }
-function CheckCardView({
+export function CheckCardView({
   status,
   results,
   openChecks,

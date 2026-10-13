@@ -259,3 +259,15 @@ export interface ImapConfig {
   port?: number;
   mailboxes?: string[];
 }
+
+/** A stored connector setting: the JSON the form saved. */
+export type ConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | ConfigValue[]
+  | { [key: string]: ConfigValue };
+
+export type ConfigEntries = Record<string, ConfigValue>;

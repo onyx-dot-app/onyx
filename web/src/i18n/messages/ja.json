@@ -2036,23 +2036,11 @@
           "days": "{count, plural, one {# 日} other {# 日}}",
           "hours": "{count, plural, one {# 時間} other {# 時間}}",
           "minutes": "{count, plural, one {# 分} other {# 分}}"
-        },
-        "indexingStart": {
-          "label": "インデックス作成の開始日"
-        },
-        "pruningFrequency": {
-          "label": "プルーニングの頻度"
-        },
-        "refreshFrequency": {
-          "label": "更新の頻度"
         }
       },
       "configItem": {
         "booleanFalse": "いいえ",
         "booleanTrue": "はい",
-        "edit": {
-          "tooltip": "編集"
-        },
         "showAll": {
           "label": "すべて表示（{count} 件）"
         },
@@ -2250,9 +2238,12 @@
         }
       },
       "indexErrorsAlert": {
-        "description": "一部のドキュメントの処理中に問題が発生しました。<details>詳細を表示</details>",
+        "description": "一部のドキュメントの処理中に問題が発生しました。",
         "resolvingStatus": "失敗を解決しています",
-        "title": "一部のドキュメントのインデックス作成に失敗しました"
+        "title": "一部のドキュメントのインデックス作成に失敗しました",
+        "detailsButton": {
+          "label": "詳細を表示"
+        }
       },
       "invalidState": {
         "description": "このコネクターは無効な状態です。再インデックスの前に、認証情報を更新するか、新しいコネクターを作成してください。",
@@ -2315,10 +2306,6 @@
           "label": "成功"
         }
       },
-      "pruningFrequencyModal": {
-        "description": "コネクターをプルーニングする頻度（時間単位）",
-        "title": "プルーニングの頻度"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "再有効化"
@@ -2340,30 +2327,6 @@
         },
         "updateButton": {
           "label": "更新を実行"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "コネクターを更新する頻度（分単位）",
-        "title": "更新の頻度"
-      },
-      "sections": {
-        "advanced": {
-          "title": "詳細設定"
-        },
-        "advancedConfiguration": {
-          "title": "詳細な構成"
-        },
-        "connectorConfiguration": {
-          "title": "コネクターの構成"
-        },
-        "credential": {
-          "title": "認証情報"
-        },
-        "indexing": {
-          "title": "インデックス作成"
-        },
-        "indexingAttempts": {
-          "title": "インデックス作成の試行"
         }
       },
       "stageMetrics": {
@@ -2526,18 +2489,20 @@
         "documentsIndexed": {
           "label": "インデックス済みドキュメント数"
         },
-        "indexingSpeed": "（{speed} 件 / 分）",
+        "indexingSpeed": "{speed} 件/分",
         "lastIndexed": {
-          "label": "最終インデックス作成"
+          "value": "最終インデックス作成 {when}"
         },
         "lastSynced": {
-          "label": "最終同期"
+          "value": "最終同期 {when}"
         },
         "permissionSyncing": {
           "label": "権限の同期"
         },
-        "status": {
-          "label": "ステータス"
+        "title": "インデックス状況",
+        "documents": {
+          "label": "直近 / 合計",
+          "total": "/ {total}"
         }
       },
       "syncTables": {
@@ -2573,8 +2538,6 @@
         "indexingStartUnexpectedError": "インデックス作成の開始中に予期しないエラーが発生しました",
         "indexingUpdateStarted": "インデックスの更新を開始しました",
         "indexingUpdateStarting": "インデックスの更新を開始しています...",
-        "invalidPruningFrequency": "プルーニング頻度が無効です。有効な数値を入力してください",
-        "invalidRefreshFrequency": "更新頻度が無効です。整数を入力してください",
         "nameUpdateFailed": "コネクター名を更新できませんでした",
         "nameUpdated": "コネクター名を更新しました",
         "noUnresolvedErrors": "再試行する未解決のエラーはありません。",
@@ -2584,6 +2547,50 @@
         "refreshFrequencyUpdated": "コネクターの更新頻度を変更しました",
         "targetedReindexFailed": "対象を指定した再インデックス作成に失敗しました: {message}",
         "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。"
+      },
+      "backButton": {
+        "label": "すべてのコネクタ"
+      },
+      "account": {
+        "title": "認証アカウント",
+        "editButton": {
+          "label": "アカウントを編集"
+        }
+      },
+      "configuration": {
+        "title": "インデックス設定",
+        "description": "{source} • {count, plural, one {# 件の設定} other {# 件の設定}}",
+        "editButton": {
+          "label": "設定を編集"
+        }
+      },
+      "sharing": {
+        "title": "共有設定",
+        "summary": {
+          "everyone": "ドキュメントは**全員**と共有",
+          "groups": "ドキュメントは**{count, plural, one {# 件のグループ} other {# 件のグループ}}**と共有",
+          "sync": "ドキュメントへのアクセスは**{source} と同期**",
+          "managedByAdmins": "**管理者**が管理",
+          "managedByGroups": "**{count, plural, one {# 件のグループ} other {# 件のグループ}}**が管理",
+          "syncRestricted": "ドキュメントへのアクセスは**{source} と同期**し、**{count, plural, one {# 件のグループ} other {# 件のグループ}}**に制限",
+          "groupsPending": "ドキュメントは**特定のグループ**と共有",
+          "syncRestrictedPending": "ドキュメントへのアクセスは**{source} と同期**し、**特定のグループ**に制限"
+        },
+        "manageAccess": {
+          "title": "コネクタ管理アクセス",
+          "unavailable": "このコネクタを管理しているユーザーは表示できません。"
+        },
+        "editButton": {
+          "label": "アクセスを編集"
+        },
+        "groupsUnavailable": "グループを読み込めませんでした。"
+      },
+      "schedule": {
+        "refresh": "**{every}**ごとに更新",
+        "prune": "**{every}**ごとに整理"
+      },
+      "runs": {
+        "title": "インデックス実行"
       }
     },
     "connectorTitle": {
@@ -3361,9 +3368,6 @@
         },
         "createdOnBy": {
           "label": "<i>{date}</i> に <i>{email}</i> が作成"
-        },
-        "unnamed": {
-          "label": "認証情報 #{id}"
         }
       },
       "create": {
@@ -3417,23 +3421,6 @@
           "label": "確認"
         },
         "confirmTitle": "削除の確認"
-      },
-      "edit": {
-        "name": {
-          "label": "名前 (任意):"
-        },
-        "permissions": {
-          "note": "適切な権限を持つ認証情報に更新してください!"
-        },
-        "resetButton": {
-          "label": "変更をリセット"
-        },
-        "updateButton": {
-          "label": "更新"
-        },
-        "updateError": {
-          "toast": "認証情報の更新中にエラーが発生しました"
-        }
       },
       "displayNames": {
         "accessKeyId": "{source} アクセスキー ID",
@@ -3514,22 +3501,6 @@
           "s3AssumeRole": "このモードでは、Amazon EC2 インスタンスが既存のロールを引き受けて S3 にアクセスします。追加の認証情報は不要です。"
         }
       },
-      "modal": {
-        "createTitle": "{source} の認証情報を作成",
-        "editTitle": "認証情報を編集",
-        "updateTitle": "認証情報を更新"
-      },
-      "modify": {
-        "createButton": {
-          "label": "作成"
-        },
-        "instructions": {
-          "message": "必要に応じて認証情報を選択してください!このコネクタに適切な権限を持つ認証情報を選択したことを確認してください!"
-        },
-        "selectButton": {
-          "label": "選択"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "接続"
@@ -3537,66 +3508,12 @@
         "connectError": {
           "title": "接続できませんでした"
         },
-        "redirectFailed": {
-          "message": "{source} でのサインインにリダイレクトできませんでした。もう一度お試しください。"
-        },
-        "retryButton": {
-          "label": "再試行"
-        },
         "signIn": {
           "description": "{appName} には読み取り専用のスコープが必要です。",
           "title": "{source} でサインイン"
         },
         "startError": {
           "message": "OAuth を開始できません"
-        }
-      },
-      "swap": {
-        "error": {
-          "toast": "認証情報の切り替えに問題があります: {detail}"
-        },
-        "success": {
-          "toast": "認証情報を正常に切り替えました!"
-        }
-      },
-      "table": {
-        "actions": {
-          "label": "操作"
-        },
-        "created": {
-          "header": "作成日"
-        },
-        "edit": {
-          "ariaLabel": "認証情報を編集"
-        },
-        "empty": {
-          "message": "このコネクタには認証情報がありません!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "最終更新"
-        },
-        "name": {
-          "header": "名前"
-        },
-        "select": {
-          "label": "選択"
-        },
-        "selected": {
-          "badge": "選択済み"
-        },
-        "untitled": {
-          "label": "無題"
-        }
-      },
-      "update": {
-        "error": {
-          "toast": "認証情報の更新に問題があります"
-        },
-        "success": {
-          "toast": "認証情報を更新しました"
         }
       },
       "validation": {
@@ -11289,18 +11206,6 @@
         },
         "modifyAction": {
           "label": "変更"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "{property} を編集"
-        },
-        "submitButton": {
-          "label": "プロパティを更新",
-          "loadingLabel": "更新中..."
-        },
-        "valueInput": {
-          "placeholder": "プロパティの値"
         }
       },
       "feedback": {
