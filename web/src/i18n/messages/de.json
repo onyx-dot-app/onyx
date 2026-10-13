@@ -9098,6 +9098,20 @@
       "credentialSwap": {
         "title": "Sie haben andere Anmeldedaten gewählt",
         "description": "Im Plan können Sie die indexierten Dokumente behalten oder alles neu indexieren und die Dokumente entfernen, die die neuen Anmeldedaten nicht sehen."
+      },
+      "files": {
+        "title": "Dateien",
+        "description": "Fügen Sie Dateien hinzu oder entfernen Sie sie. Neue Dateien werden erst indexiert, nachdem Sie den Plan angewendet haben.",
+        "empty": "Der Connector hat keine Dateien.",
+        "addButton": {
+          "label": "Dateien hinzufügen"
+        },
+        "remove": {
+          "tooltip": "{name} entfernen"
+        },
+        "uploadFailed": {
+          "toast": "Die Dateien konnten nicht hochgeladen werden: {detail}"
+        }
       }
     }
   },

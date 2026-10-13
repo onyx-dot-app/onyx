@@ -9098,6 +9098,20 @@
       "credentialSwap": {
         "title": "Você escolheu outra credencial",
         "description": "O plano permite manter os documentos indexados, ou reindexar tudo e remover os documentos que a nova credencial não consegue ver."
+      },
+      "files": {
+        "title": "Arquivos",
+        "description": "Adicione ou remova arquivos. Os novos arquivos são indexados somente depois que você aplica o plano.",
+        "empty": "O conector não tem arquivos.",
+        "addButton": {
+          "label": "Adicionar arquivos"
+        },
+        "remove": {
+          "tooltip": "Remover {name}"
+        },
+        "uploadFailed": {
+          "toast": "Não foi possível enviar os arquivos: {detail}"
+        }
       }
     }
   },

@@ -100,6 +100,7 @@ import AuthenticationAccountSection from "@/views/admin/connectors/AddConnectorP
 import ConnectorContentSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorContentSection";
 import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
+import EditFileLocations from "@/views/admin/connectors/AddConnectorPage/form/EditFileLocations";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
 import { CredentialDerivedConfig } from "@/views/admin/connectors/AddConnectorPage/form/CredentialDerivedConfig";
@@ -254,6 +255,17 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
     NEW_ACCOUNT_FIELD,
   ]);
 
+  // In edit mode, the file connector's files are a list of stored and
+  // staged file ids, not files picked for upload.
+  const editsFileList = edit !== undefined && connector === "file";
+  const contentConfiguration: ConnectionConfiguration = editsFileList
+    ? {
+        ...credentialBoundFields.rest,
+        values: credentialBoundFields.rest.values.filter(
+          (field) => field.type !== "file"
+        ),
+      }
+    : credentialBoundFields.rest;
   // Edit mode fills the form with the pair's state once, at mount.
   const [editValues] = useState(() =>
     edit
@@ -870,12 +882,21 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           >
                             <Section gap={6} alignItems="stretch" width="full">
                               <ConnectorContentSection
-                                config={credentialBoundFields.rest}
+                                config={contentConfiguration}
                                 values={formikProps.values}
                                 connector={connector}
                                 currentCredential={formCredential}
                                 disabled={!formUnlocked}
-                              />
+                              >
+                                {edit && editsFileList && (
+                                  <EditFileLocations
+                                    ccPairId={edit.ccPair.id}
+                                    // Review waits for the upload: a plan
+                                    // made earlier would miss its files.
+                                    onUploadingChange={setUploading}
+                                  />
+                                )}
+                              </ConnectorContentSection>
 
                               <Divider
                                 paddingParallel={0}
