@@ -28,11 +28,10 @@ from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.cc_pair_runs import (
-    CCPairRunFilter,
-    CCPairRunPage,
     count_cc_pair_runs_by_status_group,
     get_cc_pair_run_page,
 )
+from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
@@ -61,7 +60,7 @@ from onyx.db.enums import (
     PermissionSyncStatus,
 )
 from onyx.db.index_attempt import (
-    cancel_waiting_index_attempt__no_commit,
+    cancel_queued_index_attempt__no_commit,
     count_index_attempt_errors_for_cc_pair,
     count_index_attempts_for_cc_pair,
     get_error_counts_for_index_attempts,
@@ -343,13 +342,11 @@ def get_cc_pair_runs(
 def _cancel_index_attempt(
     db_session: Session, attempt: IndexAttempt, reason: str
 ) -> None:
-    """Cancels an active attempt. A waiting one has no task to read a cancel request,
-    so it ends here for the caller to commit. Others get a request, which commits."""
-    if attempt.celery_task_id is None and cancel_waiting_index_attempt__no_commit(
-        db_session, attempt.id, reason=reason
-    ):
-        return
-    IndexingCoordination.request_cancellation(db_session, attempt.id)
+    """Cancels an active attempt. A queued one ends here for the caller to
+    commit, since its task may never run to read a request. A running one gets
+    a request, which commits. Either way its task is revoked."""
+    if not cancel_queued_index_attempt__no_commit(db_session, attempt.id, reason):
+        IndexingCoordination.request_cancellation(db_session, attempt.id)
     if attempt.celery_task_id:
         client_app.control.revoke(attempt.celery_task_id)
 

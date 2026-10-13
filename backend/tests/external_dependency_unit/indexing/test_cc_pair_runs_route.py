@@ -338,10 +338,9 @@ def test_cancel_ends_a_waiting_attempt_in_place(db_session: Session) -> None:
     db_session.refresh(attempt)
     assert attempt.status == IndexingStatus.CANCELED
     assert attempt.time_started is None
-    assert attempt.cancellation_requested is False
 
 
-def test_cancel_revokes_a_queued_attempt_with_a_task(
+def test_cancel_ends_and_revokes_a_queued_attempt_with_a_task(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     admin = create_test_user(db_session, "runs_admin", is_admin=True)
@@ -360,7 +359,7 @@ def test_cancel_revokes_a_queued_attempt_with_a_task(
     cancel_index_attempt(index_attempt_id=attempt.id, user=admin, db_session=db_session)
 
     db_session.refresh(attempt)
-    assert attempt.status == IndexingStatus.NOT_STARTED
+    assert attempt.status == IndexingStatus.CANCELED
     assert attempt.cancellation_requested is True
     revoke.assert_called_once_with("task-2")
 
