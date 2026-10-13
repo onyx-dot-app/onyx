@@ -5688,6 +5688,10 @@
             "error": "Impossible de mettre à jour le mode d’accès à la recherche.",
             "success": "Mode d’accès à la recherche défini sur {mode}."
           }
+        },
+        "loadError": {
+          "description": "Rechargez la page pour réessayer.",
+          "title": "Impossible de charger la mise à jour de l’accès par connecteur"
         }
       }
     },

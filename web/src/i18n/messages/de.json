@@ -5688,6 +5688,10 @@
             "error": "Der Suchzugriffsmodus konnte nicht aktualisiert werden.",
             "success": "Suchzugriffsmodus auf {mode} gesetzt."
           }
+        },
+        "loadError": {
+          "description": "Laden Sie die Seite neu, um es erneut zu versuchen.",
+          "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden"
         }
       }
     },

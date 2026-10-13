@@ -5688,6 +5688,10 @@
             "error": "Could not update the search access mode.",
             "success": "Search access mode set to {mode}."
           }
+        },
+        "loadError": {
+          "description": "Reload the page to try again.",
+          "title": "Could not load the connector access update"
         }
       }
     },

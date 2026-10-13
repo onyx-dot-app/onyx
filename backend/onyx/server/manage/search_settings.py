@@ -1,3 +1,4 @@
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,6 +13,7 @@ from onyx.background.celery.tasks.port.tasks import (
     resume_paused_port_unit,
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DISABLE_INDEX_UPDATE_ON_SWAP,
     DISABLE_VECTOR_DB,
@@ -644,6 +646,39 @@ def get_reindex_progress(
     )
 
 
+_BACKFILL_DOC_COUNTS_TTL_S = 60
+
+
+def _cached_document_counts(
+    db_session: Session, search_settings: SearchSettings, cc_pair_ids: list[int]
+) -> dict[int, int]:
+    """Document counts of the cc-pairs for the backfill status. Counting a large
+    snapshot is slow, and the card polls it, so counts are cached briefly per
+    tenant and index generation. A cache failure only costs a recount."""
+    key = (
+        f"cc_pair_ids_backfill_doc_counts:{search_settings.id}:"
+        f"{search_settings.index_name}"
+    )
+    cache = get_cache_backend()
+    try:
+        raw = cache.get(key)
+        if raw is not None:
+            cached = {int(k): v for k, v in json.loads(raw).items()}
+            if set(cc_pair_ids) <= cached.keys():
+                return {cc_pair_id: cached[cc_pair_id] for cc_pair_id in cc_pair_ids}
+    except Exception:
+        logger.warning("Failed to read cached backfill document counts", exc_info=True)
+
+    counts = count_documents_by_cc_pair_ids(db_session, cc_pair_ids)
+    # Store zeros too, so a cached entry answers for every requested cc-pair.
+    counts = {cc_pair_id: counts.get(cc_pair_id, 0) for cc_pair_id in cc_pair_ids}
+    try:
+        cache.set(key, json.dumps(counts), ex=_BACKFILL_DOC_COUNTS_TTL_S)
+    except Exception:
+        logger.warning("Failed to cache backfill document counts", exc_info=True)
+    return counts
+
+
 @router.get("/cc-pair-ids-backfill-progress")
 def get_cc_pair_ids_backfill_status(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
@@ -671,7 +706,9 @@ def get_cc_pair_ids_backfill_status(
         return status
 
     snapshot = progress.snapshot_cc_pair_ids
-    doc_counts = count_documents_by_cc_pair_ids(db_session, snapshot or pending)
+    doc_counts = _cached_document_counts(
+        db_session, search_settings, snapshot or pending
+    )
     current_cc_pair = get_connector_credential_pair_from_id(
         db_session=db_session, cc_pair_id=pending[0]
     )

@@ -11,6 +11,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
 from onyx.context.search.models import CCPairAccessMode
 from onyx.db.document import upsert_document_by_connector_credential_pair
@@ -39,6 +40,21 @@ _FLAG_KEYS = [
     f"{ONYX_CLOUD_REDIS_RUNTIME}:cc_pair_access_filter:{axis}"
     for axis in ("enabled", "enforce")
 ]
+
+
+_DOC_COUNTS_KEY = (
+    f"cc_pair_ids_backfill_doc_counts:{_SEARCH_SETTINGS.id}:"
+    f"{_SEARCH_SETTINGS.index_name}"
+)
+
+
+@pytest.fixture(autouse=True)
+def _doc_counts_uncached(
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[None, None, None]:
+    get_cache_backend().delete(_DOC_COUNTS_KEY)
+    yield
+    get_cache_backend().delete(_DOC_COUNTS_KEY)
 
 
 @pytest.fixture
@@ -190,8 +206,10 @@ def test_status_without_a_snapshot_reports_only_what_is_left(
     assert status.completed_documents is None
 
 
-@pytest.mark.usefixtures("kv_progress_restored", "tenant_context")
+@pytest.mark.usefixtures("kv_progress_restored", "flags_restored")
 def test_status_before_start_and_after_completion(db_session: Session) -> None:
+    # The mode depends on the flags, so pin them off.
+    OnyxRuntime.set_cc_pair_access_filter_flags(enabled=False, enforce=False)
     _store(pending=None)
     status = _status(db_session)
     assert not status.started and not status.completed
@@ -240,3 +258,18 @@ def test_mode_is_operator_controlled_in_multi_tenant(db_session: Session) -> Non
             _set_mode(db_session, CCPairAccessMode.SHADOW)
         assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
         assert not _status(db_session).mode_editable
+
+
+@pytest.mark.usefixtures("kv_progress_restored")
+def test_status_reuses_cached_document_counts(
+    db_session: Session, pairs: _Pairs
+) -> None:
+    _store(pending=[pairs.current.id], snapshot=[pairs.done.id, pairs.current.id])
+    count = MagicMock(wraps=search_settings_api.count_documents_by_cc_pair_ids)
+
+    with patch.object(search_settings_api, "count_documents_by_cc_pair_ids", count):
+        first = _status(db_session)
+        second = _status(db_session)
+
+    assert count.call_count == 1
+    assert first.total_documents == second.total_documents == 5

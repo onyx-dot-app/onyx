@@ -11,6 +11,7 @@ import {
   Text,
 } from "@opal/components";
 import { toast } from "@opal/layouts";
+import { CardLoader } from "@opal/loaders";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useCCPairIdsBackfillStatus } from "@/lib/searchSettings/hooks";
 import { updateCCPairAccessMode } from "@/lib/searchSettings/svc";
@@ -146,10 +147,21 @@ function AccessModeSelect({ status }: BackfillStatusProps) {
 
 export default function CCPairIdsBackfillCard() {
   const t = useTranslations("admin.indexSettings.ccPairIdsBackfill");
-  const { data: status } = useCCPairIdsBackfillStatus();
+  const { data: status, isLoading } = useCCPairIdsBackfillStatus();
 
+  if (isLoading) {
+    return <CardLoader />;
+  }
+
+  // A failed poll keeps the last status, so only a failed first load shows this.
   if (!status) {
-    return null;
+    return (
+      <MessageCard
+        variant="error"
+        title={t("loadError.title")}
+        description={t("loadError.description")}
+      />
+    );
   }
 
   const modeSelect = status.mode_editable ? (

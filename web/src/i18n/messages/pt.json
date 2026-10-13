@@ -5688,6 +5688,10 @@
             "error": "Não foi possível atualizar o modo de acesso à pesquisa.",
             "success": "Modo de acesso à pesquisa definido como {mode}."
           }
+        },
+        "loadError": {
+          "description": "Recarregue a página para tentar novamente.",
+          "title": "Não foi possível carregar a atualização do acesso por conector"
         }
       }
     },
