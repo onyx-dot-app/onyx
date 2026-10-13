@@ -944,6 +944,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           <Disabled
                             disabled={!formUnlocked}
                             tooltip={formLockReason}
+                            // The locked form is page-tall: the tooltip stays
+                            // level with the pointer, not the form's middle.
+                            tooltipAlign="follow"
                             data-testid="connector-form"
                           >
                             <Section gap={6} alignItems="stretch" width="full">
