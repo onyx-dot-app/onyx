@@ -5,8 +5,8 @@ import { useTranslations } from "next-intl";
 import { SvgOrganization, SvgUsers } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { markdown } from "@opal/utils";
-import type { Plan, PlanColor, PlanMetadata } from "@/lib/tiers/types";
-import { Tier } from "@/lib/settings/types";
+import type { PlanColor, PlanMetadata } from "@/lib/tiers/types";
+import { Tier } from "@/lib/tiers/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -24,36 +24,45 @@ export function useTierAtLeast(required: Tier): boolean {
 }
 
 const PLAN_STYLES: Record<
-  Plan,
-  { color: PlanColor; icon: IconFunctionComponent | undefined }
+  Tier,
+  {
+    color: PlanColor;
+    icon: IconFunctionComponent | undefined;
+    // The tier's key under `common.plans`; the UI calls COMMUNITY "Free".
+    copyKey: "free" | "business" | "enterprise";
+  }
 > = {
-  free: { color: "gray", icon: undefined },
-  business: { color: "green", icon: SvgUsers },
-  enterprise: { color: "amber", icon: SvgOrganization },
+  [Tier.COMMUNITY]: { color: "gray", icon: undefined, copyKey: "free" },
+  [Tier.BUSINESS]: { color: "green", icon: SvgUsers, copyKey: "business" },
+  [Tier.ENTERPRISE]: {
+    color: "amber",
+    icon: SvgOrganization,
+    copyKey: "enterprise",
+  },
 };
 
 /**
- * The app's plan badges and their copy, by plan. Use these wherever a
- * feature is limited to a plan, so every such feature reads the same.
+ * The app's plan badges and their copy, by tier. Use these wherever a
+ * feature is limited to a tier, so every such feature reads the same.
  */
-export function usePlans(): Record<Plan, PlanMetadata> {
+export function usePlans(): Record<Tier, PlanMetadata> {
   const t = useTranslations("common.plans");
   return useMemo(() => {
-    const metadata = (plan: Plan): PlanMetadata => {
-      const { color, icon } = PLAN_STYLES[plan];
-      const title: string = t(`${plan}.title`);
+    const metadata = (tier: Tier): PlanMetadata => {
+      const { color, icon, copyKey } = PLAN_STYLES[tier];
+      const title: string = t(`${copyKey}.title`);
       return {
         title,
         icon,
         color,
         tag: { title, color, icon },
-        tooltip: markdown(t(`${plan}.tooltip`)),
+        tooltip: markdown(t(`${copyKey}.tooltip`)),
       };
     };
     return {
-      free: metadata("free"),
-      business: metadata("business"),
-      enterprise: metadata("enterprise"),
+      [Tier.COMMUNITY]: metadata(Tier.COMMUNITY),
+      [Tier.BUSINESS]: metadata(Tier.BUSINESS),
+      [Tier.ENTERPRISE]: metadata(Tier.ENTERPRISE),
     };
   }, [t]);
 }

@@ -6,7 +6,7 @@ import { toast } from "@opal/layouts";
 import { useState } from "react";
 import { mutate } from "swr";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { Section } from "@/layouts/general-layouts";
 import { SvgGlobe, SvgPlusCircle, SvgUser, SvgUsers } from "@opal/icons";

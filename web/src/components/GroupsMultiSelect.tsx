@@ -3,7 +3,7 @@ import { useTranslations } from "next-intl";
 import { Label } from "@/components/Field";
 import { useUserGroups } from "@/lib/hooks";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { GenericMultiSelect } from "@/components/GenericMultiSelect";
 
 export type GroupsMultiSelectFormType = {

@@ -92,7 +92,7 @@ import {
   updateAgentShares,
 } from "@/lib/agents/svc";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { ShareAgentModal, type ShareDraftState } from "@/lib/agents/components";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";

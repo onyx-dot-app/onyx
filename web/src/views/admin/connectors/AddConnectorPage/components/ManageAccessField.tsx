@@ -4,7 +4,7 @@ import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { Divider, MessageCard, Tooltip } from "@opal/components";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { Content, Section } from "@opal/layouts";
 import { SvgBarChart, SvgEditBig, SvgUserManage } from "@opal/icons";
 import useUsers from "@/hooks/useUsers";
@@ -104,13 +104,13 @@ export default function ManageAccessField({
       <Content
         title={t("title")}
         description={t("description")}
-        tag={businessTier ? undefined : plans.business.tag}
+        tag={businessTier ? undefined : plans[Tier.BUSINESS].tag}
         sizePreset="main-ui"
         variant="section"
       />
       {/* The list is tall, so the tooltip stays level with the pointer. */}
       <Tooltip
-        tooltip={businessTier ? undefined : plans.business.tooltip}
+        tooltip={businessTier ? undefined : plans[Tier.BUSINESS].tooltip}
         align="follow"
       >
         <div className="w-full">

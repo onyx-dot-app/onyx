@@ -67,7 +67,7 @@ import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
 

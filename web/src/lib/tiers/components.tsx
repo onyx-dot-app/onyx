@@ -2,10 +2,10 @@
 
 import { Tag, type TagProps } from "@opal/components";
 import { usePlans } from "@/lib/tiers/hooks";
-import type { Plan } from "@/lib/tiers/types";
+import type { Tier } from "@/lib/tiers/types";
 
 export interface PlanTagProps {
-  plan: Plan;
+  plan: Tier;
   size?: TagProps["size"];
 }
 

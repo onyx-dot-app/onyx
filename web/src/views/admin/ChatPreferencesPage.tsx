@@ -83,7 +83,7 @@ import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -1016,7 +1016,7 @@ export default function ChatPreferencesPage() {
                 title={t("searchMode.title")}
                 tag={
                   !businessTier
-                    ? plans.business.tag
+                    ? plans[Tier.BUSINESS].tag
                     : { title: t("betaTag.label"), color: "blue" }
                 }
                 description={t("searchMode.description")}
@@ -1025,7 +1025,7 @@ export default function ChatPreferencesPage() {
                 <Tooltip
                   tooltip={
                     !businessTier
-                      ? plans.business.tooltip
+                      ? plans[Tier.BUSINESS].tooltip
                       : uniqueSources.length === 0
                         ? t("searchMode.noConnectorsTooltip")
                         : undefined
@@ -1486,13 +1486,17 @@ export default function ChatPreferencesPage() {
                     description={t("retention.description", {
                       appName: settings.appName,
                     })}
-                    tag={!enterpriseTier ? plans.enterprise.tag : undefined}
+                    tag={
+                      !enterpriseTier ? plans[Tier.ENTERPRISE].tag : undefined
+                    }
                     withLabel
                     fillInput
                   >
                     <Tooltip
                       tooltip={
-                        enterpriseTier ? undefined : plans.enterprise.tooltip
+                        enterpriseTier
+                          ? undefined
+                          : plans[Tier.ENTERPRISE].tooltip
                       }
                     >
                       <div className="w-full">

@@ -21,7 +21,7 @@ import AutoSyncOptions from "@/views/admin/connectors/AddConnectorPage/component
 import ConnectorGroupRestrictionPicker from "@/lib/connectors/components/ConnectorGroupRestrictionPicker";
 import { useConnectorGroupRestrictionsEnabled } from "@/lib/connectors/hooks";
 import GroupShareList from "@/lib/connectors/components/GroupShareList";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import type { CredentialValues } from "@/lib/credentials/types";
 import { getCredentialSpec } from "@/lib/credentials/utils";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -167,12 +167,14 @@ export default function DocumentAccessField({
         withLabel="access_type"
         title={t("title")}
         description={t("description")}
-        tag={businessTier ? undefined : plans.business.tag}
+        tag={businessTier ? undefined : plans[Tier.BUSINESS].tag}
         disabled={disabled}
         fillInput
         center
       >
-        <Tooltip tooltip={businessTier ? undefined : plans.business.tooltip}>
+        <Tooltip
+          tooltip={businessTier ? undefined : plans[Tier.BUSINESS].tooltip}
+        >
           <div className="w-full">
             <InputSingleSelect
               id="access_type"

@@ -1,8 +1,15 @@
 import type { TagProps } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 
-/** The plans a feature can be limited to, lowest first. */
-export type Plan = "free" | "business" | "enterprise";
+/**
+ * The workspace's subscription tier, lowest first. The UI calls a tier a
+ * plan ("Business Plan"); COMMUNITY is shown as the Free plan.
+ */
+export enum Tier {
+  COMMUNITY = "community",
+  BUSINESS = "business",
+  ENTERPRISE = "enterprise",
+}
 
 export type PlanColor = NonNullable<TagProps["color"]>;
 

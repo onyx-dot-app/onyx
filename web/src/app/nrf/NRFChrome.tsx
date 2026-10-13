@@ -14,7 +14,7 @@ import { useAppPosition } from "@/lib/position/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useTranslations } from "next-intl";

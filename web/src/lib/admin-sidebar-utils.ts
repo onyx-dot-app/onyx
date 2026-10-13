@@ -7,7 +7,8 @@ import {
 } from "@/lib/admin-routes";
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";
-import { Settings, Tier } from "@/lib/settings/types";
+import { Settings } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { tierAtLeast } from "@/lib/tiers/utils";
 
 export type { FeatureFlags } from "@/lib/admin-routes";

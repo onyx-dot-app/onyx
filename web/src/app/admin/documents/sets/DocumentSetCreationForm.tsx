@@ -20,7 +20,7 @@ import {
 import { TextFormField } from "@/components/Field";
 import { Button } from "@opal/components";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import React, { useEffect, useState } from "react";
 import { useUser } from "@/providers/UserProvider";

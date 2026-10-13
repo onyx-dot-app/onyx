@@ -1,3 +1,4 @@
+import { Tier } from "@/lib/tiers/types";
 import type { Notification } from "@/lib/notifications/interfaces";
 
 export enum ApplicationStatus {
@@ -5,12 +6,6 @@ export enum ApplicationStatus {
   GATED_ACCESS = "gated_access",
   ACTIVE = "active",
   SEAT_LIMIT_EXCEEDED = "seat_limit_exceeded",
-}
-
-export enum Tier {
-  COMMUNITY = "community",
-  BUSINESS = "business",
-  ENTERPRISE = "enterprise",
 }
 
 export enum QueryHistoryType {

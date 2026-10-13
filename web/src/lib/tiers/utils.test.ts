@@ -1,4 +1,4 @@
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers/utils";
 
 describe("LLM Gateway tier", () => {

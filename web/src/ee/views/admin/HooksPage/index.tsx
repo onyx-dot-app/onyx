@@ -9,7 +9,7 @@ import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
 import { useHooks } from "@/ee/hooks/useHooks";
 import useFilter from "@/hooks/useFilter";

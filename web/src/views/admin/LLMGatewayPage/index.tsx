@@ -13,7 +13,7 @@ import { Section } from "@/layouts/general-layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { updateAdminSettings } from "@/lib/settings/svc";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 
 const route = ADMIN_ROUTES.LLM_GATEWAY;
 
@@ -60,7 +60,7 @@ export default function LLMGatewayPage() {
             >
               <InputHorizontal
                 title={t("access.toggle.title")}
-                tag={!businessTier ? plans.business.tag : undefined}
+                tag={!businessTier ? plans[Tier.BUSINESS].tag : undefined}
                 description={t("access.toggle.description")}
                 disabled={!businessTier}
                 withLabel

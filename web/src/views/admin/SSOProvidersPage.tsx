@@ -17,7 +17,7 @@ import { cn } from "@opal/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import type { SSOProviderResponse } from "@/lib/sso/interfaces";
 import { tierAtLeast } from "@/lib/tiers/utils";
 import { setSSOProviderEnabled } from "@/lib/sso/svc";

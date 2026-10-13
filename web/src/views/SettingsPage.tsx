@@ -80,7 +80,7 @@ import {
 import { SvgCheck } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import {
   ALL_REASONING_STOPS,
