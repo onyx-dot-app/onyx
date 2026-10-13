@@ -165,12 +165,13 @@ def _query(params: dict[str, Any]) -> str:
 def _paginate(
     base_url: str, path: str, key: str, limit: int, params: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Walk a Zendesk collection up to ``limit`` records.
+    """Walk a Zendesk collection up to ``limit`` records, following whichever
+    paging shape the endpoint uses (see ``_next_page_url``). ``per_page`` is the
+    one size parameter all of them honour.
 
-    Covers all three of Zendesk's paging shapes: offset (``next_page``), cursor
-    (``links.next`` + ``meta.has_more``), and the incremental exports
-    (``after_url`` + ``end_of_stream``). ``per_page`` is the one size parameter
-    every one of them honours."""
+    Truncates mid-page at ``limit``, which suits a browsing read. The
+    incremental export cannot work that way — it has ``_incremental_tickets``,
+    which stops on a page boundary so its cursor stays safe to resume from."""
     if limit <= 0:
         raise ZendeskError("limit must be a positive integer")
     results: list[Any] = []
