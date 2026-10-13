@@ -49,6 +49,10 @@ export interface Settings {
   image_extraction_and_analysis_enabled?: boolean;
   image_analysis_max_size_mb?: number | null;
 
+  // Backoff between retries of indexing embedding calls, in seconds
+  embedding_retry_backoff_scale_seconds?: number;
+  embedding_retry_backoff_max_seconds?: number;
+
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
   user_file_max_upload_size_mb?: number | null;

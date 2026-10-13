@@ -5697,6 +5697,28 @@
           "description": "Laden Sie die Seite neu, um es erneut zu versuchen.",
           "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden"
         }
+      },
+      "embeddingRetry": {
+        "title": "Embedding-Wiederholungen",
+        "description": "Wenn ein Embedding-Aufruf während der Indexierung fehlschlägt, wartet Onyx und versucht es erneut. Jede Wartezeit ist doppelt so lang wie die vorherige, bis zum Maximum. Änderungen gelten ab dem nächsten Indexierungs-Batch.",
+        "scale": {
+          "title": "Wartezeit vor der ersten Wiederholung",
+          "description": "Die Wartezeit vor der ersten Wiederholung."
+        },
+        "max": {
+          "title": "Maximale Wartezeit",
+          "description": "Keine Wartezeit ist länger als dieser Wert."
+        },
+        "suffix": "(Sekunden)",
+        "restoreDefault": "Standard wiederherstellen",
+        "validation": {
+          "range": "Geben Sie eine Zahl größer als 0 und höchstens {max} ein.",
+          "maxBelowScale": "Die maximale Wartezeit darf nicht kürzer als die erste Wartezeit sein."
+        },
+        "toasts": {
+          "saved": "Wiederholungseinstellungen gespeichert.",
+          "failed": "Die Wiederholungseinstellungen konnten nicht gespeichert werden."
+        }
       }
     },
     "indexing": {

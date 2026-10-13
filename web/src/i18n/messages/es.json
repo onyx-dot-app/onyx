@@ -5697,6 +5697,28 @@
           "description": "Recarga la página para intentarlo de nuevo.",
           "title": "No se pudo cargar la actualización del acceso por conector"
         }
+      },
+      "embeddingRetry": {
+        "title": "Reintentos de embeddings",
+        "description": "Cuando falla una llamada de embedding durante la indexación, Onyx espera y vuelve a intentarlo. Cada espera es el doble de la anterior, hasta el máximo. Los cambios se aplican al siguiente lote de indexación.",
+        "scale": {
+          "title": "Espera antes del primer reintento",
+          "description": "La espera antes del primer reintento."
+        },
+        "max": {
+          "title": "Espera máxima entre reintentos",
+          "description": "Ninguna espera es mayor que este valor."
+        },
+        "suffix": "(segundos)",
+        "restoreDefault": "Restaurar valor predeterminado",
+        "validation": {
+          "range": "Introduce un número mayor que 0 y no mayor que {max}.",
+          "maxBelowScale": "La espera máxima no puede ser menor que la primera espera."
+        },
+        "toasts": {
+          "saved": "Configuración de reintentos guardada.",
+          "failed": "No se pudo guardar la configuración de reintentos."
+        }
       }
     },
     "indexing": {

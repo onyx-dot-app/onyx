@@ -2,12 +2,12 @@
 
 import json
 from collections.abc import Callable, Iterator
-from typing import Any, cast
+from typing import Any
 from unittest.mock import patch
 
 import httpx
 import pytest
-from tenacity import stop_after_attempt, wait_none
+from tenacity import wait_none
 
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.exceptions import (
@@ -17,6 +17,7 @@ from onyx.natural_language_processing.exceptions import (
 from onyx.natural_language_processing.search_nlp_models import (
     AuthenticationError,
     CloudEmbedding,
+    EmbeddingRetryBackoff,
 )
 from onyx.natural_language_processing.utils import (
     TiktokenTokenizer,
@@ -79,10 +80,7 @@ def _bifrost(
 
 @pytest.fixture(autouse=True)
 def _no_retry_waits() -> Iterator[None]:
-    with (
-        patch(f"{_MODULE}._BIFROST_RETRY_WAIT", wait_none()),
-        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
-    ):
+    with patch.object(EmbeddingRetryBackoff, "wait", lambda _self: wait_none()):
         yield
 
 
@@ -282,21 +280,14 @@ async def test_an_exhausted_request_is_not_replayed_by_the_outer_retry() -> None
         return None
 
     gateway = _FakeGateway(respond=always_fail_b)
-    with (
-        patch(f"{_MODULE}._BIFROST_REQUEST_TRIES", 3),
-        patch.object(
-            cast(Any, CloudEmbedding.embed).retry, "stop", stop_after_attempt(5)
-        ),
-    ):
-        async with _bifrost(gateway, "https://bifrost.example") as embedding:
-            with pytest.raises(
-                EmbeddingRequestFailedError, match="HTTP 503: unavailable"
-            ):
-                await embedding.embed(
-                    texts=["a", "b", "c"],
-                    text_type=EmbedTextType.PASSAGE,
-                    model_name="gemini/gemini-embedding-001",
-                )
+    async with _bifrost(gateway, "https://bifrost.example") as embedding:
+        embedding.retry_tries = 3
+        with pytest.raises(EmbeddingRequestFailedError, match="HTTP 503: unavailable"):
+            await embedding.embed(
+                texts=["a", "b", "c"],
+                text_type=EmbedTextType.PASSAGE,
+                model_name="gemini/gemini-embedding-001",
+            )
 
     # Only the failing input is retried, and the inputs that succeeded are not resent.
     assert attempts == {"a": 1, "b": 3, "c": 1}

@@ -5697,6 +5697,28 @@
           "description": "Reload the page to try again.",
           "title": "Could not load the connector access update"
         }
+      },
+      "embeddingRetry": {
+        "title": "Embedding retries",
+        "description": "When an embedding call fails during indexing, Onyx waits and tries again. Each wait is double the previous wait, up to the maximum. Changes apply to the next indexing batch.",
+        "scale": {
+          "title": "First retry wait",
+          "description": "The wait before the first retry."
+        },
+        "max": {
+          "title": "Maximum retry wait",
+          "description": "No wait is longer than this value."
+        },
+        "suffix": "(seconds)",
+        "restoreDefault": "Restore default",
+        "validation": {
+          "range": "Enter a number greater than 0 and not more than {max}.",
+          "maxBelowScale": "The maximum wait cannot be less than the first wait."
+        },
+        "toasts": {
+          "saved": "Retry settings saved.",
+          "failed": "Could not save the retry settings."
+        }
       }
     },
     "indexing": {

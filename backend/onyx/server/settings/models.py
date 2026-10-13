@@ -3,10 +3,13 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from onyx.configs.app_configs import (
+    DEFAULT_EMBEDDING_RETRY_BACKOFF_MAX_SECONDS,
+    DEFAULT_EMBEDDING_RETRY_BACKOFF_SCALE_SECONDS,
     DEFAULT_PRUNING_FREQ,
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
+    MAX_EMBEDDING_RETRY_BACKOFF_SECONDS,
 )
 from onyx.configs.constants import QueryHistoryType
 from onyx.server.features.notifications.models import NotificationResponse
@@ -80,6 +83,18 @@ class Settings(BaseModel):
     # Image processing settings
     image_extraction_and_analysis_enabled: bool | None = True
     image_analysis_max_size_mb: int | None = 20
+
+    # Backoff between retries of indexing embedding calls
+    embedding_retry_backoff_scale_seconds: float = Field(
+        default=DEFAULT_EMBEDDING_RETRY_BACKOFF_SCALE_SECONDS,
+        gt=0,
+        le=MAX_EMBEDDING_RETRY_BACKOFF_SECONDS,
+    )
+    embedding_retry_backoff_max_seconds: float = Field(
+        default=DEFAULT_EMBEDDING_RETRY_BACKOFF_MAX_SECONDS,
+        gt=0,
+        le=MAX_EMBEDDING_RETRY_BACKOFF_SECONDS,
+    )
 
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True

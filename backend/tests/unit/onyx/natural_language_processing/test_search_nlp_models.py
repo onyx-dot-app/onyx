@@ -1,6 +1,6 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from threading import Lock
-from typing import Any, cast
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,6 +14,7 @@ from onyx.natural_language_processing.embedding_auth import build_embedding_auth
 from onyx.natural_language_processing.search_nlp_models import (
     CloudEmbedding,
     EmbeddingModel,
+    EmbeddingRetryBackoff,
     clean_model_name,
 )
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
@@ -381,7 +382,7 @@ async def test_cloud_embedding_retries_on_transient_failure() -> None:
         return [[0.1, 0.2, 0.3] for _ in texts]
 
     with (
-        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
+        patch.object(EmbeddingRetryBackoff, "wait", lambda _self: wait_none()),
         patch.object(
             CloudEmbedding,
             CloudEmbedding._embed_openai.__name__,
@@ -435,7 +436,7 @@ async def test_cloud_embedding_retries_on_vertex_429() -> None:
         return [[0.1, 0.2, 0.3] for _ in texts]
 
     with (
-        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
+        patch.object(EmbeddingRetryBackoff, "wait", lambda _self: wait_none()),
         patch.object(
             CloudEmbedding,
             CloudEmbedding._embed_vertex.__name__,
@@ -480,7 +481,19 @@ def _embedding_for_text(text: str) -> list[float]:
     return _embedding_for_idx(int(text.split("_")[1]))
 
 
-def _fake_direct_api_call(embed_request: EmbedRequest) -> EmbedResponse:
+@pytest.fixture(autouse=True)
+def _default_passage_retry_backoff() -> Iterator[None]:
+    with patch(
+        f"{_SEARCH_NLP_MODULE}._load_passage_retry_backoff",
+        return_value=EmbeddingRetryBackoff(scale_seconds=1, max_seconds=1),
+    ):
+        yield
+
+
+def _fake_direct_api_call(
+    embed_request: EmbedRequest,
+    *_retry_config: object,
+) -> EmbedResponse:
     return EmbedResponse(
         embeddings=[_embedding_for_text(t) for t in embed_request.texts]
     )
@@ -490,6 +503,7 @@ def _fake_model_server_call(
     embed_request: EmbedRequest,
     tenant_id: str | None = None,  # noqa: ARG001
     request_id: str | None = None,  # noqa: ARG001
+    retry_backoff: EmbeddingRetryBackoff | None = None,  # noqa: ARG001
 ) -> EmbedResponse:
     return EmbedResponse(
         embeddings=[_embedding_for_text(t) for t in embed_request.texts]
@@ -641,7 +655,9 @@ def test_batch_encode_error_propagates() -> None:
     call_count = {"n": 0}
     call_count_lock = Lock()
 
-    def _fail_on_second_call(embed_request: EmbedRequest) -> EmbedResponse:
+    def _fail_on_second_call(
+        embed_request: EmbedRequest, *_retry_config: object
+    ) -> EmbedResponse:
         with call_count_lock:
             call_count["n"] += 1
             if call_count["n"] == 2:
@@ -762,3 +778,34 @@ async def test_batch_encode_async_caller_multi_batch() -> None:
     # Postcondition.
     assert result == [_embedding_for_idx(i) for i in range(n_texts)]
     assert spy_asyncio_run.call_count == 0
+
+
+def test_passage_model_server_retry_uses_settings_backoff() -> None:
+    """A rate-limited passage embed retries with the backoff from the settings."""
+    model = _make_local_embedding_model()
+    settings_backoff = EmbeddingRetryBackoff(scale_seconds=7, max_seconds=90)
+    used_backoffs: list[EmbeddingRetryBackoff] = []
+
+    def record_wait(backoff: EmbeddingRetryBackoff) -> Any:
+        used_backoffs.append(backoff)
+        return wait_none()
+
+    rate_limited = MagicMock(status_code=429, text="slow down")
+    ok = MagicMock(status_code=200)
+    ok.json.return_value = {"embeddings": [[1.0]]}
+
+    with (
+        patch(
+            f"{_SEARCH_NLP_MODULE}._load_passage_retry_backoff",
+            return_value=settings_backoff,
+        ),
+        patch.object(EmbeddingRetryBackoff, "wait", record_wait),
+        patch(
+            f"{_SEARCH_NLP_MODULE}.requests.post", side_effect=[rate_limited, ok]
+        ) as post,
+    ):
+        result = model.encode(texts=["text_0"], text_type=EmbedTextType.PASSAGE)
+
+    assert result == [[1.0]]
+    assert post.call_count == 2
+    assert used_backoffs and all(b == settings_backoff for b in used_backoffs)

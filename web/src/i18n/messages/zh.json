@@ -5697,6 +5697,28 @@
           "description": "请重新加载页面后重试。",
           "title": "无法加载连接器访问更新"
         }
+      },
+      "embeddingRetry": {
+        "title": "嵌入重试",
+        "description": "索引期间嵌入调用失败时，Onyx 会等待后重试。每次等待时间是上一次的两倍，直到达到最大值。更改将从下一个索引批次开始生效。",
+        "scale": {
+          "title": "首次重试等待时间",
+          "description": "第一次重试前的等待时间。"
+        },
+        "max": {
+          "title": "最大重试等待时间",
+          "description": "等待时间不会超过此值。"
+        },
+        "suffix": "（秒）",
+        "restoreDefault": "恢复默认值",
+        "validation": {
+          "range": "请输入大于 0 且不超过 {max} 的数字。",
+          "maxBelowScale": "最大等待时间不能小于首次等待时间。"
+        },
+        "toasts": {
+          "saved": "重试设置已保存。",
+          "failed": "无法保存重试设置。"
+        }
       }
     },
     "indexing": {

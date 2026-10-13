@@ -118,6 +118,7 @@ import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
 import CCPairIdsBackfillCard from "@/views/admin/IndexSettingsPage/CCPairIdsBackfillCard";
+import EmbeddingRetryBackoffCard from "@/views/admin/IndexSettingsPage/EmbeddingRetryBackoffCard";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -2364,6 +2365,10 @@ export default function IndexSettingsPage() {
                       </GeneralLayouts.Section>
                     </GeneralLayouts.Section>
                   </Disabled>
+
+                  {/* Outside the re-index lock: retries matter most during a re-index. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <EmbeddingRetryBackoffCard />
                 </>
               );
             }}

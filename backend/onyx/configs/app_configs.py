@@ -1951,6 +1951,12 @@ MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 
+# Exponential backoff between retries of indexing embedding calls (model server
+# and cloud providers): waits of scale, 2*scale, 4*scale, ... seconds, capped at max.
+DEFAULT_EMBEDDING_RETRY_BACKOFF_SCALE_SECONDS = 5.0
+DEFAULT_EMBEDDING_RETRY_BACKOFF_MAX_SECONDS = 60.0
+MAX_EMBEDDING_RETRY_BACKOFF_SECONDS = 600.0
+
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
 

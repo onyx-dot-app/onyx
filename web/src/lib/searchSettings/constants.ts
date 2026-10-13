@@ -283,3 +283,8 @@ export const MAX_IMAGE_SIZE_OPTIONS = ["5", "10", "20", "50", "100"];
 
 /** Mirrors `DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB` on the backend. */
 export const DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20;
+
+/** Mirror the `*EMBEDDING_RETRY_BACKOFF*` constants on the backend. */
+export const DEFAULT_EMBEDDING_RETRY_BACKOFF_SCALE_SECONDS = 5;
+export const DEFAULT_EMBEDDING_RETRY_BACKOFF_MAX_SECONDS = 60;
+export const MAX_EMBEDDING_RETRY_BACKOFF_SECONDS = 600;

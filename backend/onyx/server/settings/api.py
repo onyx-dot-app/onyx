@@ -113,6 +113,15 @@ def admin_patch_settings(
                 f"File upload size limit cannot exceed {MAX_ALLOWED_UPLOAD_SIZE_MB} MB",
             )
 
+        if (
+            merged.embedding_retry_backoff_max_seconds
+            < merged.embedding_retry_backoff_scale_seconds
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "The maximum retry wait cannot be less than the retry scale.",
+            )
+
         # Search Mode is Business+, Chat Retention is Enterprise-only. Same error
         # code (FEATURE_NOT_AVAILABLE / 402) the tier_gate middleware uses, so the
         # FE has one shape to handle for tier-rejected writes.

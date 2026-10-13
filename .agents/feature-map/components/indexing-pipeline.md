@@ -336,7 +336,11 @@ enrichment (`_partition_documents_blocked_by_llm_spend_limit`).
 `indexing_pipeline.py`). Chunks are split into sub-batches of at most
 `MAX_CHUNKS_PER_DOC_BATCH` (1000) and each sub-batch is embedded in one call to
 `EmbeddingModel.encode` (`natural_language_processing/search_nlp_models.py`), which
-reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`. Titles
+reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`, or the
+cloud provider directly. Failed passage calls retry with exponential backoff. The
+admin sets the first wait and the maximum wait on the Index Settings page
+(`embedding_retry_backoff_*_seconds` in workspace `Settings`). `encode` reads them
+once per call, so a change applies to the next batch. Titles
 get no separate embedding: the title reaches the vector only through the chunk's
 `title_prefix`.
 Each successfully embedded sub-batch is immediately pickled to disk via

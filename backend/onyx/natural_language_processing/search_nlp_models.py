@@ -15,7 +15,7 @@ import voyageai
 from cohere import AsyncClient as CohereAsyncClient
 from cohere.core.api_error import ApiError
 from httpx import HTTPError
-from pydantic import SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
 from requests import JSONDecodeError, RequestException, Response
 from tenacity import (
     retry,
@@ -23,12 +23,13 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    wait_fixed,
     wait_random,
 )
 from tenacity.wait import wait_base
 
 from onyx.configs.app_configs import (
+    DEFAULT_EMBEDDING_RETRY_BACKOFF_MAX_SECONDS,
+    DEFAULT_EMBEDDING_RETRY_BACKOFF_SCALE_SECONDS,
     INDEXING_EMBEDDING_MODEL_NUM_THREADS,
     LARGE_CHUNK_RATIO,
 )
@@ -63,6 +64,7 @@ from onyx.server.metrics.embedding import (
     observe_embedding_client,
     track_embedding_in_progress,
 )
+from onyx.server.settings.store import load_settings
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
@@ -99,6 +101,48 @@ logger = setup_logger()
 # we hit the 60s cap exactly once, totaling ~123s before giving up.
 _RETRY_DELAY = 1 if INDEXING_ONLY else 0.1
 _RETRY_TRIES = 8 if INDEXING_ONLY else 2
+# Passage embeds read their backoff from the workspace settings.
+_PASSAGE_RETRY_TRIES = 8
+# Model server: attempts per error loop. The 429 loop wraps the error loop.
+_MODEL_SERVER_ERROR_TRIES = 3
+_MODEL_SERVER_RATE_LIMIT_TRIES = 10
+
+
+class EmbeddingRetryBackoff(BaseModel):
+    """Exponential backoff between embedding retries: waits of scale, 2*scale,
+    4*scale, ... seconds, capped at max, plus up to 2s of jitter."""
+
+    model_config = ConfigDict(frozen=True)
+
+    scale_seconds: float
+    max_seconds: float
+
+    def wait(self) -> wait_base:
+        return wait_exponential(
+            multiplier=self.scale_seconds, max=self.max_seconds
+        ) + wait_random(0, 2)
+
+
+_DEFAULT_RETRY_BACKOFF = EmbeddingRetryBackoff(
+    scale_seconds=_RETRY_DELAY, max_seconds=60
+)
+
+
+def _load_passage_retry_backoff() -> EmbeddingRetryBackoff:
+    """The workspace's indexing backoff, or the defaults if settings cannot be read."""
+    try:
+        settings = load_settings()
+    except Exception:
+        logger.exception("Failed to load embedding retry backoff settings")
+        return EmbeddingRetryBackoff(
+            scale_seconds=DEFAULT_EMBEDDING_RETRY_BACKOFF_SCALE_SECONDS,
+            max_seconds=DEFAULT_EMBEDDING_RETRY_BACKOFF_MAX_SECONDS,
+        )
+    return EmbeddingRetryBackoff(
+        scale_seconds=settings.embedding_retry_backoff_scale_seconds,
+        max_seconds=settings.embedding_retry_backoff_max_seconds,
+    )
+
 
 # OpenAI only allows 2048 embeddings to be computed at once
 _OPENAI_MAX_INPUT_LEN = 2048
@@ -255,11 +299,6 @@ _BIFROST_OPENAI_MODEL_PREFIXES: tuple[str, ...] = ("openai/", "azure/")
 # Bifrost forwards a batch upstream unsplit; Cohere's cap is a safe default.
 _BIFROST_DEFAULT_MAX_INPUT_LEN: int = _COHERE_MAX_INPUT_LEN
 _BIFROST_MAX_CONCURRENT_REQUESTS: int = 8
-# Bifrost requests retry here, not in the outer @retry, with the same budget.
-_BIFROST_REQUEST_TRIES: int = _RETRY_TRIES
-_BIFROST_RETRY_WAIT: wait_base = wait_exponential(
-    multiplier=_RETRY_DELAY, max=60
-) + wait_random(0, 2)
 _BIFROST_RETRYABLE_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 # Client errors that are not a verdict on the request itself.
 _BIFROST_NON_FINAL_STATUSES: frozenset[int] = frozenset({401, 408, 429})
@@ -391,8 +430,12 @@ class CloudEmbedding:
         api_version: str | None = None,
         timeout: int = API_BASED_EMBEDDING_TIMEOUT,
         auth: CloudEmbeddingAuth | None = None,
+        retry_backoff: EmbeddingRetryBackoff = _DEFAULT_RETRY_BACKOFF,
+        retry_tries: int = _RETRY_TRIES,
     ) -> None:
         self.provider = provider
+        self.retry_backoff = retry_backoff
+        self.retry_tries = retry_tries
         self.api_key = api_key
         self.api_url = api_url
         self.api_version = api_version
@@ -680,11 +723,11 @@ class CloudEmbedding:
         is_gemini_embedding_2: bool = _is_gemini_embedding_2_model(model)
 
         # Retry one request here. A request that still fails escapes the outer
-        # @retry, so inputs that already succeeded are not embedded again.
+        # retry in `embed`, so inputs that already succeeded are not embedded again.
         @retry(
             retry=retry_if_exception(_is_retryable_bifrost_error),
-            stop=stop_after_attempt(_BIFROST_REQUEST_TRIES),
-            wait=_BIFROST_RETRY_WAIT,
+            stop=stop_after_attempt(self.retry_tries),
+            wait=self.retry_backoff.wait(),
             reraise=True,
         )
         async def post(payload: dict[str, Any]) -> httpx.Response:
@@ -759,13 +802,30 @@ class CloudEmbedding:
             final_embeddings.extend(result)
         return final_embeddings
 
-    @retry(
-        retry=retry_if_exception_type(RuntimeError),
-        stop=stop_after_attempt(_RETRY_TRIES),
-        wait=wait_exponential(multiplier=_RETRY_DELAY, max=60) + wait_random(0, 2),
-        reraise=True,
-    )
     async def embed(
+        self,
+        *,
+        texts: list[str],
+        text_type: EmbedTextType,
+        model_name: str | None = None,
+        deployment_name: str | None = None,
+        reduced_dimension: int | None = None,
+    ) -> list[Embedding]:
+        embed_with_retries = retry(
+            retry=retry_if_exception_type(RuntimeError),
+            stop=stop_after_attempt(self.retry_tries),
+            wait=self.retry_backoff.wait(),
+            reraise=True,
+        )(self._embed_once)
+        return await embed_with_retries(
+            texts=texts,
+            text_type=text_type,
+            model_name=model_name,
+            deployment_name=deployment_name,
+            reduced_dimension=reduced_dimension,
+        )
+
+    async def _embed_once(
         self,
         *,
         texts: list[str],
@@ -817,7 +877,7 @@ class CloudEmbedding:
                 sanitized_api_key=self.sanitized_api_key,
                 status_code=e.response.status_code,
             )
-            # Log at warning because the @retry decorator will re-invoke us
+            # Log at warning because the retry in `embed` will re-invoke us
             # on failure — an ERROR-level log here floods Sentry with up to
             # _RETRY_TRIES duplicate events per failing batch (rate limits,
             # transient provider outages). The final failure surfaces via
@@ -1014,6 +1074,8 @@ class EmbeddingModel:
     async def _make_direct_api_call(
         self,
         embed_request: EmbedRequest,
+        retry_backoff: EmbeddingRetryBackoff = _DEFAULT_RETRY_BACKOFF,
+        retry_tries: int = _RETRY_TRIES,
     ) -> EmbedResponse:
         """Make direct API call to cloud provider, bypassing model server."""
         if self.provider_type is None:
@@ -1054,6 +1116,8 @@ class EmbeddingModel:
             api_url=self.api_url,
             api_version=self.api_version,
             auth=self.auth,
+            retry_backoff=retry_backoff,
+            retry_tries=retry_tries,
         ) as cloud_model:
             embeddings = await cloud_model.embed(
                 texts=embed_request.texts,
@@ -1086,6 +1150,7 @@ class EmbeddingModel:
         embed_request: EmbedRequest,
         tenant_id: str | None = None,
         request_id: str | None = None,
+        retry_backoff: EmbeddingRetryBackoff = _DEFAULT_RETRY_BACKOFF,
     ) -> EmbedResponse:
         if self.embed_server_endpoint is None:
             raise ValueError("Model server endpoint is not configured for local models")
@@ -1123,15 +1188,14 @@ class EmbeddingModel:
                 retry=retry_if_exception_type(
                     (RequestException, ValueError, JSONDecodeError)
                 ),
-                stop=stop_after_attempt(3),
-                wait=wait_fixed(5),
+                stop=stop_after_attempt(_MODEL_SERVER_ERROR_TRIES),
+                wait=retry_backoff.wait(),
                 reraise=True,
             )(final_make_request_func)
-            # use 10 second delay as per Azure suggestion
             final_make_request_func = retry(
                 retry=retry_if_exception_type(ModelServerRateLimitError),
-                stop=stop_after_attempt(10),
-                wait=wait_fixed(10),
+                stop=stop_after_attempt(_MODEL_SERVER_RATE_LIMIT_TRIES),
+                wait=retry_backoff.wait(),
                 reraise=True,
             )(final_make_request_func)
 
@@ -1163,6 +1227,12 @@ class EmbeddingModel:
         request_id: str | None = None,
     ) -> list[Embedding]:
         text_batches = batch_list(texts, batch_size)
+        # Resolved here, not in the worker threads, which lack the tenant context.
+        retry_backoff, retry_tries = (
+            (_load_passage_retry_backoff(), _PASSAGE_RETRY_TRIES)
+            if text_type == EmbedTextType.PASSAGE
+            else (_DEFAULT_RETRY_BACKOFF, _RETRY_TRIES)
+        )
         num_of_batches = len(text_batches)
 
         logger.debug("Encoding %s texts in %s batches.", len(texts), num_of_batches)
@@ -1241,7 +1311,9 @@ class EmbeddingModel:
                             # during batch processing.
                             loop = _get_or_create_event_loop()
                             response = loop.run_until_complete(
-                                self._make_direct_api_call(embed_request)
+                                self._make_direct_api_call(
+                                    embed_request, retry_backoff, retry_tries
+                                )
                             )
                         else:
                             # This code is being called from an event loop,
@@ -1253,13 +1325,18 @@ class EmbeddingModel:
                                     EmbedResponse,
                                     pool.submit(
                                         asyncio.run,
-                                        self._make_direct_api_call(embed_request),
+                                        self._make_direct_api_call(
+                                            embed_request, retry_backoff, retry_tries
+                                        ),
                                     ).result(),
                                 )
                     else:
                         # For local models, use model server.
                         response = self._make_model_server_request(
-                            embed_request, tenant_id=tenant_id, request_id=request_id
+                            embed_request,
+                            tenant_id=tenant_id,
+                            request_id=request_id,
+                            retry_backoff=retry_backoff,
                         )
                 success = True
             finally:

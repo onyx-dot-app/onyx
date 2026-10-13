@@ -5697,6 +5697,28 @@
           "description": "Rechargez la page pour réessayer.",
           "title": "Impossible de charger la mise à jour de l’accès par connecteur"
         }
+      },
+      "embeddingRetry": {
+        "title": "Nouvelles tentatives d'embedding",
+        "description": "Lorsqu'un appel d'embedding échoue pendant l'indexation, Onyx attend puis réessaie. Chaque attente est le double de la précédente, jusqu'au maximum. Les modifications s'appliquent au prochain lot d'indexation.",
+        "scale": {
+          "title": "Attente avant la première tentative",
+          "description": "L'attente avant la première nouvelle tentative."
+        },
+        "max": {
+          "title": "Attente maximale entre tentatives",
+          "description": "Aucune attente ne dépasse cette valeur."
+        },
+        "suffix": "(secondes)",
+        "restoreDefault": "Restaurer la valeur par défaut",
+        "validation": {
+          "range": "Saisissez un nombre supérieur à 0 et inférieur ou égal à {max}.",
+          "maxBelowScale": "L'attente maximale ne peut pas être inférieure à la première attente."
+        },
+        "toasts": {
+          "saved": "Paramètres de nouvelle tentative enregistrés.",
+          "failed": "Impossible d'enregistrer les paramètres de nouvelle tentative."
+        }
       }
     },
     "indexing": {
