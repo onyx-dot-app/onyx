@@ -5637,6 +5637,33 @@
         "e5SmallV2": "Die kleinste und schnellste Variante der E5-Modellreihe. Eine gute Wahl, wenn {appName} auf einem System mit begrenzten Ressourcen läuft.",
         "multilingualE5Base": "Für Korpora in anderen Sprachen als Englisch ist dies die richtige Wahl.",
         "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet den Zugriff auf Konnektorebene.",
+            "off": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente. Der Zugriff auf Konnektorebene ist ausgeschaltet.",
+            "shadow": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente und vergleicht sie mit dem Zugriff auf Konnektorebene."
+          },
+          "title": "Aktualisierung des Konnektorzugriffs abgeschlossen"
+        },
+        "notStarted": {
+          "description": "Ein Hintergrundjob fügt den vorhandenen Chunks im Suchindex Konnektor-IDs hinzu. Er startet in wenigen Minuten.",
+          "title": "Aktualisierung des Konnektorzugriffs noch nicht gestartet"
+        },
+        "progress": {
+          "ariaLabel": "Fortschritt der Aktualisierung des Konnektorzugriffs"
+        },
+        "running": {
+          "description": "Ein Hintergrundjob fügt den vorhandenen Chunks im Suchindex Konnektor-IDs hinzu. Der Suchzugriff auf Konnektorebene kann erst danach erzwungen werden.",
+          "title": "Suchindex wird für den Konnektorzugriff aktualisiert…"
+        },
+        "status": {
+          "connectors": "{done, number} von {total, number} Konnektoren fertig",
+          "connectorsLeft": "{count, plural, one {# Konnektor übrig} other {# Konnektoren übrig}}",
+          "current": "Aktueller Konnektor: {name}",
+          "documentsLeft": "{count, plural, one {# Dokument übrig} other {# Dokumente übrig}}"
+        }
       }
     },
     "indexing": {

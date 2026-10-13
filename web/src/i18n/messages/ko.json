@@ -5637,6 +5637,33 @@
         "e5SmallV2": "E5 모델 계열 중 가장 작고 빠른 버전입니다. 리소스가 제한된 시스템에서 {appName}를 실행한다면 좋은 선택입니다.",
         "multilingualE5Base": "영어 이외의 언어로 된 코퍼스에는 이 모델을 선택하세요.",
         "multilingualE5Small": "영어 이외의 언어로 된 코퍼스이면서 리소스가 제한된 시스템이라면 이 모델을 선택하세요."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 커넥터 수준 액세스를 사용합니다.",
+            "off": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 문서 액세스 목록을 사용합니다. 커넥터 수준 액세스는 꺼져 있습니다.",
+            "shadow": "검색 인덱스의 모든 청크에 커넥터 ID가 있습니다. 검색은 문서 액세스 목록을 사용하고 커넥터 수준 액세스와 비교합니다."
+          },
+          "title": "커넥터 액세스 업데이트 완료"
+        },
+        "notStarted": {
+          "description": "백그라운드 작업이 검색 인덱스의 기존 청크에 커넥터 ID를 추가합니다. 몇 분 안에 시작됩니다.",
+          "title": "커넥터 액세스 업데이트가 시작되지 않았습니다"
+        },
+        "progress": {
+          "ariaLabel": "커넥터 액세스 업데이트 진행률"
+        },
+        "running": {
+          "description": "백그라운드 작업이 검색 인덱스의 기존 청크에 커넥터 ID를 추가하고 있습니다. 커넥터 수준 검색 액세스는 작업이 완료된 후에만 적용할 수 있습니다.",
+          "title": "커넥터 액세스를 위해 검색 인덱스를 업데이트하는 중…"
+        },
+        "status": {
+          "connectors": "커넥터 {total, number}개 중 {done, number}개 완료",
+          "connectorsLeft": "{count, plural, one {커넥터 #개 남음} other {커넥터 #개 남음}}",
+          "current": "현재 커넥터: {name}",
+          "documentsLeft": "{count, plural, one {문서 #개 남음} other {문서 #개 남음}}"
+        }
       }
     },
     "indexing": {

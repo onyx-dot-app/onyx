@@ -847,6 +847,55 @@ def get_document_counts_for_cc_pairs(
     ]
 
 
+def count_documents_by_cc_pair_ids(
+    db_session: Session, cc_pair_ids: list[int]
+) -> dict[int, int]:
+    """Number of documents of each cc-pair, indexed or not. cc-pairs with no
+    documents are left out."""
+    if not cc_pair_ids:
+        return {}
+    stmt = (
+        select(ConnectorCredentialPair.id, func.count())
+        .join(
+            DocumentByConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(ConnectorCredentialPair.id.in_(cc_pair_ids))
+        .group_by(ConnectorCredentialPair.id)
+    )
+    return dict(db_session.execute(stmt).tuples().all())
+
+
+def count_documents_for_cc_pair_up_to(
+    db_session: Session, cc_pair_id: int, up_to_doc_id: str
+) -> int:
+    """Number of documents of the cc-pair whose ID is <= up_to_doc_id: the
+    documents a cursor scan in ID order has passed."""
+    stmt = (
+        select(func.count())
+        .select_from(DocumentByConnectorCredentialPair)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            ConnectorCredentialPair.id == cc_pair_id,
+            DocumentByConnectorCredentialPair.id <= up_to_doc_id,
+        )
+    )
+    return db_session.scalar(stmt) or 0
+
+
 def get_document_counts_for_all_cc_pairs(
     db_session: Session,
 ) -> Sequence[tuple[int, int, int]]:

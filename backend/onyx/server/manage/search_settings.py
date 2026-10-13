@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from onyx.access.cc_pair_access import get_cc_pair_access_mode
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.tasks.index_reclaim.tasks import enqueue_index_reclaim
 from onyx.background.celery.tasks.port.tasks import (
@@ -18,6 +19,7 @@ from onyx.configs.app_configs import (
     OLD_INDEX_RECLAIM_ENABLED,
 )
 from onyx.context.search.models import (
+    CCPairAccessMode,
     ContextualRagModelUpdateResponse,
     SavedSearchSettings,
     SearchSettingsCreationRequest,
@@ -25,9 +27,14 @@ from onyx.context.search.models import (
 from onyx.db.connector_credential_pair import (
     compute_wont_port_cc_pair_ids,
     fetch_indexable_standard_connector_credential_pair_ids,
+    get_connector_credential_pair_from_id,
     get_connector_credential_pairs,
     get_last_successful_attempt_poll_range_end,
     resync_cc_pair,
+)
+from onyx.db.document import (
+    count_documents_by_cc_pair_ids,
+    count_documents_for_cc_pair_up_to,
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
@@ -69,6 +76,9 @@ from onyx.db.search_settings import (
 )
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import TenantState
+from onyx.document_index.opensearch.cc_pair_ids_backfill import (
+    load_cc_pair_ids_backfill_progress,
+)
 from onyx.document_index.opensearch.client import OpenSearchClient
 from onyx.document_index.opensearch.constants import LUCENE_SCALAR_QUANTIZATION
 from onyx.document_index.opensearch.index_reclaim import (
@@ -88,11 +98,13 @@ from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.embedding.probe import probe_embedding_dimension
 from onyx.server.manage.models import (
+    CCPairIdsBackfillStatus,
     FullModelVersionResponse,
     ReindexProgress,
     UnstructuredApiKeyRequest,
 )
 from onyx.server.models import IdReturn
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.audit import (
     AuditAction,
@@ -629,6 +641,54 @@ def get_reindex_progress(
     return ReindexProgress(
         **counts.model_dump(), reembeds=_port_reembeds(db_session, target)
     )
+
+
+@router.get("/cc-pair-ids-backfill-progress")
+def get_cc_pair_ids_backfill_status(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CCPairIdsBackfillStatus:
+    search_settings = get_current_search_settings(db_session)
+    progress = load_cc_pair_ids_backfill_progress(search_settings)
+    status = CCPairIdsBackfillStatus(
+        index_name=search_settings.index_name,
+        started=progress.pending_cc_pair_ids is not None,
+        completed=progress.completed,
+        total_cc_pairs=None,
+        pending_cc_pairs=None,
+        total_documents=None,
+        completed_documents=None,
+        remaining_documents=None,
+        current_cc_pair_name=None,
+        access_mode=get_cc_pair_access_mode(db_session) or CCPairAccessMode.OFF,
+        filter_enabled=OnyxRuntime.get_cc_pair_access_filter_enabled(),
+        enforce_requested=OnyxRuntime.get_cc_pair_access_filter_enforce(),
+    )
+    pending = progress.pending_cc_pair_ids
+    if not pending:
+        return status
+
+    snapshot = progress.snapshot_cc_pair_ids
+    doc_counts = count_documents_by_cc_pair_ids(db_session, snapshot or pending)
+    current_cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session, cc_pair_id=pending[0]
+    )
+    current_done = (
+        count_documents_for_cc_pair_up_to(
+            db_session, pending[0], progress.last_document_id
+        )
+        if progress.last_document_id is not None
+        else 0
+    )
+    pending_documents = sum(doc_counts.get(cc_pair_id, 0) for cc_pair_id in pending)
+    status.pending_cc_pairs = len(pending)
+    status.remaining_documents = max(pending_documents - current_done, 0)
+    status.current_cc_pair_name = current_cc_pair.name if current_cc_pair else None
+    if snapshot is not None:
+        status.total_cc_pairs = len(snapshot)
+        status.total_documents = sum(doc_counts.values())
+        status.completed_documents = status.total_documents - status.remaining_documents
+    return status
 
 
 @router.get("/reindex-errors")

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
-from onyx.context.search.models import SavedSearchSettings
+from onyx.context.search.models import CCPairAccessMode, SavedSearchSettings
 from onyx.db.enums import (
     AccountType,
     DefaultAppMode,
@@ -612,3 +612,24 @@ class ReindexProgress(ReindexProgressCounts):
     stored vectors."""
 
     reembeds: bool
+
+
+class CCPairIdsBackfillStatus(BaseModel):
+    """Progress of the backfill that sets cc_pair_ids on the chunks of the
+    current index, and the search access mode that the backfill gates.
+    Document counts are current counts, so they can move while the backfill
+    runs. They are None when the backfill has not started or is complete."""
+
+    index_name: str
+    started: bool
+    completed: bool
+    # None when the stored progress has no snapshot (stored before it existed).
+    total_cc_pairs: int | None
+    pending_cc_pairs: int | None
+    total_documents: int | None
+    completed_documents: int | None
+    remaining_documents: int | None
+    current_cc_pair_name: str | None
+    access_mode: CCPairAccessMode
+    filter_enabled: bool
+    enforce_requested: bool

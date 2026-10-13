@@ -5637,6 +5637,33 @@
         "e5SmallV2": "La version la plus petite et la plus rapide de la gamme E5. Un bon choix si {appName} tourne sur un système aux ressources limitées.",
         "multilingualE5Base": "Pour les corpus dans d'autres langues que l'anglais, c'est le modèle à choisir.",
         "multilingualE5Small": "Pour les corpus dans d'autres langues que l'anglais sur un système aux ressources limitées, c'est le modèle à choisir."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise l’accès par connecteur.",
+            "off": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents. L’accès par connecteur est désactivé.",
+            "shadow": "Chaque fragment de l’index de recherche a ses ID de connecteur. La recherche utilise les listes d’accès des documents et les compare à l’accès par connecteur."
+          },
+          "title": "Mise à jour de l’accès par connecteur terminée"
+        },
+        "notStarted": {
+          "description": "Une tâche en arrière-plan ajoutera les ID de connecteur aux fragments existants de l’index de recherche. Elle démarre dans quelques minutes.",
+          "title": "La mise à jour de l’accès par connecteur n’a pas commencé"
+        },
+        "progress": {
+          "ariaLabel": "Progression de la mise à jour de l’accès par connecteur"
+        },
+        "running": {
+          "description": "Une tâche en arrière-plan ajoute les ID de connecteur aux fragments existants de l’index de recherche. L’accès de recherche par connecteur ne peut être appliqué qu’une fois la tâche terminée.",
+          "title": "Mise à jour de l’index de recherche pour l’accès par connecteur…"
+        },
+        "status": {
+          "connectors": "{done, number} connecteurs terminés sur {total, number}",
+          "connectorsLeft": "{count, plural, one {# connecteur restant} other {# connecteurs restants}}",
+          "current": "Connecteur en cours : {name}",
+          "documentsLeft": "{count, plural, one {# document restant} other {# documents restants}}"
+        }
       }
     },
     "indexing": {

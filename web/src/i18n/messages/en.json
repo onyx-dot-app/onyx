@@ -5637,6 +5637,33 @@
         "e5SmallV2": "The smallest and fastest version of the E5 line of models. If you're running {appName} on a resource constrained system, then this may be a good choice.",
         "multilingualE5Base": "For corpora in other languages besides English, this is the one to choose.",
         "multilingualE5Small": "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Every chunk in the search index has its connector IDs. Search uses connector-level access.",
+            "off": "Every chunk in the search index has its connector IDs. Search uses the document access lists. Connector-level access is turned off.",
+            "shadow": "Every chunk in the search index has its connector IDs. Search uses the document access lists and compares them with connector-level access."
+          },
+          "title": "Connector access update complete"
+        },
+        "notStarted": {
+          "description": "A background job will add connector IDs to the existing chunks in the search index. It starts within a few minutes.",
+          "title": "Connector access update has not started"
+        },
+        "progress": {
+          "ariaLabel": "Connector access update progress"
+        },
+        "running": {
+          "description": "A background job adds connector IDs to the existing chunks in the search index. Connector-level search access can be enforced only after it completes.",
+          "title": "Updating the search index for connector access…"
+        },
+        "status": {
+          "connectors": "{done, number} of {total, number} connectors done",
+          "connectorsLeft": "{count, plural, one {# connector left} other {# connectors left}}",
+          "current": "Current connector: {name}",
+          "documentsLeft": "{count, plural, one {# document left} other {# documents left}}"
+        }
       }
     },
     "indexing": {
