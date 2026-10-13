@@ -15,7 +15,6 @@ export type OpalStrings = {
   copied: string;
   copyCode: string;
   clear: string;
-  attachFile: string;
   clearFile: string;
   /** InputUpload's placeholder when its caller gives none. */
   inputUploadPlaceholder: string;
@@ -131,7 +130,6 @@ export const defaultOpalStrings: OpalStrings = {
   copied: "Copied!",
   copyCode: "Copy code",
   clear: "Clear",
-  attachFile: "Attach file",
   clearFile: "Clear file",
   inputUploadPlaceholder: "Add a file…",
   inputUploadPasted: "Pasted text",
