@@ -103,7 +103,11 @@ interface AuthenticationAccountCardProps {
   detailsOpen: boolean;
   /** Called when the chevron opens or closes the details. */
   onDetailsOpenChange: (open: boolean) => void;
-
+  /**
+   * Saves a new name for the account; resolves once it is stored and
+   * rejects when the save fails.
+   */
+  onRename: (name: string) => Promise<void>;
   /** The account's stored check report, or null if it was never checked. */
   checkReport: CredentialCheckReport | null;
   /** Starts the checks on this account; resolves once the run is queued. */
@@ -135,6 +139,7 @@ export default function AuthenticationAccountCard({
   onDelete,
   detailsOpen,
   onDetailsOpenChange,
+  onRename,
   checkReport,
   onRerunChecks,
   groupsLocked,
@@ -239,6 +244,22 @@ export default function AuthenticationAccountCard({
   }
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
+  // A saved rename shows at once; the list refetch then brings it back.
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  useEffect(() => {
+    setPendingName(null);
+  }, [credential.name]);
+  async function rename(name: string) {
+    setPendingName(name);
+    try {
+      await onRename(name);
+      toast.success(t("renameSaved.toast"));
+    } catch {
+      setPendingName(null);
+      toast.error(t("renameFailed.toast"));
+    }
+  }
+
   const addedOn: string = format.dateTime(new Date(credential.time_created), {
     year: "numeric",
     month: "2-digit",
@@ -255,8 +276,9 @@ export default function AuthenticationAccountCard({
   const isOwnAccount: boolean =
     credential.is_owner ?? (user !== null && credential.user_id === user.id);
   // The owner, or an admin when the account is shared with admins or has no
-  // owner, may change its sharing; a group-shared user may only use it.
-  const canEditSharing: boolean =
+  // owner, may rename it and change its sharing; a group-shared user may only
+  // use it.
+  const canEditAccount: boolean =
     isOwnAccount ||
     (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
       (credential.admin_public || credential.user_id === null));
@@ -378,7 +400,7 @@ export default function AuthenticationAccountCard({
                 <Divider paddingParallel={2} paddingPerpendicular={0} />
                 <Tooltip
                   tooltip={
-                    canEditSharing ? undefined : t("shareLocked.tooltip")
+                    canEditAccount ? undefined : t("shareLocked.tooltip")
                   }
                 >
                   <div className="p-2">
@@ -405,7 +427,7 @@ export default function AuthenticationAccountCard({
                       onGroupsBlur={() => {
                         if (hasUnsavedSharing) void saveSharing(sharing);
                       }}
-                      disabled={!canEditSharing}
+                      disabled={!canEditAccount}
                       onlyMeDisabledReason={
                         isOwnAccount ? undefined : t("onlyMeOwnerOnly.tooltip")
                       }
@@ -426,13 +448,15 @@ export default function AuthenticationAccountCard({
             <Section alignItems="start" gap={0} padding={2} width="full">
               <Content
                 icon={getSourceMetadata(source).icon}
-                // Named by who created it; the account's own name stands in
-                // for one with no creator.
+                // The account's name, which its editors can change in place;
+                // an unnamed account shows who created it.
                 title={
-                  credential.user_email ??
-                  credential.name ??
+                  (pendingName ?? credential.name) ||
+                  credential.user_email ||
                   t("untitled.label")
                 }
+                editable={canEditAccount}
+                onTitleChange={(name) => void rename(name)}
                 suffix={t("sourceSuffix", { source: sourceName })}
                 description={t("addedOn.label", { date: addedOn })}
                 sizePreset="main-ui"

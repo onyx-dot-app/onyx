@@ -2771,6 +2771,12 @@
           "shareFailed": {
             "toast": "无法更改可使用此账户的人员。请重试。"
           },
+          "renameSaved": {
+            "toast": "账号已重命名。"
+          },
+          "renameFailed": {
+            "toast": "无法重命名此账号。请重试。"
+          },
           "onlyMeOwnerOnly": {
             "tooltip": "只有添加此账户的人才能将其设为私有。"
           },

@@ -2771,6 +2771,12 @@
           "shareFailed": {
             "toast": "Não foi possível alterar quem pode usar esta conta. Tente novamente."
           },
+          "renameSaved": {
+            "toast": "Conta renomeada."
+          },
+          "renameFailed": {
+            "toast": "Não foi possível renomear esta conta. Tente novamente."
+          },
           "onlyMeOwnerOnly": {
             "tooltip": "Somente quem adicionou esta conta pode torná-la privada."
           },

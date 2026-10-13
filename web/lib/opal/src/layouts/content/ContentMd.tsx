@@ -186,7 +186,7 @@ function ContentMd({
   }
   useImperativeHandle(editHandle, () => ({ startEditing }), [title]);
 
-  // Starting an edit must not double as a click on the parent row.
+  // Starting or making an edit must not double as a click on the parent row.
   function handleTitleClick(e: React.MouseEvent) {
     e.stopPropagation();
     startEditing();
@@ -248,6 +248,7 @@ function ContentMd({
                 )}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
                 size={1}
                 onFocus={(e) => e.currentTarget.select()}
                 onBlur={commit}
@@ -316,9 +317,10 @@ function ContentMd({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
+                aria-label={strings.edit}
                 tooltip={strings.edit}
                 tooltipSide="end"
-                onClick={startEditing}
+                onClick={handleTitleClick}
               />
             </div>
           )}

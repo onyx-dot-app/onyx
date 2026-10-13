@@ -189,6 +189,7 @@ function ContentLg({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
+                aria-label={strings.edit}
                 tooltip={strings.edit}
                 tooltipSide="end"
                 onClick={startEditing}

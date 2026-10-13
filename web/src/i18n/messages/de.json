@@ -2771,6 +2771,12 @@
           "shareFailed": {
             "toast": "Die Freigabe dieses Kontos konnte nicht geändert werden. Versuchen Sie es erneut."
           },
+          "renameSaved": {
+            "toast": "Konto umbenannt."
+          },
+          "renameFailed": {
+            "toast": "Das Konto konnte nicht umbenannt werden. Versuche es erneut."
+          },
           "onlyMeOwnerOnly": {
             "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, kann es privat machen."
           },

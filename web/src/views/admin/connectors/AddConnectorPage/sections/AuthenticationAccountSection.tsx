@@ -34,7 +34,10 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
-import { updateCredentialSharing } from "@/lib/credentials/svc";
+import {
+  updateCredential,
+  updateCredentialSharing,
+} from "@/lib/credentials/svc";
 import { getIn, useFormikContext } from "formik";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -392,6 +395,13 @@ export default function AuthenticationAccountSection({
         checkReport={checkReports.reportFor(credential.id)}
         onRerunChecks={() => checkReports.rerun(credential.id)}
         groupsLocked={!businessTier}
+        onRename={async (name) => {
+          // Only the name changes: the account's fields are merged, not
+          // replaced, so none are sent.
+          const response = await updateCredential(credential.id, { name });
+          if (!response.ok) throw new Error(await response.text());
+          refresh();
+        }}
         onUpdateSharing={async (sharing) => {
           const response = await updateCredentialSharing(
             credential.id,
