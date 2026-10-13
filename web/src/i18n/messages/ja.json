@@ -2809,10 +2809,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Google Drive の認証情報を作成しました。認証情報の一覧から管理または取り消しができます。",
-          "title": "認証が完了しました"
-        },
         "authFailed": {
           "toast": "Google Drive での認証に失敗しました - {error}"
         },
@@ -2820,51 +2816,12 @@
           "label": "Google Drive で認証",
           "pendingLabel": "認証しています..."
         },
-        "createButton": {
-          "label": "認証情報を作成",
-          "pendingLabel": "作成しています..."
-        },
-        "credentialsLoadError": {
-          "title": "Google Drive の認証情報の読み込みに失敗しました。"
-        },
-        "invalidFile": {
-          "toast": "指定したファイルが無効です - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "指定したファイルが無効です - サービスアカウントの JSON キーが必要です"
-        },
-        "missingServiceAccountKey": {
-          "toast": "認証情報を作成する前に、サービスアカウントキーをアップロードしてください"
-        },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Drive を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ",
           "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Google Drive と Gmail へのアクセスをまとめて求めます。このアカウントを Google Drive だけに使う場合は、同意画面で Gmail のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
-        },
-        "primaryAdmin": {
-          "description": "インデックスを作成する Google Drive を所有する Google 組織の、管理者またはオーナーのメールアドレスを入力してください。",
-          "invalidEmail": "有効なメールアドレスを入力してください",
-          "label": "主管理者のメールアドレス",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必須です"
-        },
-        "section": {
-          "title": "Google Drive の認証"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "サービスアカウントの認証情報を作成できませんでした - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "サービスアカウントの認証情報を作成しました"
-        },
-        "serviceAccountOption": {
-          "title": "オプション 2: サービスアカウント"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "サービスアカウントの JSON キーをアップロードまたは貼り付け"
         }
       },
       "gmail": {
@@ -3510,7 +3467,9 @@
         "isSandbox": "サンドボックス環境かどうか",
         "serviceUserEmail": "サービスユーザーのメールアドレス",
         "zuliprcContent": "Zuliprc の内容",
-        "authenticationMethod": "認証方法"
+        "authenticationMethod": "認証方法",
+        "primaryAdminEmail": "プライマリ管理者のメールアドレス",
+        "serviceAccountKey": "サービスアカウントキー"
       },
       "hints": {
         "boxUserEmail": "任意。なりすます Box ユーザーを指定します。",
@@ -3520,7 +3479,8 @@
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
-        "testrailBaseUrl": "例: https://yourcompany.testrail.io。"
+        "testrailBaseUrl": "例: https://yourcompany.testrail.io。",
+        "googleServiceAccountKey": "ドメイン全体の委任を設定した Google サービスアカウントの `.json` キーをアップロードまたは貼り付けてください。"
       },
       "methods": {
         "labels": {
@@ -3529,7 +3489,9 @@
           "certificate": "証明書",
           "accessKeyAndSecret": "アクセスキーとシークレット",
           "iamRole": "IAM ロール",
-          "assumeRole": "ロールの引き受け"
+          "assumeRole": "ロールの引き受け",
+          "serviceAccount": "サービスアカウント",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "このモードでは、SharePoint コネクタはクライアントシークレットで認証します。クライアント ID とクライアントシークレットを入力してください。",

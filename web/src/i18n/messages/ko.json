@@ -2809,10 +2809,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Google Drive 자격 증명을 만들었습니다. 자격 증명 목록에서 관리하거나 취소할 수 있습니다.",
-          "title": "인증 완료"
-        },
         "authFailed": {
           "toast": "Google Drive 인증에 실패했습니다 - {error}"
         },
@@ -2820,51 +2816,12 @@
           "label": "Google Drive로 인증",
           "pendingLabel": "인증하는 중..."
         },
-        "createButton": {
-          "label": "자격 증명 만들기",
-          "pendingLabel": "만드는 중..."
-        },
-        "credentialsLoadError": {
-          "title": "Google Drive 자격 증명을 불러오지 못했습니다."
-        },
-        "invalidFile": {
-          "toast": "잘못된 파일입니다 - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "잘못된 파일입니다 - 서비스 계정 JSON 키가 필요합니다"
-        },
-        "missingServiceAccountKey": {
-          "toast": "자격 증명을 만들기 전에 서비스 계정 키를 업로드하세요"
-        },
         "oauthOption": {
           "description": "Google Cloud Console에서 OAuth 앱 JSON을 업로드한 다음([설정 방법]({docsUrl})), 인덱싱할 Drive의 Google 계정으로 인증하세요.",
-          "title": "옵션 1: OAuth 앱",
           "sharedScopesNote": "하나의 계정으로 두 커넥터를 모두 사용할 수 있도록 Google은 Google Drive와 Gmail 액세스를 함께 요청합니다. 이 계정을 Google Drive에만 사용하려면 동의 화면에서 Gmail 범위의 선택을 해제하세요([요청하는 이유]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "OAuth 앱 JSON을 업로드하거나 붙여 넣으세요"
-        },
-        "primaryAdmin": {
-          "description": "인덱싱할 Google Drive를 소유한 Google 조직의 관리자 또는 소유자 이메일을 입력하세요.",
-          "invalidEmail": "유효한 이메일이어야 합니다",
-          "label": "기본 관리자 이메일",
-          "placeholder": "admin@yourcompany.com",
-          "required": "필수 항목입니다"
-        },
-        "section": {
-          "title": "Google Drive 인증"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "서비스 계정 자격 증명을 만들지 못했습니다 - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "서비스 계정 자격 증명을 만들었습니다"
-        },
-        "serviceAccountOption": {
-          "title": "옵션 2: 서비스 계정"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "서비스 계정 JSON 키를 업로드하거나 붙여 넣으세요"
         }
       },
       "gmail": {
@@ -3510,7 +3467,9 @@
         "isSandbox": "샌드박스 환경 여부",
         "serviceUserEmail": "서비스 사용자 이메일",
         "zuliprcContent": "Zuliprc 내용",
-        "authenticationMethod": "인증 방법"
+        "authenticationMethod": "인증 방법",
+        "primaryAdminEmail": "기본 관리자 이메일",
+        "serviceAccountKey": "서비스 계정 키"
       },
       "hints": {
         "boxUserEmail": "선택 사항입니다. 대신 접근할 Box 사용자입니다.",
@@ -3520,7 +3479,8 @@
         "lumappsServiceUser": "대신 인덱싱할 사용자입니다.",
         "outlineBaseUrl": "예: https://app.getoutline.com 또는 자체 호스팅 URL.",
         "pfxFile": "앱 등록의 개인 키가 포함된 `.pfx` 파일을 업로드하세요. 10KB 미만이어야 합니다.",
-        "testrailBaseUrl": "예: https://yourcompany.testrail.io."
+        "testrailBaseUrl": "예: https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "도메인 전체 위임이 설정된 Google 서비스 계정의 `.json` 키를 업로드하거나 붙여 넣으세요."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3489,9 @@
           "certificate": "인증서",
           "accessKeyAndSecret": "액세스 키 및 시크릿",
           "iamRole": "IAM 역할",
-          "assumeRole": "역할 수임"
+          "assumeRole": "역할 수임",
+          "serviceAccount": "서비스 계정",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "이 모드를 선택하면 SharePoint 커넥터가 클라이언트 시크릿으로 인증합니다. 클라이언트 ID와 클라이언트 시크릿을 입력해야 합니다.",

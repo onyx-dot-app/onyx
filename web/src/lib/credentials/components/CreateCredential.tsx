@@ -7,7 +7,6 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/lib/credentials/svc";
 import { Form, Formik, FormikHelpers } from "formik";
 import { Section, toast } from "@opal/layouts";
-import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
 import type { Credential } from "@/lib/credentials/types";
 import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
@@ -16,7 +15,9 @@ import {
   createValidationSchema,
   getCredentialSpec,
   initialCredentialValues,
+  isOwnSetupMethod,
 } from "@/lib/credentials/utils";
+import OwnAccountSetup from "@/views/admin/connectors/AddConnectorPage/form/OwnAccountSetup";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import {
@@ -179,10 +180,6 @@ export default function CreateCredential({
     return <GmailMain />;
   }
 
-  if (sourceType == "google_drive") {
-    return <GDriveMain />;
-  }
-
   const spec = getCredentialSpec(sourceType);
   if (!spec) {
     return null;
@@ -224,6 +221,13 @@ export default function CreateCredential({
           formikProps.setFieldValue("authentication_method", authMethod);
         }
 
+        // A method that saves the account itself has no name, sharing or
+        // Create of its own.
+        const ownSetup: boolean = isOwnSetupMethod(
+          spec,
+          authMethod || initialAuthMethod
+        );
+
         return (
           // No card of its own: the form sits directly in its host (the
           // credential step's create card, or a modal).
@@ -234,35 +238,40 @@ export default function CreateCredential({
                 spec={spec}
                 authMethod={authMethod || initialAuthMethod}
                 setAuthMethod={setAuthMethod}
+                renderOwnSetup={() => <OwnAccountSetup source={sourceType} />}
               />
 
-              {/* Above: the fields the source needs. Below: the optional name
-              and sharing, then the Create button. */}
-              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              {!ownSetup && (
+                <>
+                  {/* Above: the fields the source needs. Below: the optional
+                  name and sharing, then the Create button. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-              <Disabled disabled={!formikProps.isValid}>
-                <Section alignItems="stretch" gap={4}>
-                  <AccountNameField name="name" />
-                  <ShareAccountField
-                    disabled={!formikProps.isValid}
-                    groupsLocked={!businessTier}
-                  />
-                </Section>
-              </Disabled>
+                  <Disabled disabled={!formikProps.isValid}>
+                    <Section alignItems="stretch" gap={4}>
+                      <AccountNameField name="name" />
+                      <ShareAccountField
+                        disabled={!formikProps.isValid}
+                        groupsLocked={!businessTier}
+                      />
+                    </Section>
+                  </Disabled>
 
-              <Section flexDirection="row" justifyContent="end">
-                <CreateButton
-                  onClick={() =>
-                    handleSubmit(
-                      formikProps.values,
-                      formikProps,
-                      swapConnector ? "createAndSwap" : "create"
-                    )
-                  }
-                  isSubmitting={formikProps.isSubmitting}
-                  isValid={formikProps.isValid}
-                />
-              </Section>
+                  <Section flexDirection="row" justifyContent="end">
+                    <CreateButton
+                      onClick={() =>
+                        handleSubmit(
+                          formikProps.values,
+                          formikProps,
+                          swapConnector ? "createAndSwap" : "create"
+                        )
+                      }
+                      isSubmitting={formikProps.isSubmitting}
+                      isValid={formikProps.isValid}
+                    />
+                  </Section>
+                </>
+              )}
             </Section>
           </Form>
         );

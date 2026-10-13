@@ -2809,10 +2809,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Ihre Google Drive-Anmeldedaten wurden erstellt. Sie können sie in der Liste der Anmeldedaten verwalten oder widerrufen.",
-          "title": "Authentifizierung abgeschlossen"
-        },
         "authFailed": {
           "toast": "Die Authentifizierung bei Google Drive ist fehlgeschlagen - {error}"
         },
@@ -2820,51 +2816,12 @@
           "label": "Bei Google Drive authentifizieren",
           "pendingLabel": "Wird authentifiziert..."
         },
-        "createButton": {
-          "label": "Anmeldedaten erstellen",
-          "pendingLabel": "Wird erstellt..."
-        },
-        "credentialsLoadError": {
-          "title": "Die Google Drive-Anmeldedaten konnten nicht geladen werden."
-        },
-        "invalidFile": {
-          "toast": "Ungültige Datei angegeben - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Ungültige Datei angegeben - erwartet wurde ein JSON-Schlüssel für ein Dienstkonto"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Bitte laden Sie einen Dienstkontoschlüssel hoch, bevor Sie Anmeldedaten erstellen"
-        },
         "oauthOption": {
           "description": "Laden Sie die JSON-Datei der OAuth-App aus der Google Cloud Console hoch ([Einrichtungsanleitung]({docsUrl})) und authentifizieren Sie sich dann mit dem Google-Konto, dessen Drive Sie indizieren möchten.",
-          "title": "Option 1: OAuth-App",
           "sharedScopesNote": "Google fragt den Zugriff auf Google Drive und Gmail gemeinsam an, damit ein Konto beide Connectors versorgen kann. Um dieses Konto nur für Google Drive zu verwenden, entfernen Sie auf dem Zustimmungsbildschirm die Häkchen bei den Gmail-Bereichen ([warum wir fragen]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Laden Sie die JSON-Datei Ihrer OAuth-App hoch oder fügen Sie sie ein"
-        },
-        "primaryAdmin": {
-          "description": "Geben Sie die E-Mail-Adresse eines Administrators oder Eigentümers der Google-Organisation ein, der die Google Drives gehören, die Sie indizieren möchten.",
-          "invalidEmail": "Muss eine gültige E-Mail-Adresse sein",
-          "label": "E-Mail-Adresse des Hauptadministrators",
-          "placeholder": "admin@ihrunternehmen.com",
-          "required": "Erforderlich"
-        },
-        "section": {
-          "title": "Google Drive-Authentifizierung"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Die Anmeldedaten für das Dienstkonto konnten nicht erstellt werden - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Anmeldedaten für das Dienstkonto erfolgreich erstellt"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2: Dienstkonto"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Laden Sie den JSON-Schlüssel Ihres Dienstkontos hoch oder fügen Sie ihn ein"
         }
       },
       "gmail": {
@@ -3510,7 +3467,9 @@
         "isSandbox": "Sandbox-Umgebung",
         "serviceUserEmail": "E-Mail-Adresse des Dienstbenutzers",
         "zuliprcContent": "Zuliprc-Inhalt",
-        "authenticationMethod": "Authentifizierungsmethode"
+        "authenticationMethod": "Authentifizierungsmethode",
+        "primaryAdminEmail": "E-Mail des primären Administrators",
+        "serviceAccountKey": "Dienstkontoschlüssel"
       },
       "hints": {
         "boxUserEmail": "Optional. Der Box-Benutzer, dessen Identität übernommen wird.",
@@ -3520,7 +3479,8 @@
         "lumappsServiceUser": "Der Benutzer, in dessen Namen indiziert wird.",
         "outlineBaseUrl": "Zum Beispiel https://app.getoutline.com oder deine selbst gehostete URL.",
         "pfxFile": "Lade die `.pfx`-Datei mit dem privaten Schlüssel der App-Registrierung hoch. Muss kleiner als 10 KB sein.",
-        "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io."
+        "testrailBaseUrl": "Zum Beispiel https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "Laden Sie den `.json`-Schlüssel eines Google-Dienstkontos mit domainweiter Delegierung hoch oder fügen Sie ihn ein."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3489,9 @@
           "certificate": "Zertifikat",
           "accessKeyAndSecret": "Zugriffsschlüssel und Secret",
           "iamRole": "IAM-Rolle",
-          "assumeRole": "Rolle übernehmen"
+          "assumeRole": "Rolle übernehmen",
+          "serviceAccount": "Dienstkonto",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "In diesem Modus authentifiziert sich der SharePoint-Connector mit einem Client-Secret. Geben Sie die Client-ID und das Client-Secret an.",

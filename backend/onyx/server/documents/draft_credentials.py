@@ -8,9 +8,13 @@ Creating the connector promotes the draft to a saved credential."""
 
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.google_utils.shared_constants import (
+    DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
+)
 from onyx.db.credentials import (
     create_draft_credential,
     credential_usable_for_source,
@@ -20,9 +24,36 @@ from onyx.db.credentials import (
 from onyx.db.models import Credential, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.documents.models import NAMES_A_CREDENTIAL
+from onyx.server.documents.models import NAMES_A_CREDENTIAL, GoogleServiceAccountKey
 from onyx.server.documents.private_key_types import validate_pkcs12_credential_value
 from onyx.utils.encryption import reject_masked_credentials
+
+_GOOGLE_SOURCES = frozenset({DocumentSource.GOOGLE_DRIVE, DocumentSource.GMAIL})
+
+
+def validate_google_service_account_key(
+    source: DocumentSource, credential_json: dict[str, Any]
+) -> None:
+    """A typed Google account's service-account key is stored as the key
+    file's JSON text, which the connector parses. Rejects text that is not a
+    service-account key.
+
+    Raises:
+        ValueError: the key is not a service-account key's JSON text.
+    """
+    if source not in _GOOGLE_SOURCES:
+        return
+    key = credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)
+    if key is None:
+        return
+    if not isinstance(key, str):
+        raise ValueError("The service account key must be the key file's JSON text.")
+    try:
+        parsed = GoogleServiceAccountKey.model_validate_json(key)
+    except ValidationError as e:
+        raise ValueError("The file is not a Google service account key.") from e
+    if parsed.type != "service_account":
+        raise ValueError("The file is not a Google service account key.")
 
 
 def resolve_form_credential(
@@ -84,6 +115,7 @@ def resolve_form_credential(
             # A certificate comes as base64 text, not an upload: check it as
             # the upload is checked.
             validate_pkcs12_credential_value(source, credential_json)
+            validate_google_service_account_key(source, credential_json)
             if credential is None:
                 # A new draft, or a lost draft made again.
                 return create_draft_credential(

@@ -2809,10 +2809,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "تم إنشاء بيانات اعتماد Google Drive. أدرها أو ألغها من قائمة بيانات الاعتماد.",
-          "title": "اكتملت المصادقة"
-        },
         "authFailed": {
           "toast": "فشلت المصادقة مع Google Drive - {error}"
         },
@@ -2820,51 +2816,12 @@
           "label": "المصادقة عبر Google Drive",
           "pendingLabel": "جارٍ المصادقة..."
         },
-        "createButton": {
-          "label": "إنشاء بيانات اعتماد",
-          "pendingLabel": "جارٍ الإنشاء..."
-        },
-        "credentialsLoadError": {
-          "title": "فشل تحميل بيانات اعتماد Google Drive."
-        },
-        "invalidFile": {
-          "toast": "ملف غير صالح - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "ملف غير صالح - كان المتوقع مفتاح JSON لحساب خدمة"
-        },
-        "missingServiceAccountKey": {
-          "toast": "يرجى رفع مفتاح حساب خدمة قبل إنشاء بيانات الاعتماد"
-        },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Drive الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth",
           "sharedScopesNote": "يطلب Google الوصول إلى Google Drive وGmail معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Google Drive فقط، ألغِ تحديد نطاقات Gmail في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
-        },
-        "primaryAdmin": {
-          "description": "أدخل بريد مسؤول أو مالك مؤسسة Google التي تملك حسابات Google Drive المراد فهرستها.",
-          "invalidEmail": "يجب أن يكون بريدًا إلكترونيًا صالحًا",
-          "label": "بريد المسؤول الرئيسي",
-          "placeholder": "admin@yourcompany.com",
-          "required": "مطلوب"
-        },
-        "section": {
-          "title": "مصادقة Google Drive"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "فشل إنشاء بيانات اعتماد حساب الخدمة - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "تم إنشاء بيانات اعتماد حساب الخدمة بنجاح"
-        },
-        "serviceAccountOption": {
-          "title": "الخيار 2: حساب خدمة"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "ارفع أو الصق مفتاح JSON لحساب الخدمة"
         }
       },
       "gmail": {
@@ -3510,7 +3467,9 @@
         "isSandbox": "بيئة تجريبية (Sandbox)",
         "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
         "zuliprcContent": "محتوى Zuliprc",
-        "authenticationMethod": "طريقة المصادقة"
+        "authenticationMethod": "طريقة المصادقة",
+        "primaryAdminEmail": "البريد الإلكتروني للمسؤول الرئيسي",
+        "serviceAccountKey": "مفتاح حساب الخدمة"
       },
       "hints": {
         "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
@@ -3520,7 +3479,8 @@
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
-        "testrailBaseUrl": "مثل https://yourcompany.testrail.io."
+        "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3489,9 @@
           "certificate": "الشهادة",
           "accessKeyAndSecret": "مفتاح الوصول والسر",
           "iamRole": "دور IAM",
-          "assumeRole": "تولّي الدور"
+          "assumeRole": "تولّي الدور",
+          "serviceAccount": "حساب الخدمة",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint سر العميل للمصادقة. ستحتاج إلى تقديم معرّف العميل وسر العميل.",

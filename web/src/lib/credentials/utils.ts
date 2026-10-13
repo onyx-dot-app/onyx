@@ -71,6 +71,21 @@ export function getCredentialFileType(key: string): FileTypeCategory | null {
   return FILE_FIELD_TYPES.get(key) ?? null;
 }
 
+/**
+ * Whether the chosen auth method sets the account up on its own (Google
+ * Drive's OAuth sign-in), so nothing typed is saved for it.
+ */
+export function isOwnSetupMethod(
+  spec: CredentialSpec,
+  authMethod: string | undefined
+): boolean {
+  return (
+    spec.methods?.some(
+      (method) => method.value === authMethod && method.ownSetup === true
+    ) ?? false
+  );
+}
+
 /** The value a form starts a field at. */
 export function initialFieldValue(
   field: CredentialSpecField
@@ -204,7 +219,9 @@ function fieldSchema(
       .notRequired();
   }
   const required = (s: Yup.StringSchema) =>
-    s.min(1, messages.empty(title)).required(messages.required(title));
+    field.kind === "jsonFile"
+      ? s.required(messages.fileRequired(title))
+      : s.min(1, messages.empty(title)).required(messages.required(title));
   if (!selected) return required(base);
   return base.when(AUTHENTICATION_METHOD_KEY, {
     is: selected,
@@ -527,6 +544,7 @@ export function getCredentialDetails(
       const value = credentialJson[key];
       if (
         field.kind === "file" ||
+        field.kind === "jsonFile" ||
         field.kind === "toggle" ||
         field.kind === "checkbox" ||
         typeof value !== "string" ||

@@ -551,6 +551,16 @@ a new account's values, and disables saved accounts whose stored realm differs
 request that sends form values as connector config: Create, check runs and plans,
 and binding checks.
 
+A source's credential spec (`web/src/lib/credentials/constants.ts`) shapes the new
+account. Gmail is the one source that still sets accounts up on its own page
+(`OWN_ACCOUNT_SETUP` in `AddConnectorPage/newAccount.ts`). Google Drive types its
+account in: a "Service Account" tab (`google_primary_admin`, then
+`google_service_account_key`, a `jsonFile` field that holds the key file's text) and
+an "OAuth" tab. The OAuth method is `ownSetup`: its tab renders `DriveOAuthSetup`
+(`AddConnectorPage/form/gdrive/Credential.tsx`), whose Google sign-in saves the
+account itself, so the form saves no draft for it. `draft_credentials.py` rejects a
+Google draft whose key is not a service-account key's JSON text.
+
 A config also picks how the cc-pair status page breaks the documents down by
 hierarchy node. `hierarchy_breakdown_sections` returns the node types to list, and
 the nodes that the config names (`HierarchyBreakdownSection`). The default (`None`)

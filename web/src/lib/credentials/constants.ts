@@ -65,6 +65,13 @@ function secret<const TOptions extends CredentialFieldOptions = {}>(
   return textField("secret", displayName, options);
 }
 
+function jsonFile<const TOptions extends CredentialFieldOptions = {}>(
+  displayName: CredentialDisplayName,
+  options?: TOptions
+) {
+  return textField("jsonFile", displayName, options);
+}
+
 function toggle(displayName: CredentialDisplayName) {
   return { kind: "toggle", displayName } as const;
 }
@@ -523,11 +530,26 @@ export const CREDENTIAL_SPECS = {
     brandName: "Discord",
     fields: { discord_bot_token: secret("botToken") },
   }),
-  // Gmail and Google Drive set up their credentials on their own pages.
+  // The OAuth tab signs in with Google, which saves the account itself.
   google_drive: defineCredentialSpec({
     brandName: "Google",
-    fields: { google_tokens: secret("oauthTokens") },
+    fields: {
+      google_primary_admin: email("primaryAdminEmail"),
+      google_service_account_key: jsonFile("serviceAccountKey", {
+        hint: { key: "googleServiceAccountKey" },
+      }),
+    },
+    methods: [
+      {
+        // The stored value for an uploaded key.
+        value: "uploaded",
+        label: "serviceAccount",
+        fields: ["google_primary_admin", "google_service_account_key"],
+      },
+      { value: "oauth", label: "oauth", fields: [], ownSetup: true },
+    ],
   }),
+  // Gmail sets up its credentials on its own page.
   gmail: defineCredentialSpec({
     brandName: "Google",
     fields: { google_tokens: secret("oauthTokens") },

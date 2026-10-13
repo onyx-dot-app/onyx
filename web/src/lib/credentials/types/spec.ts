@@ -47,7 +47,17 @@ interface CredentialFieldBase extends CredentialFieldOptions {
   displayName: CredentialDisplayName;
 }
 
-export type CredentialTextKind = "text" | "email" | "url" | "secret";
+/**
+ * A string field. `jsonFile` is a JSON key file (a Google service-account
+ * key): uploaded or pasted, the field holds its text, which the account
+ * stores as it is.
+ */
+export type CredentialTextKind =
+  | "text"
+  | "email"
+  | "url"
+  | "secret"
+  | "jsonFile";
 
 /** One field of a credential spec. `kind` picks how it renders. */
 export type CredentialSpecField =
@@ -66,6 +76,11 @@ export interface CredentialSpecMethod<TKey extends string = string> {
   fields: readonly TKey[];
   /** Hides the "Auto Sync Permissions" access type for this method. */
   disablePermSync?: boolean;
+  /**
+   * The method sets the account up on its own (an OAuth sign-in that saves
+   * it), so the form saves no typed account for it. It names no fields.
+   */
+  ownSetup?: boolean;
 }
 
 /** A source's credential: its fields and, optionally, its auth methods. */
