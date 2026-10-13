@@ -17,7 +17,11 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.scoped_permissions import assert_within_scope
+from onyx.auth.scoped_permissions import (
+    assert_within_scope,
+    get_visible_user_group_ids,
+    scope_data_access_group_ids,
+)
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.attempt_restart import revoke_restarted_attempt_tasks
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
@@ -161,15 +165,26 @@ def _authorize_proposed_state(
 
 
 def _proposed_state(
-    current: CurrentPairState, proposal: ConnectorEditProposal
+    current: CurrentPairState,
+    proposal: ConnectorEditProposal,
+    visible_group_ids: set[int] | None,
 ) -> ProposedPairState:
+    """The proposal as a full state. The proposed data-access groups only
+    touch the groups the editor can see (``visible_group_ids``; None: every
+    group); None in the proposal keeps the pair's groups."""
     return ProposedPairState(
         source=current.source,
         input_type=current.input_type,
         connector_specific_config=proposal.connector_specific_config,
         access_type=proposal.access_type,
         data_access_group_ids=(
-            proposal.data_access_group_ids
+            sorted(
+                scope_data_access_group_ids(
+                    proposal.data_access_group_ids,
+                    current.data_access_group_ids,
+                    visible_group_ids,
+                )
+            )
             if proposal.data_access_group_ids is not None
             else current.data_access_group_ids
         ),
@@ -218,7 +233,9 @@ def plan_cc_pair_edit(
     the config, credential or access type changes."""
     _authorize_pair_edit(db_session, user, cc_pair_id)
     current = fetch_current_pair_state(db_session, cc_pair_id)
-    proposed = _proposed_state(current, proposal)
+    proposed = _proposed_state(
+        current, proposal, get_visible_user_group_ids(user, db_session)
+    )
     _authorize_proposed_state(db_session, user, current, proposed)
     stored = plan_connector_edit(
         db_session, cc_pair_id=cc_pair_id, proposed=proposed, user=user
