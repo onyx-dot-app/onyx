@@ -175,10 +175,10 @@ reads it to decide whether a turn can run.
 ### `Artifact` (`backend/onyx/db/models.py:Artifact`)
 
 One mutable row per `(session_id, path)`, upserted at turn end
-(`db/artifact.py:upsert_artifact`). `content_hash` drives change detection: a
-changed hash bumps `version` and clears `archive_file_id`; an unchanged hash
-only refreshes metadata. `deleted=True` keeps the row (so a stale FE card
-greys out instead of 404ing) rather than removing it.
+(`db/artifact.py:upsert_artifact`). `source_revision` stores the observed filesystem revision;
+Changes advance `version` and invalidate `archive_file_id`.
+Unchanged files keep their producing `turn_index`. `viewed_revision` records the session owner's last viewed version.
+`deleted=True` retains the row so chat can display an unavailable card.
 
 ### `ActionReceipt` (`backend/onyx/db/models.py:ActionReceipt`)
 
@@ -322,6 +322,12 @@ flushes whatever the per-turn `BuildStreamingState` accumulated since the
 last flush. So there is no single "save the whole turn" transaction to point
 to the way `save_chat_turn` is one; correctness instead rests on: no
 streamed terminal path may skip its `finalize_persist` + `finish_turn` pair.
+
+The turn events endpoint emits `turn_completed` only after backend finalization reaches a terminal state.
+It releases the sandbox subscription before waiting for that state and can replay a completed turn on attachment.
+The packet carries the owned turn ID, status, index, and error detail. Transport errors remain stream errors.
+Both runners close the producer and commit the transcript before the separate output-index transaction.
+They persist output metadata before publishing terminal status, while retaining prompt ownership.
 
 ### 4.3 Locking
 
@@ -537,10 +543,20 @@ effect.
 
 ### 4.7 Artifacts, receipts, and export
 
-Artifacts are a manifest, not a store: `upsert_artifact`
-(`db/artifact.py`) is called once per `(session, path)` at turn end, keyed on
-a content hash so an unchanged file is a metadata-only touch while a changed
-one bumps `version` and invalidates any cached archive. `download_artifact`
+`backend/onyx/server/features/build/session/output_cards.py` compares complete manifests before and after each interactive or scheduled prompt, while the runner owns the prompt slot.
+It saves changed paths and their producing turns before terminal status. Webapp source changes share the `outputs/web` entry.
+Incomplete scans and lost ownership preserve earlier attribution. Reclaimed runners do not invent a new baseline.
+Complete scans mark missing indexed paths deleted. Revisions detect filesystem writes, not differences in file contents.
+
+`GET /build/sessions/{id}/output-cards` reads indexed cards without waking the sandbox. It omits rows without a producing turn.
+`PATCH /build/sessions/{id}/output-cards/{artifact_id}/viewed` records the opened revision; `/output-cards/viewed` accepts up to 10,000 ID/revision pairs.
+Bulk acknowledgements lock rows in bytewise path order, matching output capture.
+A complete capture restores indexed files missed by failed scans without changing their last known producing turn.
+Both routes advance viewed revisions monotonically and reject future revisions with 409. Bulk requests fail before changing any row.
+Bulk requests skip deleted, unknown, and foreign-session IDs. All three routes require session ownership.
+The older `/artifacts` endpoint discovers the local webapp; it does not supply durable cards.
+
+`download_artifact`
 and `export_docx` (`session/api.py:559,610`) read the live file out of the
 sandbox workspace; `md_to_docx.py:markdown_to_docx_bytes` converts a
 Markdown artifact to `.docx` with `mistune` + `python-docx`, pure-Python, no
