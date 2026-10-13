@@ -28,7 +28,7 @@ import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import { planTagProps } from "@/lib/tier-badge";
+import { PlanTag } from "@/lib/app/plans";
 
 interface AppearanceThemeSettingsProps {
   selectedLogo: File | null;
@@ -530,9 +530,7 @@ export const AppearanceThemeSettings = forwardRef<
           >
             <FormField.Label>
               {t("helpLink.label")}
-              {!enterpriseTier && (
-                <Tag {...planTagProps("enterprise")} size="sm" />
-              )}
+              {!enterpriseTier && <PlanTag plan="enterprise" size="sm" />}
             </FormField.Label>
             <FormField.Control asChild>
               <InputTypeIn

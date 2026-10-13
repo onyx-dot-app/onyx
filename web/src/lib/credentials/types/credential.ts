@@ -42,6 +42,11 @@ export interface Credential<T> extends CredentialBase<T> {
   user_personal_name: string | null;
   time_created: string;
   time_updated: string;
+  /**
+   * Whether the requesting user owns the credential. Null when the response
+   * does not say (credentials nested in pair, group and document-set views).
+   */
+  is_owner?: boolean | null;
 }
 
 /**

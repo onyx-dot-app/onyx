@@ -1857,9 +1857,6 @@
           "restoreTooltip": "Standard wiederherstellen"
         },
         "description": "Legen Sie fest, wie lange {appName} Chats in Ihrer Organisation aufbewahren soll.",
-        "enterprisePlanTag": {
-          "label": "Enterprise-Tarif"
-        },
         "forever": {
           "label": "Unbegrenzt"
         },
@@ -1879,9 +1876,6 @@
         "title": "Chat-Verlauf aufbewahren"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business-Tarif"
-        },
         "description": "Oberflächenmodus für die schnelle Dokumentensuche in Ihrer Organisation.",
         "noConnectorsTooltip": "Richten Sie Konnektoren ein, um den Suchmodus zu verwenden",
         "tierTooltip": "Der Suchmodus erfordert den Business- oder Enterprise-Tarif.",
@@ -2772,7 +2766,22 @@
           },
           "rerunFailed": {
             "toast": "Die Prüfungen konnten nicht gestartet werden. Versuchen Sie es erneut."
+          },
+          "shareSaved": {
+            "toast": "Freigabe aktualisiert."
+          },
+          "shareFailed": {
+            "toast": "Die Freigabe dieses Kontos konnte nicht geändert werden. Versuchen Sie es erneut."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, kann es privat machen."
+          },
+          "shareLocked": {
+            "tooltip": "Nur die Person, die dieses Konto hinzugefügt hat, oder ein Admin, mit dem es geteilt ist, kann ändern, wer es nutzen darf."
           }
+        },
+        "accountUnavailable": {
+          "toast": "Dieses Konto ist für Sie nicht mehr verfügbar. Wählen Sie ein anderes Konto."
         }
       },
       "credentialRequired": {
@@ -9004,9 +9013,6 @@
           "description": "Wenn deaktiviert, lehnen alle Gateway-Endpunkte Anfragen ab, vorhandene Token funktionieren nicht mehr, und der Gateway-Bereich wird in der Token-Auswahl ausgeblendet. Der Craft-Sandbox-Datenverkehr wird separat über die Craft-Einstellungen gesteuert."
         }
       },
-      "businessPlanTag": {
-        "label": "Business-Tarif"
-      },
       "tierTooltip": "Das LLM Gateway erfordert den Business- oder Enterprise-Tarif.",
       "scopeNote": {
         "title": "Jeder Benutzer konfiguriert sein eigenes Token und die Verbindungsdetails unter Einstellungen → LLM Gateway."
@@ -12093,6 +12099,20 @@
         "defaultName": "Blatt 1",
         "empty": "Dieses Blatt ist leer.",
         "tooLarge": "Dieses Blatt ist zu groß für die Vorschau. Laden Sie die Datei herunter, um es anzusehen."
+      }
+    },
+    "plans": {
+      "free": {
+        "title": "Free-Tarif",
+        "tooltip": "In allen Tarifen verfügbar."
+      },
+      "business": {
+        "title": "Business-Tarif",
+        "tooltip": "Erfordert den [Business- oder Enterprise-Tarif](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Enterprise-Tarif",
+        "tooltip": "Erfordert den [Enterprise-Tarif](/admin/billing)."
       }
     }
   },

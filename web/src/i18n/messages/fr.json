@@ -1857,9 +1857,6 @@
           "restoreTooltip": "Rétablir la valeur par défaut"
         },
         "description": "Indiquez combien de temps {appName} doit conserver les discussions de votre organisation.",
-        "enterprisePlanTag": {
-          "label": "Forfait Enterprise"
-        },
         "forever": {
           "label": "Toujours"
         },
@@ -1879,9 +1876,6 @@
         "title": "Conserver l'historique des discussions"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Forfait Business"
-        },
         "description": "Mode d'interface pour la recherche rapide de documents dans toute votre organisation.",
         "noConnectorsTooltip": "Configurez des connecteurs pour utiliser le mode Recherche",
         "tierTooltip": "Le mode Recherche nécessite le forfait Business ou Enterprise.",
@@ -2772,7 +2766,22 @@
           },
           "rerunFailed": {
             "toast": "Impossible de lancer les vérifications. Réessayez."
+          },
+          "shareSaved": {
+            "toast": "Partage mis à jour."
+          },
+          "shareFailed": {
+            "toast": "Impossible de modifier qui peut utiliser ce compte. Réessayez."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Seule la personne qui a ajouté ce compte peut le rendre privé."
+          },
+          "shareLocked": {
+            "tooltip": "Seule la personne qui a ajouté ce compte, ou un administrateur avec qui il est partagé, peut modifier qui peut l'utiliser."
           }
+        },
+        "accountUnavailable": {
+          "toast": "Ce compte n'est plus disponible pour vous. Choisissez un autre compte."
         }
       },
       "credentialRequired": {
@@ -9004,9 +9013,6 @@
           "description": "Lorsque cette option est désactivée, tous les points de terminaison de la passerelle rejettent les requêtes, les jetons existants cessent de fonctionner et la portée de la passerelle est masquée dans le sélecteur de jetons. Le trafic du sandbox Craft est contrôlé séparément par les paramètres Craft."
         }
       },
-      "businessPlanTag": {
-        "label": "Forfait Business"
-      },
       "tierTooltip": "LLM Gateway nécessite le forfait Business ou Enterprise.",
       "scopeNote": {
         "title": "Chaque utilisateur configure son propre jeton et les détails de connexion sous Paramètres → LLM Gateway."
@@ -12093,6 +12099,20 @@
         "defaultName": "Feuille 1",
         "empty": "Cette feuille est vide.",
         "tooLarge": "Cette feuille est trop volumineuse pour l'aperçu. Téléchargez le fichier pour la consulter."
+      }
+    },
+    "plans": {
+      "free": {
+        "title": "Offre gratuite",
+        "tooltip": "Disponible dans toutes les offres."
+      },
+      "business": {
+        "title": "Offre Business",
+        "tooltip": "Nécessite l'[offre Business ou Enterprise](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Offre Enterprise",
+        "tooltip": "Nécessite l'[offre Enterprise](/admin/billing)."
       }
     }
   },

@@ -1857,9 +1857,6 @@
           "restoreTooltip": "恢复默认"
         },
         "description": "指定 {appName} 在您的组织中保留对话的时长。",
-        "enterprisePlanTag": {
-          "label": "企业版套餐"
-        },
         "forever": {
           "label": "永久"
         },
@@ -1879,9 +1876,6 @@
         "title": "保留对话历史"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "商业版套餐"
-        },
         "description": "用于在组织内快速搜索文档的界面模式。",
         "noConnectorsTooltip": "设置连接器后才能使用搜索模式",
         "tierTooltip": "搜索模式需要商业版或企业版套餐。",
@@ -2772,7 +2766,22 @@
           },
           "rerunFailed": {
             "toast": "无法启动检查，请重试。"
+          },
+          "shareSaved": {
+            "toast": "共享已更新。"
+          },
+          "shareFailed": {
+            "toast": "无法更改可使用此账户的人员。请重试。"
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "只有添加此账户的人才能将其设为私有。"
+          },
+          "shareLocked": {
+            "tooltip": "只有添加此账户的人或与其共享的管理员可以更改可使用此账户的人员。"
           }
+        },
+        "accountUnavailable": {
+          "toast": "此账户已不可用。请选择其他账户。"
         }
       },
       "credentialRequired": {
@@ -9004,9 +9013,6 @@
           "description": "关闭后，所有网关端点都会拒绝请求，现有令牌将失效，令牌选择器中也会隐藏网关范围。Craft 沙箱流量由 Craft 设置单独控制。"
         }
       },
-      "businessPlanTag": {
-        "label": "商业版套餐"
-      },
       "tierTooltip": "LLM 网关需要商业版或企业版套餐。",
       "scopeNote": {
         "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
@@ -12093,6 +12099,20 @@
         "defaultName": "工作表1",
         "empty": "此工作表为空。",
         "tooLarge": "此工作表过大，无法预览。请下载文件查看。"
+      }
+    },
+    "plans": {
+      "free": {
+        "title": "免费版",
+        "tooltip": "所有版本均可用。"
+      },
+      "business": {
+        "title": "商业版",
+        "tooltip": "需要[商业版或企业版](/admin/billing)。"
+      },
+      "enterprise": {
+        "title": "企业版",
+        "tooltip": "需要[企业版](/admin/billing)。"
       }
     }
   },

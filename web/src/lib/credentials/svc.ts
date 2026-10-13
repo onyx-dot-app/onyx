@@ -170,6 +170,18 @@ export function updateCredential(credentialId: number, newDetails: any) {
   });
 }
 
+/** Changes who may reuse a saved credential: its owner or an admin who can edit it. */
+export function updateCredentialSharing(
+  credentialId: number,
+  sharing: Pick<CredentialSharing, "admin_public" | "groups">
+): Promise<Response> {
+  return fetch(`/api/manage/admin/credential/${credentialId}/sharing`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sharing),
+  });
+}
+
 export function updateCredentialWithPrivateKey(
   credentialId: number,
   newDetails: any,

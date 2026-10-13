@@ -1,5 +1,6 @@
 "use client";
 
+import { usePlans } from "@/lib/app/plans";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { markdown } from "@opal/utils";
 import React, {
@@ -38,7 +39,6 @@ import {
   SvgExpand,
   SvgFold,
   SvgExternalLink,
-  SvgOrganization,
   SvgRefreshCw,
   SvgRevert,
   SvgChevronDown,
@@ -731,6 +731,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
 export default function ChatPreferencesPage() {
   const t = useTranslations("admin.chatPreferences");
+  const plans = usePlans();
   const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
@@ -1023,11 +1024,7 @@ export default function ChatPreferencesPage() {
                   title={t("searchMode.title")}
                   tag={
                     !businessTier
-                      ? {
-                          title: t("searchMode.businessPlanTag.label"),
-                          color: "amber",
-                          icon: SvgOrganization,
-                        }
+                      ? plans.business.tag
                       : { title: t("betaTag.label"), color: "blue" }
                   }
                   description={t("searchMode.description")}
@@ -1489,15 +1486,7 @@ export default function ChatPreferencesPage() {
                       description={t("retention.description", {
                         appName: settings.appName,
                       })}
-                      tag={
-                        !enterpriseTier
-                          ? {
-                              title: t("retention.enterprisePlanTag.label"),
-                              color: "amber",
-                              icon: SvgOrganization,
-                            }
-                          : undefined
-                      }
+                      tag={!enterpriseTier ? plans.enterprise.tag : undefined}
                       disabled={!enterpriseTier}
                       withLabel
                       fillInput

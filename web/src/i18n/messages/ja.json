@@ -1857,9 +1857,6 @@
           "restoreTooltip": "既定値に戻す"
         },
         "description": "組織のチャットを {appName} が保持する期間を指定します。",
-        "enterprisePlanTag": {
-          "label": "Enterprise プラン"
-        },
         "forever": {
           "label": "無期限"
         },
@@ -1879,9 +1876,6 @@
         "title": "チャット履歴の保持"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business プラン"
-        },
         "description": "組織全体のドキュメントをすばやく検索するための UI モードです。",
         "noConnectorsTooltip": "検索モードを使用するにはコネクターを設定してください",
         "tierTooltip": "検索モードには Business プランまたは Enterprise プランが必要です。",
@@ -2772,7 +2766,22 @@
           },
           "rerunFailed": {
             "toast": "チェックを開始できませんでした。もう一度お試しください。"
+          },
+          "shareSaved": {
+            "toast": "共有を更新しました。"
+          },
+          "shareFailed": {
+            "toast": "このアカウントを使用できるユーザーを変更できませんでした。もう一度お試しください。"
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "このアカウントを追加したユーザーのみが非公開にできます。"
+          },
+          "shareLocked": {
+            "tooltip": "このアカウントを追加したユーザー、または共有されている管理者のみが、使用できるユーザーを変更できます。"
           }
+        },
+        "accountUnavailable": {
+          "toast": "このアカウントは利用できなくなりました。別のアカウントを選択してください。"
         }
       },
       "credentialRequired": {
@@ -9004,9 +9013,6 @@
           "description": "オフにすると、すべてのゲートウェイエンドポイントがリクエストを拒否し、既存のトークンは動作しなくなり、トークン選択からゲートウェイスコープが非表示になります。Craft サンドボックスのトラフィックは Craft 設定で個別に制御されます。"
         }
       },
-      "businessPlanTag": {
-        "label": "Business プラン"
-      },
       "tierTooltip": "LLM ゲートウェイには Business プランまたは Enterprise プランが必要です。",
       "scopeNote": {
         "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
@@ -12093,6 +12099,20 @@
         "defaultName": "シート1",
         "empty": "このシートは空です。",
         "tooLarge": "このシートは大きすぎてプレビューできません。ファイルをダウンロードして表示してください。"
+      }
+    },
+    "plans": {
+      "free": {
+        "title": "無料プラン",
+        "tooltip": "すべてのプランで利用できます。"
+      },
+      "business": {
+        "title": "ビジネスプラン",
+        "tooltip": "[ビジネスプランまたはエンタープライズプラン](/admin/billing)が必要です。"
+      },
+      "enterprise": {
+        "title": "エンタープライズプラン",
+        "tooltip": "[エンタープライズプラン](/admin/billing)が必要です。"
       }
     }
   },

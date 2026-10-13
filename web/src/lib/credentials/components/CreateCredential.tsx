@@ -235,11 +235,12 @@ export default function CreateCredential({
               and the Create button. */}
               <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-              {businessTier && (
-                <Disabled disabled={!formikProps.isValid}>
-                  <ShareAccountField disabled={!formikProps.isValid} />
-                </Disabled>
-              )}
+              <Disabled disabled={!formikProps.isValid}>
+                <ShareAccountField
+                  disabled={!formikProps.isValid}
+                  groupsLocked={!businessTier}
+                />
+              </Disabled>
 
               <Section flexDirection="row" justifyContent="end">
                 <CreateButton

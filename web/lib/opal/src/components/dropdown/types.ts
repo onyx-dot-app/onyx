@@ -1,4 +1,5 @@
 import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { TagProps } from "@opal/components/tag/components";
 import type { InputTypeInProps } from "@opal/components/inputs/texts/input-type-in/components";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +26,10 @@ export interface DropdownOption extends DropdownRowBase {
   icon?: IconFunctionComponent;
   /** Lines the description may take before it clamps, for text a user wrote. */
   descriptionMaxLines?: number;
+  /** Tag beside the title, like a plan badge. */
+  tag?: TagProps;
+  /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
+  tooltip?: string | RichStr;
 }
 
 /**
@@ -40,8 +45,8 @@ export type DropdownAction = DropdownRowBase & {
   icon?: IconFunctionComponent;
   /** A destructive command: the row reads in the danger colour. */
   danger?: boolean;
-  /** Hover text on the row, for the reason it is disabled. */
-  tooltip?: string;
+  /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
+  tooltip?: string | RichStr;
   keepOpen?: boolean;
 } & (
     | {

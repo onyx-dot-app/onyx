@@ -1857,9 +1857,6 @@
           "restoreTooltip": "기본값 복원"
         },
         "description": "{appName}가 조직의 채팅을 보관할 기간을 지정하세요.",
-        "enterprisePlanTag": {
-          "label": "Enterprise 플랜"
-        },
         "forever": {
           "label": "무기한"
         },
@@ -1879,9 +1876,6 @@
         "title": "채팅 기록 보관"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business 플랜"
-        },
         "description": "조직 전체 문서를 빠르게 검색하는 UI 모드입니다.",
         "noConnectorsTooltip": "검색 모드를 사용하려면 커넥터를 설정하세요",
         "tierTooltip": "검색 모드는 Business 또는 Enterprise 플랜이 필요합니다.",
@@ -2772,7 +2766,22 @@
           },
           "rerunFailed": {
             "toast": "검사를 시작할 수 없습니다. 다시 시도하세요."
+          },
+          "shareSaved": {
+            "toast": "공유가 업데이트되었습니다."
+          },
+          "shareFailed": {
+            "toast": "이 계정을 사용할 수 있는 사용자를 변경하지 못했습니다. 다시 시도하세요."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "이 계정을 추가한 사람만 비공개로 설정할 수 있습니다."
+          },
+          "shareLocked": {
+            "tooltip": "이 계정을 추가한 사람 또는 공유된 관리자만 사용할 수 있는 사람을 변경할 수 있습니다."
           }
+        },
+        "accountUnavailable": {
+          "toast": "이 계정을 더 이상 사용할 수 없습니다. 다른 계정을 선택하세요."
         }
       },
       "credentialRequired": {
@@ -9004,9 +9013,6 @@
           "description": "끄면 모든 게이트웨이 엔드포인트가 요청을 거부하고, 기존 토큰이 작동을 멈추며, 토큰 선택기에서 게이트웨이 범위가 숨겨집니다. Craft 샌드박스 트래픽은 Craft 설정에서 별도로 제어됩니다."
         }
       },
-      "businessPlanTag": {
-        "label": "Business 플랜"
-      },
       "tierTooltip": "LLM 게이트웨이는 Business 또는 Enterprise 플랜이 필요합니다.",
       "scopeNote": {
         "title": "각 사용자는 설정 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
@@ -12093,6 +12099,20 @@
         "defaultName": "시트 1",
         "empty": "이 시트는 비어 있습니다.",
         "tooLarge": "이 시트는 너무 커서 미리 볼 수 없습니다. 파일을 다운로드하여 확인하세요."
+      }
+    },
+    "plans": {
+      "free": {
+        "title": "무료 플랜",
+        "tooltip": "모든 플랜에서 사용할 수 있습니다."
+      },
+      "business": {
+        "title": "비즈니스 플랜",
+        "tooltip": "[비즈니스 또는 엔터프라이즈 플랜](/admin/billing)이 필요합니다."
+      },
+      "enterprise": {
+        "title": "엔터프라이즈 플랜",
+        "tooltip": "[엔터프라이즈 플랜](/admin/billing)이 필요합니다."
       }
     }
   },

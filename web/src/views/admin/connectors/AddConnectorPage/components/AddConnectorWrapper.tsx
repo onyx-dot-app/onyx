@@ -79,6 +79,7 @@ import {
   useGoogleDriveCredentials,
   useResetSavedDraftCredential,
   useSavedDraftCredential,
+  refreshSourceCredentials,
 } from "@/lib/credentials/hooks";
 import {
   NEW_ACCOUNT_FIELD,
@@ -522,7 +523,17 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
           } else if (!timeoutErrorHappenedRef.current) {
             // Only show error if timeout didn't happen
             const errorData = await createResponse.json();
-            toast.error(errorData.detail || errorData.message);
+            if (
+              errorData.error_code === "CREDENTIAL_NOT_FOUND" &&
+              !isDraftCredential(credential)
+            ) {
+              // The saved account is gone from this user's reach. The
+              // account section sees it leave the list, says so and drops
+              // the pick.
+              await refreshSourceCredentials(connector);
+            } else {
+              toast.error(errorData.detail || errorData.message);
+            }
           }
         }
 
