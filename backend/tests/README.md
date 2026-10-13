@@ -30,10 +30,6 @@ Use when you need a real database or real API calls but want control over setup.
 uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit
 ```
 
-Craft database fixtures delete the schedules each test creates, including committed rows after assertion or transaction failures.
-Cleanup uses exact task IDs and also removes dependent runs and pre-approval grants through database cascades.
-Cleanup failures fail the test. Keep application processes stopped while running external dependency tests; cleanup cannot run after a forced process kill.
-
 ### Integration Tests (`tests/integration/`)
 
 Full Onyx deployment running. Do not mock Onyx code. Faking an external service

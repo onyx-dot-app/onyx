@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -33,6 +33,7 @@ from onyx.db.llm import (
 from onyx.db.models import (
     BuildSession,
     Sandbox,
+    ScheduledTask,
     Skill,
     Skill__UserGroup,
     User,
@@ -54,7 +55,6 @@ from tests.common.craft.skill_table_isolation import (
     snapshot_skill_tables,
 )
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import scheduled_task_cleanup
 
 
 def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
@@ -143,8 +143,7 @@ def _set_onyx_server_url(monkeypatch: pytest.MonkeyPatch) -> None:
 def db_session() -> Generator[Session, None, None]:
     SqlEngine.init_engine(pool_size=10, max_overflow=5)
     with get_session_with_current_tenant() as session:
-        with scheduled_task_cleanup(session):
-            yield session
+        yield session
 
 
 @pytest.fixture(scope="function")
@@ -179,10 +178,13 @@ def test_user(
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
+    user_id = user.id
     yield user
-    # Release uncommitted locks before the separate-session delete cascades from this user.
     db_session.rollback()
-    _best_effort_delete(User, [user.id])
+    # Remove recurring jobs even if the later best-effort user cleanup fails.
+    db_session.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user_id))
+    db_session.commit()
+    _best_effort_delete(User, [user_id])
 
 
 @pytest.fixture(scope="function")
