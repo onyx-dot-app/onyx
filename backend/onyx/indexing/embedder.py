@@ -16,6 +16,11 @@ from onyx.document_index.chunk_content_enrichment import (
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
+from onyx.natural_language_processing.passage_embedding_cache import (
+    cache_passage_embeddings,
+    get_cached_passage_embeddings,
+)
+from onyx.configs.app_configs import PASSAGE_EMBEDDING_CACHE_ENABLED, PASSAGE_EMBEDDING_CACHE_TTL_S
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
 from onyx.utils.timing import log_function_time
@@ -151,13 +156,29 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     raise RuntimeError("Large chunk contains mini chunks")
                 flat_chunk_texts.extend(chunk.mini_chunk_texts)
 
-        embeddings = self.embedding_model.encode(
-            texts=flat_chunk_texts,
-            text_type=EmbedTextType.PASSAGE,
-            large_chunks_present=large_chunks_present,
-            tenant_id=tenant_id,
-            request_id=request_id,
+        cached = (
+            get_cached_passage_embeddings(flat_chunk_texts, self.model_name, tenant_id)
+            if PASSAGE_EMBEDDING_CACHE_ENABLED
+            else [None] * len(flat_chunk_texts)
         )
+        misses = [i for i, value in enumerate(cached) if value is None]
+        if misses:
+            fresh = self.embedding_model.encode(
+                texts=[flat_chunk_texts[i] for i in misses],
+                text_type=EmbedTextType.PASSAGE,
+                large_chunks_present=large_chunks_present,
+                tenant_id=tenant_id,
+                request_id=request_id,
+            )
+            if PASSAGE_EMBEDDING_CACHE_ENABLED:
+                cache_passage_embeddings(
+                    [flat_chunk_texts[i] for i in misses], fresh,
+                    self.model_name, tenant_id, PASSAGE_EMBEDDING_CACHE_TTL_S,
+                )
+            fresh_iter = iter(fresh)
+            embeddings = [next(fresh_iter) if i in misses else cached[i] for i in range(len(cached))]
+        else:
+            embeddings = [value for value in cached if value is not None]
 
         # Mapping embeddings to chunks
         embedded_chunks: list[IndexChunk] = []

@@ -105,6 +105,14 @@ CACHE_BACKEND = CacheBackendType(
 QUERY_EMBEDDING_CACHE_ENABLED = (
     os.environ.get("QUERY_EMBEDDING_CACHE_ENABLED", "true").lower() == "true"
 )
+PASSAGE_EMBEDDING_CACHE_ENABLED = (
+    os.environ.get("PASSAGE_EMBEDDING_CACHE_ENABLED", "true").lower() == "true"
+)
+assert (
+    PASSAGE_EMBEDDING_CACHE_TTL_S := int(
+        os.environ.get("PASSAGE_EMBEDDING_CACHE_TTL_S", "86400")
+    )
+) > 0, "PASSAGE_EMBEDDING_CACHE_TTL_S must be positive."
 assert (
     QUERY_EMBEDDING_CACHE_TTL_S := int(
         os.environ.get("QUERY_EMBEDDING_CACHE_TTL_S", "900")
