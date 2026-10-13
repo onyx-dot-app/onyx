@@ -5067,8 +5067,8 @@
           "label": "Current Model"
         },
         "gpuRecommended": {
-          "tag": "GPU only",
-          "tooltip": "Indexing with this model on a CPU is too slow to be practical. Run the model server on a GPU."
+          "tag": "GPU recommended",
+          "tooltip": "CPU indexing is supported, but slow. A GPU makes indexing faster."
         },
         "legacy": {
           "tag": "Legacy",
@@ -5082,6 +5082,7 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPU speeds are estimates and vary with hardware and document size. RAM recommendations cover one loaded model, not the full Onyx stack. Allow more memory during re-indexing.",
         "addCustomModel": {
           "label": "Add Custom Model"
         },
@@ -5298,9 +5299,9 @@
         "googleTextEmbeddingGecko003": "Earlier Google Gecko text embedding model. Newer Google models replace it.",
         "voyageLarge2Instruct": "Voyage's large embedding model. High performance with instruction fine-tuning.",
         "voyageLight2Instruct": "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
-        "graniteEmbedding97mMultilingualR2": "IBM's small multilingual model. Fast on CPU, and it ships with {appName}, so no download is needed. 97M parameters, 384-dim output. About 6 chunks per second on 4 CPU cores.",
-        "voyage4Nano": "Voyage AI's open-weights model. Higher search quality than smaller models, but slower on CPU. 346M parameters, 2048-dim output. About 1 chunk per second on 4 CPU cores.",
-        "nemotron3Embed1b": "NVIDIA's multilingual model, with high search quality. 1.1B parameters, 2048-dim output. GPU only: indexing on CPU is too slow.",
+        "graniteEmbedding97mMultilingualR2": "IBM's small multilingual model. Ships with {appName}. 97M parameters, 384-dim output. Up to 200 docs / min / CPU core. Recommended CPU RAM: 4 GB per model server.",
+        "voyage4Nano": "Voyage AI's open-weights model. 346M parameters, 2048-dim output. Up to 50 docs / min / CPU core. Recommended CPU RAM: 4 GB per model server.",
+        "nemotron3Embed1b": "NVIDIA's multilingual model. 1.1B parameters, 2048-dim output. Up to 5 docs / min / CPU core. Recommended CPU RAM: 8 GB per model server. GPU recommended.",
         "nomicEmbedTextV1": "Nomic's embedding model specialized for retrieval, similarity, clustering and classification.",
         "e5BaseV2": "English embedding model from Microsoft's E5 family. A balance of speed and search quality.",
         "e5SmallV2": "The smallest and fastest version of the E5 line of models. If you're running {appName} on a resource constrained system, then this may be a good choice.",

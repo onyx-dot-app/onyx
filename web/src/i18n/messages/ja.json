@@ -5067,8 +5067,8 @@
           "label": "現在のモデル"
         },
         "gpuRecommended": {
-          "tag": "GPU 専用",
-          "tooltip": "CPU でこのモデルを使ったインデックス作成は遅すぎて実用的ではありません。モデルサーバーは GPU で実行してください。"
+          "tag": "GPU推奨",
+          "tooltip": "CPUでのインデックス作成は可能ですが、低速です。GPUを使用すると高速化できます。"
         },
         "legacy": {
           "tag": "レガシー",
@@ -5082,6 +5082,7 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPUの速度は目安で、ハードウェアと文書サイズによって異なります。推奨RAMは読み込んだモデル1つ分であり、Onyx全体の必要量ではありません。再インデックス時は追加のメモリを確保してください。",
         "addCustomModel": {
           "label": "カスタムモデルを追加"
         },
@@ -5298,9 +5299,9 @@
         "googleTextEmbeddingGecko003": "Google の以前の Gecko テキスト埋め込みモデル。より新しい Google モデルに置き換えられました。",
         "voyageLarge2Instruct": "Voyage の大規模埋め込みモデル。指示によるファインチューニングで高性能。",
         "voyageLight2Instruct": "Voyage の軽量な埋め込みモデル。性能と効率のバランスが良い。",
-        "graniteEmbedding97mMultilingualR2": "IBM の小型多言語モデル。CPU でも高速で、{appName} に同梱されているためダウンロード不要です。9,700 万パラメータ、384 次元出力。4 コアの CPU で毎秒約 6 チャンク。",
-        "voyage4Nano": "Voyage AI のオープンウェイトモデル。小型モデルより検索品質が高い一方、CPU では低速です。3 億 4,600 万パラメータ、2048 次元出力。4 コアの CPU で毎秒約 1 チャンク。",
-        "nemotron3Embed1b": "検索品質が高い NVIDIA の多言語モデル。11 億パラメータ、2048 次元出力。GPU 専用：CPU でのインデックス作成は遅すぎます。",
+        "graniteEmbedding97mMultilingualR2": "IBMの小型多言語モデル。{appName}に同梱。9700万パラメータ、384次元出力。CPUコアあたり最大200文書/分。CPU実行時の推奨RAM：モデルサーバーあたり4 GB。",
+        "voyage4Nano": "Voyage AIのオープンウェイトモデル。3億4600万パラメータ、2048次元出力。CPUコアあたり最大50文書/分。CPU実行時の推奨RAM：モデルサーバーあたり4 GB。",
+        "nemotron3Embed1b": "NVIDIAの多言語モデル。11億パラメータ、2048次元出力。CPUコアあたり最大5文書/分。CPU実行時の推奨RAM：モデルサーバーあたり8 GB。GPU推奨。",
         "nomicEmbedTextV1": "検索、類似度、クラスタリング、分類に特化した Nomic の埋め込みモデル。",
         "e5BaseV2": "Microsoft の E5 ファミリーの英語埋め込みモデル。速度と検索品質のバランスが取れています。",
         "e5SmallV2": "E5 系モデルの中で最小かつ最速のバージョン。リソースが限られた環境で {appName} を実行している場合に適しています。",

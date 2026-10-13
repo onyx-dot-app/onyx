@@ -5067,8 +5067,8 @@
           "label": "当前模型"
         },
         "gpuRecommended": {
-          "tag": "仅限 GPU",
-          "tooltip": "在 CPU 上使用此模型进行索引太慢，无法实际使用。请在 GPU 上运行模型服务器。"
+          "tag": "建议使用 GPU",
+          "tooltip": "支持 CPU 索引，但速度较慢。使用 GPU 可加快索引速度。"
         },
         "legacy": {
           "tag": "旧版",
@@ -5082,6 +5082,7 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "CPU 速度为估计值，会因硬件和文档大小而异。RAM 建议适用于一个已加载模型，并非整个 Onyx 系统的内存要求。重新索引时请预留更多内存。",
         "addCustomModel": {
           "label": "添加自定义模型"
         },
@@ -5298,9 +5299,9 @@
         "googleTextEmbeddingGecko003": "Google 早期的 Gecko 文本嵌入模型。已被更新的 Google 模型取代。",
         "voyageLarge2Instruct": "Voyage 的大型嵌入模型。经过指令微调，性能出色。",
         "voyageLight2Instruct": "Voyage 的轻量级嵌入模型。性能与效率平衡良好。",
-        "graniteEmbedding97mMultilingualR2": "IBM 的小型多语言模型。在 CPU 上运行很快，且已随 {appName} 提供，无需下载。9700 万参数，384 维输出。在 4 核 CPU 上每秒约 6 个分块。",
-        "voyage4Nano": "Voyage AI 的开放权重模型。搜索质量高于更小的模型，但在 CPU 上较慢。3.46 亿参数，2048 维输出。在 4 核 CPU 上每秒约 1 个分块。",
-        "nemotron3Embed1b": "NVIDIA 的多语言模型，搜索质量高。11 亿参数，2048 维输出。仅限 GPU：在 CPU 上索引太慢。",
+        "graniteEmbedding97mMultilingualR2": "IBM 的小型多语言模型。随 {appName} 提供。9700 万参数，384 维输出。每个 CPU 核心每分钟最多处理 200 篇文档。CPU 推理建议 RAM：每个模型服务器 4 GB。",
+        "voyage4Nano": "Voyage AI 的开放权重模型。3.46 亿参数，2048 维输出。每个 CPU 核心每分钟最多处理 50 篇文档。CPU 推理建议 RAM：每个模型服务器 4 GB。",
+        "nemotron3Embed1b": "NVIDIA 的多语言模型。11 亿参数，2048 维输出。每个 CPU 核心每分钟最多处理 5 篇文档。CPU 推理建议 RAM：每个模型服务器 8 GB。建议使用 GPU。",
         "nomicEmbedTextV1": "Nomic 的嵌入模型，专注于检索、相似度、聚类和分类。",
         "e5BaseV2": "Microsoft E5 系列的英文嵌入模型。在速度与搜索质量之间取得平衡。",
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",

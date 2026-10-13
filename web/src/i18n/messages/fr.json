@@ -5067,8 +5067,8 @@
           "label": "Modèle actuel"
         },
         "gpuRecommended": {
-          "tag": "GPU uniquement",
-          "tooltip": "L'indexation avec ce modèle sur un CPU est trop lente pour être utilisable. Exécutez le serveur de modèles sur un GPU."
+          "tag": "GPU recommandé",
+          "tooltip": "L’indexation sur CPU est prise en charge, mais lente. Un GPU accélère l’indexation."
         },
         "legacy": {
           "tag": "Ancien",
@@ -5082,6 +5082,7 @@
         }
       },
       "modelPicker": {
+        "cpuEstimateHint": "Les vitesses CPU sont des estimations qui varient selon le matériel et la taille des documents. La RAM recommandée couvre un modèle chargé, pas toute l’infrastructure Onyx. Prévoyez plus de mémoire pendant la réindexation.",
         "addCustomModel": {
           "label": "Ajouter un modèle personnalisé"
         },
@@ -5298,9 +5299,9 @@
         "googleTextEmbeddingGecko003": "Ancien modèle d'embedding de texte Gecko de Google. Remplacé par des modèles Google plus récents.",
         "voyageLarge2Instruct": "Grand modèle d'embedding de Voyage. Hautes performances grâce au fine-tuning par instructions.",
         "voyageLight2Instruct": "Modèle d'embedding léger de Voyage. Bon équilibre entre performances et efficacité.",
-        "graniteEmbedding97mMultilingualR2": "Petit modèle multilingue d'IBM. Rapide sur CPU et fourni avec {appName}, donc aucun téléchargement n'est nécessaire. 97 M de paramètres, sortie de 384 dimensions. Environ 6 segments par seconde sur 4 cœurs CPU.",
-        "voyage4Nano": "Modèle à poids ouverts de Voyage AI. Meilleure qualité de recherche que les modèles plus petits, mais plus lent sur CPU. 346 M de paramètres, sortie de 2048 dimensions. Environ 1 segment par seconde sur 4 cœurs CPU.",
-        "nemotron3Embed1b": "Modèle multilingue de NVIDIA, avec une haute qualité de recherche. 1,1 milliard de paramètres, sortie de 2048 dimensions. GPU uniquement : l'indexation sur CPU est trop lente.",
+        "graniteEmbedding97mMultilingualR2": "Le petit modèle multilingue d’IBM. Inclus dans {appName}. 97 M de paramètres, sortie de 384 dimensions. Jusqu’à 200 documents / min / cœur CPU. RAM CPU recommandée : 4 Go par serveur de modèles.",
+        "voyage4Nano": "Le modèle à poids ouverts de Voyage AI. 346 M de paramètres, sortie de 2048 dimensions. Jusqu’à 50 documents / min / cœur CPU. RAM CPU recommandée : 4 Go par serveur de modèles.",
+        "nemotron3Embed1b": "Le modèle multilingue de NVIDIA. 1,1 milliard de paramètres, sortie de 2048 dimensions. Jusqu’à 5 documents / min / cœur CPU. RAM CPU recommandée : 8 Go par serveur de modèles. GPU recommandé.",
         "nomicEmbedTextV1": "Modèle d'embedding de Nomic spécialisé dans la recherche, la similarité, le clustering et la classification.",
         "e5BaseV2": "Modèle d'embedding anglais de la famille E5 de Microsoft. Un équilibre entre vitesse et qualité de recherche.",
         "e5SmallV2": "La version la plus petite et la plus rapide de la gamme E5. Un bon choix si {appName} tourne sur un système aux ressources limitées.",
