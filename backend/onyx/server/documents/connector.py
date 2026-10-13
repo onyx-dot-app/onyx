@@ -424,8 +424,8 @@ def upload_files(
 
                 # Validate the zip by opening it (catches corrupt/non-zip files)
                 with zipfile.ZipFile(file.file, "r") as zf:
+                    assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                     if unzip:
-                        assert_zip_within_limits(zf, max_total_bytes=MAX_UNZIPPED_BYTES)
                         unzipped_bytes: int
                         zip_metadata_file_id, unzipped_bytes = (
                             save_zip_metadata_to_file_store(
