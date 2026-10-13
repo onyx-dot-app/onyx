@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Onyx に接続",
+      "request": "{clientName} に Onyx の検索を許可しますか？",
+      "account": "ログイン中: {email}",
+      "workspace": "ワークスペース: {workspaceName}",
+      "appAddress": "アプリのアドレス: {origin}",
+      "access": "アクセス可能なドキュメントの検索結果を読み取ります。ウェブ検索を使用し、ウェブページを開きます。",
+      "allow": "アクセスを許可",
+      "deny": "拒否",
+      "pending": "選択を保存中...",
+      "loading": "認可リクエストを読み込み中...",
+      "unavailable": "このリクエストは期限切れ、または変更されています。アプリからやり直してください。",
+      "failed": "認可を完了できませんでした。アプリからやり直してください。",
+      "signInRequired": "このアプリを認可するにはログインしてください。",
+      "signIn": "ログイン",
+      "forbidden": "このアプリを認可できません。ワークスペース管理者にお問い合わせください。",
+      "loadFailed": "Onyx はこのリクエストを読み込めませんでした。もう一度お試しください。",
+      "retry": "再試行"
+    },
+    "connections": {
+      "cancel": "キャンセル",
+      "title": "接続済みアプリ",
+      "description": "Onyx の検索を許可したアプリです。",
+      "empty": "接続済みアプリはありません。",
+      "loading": "接続済みアプリを読み込み中...",
+      "expires": "有効期限: {date}",
+      "disconnect": "接続を解除",
+      "disconnectAriaLabel": "{clientName} の接続を解除",
+      "pending": "接続を解除中...",
+      "failed": "アプリの接続を解除できませんでした。もう一度お試しください。",
+      "loadFailed": "接続済みアプリを読み込めませんでした。",
+      "confirmTitle": "{clientName} の接続を解除しますか？",
+      "confirmDescription": "このアプリは Onyx にアクセスできなくなります。後で再接続できます。"
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "アカウント"
@@ -1385,6 +1421,43 @@
           "text": "1 か月の無料トライアルの終了後、<value>{date}</value> に請求されます。"
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "ダウングレードに失敗しました"
+        },
+        "link": {
+          "label": "Community にダウングレード"
+        },
+        "modal": {
+          "changes": {
+            "text": "ダウングレードすると:"
+          },
+          "confirmButton": {
+            "label": "ダウングレード",
+            "loading": "ダウングレード中..."
+          },
+          "deleted": {
+            "text": "**削除:** ユーザーグループ、サービスアカウントの API キー、トークンレート制限、フック"
+          },
+          "description": "ライセンスとすべての有料機能を削除します。",
+          "disabled": {
+            "text": "**無効化:** 標準回答と SCIM トークン"
+          },
+          "intro": {
+            "text": "このデプロイメントからアクセス制御が削除されます。**再インデックスが開始され**、検索結果に変更が反映されます。大きなインデックスでは時間がかかることがあります。"
+          },
+          "madePublic": {
+            "text": "**公開:** すべてのコネクタと、ユーザーグループに共有されているエージェント、ドキュメントセット、LLM プロバイダー、MCP サーバー、スキル"
+          },
+          "reset": {
+            "text": "**デフォルトにリセット:** カスタムブランディングとチャット保持ポリシー"
+          },
+          "title": "Community Edition にダウングレード",
+          "warning": {
+            "text": "同期された権限やユーザーグループで制限されていたドキュメントが**すべてのユーザーに表示**されます。この操作は元に戻せません。"
+          }
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "ライセンスキーを有効化"
@@ -1784,9 +1857,6 @@
           "restoreTooltip": "既定値に戻す"
         },
         "description": "組織のチャットを {appName} が保持する期間を指定します。",
-        "enterprisePlanTag": {
-          "label": "Enterprise プラン"
-        },
         "forever": {
           "label": "無期限"
         },
@@ -1802,16 +1872,11 @@
           "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
           "title": "チャットの保持期間を短縮しますか？"
         },
-        "tierTooltip": "チャット履歴の保持は Enterprise プランの機能です。",
         "title": "チャット履歴の保持"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business プラン"
-        },
         "description": "組織全体のドキュメントをすばやく検索するための UI モードです。",
         "noConnectorsTooltip": "検索モードを使用するにはコネクターを設定してください",
-        "tierTooltip": "検索モードには Business プランまたは Enterprise プランが必要です。",
         "title": "検索モード"
       },
       "systemPrompt": {
@@ -1963,25 +2028,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "ソースから権限を自動的に同期します。検索を行うユーザーがソースでそのドキュメントへのアクセス権限を持つ場合に限り、{appName}で検索可能になります。",
-          "disabledReason": "現在の認証情報の認証方式は権限の自動同期に対応していません。対応している認証方式に変更してください。",
-          "name": "権限の自動同期"
-        },
-        "heading": {
-          "description": "このコネクタでインデックスされたドキュメントへのアクセス権を管理します。",
-          "title": "ドキュメントアクセス"
-        },
-        "privateOption": {
-          "description": "（ユーザーグループページで）このコネクタへのアクセスを明示的に付与されたユーザーのみが、このコネクタで取り込まれたドキュメントにアクセスできます",
-          "name": "非公開"
-        },
-        "publicOption": {
-          "description": "{appName}のアカウントを持つすべてのユーザーが、このコネクタで取り込まれたドキュメントにアクセスできます",
-          "name": "公開"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# 日} other {# 日}}",
@@ -2157,6 +2203,7 @@
           "description": "全員がソースから同期されたアクセス権を保持します。",
           "title": "グループを追加するまで制限はありません"
         },
+        "loadError": "グループを読み込めませんでした。ページを再読み込みして、もう一度お試しください。",
         "memberCount": "{count, plural, other {#人のメンバー}}",
         "picker": {
           "placeholder": "このコネクタへのアクセスを制限するグループを追加"
@@ -2164,26 +2211,12 @@
         "remove": {
           "tooltip": "{name}を削除"
         },
+        "table": {
+          "group": "グループ"
+        },
         "toggle": {
           "description": "選択したグループのメンバーにアクセスを限定します。同期された権限も引き続き適用されます。",
           "title": "グループへのアクセス制限"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "このコネクタへのグループアクセスを割り当てる"
-        },
-        "assignToGroup": {
-          "title": "このコネクタを管理できるグループ"
-        },
-        "scopedManagerGroups": {
-          "description": "このコネクタへのアクセスを付与するには、管理しているグループを1つ以上選択してください"
-        },
-        "syncGroups": {
-          "description": "以下のグループは、このコネクタを管理できるユーザーを制御します。ドキュメントへのアクセスはソース自体の権限から継承されます。"
-        },
-        "visibleToGroups": {
-          "description": "このコネクタは、以下で選択したグループに表示・アクセス可能になります"
         }
       },
       "indexAttemptsTable": {
@@ -2562,7 +2595,7 @@
       "oneDrive": {
         "description": "OneDrive コネクタを設定",
         "indexingScope": {
-          "label": "Onyx でインデックスを作成する OneDrive ファイルの所有者",
+          "label": "インデックスする OneDrive ファイル",
           "general": {
             "label": "一般",
             "description": "Microsoft アプリケーションがアクセスできるすべての対象ユーザーをインデックス化します。"
@@ -2578,7 +2611,7 @@
         },
         "excludedPaths": {
           "label": "除外するパス",
-          "description": "各ファイルパスとファイル名に照合する glob パターン（例: '*.tmp'、'Archive/*'）。"
+          "description": "各ファイルパスとファイル名に照合する glob パターン（例: `*.tmp`、`Archive/*`）。"
         },
         "organizationLinks": {
           "label": "組織リンクを公開として扱う",
@@ -2593,22 +2626,28 @@
           "description": "Microsoft Graph ホスト。GCC High または DoD では https://graph.microsoft.us を使用してください。"
         }
       },
+      "linear": {
+        "description": "Linear コネクタを設定",
+        "teams": {
+          "label": "チーム",
+          "description": "インデックスする Linear のチームキー（例: ENG）。空のままにすると、接続ユーザーが閲覧できるすべてのチームをインデックスします。"
+        },
+        "projects": {
+          "label": "プロジェクト",
+          "description": "インデックスする Linear のプロジェクト名または URL。空のままにすると、すべてのプロジェクトをインデックスします。チームも設定した場合、イシューは両方に一致する必要があります。"
+        },
+        "syncNotice": "インデックスするすべてのプライベートチームに所属するワークスペースメンバー（ゲストではなく）として接続してください。接続ユーザーが所属していないプライベートチームは Onyx からは見えません。パブリックチームのイシューはワークスペースの全メンバーが、プライベートまたは制限付きチームのイシューはそのメンバーが検索できます。"
+      },
       "add": {
         "authorizeButton": {
           "label": "{source} で認可",
           "pendingLabel": "認可しています..."
-        },
-        "collapseButton": {
-          "ariaLabel": "折りたたむ"
         },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "新規作成"
-        },
-        "credentialDeleted": {
-          "toast": "認証情報を削除しました！"
         },
         "credentialModal": {
           "title": "{source} の認証情報を作成"
@@ -2621,14 +2660,8 @@
           "description": "共有サービスアカウントを使用します。{appName} はこのアカウントとしてコンテンツをインデックスします。",
           "title": "認証アカウント"
         },
-        "credentialSwapped": {
-          "toast": "認証情報を切り替えました！"
-        },
         "error": {
           "toast": "エラー: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "展開"
         },
         "federated": {
           "tooltip": {
@@ -2660,19 +2693,100 @@
         "retryButton": {
           "label": "再試行"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {保存済みアカウント # 件} other {保存済みアカウント # 件}}",
+          "expandButton": {
+            "ariaLabel": "保存済みアカウントを表示"
+          },
+          "collapseButton": {
+            "ariaLabel": "保存済みアカウントを非表示"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(新しいアカウント)",
+          "editButton": {
+            "label": "アカウントを編集"
+          }
         },
         "timeout": {
           "toast": "{seconds} 秒後に操作がタイムアウトしました。設定に誤りがないか確認してください。"
         },
         "unknownError": {
           "toast": "不明なエラーが発生しました"
+        },
+        "account": {
+          "untitled": {
+            "label": "無題"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "{date} に追加"
+          },
+          "selected": {
+            "label": "選択中"
+          },
+          "useButton": {
+            "label": "このアカウントを使用"
+          },
+          "unsupportedRealm": {
+            "label": "サポートされていないサイトドメイン"
+          },
+          "expandButton": {
+            "ariaLabel": "アカウントの詳細を表示"
+          },
+          "collapseButton": {
+            "ariaLabel": "アカウントの詳細を非表示"
+          },
+          "deleteButton": {
+            "label": "アカウントを削除",
+            "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。"
+          },
+          "usedBy": {
+            "label": "{count, plural, other {# 個のコネクタ}}で使用中"
+          },
+          "owner": {
+            "you": "{name}（あなた）"
+          },
+          "lastTested": {
+            "title": "最終テスト {date}"
+          },
+          "notTested": {
+            "title": "未テスト"
+          },
+          "details": {
+            "description": "保存済みアカウントの認証情報は編集したり、別のホストに向けたりすることはできません。再利用する前にアカウントをテストするか、新しいアカウントを追加してください。"
+          },
+          "rerunButton": {
+            "label": "チェックを再実行"
+          },
+          "authenticationType": {
+            "label": "認証タイプ"
+          },
+          "rerunFailed": {
+            "toast": "チェックを開始できませんでした。もう一度お試しください。"
+          },
+          "shareSaved": {
+            "toast": "共有を更新しました。"
+          },
+          "shareFailed": {
+            "toast": "このアカウントを使用できるユーザーを変更できませんでした。もう一度お試しください。"
+          },
+          "renameSaved": {
+            "toast": "アカウント名を変更しました。"
+          },
+          "renameFailed": {
+            "toast": "このアカウントの名前を変更できませんでした。もう一度お試しください。"
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "このアカウントを追加したユーザーのみが非公開にできます。"
+          },
+          "shareLocked": {
+            "tooltip": "このアカウントを追加したユーザー、または共有されている管理者のみが、使用できるユーザーを変更できます。"
+          }
+        },
+        "accountUnavailable": {
+          "toast": "このアカウントは利用できなくなりました。別のアカウントを選択してください。"
         }
-      },
-      "connectorName": {
-        "label": "コネクター名",
-        "subtext": "コネクターの内容がわかる名前です。"
       },
       "credentialRequired": {
         "tooltip": "最初に認証情報を選択してください。"
@@ -2681,6 +2795,7 @@
         "enterField": "「{field}」を入力してください。",
         "fixField": "「{field}」を確認してください。",
         "awaitingCheck": "フィールドから移動すると、認証情報で確認します。",
+        "runChecks": "チェックを実行して、新しいアカウントをこの設定で確認します。",
         "checking": "認証情報を確認しています…",
         "fieldInvalid": "「{field}」を確認してください: {detail}",
         "rejected": "この認証情報はこの設定では使用できません。{detail}"
@@ -2689,9 +2804,6 @@
         "title": "認証情報の読み込みに失敗しました。"
       },
       "field": {
-        "optional": {
-          "label": "（任意）"
-        },
         "optionalSuffix": {
           "label": "任意"
         }
@@ -2819,7 +2931,7 @@
           "label": "キャンセル"
         },
         "connectButton": {
-          "label": "接続"
+          "label": "コネクタを作成"
         },
         "description": "{source} に接続し、{appName} 用のコネクタを設定します。{hasDocs, select, true {[ドキュメント]({url})を見る} other {}}"
       },
@@ -2924,22 +3036,13 @@
           "title": "送信中にエラーが発生しました。"
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "設定"
-        }
+      "content": {
+        "title": "コネクタのコンテンツ",
+        "description": "このコネクタでインデックスするコンテンツを選択してください。"
       },
       "selectInput": {
         "emptyOption": {
           "label": "選択してください"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "新規追加"
-        },
-        "removeButton": {
-          "tooltip": "削除"
         }
       },
       "tabs": {
@@ -2951,8 +3054,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "サイトの URL を貼り付けてください。そこで {connectorName} の REST API にアクセスできる必要があります。"
+      },
       "boundFields": {
-        "advancedOptions": "詳細オプション",
         "errors": {
           "missing": "値を入力してください。",
           "invalid": "この値は無効です: {detail}"
@@ -2978,6 +3083,57 @@
           "hours": "時間",
           "minutes": "分"
         }
+      },
+      "settings": {
+        "description": "コネクタの情報とアクセス。",
+        "displayName": {
+          "title": "コネクタの表示名"
+        },
+        "documentAccess": {
+          "description": "このコネクタでインデックスされたドキュメントにアクセスできるユーザーを管理します。",
+          "everyone": {
+            "description": "このコネクタでインデックスされたドキュメントは、組織内の全員に公開されます。",
+            "title": "組織内の全員"
+          },
+          "specificGroups": {
+            "description": "このコネクタのドキュメントにアクセスできるグループを指定します。",
+            "required": "グループを 1 つ以上選択してください。",
+            "title": "特定のグループ"
+          },
+          "sync": {
+            "description": "{appName}はソースと権限を同期します。ユーザーはソースで閲覧できるものだけを検索できます。",
+            "disabledReason": "現在の認証情報の認証方式は権限の自動同期に対応していません。対応している認証方式に変更してください。",
+            "title": "{source}と同期"
+          },
+          "title": "ドキュメントへのアクセス"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "常に共有",
+            "title": "管理者"
+          },
+          "description": "コネクタを運用（インデックスのスケジュールと監視）または設定を編集できるユーザーを管理します。",
+          "note": "「コネクタの管理」権限（グループマネージャーのロールまたはグループ権限）を持つユーザーのみが、コネクタを運用または編集できます。",
+          "placeholder": "グループを追加してこのコネクタを共有",
+          "role": {
+            "editor": {
+              "description": "設定を更新・削除できます。",
+              "label": "編集者"
+            },
+            "menu": {
+              "ariaLabel": "{name} のロール"
+            },
+            "operator": {
+              "description": "インデックス作成をスケジュール・監視できます。",
+              "label": "オペレーター"
+            },
+            "removeAccess": {
+              "label": "アクセスを削除"
+            }
+          },
+          "title": "コネクタの管理アクセス"
+        },
+        "title": "コネクタ設定"
       }
     },
     "costOverrides": {
@@ -3242,6 +3398,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "API トークンを所有するアカウントのメールアドレスを使用してください。"
+        },
+        "nameField": {
+          "title": "表示名",
+          "placeholder": "認証アカウントに名前を付けてください"
         },
         "apiTokenField": {
           "subDescription": "{source} にアクセスするための API トークンを貼り付けてください。"
@@ -4348,6 +4508,7 @@
           "tooltip": "このグループの最近の変更により、ドキュメントの embedding を更新しています。"
         },
         "systemGroup": {
+          "basicDescription": "このグループは {appName} が管理します。保持するのはメンバーのみで、以下の権限は全員に適用されます。",
           "description": "このグループは {appName} が管理します。保持するのはメンバーのみで、変更できるのもメンバーだけです。",
           "title": "システムグループ"
         },
@@ -5043,6 +5204,16 @@
           "title": "ターゲット URL"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "Bifrost ゲートウェイのベース URL です。{appName} は埋め込みリクエストを /v1/embeddings エンドポイントに送信します。",
+          "title": "ベース URL"
+        },
+        "modelName": {
+          "description": "Bifrost のモデル ID（例: openai/text-embedding-3-large）。保存時に {appName} がテスト文字列を埋め込み、埋め込みモデルであることを確認して次元数を取得します。",
+          "editDescription": "{appName} は現在このモデルを使用しています。保存すると、新しい URL とキーでテストされます。別のモデルを使うには、モデル一覧から選択してください。"
+        }
+      },
       "cancelReindexModal": {
         "description": "キャンセルすると以前の embedding モデルに戻り、再インデックスの進捗はすべて失われます。",
         "submit": {
@@ -5055,6 +5226,10 @@
         "title": "キャプション生成 LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "新規および更新されたドキュメントのコンテキスト生成を今すぐ停止するか、すべてのドキュメントを再構築して生成済みのコンテキストも削除します。",
+          "title": "コンテキスト検索をオフにする方法を選択してください"
+        },
         "contextualModelMissing": {
           "description": "コンテキスト検索は有効ですが、モデルが選択されていません。再インデックスの前に、下でコンテキスト検索 LLM を選択してください。選択しないと再インデックスは実行できません。",
           "title": "コンテキスト検索 LLM を選択してください"
@@ -5073,6 +5248,10 @@
         },
         "orSeparator": {
           "label": "または"
+        },
+        "quantizationOnly": {
+          "description": "変更されたのはベクトル量子化のみのため、Onyx は保存済みのベクトルからインデックスを再構築し、再埋め込みは行いません。完全な再インデックスよりはるかに高速です。",
+          "title": "インデックスを再構築します。"
         },
         "reindex": {
           "description": "再インデックスにはコーパスの規模に応じて*数時間から数日*かかることがあります。[詳細](https://docs.onyx.app/security/architecture/data_flows)",
@@ -5171,6 +5350,10 @@
       "forwardOnlyModal": {
         "description": "既存のドキュメントは以前のモデルが生成したコンテキストを保持します。新しいモデルは、ドキュメントの追加時または更新時にのみ適用されます。コンテキストの内容がドキュメントによって異なる場合があります。",
         "title": "コンテキスト検索 LLM を以降のドキュメントに適用"
+      },
+      "disableForwardModal": {
+        "description": "今後追加または更新されるドキュメントではコンテキスト検索が停止します。既存のドキュメントは、更新されるか再インデックスするまで生成済みのコンテキストを保持します。",
+        "title": "コンテキスト検索を以降のドキュメントでオフにする"
       },
       "header": {
         "description": "ドキュメントのインデックス作成、embedding の生成、検索と取得に向けた準備の方法を設定します。"
@@ -5290,7 +5473,9 @@
         "cancelButton": {
           "label": "再インデックスをキャンセルして元に戻す"
         },
+        "copyTitle": "インデックスを再構築しています…",
         "description": {
+          "copy": "Onyx は保存済みのベクトルからインデックスを再構築しています。再埋め込みは行いません。再埋め込みよりはるかに高速です。",
           "withModel": "再インデックスの進行に合わせて、新しい embedding 設定 (**{model}**) を適用しています。コーパスの規模によっては **数時間から数日** かかることがあります。",
           "withoutModel": "再インデックスの進行に合わせて、新しい embedding 設定を適用しています。コーパスの規模によっては **数時間から数日** かかることがあります。"
         },
@@ -5308,9 +5493,6 @@
             "label": "設定を追加"
           },
           "title": "{provider} の embedding プロバイダーの設定を追加します。"
-        },
-        "deprecated": {
-          "suffix": "(非推奨)"
         },
         "disconnect": {
           "errorToast": "{provider} の接続を解除できませんでした",
@@ -5390,6 +5572,8 @@
         "contextualModelRequired": "再インデックスの前にコンテキスト検索 LLM を選択してください。",
         "contextualModelUpdateFailed": "コンテキスト検索 LLM を更新できませんでした",
         "contextualModelUpdated": "コンテキスト検索 LLM を更新しました",
+        "contextualRetrievalDisableFailed": "コンテキスト検索をオフにできませんでした",
+        "contextualRetrievalDisabled": "コンテキスト検索をオフにしました",
         "modelNotFound": "選択したモデルが見つかりませんでした",
         "providerResolveFailed": "プロバイダーを特定できませんでした",
         "reindexCanceled": "再インデックスをキャンセルしました",
@@ -5413,17 +5597,17 @@
         "googleProjectRequired": "GCP プロジェクト ID が必要です"
       },
       "vectorQuantization": {
-        "description": "ドキュメントのベクトルを少ないビット数で保存し、メモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。",
+        "description": "ドキュメントのベクトルを少ないビット数で保存し、ベクトル検索のメモリ使用量を削減します。ビット数が少ないほど検索品質が低下する場合があります。この設定のみを変更した場合、保存済みのベクトルからインデックスを再構築し、再埋め込みは行いません。",
         "none": {
           "description": "32 ビットの完全な精度。",
           "label": "なし"
         },
         "scalar1Bit": {
-          "description": "メモリ使用量が 32 分の 1。OpenSearch 3.6 以降が必要です。",
+          "description": "ベクトル検索のメモリ使用量が最小になり、検索品質はわずかに低下します。大規模なインデックスに推奨。OpenSearch 3.6 以降が必要です。",
           "label": "1 ビット"
         },
         "scalar7Bit": {
-          "description": "メモリ使用量が 4 分の 1。検索品質はほぼ低下しません。",
+          "description": "ベクトル検索のメモリ使用量が約 4 分の 1。検索品質はほぼ低下しません。",
           "label": "7 ビット"
         },
         "title": "ベクトル量子化"
@@ -5448,12 +5632,71 @@
         "googleGeminiEmbedding2": "Google の最新のマルチモーダル埋め込みモデル（GA）。3072 次元出力で最高品質の検索。",
         "googleGeminiEmbedding2Preview": "Gemini Embedding 2 のプレビュー版。新規セットアップでは gemini-embedding-2 に置き換えられました。",
         "voyageLarge2Instruct": "Voyage の大規模埋め込みモデル。指示によるファインチューニングで高性能。",
+        "voyage4Large": "Voyage 4 シリーズ最大の埋め込みモデル。Voyage で最高の検索品質、多言語対応。",
+        "voyage4": "Voyage 4 シリーズの汎用埋め込みモデル。手頃なコストで高い検索品質。",
+        "voyage4Lite": "Voyage 4 シリーズの軽量埋め込みモデル。最も低コストで、レート制限が最も高い。",
         "voyageLight2Instruct": "Voyage の軽量な埋め込みモデル。性能と効率のバランスが良い。",
         "nomicEmbedTextV1": "検索、類似度、クラスタリング、分類に特化した Nomic の埋め込みモデル。",
         "e5BaseV2": "デフォルトより小型で高速なモデル。検索品質は下がるが、デフォルトモデルの約 2 倍高速。",
         "e5SmallV2": "E5 系モデルの中で最小かつ最速のバージョン。リソースが限られた環境で {appName} を実行している場合に適しています。",
         "multilingualE5Base": "英語以外の言語のコーパスには、これを選択してください。",
         "multilingualE5Small": "英語以外の言語のコーパスで、かつリソースが限られた環境の場合は、これを選択してください。"
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はコネクタ単位のアクセスを使用します。",
+            "off": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はドキュメントのアクセスリストを使用します。コネクタ単位のアクセスはオフです。",
+            "shadow": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はドキュメントのアクセスリストを使用し、コネクタ単位のアクセスと比較します。"
+          },
+          "title": "コネクタアクセスの更新が完了しました"
+        },
+        "notStarted": {
+          "description": "バックグラウンドジョブが検索インデックス内の既存チャンクにコネクタIDを追加します。数分以内に開始されます。",
+          "title": "コネクタアクセスの更新はまだ開始されていません"
+        },
+        "progress": {
+          "ariaLabel": "コネクタアクセス更新の進行状況"
+        },
+        "running": {
+          "description": "バックグラウンドジョブが検索インデックス内の既存チャンクにコネクタIDを追加しています。コネクタ単位の検索アクセスは、完了後にのみ適用できます。",
+          "title": "コネクタアクセス用に検索インデックスを更新しています…"
+        },
+        "status": {
+          "connectors": "{total, number} 個中 {done, number} 個のコネクタが完了",
+          "connectorsLeft": "{count, plural, one {残り # 個のコネクタ} other {残り # 個のコネクタ}}",
+          "current": "現在のコネクタ: {name}",
+          "documentsLeft": "{count, plural, one {残り # 件のドキュメント} other {残り # 件のドキュメント}}"
+        },
+        "mode": {
+          "description": "ユーザーが閲覧できるドキュメントを検索がどのように判断するか。",
+          "enforcePending": "適用が設定されており、更新の完了時に開始されます。",
+          "enforceUnavailable": "検索インデックスの更新完了後に利用できます。",
+          "label": "検索アクセスモード",
+          "options": {
+            "enforce": {
+              "description": "検索はコネクタ単位のアクセスを使用します。",
+              "title": "適用"
+            },
+            "off": {
+              "description": "検索はドキュメントのアクセスリストを使用します。",
+              "title": "オフ"
+            },
+            "shadow": {
+              "description": "検索はドキュメントのアクセスリストを使用し、コネクタ単位のアクセスで結果が異なる場合を記録します。",
+              "title": "シャドウ"
+            }
+          },
+          "placeholder": "モードを選択",
+          "toasts": {
+            "error": "検索アクセスモードを更新できませんでした。",
+            "success": "検索アクセスモードを{mode}に設定しました。"
+          }
+        },
+        "loadError": {
+          "description": "ページを再読み込みして、もう一度お試しください。",
+          "title": "コネクタアクセスの更新を読み込めませんでした"
+        }
       }
     },
     "indexing": {
@@ -6114,6 +6357,19 @@
         "settingsUpdateFailed": "設定の更新に失敗しました",
         "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "オートモード",
+          "description": "各メッセージに最適なモデルを選ぶ Auto 項目をモデルピッカーに追加します。"
+        },
+        "target": {
+          "title": "ルーターモデル",
+          "description": "Auto モードのモデルルーティングを担当します。",
+          "empty": "ルーターモデルが見つかりません。先にゲートウェイプロバイダーでルーターモデルを有効にしてください。",
+          "error": "ルーターモデルを読み込めませんでした。",
+          "retry": "再試行"
+        }
       }
     },
     "mcpActions": {
@@ -8444,6 +8700,9 @@
         "makeAdmin": {
           "label": "管理者にする"
         },
+        "menuButton": {
+          "ariaLabel": "ユーザー操作"
+        },
         "removeAdmin": {
           "label": "管理者権限を削除"
         },
@@ -8799,6 +9058,312 @@
           "label": "API ベース URL",
           "description": "Firecrawl API のベース URL。"
         }
+      }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM ゲートウェイ",
+        "description": "外部ツールからワークスペースの言語モデルへの直接 API アクセスを制御します。"
+      },
+      "access": {
+        "title": "モデルへの直接 API アクセス",
+        "description": "ワークスペースの言語モデルを Claude Code や Cursor などの外部ツールからスコープ付きアクセストークンで呼び出せるようにします。呼び出しは設定済みのプロバイダーに課金されます。",
+        "toggle": {
+          "title": "LLM ゲートウェイを有効化",
+          "description": "オフにすると、すべてのゲートウェイエンドポイントがリクエストを拒否し、既存のトークンは動作しなくなり、トークン選択からゲートウェイスコープが非表示になります。Craft サンドボックスのトラフィックは Craft 設定で個別に制御されます。"
+        }
+      },
+      "tierTooltip": "LLM ゲートウェイには Business プランまたは Enterprise プランが必要です。",
+      "scopeNote": {
+        "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
+      },
+      "toasts": {
+        "settingsUpdated": "設定を更新しました",
+        "settingsUpdateFailed": "設定の更新に失敗しました"
+      }
+    },
+    "connectorChecks": {
+      "lockReason": "続行するには、上のコネクタのチェックを実行し、失敗を解消してください。",
+      "prompt": {
+        "title": "接続をテスト",
+        "description": "{appName} は続行する前に、必要なスコープを確認するチェックを実行します。",
+        "startButton": {
+          "label": "チェックを開始"
+        }
+      },
+      "title": "コネクターチェック",
+      "groups": {
+        "failed": "失敗 {count} 件",
+        "indeterminate": "未検証 {count} 件",
+        "passed": "完了 {count} 件",
+        "skipped": "スキップ {count} 件",
+        "running": "実行中 {count} 件",
+        "expected": "予定 {count} 件"
+      },
+      "status": {
+        "passed": "合格",
+        "failed": "失敗",
+        "indeterminate": "検証できませんでした",
+        "skipped": "スキップ",
+        "running": "テスト中…",
+        "pending": "待機中",
+        "waiting": "設定を待っています"
+      },
+      "required": {
+        "label": "必須"
+      },
+      "empty": {
+        "label": "まだチェックは実行されていません。"
+      },
+      "docsLink": {
+        "label": "ドキュメント"
+      },
+      "foldButton": {
+        "fold": "折りたたむ",
+        "expand": "展開"
+      },
+      "titleCount": "（{complete}/{total}）",
+      "summary": {
+        "failed": "失敗 {count} 件",
+        "unverified": "未検証 {count} 件",
+        "inProgress": "実行中 {count} 件",
+        "expected": "予定 {count} 件",
+        "skipped": "スキップ {count} 件",
+        "successful": "成功 {count} 件"
+      },
+      "failedToRun": "チェックを実行できませんでした。もう一度お試しください。",
+      "requiredFailed": "{count, plural, one {必須チェック # 件が失敗} other {必須チェック # 件が失敗}}",
+      "state": {
+        "completed": "チェックが完了しました。",
+        "inProgress": "チェックを実行中...",
+        "waiting": "コネクタ設定を待機中..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "コネクタを編集"
+      },
+      "header": {
+        "title": "{name} を編集",
+        "description": "この {source} コネクタの設定を変更します。変更を適用する前にプランを確認します。",
+        "reviewButton": {
+          "label": "変更を確認"
+        }
+      },
+      "loadError": {
+        "title": "コネクタを読み込めませんでした",
+        "description": "ページを再読み込みするか、コネクタに戻ってください。",
+        "backButton": {
+          "label": "コネクタに戻る"
+        }
+      },
+      "credentialSwap": {
+        "title": "別の認証情報を選択しました",
+        "description": "プランでは、インデックス済みのドキュメントを保持するか、すべてを再インデックスして新しい認証情報で参照できないドキュメントを削除するかを選べます。"
+      },
+      "files": {
+        "title": "ファイル",
+        "description": "ファイルを追加または削除します。新しいファイルは、プランを適用した後にのみインデックスされます。",
+        "empty": "コネクタにファイルがありません。",
+        "addButton": {
+          "label": "ファイルを追加"
+        },
+        "remove": {
+          "tooltip": "{name} を削除"
+        },
+        "uploadFailed": {
+          "toast": "ファイルをアップロードできませんでした: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "プランを作成できませんでした: {detail}"
+      },
+      "typedAccount": {
+        "toast": "変更を確認する前に新しいアカウントを保存するか、保存済みのアカウントを選択してください。"
+      },
+      "applied": {
+        "toast": "変更を適用しました。"
+      },
+      "plan": {
+        "title": "プランを確認",
+        "description": "{count, plural, other {コネクタには # 件のインデックス済みドキュメントがあります。}}",
+        "changes": {
+          "list": "変更: {fields}",
+          "none": "変更はありません。"
+        },
+        "stale": {
+          "title": "コネクタが変更されました",
+          "description": "このプランの作成後にコネクタが変更されました。適用する前にプランを作成し直してください。",
+          "replanButton": {
+            "label": "プランを再作成"
+          }
+        },
+        "expired": {
+          "title": "プランの有効期限が切れました",
+          "description": "このプランは期限切れか、すでに適用されています。プランを再計算してください。"
+        },
+        "applyFailed": {
+          "title": "変更を適用できませんでした"
+        },
+        "validation": {
+          "title": "検証",
+          "blocks": "新しい設定は検証に失敗しました。適用する前に修正してください。",
+          "warns": "一部の任意のチェックが失敗しました。適用は可能です。",
+          "error": {
+            "title": "設定が無効です"
+          }
+        },
+        "warnings": {
+          "title": "警告"
+        },
+        "notes": {
+          "title": "注意事項"
+        },
+        "reconciliation": {
+          "title": "スコープ変更の調整方法を選択",
+          "description": "{fields} の変更によってドキュメントが追加されるか削除されるかをプランで判断できません。適用時の動作を選択してください。",
+          "option": {
+            "prune": {
+              "title": "削除",
+              "description": "スコープ外になったドキュメントを削除します。"
+            },
+            "full_reindex": {
+              "title": "完全な再インデックス",
+              "description": "開始日からすべてを再インデックスし、スコープ内になったドキュメントを追加します。"
+            },
+            "both": {
+              "title": "完全な再インデックス後に削除",
+              "description": "すべてを再インデックスしてから、スコープ外になったドキュメントを削除します。"
+            },
+            "nothing": {
+              "title": "何もしない",
+              "description": "インデックス済みのドキュメントを保持します。以降の実行では新しい設定を使用します。"
+            }
+          }
+        },
+        "credential": {
+          "title": "認証情報の変更",
+          "description": "古い認証情報でインデックスされたドキュメントの扱いを選択してください。",
+          "option": {
+            "keep_indexed": {
+              "title": "インデックス済みのドキュメントを保持",
+              "description": "以降の実行では新しい認証情報を使用します。高速な方法です。"
+            },
+            "full_reindex_and_prune": {
+              "title": "完全な再インデックスと削除",
+              "description": "新しい認証情報ですべてを再インデックスし、参照できないドキュメントを削除します。"
+            }
+          }
+        },
+        "steps": {
+          "title": "ステップ",
+          "description": "適用時に行う処理の順序です。任意のステップはオフにできます。",
+          "none": "適用すると設定が保存されます。インデックス作業は不要です。",
+          "required": {
+            "label": "必須"
+          },
+          "optional": {
+            "label": "任意"
+          },
+          "include": {
+            "ariaLabel": "ステップを実行: {step}"
+          },
+          "fields": "フィールド: {fields}",
+          "window": "期間: {start} ～ {end}",
+          "windowFromStart": "期間: {end} まですべて",
+          "kind": {
+            "access_groups": {
+              "title": "データアクセスグループを更新",
+              "description": "検索に新しいグループがすぐに適用されます。"
+            },
+            "access_type": {
+              "title": "アクセスタイプを変更",
+              "description": "ドキュメントを閲覧できるユーザーが変わります。"
+            },
+            "enter_perm_sync": {
+              "title": "権限の同期を開始",
+              "description": "最初の権限同期が完了するまで、ドキュメントは非表示のままです。"
+            },
+            "leave_perm_sync": {
+              "title": "権限の同期を停止",
+              "description": "ソースの権限でドキュメントの閲覧者が決まらなくなります。"
+            },
+            "restart_attempt": {
+              "title": "実行中のインデックス処理を再開",
+              "description": "実行中の処理が停止し、新しい設定で新しい処理が開始されます。"
+            },
+            "full_reindex_then_prune": {
+              "title": "完全な再インデックス後に削除",
+              "description": "すべてを再インデックスしてから、ソースが返さなくなったドキュメントを削除します。"
+            },
+            "full_reindex": {
+              "title": "完全な再インデックス",
+              "description": "開始日からすべてを再インデックスします。"
+            },
+            "scoped_backfill": {
+              "title": "追加した項目をバックフィル",
+              "description": "追加した項目の履歴のみをインデックスします。"
+            },
+            "window_backfill": {
+              "title": "以前の期間をバックフィル",
+              "description": "新しい開始日と以前の開始日の間の期間をインデックスします。"
+            },
+            "prune": {
+              "title": "削除",
+              "description": "ソースが返さなくなったドキュメントを削除します。"
+            }
+          },
+          "reason": {
+            "identity_changed": "ドキュメント ID が変わる",
+            "behavior_changed": "処理が変更された",
+            "scope_widened": "スコープが拡大",
+            "scope_narrowed": "スコープが縮小",
+            "items_added_or_changed": "項目の追加または変更",
+            "items_removed": "項目の削除",
+            "opaque_scope_choice": "スコープの選択",
+            "indexing_start_earlier": "開始日を前倒し",
+            "credential_full_path": "認証情報の完全な方法",
+            "access_changed": "アクセスが変更された",
+            "permissions_fetched_during_indexing": "権限はインデックス時に取得",
+            "attempt_running": "処理を実行中",
+            "scoped_backfill_superseded": "以前のバックフィルを置き換え",
+            "admin_added": "あなたが追加",
+            "indexing_start_later": "開始日を後ろ倒し"
+          }
+        },
+        "extra": {
+          "title": "追加の作業",
+          "description": "プランに必要ない作業を追加します。",
+          "fullReindex": {
+            "title": "完全な再インデックスを追加",
+            "description": "開始日からすべてを再インデックスします。"
+          },
+          "prune": {
+            "title": "削除を追加",
+            "description": "ソースが返さなくなったドキュメントを削除します。"
+          }
+        },
+        "backButton": {
+          "label": "編集に戻る"
+        },
+        "applyButton": {
+          "label": "適用"
+        },
+        "blocked": {
+          "validation": "先に検証エラーを修正してください。",
+          "reconciliation": "先にスコープ変更の調整方法を選択してください。"
+        }
+      },
+      "pendingBackfills": {
+        "title": "保留中のバックフィル",
+        "description": "編集によってこれらの実行が要求されました。実行が成功するまでここに表示されます。",
+        "window": "{start} ～ {end}",
+        "windowFromStart": "{end} まですべて",
+        "waiting": "実行を待機しています。",
+        "runningNow": "インデックス試行が現在実行しています。",
+        "retry": "{count, plural, other {# 回失敗しました。次の再試行: {time}。}}",
+        "scoped": "追加または変更された項目のみ",
+        "failures": "{count, plural, other {失敗 # 回}}"
       }
     }
   },
@@ -11048,6 +11613,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "このモデルでは、この設定の変更に対応していません。"
+      },
+      "autoItem": {
+        "label": "オート",
+        "description": "各メッセージに最適なモデルを選択します"
       }
     },
     "nrf": {
@@ -11234,6 +11803,9 @@
         "expand": {
           "ariaLabel": "プロジェクトを展開する"
         },
+        "options": {
+          "label": "プロジェクトのオプション"
+        },
         "rename": {
           "label": "プロジェクト名を変更"
         }
@@ -11292,6 +11864,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {ファイルを選択} other {ファイルを選択}}"
+      },
+      "prompt": "{multiple, select, true {またはここにファイルをドラッグ＆ドロップしてください。} other {またはここにファイルをドラッグ＆ドロップしてください。}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "新規追加"
+      },
+      "removeButton": {
+        "tooltip": "削除"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "サイドバーを開く"
@@ -11455,6 +12041,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "管理者の場合は、<billingLink>管理者請求</billingLink>ページでライセンスを{hadLicense, select, true {更新} other {有効化}}するか、Stripe経由で登録するか、請求に関するサポートは<supportLink>support@onyx.app</supportLink>までお問い合わせください。"
+        },
+        "downgradeButton": {
+          "label": "Community にダウングレード"
         },
         "heading": {
           "title": "アクセスが制限されています"
@@ -11798,6 +12387,24 @@
         "empty": "このシートは空です。",
         "tooLarge": "このシートは大きすぎてプレビューできません。ファイルをダウンロードして表示してください。"
       }
+    },
+    "plans": {
+      "free": {
+        "title": "無料プラン",
+        "tooltip": "すべてのプランで利用できます。"
+      },
+      "business": {
+        "title": "ビジネスプラン",
+        "tooltip": "[ビジネスプランまたはエンタープライズプラン](/admin/billing)が必要です。"
+      },
+      "enterprise": {
+        "title": "エンタープライズプラン",
+        "tooltip": "[エンタープライズプラン](/admin/billing)が必要です。"
+      },
+      "upgrade": {
+        "label": "プランをアップグレード"
+      },
+      "availableFor": "{plan}で利用可能"
     }
   },
   "craft": {
@@ -11873,7 +12480,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "{name} を関連付け",
         "associateButton": "既存のスキルを関連付け",
         "create": {
           "github": {
@@ -12112,6 +12718,11 @@
       },
       "toggleItem": {
         "ariaLabel": "{name} を開閉"
+      },
+      "status": {
+        "loading": "出力を読み込み中…",
+        "incomplete": "一部の出力を表示できませんでした。「ファイル」を開いてワークスペースを確認してください。",
+        "error": "出力を更新できませんでした。もう一度お試しください。"
       }
     },
     "chatPanel": {
@@ -12137,6 +12748,17 @@
         "operationWait": "現在の操作が完了するまでお待ちください。",
         "sandboxWait": "サンドボックスの初期化をお待ちください",
         "scheduledRunWait": "スケジュール実行が完了するまでお待ちください。"
+      },
+      "loadError": {
+        "title": "セッションを読み込めませんでした",
+        "retry": "再試行"
+      },
+      "queuedSendError": {
+        "title": "待機中のメッセージを送信できませんでした"
+      },
+      "settlementError": {
+        "title": "タスクの完了を確認できませんでした",
+        "description": "もう一度試して、タスクを確認し、保存された回答を読み込んでください。"
       }
     },
     "compaction": {
@@ -12250,6 +12872,10 @@
       },
       "noContent": {
         "label": "コンテンツがありません"
+      },
+      "csv": {
+        "truncated": "プレビューは{rows, number}行、{columns, number}列、{cells, number}セルまでです。すべてのデータを見るには元のファイルをダウンロードしてください。",
+        "malformed": "このCSVには引用符で囲まれた無効なフィールドがあります。確認するには元のファイルをダウンロードしてください。"
       }
     },
     "filesTab": {
@@ -12257,17 +12883,11 @@
         "description": "ビルド中に作成されたファイルがここに表示されます",
         "title": "まだファイルがありません"
       },
-      "emptyDirectory": {
-        "label": "このディレクトリにはファイルがありません"
-      },
       "error": {
         "title": "ファイルの読み込みエラー"
       },
       "loading": {
         "label": "ファイルを読み込んでいます..."
-      },
-      "loadingChildren": {
-        "label": "読み込み中..."
       },
       "preparing": {
         "description": "開発環境をセットアップしています",
@@ -12284,6 +12904,9 @@
       },
       "preview": {
         "ariaLabel": "{name} のプレビュー"
+      },
+      "background": {
+        "contrast": "コントラスト背景"
       }
     },
     "inputBar": {
@@ -12427,6 +13050,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "{fileName} を閉じる"
+      },
       "artifactsEmpty": {
         "tooltip": "何かを作り始めるとアーティファクトが表示されます！"
       },
@@ -12450,6 +13076,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "スライド"
+      },
+      "previous": {
+        "label": "前のスライド"
+      },
+      "next": {
+        "label": "次のスライド"
+      },
       "converting": {
         "label": "プレゼンテーションを変換しています..."
       },
@@ -12464,6 +13099,9 @@
       },
       "slide": {
         "counter": "スライド {current} / {total}"
+      },
+      "resize": {
+        "ariaLabel": "スライドのサムネイルの幅を変更"
       }
     },
     "previewTab": {
@@ -12584,6 +13222,9 @@
       },
       "newSession": {
         "label": "クラフトを始める"
+      },
+      "options": {
+        "label": "セッションのオプション"
       },
       "rename": {
         "label": "名前を変更"
@@ -12852,9 +13493,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
-        },
-        "failed": {
-          "tag": "{count} 件失敗"
         },
         "working": {
           "label": "作業中"
@@ -13292,6 +13930,9 @@
       "sevenDays": "7日",
       "threeMonths": "3ヶ月"
     },
+    "iconTooltip": {
+      "label": "詳細情報"
+    },
     "input": {
       "day": "日",
       "hidePassword": "パスワードを非表示",
@@ -13582,6 +14223,10 @@
       "title": "危険な操作"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "管理者がこのワークスペースの LLM ゲートウェイをオフにしました。再度有効にするには管理者にお問い合わせください。",
+        "title": "LLM ゲートウェイはオフです"
+      },
       "accessToken": {
         "button": "新しいトークン",
         "description": "アプリケーションを接続する前に、スコープを設定したトークンを作成してください。",
@@ -13893,6 +14538,9 @@
         "languageModels": {
           "label": "言語モデル"
         },
+        "llmGateway": {
+          "label": "LLM ゲートウェイ"
+        },
         "mcpActions": {
           "label": "MCP アクション"
         },
@@ -14041,6 +14689,9 @@
       },
       "moveToProject": {
         "label": "プロジェクトに移動"
+      },
+      "options": {
+        "label": "チャットのオプション"
       },
       "projectSearchInput": {
         "placeholder": "プロジェクトを検索"
@@ -14603,5 +15254,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearchのリソースが不足しています",
+    "disk": "OpenSearchのデータノードでディスク使用率が85%以上です。ディスクがいっぱいになるとインデックス作成が停止する可能性があります。",
+    "jvmMemory": "OpenSearchのJVMメモリ使用率が複数回のチェックで85%を超えています。検索やインデックス作成が失敗する可能性があります。",
+    "vectorMemory": "OpenSearchのベクトルメモリがほぼ満杯、または上限に達しています。検索やインデックス作成が失敗する可能性があります。",
+    "contact": "システム管理者、またはOnyxチーム（[support@onyx.app](mailto:support@onyx.app)）にお問い合わせください。",
+    "stale": "最新のチェックを利用できません。この警告は最後に成功したチェックに基づいており、復旧は確認されていません。",
+    "dismiss": "閉じる",
+    "diskTitle": "ディスク容量",
+    "jvmMemoryTitle": "JVMメモリ",
+    "vectorMemoryTitle": "ベクトルメモリ",
+    "viewDetails": "詳細を表示"
   }
 }

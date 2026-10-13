@@ -38,9 +38,8 @@ def teams_group_sync(
     if not connector.include_attachments:
         return
 
+    reader = connector.permission_reader()
     for site_url in connector.channel_site_urls():
-        groups = get_sharepoint_external_groups(
-            connector.rest_context(site_url), connector.graph_client
-        )
+        groups = get_sharepoint_external_groups(reader, site_url)
         logger.info("Channel site %s grants %s groups", site_url, len(groups))
         yield from groups

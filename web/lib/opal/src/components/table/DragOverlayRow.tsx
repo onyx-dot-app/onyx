@@ -1,6 +1,8 @@
 import { memo } from "react";
 import { type Row, flexRender } from "@tanstack/react-table";
-import TableRow from "@opal/components/table/TableRow";
+import TableRow, {
+  type TableProminence,
+} from "@opal/components/table/TableRow";
 import TableCell from "@opal/components/table/TableCell";
 import QualifierContainer from "@opal/components/table/QualifierContainer";
 import TableQualifier from "@opal/components/table/TableQualifier";
@@ -16,6 +18,8 @@ interface DragOverlayRowProps<TData> {
   columnKindMap?: Map<string, OnyxColumnDef<TData>>;
   qualifierColumn?: OnyxQualifierColumn<TData> | null;
   isSelectable?: boolean;
+  /** The table's row surface, so the preview matches the dragged row. */
+  prominence?: TableProminence;
 }
 
 function DragOverlayRowInner<TData>({
@@ -24,6 +28,7 @@ function DragOverlayRowInner<TData>({
   columnKindMap,
   qualifierColumn,
   isSelectable = false,
+  prominence,
 }: DragOverlayRowProps<TData>) {
   const tableWidth = columnWidths
     ? Object.values(columnWidths).reduce((sum, w) => sum + w, 0)
@@ -48,7 +53,7 @@ function DragOverlayRowInner<TData>({
         </colgroup>
       )}
       <tbody>
-        <TableRow selected={row.getIsSelected()}>
+        <TableRow prominence={prominence} selected={row.getIsSelected()}>
           {row.getVisibleCells().map((cell) => {
             const colDef = columnKindMap?.get(cell.column.id);
 
@@ -61,7 +66,7 @@ function DragOverlayRowInner<TData>({
                     imageSrc={qualifierColumn.getImageSrc?.(row.original)}
                     imageAlt={qualifierColumn.getImageAlt?.(row.original)}
                     background={qualifierColumn.background}
-                    iconSize={qualifierColumn.iconSize}
+                    avatar={qualifierColumn.avatar}
                     selectable={isSelectable}
                     selected={isSelectable && row.getIsSelected()}
                   />

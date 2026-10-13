@@ -12,16 +12,22 @@ version. A lost save means a concurrent writer won or the session ended, and
 the caller must not retry with the history it loaded.
 """
 
-from collections.abc import Collection
+from collections.abc import Callable, Collection, Generator
+from contextlib import contextmanager
+from itertools import islice
+from typing import Any, cast
 from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from redis.exceptions import LockNotOwnedError
+from redis.lock import Lock as RedisLock
 
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.models import ChatMessageSimple
 from onyx.chat.stream_buffer import stream_buffer_key_pattern
 from onyx.configs import app_configs
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient, TenantRedisPipeline
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -31,41 +37,24 @@ logger = setup_logger()
 INCOGNITO_CONTEXT_TTL_SECONDS = 3600
 # Long enough that an in-flight turn cannot resurrect a torn-down context.
 _TOMBSTONE_TTL_SECONDS = INCOGNITO_CONTEXT_TTL_SECONDS
+_STATE_LOCK_SECONDS: float = 60.0
+_STATE_LOCK_WAIT_SECONDS: float = 5.0
 # Raw-storage caps. Token budgeting trims context further at prompt build.
 # These only bound what one session may hold in Redis.
 _MAX_CONTEXT_MESSAGES = 200
 _MAX_CONTEXT_BYTES = 1_000_000
-# 15 digits stay exact in a Lua double, and turn counts never approach it.
+# Bound the version prefix before converting it to an integer.
 _MAX_VERSION_DIGITS = 15
 
 _KEY_PREFIX = "incognito_ctx"
+_PENDING_TEARDOWNS_KEY: str = f"{_KEY_PREFIX}:pending_teardowns"
 
 _MESSAGES_ADAPTER: TypeAdapter[list[ChatMessageSimple]] = TypeAdapter(
     list[ChatMessageSimple]
 )
 
-# Stored value grammar: ``<version>:<messages json>``. Lua and Python agree
-# only on the digits-before-colon prefix, mirrored by _parse_version_prefix.
-# Non-matching values read as version 0. Applies when stored version == ARGV[1].
+# Stored value grammar: ``<version>:<messages json>``.
 _TOMBSTONE = b"tombstone"
-_CAS_SCRIPT = """
-local cur = redis.call('GET', KEYS[1])
-if cur == 'tombstone' then
-  return 0
-end
-local cur_version = 0
-if cur then
-  local v = string.match(cur, '^(%d+):')
-  if v ~= nil and #v <= 15 then
-    cur_version = tonumber(v)
-  end
-end
-if cur_version ~= tonumber(ARGV[1]) then
-  return 0
-end
-redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
-return 1
-"""
 
 
 class IncognitoContext(BaseModel):
@@ -96,8 +85,8 @@ def _parse_version_prefix(raw: bytes) -> tuple[int, bytes | None]:
     """The value's version and JSON body, or (0, None) for a tombstone or a
     value this store did not write.
 
-    Byte-for-byte the same rule as the CAS script: ASCII digits, at most
-    ``_MAX_VERSION_DIGITS`` of them, immediately followed by a colon.
+    Accept ASCII digits, at most ``_MAX_VERSION_DIGITS`` of them,
+    immediately followed by a colon.
     """
     prefix, sep, body = raw.partition(b":")
     if sep and prefix.isdigit() and len(prefix) <= _MAX_VERSION_DIGITS:
@@ -134,6 +123,91 @@ def load_incognito_context(chat_session_id: UUID) -> IncognitoContext:
     return IncognitoContext(version=version, messages=messages)
 
 
+class _IncognitoWrite(BaseModel):
+    context: bytes
+    agents: dict[bytes, bytes]
+
+
+def _agents_key(chat_session_id: UUID) -> str:
+    return f"{_KEY_PREFIX}:{chat_session_id}:agents"
+
+
+class _IncognitoLockError(RuntimeError):
+    """The session state lock could not be acquired or was lost."""
+
+
+@contextmanager
+def _locked_incognito_state(
+    chat_session_id: UUID,
+    *,
+    blocking: bool = True,
+) -> Generator[tuple[TenantRedisClient, RedisLock], None, None]:
+    """Serialize saves and teardown under one tenant/session lock."""
+    client: TenantRedisClient = get_redis_client()
+    lock: RedisLock = client.lock(
+        f"{_context_key(chat_session_id)}:lock", timeout=_STATE_LOCK_SECONDS
+    )
+    if not lock.acquire(blocking=blocking, blocking_timeout=_STATE_LOCK_WAIT_SECONDS):
+        raise _IncognitoLockError("Incognito state is busy")
+    try:
+        yield client, lock
+    finally:
+        try:
+            lock.release()
+        except LockNotOwnedError:
+            logger.warning(
+                "Incognito state lock expired for session %s", chat_session_id
+            )
+
+
+def _update_incognito_state(
+    chat_session_id: UUID,
+    update: Callable[[bytes | None, dict[bytes, bytes]], _IncognitoWrite | None],
+    *,
+    max_attempts: int = 1,
+) -> bool:
+    """Commit both stores under the session lock; reject tombstoned sessions.
+
+    The callback returns replacement state or None to skip the write.
+    Lock retries reload state and rerun the callback. Callbacks must not
+    perform external writes. A stale full-history save must not retry.
+    """
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive")
+    context_key: str = _context_key(chat_session_id)
+    agents_key: str = _agents_key(chat_session_id)
+    for _ in range(max_attempts):
+        try:
+            client: TenantRedisClient
+            lock: RedisLock
+            pipeline: TenantRedisPipeline
+            with _locked_incognito_state(chat_session_id) as (client, lock):
+                with client.pipeline() as pipeline:
+                    pipeline.get(context_key).hgetall(agents_key)
+                    values: list[Any] = pipeline.execute()
+                    raw: bytes | None = cast(bytes | None, values[0])
+                    agents: dict[bytes, bytes] = cast(dict[bytes, bytes], values[1])
+                    if raw == _TOMBSTONE:
+                        return False
+                    state: _IncognitoWrite | None = update(raw, agents)
+                    if state is None:
+                        return False
+                    pipeline.set(
+                        context_key, state.context, ex=INCOGNITO_CONTEXT_TTL_SECONDS
+                    )
+                    pipeline.delete(agents_key)
+                    if state.agents:
+                        pipeline.hset(agents_key, state.agents)
+                        pipeline.expire(agents_key, INCOGNITO_CONTEXT_TTL_SECONDS)
+                    if not lock.owned():
+                        raise _IncognitoLockError("Incognito state lock was lost")
+                    pipeline.execute()
+                return True
+        except _IncognitoLockError:
+            continue
+    return False
+
+
 def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> bool:
     """Write the full history, bump the version, restart the idle clock.
 
@@ -155,17 +229,13 @@ def save_incognito_context(chat_session_id: UUID, context: IncognitoContext) -> 
         body = _MESSAGES_ADAPTER.dump_json(trimmed)
     payload = f"{context.version + 1}:".encode() + body
 
-    client = get_redis_client()
-    result = client.eval(
-        _CAS_SCRIPT,
-        keys=[_context_key(chat_session_id)],
-        args=[
-            str(context.version).encode(),
-            payload,
-            str(INCOGNITO_CONTEXT_TTL_SECONDS).encode(),
-        ],
-    )
-    return bool(result)
+    def update(raw: bytes | None, agents: dict[bytes, bytes]) -> _IncognitoWrite | None:
+        version: int = _parse_version_prefix(raw)[0] if raw is not None else 0
+        if version != context.version:
+            return None
+        return _IncognitoWrite(context=payload, agents=agents)
+
+    return _update_incognito_state(chat_session_id, update)
 
 
 def append_incognito_message(chat_session_id: UUID, message: ChatMessageSimple) -> None:
@@ -225,12 +295,62 @@ def incognito_session_ended(chat_session_id: UUID) -> bool:
     return bool(incognito_sessions_ended([chat_session_id]))
 
 
-def teardown_incognito_session(chat_session_id: UUID) -> None:
-    """End the session now: tombstone the context so an in-flight turn cannot
-    recreate it (a missing key reads as version zero), and delete the buffered
-    stream chunks holding the streamed answer NDJSON."""
-    client = get_redis_client()
-    client.set(_context_key(chat_session_id), _TOMBSTONE, ex=_TOMBSTONE_TTL_SECONDS)
-    buffered = list(client.scan_iter(match=stream_buffer_key_pattern(chat_session_id)))
+def _enqueue_incognito_teardown_retry() -> None:
+    from onyx.background.celery.versioned_apps.client import app
+    from onyx.configs.constants import OnyxCeleryTask
+    from shared_configs.contextvars import get_current_tenant_id
+
+    app.send_task(
+        OnyxCeleryTask.CHECK_FOR_INCOGNITO_FILE_CLEANUP,
+        kwargs={"tenant_id": get_current_tenant_id()},
+        countdown=_STATE_LOCK_SECONDS,
+        expires=600,
+    )
+
+
+def _finish_incognito_teardown(chat_session_id: UUID, *, blocking: bool = True) -> None:
+    client: TenantRedisClient
+    lock: RedisLock
+    pipeline: TenantRedisPipeline
+    with _locked_incognito_state(chat_session_id, blocking=blocking) as (client, lock):
+        with client.pipeline() as pipeline:
+            pipeline.set(
+                _context_key(chat_session_id), _TOMBSTONE, ex=_TOMBSTONE_TTL_SECONDS
+            )
+            pipeline.delete(_agents_key(chat_session_id))
+            if not lock.owned():
+                raise _IncognitoLockError("Incognito state lock was lost")
+            pipeline.execute()
+    buffered: list[bytes] = list(
+        client.scan_iter(match=stream_buffer_key_pattern(chat_session_id))
+    )
     if buffered:
         client.delete(*buffered)
+    client.srem(_PENDING_TEARDOWNS_KEY, str(chat_session_id))
+
+
+def teardown_incognito_session(chat_session_id: UUID) -> None:
+    """End temporary history now, retaining failed cleanup for worker retries."""
+    client: TenantRedisClient = get_redis_client()
+    client.sadd(_PENDING_TEARDOWNS_KEY, str(chat_session_id))
+    try:
+        _finish_incognito_teardown(chat_session_id)
+    except _IncognitoLockError:
+        try:
+            _enqueue_incognito_teardown_retry()
+        except Exception:
+            # The periodic cleanup job also drains the retained requests.
+            logger.exception("Could not enqueue incognito teardown retry")
+
+
+def retry_incognito_teardowns() -> None:
+    """Drain retained requests without waiting on busy session locks."""
+    client: TenantRedisClient = get_redis_client()
+    session_id: bytes
+    for session_id in islice(client.sscan_iter(_PENDING_TEARDOWNS_KEY), 100):
+        try:
+            _finish_incognito_teardown(UUID(session_id.decode()), blocking=False)
+        except _IncognitoLockError:
+            continue
+        except Exception:
+            logger.exception("Incognito teardown retry failed for %s", session_id)

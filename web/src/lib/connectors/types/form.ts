@@ -1,5 +1,5 @@
 /** The schema a connector's creation form is rendered from. */
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 
 export type InputType =
   | "list"
@@ -17,20 +17,22 @@ export type StringWithDescription = {
 };
 
 export interface Option {
-  label: string | ((currentCredential: Credential<any> | null) => string);
+  label: string | ((currentCredential: CredentialValues | null) => string);
   name: string;
   description?:
     | string
-    | ((currentCredential: Credential<any> | null) => string);
+    | ((currentCredential: CredentialValues | null) => string);
   query?: string;
   optional?: boolean;
   hidden?: boolean;
   visibleCondition?: (
     values: any,
-    currentCredential: Credential<any> | null
+    currentCredential: CredentialValues | null
   ) => boolean;
   wrapInCollapsible?: boolean;
-  disabled?: boolean | ((currentCredential: Credential<any> | null) => boolean);
+  disabled?:
+    | boolean
+    | ((currentCredential: CredentialValues | null) => boolean);
 }
 
 export interface SelectOption extends Option {
@@ -63,11 +65,18 @@ export interface StringPairListOption extends Option {
   rightPlaceholder?: string;
 }
 
+/** A key under `admin.connectorsList.subDescriptions` in the message catalog. */
+export type TextSubDescriptionKey = "siteUrl";
+
 export interface TextOption extends Option {
   type: "text";
   default?: string;
-  initial?: string | ((currentCredential: Credential<any> | null) => string);
+  initial?: string | ((currentCredential: CredentialValues | null) => string);
   isTextArea?: boolean;
+  /** Example value shown in the empty input. */
+  placeholder?: string;
+  /** Text below the input. It gets the connector's name as `connectorName`. */
+  subDescription?: TextSubDescriptionKey;
 }
 
 export interface NumberOption extends Option {
@@ -82,9 +91,11 @@ export interface BooleanOption extends Option {
   type: "checkbox";
   default?: boolean;
   /** The value the credential sets; the form uses it while the field is disabled. */
-  initial?: (currentCredential: Credential<any> | null) => boolean | undefined;
+  initial?: (currentCredential: CredentialValues | null) => boolean | undefined;
   /** Shows the value as two tabs with these labels instead of a checkbox. */
   tabLabels?: { true: CheckboxTabLabelKey; false: CheckboxTabLabelKey };
+  /** Shows a checkbox instead of the standard switch. */
+  asCheckbox?: boolean;
 }
 
 export interface FileOption extends Option {
@@ -108,8 +119,10 @@ export type ConnectorValueField =
   | FileOption
   | StringTabOption;
 
-export interface TabOption extends Option {
+export interface TabOption extends Omit<Option, "label"> {
   type: "tab";
+  /** Heading above the tabs. Leave it out when the tab labels say enough. */
+  label?: Option["label"];
   defaultTab?: string;
   tabs: {
     label: string;
@@ -128,6 +141,14 @@ export interface ConnectionConfiguration {
   overrideDefaultFreq?: number;
   advancedValuesVisibleCondition?: (
     values: any,
-    currentCredential: Credential<any> | null
+    currentCredential: CredentialValues | null
   ) => boolean;
+  /**
+   * Config values that follow from the picked credential, such as its kind.
+   * The form sets them whenever the credential changes. Each must also be a
+   * field (usually hidden), so that the checks and the create request send it.
+   */
+  configFromCredential?: (
+    credential: CredentialValues | null
+  ) => Record<string, string | undefined>;
 }

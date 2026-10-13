@@ -15,6 +15,7 @@ class InteractiveTurnResponse(BaseModel):
     session_id: str
     status: str
     turn_index: int
+    error_detail: str | None = None
 
     @classmethod
     def from_turn(cls, turn: "InteractiveTurn") -> "InteractiveTurnResponse":
@@ -23,4 +24,5 @@ class InteractiveTurnResponse(BaseModel):
             session_id=str(turn.session_id),
             status=turn.status,
             turn_index=turn.turn_index,
+            error_detail=turn.error_detail,
         )

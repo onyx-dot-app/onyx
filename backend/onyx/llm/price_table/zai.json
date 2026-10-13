@@ -1,6 +1,27 @@
 {
   "aliases": {},
   "models": {
+    "glm-4-32b-0414-128k": {
+      "cost": {
+        "input": 0.09999999999999999,
+        "output": 0.09999999999999999
+      },
+      "limit": {
+        "context": 128000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "glm-4-32b-0414-128k",
+      "tool_call": true
+    },
     "glm-4.5": {
       "attachment": false,
       "cost": {
@@ -59,6 +80,27 @@
       "temperature": true,
       "tool_call": true
     },
+    "glm-4.5-airx": {
+      "cost": {
+        "input": 1.1,
+        "output": 4.5
+      },
+      "limit": {
+        "context": 128000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "glm-4.5-airx",
+      "tool_call": true
+    },
     "glm-4.5-flash": {
       "attachment": false,
       "cost": {
@@ -86,6 +128,27 @@
       "reasoning": true,
       "release_date": "2025-07-28",
       "temperature": true,
+      "tool_call": true
+    },
+    "glm-4.5-x": {
+      "cost": {
+        "input": 2.2,
+        "output": 8.9
+      },
+      "limit": {
+        "context": 128000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "glm-4.5-x",
       "tool_call": true
     },
     "glm-4.5v": {
@@ -317,6 +380,30 @@
       "reasoning": true,
       "release_date": "2026-02-12",
       "temperature": true,
+      "tool_call": true
+    },
+    "glm-5-code": {
+      "cost": {
+        "cache_read": 0.3,
+        "cache_write": 0.0,
+        "input": 1.2,
+        "output": 5.0
+      },
+      "limit": {
+        "context": 200000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "glm-5-code",
+      "reasoning": true,
       "tool_call": true
     },
     "glm-5-turbo": {

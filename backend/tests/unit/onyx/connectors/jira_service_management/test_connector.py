@@ -1,15 +1,13 @@
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import cast
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
-from jira import JIRA
-from jira.resources import Issue
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.jira.utils import JIRA_SERVER_API_VERSION
+from onyx.connectors.jira.source_operations import JiraSourceOperations
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
 )
@@ -19,48 +17,45 @@ from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_con
 
 
 @pytest.fixture
-def mock_jira_client() -> MagicMock:
-    mock_client = MagicMock(spec=JIRA)
-    mock_client._options = {"rest_api_version": JIRA_SERVER_API_VERSION}
+def mock_source_operations() -> MagicMock:
+    mock_client = MagicMock(spec=JiraSourceOperations)
+    mock_client._is_cloud.return_value = False
     mock_client.search_issues = MagicMock(return_value=[])
-    mock_client.project = MagicMock()
+    mock_client.get_project = MagicMock()
     return mock_client
 
 
 @pytest.fixture
-def make_issue() -> Callable[..., MagicMock]:
+def make_issue() -> Callable[..., dict[str, Any]]:
     def _make_issue(
         key: str = "HELP-1", summary: str = "Printer is jammed"
-    ) -> MagicMock:
-        issue = MagicMock(spec=Issue)
-        issue.key = key
-        issue.fields = MagicMock()
-        issue.fields.summary = summary
-        issue.fields.updated = "2026-05-01T12:00:00.000+0000"
-        issue.fields.description = "The printer is stuck."
-        issue.fields.labels = []
-        issue.fields.comment.comments = []
-        issue.fields.reporter = None
-        issue.fields.assignee = None
-        issue.fields.priority = None
-        issue.fields.status = None
-        issue.fields.resolution = None
-        issue.fields.created = "2026-04-30T09:00:00.000+0000"
-        issue.fields.duedate = None
-        issue.fields.issuetype = MagicMock()
-        issue.fields.issuetype.name = "Service Request"
-        issue.fields.parent = None
-        issue.fields.project = MagicMock()
-        issue.fields.project.key = "HELP"
-        issue.fields.project.name = "Help Desk"
-        issue.raw = {"fields": {"description": issue.fields.description}}
-        return issue
+    ) -> dict[str, Any]:
+        return {
+            "key": key,
+            "fields": {
+                "summary": summary,
+                "updated": "2026-05-01T12:00:00.000+0000",
+                "created": "2026-04-30T09:00:00.000+0000",
+                "description": "The printer is stuck.",
+                "labels": [],
+                "comment": {"comments": []},
+                "reporter": None,
+                "assignee": None,
+                "priority": None,
+                "status": None,
+                "resolution": None,
+                "duedate": None,
+                "issuetype": {"name": "Service Request"},
+                "parent": None,
+                "project": {"key": "HELP", "name": "Help Desk"},
+            },
+        }
 
     return _make_issue
 
 
 def _connector(
-    mock_jira_client: MagicMock,
+    mock_source_operations: MagicMock,
     *,
     project_key: str | None = None,
     jql_query: str | None = None,
@@ -70,7 +65,7 @@ def _connector(
         project_key=project_key,
         jql_query=jql_query,
     )
-    connector._jira_client = mock_jira_client
+    connector._source_operations = mock_source_operations
     return connector
 
 
@@ -82,9 +77,9 @@ def test_registry_maps_to_jsm_connector() -> None:
 
 
 def test_jql_restricts_everything_to_service_desk(
-    mock_jira_client: MagicMock,
+    mock_source_operations: MagicMock,
 ) -> None:
-    connector = _connector(mock_jira_client)
+    connector = _connector(mock_source_operations)
     start = datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp()
     end = datetime(2026, 5, 2, tzinfo=timezone.utc).timestamp()
 
@@ -95,9 +90,9 @@ def test_jql_restricts_everything_to_service_desk(
 
 
 def test_jql_validates_project_scope_without_hot_path_service_desk_call(
-    mock_jira_client: MagicMock,
+    mock_source_operations: MagicMock,
 ) -> None:
-    connector = _connector(mock_jira_client, project_key="HELP")
+    connector = _connector(mock_source_operations, project_key="HELP")
     start = datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp()
     end = datetime(2026, 5, 2, tzinfo=timezone.utc).timestamp()
 
@@ -105,13 +100,15 @@ def test_jql_validates_project_scope_without_hot_path_service_desk_call(
         'project = "HELP" AND updated >= 1777593600000 AND updated <= 1777680000000'
     )
 
-    assert mock_jira_client.project.call_count == 0
+    assert mock_source_operations.get_project.call_count == 0
 
 
 def test_custom_jql_is_always_scoped_to_service_desk(
-    mock_jira_client: MagicMock,
+    mock_source_operations: MagicMock,
 ) -> None:
-    connector = _connector(mock_jira_client, jql_query='status = "Waiting for support"')
+    connector = _connector(
+        mock_source_operations, jql_query='status = "Waiting for support"'
+    )
     start = datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp()
     end = datetime(2026, 5, 2, tzinfo=timezone.utc).timestamp()
 
@@ -122,72 +119,70 @@ def test_custom_jql_is_always_scoped_to_service_desk(
 
 
 def test_validate_all_projects_uses_official_service_space_jql(
-    mock_jira_client: MagicMock,
+    mock_source_operations: MagicMock,
 ) -> None:
-    connector = _connector(mock_jira_client)
+    connector = _connector(mock_source_operations)
 
     connector.validate_connector_settings()
 
-    mock_jira_client.search_issues.assert_called_once()
+    mock_source_operations.search_issues.assert_called_once()
     assert (
-        mock_jira_client.search_issues.call_args.kwargs["jql_str"]
+        mock_source_operations.search_issues.call_args.kwargs["jql"]
         == "spaceType = service_desk"
     )
 
 
 def test_validate_custom_jql_is_parenthesized_and_scoped(
-    mock_jira_client: MagicMock,
+    mock_source_operations: MagicMock,
 ) -> None:
     connector = _connector(
-        mock_jira_client, jql_query='status = "Open" OR priority = High'
+        mock_source_operations, jql_query='status = "Open" OR priority = High'
     )
 
     connector.validate_connector_settings()
 
-    mock_jira_client.search_issues.assert_called_once()
-    assert mock_jira_client.search_issues.call_args.kwargs["jql_str"] == (
+    mock_source_operations.search_issues.assert_called_once()
+    assert mock_source_operations.search_issues.call_args.kwargs["jql"] == (
         '(status = "Open" OR priority = High) AND spaceType = service_desk'
     )
 
 
-def test_validate_project_rejects_non_jsm_project(mock_jira_client: MagicMock) -> None:
-    project = MagicMock()
-    project.projectTypeKey = "software"
-    mock_jira_client.project.return_value = project
-    connector = _connector(mock_jira_client, project_key="ENG")
+def test_validate_project_rejects_non_jsm_project(
+    mock_source_operations: MagicMock,
+) -> None:
+    project = {"projectTypeKey": "software"}
+    mock_source_operations.get_project.return_value = project
+    connector = _connector(mock_source_operations, project_key="ENG")
 
     with pytest.raises(ConnectorValidationError, match="not a Jira Service Management"):
         connector.validate_connector_settings()
 
-    mock_jira_client.project.assert_called_once_with("ENG")
+    mock_source_operations.get_project.assert_called_once_with(project_key="ENG")
 
 
 def test_validate_project_accepts_service_desk_project(
-    mock_jira_client: MagicMock,
+    mock_source_operations: MagicMock,
 ) -> None:
-    project = MagicMock()
-    project.projectTypeKey = "service_desk"
-    mock_jira_client.project.return_value = project
-    connector = _connector(mock_jira_client, project_key="HELP")
+    project = {"projectTypeKey": "service_desk"}
+    mock_source_operations.get_project.return_value = project
+    connector = _connector(mock_source_operations, project_key="HELP")
 
     connector.validate_connector_settings()
 
-    mock_jira_client.project.assert_called_once_with("HELP")
-    mock_jira_client.search_issues.assert_not_called()
+    mock_source_operations.get_project.assert_called_once_with(project_key="HELP")
+    mock_source_operations.search_issues.assert_not_called()
 
 
-def test_validate_project_accepts_raw_service_management_alias(
-    mock_jira_client: MagicMock,
+def test_validate_project_accepts_service_management_alias(
+    mock_source_operations: MagicMock,
 ) -> None:
-    project = MagicMock()
-    project.projectTypeKey = None
-    project.raw = {"projectTypeKey": "service_management"}
-    mock_jira_client.project.return_value = project
-    connector = _connector(mock_jira_client, project_key="HELP")
+    project = {"projectTypeKey": "service_management"}
+    mock_source_operations.get_project.return_value = project
+    connector = _connector(mock_source_operations, project_key="HELP")
 
     connector.validate_connector_settings()
 
-    mock_jira_client.project.assert_called_once_with("HELP")
+    mock_source_operations.get_project.assert_called_once_with(project_key="HELP")
 
 
 def test_missing_credentials_names_jsm_source() -> None:
@@ -202,11 +197,11 @@ def test_missing_credentials_names_jsm_source() -> None:
 
 
 def test_documents_are_indexed_with_jsm_source(
-    mock_jira_client: MagicMock,
-    make_issue: Callable[..., MagicMock],
+    mock_source_operations: MagicMock,
+    make_issue: Callable[..., dict[str, Any]],
 ) -> None:
-    mock_jira_client.search_issues.return_value = [make_issue()]
-    connector = _connector(mock_jira_client, project_key="HELP")
+    mock_source_operations.search_issues.return_value = [make_issue()]
+    connector = _connector(mock_source_operations, project_key="HELP")
 
     outputs = load_everything_from_checkpoint_connector(
         connector,

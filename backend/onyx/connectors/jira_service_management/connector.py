@@ -1,4 +1,5 @@
-from jira.resources import Project
+from typing import Any
+
 from typing_extensions import override
 
 from onyx.configs.constants import DocumentSource
@@ -11,20 +12,9 @@ JSM_PROJECT_TYPE_KEYS = frozenset({"service_desk", "service_management"})
 JSM_SPACE_TYPE_JQL = "spaceType = service_desk"
 
 
-def _project_type_key(project: Project) -> str | None:
-    project_type = getattr(  # ods: ignore[getattr] Optional Jira response field.
-        project, "projectTypeKey", None
-    )
-    if isinstance(project_type, str):
-        return project_type
-
-    raw = project.raw
-    if isinstance(raw, dict):
-        raw_type = raw.get("projectTypeKey")
-        if isinstance(raw_type, str):
-            return raw_type
-
-    return None
+def _project_type_key(project: dict[str, Any]) -> str | None:
+    project_type = project.get("projectTypeKey")
+    return project_type if isinstance(project_type, str) else None
 
 
 class JiraServiceManagementConnector(JiraConnector):
@@ -50,12 +40,14 @@ class JiraServiceManagementConnector(JiraConnector):
 
     @override
     def validate_connector_settings(self) -> None:
-        if self._jira_client is None:
+        if self._source_operations is None:
             raise ConnectorMissingCredentialError("Jira Service Management")
 
         if self.jira_project and not self.jql_query:
             try:
-                project = self.jira_client.project(self.jira_project)
+                project = self.source_operations.get_project(
+                    project_key=self.jira_project
+                )
             except Exception as e:
                 self._handle_jira_connector_settings_error(e)
                 return
@@ -72,7 +64,7 @@ class JiraServiceManagementConnector(JiraConnector):
             next(
                 iter(
                     _perform_jql_search(
-                        jira_client=self.jira_client,
+                        source_operations=self.source_operations,
                         jql=(
                             f"({self.jql_query}) AND {JSM_SPACE_TYPE_JQL}"
                             if self.jql_query

@@ -28,13 +28,17 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.teams import images
+from onyx.connectors.teams.export import EXPORT_MESSAGES_CAP, export_api_answers
 from onyx.connectors.teams.images import IMAGES_NOT_INDEXED, harvest_message_images
 from onyx.connectors.teams.messages import message_authors, message_text, modified_at
-from onyx.connectors.teams.models import ChannelMember, Message
+from onyx.connectors.teams.models import ChannelMember, ChatExportRow, Message
 from onyx.connectors.teams.organizers import Organizer, OrganizerSource
 from onyx.connectors.teams.refusals import (
+    ExportProbe,
     graph_error_message,
     graph_said,
+    is_export_refusal,
+    is_metered_refusal,
     is_permanent,
     status,
 )
@@ -45,6 +49,9 @@ from onyx.connectors.teams.utils import (
     GraphRetriesExhausted,
     UserDirectory,
     _sanitize_message_user_display_name,
+    export_probe_url,
+    export_url,
+    graph_timestamp,
     iter_values,
 )
 from onyx.utils.logger import setup_logger
@@ -102,6 +109,8 @@ class MeetingChat(BaseModel):
 class ChatMessage(Message):
     # Graph links a channel message and gives a chat message no url of its own.
     web_url: str | None = None
+    # Carried by the rows of a user's export stream, which spans their chats.
+    chat_id: str | None = None
 
 
 class ChatMember(ChannelMember):
@@ -110,10 +119,18 @@ class ChatMember(ChannelMember):
     visible_history_start_date_time: datetime | None = None
 
 
-def _graph_timestamp(moment: SecondsSinceUnixEpoch) -> str:
-    return datetime.fromtimestamp(moment, tz=timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+def _lookback_opens() -> float:
+    return time.time() - CHAT_LOOKBACK_S
+
+
+def _is_poll(start: SecondsSinceUnixEpoch) -> bool:
+    """A window as old as the lookback reads every day of it, so asking what
+    changed first would read every message twice."""
+    return start > _lookback_opens()
+
+
+def user_chats_collection(user_id: str) -> str:
+    return f"users/{user_id}/chats"
 
 
 def fetch_meeting_chats(
@@ -122,9 +139,11 @@ def fetch_meeting_chats(
     before_page: Callable[[], None] | None = None,
 ) -> Generator[MeetingChat]:
     """The chats of the meetings this user organized with a message inside the
-    lookback. Every one of them is asked what changed, since a delete in a chat
-    that has gone quiet must still leave the index. Needs Chat.Read.All."""
-    since = datetime.fromtimestamp(time.time() - CHAT_LOOKBACK_S, tz=timezone.utc)
+    lookback. Every one of them is read on the first index, and on a poll the
+    ones the export stream names, or every one when the stream is refused,
+    since a delete in a chat that has gone quiet must still leave the index.
+    Needs Chat.Read.All."""
+    since = datetime.fromtimestamp(_lookback_opens(), tz=timezone.utc)
     url = f"users/{organizer_id}/chats?{CHATS_QUERY}"
     for row in iter_values(graph_client, url, before_page):
         chat = MeetingChat.from_graph(row)
@@ -132,6 +151,64 @@ def fetch_meeting_chats(
             return
         if chat.organizer_id == organizer_id:
             yield chat
+
+
+def fetch_touched_days(
+    graph_client: GraphClient,
+    user_id: str,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> dict[str, set[date]] | None:
+    """The days that changed inside the window in each chat the user is in,
+    from one export stream. Days older than the lookback are left out. None
+    past the cap, which bounds the time spent on one user: a user streaming
+    more goes back to a question per chat. The stream runs to the time of the
+    request, as the team stream does, so a message edited while the attempt
+    runs is in it."""
+    # The stream carries every message of every chat the user is in, with
+    # bodies, and is metered where the tenant meters the export API. It is
+    # still one call per organizer against one per chat.
+    oldest: datetime = _lookback_oldest_day()
+    touched: dict[str, set[date]] = {}
+    without_chat: int = 0
+    seen: int = 0
+    stream: Iterator[dict[str, Any]] = iter_values(
+        graph_client,
+        export_url(user_chats_collection(user_id), start, max(end, time.time())),
+    )
+    for seen, row in enumerate(stream, start=1):
+        if seen > EXPORT_MESSAGES_CAP:
+            logger.warning(
+                "User %s streams more than %s chat messages; asking each chat what changed",
+                user_id,
+                EXPORT_MESSAGES_CAP,
+            )
+            return None
+        message: ChatExportRow = ChatExportRow(**row)
+        if message.chat_id is None:
+            without_chat += 1
+            continue
+        if message.created_date_time < oldest:
+            continue
+        touched.setdefault(message.chat_id, set()).add(message.created_date_time.date())
+    if without_chat:
+        # A row names its chat on every tenant measured. A stream that did
+        # not would make every chat look unchanged.
+        logger.warning(
+            "User %s: %s of %s exported chat rows name no chat",
+            user_id,
+            without_chat,
+            seen,
+        )
+    return touched
+
+
+def _lookback_oldest_day() -> datetime:
+    """Midnight after the lookback opens: a whole day or none of it, since a day
+    cut at the lookback's edge would take its readers from a later message
+    than the document indexed whole."""
+    opens = datetime.fromtimestamp(_lookback_opens(), tz=timezone.utc)
+    return _day_bounds(opens.date())[1]
 
 
 def fetch_chat_members(graph_client: GraphClient, chat_id: str) -> list[ChatMember]:
@@ -163,28 +240,23 @@ def fetch_chat_days(
     chat_id: str,
     start: SecondsSinceUnixEpoch | None,
     before_page: Callable[[], None] | None = None,
+    touched_days: set[date] | None = None,
 ) -> Iterator[tuple[date, list[ChatMessage]]]:
     """Each day that changed since ``start`` with every message of it, oldest
     first. A day is a document, so one new, edited or deleted message brings the
     whole day back. Days are UTC and never older than the lookback. Graph serves
     the chat newest first, so a day is yielded as soon as an older one begins,
-    and a chat of any length holds one day at a time."""
-    lookback_opens = time.time() - CHAT_LOOKBACK_S
-    # A whole day or none of it: a day cut at the lookback's edge would take its
-    # readers from a later message than the document indexed whole.
-    oldest = _day_bounds(
-        datetime.fromtimestamp(lookback_opens, tz=timezone.utc).date()
-    )[1]
-    touched: set[date] | None = None
-    # A window as old as the lookback reads every day of it, so asking what
-    # changed first would read every message twice.
-    if start is not None and start > lookback_opens:
+    and a chat of any length holds one day at a time. ``touched_days`` skips
+    the question when the caller already knows."""
+    oldest = _lookback_oldest_day()
+    touched: set[date] | None = touched_days
+    if touched is None and start is not None and _is_poll(start):
         touched = {
             message.created_date_time.date()
             for message in _messages(
                 graph_client,
                 chat_id,
-                f"$filter=lastModifiedDateTime gt {_graph_timestamp(start)}"
+                f"$filter=lastModifiedDateTime gt {graph_timestamp(start)}"
                 "&$orderby=lastModifiedDateTime desc",
                 before_page,
             )
@@ -196,7 +268,7 @@ def fetch_chat_days(
     reads_from = _day_bounds(max(touched))[1] if touched else None
     reads_to = _day_bounds(min(touched))[0] if touched else oldest
     created_before = (
-        f"$filter=createdDateTime lt {_graph_timestamp(reads_from.timestamp())}&"
+        f"$filter=createdDateTime lt {graph_timestamp(reads_from.timestamp())}&"
         if reads_from
         else ""
     )
@@ -309,6 +381,25 @@ class ChatSource(OrganizerSource):
     def __init__(self, session: TeamsSession, include_inline_images: bool) -> None:
         self._session = session
         self._include_inline_images = include_inline_images
+        # Whether the chats export API answers for this app, probed once per
+        # attempt on the first poll that could use it.
+        self._export: bool | None = None
+
+    def _export_available(self, user_id: str) -> bool:
+        """Whether this organizer's chats stream. A refusal to the app is
+        kept for the attempt; one for the user alone (gone, locked) decides
+        nothing for the next organizer, who probes again."""
+        # Workers drain organizers side by side, so two may probe at once. Both
+        # get the same answer.
+        if self._export is not None:
+            return self._export
+        probe: ExportProbe = export_api_answers(
+            self._session.graph(), export_probe_url(user_chats_collection(user_id))
+        )
+        if probe is ExportProbe.REFUSED_FOR_ITEM:
+            return False
+        self._export = probe is ExportProbe.ANSWERS
+        return self._export
 
     def validate(self, organizer: Organizer) -> None:
         """Lists the organizer's meeting chats, which is where Graph answers for
@@ -326,12 +417,17 @@ class ChatSource(OrganizerSource):
         self,
         organizer: Organizer,
         start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch,
     ) -> Iterator[Document | ConnectorFailure]:
         """The chats of the meetings one organizer set up, a document per day
         that changed. A refused listing is one recorded failure for the
         organizer and a refused chat a warning. Refused after it answered,
-        either fails the attempt."""
+        either fails the attempt. On a poll, one export stream per organizer
+        says which chats changed, so a quiet chat costs no request; a stream
+        refused or too large asks each chat instead."""
+        touched: dict[str, set[date]] | None = None
+        if _is_poll(start) and self._export_available(organizer.id):
+            touched = self._touched_days(organizer, start, end)
         listing = PagedListing()
         chats = fetch_meeting_chats(
             self._session.graph(), organizer.id, listing.before_page
@@ -355,11 +451,45 @@ class ChatSource(OrganizerSource):
                 return
             if chat is None:
                 return
-            yield from self._chat_documents(organizer, chat, start)
+            chat_days: set[date] | None = None
+            if touched is not None:
+                chat_days = touched.get(chat.id)
+                if not chat_days:
+                    continue
+            yield from self._chat_documents(organizer, chat, start, chat_days)
         raise _too_many_chats(organizer)
 
+    def _touched_days(
+        self,
+        organizer: Organizer,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> dict[str, set[date]] | None:
+        """Which chats changed, from the organizer's export stream, or None for
+        a stream refused or too large: the question per chat answers then, so
+        the optional stream never holds back chats the app can read."""
+        try:
+            return fetch_touched_days(self._session.graph(), organizer.id, start, end)
+        except requests.HTTPError as e:
+            if not is_export_refusal(e):
+                raise
+            if is_metered_refusal(e):
+                # 402 applies to the whole tenant, so no organizer streams
+                # again this attempt.
+                self._export = False
+            logger.warning(
+                "The chats export stream of %s was refused (%s); asking each chat what changed",
+                organizer.email,
+                status(e),
+            )
+            return None
+
     def _chat_documents(
-        self, organizer: Organizer, chat: MeetingChat, start: SecondsSinceUnixEpoch
+        self,
+        organizer: Organizer,
+        chat: MeetingChat,
+        start: SecondsSinceUnixEpoch,
+        touched_days: set[date] | None = None,
     ) -> Iterator[Document | ConnectorFailure]:
         # The listing just answered with the same grant, so a refused chat is
         # the one chat and not the setup. A recorded failure would hold every
@@ -370,7 +500,13 @@ class ChatSource(OrganizerSource):
         days = _until_refused(
             organizer,
             chat,
-            fetch_chat_days(self._session.graph(), chat.id, start, listing.before_page),
+            fetch_chat_days(
+                self._session.graph(),
+                chat.id,
+                start,
+                listing.before_page,
+                touched_days,
+            ),
             listing.lost_access,
         )
         members: list[ChatMember] | None = None

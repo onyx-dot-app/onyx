@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolResponse
@@ -50,24 +51,21 @@ class KnowledgeGraphTool(Tool[None]):
         kg_configs = get_kg_config_settings()
         return kg_configs.KG_ENABLED and kg_configs.KG_EXPOSED
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        QUERY_FIELD: {
-                            "type": "string",
-                            "description": "What to search for",
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    QUERY_FIELD: {
+                        "type": "string",
+                        "description": "What to search for",
                     },
-                    "required": [QUERY_FIELD],
                 },
+                "required": [QUERY_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         raise NotImplementedError("KnowledgeGraphTool.emit_start is not implemented.")

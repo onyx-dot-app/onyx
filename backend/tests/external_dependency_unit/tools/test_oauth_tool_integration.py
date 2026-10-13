@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from onyx.chat.emitter import Emitter
 from onyx.db.models import OAuthAccount, OAuthConfig, Persona, Tool, User
 from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
+from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.factory import get_default_llm
 from onyx.tools.tool_constructor import SearchToolConfig, construct_tools
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
@@ -165,7 +166,7 @@ class TestOAuthToolIntegrationPriority:
         search_tool_config = SearchToolConfig()
 
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
@@ -223,7 +224,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
@@ -275,7 +276,7 @@ class TestOAuthToolIntegrationPriority:
         # Construct tools
         with caplog.at_level("WARNING"):
             tool_dict = construct_tools(
-                persona=persona,
+                configuration=capture_persona_tool_configuration(persona),
                 db_session=db_session,
                 emitter=Emitter(merged_queue=queue.Queue()),
                 user=user,
@@ -336,7 +337,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
@@ -407,7 +408,7 @@ class TestOAuthToolIntegrationPriority:
 
             # Construct tools
             tool_dict = construct_tools(
-                persona=persona,
+                configuration=capture_persona_tool_configuration(persona),
                 db_session=db_session,
                 emitter=Emitter(merged_queue=queue.Queue()),
                 user=user,
@@ -474,7 +475,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=Emitter(merged_queue=queue.Queue()),
             user=user,
@@ -527,7 +528,7 @@ class TestOAuthToolIntegrationPriority:
 
         # Construct tools
         tool_dict = construct_tools(
-            persona=persona,
+            configuration=capture_persona_tool_configuration(persona),
             db_session=db_session,
             emitter=Emitter(merged_queue=queue.Queue()),
             user=user,

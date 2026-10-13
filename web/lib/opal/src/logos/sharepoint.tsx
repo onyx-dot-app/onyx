@@ -1,5 +1,5 @@
 import type { IconProps } from "@opal/types";
-const SvgSharepoint = ({ size, ...props }: IconProps) => (
+const SvgSharePoint = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
@@ -195,4 +195,4 @@ const SvgSharepoint = ({ size, ...props }: IconProps) => (
     </defs>
   </svg>
 );
-export default SvgSharepoint;
+export default SvgSharePoint;

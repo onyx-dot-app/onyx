@@ -20,7 +20,7 @@ type ContentActionProps = ContentProps & {
    *
    * @default 2
    */
-  padding?: 0 | 0.5 | 1 | 2;
+  padding?: 0 | 0.5 | 1 | 1.5 | 2;
 
   /**
    * When true, vertically centers the Content and rightChildren.

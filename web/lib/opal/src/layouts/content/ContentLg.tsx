@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Text } from "@opal/components";
+import { Button, OverflowText, Text } from "@opal/components";
 import type { TextFont } from "@opal/components";
 import type { ContainerSizeVariants } from "@opal/types";
 import SvgEdit from "@opal/icons/edit";
@@ -189,8 +189,9 @@ function ContentLg({
                 icon={SvgEdit}
                 prominence="internal"
                 size={config.editButtonSize}
+                aria-label={strings.edit}
                 tooltip={strings.edit}
-                tooltipSide="right"
+                tooltipSide="end"
                 onClick={startEditing}
               />
             </div>
@@ -207,14 +208,21 @@ function ContentLg({
               : undefined
           }
         >
-          <Text
-            font="secondary-body"
-            color="inherit"
-            as="p"
-            maxLines={descriptionMaxLines}
-          >
-            {description}
-          </Text>
+          {/* Clamped, the full description shows in a tooltip when it is cut. */}
+          {descriptionMaxLines ? (
+            <OverflowText
+              font="secondary-body"
+              color="inherit"
+              as="p"
+              maxLines={descriptionMaxLines}
+            >
+              {description}
+            </OverflowText>
+          ) : (
+            <Text font="secondary-body" color="inherit" as="p">
+              {description}
+            </Text>
+          )}
         </div>
       )}
     </div>

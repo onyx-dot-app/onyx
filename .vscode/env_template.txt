@@ -46,12 +46,6 @@ PYTHONPATH=../backend
 PYTHONUNBUFFERED=1
 
 
-# Enable the full set of Onyx Enterprise Edition features.
-# NOTE: DO NOT ENABLE THIS UNLESS YOU HAVE A PAID ENTERPRISE LICENSE (or if you
-# are using this for local testing/development).
-ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=False
-
-
 # S3 File Store Configuration (the bundled object store for local development)
 S3_ENDPOINT_URL=http://localhost:9004
 # The legacy MinIO when one runs (ods compose publishes it on 9005)

@@ -1,6 +1,16 @@
 {
   "aliases": {},
   "models": {
+    "ai_decide": {
+      "cost": {
+        "cache_read": 0.0,
+        "cache_write": 0.0,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "evaluation",
+      "name": "ai_decide"
+    },
     "databricks-bge-large-en": {
       "cost": {
         "cache_read": 0.10003000000000001,
@@ -1118,6 +1128,16 @@
       "structured_output": true,
       "temperature": false,
       "tool_call": true
+    },
+    "databricks-openjev-qwen35-4b": {
+      "cost": {
+        "cache_read": 0.0,
+        "cache_write": 0.0,
+        "input": 0.0,
+        "output": 0.0
+      },
+      "mode": "evaluation",
+      "name": "databricks-openjev-qwen35-4b"
     },
     "databricks-qwen3-embedding-0-6b": {
       "cost": {

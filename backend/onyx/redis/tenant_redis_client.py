@@ -1345,6 +1345,30 @@ class TenantRedisPipeline:
         self._p.sadd(_prefix_key(self._prefix, name), *values)
         return self
 
+    def hset(self, name: KeyArg, mapping: Mapping[bytes, bytes]) -> TenantRedisPipeline:
+        """Queue hash fields under a tenant-prefixed key."""
+        self._p.hset(_prefix_key(self._prefix, name), mapping=mapping)
+        return self
+
+    # --------------------------------------------------------------------------
+    # Read commands
+    # --------------------------------------------------------------------------
+
+    def get(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue a tenant-prefixed GET."""
+        self._p.get(_prefix_key(self._prefix, name))
+        return self
+
+    def hget(self, name: KeyArg, key: str | bytes) -> TenantRedisPipeline:
+        """Queue a tenant-prefixed HGET without changing the field name."""
+        self._p.hget(_prefix_key(self._prefix, name), key)
+        return self
+
+    def hgetall(self, name: KeyArg) -> TenantRedisPipeline:
+        """Queue all hash fields under a tenant-prefixed key."""
+        self._p.hgetall(_prefix_key(self._prefix, name))
+        return self
+
     # --------------------------------------------------------------------------
     # Passthrough
     # --------------------------------------------------------------------------

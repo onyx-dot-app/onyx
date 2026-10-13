@@ -273,6 +273,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: i18n-copy-changes
+        name: translation updates for English copy changes
+        language: system
+        entry: python3 tools/i18n/check_copy_changes.py
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^web/src/i18n/messages/.*\.json$
       # `uv pip compile` cannot read `[build-system] requires`, so the pins are
       # duplicated in tools/requirements/build-constraints.in. Catch a mismatch
       # here rather than as an unsatisfiable resolution when a release builds wheels.
@@ -296,6 +303,16 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
         files: ^backend/alembic/versions/.*\.py$
+      # Runs on every commit so a rename or deletion of a file the map cites
+      # fails in the same PR.
+      - id: feature-map-integrity
+        name: feature map integrity
+        description: "Fail when the feature map is malformed or cites a repo path that does not exist"
+        language: system
+        entry: python3 .agents/feature-map/check_feature_map.py
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
       # Regenerate the baseline with `env_inventory.py --write-baseline`.
       - id: env-drift-baseline
         name: env drift baseline

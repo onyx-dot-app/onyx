@@ -72,6 +72,8 @@ class DrupalWikiConnector(
     CheckpointedConnector[DrupalWikiCheckpoint],
     SlimConnector,
 ):
+    slim_listing_honors_indexing_start = True
+
     # Deprecated parameters that may exist in old connector configurations
     _DEPRECATED_PARAMS = {"drupal_wiki_scope", "include_all_spaces"}
 

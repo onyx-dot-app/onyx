@@ -47,22 +47,21 @@ export class AdminAgentsPage {
     agentId: number,
     expected: { visible: AgentRowAction[]; hidden: AgentRowAction[] }
   ): Promise<void> {
-    // a closing menu's items are still role=dialog descendants; settle first
-    await expect(this.page.getByRole("dialog")).toHaveCount(0);
+    // a closing menu stays mounted for its exit animation; settle first
+    await expect(this.page.getByRole("menu")).toHaveCount(0);
     await this.openOverflow(agentId);
 
-    // LineItem nests <p> in <p>, so getByText matches twice per entry
-    const menu = this.page.getByRole("dialog").last();
+    const menu = this.page.getByRole("menu", { name: "Agent actions" });
     for (const action of expected.visible) {
-      await expect(menu.getByRole("button", { name: action })).toBeVisible({
+      await expect(menu.getByRole("menuitem", { name: action })).toBeVisible({
         timeout: 10_000,
       });
     }
     for (const action of expected.hidden) {
-      await expect(menu.getByRole("button", { name: action })).toHaveCount(0);
+      await expect(menu.getByRole("menuitem", { name: action })).toHaveCount(0);
     }
     // Close so the next row's menu isn't shadowed.
     await this.page.keyboard.press("Escape");
-    await expect(this.page.getByRole("dialog")).toHaveCount(0);
+    await expect(this.page.getByRole("menu")).toHaveCount(0);
   }
 }

@@ -41,6 +41,7 @@ from onyx.db.llm import (
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.interfaces import LLM
 from onyx.llm.model_request import (
@@ -60,7 +61,7 @@ from onyx.llm.models import (
     ToolChoice,
     ToolChoiceOptions,
 )
-from onyx.llm.multi_llm import LitellmLLM, LLMRateLimitError, LLMTimeoutError
+from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
 from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import (
@@ -116,6 +117,7 @@ from onyx.server.gateway.models import (
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
@@ -154,6 +156,18 @@ def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
+        )
+    # The workspace switch only gates third-party PAT traffic. Craft sandbox
+    # tokens keep working — admins control those via the Craft setting.
+    # Fail closed: a settings-read error must not silently re-enable a
+    # feature the admin switched off.
+    if (
+        flow is LLMFlow.LLM_GATEWAY
+        and not load_settings(raise_on_error=True).llm_gateway_enabled
+    ):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_DISABLED,
+            "The Onyx LLM gateway is disabled by an administrator.",
         )
     return flow
 
@@ -993,7 +1007,7 @@ def _anthropic_reasoning_effort(
 ) -> ReasoningEffort:
     """Anthropic has two thinking APIs: legacy ``thinking.type=enabled`` with
     ``budget_tokens``, and adaptive ``thinking.type=adaptive`` where effort
-    lives in top-level ``output_config.effort``. The downstream LLM layer
+    lives in top-level ``output_config.effort``. The provider adapter
     re-derives the right API per model from the single ReasoningEffort, so
     both request shapes must map faithfully here."""
     if thinking is not None and thinking.get("type") == "disabled":
@@ -1381,7 +1395,7 @@ def handle_anthropic_messages(
     except ValueError as e:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
-            "The upstream LLM returned invalid tool arguments.",
+            "The upstream model returned invalid tool arguments.",
         ) from e
     content.extend(tool_blocks)
     return AnthropicMessageResponse.from_parts(

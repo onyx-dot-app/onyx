@@ -169,6 +169,34 @@
       "temperature": true,
       "tool_call": true
     },
+    "Qwen/Qwen3.8-27B": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.45,
+        "input": 0.45,
+        "output": 3
+      },
+      "family": "qwen",
+      "limit": {
+        "context": 262144,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Qwen3.8 27B",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "deepseek-ai/DeepSeek-V4-Flash-0731": {
       "attachment": false,
       "cost": {

@@ -9,9 +9,11 @@ from typing_extensions import override
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.user_file import get_user_file_metadata
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_store.models import ChatFileType, InMemoryChatFile
-from onyx.file_store.utils import load_chat_file_by_id, load_user_file
+from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetadata
+from onyx.file_store.utils import load_chat_file_by_id, load_user_file_content
+from onyx.llm.models import ToolDefinition
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     FileReaderResult,
@@ -80,36 +82,33 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
         # generalised for standard (vector-DB-enabled) deployments.
         return DISABLE_VECTOR_DB
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.DESCRIPTION,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        FILE_ID_FIELD: {
-                            "type": "string",
-                            "description": "The UUID of the file to read.",
-                        },
-                        START_CHAR_FIELD: {
-                            "type": "integer",
-                            "description": (
-                                "Character offset to start reading from. Defaults to 0."
-                            ),
-                        },
-                        NUM_CHARS_FIELD: {
-                            "type": "integer",
-                            "description": (
-                                "Number of characters to return (max 16000). Defaults to 16000."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.DESCRIPTION,
+            parameters={
+                "type": "object",
+                "properties": {
+                    FILE_ID_FIELD: {
+                        "type": "string",
+                        "description": "The UUID of the file to read.",
                     },
-                    "required": [FILE_ID_FIELD],
+                    START_CHAR_FIELD: {
+                        "type": "integer",
+                        "description": (
+                            "Character offset to start reading from. Defaults to 0."
+                        ),
+                    },
+                    NUM_CHARS_FIELD: {
+                        "type": "integer",
+                        "description": (
+                            "Number of characters to return (max 16000). Defaults to 16000."
+                        ),
+                    },
                 },
+                "required": [FILE_ID_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
@@ -141,7 +140,8 @@ class FileReaderTool(Tool[FileReaderToolOverrideKwargs]):
     def _load_file(self, file_id: UUID) -> InMemoryChatFile:
         if file_id in self._user_file_ids:
             with get_session_with_current_tenant() as db_session:
-                return load_user_file(file_id, db_session)
+                metadata: UserFileMetadata = get_user_file_metadata(file_id, db_session)
+            return load_user_file_content(metadata)
         return load_chat_file_by_id(str(file_id))
 
     def run(

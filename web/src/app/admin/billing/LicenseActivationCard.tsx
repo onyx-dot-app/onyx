@@ -9,7 +9,7 @@ import { Section } from "@/layouts/general-layouts";
 import { InputVertical } from "@opal/layouts";
 import { SvgXCircle, SvgCheckCircle, SvgXOctagon } from "@opal/icons";
 import { uploadLicense } from "@/lib/billing/svc";
-import { LicenseStatus } from "@/lib/billing/interfaces";
+import { LicenseStatus } from "@/lib/billing/types";
 import { formatDateShort } from "@/lib/dateUtils";
 import { useSettings } from "@/lib/settings/hooks";
 

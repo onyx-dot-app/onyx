@@ -58,6 +58,7 @@ numbers are progressively fainter.
 | Fixed light / dark | `text-light-03`, `text-light-05`, `text-dark-03`, `text-dark-05` | A fixed light or dark text color that does **not** flip with the theme                            |
 | Status — error     | `status-error-01`, `status-error-02`, `status-error-05`          | Error / destructive messaging (e.g. validation errors)                                            |
 | Status — success   | `status-success-01`, `status-success-02`, `status-success-05`    | Success / confirmation messaging                                                                  |
+| Theme — amber      | `theme-amber-05`                                                 | Warnings that need attention without reading as an error                                          |
 | Special            | `inherit`                                                        | Inherit the surrounding text color (no color class applied) — useful when a parent sets the color |
 
 ## Usage Examples

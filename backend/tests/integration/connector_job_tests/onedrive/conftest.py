@@ -115,6 +115,9 @@ def _wait_for_initial_jobs(
         after=started_at,
         user_performing_action=admin_user,
         timeout=JOB_TIMEOUT_SECONDS,
+        # Graph throttling can fail the first attempt; fail fast so the CI
+        # retry gets a fresh attempt inside the job timeout.
+        fail_on_repeated_error=True,
     )
     CCPairManager.wait_for_sync(
         cc_pair=cc_pair,

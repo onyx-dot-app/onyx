@@ -115,7 +115,6 @@ KV_CRED_KEY = "credential_id_{}"
 KV_GEN_AI_KEY_CHECK_TIME = "genai_api_key_last_check_time"
 KV_SETTINGS_KEY = "onyx_settings"
 KV_CUSTOMER_UUID_KEY = "customer_uuid"
-KV_INSTANCE_DOMAIN_KEY = "instance_domain"
 KV_ENTERPRISE_SETTINGS_KEY = "onyx_enterprise_settings"
 KV_CUSTOM_ANALYTICS_SCRIPT_KEY = "__custom_analytics_script__"
 KV_KG_CONFIG_KEY = "kg_config"
@@ -403,6 +402,7 @@ class MessageType(str, Enum):
     SYSTEM = "system"  # SystemMessage
     USER = "user"  # HumanMessage
     ASSISTANT = "assistant"  # AIMessage - Can include tool_calls field for parallel tool calling
+    SUMMARY = "summary"
     TOOL_CALL_RESPONSE = "tool_call_response"
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
 
@@ -544,7 +544,6 @@ class OnyxRedisLocks:
 
     SECURITY_SETTINGS = "da_lock:security_settings"
 
-    MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     # In-flight marker: set while a chat-TTL cleanup chain is active (spanning
     # its chained tasks) so the beat won't start a second chain per tenant.
     CHAT_TTL_CHAIN_ACTIVE = "da_lock:chat_ttl_chain_active"
@@ -556,6 +555,7 @@ class OnyxRedisLocks:
     )
     CONNECTOR_EXTERNAL_GROUP_SYNC_LOCK_PREFIX = "da_lock:connector_external_group_sync"
     PRUNING_LOCK_PREFIX = "da_lock:pruning"
+    ORPHAN_TAG_SWEEP_LOCK = "da_lock:orphan_tag_sweep"
     INDEXING_METADATA_PREFIX = "da_metadata:indexing"
 
     SLACK_BOT_LOCK = "da_lock:slack_bot"
@@ -576,6 +576,9 @@ class OnyxRedisLocks:
     USER_FILE_PROJECT_SYNC_QUEUED_PREFIX = "da_lock:user_file_project_sync_queued"
     USER_FILE_DELETE_BEAT_LOCK = "da_lock:check_user_file_delete_beat"
     INCOGNITO_FILE_CLEANUP_BEAT_LOCK = "da_lock:check_incognito_file_cleanup_beat"
+    STAGED_CONNECTOR_FILE_CLEANUP_BEAT_LOCK = (
+        "da_lock:check_staged_connector_file_cleanup_beat"
+    )
     USER_FILE_DELETE_LOCK_PREFIX = "da_lock:user_file_delete"
     # Short-lived key set when a delete task is enqueued; cleared when the worker picks it up.
     # Prevents the beat from re-enqueuing the same file while a delete task is already queued.
@@ -598,6 +601,8 @@ class OnyxRedisSignals:
         "signal:block_validate_permission_sync_fences"
     )
     BLOCK_PRUNING = "signal:block_pruning"
+    # Set by a sweep that skipped because another one held the lock.
+    ORPHAN_TAG_SWEEP_PENDING = "signal:orphan_tag_sweep_pending"
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
     BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
@@ -677,15 +682,18 @@ class OnyxCeleryTask:
     CHECK_FOR_INDEX_ATTEMPT_CLEANUP = "check_for_index_attempt_cleanup"
     CLEANUP_INDEX_ATTEMPT = "cleanup_index_attempt"
 
+    CLEANUP_OAUTH_PROVIDER_GRANTS = "cleanup_oauth_provider_grants"
+    CLEANUP_OAUTH_PROVIDER_CLIENTS = "cleanup_oauth_provider_clients"
+
     # Old-index reclamation (post-reindex deletion of the now-PAST index)
     CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
     RUN_OLD_INDEX_RECLAIM = "run_old_index_reclaim"
 
-    MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
+    MONITOR_OPENSEARCH_RESOURCES = "monitor_opensearch_resources"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
     CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
-    EMIT_VERSION_TELEMETRY = "emit_version_telemetry"
+    COLLECT_FLEET_TELEMETRY = "collect_fleet_telemetry"
 
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
@@ -710,6 +718,12 @@ class OnyxCeleryTask:
     RUN_CAPABILITY_CHECKS = "run_capability_checks"
     RUN_DRAFT_CAPABILITY_CHECKS = "run_draft_capability_checks"
     CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
+
+    # Draft credentials of connector forms that were never submitted
+    CLEANUP_STALE_DRAFT_CREDENTIALS = "cleanup_stale_draft_credentials"
+
+    # Files uploaded for a connector edit that no applied plan claimed
+    CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP = "check_for_staged_connector_file_cleanup"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"

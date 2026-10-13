@@ -47,7 +47,7 @@ test.describe("Web connector setup", () => {
 
     await setupPage.connectorNameInput.fill(connectorName);
     await setupPage.textField("base_url").fill(DOCS_URL);
-    await setupPage.selectField("web_connector_type").selectOption("recursive");
+    await setupPage.pickOption("web_connector_type", "recursive");
 
     await setupPage.submitAndWaitForCreation();
 
