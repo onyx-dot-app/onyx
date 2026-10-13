@@ -46,7 +46,7 @@ class _StubPostHogProvider(FeatureFlagProvider):
 
 @pytest.fixture(autouse=True)
 def _business_tier(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(build_utils, "_deployment_tier", lambda: Tier.BUSINESS)
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.BUSINESS)
 
 
 def _make_user() -> MagicMock:
@@ -247,7 +247,7 @@ def test_craft_requires_gateway_tier(
         "get_default_feature_flag_provider",
         lambda: NoOpFeatureFlagProvider(),
     )
-    monkeypatch.setattr(build_utils, "_deployment_tier", lambda: tier)
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: tier)
 
     assert is_craft_enabled_for_user(_make_user()) is expected
 
@@ -261,14 +261,38 @@ def test_tier_not_resolved_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> Non
     )
     monkeypatch.setattr(
         build_utils,
-        "_deployment_tier",
+        "get_current_tier",
         lambda: pytest.fail("tier should not be resolved when Craft is off"),
     )
 
     assert is_craft_enabled_for_user(_make_user()) is False
 
 
-def test_community_when_not_ee(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.undo()
-    monkeypatch.setattr(build_utils.global_version, "is_ee_version", lambda: False)
-    assert build_utils._deployment_tier() == Tier.COMMUNITY
+@pytest.mark.parametrize(
+    "tier,expected",
+    [(Tier.COMMUNITY, True), (Tier.BUSINESS, False), (Tier.ENTERPRISE, False)],
+)
+def test_craft_locked_by_tier(
+    monkeypatch: pytest.MonkeyPatch, tier: Tier, expected: bool
+) -> None:
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: tier)
+
+    assert build_utils.is_craft_locked_by_tier(_make_user()) is expected
+
+
+def test_craft_not_locked_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", False)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.COMMUNITY)
+
+    assert build_utils.is_craft_locked_by_tier(_make_user()) is False

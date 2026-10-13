@@ -9196,7 +9196,8 @@
         "title": "Agents"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explore Agents"
@@ -9604,6 +9605,19 @@
         "error": {
           "readFailed": "Could not read the upload."
         }
+      }
+    }
+  },
+  "craft": {
+    "upgrade": {
+      "title": "Craft requires a Business plan",
+      "adminDescription": "Craft is available on the Business and Enterprise plans. It is not supported on the Community Edition until Craft merges into the main chat.",
+      "userDescription": "Craft is available on the Business and Enterprise plans. Ask your admin to upgrade to use Craft.",
+      "backToChat": {
+        "label": "Back to chat"
+      },
+      "viewPlans": {
+        "label": "View plans"
       }
     }
   }
