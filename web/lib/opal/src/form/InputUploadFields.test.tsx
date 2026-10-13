@@ -27,7 +27,9 @@ describe("InputSingleUploadField", () => {
       <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
         {(formik) => {
           form = formik;
-          return <InputSingleUploadField name="key" placeholder="Upload a key" />;
+          return (
+            <InputSingleUploadField name="key" placeholder="Upload a key" />
+          );
         }}
       </Formik>
     );
@@ -79,7 +81,9 @@ describe("InputSingleUploadField", () => {
       >
         {(formik) => {
           form = formik;
-          return <InputSingleUploadField name="key" placeholder="Upload a key" />;
+          return (
+            <InputSingleUploadField name="key" placeholder="Upload a key" />
+          );
         }}
       </Formik>
     );

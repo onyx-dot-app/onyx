@@ -42,5 +42,7 @@ export const Error: Story = {
 };
 
 export const Disabled: Story = {
-  render: () => <InputMultiUpload variant="disabled" onFilesChange={() => {}} />,
+  render: () => (
+    <InputMultiUpload variant="disabled" onFilesChange={() => {}} />
+  ),
 };

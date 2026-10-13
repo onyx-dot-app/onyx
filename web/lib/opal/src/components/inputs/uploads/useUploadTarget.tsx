@@ -63,8 +63,11 @@ export default function useUploadTarget({
 }: UseUploadTargetOptions) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerOpenRef = useRef<boolean>(false);
+  // The latest focus target, kept current after each commit.
   const focusTargetRef = useRef(focusTarget);
-  focusTargetRef.current = focusTarget;
+  useEffect(() => {
+    focusTargetRef.current = focusTarget;
+  });
 
   function takeFiles(files: File[]) {
     const allowed = files.filter((file) => {

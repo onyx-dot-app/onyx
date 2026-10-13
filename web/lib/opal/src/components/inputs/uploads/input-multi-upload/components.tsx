@@ -121,7 +121,9 @@ export default function InputMultiUpload({
         variant={variant === "error" ? "error" : "primary"}
         disabled={isNonEditable}
         icon={SvgImport}
-        onClear={files.length > 0 && drag === null ? () => report([]) : undefined}
+        onClear={
+          files.length > 0 && drag === null ? () => report([]) : undefined
+        }
         readOnly
         triggerRef={triggerRef}
         onInputClick={openFilePicker}
