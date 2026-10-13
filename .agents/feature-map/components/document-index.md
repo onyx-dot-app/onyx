@@ -72,6 +72,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 | GET | `/search-settings/get-all-search-settings` | | |
 | GET | `/search-settings/reindex-progress` | | |
 | GET | `/search-settings/reindex-errors` | | |
+| GET | `/search-settings/cc-pair-ids-backfill-progress` | `get_cc_pair_ids_backfill_status` | Progress of the `cc_pair_ids` backfill and the cc-pair access mode. Index Settings shows it in `CCPairIdsBackfillCard.tsx`. |
 | POST | `/search-settings/reindex/port/resume` | | Resumes a stalled reindex-port backfill. |
 | POST | `/search-settings/update-inference-settings` | | |
 | GET/PUT/DELETE | `/search-settings/unstructured-api-key-set`, `/upsert-unstructured-api-key`, `/delete-unstructured-api-key` | | Unrelated document-parsing key, colocated in this router. |
@@ -304,7 +305,9 @@ files) fall back to the old ACL filter. Even in `OFF` mode, the filter exists to
 Chunks get `cc_pair_ids` at index time. The beat task
 `cc_pair_ids_backfill` fills older chunks without re-embedding, with progress in the
 KV store (`KV_CC_PAIR_IDS_BACKFILL_PROGRESS_KEY`), restarted per `SearchSettings`
-generation. Metadata sync keeps the field current. Filter semantics are in
+generation. The progress keeps the snapshot of cc-pairs it started with, so the
+Index Settings card can show connectors and documents done. Metadata sync keeps the
+field current. Filter semantics are in
 `backend/onyx/document_index/FILTER_SEMANTICS.md`.
 
 ### 4.4 The embedding-model swap state machine
