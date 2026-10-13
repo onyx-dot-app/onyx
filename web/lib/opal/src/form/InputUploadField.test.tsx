@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@tests/setup/test-utils";
+import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Formik, type FormikProps } from "formik";
@@ -66,6 +66,39 @@ describe("InputUploadField", () => {
     await user.click(screen.getByRole("button", { name: "Clear file" }));
     await waitFor(() => expect(form?.values.key).toBe(""));
     expect(trigger).toHaveFocus();
+  });
+
+  test("opening the picker does not mark the field touched", async () => {
+    const user = userEvent.setup({ delay: null });
+    let form: FormikProps<KeyForm> | null = null;
+    const { container } = render(
+      <Formik<KeyForm>
+        initialValues={{ key: "" }}
+        validate={(values) => (values.key ? {} : { key: "Required" })}
+        onSubmit={() => {}}
+      >
+        {(formik) => {
+          form = formik;
+          return <InputUploadField name="key" placeholder="Upload a key" />;
+        }}
+      </Formik>
+    );
+    const trigger = screen.getByRole("button", { name: "Upload a key" });
+
+    // The picker takes focus; the field is still being filled in.
+    await user.click(trigger);
+    fireEvent.blur(trigger);
+    expect(form?.touched.key).toBeFalsy();
+    expect(container.querySelector(".opal-input")).toHaveAttribute(
+      "data-variant",
+      "primary"
+    );
+
+    // Cancelled, focus returns; leaving the field then counts.
+    fireEvent(picker(container), new Event("cancel"));
+    expect(trigger).toHaveFocus();
+    fireEvent.blur(trigger);
+    await waitFor(() => expect(form?.touched.key).toBe(true));
   });
 
   test("the × clears an upload", async () => {

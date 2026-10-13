@@ -229,11 +229,35 @@ export default function InputUpload(props: InputUploadProps) {
           ? strings.inputUploadDropToReplace
           : label;
 
+  // The picker takes focus from the control. That blur is not the user
+  // leaving the field, so it is not reported (a form would mark the field
+  // touched and show "required" mid-pick); focus comes back on close.
+  const pickerOpenRef = useRef<boolean>(false);
+  function closePicker() {
+    if (!pickerOpenRef.current) return;
+    pickerOpenRef.current = false;
+    triggerRef.current?.focus();
+  }
+  useEffect(() => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.addEventListener("cancel", closePicker);
+    return () => input.removeEventListener("cancel", closePicker);
+  }, []);
+
   function openFilePicker() {
-    if (!isNonEditable) fileInputRef.current?.click();
+    if (isNonEditable) return;
+    pickerOpenRef.current = true;
+    // Where the picker sends no cancel event, focus returning to the page
+    // marks it closed.
+    window.addEventListener("focus", () => setTimeout(closePicker), {
+      once: true,
+    });
+    fileInputRef.current?.click();
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    closePicker();
     const file = e.target.files?.[0];
     if (file) takeFile(file);
     // Lets the same file be picked again.
@@ -285,7 +309,9 @@ export default function InputUpload(props: InputUploadProps) {
             e.preventDefault();
             clear();
           }}
-          onBlur={onBlur}
+          onBlur={(e) => {
+            if (!pickerOpenRef.current) onBlur?.(e);
+          }}
         >
           <div className="opal-input-leading-icon">
             <SvgImport className="opal-input-leading-icon-svg" />
