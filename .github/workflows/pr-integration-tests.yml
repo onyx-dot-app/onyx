@@ -641,6 +641,7 @@ jobs:
               -e POSTGRES_POOL_PRE_PING=true \
               -e POSTGRES_USE_NULL_POOL=true \
               -e DISABLE_VECTOR_DB=true \
+              -e DISABLE_TELEMETRY=true \
               -e FILE_STORE_BACKEND=postgres \
               -e CACHE_BACKEND=postgres \
               -e AUTH_BACKEND=postgres \
