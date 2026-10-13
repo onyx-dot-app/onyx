@@ -1484,7 +1484,11 @@ def user_list_mcp_tools_by_id(
     db: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> MCPToolListResponse:
-    return _list_mcp_tools_by_id(server_id, db, False, user)
+    # Read-only: status and stored tools change only on the owner-or-admin path.
+    mcp_server, discovered_tools = _discover_mcp_server_tools(
+        server_id, db, False, user
+    )
+    return _tool_list_response(mcp_server, discovered_tools)
 
 
 def _upsert_db_tools(
@@ -1570,6 +1574,27 @@ def _list_mcp_tools_by_id(
     user: User,
 ) -> MCPToolListResponse:
     """List available tools from an existing MCP server"""
+    mcp_server, discovered_tools = _discover_mcp_server_tools(
+        server_id, db, is_admin, user
+    )
+    if is_admin:
+        update_mcp_server__no_commit(
+            server_id=server_id,
+            db_session=db,
+            status=MCPServerStatus.CONNECTED,
+        )
+        db.commit()
+        _sync_mcp_server_tools(mcp_server.id, discovered_tools, db)
+    return _tool_list_response(mcp_server, discovered_tools)
+
+
+def _discover_mcp_server_tools(
+    server_id: int,
+    db: Session,
+    is_admin: bool,
+    user: User,
+) -> tuple[DbMCPServer, list[MCPLibTool]]:
+    """Gate the caller, then discover the server's tools. Never writes."""
     logger.info("Listing tools for MCP server: %s", server_id)
 
     try:
@@ -1632,16 +1657,12 @@ def _list_mcp_tools_by_id(
         mcp_server.name,
         time.time() - t1,
     )
-    update_mcp_server__no_commit(
-        server_id=server_id,
-        db_session=db,
-        status=MCPServerStatus.CONNECTED,
-    )
-    db.commit()
+    return mcp_server, discovered_tools
 
-    if is_admin:
-        _sync_mcp_server_tools(mcp_server.id, discovered_tools, db)
 
+def _tool_list_response(
+    mcp_server: DbMCPServer, discovered_tools: list[MCPLibTool]
+) -> MCPToolListResponse:
     # Truncate tool descriptions to prevent overly long responses
     for tool in discovered_tools:
         if tool.description:
@@ -1651,7 +1672,7 @@ def _list_mcp_tools_by_id(
     # resources = discover_mcp_resources(mcp_server, connection_config)
 
     return MCPToolListResponse(
-        server_id=server_id,
+        server_id=mcp_server.id,
         server_name=mcp_server.name,
         server_url=mcp_server.server_url,
         tools=discovered_tools,
