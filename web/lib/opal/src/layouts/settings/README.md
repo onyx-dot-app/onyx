@@ -43,6 +43,10 @@ Headers are only sticky when `actions` is non-empty.
 
 Content container with consistent padding and vertical spacing.
 
+| Prop  | Type      | Default | Description                                        |
+| ----- | --------- | ------- | -------------------------------------------------- |
+| `gap` | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem) |
+
 ## Usage
 
 ```tsx

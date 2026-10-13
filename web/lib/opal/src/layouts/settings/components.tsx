@@ -8,8 +8,10 @@ import type {
   IconFunctionComponent,
   RichStr,
   SizeVariants,
+  Spacing,
   WithoutStyles,
 } from "@opal/types";
+import { spacingToRem } from "@opal/shared";
 import { HtmlHTMLAttributes, useEffect, useRef, useState } from "react";
 import { Content } from "@opal/layouts";
 import { useOpalStrings } from "@opal/strings";
@@ -205,11 +207,20 @@ function SettingsHeader({
 // Body
 // ---------------------------------------------------------------------------
 
-function SettingsBody(
-  props: WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>>
-) {
+interface SettingsBodyProps extends WithoutStyles<
+  HtmlHTMLAttributes<HTMLDivElement>
+> {
+  /** Space between sections, as a spacing step (`N / 4` rem). @default 8 */
+  gap?: Spacing;
+}
+
+function SettingsBody({ gap = 8, ...props }: SettingsBodyProps) {
   return (
-    <div className="pt-6 pb-18 px-4 flex flex-col gap-8 w-full" {...props} />
+    <div
+      className="pt-6 pb-18 px-4 flex flex-col w-full"
+      style={{ gap: spacingToRem(gap) }}
+      {...props}
+    />
   );
 }
 

@@ -424,7 +424,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         }
       />
 
-      <SettingsLayouts.Body>
+      <SettingsLayouts.Body gap={6}>
         {ccPair.deletion_failure_message && isDeleting && (
           <MessageCard
             variant="error"
