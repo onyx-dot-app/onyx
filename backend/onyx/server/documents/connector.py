@@ -1644,6 +1644,9 @@ def create_connector_with_mock_credential(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
+    # Create the pair paused, so no index attempt starts before the caller is
+    # ready. Tests use this to avoid a failed first attempt.
+    paused: bool = Query(False),
 ) -> StatusResponse:
     tenant_id = get_current_tenant_id()
 
@@ -1711,23 +1714,30 @@ def create_connector_with_mock_credential(
             manage_access=dict.fromkeys(
                 connector_data.groups, ConnectorManageRole.EDITOR
             ),
+            initial_status=(
+                ConnectorCredentialPairStatus.PAUSED
+                if paused
+                else ConnectorCredentialPairStatus.SCHEDULED
+            ),
         )
 
-        # Tenant-work-gating lifecycle hook: keep new-tenant latency to
-        # seconds instead of one full-fanout interval.
-        maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
+        if not paused:
+            # Tenant-work-gating lifecycle hook: keep new-tenant latency to
+            # seconds instead of one full-fanout interval.
+            maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
 
-        # trigger indexing immediately
-        client_app.send_task(
-            OnyxCeleryTask.CHECK_FOR_INDEXING,
-            priority=OnyxCeleryPriority.HIGH,
-            kwargs={"tenant_id": tenant_id},
-        )
+            # trigger indexing immediately
+            client_app.send_task(
+                OnyxCeleryTask.CHECK_FOR_INDEXING,
+                priority=OnyxCeleryPriority.HIGH,
+                kwargs={"tenant_id": tenant_id},
+                expires=BEAT_EXPIRES_DEFAULT,
+            )
 
-        logger.info(
-            "create_connector_with_mock_credential - running check_for_indexing: cc_pair=%s",
-            response.data,
-        )
+            logger.info(
+                "create_connector_with_mock_credential - running check_for_indexing: cc_pair=%s",
+                response.data,
+            )
 
         mt_cloud_telemetry(
             tenant_id=tenant_id,
