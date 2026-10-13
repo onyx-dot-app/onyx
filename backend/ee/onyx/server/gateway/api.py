@@ -31,7 +31,6 @@ from ee.onyx.server.gateway.stream_bridge import (
     _StreamAccumulator,
     finalize_tool_calls,
 )
-from ee.onyx.utils.tier import get_tier
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
@@ -68,7 +67,6 @@ from onyx.server.features.build.craft_gateway import gateway_request_flow
 from onyx.server.gateway.configs import (
     GATEWAY_LLM_TOTAL_TIMEOUT_SECONDS,
     GATEWAY_PATH_PREFIX,
-    LLM_GATEWAY_MIN_TIER,
 )
 from onyx.server.gateway.model_catalog import build_gateway_model_catalog
 from onyx.server.gateway.models import (
@@ -120,7 +118,6 @@ from onyx.server.gateway.models import (
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.server.settings.store import load_settings
-from onyx.server.settings.tier_order import tier_at_least
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
@@ -160,17 +157,8 @@ def _authorize_gateway_request(http_request: Request, user: User) -> LLMFlow:
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This credential is not authorized to use the Onyx LLM gateway.",
         )
-    # The tier floor and workspace switch only gate third-party PAT traffic.
-    # Craft sandbox tokens keep working on every tier — admins control those
-    # via the Craft setting.
-    if flow is LLMFlow.LLM_GATEWAY and not tier_at_least(
-        get_tier(), LLM_GATEWAY_MIN_TIER
-    ):
-        raise OnyxError(
-            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
-            f"This feature requires the {LLM_GATEWAY_MIN_TIER.value.title()} plan.",
-            extra={"required_tier": LLM_GATEWAY_MIN_TIER.value},
-        )
+    # The workspace switch only gates third-party PAT traffic. Craft sandbox
+    # tokens keep working — admins control those via the Craft setting.
     # Fail closed: a settings-read error must not silently re-enable a
     # feature the admin switched off.
     if (

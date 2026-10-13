@@ -9,9 +9,8 @@
 **Verified against:** `268e4d5a3d` (2026-10-05)
 **Domain:** platform (EE surface, consumed by Craft and by external tools)
 **Edition:** EE only. The router only exists when EE code loads
-(`backend/ee/onyx/main.py`). Third-party PAT traffic requires
-`LLM_GATEWAY_MIN_TIER` (`Tier.BUSINESS`, `backend/onyx/server/gateway/configs.py`);
-Craft sandbox traffic works on every tier, Community included.
+(`backend/ee/onyx/main.py`), and the path prefix is gated at
+`Tier.BUSINESS` (`backend/onyx/server/gateway/configs.py`).
 **Owns:**
 `backend/ee/onyx/server/gateway/api.py`, `openai_passthrough.py`,
 `anthropic_passthrough.py`, `stream_bridge.py`,
@@ -41,9 +40,9 @@ a real provider, so a Craft session's cost, model choice, and access all flow
 through the same provider configuration an admin manages under
 **Admin > LLM** (see [[llm-providers]]).
 
-External (PAT) use requires at least the Business tier. On a lower tier, a
-PAT request is rejected with a 402 naming the required plan. Craft sandbox
-requests are not tier-gated, so Craft works in Community Edition.
+The feature requires at least the Business tier. On a lower tier, every
+`/gateway/*` request is rejected with a 402 naming the required plan, before
+any gateway code runs.
 
 An admin can also turn the gateway off for the whole workspace, from
 **Admin > LLM Gateway** (`web/src/app/admin/llm-gateway`) or `PATCH
@@ -96,9 +95,8 @@ means mechanically.
 
 `GATEWAY_PATH_PREFIX` (`/gateway`) and `LLM_GATEWAY_MIN_TIER` (`Tier.BUSINESS`) are
 Python constants, not environment variables. `GATEWAY_PATH_PREFIX` is the router's
-mount prefix. `LLM_GATEWAY_MIN_TIER` is the minimum tier for `LLMFlow.LLM_GATEWAY`
-(third-party PAT) traffic, enforced in `_authorize_gateway_request`; `/gateway` is
-deliberately absent from `PATH_PREFIX_MIN_TIER`. The timeout values below are also
+mount prefix and the key `PATH_PREFIX_MIN_TIER` gates on. `LLM_GATEWAY_MIN_TIER` is the
+minimum tier for the whole `/gateway` prefix. The timeout values below are also
 constants. Only the two passthrough kill switches read the environment.
 
 | Variable | Default | Effect |
@@ -144,11 +142,12 @@ asynchronously from tracing spans, not synchronously by the gateway request.
 
 ```
 POST /gateway/v1/chat/completions               ee/onyx/server/gateway/api.py
+  ├─ tier_gate middleware                             ee/onyx/server/middleware/tier_gate.py
+  │    PATH_PREFIX_MIN_TIER["/gateway"] = Tier.BUSINESS
   ├─ require_permission(Permission.USE_LLM_GATEWAY)   GATE 1 (FastAPI Depends)
   ├─ _authorize_gateway_request                       api.py
   │    ├─ gateway_request_flow                         onyx/server/features/build/craft_gateway.py
   │    │    GATE 2: resolves the LLMFlow tag, or rejects
-  │    ├─ tier floor: LLM_GATEWAY_MIN_TIER (LLM_GATEWAY flow only)
   │    └─ workspace switch: Settings.llm_gateway_enabled (LLM_GATEWAY flow only)
   ├─ check_token_rate_limits(user)                     onyx/server/query_and_chat/token_limit.py
   ├─ resolve_gateway_model                              api.py
@@ -160,11 +159,13 @@ POST /gateway/v1/chat/completions               ee/onyx/server/gateway/api.py
   └─ llm_generation_span(flow=...)                      tracing → user_usage rollup
 ```
 
-The tier check runs inside `_authorize_gateway_request`, after GATE 2 has
-resolved the flow, and only for `LLMFlow.LLM_GATEWAY`. Craft sandbox tokens
-(`LLMFlow.CRAFT_LLM_GENERATION`) skip it, so Craft works on Community. A
-path-level `PATH_PREFIX_MIN_TIER` entry for `/gateway` would 402 Craft too,
-which is why there is none.
+The tier check runs as ASGI middleware before the route body executes
+(`ee/onyx/server/middleware/tier_gate.py`), so an under-tier tenant
+never reaches GATE 1 or GATE 2. `PATH_PREFIX_MIN_TIER[GATEWAY_PATH_PREFIX] =
+LLM_GATEWAY_MIN_TIER` (`ee/onyx/configs/license_enforcement_config.py`)
+is the entry that ties `/gateway` to Business. On tier-resolution failure the
+middleware fails closed to `Tier.COMMUNITY` (`tier_gate.py`), which
+denies the gateway rather than allowing it.
 
 ### 4.2 Authentication and scope: two gates and a workspace switch
 
@@ -230,9 +231,12 @@ attribution (§4.6).
 
 ### 4.3 Tier gating
 
-Enforced by `_authorize_gateway_request` (`ee/onyx/server/gateway/api.py`)
-for `LLMFlow.LLM_GATEWAY` only, against `LLM_GATEWAY_MIN_TIER = Tier.BUSINESS`
-(`onyx/server/gateway/configs.py`). Craft sandbox traffic is not tier-gated. The current tier is resolved by
+Enforced by `add_tier_gate_middleware`
+(`ee/onyx/server/middleware/tier_gate.py`) against the
+longest-matching-prefix entry in `PATH_PREFIX_MIN_TIER`
+(`ee/onyx/configs/license_enforcement_config.py`), where
+`GATEWAY_PATH_PREFIX` maps to `LLM_GATEWAY_MIN_TIER = Tier.BUSINESS`
+(`onyx/server/gateway/configs.py`). The current tier is resolved by
 `ee/onyx/utils/tier.py:get_tier`, cloud tenants from a Redis-cached
 control-plane value, self-hosted from the license payload's `customer_tier`.
 See [[editions-and-gating]] for `Tier`/`tier_at_least` mechanics and
@@ -445,10 +449,10 @@ records the span before signalling `_STREAM_END`.
    add a "pick the default model instead" fallback here; a gateway caller
    picked its model explicitly and a silent substitution would bill the
    wrong model to the wrong budget.
-7. **Tier gating is per-flow, not per-path.** Do not add `/gateway` to
-   `PATH_PREFIX_MIN_TIER`: that 402s Craft on Community. Any new PAT-facing
-   flow must go through the `LLMFlow.LLM_GATEWAY` tier check in
-   `_authorize_gateway_request`.
+7. **Tier gating happens before any gateway code runs.** The `/gateway`
+   prefix must stay in `PATH_PREFIX_MIN_TIER` at `Tier.BUSINESS` or higher;
+   removing the entry (rather than deliberately changing the tier) reopens
+   the feature below its licensed tier.
 
 ---
 
@@ -544,9 +548,9 @@ See `backend/AGENTS.md` for required env and secrets.
    ~45 seconds (see `test_gateway_usage_tracking.py:_POLL_TIMEOUT_SECONDS`).
 6. Repeat on a deployment below the Business tier (a self-hosted deployment
    with no license resolves `Tier.COMMUNITY`,
-   `ee/onyx/utils/tier.py:_self_hosted_tier`) and confirm PAT `/gateway/*` calls
-   return 402 with `error_code: "FEATURE_NOT_AVAILABLE"` before touching
-   any provider, while a Craft turn still completes.
+   `ee/onyx/utils/tier.py:_self_hosted_tier`) and confirm every `/gateway/*` call
+   returns 402 with `error_code: "FEATURE_NOT_AVAILABLE"` before touching
+   any provider.
 
 ### What "working" looks like
 
@@ -557,8 +561,8 @@ See `backend/AGENTS.md` for required env and secrets.
 - `store` is `false` in every outbound OpenAI Responses passthrough request,
   regardless of what the caller sent.
 - An unknown or inaccessible model id returns 404, never a substituted model.
-- Below Business tier, PAT `/gateway/*` requests get a 402 before any
-  provider call; Craft sandbox requests succeed.
+- Below Business tier, every `/gateway/*` request is rejected by the tier
+  gate before any handler code runs.
 
 ---
 
