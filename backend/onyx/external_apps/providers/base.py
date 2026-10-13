@@ -127,12 +127,12 @@ class AdminDescriptorSpec(BaseModel):
 class AppInstanceConfig(BaseModel):
     """What one configured app row needs that the static descriptor can't give.
 
-    Most providers talk to a fixed host, so the descriptor is already the whole
-    answer. A provider whose host is per-account (Zendesk, where every account
-    lives on its own ``*.zendesk.com`` subdomain) resolves it from the
-    organization credentials an admin filled in, so the egress gateway keeps a
-    literal host — the credential-injection boundary — and the bundled skill
-    knows which account to call."""
+    Only a provider whose host is per-account produces this. Zendesk is the
+    case: every account lives on its own ``*.zendesk.com`` subdomain, so the
+    gateway's patterns and the bundled skill's base URL both come from the
+    organization credentials an admin filled in — the gateway keeps a literal
+    host (the credential-injection boundary) and the skill knows which account
+    to call."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -223,18 +223,20 @@ class ExternalAppProvider(ABC):
     def resolve_instance(
         self,
         org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
-    ) -> AppInstanceConfig:
-        """Resolve one app row's gateway config from the admin-supplied
-        organization credentials. The descriptor's static patterns by default;
-        override when the upstream host depends on that config.
+    ) -> AppInstanceConfig | None:
+        """Per-app-row gateway config derived from the admin-supplied
+        organization credentials, or ``None`` — the default — when this
+        provider's host is fixed and the app's own stored config stands as the
+        admin set it.
+
+        Override only when the upstream host depends on that config, which is
+        what makes the gateway patterns provider-owned for that provider.
 
         ``org_credentials`` may carry masked secrets (the admin form echoes them
         back), so an override must read only fields declared non-secret in
         ``required_org_credential_fields``. Raise ``OnyxError(INVALID_INPUT)``
         when a field the host depends on is missing or malformed."""
-        return AppInstanceConfig(
-            upstream_url_patterns=list(self.spec.descriptor.upstream_url_patterns)
-        )
+        return None
 
 
 class OnyxManagedExtApp(ExternalAppProvider, abstract=True):

@@ -111,7 +111,7 @@ def test_resolve_instance_config_withholds_secret_fields(
 
     def _spy(
         _self: ZendeskProvider, org_credentials: Mapping[str, str]
-    ) -> AppInstanceConfig:
+    ) -> AppInstanceConfig | None:
         captured.update(org_credentials)
         return AppInstanceConfig(upstream_url_patterns=[])
 
@@ -124,17 +124,13 @@ def test_resolve_instance_config_withholds_secret_fields(
 
 
 def test_resolve_instance_config_leaves_fixed_host_providers_alone() -> None:
-    """The hook defaults to the descriptor, so deriving a built-in's patterns
-    from the provider is a no-op for every provider on a fixed host."""
+    """The hook resolves nothing by default, so a provider on a fixed host
+    keeps the gateway config an admin authored — only a per-account provider
+    takes ownership of its patterns."""
     for app_type, provider in PROVIDERS.items():
         if isinstance(provider, ZendeskProvider):
             continue  # per-account: needs a subdomain, covered above
-        instance = resolve_instance_config(app_type, {})
-        assert instance is not None
-        assert (
-            instance.upstream_url_patterns
-            == provider.spec.descriptor.upstream_url_patterns
-        )
+        assert resolve_instance_config(app_type, {}) is None
 
 
 def test_token_exchange_posts_json_with_an_explicit_expiry() -> None:

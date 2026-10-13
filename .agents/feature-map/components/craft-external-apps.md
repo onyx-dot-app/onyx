@@ -143,13 +143,14 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 
 - `ExternalApp` (`backend/onyx/db/models.py:ExternalApp`): the configured
   app. `upstream_url_patterns` is a plain regex list for built-ins and a glob
-  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). For a
-  built-in the list is provider-derived at write time, not taken from the
-  request: the admin API resolves it through
-  `external_apps/providers/registry.py:resolve_instance_config`, which hands
-  the provider only its non-secret credential fields. Most providers return
-  their static descriptor patterns; one hosted per account (Zendesk) narrows
-  them to the configured account's host. `organization_credentials` and (on
+  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). An
+  admin authors them, except for a built-in whose provider resolves them from
+  its own configuration — `resolve_instance` returns `None` for every provider
+  on a fixed host, and a per-account one (Zendesk) returns the configured
+  account's host, which the admin API then writes instead of the submitted
+  value (`external_apps/providers/registry.py:resolve_instance_config`, which
+  hands the provider only its non-secret credential fields).
+  `organization_credentials` and (on
   `ExternalAppUserCredential`) `user_credentials` are `EncryptedJson` /
   `SensitiveValue`, read only via `.get_value(apply_mask=False)`. The admin
   response masks them, except the fields a provider declares non-secret

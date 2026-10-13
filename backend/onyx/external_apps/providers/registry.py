@@ -75,8 +75,10 @@ def resolve_instance_config(
     app_type: ExternalAppType,
     org_credentials: Mapping[str, Any],
 ) -> AppInstanceConfig | None:
-    """The gateway config for one configured built-in app, or ``None`` for
-    CUSTOM / unregistered types (whose config the admin authors directly).
+    """The gateway config a provider derives for one configured app, or
+    ``None`` — the common case — when nothing needs deriving: a CUSTOM or
+    unregistered type, or a provider on a fixed host, both of which leave the
+    app's stored config as the admin authored it.
 
     Only the provider's non-secret credential fields reach
     ``resolve_instance``: an admin form echoes secrets back masked, so a
