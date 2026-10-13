@@ -35,6 +35,10 @@ from onyx.connectors.microsoft_credential import (
 FAMILY_CREDENTIAL_CODECS: dict[DocumentSource, FamilyCredentialCodec[Any]] = {
     DocumentSource.CONFLUENCE: ConfluenceCredentialCodec(),
     DocumentSource.JIRA: JiraCredentialCodec(),
+    # JSM shares the atlassian family (and keys) with Jira: the credential is
+    # the same account, so a Jira credential can drive a JSM connector and the
+    # two reuse copies of a single stored token.
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: JiraCredentialCodec(),
     DocumentSource.GMAIL: GoogleCredentialCodec(),
     DocumentSource.GOOGLE_DRIVE: GoogleCredentialCodec(),
     DocumentSource.SHAREPOINT: MicrosoftCredentialCodec(SHAREPOINT_KEY_PREFIX),

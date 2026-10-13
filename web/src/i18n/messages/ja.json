@@ -882,6 +882,10 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "Service desk requests & incidents"
+        },
+
         "productboard": {
           "description": "プロダクトマネジメント"
         },
