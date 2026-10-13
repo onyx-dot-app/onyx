@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   InputUpload,
   InputPasswordTypeIn,
@@ -229,27 +229,40 @@ export function CredentialFileField({
   const fileType = getCredentialFileType(fieldKey);
   const definition = fileType ? FILE_TYPE_DEFINITIONS[fileType] : null;
 
+  // Each pick is numbered; a read that a later pick or a clear overtook is
+  // dropped, so it cannot bring back an older file.
+  const latestPickRef = useRef<number>(0);
+
   async function takeFile(file: File | null) {
+    const pick = ++latestPickRef.current;
+    const isLatest = () => pick === latestPickRef.current;
     setFileError(null);
-    if (!file) {
-      void helpers.setValue(null);
-      return;
-    }
+    // Until the new file is checked and read, the field holds no file, so
+    // nothing can send the previous one under the new name.
+    setPickedFile(null);
+    void helpers.setValue(null);
+    if (!file) return;
     if (!fileType) {
       setFileError(t("fileValidation.noTypeDefinition", { name: fieldKey }));
       return;
     }
     const typedFile = createTypedFile(file, fieldKey, fileType);
     const { isValid, errors } = await typedFile.validate();
+    if (!isLatest()) return;
     if (!isValid) {
       setFileError(errors.join(", ") || t("fileValidation.unknownError"));
-      void helpers.setValue(null);
       return;
     }
+    let value: TypedFile | string;
+    try {
+      value = values === "base64" ? await fileToBase64(file) : typedFile;
+    } catch {
+      if (isLatest()) setFileError(t("fileValidation.selectionError"));
+      return;
+    }
+    if (!isLatest()) return;
     setPickedFile(file);
-    void helpers.setValue(
-      values === "base64" ? await fileToBase64(file) : typedFile
-    );
+    void helpers.setValue(value);
     void helpers.setTouched(true, false);
   }
 
