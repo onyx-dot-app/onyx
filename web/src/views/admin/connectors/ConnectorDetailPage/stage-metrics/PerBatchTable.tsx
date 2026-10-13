@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { Table, Text, createTableColumns } from "@opal/components";
+import { Table, type TableColumn, Text } from "@opal/components";
 import { IndexAttemptStageMetric } from "@/lib/types";
 import { formatDurationMs } from "@opal/time";
 import type { SortMode } from "@/lib/connectors/types";
@@ -14,8 +14,6 @@ interface PerBatchTableProps {
   perBatchStages: IndexAttemptStageMetric[];
   sortMode: SortMode;
 }
-
-const tc = createTableColumns<IndexAttemptStageMetric>();
 
 // Plain left-aligned text cell. Matches the `secondary-body` font used by
 // `StageLabelCell`/`AvgTimeCell` so all cells share the same type style.
@@ -53,21 +51,23 @@ export default function PerBatchTable({
     [sorted]
   );
 
-  // Use displayColumn (rather than tc.column) to set explicit minWidths.
-  // tc.column derives minWidth from header length only, which produces tight
+  // Use display columns (rather than data columns) to set explicit minWidths.
+  // Data columns derive minWidth from header length only, which produces tight
   // columns that wrap stage labels like "Permission validation" or numeric
   // cells like "1.23s ± 456ms" onto a second line.
   const columns = useMemo(
-    () => [
-      tc.displayColumn({
+    (): TableColumn<IndexAttemptStageMetric>[] => [
+      {
+        kind: "display",
         id: "stage",
-        header: t("stageMetrics.perBatch.columns.stage"),
+        title: t("stageMetrics.perBatch.columns.stage"),
         width: { weight: 32, minWidth: 220 },
         cell: (row) => <StageLabelCell stage={row.stage} />,
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "avg",
-        header: t("stageMetrics.perBatch.columns.avgTime"),
+        title: t("stageMetrics.perBatch.columns.avgTime"),
         // The Modal "lg" width minus body padding is ~768px. Other columns'
         // minWidths sum to 580, so capping avg at 170 keeps the total minWidth
         // under the modal's inner width and prevents a horizontal scrollbar.
@@ -75,37 +75,41 @@ export default function PerBatchTable({
         // for the bar (which is `w-full` and shrinks freely).
         width: { weight: 30, minWidth: 170 },
         cell: (row) => <AvgTimeCell stage={row} maxAvgMs={maxAvgMs} />,
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "total",
-        header: t("stageMetrics.perBatch.columns.totalTime"),
+        title: t("stageMetrics.perBatch.columns.totalTime"),
         width: { weight: 14, minWidth: 110 },
         cell: (row) => (
           <TextCell>{formatDurationMs(row.total_duration_ms)}</TextCell>
         ),
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "calls",
-        header: t("stageMetrics.perBatch.columns.calls"),
+        title: t("stageMetrics.perBatch.columns.calls"),
         width: { weight: 8, minWidth: 70 },
         cell: (row) => <TextCell>{row.event_count}</TextCell>,
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "min",
-        header: t("stageMetrics.perBatch.columns.min"),
+        title: t("stageMetrics.perBatch.columns.min"),
         width: { weight: 8, minWidth: 90 },
         cell: (row) => (
           <TextCell>{formatOptionalMs(row.min_duration_ms)}</TextCell>
         ),
-      }),
-      tc.displayColumn({
+      },
+      {
+        kind: "display",
         id: "max",
-        header: t("stageMetrics.perBatch.columns.max"),
+        title: t("stageMetrics.perBatch.columns.max"),
         width: { weight: 8, minWidth: 90 },
         cell: (row) => (
           <TextCell>{formatOptionalMs(row.max_duration_ms)}</TextCell>
         ),
-      }),
+      },
     ],
     [maxAvgMs, t]
   );
@@ -113,11 +117,11 @@ export default function PerBatchTable({
   // Use the default `cards` variant (matches the Agents page table) for
   // spacious, rounded-card rows rather than the boxy `rows` borders.
   // Intentionally omit `pageSize` and `footer`: Opal's `Table` then sets
-  // its effective page size to `data.length`, which renders all rows in a
+  // its effective page size to `items.length`, which renders all rows in a
   // single page without pagination. Passing `pageSize: Infinity` instead
   // breaks TanStack's pagination row model (the `pageSize * pageIndex`
   // slice math evaluates to `NaN` and the body renders zero rows).
   return (
-    <Table data={sorted} columns={columns} getRowId={(row) => row.stage} />
+    <Table items={sorted} columns={columns} getRowId={(row) => row.stage} />
   );
 }

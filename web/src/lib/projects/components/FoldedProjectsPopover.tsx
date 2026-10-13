@@ -5,18 +5,17 @@ import {
   FolderIconProvider,
 } from "@/lib/projects/components/ProjectFolderButton";
 import CreateProjectModal from "@/lib/projects/components/CreateProjectModal";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
+  Dropdown,
   EmptyMessageCard,
-  InputTypeIn,
-  Popover,
-  PopoverMenu,
   SidebarTab,
   useCreateModal,
+  type DropdownMenuItem,
+  type DropdownRowProps,
 } from "@opal/components";
-import { useFocusOnMount } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { SvgFolder, SvgFolderPlus } from "@opal/icons";
 import { useAppPosition } from "@/lib/position/hooks";
@@ -37,8 +36,17 @@ import type { Project, ProjectSearchMatch } from "@/lib/projects/types";
 interface ProjectPopoverRowProps {
   match: ProjectSearchMatch;
   onNavigate: () => void;
+  /** The row props from the list. Its click stays with the tabs inside. */
+  rowProps: DropdownRowProps;
+  /** The row's element, for the keyboard to step into its chats. */
+  rowRef: (node: HTMLDivElement | null) => void;
 }
-function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
+function ProjectPopoverRow({
+  match,
+  onNavigate,
+  rowProps,
+  rowRef,
+}: ProjectPopoverRowProps) {
   const appPosition = useAppPosition();
   const pinChatAgent = usePinChatAgent();
   const activeProject = useActiveProject();
@@ -64,6 +72,10 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   return (
     <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
       <Section
+        {...rowProps}
+        ref={rowRef}
+        // A chat link's click must not also open the project.
+        onClick={undefined}
         data-testid="ProjectsPopover/row"
         gap={1}
         alignItems="stretch"
@@ -103,74 +115,6 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
 }
 
 /**
- * What the folded sidebar's Projects popover holds: the search field, the New
- * Project button, and every project with its chats.
- *
- * Its own component so the search term is its own state. Radix unmounts the
- * popover's content on close, so the term goes with it and every opening starts
- * from a clean slate, without anything having to remember to clear it.
- */
-interface FoldedProjectsPopoverContentProps {
-  onNavigate: () => void;
-  onNewProject: () => void;
-}
-function FoldedProjectsPopoverContent({
-  onNavigate,
-  onNewProject,
-}: FoldedProjectsPopoverContentProps) {
-  const t = useTranslations("chat");
-  const tSidebar = useTranslations("sidebar");
-  const [query, setQuery] = useState("");
-  const matches = useProjectSearch(query);
-  const focusOnMount = useFocusOnMount<HTMLInputElement>();
-
-  return (
-    <>
-      <Section flexDirection="row" padding={0} gap={0}>
-        <InputTypeIn
-          data-testid="ProjectsPopover/search"
-          searchIcon
-          clearButton
-          ref={focusOnMount}
-          variant="internal"
-          placeholder={t("projects.foldedPopover.search.placeholder")}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          rightChildren={
-            <Button
-              data-testid="ProjectsPopover/new-project"
-              icon={SvgFolderPlus}
-              prominence="internal"
-              size="sm"
-              tooltip={tSidebar("appSidebar.newProject.tooltip")}
-              onClick={noProp(onNewProject)}
-            />
-          }
-        />
-      </Section>
-
-      <PopoverMenu>
-        {matches.length === 0
-          ? [
-              <EmptyMessageCard
-                key="empty"
-                title={t("projects.foldedPopover.empty.title")}
-                padding={2}
-              />,
-            ]
-          : matches.map((match) => (
-              <ProjectPopoverRow
-                key={match.project.id}
-                match={match}
-                onNavigate={onNavigate}
-              />
-            ))}
-      </PopoverMenu>
-    </>
-  );
-}
-
-/**
  * The folded sidebar's Projects entry.
  *
  * Folded, the sidebar has no room for the projects tree, and a project's chats
@@ -186,6 +130,13 @@ export function FoldedProjectsPopover() {
   const appPosition = useAppPosition();
   const createProjectModal = useCreateModal();
   const [open, setOpen] = useState(false);
+  const t = useTranslations("chat");
+  // The search is the caller's: it matches chat titles too, so the rows
+  // are pinned past the list's own filter. The list clears the text on close.
+  const [query, setQuery] = useState("");
+  const matches = useProjectSearch(query);
+  // Each project's row element: ArrowRight steps into its chats.
+  const rowElements = useRef(new Map<number, HTMLDivElement>());
 
   // Any navigation means the popover has done its job. Folding a project's
   // chats never touches the URL, so the folder icon leaves the popover open.
@@ -197,6 +148,55 @@ export function FoldedProjectsPopover() {
     createProjectModal.toggle(true);
   }
 
+  const items: DropdownMenuItem[] =
+    matches.length === 0
+      ? [
+          {
+            kind: "custom",
+            id: "empty",
+            disabled: true,
+            pinned: true,
+            render: ({ props }) => (
+              <div {...props}>
+                <EmptyMessageCard
+                  title={t("projects.foldedPopover.empty.title")}
+                  padding={2}
+                />
+              </div>
+            ),
+          },
+        ]
+      : matches.map((match) => ({
+          kind: "custom",
+          id: `project-${match.project.id}`,
+          pinned: true,
+          keepOpen: true,
+          onActivate: () => {
+            setOpen(false);
+            appPosition.openProject(match.project.id);
+          },
+          // ArrowRight, with the search caret at the end of its text, moves
+          // focus to the project's first chat; Tab walks the rest and Enter
+          // follows one.
+          onSecondary: () => {
+            rowElements.current
+              .get(match.project.id)
+              ?.querySelector("a")
+              ?.focus();
+          },
+          render: ({ props }) => (
+            <ProjectPopoverRow
+              match={match}
+              onNavigate={() => setOpen(false)}
+              rowProps={props}
+              rowRef={(node) => {
+                if (node) rowElements.current.set(match.project.id, node);
+                else rowElements.current.delete(match.project.id);
+              }}
+            />
+          ),
+        }));
+
   return (
     <>
       {/* A sibling of the popover on purpose: creating a project closes the
@@ -205,8 +205,14 @@ export function FoldedProjectsPopover() {
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      <Popover open={open} onOpenChange={setOpen}>
-        <Popover.Trigger asChild>
+      <Dropdown
+        width={60}
+        side="right"
+        tabKey="walk"
+        open={open}
+        onOpenChange={setOpen}
+      >
+        <Dropdown.Trigger asChild>
           <div data-testid="AppSidebar/projects" tabIndex={-1}>
             <SidebarTab
               icon={SvgFolder}
@@ -217,20 +223,28 @@ export function FoldedProjectsPopover() {
               {tSidebar("appSidebar.projects.title")}
             </SidebarTab>
           </div>
-        </Popover.Trigger>
-
-        <Popover.Content
-          data-testid="ProjectsPopover"
-          side="right"
-          align="start"
-          width="lg"
-        >
-          <FoldedProjectsPopoverContent
-            onNavigate={() => setOpen(false)}
-            onNewProject={handleNewProject}
-          />
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={tSidebar("appSidebar.projects.title")}
+          search={{
+            "data-testid": "ProjectsPopover/search",
+            clearButton: true,
+            placeholder: t("projects.foldedPopover.search.placeholder"),
+            onChange: setQuery,
+            rightChildren: (
+              <Button
+                data-testid="ProjectsPopover/new-project"
+                icon={SvgFolderPlus}
+                prominence="internal"
+                size="sm"
+                tooltip={tSidebar("appSidebar.newProject.tooltip")}
+                onClick={noProp(handleNewProject)}
+              />
+            ),
+          }}
+          items={items}
+        />
+      </Dropdown>
     </>
   );
 }

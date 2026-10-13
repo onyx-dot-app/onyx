@@ -7,6 +7,7 @@ import type {
   ListOption,
 } from "@/lib/connectors/types";
 import { OneDriveScope } from "@/lib/connectors/types";
+import { googleCredentialKind } from "@/lib/credentials/utils";
 
 const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
 const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
@@ -127,10 +128,62 @@ function buildOneDriveConfiguration(
   };
 }
 
+interface LinearConfigurationText {
+  description: string;
+  teamsLabel: string;
+  teamsDescription: string;
+  projectsLabel: string;
+  projectsDescription: string;
+}
+
+const LINEAR_TRANSLATION_KEYS: LinearConfigurationText = {
+  description: "description",
+  teamsLabel: "teams.label",
+  teamsDescription: "teams.description",
+  projectsLabel: "projects.label",
+  projectsDescription: "projects.description",
+};
+
+function buildLinearConfiguration(
+  text: LinearConfigurationText
+): ConnectionConfiguration {
+  return {
+    description: text.description,
+    values: [
+      {
+        type: "list",
+        label: text.teamsLabel,
+        name: "team_keys",
+        description: text.teamsDescription,
+        optional: true,
+      },
+      {
+        type: "list",
+        label: text.projectsLabel,
+        name: "projects",
+        description: text.projectsDescription,
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  };
+}
+
 export function useConnectorConfiguration(
   connector: ConfigurableSources
 ): ConnectionConfiguration {
   const t = useTranslations("admin.connectorsList.oneDrive");
+  const linearText = useTranslations("admin.connectorsList.linear");
+
+  if (connector === "linear") {
+    return buildLinearConfiguration({
+      description: linearText("description"),
+      teamsLabel: linearText("teams.label"),
+      teamsDescription: linearText("teams.description"),
+      projectsLabel: linearText("projects.label"),
+      projectsDescription: linearText("projects.description"),
+    });
+  }
 
   if (connector !== "onedrive") {
     return connectorConfigs[connector];
@@ -305,6 +358,15 @@ export const connectorConfigs: Record<
     values: [
       {
         type: "text",
+        label: "GitHub Enterprise Server URL",
+        name: "github_base_url",
+        optional: true,
+        description: "Leave blank for github.com.",
+        placeholder: "https://github.example.com",
+        subDescription: "siteUrl",
+      },
+      {
+        type: "text",
         query: "Enter the GitHub username or organization:",
         label: "Repository Owner",
         name: "repo_owner",
@@ -313,7 +375,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "github_mode",
-        label: "What should we index from GitHub?",
+        label: "GitHub content to index",
         optional: true,
         tabs: [
           {
@@ -348,8 +410,8 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        query: "Include pull requests?",
-        label: "Include pull requests?",
+        query: "Include pull requests",
+        label: "Include pull requests",
         description: "Index pull requests from repositories",
         name: "include_prs",
         optional: true,
@@ -357,7 +419,7 @@ export const connectorConfigs: Record<
       {
         type: "checkbox",
         query: "Include issues?",
-        label: "Include Issues?",
+        label: "Include Issues",
         name: "include_issues",
         description: "Index issues from repositories",
         optional: true,
@@ -365,7 +427,7 @@ export const connectorConfigs: Record<
       {
         type: "checkbox",
         query: "Include documents?",
-        label: "Include Documents?",
+        label: "Include Documents",
         name: "include_files",
         description:
           "Index text-based documents (markdown, text, etc.) from repositories",
@@ -387,6 +449,14 @@ export const connectorConfigs: Record<
   testrail: {
     description: "Configure TestRail connector",
     values: [
+      {
+        type: "text",
+        label: "TestRail Base URL",
+        name: "testrail_base_url",
+        optional: false,
+        placeholder: "https://acme.testrail.io",
+        subDescription: "siteUrl",
+      },
       {
         type: "text",
         label: "Project IDs",
@@ -426,6 +496,14 @@ export const connectorConfigs: Record<
   gitlab: {
     description: "Configure GitLab connector",
     values: [
+      {
+        type: "text",
+        label: "GitLab URL",
+        name: "gitlab_url",
+        optional: false,
+        placeholder: "https://gitlab.com",
+        subDescription: "siteUrl",
+      },
       {
         type: "text",
         query: "Enter the project owner:",
@@ -475,7 +553,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "bitbucket_mode",
-        label: "What should be indexed from Bitbucket?",
+        label: "Bitbucket content to index",
         optional: true,
         tabs: [
           {
@@ -544,11 +622,20 @@ export const connectorConfigs: Record<
   },
   google_drive: {
     description: "Configure Google Drive connector",
+    configFromCredential: (credential) => ({
+      credential_kind: googleCredentialKind(credential),
+    }),
     values: [
+      {
+        type: "text",
+        label: "Credential kind",
+        name: "credential_kind",
+        optional: true,
+        hidden: true,
+      },
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How should we index your Google Drive?",
         optional: true,
         tabs: [
           {
@@ -557,7 +644,7 @@ export const connectorConfigs: Record<
             fields: [
               {
                 type: "checkbox",
-                label: "Include shared drives?",
+                label: "Include shared drives",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
                     ? "This will allow Onyx to index everything in the shared drives you have access to."
@@ -570,8 +657,8 @@ export const connectorConfigs: Record<
                 type: "checkbox",
                 label: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Include My Drive?"
-                    : "Include Everyone's My Drive?";
+                    ? "Include My Drive"
+                    : "Include Everyone's My Drive";
                 },
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
@@ -585,7 +672,7 @@ export const connectorConfigs: Record<
                 type: "checkbox",
                 description:
                   "This will allow Onyx to index all files shared with you.",
-                label: "Include All Files Shared With You?",
+                label: "Include All Files Shared With You",
                 name: "include_files_shared_with_me",
                 visibleCondition: (values, currentCredential) =>
                   currentCredential?.credential_json?.google_tokens,
@@ -650,7 +737,7 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        label: "Hide domain link-only files?",
+        label: "Hide domain link-only files",
         description:
           "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
         name: "exclude_domain_link_only",
@@ -667,12 +754,30 @@ export const connectorConfigs: Record<
   },
   bookstack: {
     description: "Configure Bookstack connector",
-    values: [],
+    values: [
+      {
+        type: "text",
+        label: "BookStack Base URL",
+        name: "bookstack_base_url",
+        optional: false,
+        placeholder: "https://bookstack.example.com",
+        subDescription: "siteUrl",
+      },
+    ],
     advanced_values: [],
   },
   outline: {
     description: "Configure Outline connector",
-    values: [],
+    values: [
+      {
+        type: "text",
+        label: "Outline Base URL",
+        name: "outline_base_url",
+        optional: false,
+        placeholder: "https://app.getoutline.com",
+        subDescription: "siteUrl",
+      },
+    ],
     advanced_values: [],
   },
   confluence: {
@@ -719,21 +824,23 @@ export const connectorConfigs: Record<
           }
           return false;
         },
-        description:
-          "The base URL of your Confluence instance (e.g., https://your-domain.atlassian.net/wiki)",
+        placeholder: "https://your-domain.atlassian.net/wiki",
+        subDescription: "siteUrl",
       },
       {
         type: "checkbox",
         query: "Using scoped token?",
-        label: "Using scoped token",
+        label: "This is an API token with scopes",
+        description:
+          "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens.",
         name: "scoped_token",
         optional: true,
         default: false,
+        asCheckbox: true,
       },
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Confluence?",
         optional: true,
         tabs: [
           {
@@ -833,7 +940,6 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Jira?",
         optional: true,
         tabs: [
           {
@@ -932,15 +1038,9 @@ export const connectorConfigs: Record<
                 isTextArea: true,
                 description:
                   "Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure." +
-                  "\n\nExample:" +
-                  "\n{" +
-                  '\n  "Account": {' +
-                  '\n    "fields": ["Id", "Name", "Industry"],' +
-                  '\n    "associations": {' +
-                  '\n      "Contact": ["Id", "FirstName", "LastName", "Email"]' +
-                  "\n    }" +
-                  "\n  }" +
-                  "\n}" +
+                  "\n\nExample: " +
+                  '`{"Account": {"fields": ["Id", "Name", "Industry"], ' +
+                  '"associations": {"Contact": ["Id", "FirstName", "LastName", "Email"]}}}`' +
                   `\n\n[See our docs](${DOCS_ADMINS_PATH}/connectors/official/salesforce) for more details.`,
               },
             ],
@@ -960,12 +1060,11 @@ export const connectorConfigs: Record<
         label: "Sites",
         name: "sites",
         optional: true,
-        description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
-• Specifying 'https://onyxai.sharepoint.com/sites/support' for example only indexes this site.
-• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example only indexes this folder.
-• To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).
-• Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.
-`,
+        description: `- If no sites are specified, all sites in your organization will be indexed (\`Sites.Read.All\` permission required).
+- Specifying \`https://onyxai.sharepoint.com/sites/support\` for example only indexes this site.
+- Specifying \`https://onyxai.sharepoint.com/sites/support/subfolder\` for example only indexes this folder.
+- To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).
+- Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.`,
       },
     ],
     advanced_values: [
@@ -991,7 +1090,7 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        label: "Treat sharing links as public?",
+        label: "Treat sharing links as public",
         description:
           "When enabled, documents with a sharing link (anonymous or organization-wide) " +
           "are treated as public (visible to all Onyx users). " +
@@ -1009,8 +1108,8 @@ export const connectorConfigs: Record<
         description:
           "Site URLs or glob patterns to exclude from indexing. " +
           "Matched sites will never be indexed, even if they appear in the sites list above. " +
-          "Examples: 'https://contoso.sharepoint.com/sites/archive' (exact), " +
-          "'*://*/sites/archive-*' (glob pattern).",
+          "Examples: `https://contoso.sharepoint.com/sites/archive` (exact), " +
+          "`*://*/sites/archive-*` (glob pattern).",
       },
       {
         type: "list",
@@ -1021,7 +1120,7 @@ export const connectorConfigs: Record<
         description:
           "Glob patterns for file paths to exclude from indexing within document libraries. " +
           "Patterns are matched against both the full relative path and the filename. " +
-          "Examples: '*.tmp' (temp files), '~$*' (Office lock files), 'Archive/*' (folder).",
+          "Examples: `*.tmp` (temp files), `~$*` (Office lock files), `Archive/*` (folder).",
       },
       {
         type: "text",
@@ -1171,8 +1270,19 @@ export const connectorConfigs: Record<
         optional: true,
         description:
           "User principal names or primary email addresses of the mailboxes to index. " +
-          "Leave empty to index every mailbox the app registration may open. " +
+          "Leave this and Mailbox Groups empty to index every mailbox the app registration may open. " +
           "Shared mailboxes are never picked up automatically and must be listed here.",
+      },
+      {
+        type: "list",
+        query: "Enter groups whose mailboxes to index:",
+        label: "Mailbox Groups",
+        name: "mailbox_groups",
+        optional: true,
+        description:
+          "Display names or object IDs of Entra groups. The mailbox of every member is indexed, " +
+          "members of nested groups included, so a tenant can be limited to the people who use Onyx. " +
+          "Needs the GroupMember.Read.All application permission.",
       },
       buildIncludeAttachmentsOption(
         false,
@@ -1286,7 +1396,7 @@ export const connectorConfigs: Record<
       {
         type: "tab",
         name: "indexing_scope",
-        label: "What should we index from Drupal Wiki?",
+        label: "Drupal Wiki content to index",
         optional: true,
         tabs: [
           {
@@ -1340,6 +1450,14 @@ export const connectorConfigs: Record<
     description: "Configure Axero connector",
     values: [
       {
+        type: "text",
+        label: "Axero Base URL",
+        name: "base_url",
+        optional: false,
+        placeholder: "https://axero.example.com",
+        subDescription: "siteUrl",
+      },
+      {
         type: "list",
         query: "Enter spaces to include:",
         label: "Spaces",
@@ -1377,7 +1495,8 @@ export const connectorConfigs: Record<
         label: "Enable Channel Regex",
         name: "channel_regex_enabled",
         description: `If enabled, we will treat the "channels" specified above as regular expressions. A channel's messages will be pulled in by the connector if the name of the channel fully matches any of the specified regular expressions.
-For example, specifying .*-support.* as a "channel" will cause the connector to include any channels with "-support" in the name.`,
+
+For example, specifying \`.*-support.*\` as a "channel" will cause the connector to include any channels with "-support" in the name.`,
         optional: true,
       },
       {
@@ -1396,7 +1515,8 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
         label: "Enable Exclude Channel Regex",
         name: "exclude_channel_regex_enabled",
         description: `If enabled, we will treat the "channels to exclude" specified above as regular expressions. A channel will be excluded if its name fully matches any of the specified regular expressions.
-For example, specifying .*-alerts as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
+
+For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
         optional: true,
       },
       {
@@ -1433,6 +1553,15 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Gong connector",
     values: [
       {
+        type: "text",
+        label: "Gong API Base URL",
+        name: "gong_base_url",
+        optional: true,
+        description: "Defaults to `https://api.gong.io`.",
+        placeholder: "https://api.gong.io",
+        subDescription: "siteUrl",
+      },
+      {
         type: "list",
         query: "Enter workspaces to include:",
         label: "Workspaces",
@@ -1447,6 +1576,15 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
   loopio: {
     description: "Configure Loopio connector",
     values: [
+      {
+        type: "text",
+        label: "Loopio Subdomain",
+        name: "loopio_subdomain",
+        optional: false,
+        description:
+          "The subdomain of your Loopio site, like `acme` in `acme.loopio.com`.",
+        placeholder: "acme",
+      },
       {
         type: "text",
         query: "Enter the Loopio stack name",
@@ -1619,6 +1757,15 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Zendesk connector",
     values: [
       {
+        type: "text",
+        label: "Zendesk Subdomain",
+        name: "zendesk_subdomain",
+        optional: false,
+        description:
+          "The subdomain of your Zendesk site, like `acme` in `acme.zendesk.com`.",
+        placeholder: "acme",
+      },
+      {
         type: "select",
         query: "Select the what content this connector will index:",
         label: "Content Type",
@@ -1642,11 +1789,7 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       },
     ],
   },
-  linear: {
-    description: "Configure Linear connector",
-    values: [],
-    advanced_values: [],
-  },
+  linear: buildLinearConfiguration(LINEAR_TRANSLATION_KEYS),
   box: {
     description: "Configure Box connector",
     values: [
@@ -1982,7 +2125,17 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
   },
   freshdesk: {
     description: "Configure Freshdesk connector",
-    values: [],
+    values: [
+      {
+        type: "text",
+        label: "Freshdesk Domain",
+        name: "freshdesk_domain",
+        optional: false,
+        description:
+          "The subdomain of your Freshdesk site, like `acme` in `acme.freshdesk.com`.",
+        placeholder: "acme",
+      },
+    ],
     advanced_values: [],
   },
   fireflies: {
@@ -2046,6 +2199,19 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
         default: true,
       },
       {
+        type: "checkbox",
+        query: "Treat link access as public?",
+        label: "Treat link access as public",
+        name: "treat_link_access_as_public",
+        description:
+          "Only matters with permission sync. When on, a recording whose Link " +
+          'access is "Anyone with the link" or a signed-in rule is visible ' +
+          "to all Onyx users, and a domain rule to users of those domains. " +
+          "When off, every transcript is visible to the recording's owner " +
+          'alone, because Zoom cannot say who is in "People with access".',
+        default: true,
+      },
+      {
         type: "select",
         query: "Select the Zoom plan:",
         label: "Zoom Plan",
@@ -2056,8 +2222,8 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
           { name: "business_plus", value: "business_plus" },
         ],
         description:
-          "Sets how fast this connector is allowed to call Zoom. Pick pro on " +
-          "a Pro account, and business_plus on Business, Education, " +
+          "Sets how fast this connector is allowed to call Zoom. Pick `pro` on " +
+          "a Pro account, and `business_plus` on Business, Education, " +
           "Enterprise or Partner.",
       },
     ],
@@ -2122,6 +2288,15 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     values: [
       {
         type: "text",
+        label: "Egnyte Domain",
+        name: "domain",
+        optional: false,
+        description:
+          "The subdomain of your Egnyte site, like `acme` in `acme.egnyte.com`.",
+        placeholder: "acme",
+      },
+      {
+        type: "text",
         query: "Enter folder path to index:",
         label: "Folder Path",
         name: "folder_path",
@@ -2138,7 +2313,7 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
       {
         type: "tab",
         name: "airtable_scope",
-        label: "What should we index from Airtable?",
+        label: "Airtable content to index",
         optional: true,
         tabs: [
           {
@@ -2195,9 +2370,17 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     description: "Configure Highspot connector",
     values: [
       {
+        type: "text",
+        label: "Highspot URL",
+        name: "highspot_url",
+        optional: false,
+        placeholder: "https://api-su2.highspot.com/v1.0/",
+        subDescription: "siteUrl",
+      },
+      {
         type: "tab",
         name: "highspot_scope",
-        label: "What should we index from Highspot?",
+        label: "Highspot content to index",
         optional: true,
         tabs: [
           {

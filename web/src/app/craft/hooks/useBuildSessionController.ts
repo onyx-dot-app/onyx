@@ -2,7 +2,10 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import {
+  canReuseSession,
+  useBuildSessionStore,
+} from "@/app/craft/hooks/useBuildSessionStore";
 import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
 import { useSandboxStatusReconciler } from "@/app/craft/hooks/useSandboxStatusReconciler";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
@@ -84,7 +87,7 @@ export function useBuildSessionController({
   const isLoading = useBuildSessionStore((state) => {
     if (!state.currentSessionId) return false;
     const session = state.sessions.get(state.currentSessionId);
-    return session ? !session.isLoaded : false;
+    return session ? !session.isLoaded && session.loadError === null : false;
   });
 
   const isStreaming = useBuildSessionStore((state) => {
@@ -104,18 +107,31 @@ export function useBuildSessionController({
         .sessions.get(sessionId);
       if (!cachedSession?.isLoaded) return;
       const skillsStaleRevision = cachedSession.skillsStaleRevision;
+      if (
+        cachedSession.status !== "running" &&
+        cachedSession.status !== "creating" &&
+        cachedSession.activeTurnId === null
+      ) {
+        void useBuildSessionStore
+          .getState()
+          .refreshOutputInventory(sessionId, { silent: true });
+      }
 
       try {
         const session = await fetchSession(sessionId, {
           checkWorkspace: false,
         });
-        if (!session.skills_stale) return;
         const currentSession = useBuildSessionStore
           .getState()
           .sessions.get(sessionId);
-        if (currentSession?.skillsStaleRevision !== skillsStaleRevision) return;
+        if (
+          currentSession?.instanceId !== cachedSession.instanceId ||
+          currentSession.turnGeneration !== cachedSession.turnGeneration ||
+          currentSession.skillsStaleRevision !== skillsStaleRevision
+        )
+          return;
         updateSessionData(sessionId, {
-          skillsStale: true,
+          skillsStale: session.skills_stale,
         });
       } catch {
         // Keep the usable cached session on transient refresh failures.
@@ -139,6 +155,7 @@ export function useBuildSessionController({
       // Reset state when transitioning FROM a session TO new build
       // This ensures we fetch fresh pre-provisioned status from backend
       if (prevExistingSessionId !== null) {
+        setControllerLoaded(null);
         setControllerTriggered(null);
         // Clear pre-provisioned state to force a fresh check from backend
         useBuildSessionStore.setState({ preProvisioning: { status: "idle" } });
@@ -180,12 +197,13 @@ export function useBuildSessionController({
       const currentState = useBuildSessionStore.getState();
       const cachedSession = currentState.sessions.get(existingSessionId);
 
-      if (cachedSession?.isLoaded) {
+      if (canReuseSession(cachedSession)) {
         setCurrentSession(existingSessionId);
         return;
       }
 
-      // Need to load from API
+      // Navigation belongs to the controller, not background loads.
+      setCurrentSession(existingSessionId);
       await loadSession(existingSessionId);
     }
 
@@ -278,6 +296,10 @@ export function useBuildSessionController({
         try {
           // Check if session is still valid WITHOUT resetting state
           const { valid } = await checkPreProvisionedSession(cachedSessionId);
+          if (
+            useBuildSessionStore.getState().preProvisioning !== preProvisioning
+          )
+            return;
 
           if (!valid) {
             // Session was consumed by another tab - now reset and re-provision

@@ -20,13 +20,14 @@ import {
   useQueuedMessages,
   useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
+import { useCraftStreaming } from "@/providers/CraftStreamingProvider";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
 import { BuildMessageAttachment } from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
   useUploadFilesContext,
+  UploadFilesProvider,
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
@@ -57,11 +58,16 @@ import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicato
 import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
-import { Button, Tooltip } from "@opal/components";
+import { Button, MessageCard, Tooltip } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
-import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import {
+  motion,
+  AnimatePresence,
+  LayoutGroup,
+  useReducedMotion,
+} from "motion/react";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
@@ -91,9 +97,7 @@ function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
  * - Input bar at bottom
  * - Header with output panel toggle
  */
-export default function BuildChatPanel({
-  existingSessionId,
-}: BuildChatPanelProps) {
+function ChatPanelContent({ existingSessionId }: BuildChatPanelProps) {
   const t = useTranslations("craft.chatPanel");
   const router = useRouter();
   const outputPanelOpen = useOutputPanelOpen();
@@ -108,10 +112,17 @@ export default function BuildChatPanel({
   const scheduledRunInFlight =
     isScheduledRunContextInFlight(scheduledRunContext);
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
+  const scheduledRunId = scheduledRunContext?.run_id;
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
-  const hasInterruptibleTurn = session?.status === "running";
+  const isRestoring: boolean =
+    session?.status === "creating" &&
+    !session.activeTurnLocalOwner &&
+    !session.activeTurnId;
+  const hasInterruptibleTurn =
+    (session?.status === "running" || session?.status === "creating") &&
+    (session.activeTurnId !== null || session.activeTurnLocalOwner);
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
@@ -183,15 +194,15 @@ export default function BuildChatPanel({
   const isViewingSubagent = viewedSubagentSessionId !== null;
   const reduceMotion = useReducedMotion();
 
-  const updateSessionData = useBuildSessionStore(
-    (state) => state.updateSessionData
-  );
-
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
     (state) => state.consumePreProvisionedSession
   );
   const createSession = useBuildSessionStore((state) => state.createSession);
+  const loadSession = useBuildSessionStore((state) => state.loadSession);
+  const retryTurnSettlement = useBuildSessionStore(
+    (state) => state.retryTurnSettlement
+  );
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
   );
@@ -202,22 +213,37 @@ export default function BuildChatPanel({
     streamMessage,
     interruptStreaming,
     streamScheduledRunEvents,
-    streamTurnEvents,
-  } = useBuildStreaming();
+    retryQueuedMessage,
+  } = useCraftStreaming();
   const isInterrupting = useIsInterrupting();
-  const queuedMessages = useQueuedMessages();
+  const sessionQueue = useQueuedMessages();
+  const queuedMessages = useMemo(
+    () => sessionQueue.filter((message) => message.phase !== "starting"),
+    [sessionQueue]
+  );
+  const queuedSendError =
+    !isRunning && !session?.activeTurnId && sessionQueue[0]?.phase === "failed"
+      ? session?.error
+      : null;
+  const settlementError =
+    session?.turnSettlement?.phase === "failed"
+      ? (session.turnSettlement.error ?? t("settlementError.description"))
+      : null;
+  const submissionBlocked =
+    (!!existingSessionId &&
+      !session?.isLoaded &&
+      !session?.activeTurnId &&
+      !session?.activeTurnLocalOwner) ||
+    session?.loadError != null ||
+    session?.turnSettlement?.phase === "failed" ||
+    sessionQueue[0]?.phase === "failed";
+  const recoverableError =
+    settlementError ?? queuedSendError ?? session?.loadError;
   const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
   );
-  const attachedTurnRef = useRef<{
-    turnId: string;
-    controller: AbortController;
-  } | null>(null);
-  const attachCleanupTimerRef = useRef<{
-    turnId: string;
-    timer: ReturnType<typeof setTimeout>;
-  } | null>(null);
+  const activeTurnId = session?.activeTurnId ?? null;
   const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -240,110 +266,48 @@ export default function BuildChatPanel({
     currentFilesRef.current = currentMessageFiles;
   }, [currentMessageFiles]);
 
-  /**
-   * Keep the upload context in sync with the active session.
-   * The context handles all session change logic internally (fetching attachments,
-   * clearing files, auto-uploading pending files).
-   */
+  // URL sessions identify drafts; provisional sessions provide upload destinations.
   useEffect(() => {
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
-    setActiveSession(activeSession);
+    setActiveSession(activeSession, { draftId: existingSessionId ?? null });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
-  const maybeAutoOpenPanelForPreview = useBuildSessionStore(
-    (s) => s.maybeAutoOpenPanelForPreview
+  const maybeAutoOpenWebapp = useBuildSessionStore(
+    (s) => s.maybeAutoOpenWebapp
   );
 
-  // Auto-open the panel the first time webappUrl becomes non-null this session.
+  // A URL starts readiness checks; only a serving webapp can open Preview.
   const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     const prev = prevWebappUrlRef.current;
     const current = session?.webappUrl ?? null;
     if (prev === null && current !== null && sessionId) {
-      maybeAutoOpenPanelForPreview(sessionId);
+      void maybeAutoOpenWebapp(sessionId);
     }
     prevWebappUrlRef.current = current;
-  }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
+  }, [session?.webappUrl, sessionId, maybeAutoOpenWebapp]);
 
   useEffect(() => {
-    if (!scheduledSessionId || !shouldStreamScheduledRun) return;
+    if (!scheduledSessionId || !scheduledRunId || !shouldStreamScheduledRun)
+      return;
 
     const controller = new AbortController();
-    void streamScheduledRunEvents(scheduledSessionId, controller.signal, () => {
-      void mutateScheduledRunContext();
-    });
+    void streamScheduledRunEvents(
+      scheduledSessionId,
+      scheduledRunId,
+      controller.signal,
+      () => {
+        void mutateScheduledRunContext();
+      }
+    );
 
     return () => controller.abort();
   }, [
     scheduledSessionId,
+    scheduledRunId,
     shouldStreamScheduledRun,
     streamScheduledRunEvents,
     mutateScheduledRunContext,
-  ]);
-
-  const activeTurnId = session?.activeTurnId ?? null;
-  const activeTurnLocalOwner = session?.activeTurnLocalOwner ?? false;
-  useEffect(() => {
-    const pendingCleanup = attachCleanupTimerRef.current;
-    if (pendingCleanup?.turnId === activeTurnId) {
-      clearTimeout(pendingCleanup.timer);
-      attachCleanupTimerRef.current = null;
-    }
-
-    if (
-      !scheduledSessionId ||
-      !activeTurnId ||
-      activeTurnLocalOwner ||
-      scheduledRunInFlight
-    ) {
-      return;
-    }
-
-    const scheduleCleanup = (attachment: {
-      turnId: string;
-      controller: AbortController;
-    }) => {
-      attachCleanupTimerRef.current = {
-        turnId: attachment.turnId,
-        timer: setTimeout(() => {
-          attachment.controller.abort();
-          if (attachedTurnRef.current === attachment) {
-            attachedTurnRef.current = null;
-          }
-          if (attachCleanupTimerRef.current?.turnId === attachment.turnId) {
-            attachCleanupTimerRef.current = null;
-          }
-        }, 0),
-      };
-    };
-
-    const existingAttachment = attachedTurnRef.current;
-    if (existingAttachment?.turnId === activeTurnId) {
-      return () => scheduleCleanup(existingAttachment);
-    }
-
-    existingAttachment?.controller.abort();
-    const controller = new AbortController();
-    const attachment = { turnId: activeTurnId, controller };
-    attachedTurnRef.current = attachment;
-    void streamTurnEvents(
-      scheduledSessionId,
-      activeTurnId,
-      controller.signal,
-      () => {
-        if (attachedTurnRef.current === attachment) {
-          attachedTurnRef.current = null;
-        }
-      }
-    );
-
-    return () => scheduleCleanup(attachment);
-  }, [
-    scheduledSessionId,
-    activeTurnId,
-    activeTurnLocalOwner,
-    scheduledRunInFlight,
-    streamTurnEvents,
   ]);
 
   useEffect(() => {
@@ -355,13 +319,19 @@ export default function BuildChatPanel({
     ) {
       return;
     }
-    updateSessionData(scheduledSessionId, { status: "active" });
+    const store = useBuildSessionStore.getState();
+    const current = store.sessions.get(scheduledSessionId);
+    if (current)
+      void store.beginTurnSettlement(
+        scheduledSessionId,
+        { kind: "scheduled", runId: scheduledRunContext.run_id },
+        current.turnGeneration
+      );
   }, [
     scheduledSessionId,
     scheduledRunContext,
     scheduledRunInFlight,
     activeTurnId,
-    updateSessionData,
   ]);
 
   // Ref to access InputBar methods
@@ -455,6 +425,7 @@ export default function BuildChatPanel({
       attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
+      if (submissionBlocked) return;
       if (scheduledRunInFlight) {
         toast.error(t("toast.scheduledRunWait"));
         return;
@@ -480,8 +451,13 @@ export default function BuildChatPanel({
           timestamp: new Date(),
           attachments,
         });
-        // Stream the response
-        await streamMessage(sessionId, message, chosen, attachments);
+        // Only explicit choices override the saved model.
+        await streamMessage(
+          sessionId,
+          message,
+          modelOverride ?? modelBySession[sessionId] ?? null,
+          attachments
+        );
       } else {
         // New session flow - ALWAYS use pre-provisioned session
         const newSessionId = await consumePreProvisionedSession();
@@ -571,6 +547,7 @@ export default function BuildChatPanel({
       sessionId,
       isRunning,
       scheduledRunInFlight,
+      submissionBlocked,
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
@@ -579,6 +556,7 @@ export default function BuildChatPanel({
       router,
       hasUploadingFiles,
       selectedModel,
+      modelBySession,
       t,
     ]
   );
@@ -598,60 +576,29 @@ export default function BuildChatPanel({
 
   const handleQueueMessage = useCallback(
     (text: string, files: BuildFile[]) => {
-      if (sessionId) {
-        enqueueMessage(sessionId, text, toMessageAttachments(files));
-      }
+      return (
+        !!sessionId &&
+        enqueueMessage(
+          sessionId,
+          text,
+          toMessageAttachments(files),
+          modelBySession[sessionId] ?? null
+        )
+      );
     },
-    [sessionId, enqueueMessage]
+    [sessionId, enqueueMessage, modelBySession]
   );
 
   const handleRemoveQueuedMessage = useCallback(
     (index: number) => {
-      if (sessionId) removeQueuedMessage(sessionId, index);
+      const message = queuedMessages[index];
+      if (sessionId && message) removeQueuedMessage(sessionId, message.id);
     },
-    [sessionId, removeQueuedMessage]
+    [sessionId, queuedMessages, removeQueuedMessage]
   );
 
-  // Auto-send the next queued message FIFO after a run cleanly succeeds (each
-  // send re-arms this for the message after). Only fire on a clean completion
-  // and when the send is actually eligible — otherwise we'd dequeue a message
-  // that a failed run never sends, silently dropping it. The sessionId guard
-  // avoids mistaking a session switch for a run completion.
-  const sessionStatus = session?.status;
-  const sessionError = session?.error;
-  const prevIsRunningRef = useRef(isRunning);
-  const prevSessionIdRef = useRef(sessionId);
-  useEffect(() => {
-    const wasRunning = prevIsRunningRef.current;
-    const prevSessionId = prevSessionIdRef.current;
-    prevIsRunningRef.current = isRunning;
-    prevSessionIdRef.current = sessionId;
-
-    const runSucceeded =
-      wasRunning &&
-      !isRunning &&
-      sessionId === prevSessionId &&
-      sessionStatus === "active" &&
-      !sessionError;
-    if (runSucceeded && sessionId && queuedMessages.length > 0) {
-      const next = queuedMessages[0];
-      if (next) {
-        removeQueuedMessage(sessionId, 0);
-        void sendMessage(next.text, next.attachments);
-      }
-    }
-  }, [
-    isRunning,
-    sessionId,
-    sessionStatus,
-    sessionError,
-    queuedMessages,
-    sendMessage,
-    removeQueuedMessage,
-  ]);
-
   return (
-    <div className="h-full w-full">
+    <LayoutGroup id="craft-chat">
       {/* Content wrapper - shrinks when output panel opens. Wrapped in a
           dropzone so files can be dropped anywhere in the chat area. */}
       {/* noPaste: the input bar already uploads pasted files itself. */}
@@ -806,6 +753,37 @@ export default function BuildChatPanel({
                       </Tooltip>
                     </div>
                   )}
+                  {recoverableError && scheduledSessionId && (
+                    <div className="pb-2" role="alert">
+                      <MessageCard
+                        variant="error"
+                        title={t(
+                          settlementError
+                            ? "settlementError.title"
+                            : queuedSendError
+                              ? "queuedSendError.title"
+                              : "loadError.title"
+                        )}
+                        description={recoverableError}
+                        rightChildren={
+                          <Button
+                            onClick={() => {
+                              if (settlementError)
+                                void retryTurnSettlement(scheduledSessionId);
+                              else if (queuedSendError)
+                                void retryQueuedMessage(scheduledSessionId);
+                              else
+                                void loadSession(scheduledSessionId, {
+                                  force: true,
+                                });
+                            }}
+                          >
+                            {t("loadError.retry")}
+                          </Button>
+                        }
+                      />
+                    </div>
+                  )}
                   {sessionId && session?.skillsStale && (
                     <div className="pb-2">
                       <SkillsStaleNotice
@@ -834,37 +812,59 @@ export default function BuildChatPanel({
                   )}
                   {/* The composer stays in view for subagents (layout consistency)
                   but is disabled — replying to subagents is not supported. */}
-                  <CraftInputBar
-                    ref={inputBarRef}
-                    onSubmit={handleSubmit}
-                    isRunning={displayIsRunning}
-                    isInterrupting={isInterrupting}
-                    onInterrupt={
-                      hasInterruptibleTurn && !scheduledRunInFlight
-                        ? handleInterrupt
-                        : undefined
-                    }
-                    disabled={
-                      isViewingSubagent || scheduledRunInFlight || !hasProvider
-                    }
-                    placeholder={
-                      isViewingSubagent
-                        ? t("input.subagentPlaceholder")
-                        : scheduledRunInFlight
-                          ? t("input.scheduledRunPlaceholder")
-                          : t("input.continuePlaceholder")
-                    }
-                    queuedMessages={queuedMessages}
-                    onQueueMessage={handleQueueMessage}
-                    onRemoveQueuedMessage={handleRemoveQueuedMessage}
-                    contextUsage={contextUsage}
-                  />
+                  <motion.div
+                    layoutId="craft-composer"
+                    transition={{
+                      duration: reduceMotion ? 0 : 0.25,
+                      ease: "easeOut",
+                    }}
+                  >
+                    <CraftInputBar
+                      ref={inputBarRef}
+                      onSubmit={handleSubmit}
+                      isRunning={displayIsRunning}
+                      isInterrupting={isInterrupting}
+                      onInterrupt={
+                        hasInterruptibleTurn && !scheduledRunInFlight
+                          ? handleInterrupt
+                          : undefined
+                      }
+                      disabled={
+                        isViewingSubagent ||
+                        isRestoring ||
+                        submissionBlocked ||
+                        scheduledRunInFlight ||
+                        !hasProvider
+                      }
+                      placeholder={
+                        isViewingSubagent
+                          ? t("input.subagentPlaceholder")
+                          : scheduledRunInFlight
+                            ? t("input.scheduledRunPlaceholder")
+                            : t("input.continuePlaceholder")
+                      }
+                      queuedMessages={queuedMessages}
+                      onQueueMessage={handleQueueMessage}
+                      onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                      contextUsage={contextUsage}
+                    />
+                  </motion.div>
                 </div>
               </div>
             )}
           </div>
         )}
       </Dropzone>
-    </div>
+    </LayoutGroup>
   );
 }
+
+function BuildChatPanel(props: BuildChatPanelProps) {
+  return (
+    <UploadFilesProvider>
+      <ChatPanelContent {...props} />
+    </UploadFilesProvider>
+  );
+}
+
+export default BuildChatPanel;

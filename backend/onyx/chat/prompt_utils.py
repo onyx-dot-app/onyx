@@ -11,7 +11,6 @@ from onyx.file_store.models import FileDescriptor
 from onyx.prompts.chat_prompts import (
     ANSWER_COMPLETENESS_REMINDER,
     ANSWER_COVERAGE_GUIDANCE,
-    CITATION_REMINDER,
     DEFAULT_SYSTEM_PROMPT,
     FILE_REMINDER,
     LAST_CYCLE_CITATION_REMINDER,
@@ -61,7 +60,7 @@ def get_default_base_system_prompt(db_session: Session) -> str:
     )
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def calculate_reserved_tokens(
     db_session: Session,
     persona_system_prompt: str,
@@ -139,7 +138,17 @@ def build_reminder_message(
     if is_last_cycle:
         reminder += "\n\n" + LAST_CYCLE_CITATION_REMINDER
     if include_citation_reminder:
-        reminder += "\n\n" + CITATION_REMINDER
+        # REQUIRE_CITATION_GUIDANCE and ANSWER_COVERAGE_GUIDANCE are the same
+        # blocks that used to be appended to the system prompt; they moved here
+        # so head prompts stay byte-stable across loop iterations for prompt
+        # caching.
+        # reminder_text may already carry the guidance when the task prompt
+        # authored a {{CITATION_GUIDANCE}} tag — don't emit it twice. The tag
+        # only injects REQUIRE_CITATION_GUIDANCE, so COVERAGE is appended
+        # unconditionally.
+        if REQUIRE_CITATION_GUIDANCE.strip() not in reminder:
+            reminder += "\n\n" + REQUIRE_CITATION_GUIDANCE
+        reminder += "\n\n" + ANSWER_COVERAGE_GUIDANCE
         reminder += "\n\n" + ANSWER_COMPLETENESS_REMINDER
     if include_file_reminder:
         reminder += "\n\n" + FILE_REMINDER
@@ -152,7 +161,7 @@ def process_prompt_template(
     *,
     datetime_aware: bool,
     append_datetime_if_aware: bool,
-    should_cite_documents: bool,
+    should_cite_documents: bool = False,
 ) -> str:
     """Apply standard prompt placeholders to any agent or task prompt."""
     processed_prompt, _ = apply_prompt_placeholders(

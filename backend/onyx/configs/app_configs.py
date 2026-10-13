@@ -459,8 +459,12 @@ OPENSEARCH_VERIFY_CERTS = (
     os.environ.get("OPENSEARCH_VERIFY_CERTS", "").lower() == "true"
 )
 # CA bundle to verify the server cert against when OPENSEARCH_VERIFY_CERTS=true.
-# Falls back to the system trust store if unset.
+# If unset, uses SSL_CERT_FILE (set by the Helm chart's customCACerts) when that
+# file exists, else certifi's public roots. opensearch-py ignores SSL_CERT_FILE.
 OPENSEARCH_CA_CERTS: str | None = os.environ.get("OPENSEARCH_CA_CERTS") or None
+_ssl_cert_file: str | None = os.environ.get("SSL_CERT_FILE") or None
+if OPENSEARCH_CA_CERTS is None and _ssl_cert_file and os.path.exists(_ssl_cert_file):
+    OPENSEARCH_CA_CERTS = _ssl_cert_file
 # Client certificate + key for mutual TLS (OpenSearch authenticating us). Both
 # must be set together.
 OPENSEARCH_CLIENT_CERT: str | None = os.environ.get("OPENSEARCH_CLIENT_CERT") or None
@@ -575,8 +579,6 @@ DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP = int(
 
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
 INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
-
-MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
@@ -1818,22 +1820,6 @@ except json.JSONDecodeError:
 AUTO_LLM_CONFIG_URL = os.environ.get(
     "AUTO_LLM_CONFIG_URL",
     "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/backend/onyx/llm/well_known_providers/recommended-models.json",
-)
-
-# How often to check for auto LLM model updates (in seconds)
-AUTO_LLM_UPDATE_INTERVAL_SECONDS = int(
-    os.environ.get("AUTO_LLM_UPDATE_INTERVAL_SECONDS", 1800)  # 30 minutes
-)
-
-#####
-# Enterprise Edition Configs
-#####
-# NOTE: this should only be enabled if you have purchased an enterprise license.
-# if you're interested in an enterprise license, please reach out to us at
-# founders@onyx.app OR message Chris Weaver or Yuhong Sun in the Onyx
-# Discord community https://discord.gg/4NA5SbzrWb
-ENTERPRISE_EDITION_ENABLED = (
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
 )
 
 #####

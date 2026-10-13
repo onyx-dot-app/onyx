@@ -85,6 +85,8 @@ export type OpalStrings = {
   selectEmptySet: string;
   selectInvalidOption: string;
   selectSearchPlaceholder: string;
+  /** The name of an `IconTooltip`, read when it takes focus. */
+  iconTooltipLabel: string;
   keyValueKey: string;
   keyValueValue: string;
   keyValueAddLine: string;
@@ -190,6 +192,7 @@ export const defaultOpalStrings: OpalStrings = {
   selectEmptySet: "No items found",
   selectInvalidOption: "Please select a valid option from the list",
   selectSearchPlaceholder: "Search",
+  iconTooltipLabel: "More information",
   keyValueKey: "Key",
   keyValueValue: "Value",
   keyValueAddLine: "Add Line",

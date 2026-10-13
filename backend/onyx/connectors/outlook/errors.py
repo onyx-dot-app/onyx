@@ -40,6 +40,19 @@ USER_LISTING_DENIED = (
 )
 
 
+GROUP_LISTING_DENIED = (
+    "The app cannot read the tenant's groups, which choosing mailboxes by group needs."
+)
+GROUP_LISTING_REMEDIATION = (
+    "Grant the `GroupMember.Read.All` application permission and admin-consent it."
+)
+
+GROUP_UNAVAILABLE_REMEDIATION = (
+    "Use the display name or the object id of an Entra group. When several "
+    "groups share the name, use the object id."
+)
+
+
 def raise_for_graph_error(
     error: MicrosoftGraphError,
     denied_message: str,

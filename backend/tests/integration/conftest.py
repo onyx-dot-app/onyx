@@ -42,7 +42,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 # Import `onyx.main` BEFORE calling fetch_versioned_implementation ourselves.
 # onyx.main's module body (line 706) already calls fetch_versioned_implementation
-# under set_is_ee_based_on_env_variable(). If our fixture is the first to invoke
+# under set_is_ee_if_available(). If our fixture is the first to invoke
 # the dispatcher, the recursion goes:
 #   fixture -> fetch_versioned_implementation -> import ee.onyx.main
 #     -> ee.onyx.main line 53 `from onyx.main import get_application`
@@ -309,7 +309,7 @@ def _test_client(
     # builds get ee.onyx.main.get_application — that's the one that
     # registers add_api_server_tenant_id_middleware (required to populate
     # CURRENT_TENANT_ID_CONTEXTVAR from the auth cookie in cloud mode).
-    # `set_is_ee_based_on_env_variable()` already ran at onyx.main module
+    # `set_is_ee_if_available()` already ran at onyx.main module
     # load above; the dispatcher hits the lru_cache and resolves to the
     # right implementation.
     # Patch setup_prometheus_metrics to avoid "Duplicated timeseries" if

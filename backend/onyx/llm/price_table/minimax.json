@@ -59,6 +59,30 @@
       "temperature": true,
       "tool_call": true
     },
+    "MiniMax-M2.1-lightning": {
+      "cost": {
+        "cache_read": 0.03,
+        "cache_write": 0.375,
+        "input": 0.3,
+        "output": 2.4
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "MiniMax-M2.1-lightning",
+      "reasoning": true,
+      "tool_call": true
+    },
     "MiniMax-M2.5": {
       "attachment": false,
       "cost": {
@@ -91,7 +115,7 @@
     "MiniMax-M2.5-highspeed": {
       "attachment": false,
       "cost": {
-        "cache_read": 0.06,
+        "cache_read": 0.03,
         "cache_write": 0.375,
         "input": 0.6,
         "output": 2.4
@@ -114,6 +138,30 @@
       "reasoning": true,
       "release_date": "2026-02-13",
       "temperature": true,
+      "tool_call": true
+    },
+    "MiniMax-M2.5-lightning": {
+      "cost": {
+        "cache_read": 0.03,
+        "cache_write": 0.375,
+        "input": 0.3,
+        "output": 2.4
+      },
+      "limit": {
+        "context": 1000000,
+        "output": 8192
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "MiniMax-M2.5-lightning",
+      "reasoning": true,
       "tool_call": true
     },
     "MiniMax-M2.7": {
@@ -197,7 +245,7 @@
       },
       "family": "minimax",
       "limit": {
-        "context": 1048576,
+        "context": 1000000,
         "output": 512000
       },
       "modalities": {

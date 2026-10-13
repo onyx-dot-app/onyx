@@ -1,5 +1,4 @@
-import type { ComponentType } from "react";
-import type { IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgImage,
   SvgFileChartPie,
@@ -252,7 +251,7 @@ export function isCodeFile(fileName: string | null | undefined): boolean {
  */
 export function getFileIcon(
   fileName: string | null | undefined
-): ComponentType<IconProps> {
+): IconFunctionComponent {
   if (!fileName) return SvgFileText;
   if (isImageFile(fileName)) return SvgImage;
   if (/\.pptx?$/i.test(fileName)) return SvgFileChartPie;

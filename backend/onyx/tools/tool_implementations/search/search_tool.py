@@ -87,6 +87,7 @@ from onyx.federated_connectors.federated_retrieval import (
 )
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
+from onyx.llm.models import ToolDefinition
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.secondary_llm_flows.document_filter import (
@@ -107,6 +108,7 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
 )
+from onyx.tools.constants import INTERNAL_SEARCH_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatMinimalTextMessage,
@@ -223,7 +225,7 @@ def _estimate_section_tokens(
     return content_tokens + METADATA_TOKEN_ESTIMATE
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
@@ -269,7 +271,7 @@ def _trim_sections_by_tokens(
 
 
 class SearchTool(Tool[SearchToolOverrideKwargs]):
-    NAME = "internal_search"
+    NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
     DESCRIPTION = "Search connected applications for information."
 
@@ -318,6 +320,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self._time_filter_computed = False
 
         self._id = tool_id
+
+    @property
+    def _is_project_only_search(self) -> bool:
+        return self.project_id_filter is not None and self.persona_id_filter is None
 
     def _prefetch_slack_data(
         self, db_session: Session
@@ -504,9 +510,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             chunk_search_request=ChunkSearchRequest(
                 query=query,
                 hybrid_alpha=hybrid_alpha,
-                # For projects, the search scope is the project and has no other limits
+                # Project-only searches ignore user-selected filters.
                 user_selected_filters=(
-                    effective_filters if self.project_id_filter is None else None
+                    effective_filters if not self._is_project_only_search else None
                 ),
                 limit=num_hits,
             ),
@@ -560,30 +566,27 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     """For explicit tool calling"""
 
-    def tool_definition(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        QUERIES_FIELD: {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": (
-                                "List of search queries to execute, typically a single query. "
-                                "Query expansion and filter extraction steps will be run "
-                                "automatically downstream, do not include time or source type "
-                                "scoping details in your query."
-                            ),
-                        },
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self.name,
+            description=self.description,
+            parameters={
+                "type": "object",
+                "properties": {
+                    QUERIES_FIELD: {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of search queries to execute, typically a single query. "
+                            "Query expansion and filter extraction steps will be run "
+                            "automatically downstream, do not include time or source type "
+                            "scoping details in your query."
+                        ),
                     },
-                    "required": [QUERIES_FIELD],
                 },
+                "required": [QUERIES_FIELD],
             },
-        }
+        )
 
     def emit_start(self, placement: Placement) -> None:
         self.emitter.emit(
@@ -595,7 +598,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
     @log_function_time(
         func_name="Search tool - query expansion + scope decision",
-        print_only=True,
         debug_only=True,
     )
     def _expand_queries_and_decide_scope(
@@ -658,7 +660,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             time_filter=self._time_filter,
         )
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     def run(
         self,
         placement: Placement,
@@ -680,10 +682,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # An explicitly empty source selection is a statement, not an absent
         # filter: the tool still runs (it may be forced), and it honestly
         # finds nothing. `None` keeps its meaning of "no source filter".
-        # Project mode ignores user filters entirely, so the guard must too.
+        # Project-only searches ignore user filters, so the guard must too.
         if (
             self.user_selected_filters is not None
-            and self.project_id_filter is None
+            and not self._is_project_only_search
             and self.user_selected_filters.source_type is not None
             and len(self.user_selected_filters.source_type) == 0
         ):
@@ -754,8 +756,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             )
 
             # Federated retrieval functions (non-Slack; Slack is separate)
-            if self.project_id_filter is not None:
-                # Project mode ignores user filters → no federated sources
+            if self._is_project_only_search:
+                # Project-only searches ignore source selections.
                 prefetch_source_types = None
             else:
                 prefetch_source_types = (
@@ -774,8 +776,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 or []
             )
 
-            # Project mode ignores user filters, so source scoping doesn't apply.
-            if self.project_id_filter is None:
+            # Custom agents retain source selection inside projects.
+            if not self._is_project_only_search:
                 connected_sources = fetch_unique_document_sources(db_session)
 
             # Slack tokens and entity config — only prefetch when Slack
@@ -837,6 +839,20 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         resolved_scope = (
             plan_scope if plan_scope is not None else user_source_restriction
         )
+        # Inferred connector sources must not hide files supplied as context.
+        # Explicit source selections remain the outer bound.
+        if (
+            plan_scope is not None
+            and (
+                self.project_id_filter is not None or self.persona_id_filter is not None
+            )
+            and (
+                user_source_restriction is None
+                or DocumentSource.USER_FILE in user_source_restriction
+            )
+            and DocumentSource.USER_FILE not in plan_scope
+        ):
+            resolved_scope = [*plan_scope, DocumentSource.USER_FILE]
 
         logger.info(
             "Internal search - source scope: %s",

@@ -1,4 +1,3 @@
-import json
 import os
 from datetime import datetime, timezone
 from io import BytesIO
@@ -13,6 +12,11 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
     tabular_file_to_sections,
+)
+from onyx.connectors.file.metadata import (
+    file_document_id,
+    load_zip_metadata,
+    zip_metadata_entry,
 )
 from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
 from onyx.connectors.models import (
@@ -112,7 +116,7 @@ def _process_file(
     # These metadata items are not settable by the user
     source_type = onyx_metadata.source_type or DocumentSource.FILE
 
-    doc_id = onyx_metadata.document_id or f"FILE_CONNECTOR__{file_id}"
+    doc_id = file_document_id(file_id, onyx_metadata.document_id)
     title = metadata.get("title") or file_display_name
 
     # 1) If the file itself is an image, handle that scenario quickly
@@ -315,27 +319,9 @@ class LocalFileConnector(LoadConnector):
         Iterates over each file path, fetches from Postgres, tries to parse text
         or images, and yields Document batches.
         """
-        # Load metadata dict at start (from file store or deprecated inline format)
-        zip_metadata: dict[str, Any] = {}
-        if self._zip_metadata_file_id:
-            try:
-                file_store = get_default_file_store()
-                metadata_io = file_store.read_file(
-                    file_id=self._zip_metadata_file_id, mode="b"
-                )
-                metadata_bytes = metadata_io.read()
-                loaded_metadata = json.loads(metadata_bytes)
-                if isinstance(loaded_metadata, list):
-                    zip_metadata = {d["filename"]: d for d in loaded_metadata}
-                else:
-                    zip_metadata = loaded_metadata
-            except Exception as e:
-                logger.warning("Failed to load metadata from file store: %s", e)
-        elif self._zip_metadata_deprecated:
-            logger.warning(
-                "Using deprecated inline zip_metadata dict. Re-upload files to use the new file store format."
-            )
-            zip_metadata = self._zip_metadata_deprecated
+        zip_metadata = load_zip_metadata(
+            self._zip_metadata_file_id, self._zip_metadata_deprecated
+        )
 
         documents: list[Document | HierarchyNode] = []
 
@@ -349,9 +335,7 @@ class LocalFileConnector(LoadConnector):
                 )
                 continue
 
-            metadata = zip_metadata.get(
-                file_record.display_name, {}
-            ) or zip_metadata.get(os.path.basename(file_record.display_name), {})
+            metadata = zip_metadata_entry(zip_metadata, file_record.display_name)
             file_io = file_store.read_file(file_id=file_id, mode="b")
             new_docs = _process_file(
                 file_id=file_id,

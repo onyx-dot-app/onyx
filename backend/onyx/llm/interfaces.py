@@ -51,10 +51,13 @@ class LLMConfig(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
     max_input_tokens: int
+    supports_images: bool | None = None
     # Here rather than in the chat loop, so every invoke path gets it.
     reasoning_effort_default: ReasoningEffort | None = None
     reasoning_effort_user_default: ReasoningEffort | None = None
     reasoning_effort_max: ReasoningEffort | None = None
+    # Admin-configured flag, for models the catalog does not know.
+    supports_reasoning: bool = False
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 
@@ -66,6 +69,9 @@ class LLM(abc.ABC):
     @abc.abstractmethod
     def config(self) -> LLMConfig:
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def redact_error(self, text: str) -> str: ...
 
     @abc.abstractmethod
     def invoke(

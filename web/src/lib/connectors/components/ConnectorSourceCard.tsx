@@ -22,7 +22,7 @@ export interface ConnectorSourceCardProps {
  * "Add Provider" cards on the Language Models page. The whole card is the
  * target; the add button repeats it for discoverability.
  */
-export function ConnectorSourceCard({
+export default function ConnectorSourceCard({
   sourceMetadata,
   description,
   navigationUrl,
@@ -47,6 +47,8 @@ export function ConnectorSourceCard({
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
         description={description}
+        // One line keeps the cards even; a cut description shows in a tooltip.
+        descriptionMaxLines={1}
         sizePreset="main-ui"
         variant="section"
         padding={2}

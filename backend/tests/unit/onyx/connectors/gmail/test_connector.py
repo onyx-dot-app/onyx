@@ -5,15 +5,18 @@ import os
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.gmail import connector as gmail_connector_module
 from onyx.connectors.gmail.connector import (
     GmailCheckpoint,
     GmailConnector,
     _build_time_range_query,
     thread_to_document,
 )
-from onyx.connectors.models import Document, TextSection
+from onyx.connectors.models import Document, SlimDocument, TextSection
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector_from_checkpoint,
 )
@@ -237,3 +240,122 @@ def test_gmail_checkpoint_progression() -> None:
     assert isinstance(final_checkpoint, GmailCheckpoint)
     assert final_checkpoint.has_more is False
     assert final_checkpoint.user_emails == []
+
+
+def _slim_listing_connector() -> GmailConnector:
+    connector = GmailConnector()
+    connector._creds = MagicMock()
+    connector._primary_admin_email = "admin@example.com"
+    return connector
+
+
+def _list_slim_ids(
+    connector: GmailConnector,
+    user_emails: list[str],
+    thread_list_responses: dict[str, dict[str | None, dict[str, Any]]],
+    list_calls: list[tuple[str, str | None]],
+) -> list[str]:
+    """Runs the slim listing against a fake Gmail API that serves
+    ``thread_list_responses[user][page_token]`` and records each list call."""
+
+    def fake_get_gmail_service(_: object, __: str) -> MagicMock:
+        def list_threads(
+            *,
+            userId: str,
+            pageToken: str | None = None,
+            **_: object,
+        ) -> MagicMock:
+            list_calls.append((userId, pageToken))
+            request = MagicMock()
+            request.execute.return_value = thread_list_responses[userId][pageToken]
+            return request
+
+        service = MagicMock()
+        service.users.return_value.threads.return_value.list.side_effect = list_threads
+        return service
+
+    with patch.object(GmailConnector, "_get_all_user_emails", return_value=user_emails):
+        with patch(
+            "onyx.connectors.gmail.connector.get_gmail_service",
+            side_effect=fake_get_gmail_service,
+        ):
+            return [
+                item.id
+                for batch in connector.retrieve_all_slim_docs_perm_sync()
+                for item in batch
+                if isinstance(item, SlimDocument)
+            ]
+
+
+def test_slim_listing_reads_every_page_of_every_user() -> None:
+    """The slim listing (used by pruning and permission sync) must return
+    every thread: all pages of a user, and each user from its first page."""
+    thread_list_responses: dict[str, dict[str | None, dict[str, Any]]] = {
+        "user1@example.com": {
+            None: {
+                "threads": [{"id": "t1"}, {"id": "t2"}],
+                "nextPageToken": "token-user1-page2",
+            },
+            "token-user1-page2": {
+                "threads": [{"id": "t3"}],
+                "nextPageToken": None,
+            },
+        },
+        "user2@example.com": {
+            None: {"threads": [{"id": "t4"}], "nextPageToken": None},
+        },
+    }
+    list_calls: list[tuple[str, str | None]] = []
+
+    slim_ids = _list_slim_ids(
+        _slim_listing_connector(),
+        ["user1@example.com", "user2@example.com"],
+        thread_list_responses,
+        list_calls,
+    )
+
+    assert sorted(slim_ids) == ["t1", "t2", "t3", "t4"]
+    assert list_calls == [
+        ("user1@example.com", None),
+        ("user1@example.com", "token-user1-page2"),
+        ("user2@example.com", None),
+    ]
+
+
+def test_slim_listing_fails_on_a_repeated_page_token() -> None:
+    thread_list_responses: dict[str, dict[str | None, dict[str, Any]]] = {
+        "user1@example.com": {
+            None: {"threads": [{"id": "t1"}], "nextPageToken": "stuck"},
+            "stuck": {"threads": [{"id": "t2"}], "nextPageToken": "stuck"},
+        },
+    }
+
+    with pytest.raises(RuntimeError, match="same page token"):
+        _list_slim_ids(
+            _slim_listing_connector(),
+            ["user1@example.com"],
+            thread_list_responses,
+            [],
+        )
+
+
+def test_slim_listing_fails_after_the_page_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gmail_connector_module, "MAX_SLIM_PAGES_PER_USER", 3)
+    pages: dict[str | None, dict[str, Any]] = {
+        None: {"threads": [{"id": "t0"}], "nextPageToken": "p1"}
+    }
+    for page in range(1, 10):
+        pages[f"p{page}"] = {
+            "threads": [{"id": f"t{page}"}],
+            "nextPageToken": f"p{page + 1}",
+        }
+
+    with pytest.raises(RuntimeError, match="without reaching the end"):
+        _list_slim_ids(
+            _slim_listing_connector(),
+            ["user1@example.com"],
+            {"user1@example.com": pages},
+            [],
+        )

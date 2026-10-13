@@ -12,6 +12,10 @@
 //      panel; Zed runs multiple sessions at once. The Docker dependencies
 //      start from tasks.json: "docker: start".
 //
+//   3. Each Python config pins `python` to the repo .venv. Without it, the
+//      debuggee runs on Zed's selected toolchain, which can be a bare
+//      interpreter without the project deps (fails at `import dotenv`).
+//
 //   Daily driver: "API Server" + "Model Server". Everything else is on demand.
 //
 // `preLaunchTask` maps to `build`, which refers to a label in .zed/tasks.json.
@@ -34,6 +38,7 @@
     "label": "api",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -60,6 +65,7 @@
     "label": "model",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "args": [
@@ -82,6 +88,7 @@
     "label": "mcp",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "args": [
@@ -111,6 +118,7 @@
     "label": "celery: primary",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -140,6 +148,7 @@
     "label": "celery: light",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -169,6 +178,7 @@
     "label": "celery: heavy",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -199,6 +209,7 @@
     "label": "celery: monitoring",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -228,6 +239,7 @@
     "label": "celery: user_file_processing",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -258,6 +270,7 @@
     "label": "celery: scheduled_tasks",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -288,6 +301,7 @@
     "label": "celery: docfetching",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -317,6 +331,7 @@
     "label": "celery: docprocessing",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -347,6 +362,7 @@
     "label": "celery: beat",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",
@@ -372,6 +388,7 @@
     "label": "slack bot",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "args": [
@@ -389,6 +406,7 @@
     "label": "discord bot",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "args": [
@@ -408,6 +426,7 @@
     "label": "pytest",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "args": [".vscode/.env", "--module", "pytest", "-v"],
@@ -421,6 +440,7 @@
     "label": "pytest (current file)",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "args": [".vscode/.env", "--module", "pytest", "-v", "$ZED_FILE"],
@@ -434,6 +454,7 @@
     "label": "background jobs",
     "adapter": "Debugpy",
     "request": "launch",
+    "python": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "cwd": "$ZED_WORKTREE_ROOT/backend",
     "program": "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
     "build": "ods-env",

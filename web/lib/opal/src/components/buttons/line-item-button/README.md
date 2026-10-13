@@ -73,7 +73,7 @@ meanings in one prop. Use `tooltip` for hover text.
 | `rounding`    | `Rounding`           | `3`      | Corner radius step (`N / 4` rem, or `"full"`); height is content-driven   |
 | `width`       | `WidthVariant`       | `"full"` | Container width                                                           |
 | `padding`     | `0 \| 0.5 \| 1 \| 2` | `0.5`    | Padding around the inner `ContentAction`, as a spacing step (`N / 4` rem) |
-| `tooltip`     | `string`             | —        | Tooltip text shown on hover                                               |
+| `tooltip`     | `string \| RichStr`  | —        | Tooltip shown on hover; markdown, e.g. a link                             |
 | `tooltipSide` | `TooltipSide`        | `"top"`  | Tooltip side                                                              |
 
 ### Content (pass-through to ContentAction)
@@ -86,6 +86,7 @@ meanings in one prop. Use `tooltip` for hover text.
 | `description`         | `string`                | —               | Description below the title                                                                                                                                                                                                  |
 | `descriptionMaxLines` | `number`                | —               | Cap the description at N lines and truncate the rest. Unset wraps without a limit — a row showing user-authored text usually wants `1`                                                                                       |
 | `suffix`              | `string`                | —               | Muted text beside the title, like "(Default)". Shown only by the `heading` variant with a `main-*` `sizePreset`; the default `headline` row drops it |
+| `tag`         | `TagProps`           | —        | Tag beside the title, like a plan badge; `heading` variant only           |
 | `sizePreset`          | `SizePreset`            | `"headline"`    | Content size preset                                                                                                                                                                                                          |
 | `variant`             | `ContentVariant`        | `"heading"`     | Content layout variant                                                                                                                                                                                                       |
 | `rightChildren`       | `ReactNode`             | —               | Content after the label (e.g. action button)                                                                                                                                                                                 |

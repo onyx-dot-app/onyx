@@ -3,8 +3,11 @@ from typing import Any
 
 from pydantic import BaseModel, JsonValue
 
-from onyx.deep_research.dr_mock_tools import GENERATE_REPORT_TOOL_NAME, THINK_TOOL_NAME
 from onyx.deep_research.models import SpecialToolCalls
+from onyx.deep_research.tool_definitions import (
+    GENERATE_REPORT_TOOL_NAME,
+    THINK_TOOL_NAME,
+)
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,

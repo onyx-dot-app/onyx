@@ -7,11 +7,14 @@ plain models in ``models.py`` so a Graph schema change surfaces in one file.
 
 Application permissions this gateway needs: ``Mail.Read`` for folders and
 messages, ``Calendars.Read`` for the calendar view, ``User.Read.All`` to
-enumerate and resolve mailboxes.
+enumerate and resolve mailboxes, ``GroupMember.Read.All`` when mailboxes are
+chosen by group.
 """
 
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
+from uuid import UUID
 
 import bs4
 import requests
@@ -28,8 +31,11 @@ from onyx.connectors.microsoft_utils.drive_items import (
 )
 from onyx.connectors.microsoft_utils.entra import (
     ENABLED_USERS_FILTER,
+    ENTRA_NAMED_GROUP_SELECT,
     ENTRA_PAGE_SIZE,
     ENTRA_USER_SELECT,
+    MAX_ENTRA_COLLECTION_PAGES,
+    EntraGroup,
     EntraUser,
     fetch_entra_page,
     fetch_entra_user,
@@ -88,14 +94,35 @@ FOLDERS_PAGE_SIZE = 250
 MESSAGES_PAGE_SIZE = 100
 # The calendar view delta takes no $select, so every row carries a full body.
 EVENTS_PAGE_SIZE = 50
+# Enough to tell one group with a display name from several.
+GROUP_NAME_MATCH_LIMIT = 2
 
-MAILBOX_SELECT = "id,mail,userPrincipalName,displayName"
+MAILBOX_SELECT = "id,mail,userPrincipalName,displayName,proxyAddresses"
+# The user listing's fields plus the aliases a message may name a mailbox by.
+OUTLOOK_USER_SELECT = f"{ENTRA_USER_SELECT},proxyAddresses"
+_SMTP_PREFIX = "smtp:"
 FOLDER_SELECT = "id,displayName,parentFolderId,childFolderCount,isHidden"
-# The delta walk only needs to know which conversations changed.
-CHANGE_SELECT = "id,conversationId,receivedDateTime"
+# Identity, thread, placement and headers of a message, never a body. Shared
+# by the delta walk and the conversation outline, which decide who builds and
+# reads a thread from the sender and recipients.
+CHANGE_SELECT = ",".join(
+    (
+        "id",
+        "internetMessageId",
+        "conversationId",
+        "conversationIndex",
+        "parentFolderId",
+        "receivedDateTime",
+        "isDraft",
+        "sender",
+        "toRecipients",
+        "ccRecipients",
+    )
+)
 MESSAGE_SELECT = ",".join(
     (
         "id",
+        "internetMessageId",
         "conversationId",
         "parentFolderId",
         "subject",
@@ -162,11 +189,27 @@ def _mailbox(user: EntraUser) -> OutlookMailbox | None:
     address = user.mail or user.user_principal_name
     if not address:
         return None
+    aliases: list[str] = []
+    for proxy in user.proxy_addresses:
+        if not proxy.lower().startswith(_SMTP_PREFIX):
+            continue
+        alias = proxy[len(_SMTP_PREFIX) :].lower()
+        if alias != address.lower() and alias not in aliases:
+            aliases.append(alias)
     return OutlookMailbox(
         id=user.id,
         address=address,
         display_name=user.display_name,
+        aliases=tuple(aliases),
     )
+
+
+def _object_id(identifier: str) -> str | None:
+    """The identifier as a canonical Entra object id, None for anything else."""
+    try:
+        return str(UUID(identifier))
+    except ValueError:
+        return None
 
 
 def _parse_folder(raw: dict[str, Any]) -> OutlookFolder:
@@ -185,8 +228,15 @@ def _parse_change(raw: dict[str, Any]) -> OutlookMessageChange:
     return OutlookMessageChange(
         id=raw["id"],
         removed="@removed" in raw,
+        internet_message_id=raw.get("internetMessageId"),
         conversation_id=raw.get("conversationId"),
+        conversation_index=raw.get("conversationIndex"),
+        parent_folder_id=raw.get("parentFolderId"),
         received_at=parse_graph_datetime(received) if received else None,
+        is_draft=bool(raw.get("isDraft")),
+        sender=_recipient(raw.get("sender")),
+        to_recipients=_recipients(raw.get("toRecipients")),
+        cc_recipients=_recipients(raw.get("ccRecipients")),
     )
 
 
@@ -195,6 +245,7 @@ def _parse_message(raw: dict[str, Any]) -> OutlookMessage:
     sent = raw.get("sentDateTime")
     return OutlookMessage(
         id=raw["id"],
+        internet_message_id=raw.get("internetMessageId"),
         conversation_id=raw.get("conversationId"),
         parent_folder_id=raw.get("parentFolderId"),
         subject=raw.get("subject"),
@@ -425,7 +476,7 @@ class OutlookSourceOperations(SourceOperations):
             self._gateway().get_json,
             url=f"{self._graph_base()}/users",
             item_model=EntraUser,
-            select_fields=ENTRA_USER_SELECT,
+            select_fields=OUTLOOK_USER_SELECT,
             next_link=next_link,
             page_size=page_size,
             filter_expression=ENABLED_USERS_FILTER,
@@ -440,6 +491,94 @@ class OutlookSourceOperations(SourceOperations):
             mailboxes=mailboxes,
             next_link=page.next_link,
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Runs only for a configured group, and the coverage spy carries no "
+            "connector config."
+        ),
+    )
+    def resolve_groups(self, *, identifier: str) -> list[EntraGroup]:
+        """The groups an identifier names: the one with that object id, or
+        every group with that display name. Names are not unique in Entra, so
+        the caller decides what more than one match means.
+
+        Needs ``GroupMember.Read.All``.
+        """
+        object_id: str | None = _object_id(identifier)
+        if object_id is not None:
+            try:
+                data = self._get(
+                    f"{self._graph_base()}/groups/{object_id}",
+                    {"$select": ENTRA_NAMED_GROUP_SELECT},
+                )
+            except OutlookGraphError as e:
+                if e.status != 404:
+                    raise
+                return []
+            return [EntraGroup.model_validate(data)]
+        # Pages are followed until a second match or the end, since one
+        # match with a continuation proves nothing about the rest.
+        matches: list[EntraGroup] = []
+        next_link: str | None = None
+        for _ in range(MAX_ENTRA_COLLECTION_PAGES):
+            page = fetch_entra_page(
+                self._gateway().get_json,
+                url=f"{self._graph_base()}/groups",
+                item_model=EntraGroup,
+                select_fields=ENTRA_NAMED_GROUP_SELECT,
+                next_link=next_link,
+                page_size=GROUP_NAME_MATCH_LIMIT,
+                filter_expression=f"displayName eq '{_odata_quote(identifier)}'",
+            )
+            matches.extend(page.items)
+            next_link = page.next_link
+            if next_link is None or len(matches) >= GROUP_NAME_MATCH_LIMIT:
+                return matches
+        raise RuntimeError(f"Outlook: the group listing for {identifier} never ends")
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Group expansion needs a concrete group id unavailable to "
+            "credential checks."
+        ),
+    )
+    def list_group_mailbox_users(
+        self,
+        *,
+        group_id: str,
+        page_size: int = ENTRA_PAGE_SIZE,
+        next_link: str | None = None,
+    ) -> OutlookMailboxPage:
+        """One page of a group's enabled users with a mail address, members of
+        nested groups included.
+
+        Needs ``GroupMember.Read.All``.
+        """
+        page = fetch_entra_page(
+            self._gateway().get_json,
+            url=(
+                f"{self._graph_base()}/groups/{quote(group_id)}"
+                "/transitiveMembers/microsoft.graph.user"
+            ),
+            item_model=EntraUser,
+            select_fields=OUTLOOK_USER_SELECT,
+            next_link=next_link,
+            page_size=page_size,
+        )
+        # The member listing takes no accountEnabled filter without advanced
+        # query parameters, so disabled accounts are dropped here.
+        mailboxes = [
+            mailbox
+            for user in page.items
+            if user.mail and user.account_enabled is not False
+            if (mailbox := _mailbox(user)) is not None
+        ]
+        return OutlookMailboxPage(mailboxes=mailboxes, next_link=page.next_link)
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
@@ -682,7 +821,7 @@ class OutlookSourceOperations(SourceOperations):
         )
         try:
             return download_graph_url_with_cap(
-                access_token=self._access_token(),
+                get_access_token=self._access_token,
                 url=url,
                 cap=cap,
                 description=f"outlook attachment {attachment_id}",
@@ -731,6 +870,65 @@ class OutlookSourceOperations(SourceOperations):
         )
         return _parse_message(raw) if raw else None
 
+    def _conversation_page(
+        self,
+        mailbox_id: str,
+        conversation_id: str,
+        select: str,
+        next_link: str | None,
+        headers: dict[str, str] | None = None,
+        oldest_first: bool = False,
+    ) -> dict[str, Any]:
+        """One page of a conversation in one mailbox, newest first unless
+        asked otherwise. Ordering needs the ordered property to lead the
+        filter, hence the always-true ``receivedDateTime`` bound ahead of the
+        conversation id."""
+        params = None
+        url = next_link
+        if url is None:
+            url = f"{self._user_url(mailbox_id)}/messages"
+            params = {
+                "$filter": (
+                    f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
+                    f"conversationId eq '{_odata_quote(conversation_id)}'"
+                ),
+                "$orderby": "receivedDateTime " + ("asc" if oldest_first else "desc"),
+                "$select": select,
+                "$top": str(MESSAGES_PAGE_SIZE),
+            }
+        return self._get(url, params, headers)
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Needs a conversation id, which only the delta walk produces. The "
+            "mail-read check proves the fields on the mailbox-wide route."
+        ),
+    )
+    def fetch_conversation_outline_page(
+        self,
+        *,
+        mailbox_id: str,
+        conversation_id: str,
+        next_link: str | None = None,
+        oldest_first: bool = False,
+    ) -> OutlookDeltaPage:
+        """One page of a conversation's messages in one mailbox, newest first
+        unless asked otherwise, the CHANGE_SELECT fields only, to decide a
+        copy's documents without reading a body."""
+        data = self._conversation_page(
+            mailbox_id,
+            conversation_id,
+            CHANGE_SELECT,
+            next_link,
+            oldest_first=oldest_first,
+        )
+        return OutlookDeltaPage(
+            changes=[_parse_change(raw) for raw in data.get("value", [])],
+            next_link=data.get("@odata.nextLink"),
+        )
+
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.CREDENTIAL,
@@ -745,30 +943,18 @@ class OutlookSourceOperations(SourceOperations):
         *,
         mailbox_id: str,
         conversation_id: str,
-        page_size: int = MESSAGES_PAGE_SIZE,
         next_link: str | None = None,
     ) -> OutlookMessagePage:
         """One page of a conversation's messages in one mailbox, newest first,
-        bodies as text.
-
-        Ordering needs the ordered property to lead the filter, hence the
-        always-true ``receivedDateTime`` bound ahead of the conversation id.
-        The body preference is a header, so it goes with every request.
-        """
-        params = None
-        url = next_link
-        if url is None:
-            url = f"{self._user_url(mailbox_id)}/messages"
-            params = {
-                "$filter": (
-                    f"receivedDateTime ge {EPOCH_TIMESTAMP} and "
-                    f"conversationId eq '{_odata_quote(conversation_id)}'"
-                ),
-                "$orderby": "receivedDateTime desc",
-                "$select": MESSAGE_SELECT,
-                "$top": str(page_size),
-            }
-        data = self._get(url, params, {"Prefer": TEXT_BODY_PREFERENCE})
+        bodies as text. The body preference is a header, so it goes with
+        every request."""
+        data = self._conversation_page(
+            mailbox_id,
+            conversation_id,
+            MESSAGE_SELECT,
+            next_link,
+            {"Prefer": TEXT_BODY_PREFERENCE},
+        )
         return OutlookMessagePage(
             messages=[_parse_message(raw) for raw in data.get("value", [])],
             next_link=data.get("@odata.nextLink"),

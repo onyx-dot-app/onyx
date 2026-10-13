@@ -179,8 +179,12 @@ Run backend services (API server, model server) with environment loaded from
 `.vscode/.env`. On first run, copies `.vscode/env_template.txt` to `.vscode/.env`
 if the `.env` file does not already exist.
 
-Enterprise Edition features are enabled by default with license enforcement
-disabled, matching the `compose` command behavior.
+Paid features need a license in the database. When `ONYX_DEV_LICENSE` is set, in
+the shell or in `.vscode/.env`, `backend api` seeds it before the server starts.
+`compose` reads it from the shell only and seeds it into the api_server once the
+stack is healthy, except with `--infra`, with `--wait=false`, and for the
+multitenant profile. With no license in the database Onyx runs as Community
+Edition.
 
 ```shell
 ods backend <subcommand>
@@ -195,7 +199,6 @@ ods backend <subcommand>
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--no-ee` | `false` | Disable Enterprise Edition features (enabled by default) |
 | `--port` | `8080` (api) / `9000` (model_server) | Port to listen on |
 
 Shell environment takes precedence over `.env` file values, so inline overrides
@@ -209,9 +212,6 @@ ods backend api
 
 # Start the API server on a custom port
 ods backend api --port 9090
-
-# Start without Enterprise Edition
-ods backend api --no-ee
 
 # Start the model server
 ods backend model_server
@@ -743,8 +743,8 @@ ods audit --all-lockfiles --web --python
 
 `ods audit gate` runs the deploy gate on the checked-out tree: the lockfiles,
 Dependabot alerts, pinned Actions, and the OS layer each shipped image carries
-(the pinned runtime base for web and model-server, the backend apt stage built
-from `backend/Dockerfile`). A critical here is the one that would fail the tag
+(the pinned runtime base for web and model-server, the apt stages of backend
+and the sandbox built from their Dockerfiles). A critical here is the one that would fail the tag
 build, so run it on the release branch at the commit you are about to tag. It
 scans the same hardened bases CI ships, so it needs Docker, `docker login
 dhi.io`, and a signed-in `gh` for the Dependabot alerts; every scan is strict,

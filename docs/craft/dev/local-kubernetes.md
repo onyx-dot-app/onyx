@@ -20,7 +20,7 @@ touching `backend/onyx/sandbox_proxy/` or the docker manager — see
 
 Builds on the CONTRIBUTING.md prereqs (Python 3.13, uv, Node.js 22, the venv,
 `.vscode/.env`). Docker Desktop must be running with at least 8 CPU / 16 GB
-allocated.
+allocated. For three active Craft sandboxes, allocate at least 12 CPU / 24 GB.
 
 Craft sandbox pods use Kubernetes native restartable init sidecar containers,
 so the cluster must run Kubernetes `>= 1.33`. The local `k8s-up.sh` script pins
@@ -53,6 +53,40 @@ One sudo prompt at session start; the daemon stays alive afterward:
 ```bash
 telepresence connect -n onyx
 ```
+
+## Local resource budgets
+
+`deployment/helm/dev/values-localdev.yaml` defines local service resources.
+CPU requests reserve capacity. CPU limits allow short bursts above the request.
+Memory limits remain separate from requests.
+
+| Service | CPU request / limit | Memory request / limit |
+| --- | --- | --- |
+| API (Telepresence target) | 0.1 / 0.5 | 256 MiB / 1 GiB |
+| Sandbox proxy | 0.5 / 2 | 512 MiB / 1 GiB |
+| Each model server | 1 / 2 | 1 GiB / 2 GiB |
+| OpenSearch | 1 / 2 | 2 GiB / 4 GiB |
+| PostgreSQL | 0.5 / 2 | 512 MiB / 2 GiB |
+| PostgreSQL operator | 0.1 / 1 | 128 MiB / 512 MiB |
+| MinIO | 0.25 / 1 | 256 MiB / 1 GiB |
+| Object store | 0.25 / 1 | 256 MiB / 2 GiB |
+| Redis | 0.1 / 1 | 128 MiB / 512 MiB |
+
+Redis has a 400 MB cache budget. Its memory limit also covers process overhead.
+OpenSearch keeps its 1 GiB heap and has memory for other allocations.
+
+The API serves as a Telepresence target. The developer's local Python process handles intercepted API requests.
+Its small resource budget is deliberate; local API startup can take longer.
+
+These services request 4.8 CPU and about 6 GiB before other operators and Kubernetes system pods.
+Each sandbox adds a 1 CPU / 2 GiB request, plus its sidecar's 0.1 CPU / 256 MiB request.
+Sandbox limits remain 2 CPU / 10 GiB; its sidecar has a 1 CPU / 1 GiB limit.
+These values support development. They do not guarantee performance for large indexes or models.
+
+Run `make craft-up` to apply the local overlay. Keep any local image overrides when upgrading an existing release.
+Changing PostgreSQL resources restarts its single instance. Existing connections can delay shutdown for up to three minutes.
+New database connections fail during this restart.
+Check node capacity with `kubectl describe node`; check usage with `kubectl top pods` when metrics are available.
 
 ## kubectl context
 
@@ -119,6 +153,9 @@ script is idempotent and refuses to run unless your kubectl context is
 per cluster. New clusters use the `kindest/node:v1.33.1` node image so Craft's
 native init sidecar pod shape is supported. Existing clusters are not recreated;
 set `KIND_NODE_IMAGE` to override the default for a newly created cluster.
+The script removes Kindnet's CPU limit so network-policy processing can use available CPU.
+It keeps the CPU request and memory settings, then waits for the rollout.
+This applies to existing clusters too, including runs with `--skip-helm`.
 
 Watch pods (opensearch and CNPG-postgres take a minute or two on first boot):
 
@@ -268,6 +305,12 @@ Each `(k8s)` config has `telepresence intercept onyx-api-server` as its
 connects + (re)creates the intercept idempotently. No manual telepresence
 invocation needed.
 
+The task checks for an unregistered traffic-agent with a recent stale-session
+error. It restarts only `onyx-api-server`, waits up to 120 seconds for the
+rollout, and creates the intercept. If the session becomes stale during intercept
+creation, it checks again and retries after recovery. Recovery runs at most once
+per launch. Other failures stop the task and show the original error.
+
 The intercept points cluster ingress to your local api_server using the same
 labels, secrets, and service account as the real pod — NetworkPolicies and
 pod-selector auth work transparently.
@@ -381,6 +424,27 @@ and load it per [step 3 of One-time setup](#3-build-and-load-the-sandbox-image)
 before launching the api_server.
 
 ## Troubleshooting
+
+### Sandbox egress stalls with Kindnet CPU throttling
+
+Kindnet processes network-policy packets. Its default `100m` CPU limit can delay
+connections to the sandbox proxy and Kubernetes resource watches. OpenCode startup
+can then time out while installing plugins, before sending an LLM request.
+
+Apply the local networking configuration without reinstalling Onyx:
+
+```bash
+deployment/helm/dev/k8s-up.sh --skip-cluster-create --skip-helm
+```
+
+Check the active CPU quota and throttling counters:
+
+```bash
+kubectl --context kind-onyx-dev -n kube-system exec daemonset/kindnet -- \
+  cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/cpu.stat
+```
+
+`cpu.max` starts with `max` when the container has no CPU limit.
 
 ### VPN or proxy certificate errors
 

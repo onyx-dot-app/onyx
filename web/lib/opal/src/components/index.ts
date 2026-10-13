@@ -124,6 +124,31 @@ export {
   type TagColor,
 } from "@opal/components/tag/components";
 
+/* Fold */
+export { Fold, type FoldProps } from "@opal/components/fold/components";
+
+/* IconTooltip */
+export {
+  IconTooltip,
+  type IconTooltipProps,
+  type IconTooltipStatus,
+} from "@opal/components/icon-tooltip/components";
+
+/* OverflowText */
+export {
+  OverflowText,
+  type OverflowTextProps,
+} from "@opal/components/overflow-text/components";
+
+/* Log */
+export {
+  Log,
+  type LogProps,
+  type LogStatus,
+  type LogVariant,
+  type LogWeight,
+} from "@opal/components/log/components";
+
 /* Divider */
 export {
   Divider,
@@ -200,8 +225,16 @@ export {
 
 /* Table */
 export { Table } from "@opal/components/table/components";
-export { createTableColumns } from "@opal/components/table/columns";
 export type { DataTableProps } from "@opal/components/table/components";
+export type {
+  TableColumn,
+  TableQualifierColumn,
+  TableFieldColumn,
+  TableValueColumn,
+  TableDisplayColumn,
+  TableActionsColumn,
+  TableCellValue,
+} from "@opal/components/table/types";
 
 /* ShadowDiv */
 export {
@@ -284,6 +317,9 @@ export {
   type DropdownSearch,
   type DropdownView,
   type DropdownViews,
+  type DropdownWidth,
+  type DropdownAlign,
+  type DropdownSide,
 } from "@opal/components/dropdown/types";
 export { useDropdownViews } from "@opal/components/dropdown/context";
 

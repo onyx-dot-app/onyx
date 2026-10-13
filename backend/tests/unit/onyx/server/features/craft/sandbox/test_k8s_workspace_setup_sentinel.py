@@ -79,3 +79,42 @@ def test_setup_raises_when_output_lacks_sentinel(
     # output with no sentinel.
     with pytest.raises(RuntimeError, match="did not complete"):
         _run_setup(monkeypatch, "Copying outputs template\nbun install ...")
+
+
+@pytest.mark.parametrize("complete", [False, True])
+def test_regenerate_config_requires_completion_sentinel(
+    monkeypatch: pytest.MonkeyPatch, complete: bool
+) -> None:
+    from onyx.server.features.build.sandbox.session_workspace import (
+        SESSION_CONFIG_COMPLETE_SENTINEL,
+    )
+
+    mgr = _make_manager(monkeypatch)
+    stream = MagicMock(
+        return_value=(
+            f"{SESSION_CONFIG_COMPLETE_SENTINEL}\n" if complete else "cp: disk full\n"
+        )
+    )
+    monkeypatch.setattr(ksm, "k8s_stream", stream)
+
+    def regenerate() -> None:
+        mgr.regenerate_session_config(
+            sandbox_id=uuid4(),
+            session_id=uuid4(),
+            agent_provider=None,
+            agent_model=None,
+            nextjs_port=None,
+            connectable_apps_section="",
+            llm_config=_LLM_CONFIG,
+        )
+
+    if complete:
+        regenerate()
+    else:
+        with pytest.raises(RuntimeError, match="did not complete"):
+            regenerate()
+    assert (
+        stream.call_args.kwargs["_request_timeout"] == WORKSPACE_SETUP_DEADLINE_SECONDS
+    )
+    script = stream.call_args.kwargs["command"][-1]
+    assert script.rstrip().endswith(f'echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"')

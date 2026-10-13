@@ -9,7 +9,10 @@ from sqlalchemy.sql.expression import UnaryExpression, literal
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.constants import QAFeedbackType
-from onyx.db.chat import content_persisting_sessions_filter
+from onyx.db.chat import (
+    content_persisting_sessions_filter,
+    visible_chat_messages_filter,
+)
 from onyx.db.models import ChatMessage, ChatMessageFeedback, ChatSession, TaskQueueState
 from onyx.db.tasks import get_all_tasks_with_prefix
 
@@ -102,7 +105,11 @@ def get_page_of_chat_sessions(
     stmt = (
         select(ChatSession)
         .join(subquery, ChatSession.id == subquery.c.id)
-        .outerjoin(ChatMessage, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(
+            ChatMessage,
+            (ChatSession.id == ChatMessage.chat_session_id)
+            & visible_chat_messages_filter(),
+        )
         .options(
             joinedload(ChatSession.user),
             joinedload(ChatSession.persona),
@@ -173,7 +180,11 @@ def fetch_chat_sessions_eagerly_by_time(
     query = (
         db_session.query(ChatSession)
         .join(subquery, ChatSession.id == subquery.c.id)
-        .outerjoin(ChatMessage, ChatSession.id == ChatMessage.chat_session_id)
+        .outerjoin(
+            ChatMessage,
+            (ChatSession.id == ChatMessage.chat_session_id)
+            & visible_chat_messages_filter(),
+        )
         .options(
             joinedload(ChatSession.user),
             joinedload(ChatSession.persona),

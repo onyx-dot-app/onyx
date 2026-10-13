@@ -12,7 +12,7 @@ from typing import Any, Dict, TypeVar
 from mcp import ClientSession
 from mcp.client.auth import OAuthClientProvider
 from mcp.client.sse import sse_client
-from mcp.client.streamable_http import streamablehttp_client  # or use stdio_client
+from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import (
     CallToolResult,
     InitializeResult,
@@ -85,47 +85,12 @@ class MCPMessage(BaseModel):
         return msg
 
 
-# TODO: in the future we should do things like manage sessions and handle errors better
-# using an abstraction like this. For now things are purely functional and we initialize
-# a new session for each tool call.
-# class MCPClient:
-#     """
-#     MCP Client implementation that properly handles the protocol lifecycle
-#     and different transport mechanisms.
-#     """
-
-#     def __init__(
-#         self,
-#         server_url: str,
-#         transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
-#         auth_token: str | None = None,
-#     ):
-#         self.server_url = server_url
-#         self.transport = transport
-#         self.auth_token = auth_token
-
-#         # Session management
-#         self.session: Optional[aiohttp.ClientSession] = None
-#         self.initialized = False
-#         self.capabilities: Dict[str, Any] = {}
-#         self.protocol_version = "2025-03-26"  # Current MCP protocol version
-#         self.session_id: str | None = None
-#         # Legacy HTTP+SSE transport support (backwards compatibility)
-#         self.legacy_post_endpoint: str | None = None
-
-#         # Message ID counter
-#         self._message_id_counter = 0
-
-#         # For stdio transport
-#         self.process: Optional[subprocess.Popen] = None
-
-
 def _create_mcp_client_function_runner(
     function: Callable[[ClientSession], Coroutine[Any, Any, T]],
     server_url: str,
     connection_headers: dict[str, str] | None = None,
     transport: MCPTransport = MCPTransport.STREAMABLE_HTTP,
-    auth: OAuthClientProvider | None = None,  # TODO: maybe used this for all auth types
+    auth: OAuthClientProvider | None = None,
     **kwargs: Any,
 ) -> Callable[[], Coroutine[Any, Any, T]]:
     auth_headers = connection_headers or {}

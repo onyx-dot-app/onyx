@@ -1,15 +1,12 @@
 "use client";
 
-import {
-  Interactive,
-  type InteractiveStatefulInteraction,
-  type InteractiveStatefulProps,
-} from "@opal/core";
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import { Text, Tooltip, Button, type TooltipSide } from "@opal/components";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgX } from "@opal/icons";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
+import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
 import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
@@ -54,12 +51,10 @@ function FilterButton({
   ...statefulProps
 }: FilterButtonProps) {
   const strings = useOpalStrings();
-  // Derive open state: explicit prop > Radix data-state (injected via Slot chain)
-  const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
-    | string
-    | undefined;
-  const resolvedInteraction: InteractiveStatefulInteraction =
-    interaction ?? (dataState === "open" ? "hover" : "rest");
+  const resolvedInteraction = resolveTriggerInteraction(
+    interaction,
+    statefulProps
+  );
 
   const button = (
     <div className="relative">

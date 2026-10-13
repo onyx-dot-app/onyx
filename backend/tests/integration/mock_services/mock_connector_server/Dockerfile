@@ -2,7 +2,7 @@
 # pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
 # Hub rate limits.
 ARG BASE_IMAGE_REGISTRY=docker.io
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
 
 WORKDIR /app
 

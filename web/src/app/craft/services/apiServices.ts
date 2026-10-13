@@ -1,3 +1,6 @@
+import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
+import { downloadFile } from "@/lib/download";
+import { FetchError } from "@/lib/fetcher";
 import {
   ApiSessionResponse,
   ApiDetailedSessionResponse,
@@ -14,6 +17,7 @@ import {
   DirectoryListing,
   SharingScope,
   ApiSessionSkillsState,
+  type OutputInventory,
 } from "@/app/craft/types/streamingTypes";
 import {
   ApprovalListResponse,
@@ -477,10 +481,31 @@ export async function fetchActiveTurn(
   );
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch active turn: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch active turn: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return await res.json();
+}
+
+export async function fetchKnownTurn(
+  sessionId: string,
+  turnId: string
+): Promise<ApiInteractiveTurnResponse | null> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/turns/${turnId}`
+  );
+  if (!res.ok) {
+    throw new FetchError(
+      `Failed to fetch turn: ${res.status}`,
+      res.status,
+      null
+    );
+  }
+  return res.json();
 }
 
 export async function fetchTurnEventStream(
@@ -497,7 +522,11 @@ export async function fetchTurnEventStream(
     if (res.status === 404 || res.status === 409) {
       return null;
     }
-    throw new Error(`Failed to stream turn: ${res.status}`);
+    throw new FetchError(
+      `Failed to stream turn: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return res;
@@ -507,14 +536,38 @@ export async function fetchTurnEventStream(
  * Interrupt the in-flight agent turn for a session. The backend interrupts the
  * sandbox turn; any attached live stream then terminates normally.
  */
-export async function interruptMessageStream(sessionId: string): Promise<void> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/interrupt`, {
-    method: "POST",
-  });
+export async function interruptMessageStream(
+  sessionId: string,
+  turnId?: string
+): Promise<boolean> {
+  const query = turnId ? `?turn_id=${encodeURIComponent(turnId)}` : "";
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/interrupt${query}`,
+    {
+      method: "POST",
+    }
+  );
 
   if (!res.ok) {
     throw new Error(`Failed to interrupt message: ${res.status}`);
   }
+  const result: { interrupted: boolean } = await res.json();
+  return result.interrupted;
+}
+
+export async function fetchScheduledRunContext(
+  sessionId: string
+): Promise<ScheduledRunContextResponse> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-context`
+  );
+  if (!res.ok)
+    throw new FetchError(
+      await errorDetail(res, "Failed to fetch scheduled run"),
+      res.status,
+      null
+    );
+  return res.json();
 }
 
 export async function fetchScheduledRunEventStream(
@@ -531,7 +584,11 @@ export async function fetchScheduledRunEventStream(
   }
 
   if (!res.ok) {
-    throw new Error(`Failed to stream scheduled run: ${res.status}`);
+    throw new FetchError(
+      `Failed to stream scheduled run: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return res;
@@ -567,10 +624,12 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
 // =============================================================================
 
 export async function fetchWebappInfo(
-  sessionId: string
+  sessionId: string,
+  signal?: AbortSignal
 ): Promise<ApiWebappInfoResponse> {
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/webapp-info`
+    `${BUILD_API_BASE}/sessions/${sessionId}/webapp-info`,
+    { signal }
   );
 
   if (!res.ok) {
@@ -584,9 +643,23 @@ export async function fetchWebappInfo(
 // Files API
 // =============================================================================
 
+export async function fetchOutputInventory(
+  sessionId: string,
+  signal?: AbortSignal
+): Promise<OutputInventory> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/outputs`,
+    { signal }
+  );
+  if (!response.ok)
+    throw new Error(`Failed to fetch output inventory: ${response.status}`);
+  return response.json();
+}
+
 export async function fetchDirectoryListing(
   sessionId: string,
-  path: string = ""
+  path: string = "",
+  signal?: AbortSignal
 ): Promise<DirectoryListing> {
   const url = new URL(
     `${BUILD_API_BASE}/sessions/${sessionId}/files`,
@@ -596,13 +669,27 @@ export async function fetchDirectoryListing(
     url.searchParams.set("path", path);
   }
 
-  const res = await fetch(url.toString());
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch directory listing: ${res.status}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () =>
+      controller.abort(
+        new DOMException("Directory listing timed out", "TimeoutError")
+      ),
+    10_000
+  );
+  try {
+    const res = await fetch(url.toString(), {
+      signal: signal
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch directory listing: ${res.status}`);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json();
 }
 
 /**
@@ -617,12 +704,9 @@ export function buildArtifactUrl(sessionId: string, path: string): string {
 }
 
 export function downloadArtifactFile(sessionId: string, path: string): void {
-  const link = document.createElement("a");
-  link.href = buildArtifactUrl(sessionId, path);
-  link.download = path.split("/").pop() || path;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadFile(path.split("/").pop() || path, {
+    url: buildArtifactUrl(sessionId, path),
+  });
 }
 
 /**
@@ -633,12 +717,9 @@ export function downloadDirectory(sessionId: string, path: string): void {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-  const link = document.createElement("a");
-  link.href = `${BUILD_API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`;
-  link.download = "";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadFile("", {
+    url: `${BUILD_API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`,
+  });
 }
 
 export interface FileContentResponse {
@@ -659,10 +740,16 @@ export async function fetchFileContent(
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  const res = await fetch(buildArtifactUrl(sessionId, path));
+  const res = await fetch(buildArtifactUrl(sessionId, path), {
+    cache: "no-store",
+  });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch file content: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch file content: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   const mimeType = res.headers.get("Content-Type") || "text/plain";
@@ -737,7 +824,11 @@ export async function uploadFile(
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to upload file: ${res.status}`);
+    throw new FetchError(
+      errorData.detail || `Failed to upload file: ${res.status}`,
+      res.status,
+      errorData
+    );
   }
 
   return res.json();
@@ -765,7 +856,11 @@ export async function deleteFile(
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
+    throw new FetchError(
+      errorData.detail || `Failed to delete file: ${res.status}`,
+      res.status,
+      errorData
+    );
   }
 }
 
@@ -820,13 +915,16 @@ export async function fetchPptxPreview(
     .join("/");
 
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`
+    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`,
+    { cache: "no-store" }
   );
 
   if (!res.ok) {
     const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errorData.detail || `Failed to generate PPTX preview: ${res.status}`
+    throw new FetchError(
+      errorData.detail || `Failed to generate PPTX preview: ${res.status}`,
+      res.status,
+      errorData
     );
   }
 

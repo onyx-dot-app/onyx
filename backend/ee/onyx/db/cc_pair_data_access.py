@@ -13,6 +13,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from onyx.auth.scoped_permissions import scope_data_access_group_ids
 from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import AccessType
 from onyx.db.models import (
@@ -209,14 +210,9 @@ def set_cc_pair_data_access_groups__no_commit(
         group.id
         for group in fetch_data_access_groups_for_cc_pair(db_session, cc_pair_id)
     }
-    final_group_ids = requested_group_ids
-    if visible_group_ids is not None:
-        if hidden_added := requested_group_ids - current_group_ids - visible_group_ids:
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                f"You can't give data access to groups you can't see: {sorted(hidden_added)}",
-            )
-        final_group_ids = requested_group_ids | (current_group_ids - visible_group_ids)
+    final_group_ids = scope_data_access_group_ids(
+        requested_group_ids, current_group_ids, visible_group_ids
+    )
 
     added_group_ids = final_group_ids - current_group_ids
     removed_group_ids = current_group_ids - final_group_ids

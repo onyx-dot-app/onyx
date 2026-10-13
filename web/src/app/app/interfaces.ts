@@ -204,7 +204,7 @@ export interface BackendChatSession {
   owner_name: string | null;
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
-  current_run?: { run_id: number } | null;
+  current_stream?: { stream_id: number } | null;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
 }

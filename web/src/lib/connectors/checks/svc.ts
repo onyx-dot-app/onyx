@@ -1,0 +1,82 @@
+import type {
+  DraftCheckPlan,
+  DraftCheckPlanRequest,
+  DraftCheckRunRequest,
+  DraftCheckRunSnapshot,
+  PairEditCheckRunRequest,
+} from "@/lib/connectors/checks/types";
+
+/**
+ * Starts the capability checks for an unsaved connector form. Checks that
+ * cannot run yet come back resolved (waiting, not applicable); poll
+ * `SWR_KEYS.connectorCheckRun` for the rest.
+ */
+export async function startDraftCheckRun(
+  request: DraftCheckRunRequest
+): Promise<DraftCheckRunSnapshot> {
+  const response = await fetch("/api/manage/admin/connector-checks/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw new Error(`Capability check run request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
+ * Starts the capability checks for a proposed edit of an existing pair: a
+ * dry run that writes no report. Poll it as a draft run.
+ */
+export async function startPairEditCheckRun(
+  ccPairId: number,
+  request: PairEditCheckRunRequest
+): Promise<DraftCheckRunSnapshot> {
+  const response = await fetch(
+    `/api/manage/admin/cc-pair/${ccPairId}/edit/checks`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Capability check run request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
+ * Lists the checks a run would hold for an unsaved connector form, without a
+ * credential and without running anything.
+ */
+export async function fetchDraftCheckPlan(
+  request: DraftCheckPlanRequest
+): Promise<DraftCheckPlan> {
+  const response = await fetch("/api/manage/admin/connector-checks/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw new Error(`Capability check plan request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
+ * Stops a draft run. Its running check finishes; the rest never start, and
+ * the run reads as superseded.
+ */
+export async function cancelDraftCheckRun(runId: string): Promise<void> {
+  const response = await fetch(
+    `/api/manage/admin/connector-checks/runs/${runId}/cancel`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Capability check cancel request failed: ${response.status}`
+    );
+  }
+}
