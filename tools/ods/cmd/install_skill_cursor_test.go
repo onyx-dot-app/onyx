@@ -440,3 +440,25 @@ func TestParseSkillMarkdownWithoutAClosedFrontmatterBlockIsAllBody(t *testing.T)
 		t.Fatalf("unclosed frontmatter must read as body: %q / %q", description, body)
 	}
 }
+
+func TestInstallCursorSkillsRefusesLinkedRulesDir(t *testing.T) {
+	source := t.TempDir()
+	writeSkill(t, source, "enforced", "rule-a", "first", "Do A.")
+	repoRoot := t.TempDir()
+	outside := t.TempDir()
+	// A rule this command generated earlier, now reachable only through the link.
+	stale := filepath.Join(outside, "rules", "old.mdc")
+	deployWriteFile(t, stale, generatedRuleMarker)
+	if err := os.Symlink(outside, filepath.Join(repoRoot, ".cursor")); err != nil {
+		t.Fatal(err)
+	}
+
+	err := installCursorSkills(discardCmd(), testUI(), discover(t, source), repoRoot)
+
+	if err == nil {
+		t.Fatal("expected a linked .cursor to be refused")
+	}
+	if _, statErr := os.Stat(stale); statErr != nil {
+		t.Fatalf("cleanup followed the link: %v", statErr)
+	}
+}

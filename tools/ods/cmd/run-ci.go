@@ -20,7 +20,6 @@ type RunCIOptions struct {
 	DryRun   bool
 	Yes      bool
 	Rerun    bool
-	NoVerify bool
 	ForEdits bool
 }
 
@@ -64,9 +63,14 @@ func NewRunCICommand() *cobra.Command {
 This command will:
   1. Fetch the PR information using the GitHub CLI
   2. Fetch the branch from the fork
-  3. Create a new branch in the main repo (run-ci/<pr-number>)
+  3. Point a local branch (run-ci/<pr-number>) at the fork's commit
+     without checking it out
   4. Push and create a PR that triggers CI
-  5. Switch back to the original branch
+
+The fork's code does not become your working tree, and the push skips local
+git hooks, so nothing from the fork runs on your machine. The exception is a
+run from run-ci/<pr-number> itself: that branch is reset to the fork's commit
+(git reset fires no hooks), so later git commands there use the fork's tree.
 
 This is useful for running CI on PRs from forks, which don't automatically
 trigger GitHub Actions for security reasons.
@@ -97,7 +101,9 @@ Example usage:
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Perform all local operations but skip pushing to remote and creating PRs")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip confirmation prompts and automatically proceed")
 	cmd.Flags().BoolVar(&opts.Rerun, "rerun", false, "Update an existing CI PR with the latest fork changes to re-trigger CI")
-	cmd.Flags().BoolVar(&opts.NoVerify, "no-verify", false, "Skip pre-push hooks when pushing the CI branch")
+	var noVerify bool
+	cmd.Flags().BoolVar(&noVerify, "no-verify", false, "Skip pre-push hooks when pushing the CI branch")
+	_ = cmd.Flags().MarkDeprecated("no-verify", "the CI branch push always skips local git hooks")
 	cmd.Flags().BoolVar(&opts.ForEdits, "for-edits", false, "Create a replacement PR intended for editing and merging")
 
 	return cmd
@@ -237,7 +243,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		log.Warning("=== DRY RUN MODE: No remote operations will be performed ===")
 	}
 
-	// Save the current branch to switch back later
+	// The current branch decides between resetting and pointing the CI branch
 	originalBranch, err := git.GetCurrentBranch()
 	if err != nil {
 		return fatalErrorf("Failed to get current branch: %w", err)
@@ -331,15 +337,10 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		}
 		git.RestoreStash(stashResult)
 	} else {
-		// Delete branch if it already exists locally (to ensure we're in sync with fork)
-		if git.BranchExists(ciBranch) {
-			log.Infof("Deleting existing local branch: %s", ciBranch)
-			if err := git.RunCommand("branch", "-D", ciBranch); err != nil {
-				return fatalErrorf("Failed to delete existing branch: %w", err)
-			}
-		}
-		log.Infof("Creating CI branch: %s", ciBranch)
-		if err := git.RunCommand("checkout", "--quiet", "-b", ciBranch, fetchedSHA); err != nil {
+		// Never check out fork code: a checkout fires post-checkout hooks,
+		// which read the fork's .pre-commit-config.yaml.
+		log.Infof("Pointing CI branch %s at %s", ciBranch, fetchedSHA)
+		if err := git.RunCommand("branch", "--force", ciBranch, fetchedSHA); err != nil {
 			return fatalErrorf("Failed to create CI branch: %w", err)
 		}
 	}
@@ -351,48 +352,31 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 		} else {
 			log.Warnf("[DRY RUN] Would update existing PR: %s", existingPRURL)
 		}
-		// Switch back to original branch
-		if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
-			log.Warnf("Failed to switch back to original branch: %v", err)
-		}
 		return nil
 	}
 
 	// Editable branches must still be absent when pushed.
 	log.Infof("Pushing CI branch: %s", ciBranch)
-	pushArgs := []string{"push"}
-	if opts.NoVerify {
-		pushArgs = append(pushArgs, "--no-verify")
-	}
+	// Hooks would run with the fork's hook config, so the push skips them.
+	pushArgs := []string{"push", "--no-verify"}
 	if opts.ForEdits {
 		pushArgs = append(pushArgs, fmt.Sprintf("--force-with-lease=refs/heads/%s:", ciBranch))
 	} else {
 		pushArgs = append(pushArgs, "-f")
 	}
 	pushArgs = append(pushArgs, "--quiet", "origin", fetchedSHA+":refs/heads/"+ciBranch)
-	if err := pushWithHookHint(opts.NoVerify, func() error { return git.RunCommand(pushArgs...) }); err != nil {
-		// Switch back to original branch before exiting
-		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
-			log.Warnf("Failed to switch back to original branch: %v", switchErr)
-		}
+	if err := git.RunCommand(pushArgs...); err != nil {
 		return fatalErrorf("Failed to push CI branch: %w", err)
 	}
 
 	for _, setting := range [][2]string{{"remote", "origin"}, {"merge", "refs/heads/" + ciBranch}} {
 		if err := git.RunCommand("config", "branch."+ciBranch+"."+setting[0], setting[1]); err != nil {
-			if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
-				log.Warnf("Failed to switch back to original branch: %v", switchErr)
-			}
 			return fatalErrorf("Failed to set CI branch upstream %s: %w", setting[0], err)
 		}
 	}
 
 	if existingPRURL != "" {
 		// PR already exists - force push is enough to re-trigger CI
-		log.Infof("Switching back to original branch: %s", originalBranch)
-		if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
-			log.Warnf("Failed to switch back to original branch: %v", err)
-		}
 		log.Infof("CI PR updated successfully: %s", existingPRURL)
 		log.Info("The force push will re-trigger CI. Remember to close (not merge) this PR after CI completes!")
 		return nil
@@ -402,17 +386,7 @@ func runCI(prNumber string, opts *RunCIOptions) error {
 	log.Info("Creating PR...")
 	prURL, err := createCIPR(ciBranch, prInfo.BaseRefName, prMetadata.Title, prMetadata.Body)
 	if err != nil {
-		// Switch back to original branch before exiting
-		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
-			log.Warnf("Failed to switch back to original branch: %v", switchErr)
-		}
 		return fatalErrorf("Failed to create PR: %w", err)
-	}
-
-	// Switch back to the original branch
-	log.Infof("Switching back to original branch: %s", originalBranch)
-	if err := git.RunCommand("switch", "--quiet", originalBranch); err != nil {
-		log.Warnf("Failed to switch back to original branch: %v", err)
 	}
 
 	log.Infof("PR created successfully: %s", prURL)

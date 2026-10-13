@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/safefs"
 )
 
 const (
@@ -79,7 +81,7 @@ func writeAgentsLocal(
 			}
 		}
 	}
-	if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
+	if err := safefs.WriteFileNoFollow(repoRoot, dest, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("could not write %s: %w", dest, err)
 	}
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Installed %s\n", dest)
