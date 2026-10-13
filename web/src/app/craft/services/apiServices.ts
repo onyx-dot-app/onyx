@@ -896,36 +896,6 @@ export async function uploadFile(
 }
 
 /**
- * Delete a file from the session's sandbox.
- */
-export async function deleteFile(
-  sessionId: string,
-  path: string
-): Promise<void> {
-  // Encode each path segment individually (spaces, special chars) but preserve slashes
-  const encodedPath = path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/files/${encodedPath}`,
-    {
-      method: "DELETE",
-    }
-  );
-
-  if (!res.ok) {
-    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
-    throw new FetchError(
-      errorData.detail || `Failed to delete file: ${res.status}`,
-      res.status,
-      errorData
-    );
-  }
-}
-
-/**
  * Export a markdown file as DOCX.
  * Returns a Blob of the converted document.
  */

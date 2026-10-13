@@ -2,7 +2,6 @@
 import {
   createTurn,
   uploadFile,
-  deleteFile,
   fetchMessages,
   fetchDirectoryListing,
   fetchFileContent,
@@ -389,13 +388,6 @@ describe("attachment mutations", () => {
         );
       await expect(
         uploadFile("session", new File(["body"], "notes.txt"))
-      ).rejects.toMatchObject({
-        status,
-        message: "Workspace access denied",
-        info: { detail: "Workspace access denied" },
-      });
-      await expect(
-        deleteFile("session", "attachments/notes.txt")
       ).rejects.toMatchObject({
         status,
         message: "Workspace access denied",

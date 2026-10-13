@@ -112,3 +112,40 @@ it("allows reads to continue when browser storage is blocked", () => {
     clearWorkspaceDirectorySnapshots("user", "session")
   ).not.toThrow();
 });
+
+it("removes an old directory snapshot when its replacement exceeds the size limit", () => {
+  saveWorkspaceDirectorySnapshot("user", "session", listing);
+  const otherDirectory = { path: "other", entries: [] };
+  saveWorkspaceDirectorySnapshot("user", "session", otherDirectory);
+  const name = "x".repeat(130_000);
+  saveWorkspaceDirectorySnapshot("user", "session", {
+    path: listing.path,
+    entries: listing.entries.map((entry) => ({
+      ...entry,
+      name,
+      path: `outputs/${name}`,
+    })),
+  });
+  expect(
+    readWorkspaceDirectorySnapshot("user", "session", "outputs")
+  ).toBeUndefined();
+  expect(readWorkspaceDirectorySnapshot("user", "session", "other")).toEqual(
+    otherDirectory
+  );
+});
+
+it("removes stale snapshots when a replacement write fails", () => {
+  saveWorkspaceDirectorySnapshot("user", "session", listing);
+  jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new DOMException("Full", "QuotaExceededError");
+  });
+  expect(() =>
+    saveWorkspaceDirectorySnapshot("user", "session", {
+      path: listing.path,
+      entries: [],
+    })
+  ).not.toThrow();
+  expect(
+    readWorkspaceDirectorySnapshot("user", "session", "outputs")
+  ).toBeUndefined();
+});

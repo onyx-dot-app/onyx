@@ -272,6 +272,7 @@ Fresh listings survive session switches and Files tab closure; reopening Files r
 `web/src/app/craft/services/workspaceDirectorySnapshots.ts` saves directory metadata in user-and-session-scoped browser session storage.
 Snapshots expire after 24 hours and are bounded to 32 directories and 256,000 characters per session.
 Hard reload uses validated snapshots as stale SWR fallback data, then reconciles with the server.
+Oversized directory replacements discard that directory’s old hint. Failed storage writes discard the session’s directory hints.
 Authorization and missing-session errors clear these snapshots. File contents and runtime state are not stored.
 A stable logical workspace identity preserves panel search and viewer state through welcome provisioning and claim.
 Backend requests and data caches retain the actual session identity.

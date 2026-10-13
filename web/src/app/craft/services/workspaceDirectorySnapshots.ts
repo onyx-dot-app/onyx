@@ -117,11 +117,11 @@ export function saveWorkspaceDirectorySnapshot(
   if (typeof window === "undefined") return;
   try {
     const snapshot = { readAt: Date.now(), listing };
-    if (JSON.stringify([snapshot]).length > MAX_SNAPSHOT_CHARACTERS) return;
     const snapshots = readSnapshots(userId, sessionId).filter(
       (snapshot) => snapshot.listing.path !== listing.path
     );
-    snapshots.push(snapshot);
+    if (JSON.stringify([snapshot]).length <= MAX_SNAPSHOT_CHARACTERS)
+      snapshots.push(snapshot);
     let serialized = JSON.stringify(snapshots);
     while (
       snapshots.length > MAX_DIRECTORIES ||
@@ -132,7 +132,8 @@ export function saveWorkspaceDirectorySnapshot(
     }
     window.sessionStorage.setItem(storageKey(userId, sessionId), serialized);
   } catch {
-    // Storage limits must not block live directory reads.
+    // A failed replacement must not leave an older snapshot behind.
+    clearWorkspaceDirectorySnapshots(userId, sessionId);
   }
 }
 
