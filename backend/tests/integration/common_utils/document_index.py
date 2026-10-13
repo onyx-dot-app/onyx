@@ -12,6 +12,22 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
+from onyx.document_index.opensearch.cc_pair_ids_backfill import (
+    load_cc_pair_ids_backfill_progress,
+    store_cc_pair_ids_backfill_progress,
+)
+
+
+def mark_cc_pair_ids_backfill_complete() -> None:
+    """Marks the cc_pair_ids backfill of the current index as complete. A reset
+    wipes its progress, and the beat task can take minutes to finish it."""
+    with get_session_with_current_tenant() as db_session:
+        progress = load_cc_pair_ids_backfill_progress(
+            get_current_search_settings(db_session)
+        )
+    progress.pending_cc_pair_ids = []
+    progress.last_document_id = None
+    store_cc_pair_ids_backfill_progress(progress)
 
 
 class DocumentIndexClient:

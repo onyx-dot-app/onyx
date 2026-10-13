@@ -322,8 +322,12 @@ invocation, inside the single DB session opened at the top of `run()`
 ### 4.3a Query-time cc-pair access filter
 
 A `SYNC_RESTRICTED` pair needs the workspace setting `allow_connector_group_restrictions`
-(`/admin/security`, default off, Business tier to turn on). `cc_pair.py:_assert_sync_restricted_allowed`
-rejects a pair that uses it while the setting is off.
+(`/admin/security`, default off, Business tier to turn on).
+`onyx/connectors/pairing_access.py:validate_pairing_access` rejects a pair that uses it
+while the setting is off. It also rejects a pair that becomes `SYNC_RESTRICTED` before
+the `cc_pair_ids` backfill of the current index is complete, because the guard below
+cannot hide chunks that do not have `cc_pair_ids` yet. A pair that is already
+`SYNC_RESTRICTED` can still change its groups while a new index runs its backfill.
 
 A second filter works from the cc-pair a chunk belongs to instead of from the
 ACL snapshot stored on the chunk. `onyx/db/connector_credential_pair.py:get_cc_pair_access_sets_for_user`

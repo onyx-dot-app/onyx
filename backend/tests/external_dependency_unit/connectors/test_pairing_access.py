@@ -41,6 +41,13 @@ def group_restrictions_allowed(
 
 
 @pytest.fixture
+def backfill_complete(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    is_complete = MagicMock(return_value=True)
+    monkeypatch.setattr(pairing_access, "is_cc_pair_ids_backfill_complete", is_complete)
+    return is_complete
+
+
+@pytest.fixture
 def ee_business_tier(
     enable_ee: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
@@ -56,6 +63,7 @@ def _validate(
     access_type: AccessType,
     data_access_group_ids: list[int] | None = None,
     source: DocumentSource = DocumentSource.SLACK,
+    current_access_type: AccessType | None = None,
 ) -> None:
     validate_pairing_access(
         db_session,
@@ -63,6 +71,7 @@ def _validate(
         source=source,
         access_type=access_type,
         data_access_group_ids=data_access_group_ids,
+        current_access_type=current_access_type,
     )
 
 
@@ -72,9 +81,17 @@ def _error_code(
     access_type: AccessType,
     data_access_group_ids: list[int] | None = None,
     source: DocumentSource = DocumentSource.SLACK,
+    current_access_type: AccessType | None = None,
 ) -> OnyxErrorCode:
     with pytest.raises(OnyxError) as exc_info:
-        _validate(db_session, user, access_type, data_access_group_ids, source)
+        _validate(
+            db_session,
+            user,
+            access_type,
+            data_access_group_ids,
+            source,
+            current_access_type,
+        )
     return exc_info.value.error_code
 
 
@@ -91,7 +108,10 @@ def test_restricted_needs_the_workspace_setting(
 
 
 @pytest.mark.usefixtures(
-    "tenant_context", "ee_business_tier", "group_restrictions_allowed"
+    "tenant_context",
+    "ee_business_tier",
+    "group_restrictions_allowed",
+    "backfill_complete",
 )
 def test_restricted_needs_a_data_access_group(db_session: Session, admin: User) -> None:
     assert (
@@ -99,6 +119,38 @@ def test_restricted_needs_a_data_access_group(db_session: Session, admin: User) 
         is OnyxErrorCode.INVALID_INPUT
     )
     _validate(db_session, admin, AccessType.SYNC_RESTRICTED, [_GROUP_ID])
+
+
+@pytest.mark.usefixtures(
+    "tenant_context", "ee_business_tier", "group_restrictions_allowed"
+)
+@pytest.mark.parametrize("current_access_type", [None, AccessType.PRIVATE])
+def test_restricted_needs_the_cc_pair_ids_backfill(
+    db_session: Session,
+    admin: User,
+    backfill_complete: MagicMock,
+    current_access_type: AccessType | None,
+) -> None:
+    backfill_complete.return_value = False
+
+    assert (
+        _error_code(
+            db_session,
+            admin,
+            AccessType.SYNC_RESTRICTED,
+            [_GROUP_ID],
+            current_access_type=current_access_type,
+        )
+        is OnyxErrorCode.FEATURE_NOT_AVAILABLE
+    )
+    # A pair that is already restricted can still change its groups.
+    _validate(
+        db_session,
+        admin,
+        AccessType.SYNC_RESTRICTED,
+        [_GROUP_ID],
+        current_access_type=AccessType.SYNC_RESTRICTED,
+    )
 
 
 @pytest.mark.usefixtures("tenant_context")
