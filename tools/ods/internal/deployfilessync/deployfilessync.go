@@ -34,6 +34,8 @@ var RelPaths = []string{
 	"data/nginx/app.conf.template",
 	"data/nginx/app.conf.template.prod",
 	"data/nginx/run-nginx.sh",
+	"data/nginx/mcp.conf.inc.template",
+	"data/nginx/mcp_upstream.conf.inc.template",
 }
 
 // SourceDir returns the directory the files are copied from.
