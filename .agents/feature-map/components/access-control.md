@@ -369,6 +369,12 @@ picks the `CCPairAccessMode`:
   the Redis-only flag `cc_pair_access_filter` / `enforce`, and a finished `cc_pair_ids` backfill
   (`document_index/opensearch/cc_pair_ids_backfill.py:is_cc_pair_ids_backfill_complete`).
 
+Both flags live in the cache (`OnyxRuntime`). On a self-hosted deployment, an
+admin sets them with the mode dropdown on Index Settings
+(`PUT /search-settings/cc-pair-access-mode`). That route refuses `ENFORCE` before
+the backfill is complete. It refuses every change in a multi-tenant deployment,
+because there the flags are shared by all tenants and operators own them.
+
 In `_get_search_filters`, `_get_cc_pair_access_visibility_filter` replaces the
 ACL clause only in `ENFORCE` mode. In every other mode the ACL clause stays,
 plus `_get_restricted_cc_pair_guard`, which removes chunks of hidden guarded

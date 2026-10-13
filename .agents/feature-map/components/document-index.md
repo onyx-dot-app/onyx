@@ -73,6 +73,7 @@ dropped the migration tables, and #15336 removed Vespa and the retrieval toggle.
 | GET | `/search-settings/reindex-progress` | | |
 | GET | `/search-settings/reindex-errors` | | |
 | GET | `/search-settings/cc-pair-ids-backfill-progress` | `get_cc_pair_ids_backfill_status` | Progress of the `cc_pair_ids` backfill and the cc-pair access mode. Index Settings shows it in `CCPairIdsBackfillCard.tsx`. |
+| PUT | `/search-settings/cc-pair-access-mode` | `update_cc_pair_access_mode` | Sets the cc-pair access mode (Off, Shadow, Enforce) through both runtime flags. Self-hosted only; Enforce needs a complete backfill. |
 | POST | `/search-settings/reindex/port/resume` | | Resumes a stalled reindex-port backfill. |
 | POST | `/search-settings/update-inference-settings` | | |
 | GET/PUT/DELETE | `/search-settings/unstructured-api-key-set`, `/upsert-unstructured-api-key`, `/delete-unstructured-api-key` | | Unrelated document-parsing key, colocated in this router. |
