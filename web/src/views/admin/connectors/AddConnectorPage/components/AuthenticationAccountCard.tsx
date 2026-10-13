@@ -99,6 +99,11 @@ interface AuthenticationAccountCardProps {
   onDeselect: () => void;
   /** Called once the user confirms the deletion. */
   onDelete: () => void;
+  /** Whether the details below the header are open. */
+  detailsOpen: boolean;
+  /** Called when the chevron opens or closes the details. */
+  onDetailsOpenChange: (open: boolean) => void;
+
   /** The account's stored check report, or null if it was never checked. */
   checkReport: CredentialCheckReport | null;
   /** Starts the checks on this account; resolves once the run is queued. */
@@ -128,6 +133,8 @@ export default function AuthenticationAccountCard({
   onSelect,
   onDeselect,
   onDelete,
+  detailsOpen,
+  onDetailsOpenChange,
   checkReport,
   onRerunChecks,
   groupsLocked,
@@ -164,7 +171,6 @@ export default function AuthenticationAccountCard({
       setStarting(false);
     }
   }
-  const [expanded, setExpanded] = useState<boolean>(false);
   // What the server holds, and what the select shows: group edits stay
   // local until focus leaves the group picker.
   const [savedSharing, setSavedSharing] = useState<ShareAccountFormValues>(() =>
@@ -294,7 +300,7 @@ export default function AuthenticationAccountCard({
       <Disabled disabled={!selectable}>
         <SelectCard
           expandable
-          expanded={expanded}
+          expanded={detailsOpen}
           expandableContentHeight="full"
           state={selected && !quietSelection ? "selected" : "filled"}
           border="solid"
@@ -490,18 +496,18 @@ export default function AuthenticationAccountCard({
                 </div>
               )}
               <Button
-                icon={expanded ? SvgChevronUp : SvgChevronDown}
+                icon={detailsOpen ? SvgChevronUp : SvgChevronDown}
                 prominence="tertiary"
                 aria-label={
-                  expanded
+                  detailsOpen
                     ? t("collapseButton.ariaLabel")
                     : t("expandButton.ariaLabel")
                 }
-                aria-expanded={expanded}
+                aria-expanded={detailsOpen}
                 onClick={(event) => {
                   // Opens the details; it does not pick the account.
                   event.stopPropagation();
-                  setExpanded((open) => !open);
+                  onDetailsOpenChange(!detailsOpen);
                 }}
               />
             </Section>
