@@ -107,6 +107,7 @@ export default function EditCredential({
                   name={key}
                   fieldKey={key}
                   label={fieldCopy(key).title}
+                  description={fieldCopy(key).description}
                 />
               ) : (
                 <TextFormField
