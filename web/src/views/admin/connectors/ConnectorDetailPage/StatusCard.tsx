@@ -22,7 +22,7 @@ interface StatBlockProps {
 /** One column of the card: a figure or tag over its two-line label. */
 function StatBlock({ children }: StatBlockProps) {
   return (
-    // Columns share the row evenly and wrap below 13rem.
+    // Columns share the row evenly and wrap below 12rem, so three fit at 640px.
     <Section
       alignItems="start"
       justifyContent="start"
@@ -30,7 +30,7 @@ function StatBlock({ children }: StatBlockProps) {
       padding={2}
       width="auto"
       height="fit"
-      className="grow basis-0 min-w-52"
+      className="grow basis-0 min-w-48"
     >
       {children}
     </Section>
