@@ -1702,6 +1702,7 @@ def create_connector_with_mock_credential(
             credential_id=credential_id,
             access_type=connector_data.access_type,
             db_session=db_session,
+            user=user,
         )
         response = add_credential_to_connector(
             db_session=db_session,
@@ -1839,6 +1840,7 @@ def create_connector_with_credential(
             credential_id,
             request.pairing.access_type,
             db_session,
+            user=user,
         )
         response = add_credential_to_connector(
             db_session=db_session,
@@ -1966,6 +1968,7 @@ def update_connector_from_model(
             connector_data.source,
             connector_data.connector_specific_config,
             db_session,
+            user=user,
         )
         connector_base = connector_data.to_connector_base()
     except (ValueError, ConnectorValidationError) as e:

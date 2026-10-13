@@ -368,6 +368,17 @@ It has one live call site, `server/documents/connector.py:get_currently_failed_i
 which uses it to compute the `is_deletable` field the admin UI shows per connector.
 It does not block the delete call; see §9.
 
+### 4.7 Credential access and use
+
+`db/credentials.py:_add_user_filters` decides which credentials a user can
+see: their own; and, for a global `MANAGE_CONNECTORS` holder, credentials
+with no owner, `admin_public` credentials and `CREDENTIAL_PERMISSIONS_TO_IGNORE`
+sources. Drafts are hidden from all but their owner's form.
+
+To pair a visible credential, swap to it, edit its bound fields or run checks
+with it, a user who does not own it must also keep the bound values of a pair
+that uses it: see [[connectors]] §4.9 (`factory.py:assert_user_can_use_credential`).
+
 ---
 
 ## 5. Contracts and invariants

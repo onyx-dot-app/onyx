@@ -31,7 +31,10 @@ from onyx.connectors.edit_plan.planner import (
     ensure_edit_is_plannable,
     restart_inputs_changed,
 )
-from onyx.connectors.edit_plan.state import fetch_current_pair_state
+from onyx.connectors.edit_plan.state import (
+    fetch_current_pair_state,
+    fetch_proposed_credential,
+)
 from onyx.connectors.edit_plan.store import (
     claim_edit_plan_for_apply,
     delete_edit_plan,
@@ -59,11 +62,7 @@ from onyx.db.connector_edit_requests import (
     request_prune_after_reindex__no_commit,
     write_edited_pair_state__no_commit,
 )
-from onyx.db.credentials import (
-    credential_usable_for_source,
-    fetch_credential_by_id,
-    swap_cc_pair_credential__no_commit,
-)
+from onyx.db.credentials import swap_cc_pair_credential__no_commit
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import CapabilityCheckTrigger, IndexingMode
 from onyx.db.models import Credential, User
@@ -104,24 +103,6 @@ def _access_changed(current: CurrentPairState, proposed: ProposedPairState) -> b
         proposed.access_type != current.access_type
         or proposed.data_access_group_ids != current.data_access_group_ids
     )
-
-
-def _proposed_credential(
-    db_session: Session, current: CurrentPairState, proposed: ProposedPairState
-) -> Credential:
-    credential = fetch_credential_by_id(proposed.credential_id, db_session)
-    if credential is None:
-        raise OnyxError(
-            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
-            f"Credential {proposed.credential_id} does not exist.",
-        )
-    if not credential_usable_for_source(credential, current.source):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Credential {credential.id} cannot be used by a "
-            f"{current.source.value} connector.",
-        )
-    return credential
 
 
 def _validate_proposed_state(
@@ -380,7 +361,9 @@ def _apply_claimed_plan(
             access_type=proposed.access_type,
             data_access_group_ids=proposed.data_access_group_ids,
         )
-    credential = _proposed_credential(db_session, current, proposed)
+    credential = fetch_proposed_credential(
+        db_session, user=user, current=current, proposed=proposed
+    )
     validated = _validate_proposed_state(db_session, current, proposed, credential)
 
     try:
@@ -392,7 +375,9 @@ def _apply_claimed_plan(
         current = fetch_current_pair_state(db_session, cc_pair_id)
         ensure_base_state_matches(stored, current)
 
-        credential = _proposed_credential(db_session, current, proposed)
+        credential = fetch_proposed_credential(
+            db_session, user=user, current=current, proposed=proposed
+        )
         task_ids = _write_edit__no_commit(
             db_session,
             user=user,
