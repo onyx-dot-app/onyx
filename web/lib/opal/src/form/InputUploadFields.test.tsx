@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Formik, type FormikProps } from "formik";
-import { InputUploadField } from "@opal/form/InputUploadField";
+import { InputSingleUploadField } from "@opal/form/InputSingleUploadField";
 
 interface KeyForm {
   key: string;
@@ -19,7 +19,7 @@ function picker(container: HTMLElement): HTMLInputElement {
   return input;
 }
 
-describe("InputUploadField", () => {
+describe("InputSingleUploadField", () => {
   test("text mode: a paste into the focused control becomes the value", async () => {
     const user = userEvent.setup({ delay: null });
     let form: FormikProps<KeyForm> | null = null;
@@ -27,7 +27,7 @@ describe("InputUploadField", () => {
       <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
         {(formik) => {
           form = formik;
-          return <InputUploadField name="key" placeholder="Upload a key" />;
+          return <InputSingleUploadField name="key" placeholder="Upload a key" />;
         }}
       </Formik>
     );
@@ -46,7 +46,7 @@ describe("InputUploadField", () => {
       <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
         {(formik) => {
           form = formik;
-          return <InputUploadField name="key" />;
+          return <InputSingleUploadField name="key" />;
         }}
       </Formik>
     );
@@ -79,7 +79,7 @@ describe("InputUploadField", () => {
       >
         {(formik) => {
           form = formik;
-          return <InputUploadField name="key" placeholder="Upload a key" />;
+          return <InputSingleUploadField name="key" placeholder="Upload a key" />;
         }}
       </Formik>
     );
@@ -108,7 +108,7 @@ describe("InputUploadField", () => {
       <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
         {(formik) => {
           form = formik;
-          return <InputUploadField name="key" />;
+          return <InputSingleUploadField name="key" />;
         }}
       </Formik>
     );
@@ -128,7 +128,7 @@ describe("InputUploadField", () => {
       <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
         {(formik) => {
           form = formik;
-          return <InputUploadField name="key" />;
+          return <InputSingleUploadField name="key" />;
         }}
       </Formik>
     );
@@ -150,7 +150,7 @@ describe("InputUploadField", () => {
       <Formik<KeyForm> initialValues={{ key: "" }} onSubmit={() => {}}>
         {(formik) => {
           form = formik;
-          return <InputUploadField name="key" />;
+          return <InputSingleUploadField name="key" />;
         }}
       </Formik>
     );
@@ -175,7 +175,7 @@ describe("InputUploadField", () => {
       >
         {(formik) => {
           form = formik;
-          return <InputUploadField name="certificate" mode="file" />;
+          return <InputSingleUploadField name="certificate" mode="file" />;
         }}
       </Formik>
     );
@@ -194,7 +194,7 @@ describe("InputUploadField", () => {
         initialErrors={{ key: "Required" }}
         onSubmit={() => {}}
       >
-        <InputUploadField name="key" />
+        <InputSingleUploadField name="key" />
       </Formik>
     );
 

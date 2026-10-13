@@ -51,3 +51,9 @@
 .opal-input-upload[data-drag] .opal-input-leading-icon-svg {
   color: var(--action-selection-05);
 }
+
+/* InputMultiUpload: its drop copy is the tag field's placeholder. */
+.opal-input-upload[data-drag] .opal-input-type-in-tag-trigger > * {
+  @apply font-main-ui-action;
+  color: var(--action-selection-05);
+}

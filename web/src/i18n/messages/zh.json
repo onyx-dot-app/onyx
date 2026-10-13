@@ -11867,12 +11867,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {选择文件} other {选择文件}}"
-      },
-      "prompt": "{multiple, select, true {或将文件拖放到此处。} other {或将文件拖放到此处。}}"
-    },
     "textListField": {
       "addButton": {
         "label": "新增"
@@ -14162,6 +14156,11 @@
     },
     "inputFile": {
       "clearFile": "清除文件"
+    },
+    "inputMultiUpload": {
+      "placeholder": "添加文件…",
+      "dropToAdd": "将文件拖放到此处以添加",
+      "dropToAddMore": "拖放到此处以添加更多文件"
     },
     "inputUpload": {
       "placeholder": "添加文件…",

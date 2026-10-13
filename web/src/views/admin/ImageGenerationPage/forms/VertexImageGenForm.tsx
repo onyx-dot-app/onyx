@@ -6,7 +6,7 @@ import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
 import { InputTypeIn } from "@opal/components";
-import { InputUploadField } from "@opal/form";
+import { InputSingleUploadField } from "@opal/form";
 import { InputSingleSelect } from "@opal/components";
 import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
@@ -175,7 +175,7 @@ function VertexFormFields(
             >
               <FormField.Label>{t("form.credentials.label")}</FormField.Label>
               <FormField.Control>
-                <InputUploadField
+                <InputSingleUploadField
                   name="custom_config.vertex_credentials"
                   // Unset, the field shows its own Formik error.
                   variant={

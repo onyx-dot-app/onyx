@@ -1,34 +1,34 @@
 "use client";
 
 import { useField } from "formik";
-import InputUpload, {
-  type InputUploadFileProps,
-  type InputUploadTextProps,
-} from "@opal/components/inputs/input-upload/components";
+import InputSingleUpload, {
+  type InputSingleUploadFileProps,
+  type InputSingleUploadTextProps,
+} from "@opal/components/inputs/uploads/input-single-upload/components";
 import type { DistributiveOmit } from "@opal/types";
 
-/** Every `InputUpload` prop except the value and its setter, which Formik owns. */
-type InputUploadFieldProps = (
-  | DistributiveOmit<InputUploadTextProps, "value" | "setValue">
-  | DistributiveOmit<InputUploadFileProps, "value" | "onFileChange">
+/** Every `InputSingleUpload` prop except the value and its setter, which Formik owns. */
+type InputSingleUploadFieldProps = (
+  | DistributiveOmit<InputSingleUploadTextProps, "value" | "setValue">
+  | DistributiveOmit<InputSingleUploadFileProps, "value" | "onFileChange">
 ) & {
   /** The Formik field name. */
   name: string;
 };
 
 /**
- * Formik-bound `InputUpload`. Text mode holds a `string` field (the uploaded
+ * Formik-bound `InputSingleUpload`. Text mode holds a `string` field (the uploaded
  * file's text, or pasted text); `mode="file"` holds a `File | null` field.
  * An upload, a paste or a clear marks the field touched, as leaving it does;
  * a touched field with an error shows the error variant unless `variant` is
  * set.
  */
-function InputUploadField({
+function InputSingleUploadField({
   name,
   variant,
   onBlur,
   ...props
-}: InputUploadFieldProps) {
+}: InputSingleUploadFieldProps) {
   const [field, meta, helpers] = useField<unknown>(name);
   const isError: boolean = !!meta.touched && meta.error !== undefined;
   const shared = {
@@ -45,7 +45,7 @@ function InputUploadField({
   // with the pre-change values.
   if (props.mode === "file") {
     return (
-      <InputUpload
+      <InputSingleUpload
         {...props}
         {...shared}
         value={field.value instanceof File ? field.value : null}
@@ -57,7 +57,7 @@ function InputUploadField({
     );
   }
   return (
-    <InputUpload
+    <InputSingleUpload
       {...props}
       {...shared}
       value={typeof field.value === "string" ? field.value : ""}
@@ -69,4 +69,4 @@ function InputUploadField({
   );
 }
 
-export { InputUploadField, type InputUploadFieldProps };
+export { InputSingleUploadField, type InputSingleUploadFieldProps };

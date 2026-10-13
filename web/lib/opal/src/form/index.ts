@@ -10,9 +10,13 @@ export {
   type InputCheckboxFieldProps,
 } from "@opal/form/InputCheckboxField";
 export {
-  InputUploadField,
-  type InputUploadFieldProps,
-} from "@opal/form/InputUploadField";
+  InputSingleUploadField,
+  type InputSingleUploadFieldProps,
+} from "@opal/form/InputSingleUploadField";
+export {
+  InputMultiUploadField,
+  type InputMultiUploadFieldProps,
+} from "@opal/form/InputMultiUploadField";
 export {
   InputSingleSelectField,
   type InputSingleSelectFieldProps,

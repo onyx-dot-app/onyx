@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import React from "react";
-import InputUpload from "@opal/components/inputs/input-upload/components";
+import InputSingleUpload from "@opal/components/inputs/uploads/input-single-upload/components";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
-const meta: Meta<typeof InputUpload> = {
-  title: "opal/components/InputUpload",
-  component: InputUpload,
+const meta: Meta<typeof InputSingleUpload> = {
+  title: "opal/components/InputSingleUpload",
+  component: InputSingleUpload,
   tags: ["autodocs"],
   decorators: [
     (Story) => (
@@ -19,13 +19,13 @@ const meta: Meta<typeof InputUpload> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof InputUpload>;
+type Story = StoryObj<typeof InputSingleUpload>;
 
 export const Default: Story = {
   render: function DefaultStory() {
     const [, setValue] = React.useState("");
     return (
-      <InputUpload
+      <InputSingleUpload
         placeholder="Paste or attach a file..."
         setValue={setValue}
       />
@@ -37,7 +37,7 @@ export const WithAcceptFilter: Story = {
   render: function AcceptFilterStory() {
     const [, setValue] = React.useState("");
     return (
-      <InputUpload
+      <InputSingleUpload
         placeholder="JSON files only..."
         setValue={setValue}
         accept="application/json,.json"
@@ -50,7 +50,7 @@ export const WithMaxSize: Story = {
   render: function MaxSizeStory() {
     const [, setValue] = React.useState("");
     return (
-      <InputUpload
+      <InputSingleUpload
         placeholder="Max 100KB..."
         setValue={setValue}
         maxSizeKb={100}
@@ -64,7 +64,7 @@ export const WithMaxSize: Story = {
 
 export const Disabled: Story = {
   render: () => (
-    <InputUpload
+    <InputSingleUpload
       placeholder="Cannot upload"
       setValue={() => {}}
       variant="disabled"
@@ -76,7 +76,7 @@ export const ErrorState: Story = {
   render: function ErrorStory() {
     const [, setValue] = React.useState("");
     return (
-      <InputUpload
+      <InputSingleUpload
         placeholder="Required file..."
         setValue={setValue}
         variant="error"
@@ -89,7 +89,7 @@ export const FileMode: Story = {
   render: function FileModeStory() {
     const [file, setFile] = React.useState<File | null>(null);
     return (
-      <InputUpload
+      <InputSingleUpload
         mode="file"
         accept=".pfx"
         placeholder="Attach a .pfx certificate"

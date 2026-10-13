@@ -1736,6 +1736,15 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     description: "Configure Google Sites connector",
     values: [
       {
+        type: "text",
+        query: "Enter the base URL:",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+        // The published site's root; each page's link is this plus its path.
+        placeholder: "https://sites.google.com/view/your-site",
+      },
+      {
         type: "file",
         query: "Enter the zip path:",
         label: "File Locations",
@@ -1743,13 +1752,8 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
         optional: false,
         description:
           "Upload a zip file containing the HTML of your Google Site",
-      },
-      {
-        type: "text",
-        query: "Enter the base URL:",
-        label: "Base URL",
-        name: "base_url",
-        optional: false,
+        multiple: false,
+        accept: ".zip",
       },
     ],
     advanced_values: [],

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
-  InputUpload,
+  InputSingleUpload,
   InputPasswordTypeIn,
   InputSwitch,
   InputTypeIn,
@@ -233,7 +233,7 @@ export function CredentialFileField({
         typeof description === "string" ? markdown(description) : description
       }
     >
-      <InputUpload
+      <InputSingleUpload
         mode="file"
         id={name}
         name={name}

@@ -16,15 +16,21 @@ export type OpalStrings = {
   copyCode: string;
   clear: string;
   clearFile: string;
-  /** InputUpload's placeholder when its caller gives none. */
+  /** InputSingleUpload's placeholder when its caller gives none. */
   inputUploadPlaceholder: string;
-  /** InputUpload's label for a value that was pasted, not uploaded. */
+  /** InputMultiUpload's placeholder when its caller gives none. */
+  inputMultiUploadPlaceholder: string;
+  /** InputMultiUpload's copy while files are dragged and it holds none. */
+  inputMultiUploadDropToAdd: string;
+  /** InputMultiUpload's copy while files are dragged over it and it holds some. */
+  inputMultiUploadDropToAddMore: string;
+  /** InputSingleUpload's label for a value that was pasted, not uploaded. */
   inputUploadPasted: string;
-  /** InputUpload's label for a value set from outside, such as a saved one. */
+  /** InputSingleUpload's label for a value set from outside, such as a saved one. */
   inputUploadAttached: string;
-  /** InputUpload's copy while a file is dragged and it holds none. */
+  /** InputSingleUpload's copy while a file is dragged and it holds none. */
   inputUploadDropToAdd: string;
-  /** InputUpload's copy while a file is dragged over it and it holds one. */
+  /** InputSingleUpload's copy while a file is dragged over it and it holds one. */
   inputUploadDropToReplace: string;
   clearFilter: string;
   date: string;
@@ -132,6 +138,9 @@ export const defaultOpalStrings: OpalStrings = {
   clear: "Clear",
   clearFile: "Clear file",
   inputUploadPlaceholder: "Add a file…",
+  inputMultiUploadPlaceholder: "Add files…",
+  inputMultiUploadDropToAdd: "Drop files here to add",
+  inputMultiUploadDropToAddMore: "Drop here to add more files",
   inputUploadPasted: "Pasted text",
   inputUploadAttached: "File attached",
   inputUploadDropToAdd: "Drop file here to add",

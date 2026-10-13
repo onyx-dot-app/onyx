@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { InputUploadField, InputSingleSelectField } from "@opal/form";
+import { InputSingleUploadField, InputSingleSelectField } from "@opal/form";
 import { Card, MessageCard } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
@@ -133,7 +133,7 @@ function VertexAIModalInternals({
             title={t("vertexAi.credentialsField.title")}
             subDescription={t("vertexAi.credentialsField.description")}
           >
-            <InputUploadField
+            <InputSingleUploadField
               name={FIELD_VERTEX_CREDENTIALS}
               accept="application/json,.json"
             />

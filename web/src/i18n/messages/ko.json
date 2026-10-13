@@ -11867,12 +11867,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {파일 선택} other {파일 선택}}"
-      },
-      "prompt": "{multiple, select, true {또는 파일을 여기로 끌어다 놓으세요.} other {또는 파일을 여기로 끌어다 놓으세요.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "새로 추가"
@@ -14162,6 +14156,11 @@
     },
     "inputFile": {
       "clearFile": "파일 지우기"
+    },
+    "inputMultiUpload": {
+      "placeholder": "파일 추가…",
+      "dropToAdd": "여기에 파일을 놓아 추가",
+      "dropToAddMore": "여기에 놓아 파일 더 추가"
     },
     "inputUpload": {
       "placeholder": "파일 추가…",
