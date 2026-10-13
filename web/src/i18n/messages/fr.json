@@ -14165,6 +14165,7 @@
       "clearFile": "Effacer le fichier"
     },
     "inputUpload": {
+      "placeholder": "Ajouter un fichier…",
       "pasted": "Texte collé",
       "attached": "Fichier joint",
       "dropToAdd": "Déposez le fichier ici pour l’ajouter",

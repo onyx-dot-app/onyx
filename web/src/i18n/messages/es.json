@@ -14165,6 +14165,7 @@
       "clearFile": "Quitar archivo"
     },
     "inputUpload": {
+      "placeholder": "Añadir un archivo…",
       "pasted": "Texto pegado",
       "attached": "Archivo adjunto",
       "dropToAdd": "Suelta el archivo aquí para añadirlo",

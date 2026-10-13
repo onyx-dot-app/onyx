@@ -14165,6 +14165,7 @@
       "clearFile": "ファイルをクリア"
     },
     "inputUpload": {
+      "placeholder": "ファイルを追加…",
       "pasted": "貼り付けたテキスト",
       "attached": "ファイル添付済み",
       "dropToAdd": "ここにファイルをドロップして追加",

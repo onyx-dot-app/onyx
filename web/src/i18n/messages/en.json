@@ -14165,6 +14165,7 @@
       "clearFile": "Clear file"
     },
     "inputUpload": {
+      "placeholder": "Add a file…",
       "pasted": "Pasted text",
       "attached": "File attached",
       "dropToAdd": "Drop file here to add",

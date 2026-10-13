@@ -17,6 +17,8 @@ export type OpalStrings = {
   clear: string;
   attachFile: string;
   clearFile: string;
+  /** InputUpload's placeholder when its caller gives none. */
+  inputUploadPlaceholder: string;
   /** InputUpload's label for a value that was pasted, not uploaded. */
   inputUploadPasted: string;
   /** InputUpload's label for a value set from outside, such as a saved one. */
@@ -131,6 +133,7 @@ export const defaultOpalStrings: OpalStrings = {
   clear: "Clear",
   attachFile: "Attach file",
   clearFile: "Clear file",
+  inputUploadPlaceholder: "Add a file…",
   inputUploadPasted: "Pasted text",
   inputUploadAttached: "File attached",
   inputUploadDropToAdd: "Drop file here to add",

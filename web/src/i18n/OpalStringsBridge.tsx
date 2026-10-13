@@ -29,6 +29,7 @@ export default function OpalStringsBridge({
       clear: t("common.clear"),
       attachFile: t("inputFile.attachFile"),
       clearFile: t("inputFile.clearFile"),
+      inputUploadPlaceholder: t("inputUpload.placeholder"),
       inputUploadPasted: t("inputUpload.pasted"),
       inputUploadAttached: t("inputUpload.attached"),
       inputUploadDropToAdd: t("inputUpload.dropToAdd"),

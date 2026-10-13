@@ -15,7 +15,10 @@ import type { InputVariants, RichStr } from "@opal/types";
 interface InputUploadBaseProps {
   /** Visual state, as on the other inputs. @default "primary" */
   variant?: InputVariants;
-  /** Shown while nothing is uploaded. Accepts `markdown()`. */
+  /**
+   * Shown while nothing is uploaded. Accepts `markdown()`. Default: "Add a
+   * file…" (`OpalStrings.inputUploadPlaceholder`).
+   */
   placeholder?: string | RichStr;
   /** The control's id, so a `<label htmlFor>` names it and opens it. */
   id?: string;
@@ -303,7 +306,7 @@ export default function InputUpload(props: InputUploadProps) {
               color="inherit"
               maxLines={1}
             >
-              {shownLabel ?? placeholder ?? strings.attachFile}
+              {shownLabel ?? placeholder ?? strings.inputUploadPlaceholder}
             </Text>
           </span>
         </button>

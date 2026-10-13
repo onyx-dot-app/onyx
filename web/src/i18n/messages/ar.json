@@ -14165,6 +14165,7 @@
       "clearFile": "مسح الملف"
     },
     "inputUpload": {
+      "placeholder": "أضف ملفًا…",
       "pasted": "نص ملصق",
       "attached": "تم إرفاق ملف",
       "dropToAdd": "أفلت الملف هنا لإضافته",

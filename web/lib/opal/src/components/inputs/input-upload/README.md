@@ -38,7 +38,7 @@ A dropped file must match `accept`, and is refused above `maxSizeKb`, as a picke
 | `value`              | file | `File \| null`                  | The file, when the caller owns it                                           |
 | `onFileChange`       | file | `(file: File \| null) => void`  | Receives the file, or `null` once cleared                                   |
 | `variant`            | both | `InputVariants`                 | `"primary"` (default), `"error"`, `"disabled"` (no picking, dropping or pasting), `"readOnly"` |
-| `placeholder`        | both | `string`                        | Shown while empty; also the control's accessible name                       |
+| `placeholder`        | both | `string \| RichStr`              | Shown while empty. Default: "Add a file…"                                  |
 | `accept`             | both | `string`                        | The picker's filter, as the HTML `accept` attribute; a drop must match it   |
 | `maxSizeKb`          | both | `number`                        | Rejects a file larger than this                                             |
 | `onFileSizeExceeded` | both | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                                 |
@@ -48,7 +48,7 @@ Without `value`, the control keeps its own. `InputUploadField` binds it to Formi
 text mode, a `File | null` field in file mode. An upload, paste or clear marks the field touched; a
 touched field with an error shows the error variant.
 
-Labels come from `OpalStrings`: `attachFile`, `clearFile`, `inputUploadPasted`, `inputUploadAttached`,
+Labels come from `OpalStrings`: `inputUploadPlaceholder`, `clearFile`, `inputUploadPasted`, `inputUploadAttached`,
 `inputUploadDropToAdd` and `inputUploadDropToReplace`.
 
 ## Usage

@@ -14165,6 +14165,7 @@
       "clearFile": "清除文件"
     },
     "inputUpload": {
+      "placeholder": "添加文件…",
       "pasted": "已粘贴的文本",
       "attached": "已附加文件",
       "dropToAdd": "将文件拖放到此处以添加",
