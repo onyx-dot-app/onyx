@@ -3128,6 +3128,9 @@
           "title": "连接器管理权限"
         },
         "title": "连接器设置"
+      },
+      "optionsListInput": {
+        "placeholder": "从列表中选择{label}或输入"
       }
     },
     "costOverrides": {

@@ -3128,6 +3128,9 @@
           "title": "Accès de gestion du connecteur"
         },
         "title": "Paramètres du connecteur"
+      },
+      "optionsListInput": {
+        "placeholder": "Choisissez {label} dans la liste ou saisissez-en"
       }
     },
     "costOverrides": {

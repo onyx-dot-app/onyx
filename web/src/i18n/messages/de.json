@@ -3128,6 +3128,9 @@
           "title": "Verwaltungszugriff für den Connector"
         },
         "title": "Connector-Einstellungen"
+      },
+      "optionsListInput": {
+        "placeholder": "{label} aus der Liste wählen oder eingeben"
       }
     },
     "costOverrides": {
