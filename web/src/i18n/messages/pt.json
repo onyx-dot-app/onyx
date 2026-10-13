@@ -5635,6 +5635,62 @@
         "e5SmallV2": "A versão menor e mais rápida da linha de modelos E5. Se você executa o {appName} em um sistema com recursos limitados, pode ser uma boa escolha.",
         "multilingualE5Base": "Para corpora em outros idiomas além do inglês, esta é a escolha certa.",
         "multilingualE5Small": "Para corpora em outros idiomas além do inglês em um sistema com recursos limitados, esta é a escolha certa."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa o acesso por conector.",
+            "off": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos. O acesso por conector está desativado.",
+            "shadow": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos e as compara com o acesso por conector."
+          },
+          "title": "Atualização do acesso por conector concluída"
+        },
+        "notStarted": {
+          "description": "Um trabalho em segundo plano adicionará os IDs de conector aos fragmentos existentes do índice de pesquisa. Ele começa em alguns minutos.",
+          "title": "A atualização do acesso por conector ainda não começou"
+        },
+        "progress": {
+          "ariaLabel": "Progresso da atualização do acesso por conector"
+        },
+        "running": {
+          "description": "Um trabalho em segundo plano adiciona os IDs de conector aos fragmentos existentes do índice de pesquisa. O acesso de pesquisa por conector só pode ser aplicado depois que ele terminar.",
+          "title": "Atualizando o índice de pesquisa para o acesso por conector…"
+        },
+        "status": {
+          "connectors": "{done, number} de {total, number} conectores concluídos",
+          "connectorsLeft": "{count, plural, one {# conector restante} other {# conectores restantes}}",
+          "current": "Conector atual: {name}",
+          "documentsLeft": "{count, plural, one {# documento restante} other {# documentos restantes}}"
+        },
+        "mode": {
+          "description": "Como a pesquisa decide quais documentos um usuário pode ver.",
+          "enforcePending": "Aplicar está definido e começa quando a atualização terminar.",
+          "enforceUnavailable": "Disponível depois que a atualização do índice de pesquisa terminar.",
+          "label": "Modo de acesso à pesquisa",
+          "options": {
+            "enforce": {
+              "description": "A pesquisa usa o acesso por conector.",
+              "title": "Aplicar"
+            },
+            "off": {
+              "description": "A pesquisa usa as listas de acesso dos documentos.",
+              "title": "Desativado"
+            },
+            "shadow": {
+              "description": "A pesquisa usa as listas de acesso dos documentos e registra onde o acesso por conector dá um resultado diferente.",
+              "title": "Sombra"
+            }
+          },
+          "placeholder": "Selecione um modo",
+          "toasts": {
+            "error": "Não foi possível atualizar o modo de acesso à pesquisa.",
+            "success": "Modo de acesso à pesquisa definido como {mode}."
+          }
+        },
+        "loadError": {
+          "description": "Recarregue a página para tentar novamente.",
+          "title": "Não foi possível carregar a atualização do acesso por conector"
+        }
       }
     },
     "indexing": {

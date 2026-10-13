@@ -115,6 +115,8 @@ export const SWR_KEYS = {
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
   reindexProgress: "/api/search-settings/reindex-progress",
   reindexErrors: "/api/search-settings/reindex-errors",
+  ccPairIdsBackfillProgress:
+    "/api/search-settings/cc-pair-ids-backfill-progress",
   embeddingProviders: "/api/admin/embedding/embedding-provider",
 
   // ── Chat Sessions ─────────────────────────────────────────────────────────

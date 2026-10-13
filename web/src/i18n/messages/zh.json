@@ -5635,6 +5635,62 @@
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",
         "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
         "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "搜索索引中的每个分块都有其连接器 ID。搜索使用连接器级访问。",
+            "off": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表。连接器级访问已关闭。",
+            "shadow": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表，并将其与连接器级访问进行比较。"
+          },
+          "title": "连接器访问更新已完成"
+        },
+        "notStarted": {
+          "description": "后台任务将为搜索索引中的现有分块添加连接器 ID。它会在几分钟内开始。",
+          "title": "连接器访问更新尚未开始"
+        },
+        "progress": {
+          "ariaLabel": "连接器访问更新进度"
+        },
+        "running": {
+          "description": "后台任务正在为搜索索引中的现有分块添加连接器 ID。只有在完成后才能强制执行连接器级搜索访问。",
+          "title": "正在为连接器访问更新搜索索引…"
+        },
+        "status": {
+          "connectors": "已完成 {done, number}/{total, number} 个连接器",
+          "connectorsLeft": "{count, plural, one {剩余 # 个连接器} other {剩余 # 个连接器}}",
+          "current": "当前连接器：{name}",
+          "documentsLeft": "{count, plural, one {剩余 # 个文档} other {剩余 # 个文档}}"
+        },
+        "mode": {
+          "description": "搜索如何决定用户可以看到哪些文档。",
+          "enforcePending": "已设置强制，将在更新完成后开始。",
+          "enforceUnavailable": "搜索索引更新完成后可用。",
+          "label": "搜索访问模式",
+          "options": {
+            "enforce": {
+              "description": "搜索使用连接器级访问。",
+              "title": "强制"
+            },
+            "off": {
+              "description": "搜索使用文档访问列表。",
+              "title": "关闭"
+            },
+            "shadow": {
+              "description": "搜索使用文档访问列表，并记录连接器级访问结果不同的情况。",
+              "title": "影子"
+            }
+          },
+          "placeholder": "选择模式",
+          "toasts": {
+            "error": "无法更新搜索访问模式。",
+            "success": "搜索访问模式已设置为{mode}。"
+          }
+        },
+        "loadError": {
+          "description": "请重新加载页面后重试。",
+          "title": "无法加载连接器访问更新"
+        }
       }
     },
     "indexing": {

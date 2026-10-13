@@ -5635,6 +5635,62 @@
         "e5SmallV2": "Die kleinste und schnellste Variante der E5-Modellreihe. Eine gute Wahl, wenn {appName} auf einem System mit begrenzten Ressourcen läuft.",
         "multilingualE5Base": "Für Korpora in anderen Sprachen als Englisch ist dies die richtige Wahl.",
         "multilingualE5Small": "Für Korpora in anderen Sprachen als Englisch auf einem System mit begrenzten Ressourcen ist dies die richtige Wahl."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet den Zugriff auf Konnektorebene.",
+            "off": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente. Der Zugriff auf Konnektorebene ist ausgeschaltet.",
+            "shadow": "Jeder Chunk im Suchindex hat seine Konnektor-IDs. Die Suche verwendet die Zugriffslisten der Dokumente und vergleicht sie mit dem Zugriff auf Konnektorebene."
+          },
+          "title": "Aktualisierung des Konnektorzugriffs abgeschlossen"
+        },
+        "notStarted": {
+          "description": "Ein Hintergrundjob fügt den vorhandenen Chunks im Suchindex Konnektor-IDs hinzu. Er startet in wenigen Minuten.",
+          "title": "Aktualisierung des Konnektorzugriffs noch nicht gestartet"
+        },
+        "progress": {
+          "ariaLabel": "Fortschritt der Aktualisierung des Konnektorzugriffs"
+        },
+        "running": {
+          "description": "Ein Hintergrundjob fügt den vorhandenen Chunks im Suchindex Konnektor-IDs hinzu. Der Suchzugriff auf Konnektorebene kann erst danach erzwungen werden.",
+          "title": "Suchindex wird für den Konnektorzugriff aktualisiert…"
+        },
+        "status": {
+          "connectors": "{done, number} von {total, number} Konnektoren fertig",
+          "connectorsLeft": "{count, plural, one {# Konnektor übrig} other {# Konnektoren übrig}}",
+          "current": "Aktueller Konnektor: {name}",
+          "documentsLeft": "{count, plural, one {# Dokument übrig} other {# Dokumente übrig}}"
+        },
+        "mode": {
+          "description": "Wie die Suche entscheidet, welche Dokumente ein Benutzer sehen kann.",
+          "enforcePending": "Erzwingen ist eingestellt und beginnt, wenn die Aktualisierung abgeschlossen ist.",
+          "enforceUnavailable": "Verfügbar, nachdem die Aktualisierung des Suchindex abgeschlossen ist.",
+          "label": "Suchzugriffsmodus",
+          "options": {
+            "enforce": {
+              "description": "Die Suche verwendet den Zugriff auf Konnektorebene.",
+              "title": "Erzwingen"
+            },
+            "off": {
+              "description": "Die Suche verwendet die Zugriffslisten der Dokumente.",
+              "title": "Aus"
+            },
+            "shadow": {
+              "description": "Die Suche verwendet die Zugriffslisten der Dokumente und protokolliert, wo der Zugriff auf Konnektorebene ein anderes Ergebnis liefert.",
+              "title": "Schatten"
+            }
+          },
+          "placeholder": "Modus auswählen",
+          "toasts": {
+            "error": "Der Suchzugriffsmodus konnte nicht aktualisiert werden.",
+            "success": "Suchzugriffsmodus auf {mode} gesetzt."
+          }
+        },
+        "loadError": {
+          "description": "Laden Sie die Seite neu, um es erneut zu versuchen.",
+          "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden"
+        }
       }
     },
     "indexing": {
