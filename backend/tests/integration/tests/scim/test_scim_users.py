@@ -470,6 +470,41 @@ def test_get_nonexistent_user(scim_token: str) -> None:
     assert resp.status_code == 404
 
 
+def test_unmanaged_admin_out_of_scim_reach(scim_token: str, idp_style: str) -> None:
+    """SCIM must not adopt, read, or deactivate an admin it did not provision."""
+    admin = UserManager.login_as_user(
+        DATestUser(
+            id="",
+            email=build_email(ADMIN_USER_NAME),
+            password=DEFAULT_PASSWORD,
+            headers=GENERAL_HEADERS,
+            is_admin=True,
+            is_active=True,
+        )
+    )
+    victim = UserManager.promote_to_admin(UserManager.create(), admin)
+    resource = _make_user_resource(
+        victim.email, f"ext-unmanaged-admin-{idp_style}", active=False
+    )
+
+    adopt = ScimClient.post("/Users", scim_token, json=resource)
+    assert adopt.status_code == 403
+
+    deactivate = _make_patch_request(
+        [{"op": "replace", "path": "active", "value": False}], idp_style
+    )
+    responses = [
+        ScimClient.get(f"/Users/{victim.id}", scim_token),
+        ScimClient.patch(f"/Users/{victim.id}", scim_token, json=deactivate),
+        ScimClient.put(f"/Users/{victim.id}", scim_token, json=resource),
+    ]
+    assert [r.status_code for r in responses] == [404, 404, 404]
+
+    assert UserManager.is_admin(victim)
+    filtered = ScimClient.get(f'/Users?filter=userName eq "{victim.email}"', scim_token)
+    assert filtered.json()["totalResults"] == 0
+
+
 def test_filter_users_by_external_id(scim_token: str, idp_style: str) -> None:
     """GET /Users?filter=externalId eq '...' returns the matching user."""
     ext_id = f"ext-unique-filter-id-{idp_style}"

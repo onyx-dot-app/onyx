@@ -91,7 +91,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_NON_GROUP_ACCOUNT_TYPES = (
+NON_GROUP_ACCOUNT_TYPES = (
     AccountType.BOT,
     AccountType.EXT_PERM_USER,
     AccountType.ANONYMOUS,
@@ -730,7 +730,7 @@ def _assert_users_can_join_groups(added_users: list[User]) -> None:
     rejected = sorted(
         f"{added_user.email} ({added_user.account_type.value})"
         for added_user in added_users
-        if added_user.account_type in _NON_GROUP_ACCOUNT_TYPES
+        if added_user.account_type in NON_GROUP_ACCOUNT_TYPES
     )
     if rejected:
         raise OnyxError(

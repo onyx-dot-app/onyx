@@ -29,6 +29,7 @@ from sqlalchemy import Select, SQLColumnExpression, func, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from ee.onyx.db.user_group import NON_GROUP_ACCOUNT_TYPES
 from ee.onyx.server.scim.filtering import ScimFilter, ScimFilterOperator
 from ee.onyx.server.scim.models import ScimMappingFields
 from onyx.db.dal import DAL
@@ -555,9 +556,11 @@ class ScimDAL(DAL):
     # ------------------------------------------------------------------
 
     def get_group(self, group_id: int) -> UserGroup | None:
-        """Fetch a group by ID, returning None if deleted or missing."""
+        """Fetch a group by ID, returning None if deleted, missing, or a
+        default group. Default group membership is admin-only, so SCIM must
+        never reach the seeded Admin and Basic groups."""
         group = self._session.get(UserGroup, group_id)
-        if group and group.is_up_for_deletion:
+        if group and (group.is_up_for_deletion or group.is_default):
             return None
         return group
 
@@ -615,7 +618,10 @@ class ScimDAL(DAL):
         Raises:
             ValueError: If the filter uses an unsupported attribute.
         """
-        query = select(UserGroup).where(UserGroup.is_up_for_deletion.is_(False))
+        query = select(UserGroup).where(
+            UserGroup.is_up_for_deletion.is_(False),
+            UserGroup.is_default.is_(False),
+        )
 
         if scim_filter:
             attr = scim_filter.attribute.lower()
@@ -678,7 +684,7 @@ class ScimDAL(DAL):
         ]
 
     def validate_member_ids(self, uuids: list[UUID]) -> list[UUID]:
-        """Return the subset of UUIDs that don't exist as users.
+        """Return the subset of UUIDs that aren't users able to join a group.
 
         Returns an empty list if all IDs are valid.
         """
@@ -687,7 +693,8 @@ class ScimDAL(DAL):
         existing_users = (
             self._session.scalars(
                 select(User).where(
-                    User.id.in_(uuids)  # ty: ignore[unresolved-attribute]
+                    User.id.in_(uuids),  # ty: ignore[unresolved-attribute]
+                    User.account_type.notin_(NON_GROUP_ACCOUNT_TYPES),
                 )
             )
             .unique()

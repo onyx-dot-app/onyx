@@ -126,7 +126,7 @@ def _emit_scim_group_update(
             extra=_scim_extra(
                 token,
                 group_name=group_name,
-                # SCIM refuses reserved names, so it can never reach a default group.
+                # ScimDAL hides default groups, so SCIM never writes one.
                 is_default=False,
                 added_user_ids=[str(uid) for uid in added_user_ids],
                 removed_user_ids=[str(uid) for uid in removed_user_ids],
@@ -325,6 +325,21 @@ def _is_privileged_account(user: User) -> bool:
     which would put it under IdP control.
     """
     return user_is_admin(user) or user.is_group_manager
+
+
+# EXT_PERM shadows are promoted to STANDARD on adoption.
+_ADOPTABLE_ACCOUNT_TYPES = frozenset({AccountType.STANDARD, AccountType.EXT_PERM_USER})
+
+
+def _adoption_refusal(user: User) -> ScimJSONResponse | None:
+    """Refuse to link an unmanaged account the IdP must not control."""
+    if user.account_type not in _ADOPTABLE_ACCOUNT_TYPES:
+        return _scim_error_response(409, f"User with email {user.email} already exists")
+    if _is_privileged_account(user):
+        return _scim_error_response(
+            403, "Cannot adopt an admin or group manager account"
+        )
+    return None
 
 
 class _EmailChange(NamedTuple):
@@ -568,8 +583,11 @@ def _assign_default_groups_or_error(
     return None
 
 
-def _fetch_user_or_404(user_id: str, dal: ScimDAL) -> User | ScimJSONResponse:
-    """Parse *user_id* as UUID, look up the user, or return a 404 error."""
+def _fetch_managed_user_or_404(
+    user_id: str, dal: ScimDAL
+) -> tuple[User, ScimUserMapping] | ScimJSONResponse:
+    """Look up a SCIM-managed user by id. Unmapped accounts are 404, as in
+    ``list_users``: the IdP must adopt them by POST, which guards adoption."""
     try:
         uid = UUID(user_id)
     except ValueError:
@@ -577,7 +595,10 @@ def _fetch_user_or_404(user_id: str, dal: ScimDAL) -> User | ScimJSONResponse:
     user = dal.get_user(uid)
     if not user:
         return _scim_error_response(404, f"User {user_id} not found")
-    return user
+    mapping = dal.get_user_mapping_by_user_id(user.id)
+    if not mapping:
+        return _scim_error_response(404, f"User {user_id} not found")
+    return user, mapping
 
 
 def _scim_name_to_str(name: ScimName | None) -> str | None:
@@ -743,18 +764,16 @@ def get_user(
     dal.update_token_last_used(_token.id)
     dal.commit()
 
-    result = _fetch_user_or_404(user_id, dal)
+    result = _fetch_managed_user_or_404(user_id, dal)
     if isinstance(result, ScimJSONResponse):
         return result
-    user = result
-
-    mapping = dal.get_user_mapping_by_user_id(user.id)
+    user, mapping = result
 
     resource = provider.build_user_resource(
         user,
-        mapping.external_id if mapping else None,
+        mapping.external_id,
         groups=dal.get_user_groups(user.id),
-        scim_username=mapping.scim_username if mapping else None,
+        scim_username=mapping.scim_username,
         fields=_mapping_to_fields(mapping),
     )
 
@@ -803,6 +822,9 @@ def create_user(
         existing_mapping = dal.get_user_mapping_by_user_id(existing_user.id)
         if existing_mapping:
             return _scim_error_response(409, f"User with email {email} already exists")
+        refusal = _adoption_refusal(existing_user)
+        if refusal:
+            return refusal
 
         # Adopt pre-existing user into SCIM management.
         # Becoming an active, seat-counting account consumes a seat — that
@@ -925,10 +947,10 @@ def replace_user(
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
-    result = _fetch_user_or_404(user_id, dal)
+    result = _fetch_managed_user_or_404(user_id, dal)
     if isinstance(result, ScimJSONResponse):
         return result
-    user = result
+    user, _ = result
 
     scim_username = user_resource.userName.strip()
     error = _validate_username_change(dal, user, scim_username)
@@ -1018,14 +1040,13 @@ def patch_user(
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
-    result = _fetch_user_or_404(user_id, dal)
+    result = _fetch_managed_user_or_404(user_id, dal)
     if isinstance(result, ScimJSONResponse):
         return result
-    user = result
+    user, mapping = result
 
-    mapping = dal.get_user_mapping_by_user_id(user.id)
-    external_id = mapping.external_id if mapping else None
-    current_scim_username = mapping.scim_username if mapping else None
+    external_id = mapping.external_id
+    current_scim_username = mapping.scim_username
     current_fields = _mapping_to_fields(mapping)
 
     current = provider.build_user_resource(
@@ -1167,16 +1188,12 @@ def delete_user(
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
-    result = _fetch_user_or_404(user_id, dal)
+    # No mapping means the user was already deleted from SCIM's
+    # perspective — 404 per RFC 7644 §3.6.
+    result = _fetch_managed_user_or_404(user_id, dal)
     if isinstance(result, ScimJSONResponse):
         return result
-    user = result
-
-    # If no SCIM mapping exists, the user was already deleted from
-    # SCIM's perspective — return 404 per RFC 7644 §3.6.
-    mapping = dal.get_user_mapping_by_user_id(user.id)
-    if not mapping:
-        return _scim_error_response(404, f"User {user_id} not found")
+    user, mapping = result
 
     dal.deactivate_user(user)
     dal.delete_user_mapping(mapping.id)

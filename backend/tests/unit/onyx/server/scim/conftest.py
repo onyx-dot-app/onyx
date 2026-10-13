@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import DEFAULT, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -50,6 +50,20 @@ def provider(request: pytest.FixtureRequest) -> ScimProvider:
     return request.param()
 
 
+# Default for get_user_mapping_by_user_id: the user a test hands to get_user is
+# SCIM-managed (by-id routes reach only those), every other user is unmapped.
+_MAPPED_IF_FETCHED = object()
+
+
+def _default_user_mapping(dal: MagicMock, user_id: object) -> object:
+    if dal.get_user_mapping_by_user_id.return_value is not _MAPPED_IF_FETCHED:
+        return DEFAULT
+    fetched = dal.get_user.return_value
+    if fetched is not None and fetched.id == user_id:
+        return make_user_mapping(user_id=user_id)
+    return None
+
+
 @pytest.fixture
 def mock_dal() -> Generator[MagicMock, None, None]:
     """Patch ScimDAL construction in api module and yield the mock instance."""
@@ -58,7 +72,10 @@ def mock_dal() -> Generator[MagicMock, None, None]:
         # User defaults
         dal.get_user.return_value = None
         dal.get_user_by_email.return_value = None
-        dal.get_user_mapping_by_user_id.return_value = None
+        dal.get_user_mapping_by_user_id.return_value = _MAPPED_IF_FETCHED
+        dal.get_user_mapping_by_user_id.side_effect = lambda user_id: (
+            _default_user_mapping(dal, user_id)
+        )
         dal.get_user_mapping_by_external_id.return_value = None
         dal.get_user_mapping_by_scim_username.return_value = None
         dal.list_users.return_value = ([], 0)

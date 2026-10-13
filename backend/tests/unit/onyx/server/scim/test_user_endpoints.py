@@ -1724,7 +1724,6 @@ class TestEmailCollisionResolution:
         clean = make_db_user(email="ralf@mane.com", is_active=False)
         mock_dal.get_user.return_value = stale
         mock_dal.get_user_by_email.return_value = clean
-        mock_dal.get_user_mapping_by_user_id.return_value = None
 
         result = replace_user(
             user_id=str(stale.id),
@@ -1753,7 +1752,7 @@ class TestEmailCollisionResolution:
         mock_dal.get_user.return_value = user
         mock_dal.get_user_by_email.return_value = other
         mock_dal.get_user_mapping_by_user_id.side_effect = lambda uid: (
-            make_user_mapping(user_id=uid) if uid == other.id else None
+            make_user_mapping(user_id=uid) if uid in (user.id, other.id) else None
         )
 
         result = replace_user(
