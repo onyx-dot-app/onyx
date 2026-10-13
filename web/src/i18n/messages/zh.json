@@ -12774,22 +12774,6 @@
         "label": "连接您的数据"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "正在打造您的工作区...",
-        "enchanting": "正在施加魔法附魔...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "正在收集资源...",
-        "miningDependencies": "正在挖掘依赖项...",
-        "placingBlocks": "正在放置方块...",
-        "punchingWood": "正在撸树...",
-        "smeltingCode": "正在熔炼代码...",
-        "worldGenerated": "世界生成完成..."
-      },
-      "tagline": {
-        "label": "正在打造您的下一个好点子..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "清空"

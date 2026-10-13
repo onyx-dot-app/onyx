@@ -12774,22 +12774,6 @@
         "label": "Connect your data"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "Crafting your workspace...",
-        "enchanting": "Enchanting with magic...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "Gathering resources...",
-        "miningDependencies": "Mining for dependencies...",
-        "placingBlocks": "Placing blocks...",
-        "punchingWood": "Punching wood...",
-        "smeltingCode": "Smelting the code...",
-        "worldGenerated": "World generation complete..."
-      },
-      "tagline": {
-        "label": "Crafting your next great idea..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "Clear"

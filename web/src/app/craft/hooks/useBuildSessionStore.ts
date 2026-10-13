@@ -3655,9 +3655,6 @@ export const useIsPreProvisioning = () =>
     (state) => state.preProvisioning.status === "provisioning"
   );
 
-export const useIsPreProvisioningReady = () =>
-  useBuildSessionStore((state) => state.preProvisioning.status === "ready");
-
 export const useIsPreProvisioningFailed = () =>
   useBuildSessionStore((state) => state.preProvisioning.status === "failed");
 

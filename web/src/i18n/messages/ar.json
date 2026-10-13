@@ -12774,22 +12774,6 @@
         "label": "اربط بياناتك"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "جارٍ صنع مساحة عملك...",
-        "enchanting": "جارٍ السحر بالتعويذات...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "جارٍ جمع الموارد...",
-        "miningDependencies": "جارٍ التنقيب عن التبعيات...",
-        "placingBlocks": "جارٍ وضع المكعبات...",
-        "punchingWood": "جارٍ تكسير الخشب...",
-        "smeltingCode": "جارٍ صهر الشيفرة...",
-        "worldGenerated": "اكتمل إنشاء العالم..."
-      },
-      "tagline": {
-        "label": "جارٍ صنع فكرتك الرائعة التالية..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "مسح"

@@ -12774,22 +12774,6 @@
         "label": "데이터 연결하기"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "작업 공간 제작 중...",
-        "enchanting": "마법 부여 중...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "자원 수집 중...",
-        "miningDependencies": "의존성 채굴 중...",
-        "placingBlocks": "블록 배치 중...",
-        "punchingWood": "나무 캐는 중...",
-        "smeltingCode": "코드 제련 중...",
-        "worldGenerated": "월드 생성 완료..."
-      },
-      "tagline": {
-        "label": "다음 멋진 아이디어를 만드는 중..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "지우기"
