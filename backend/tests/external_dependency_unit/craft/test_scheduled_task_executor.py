@@ -1,7 +1,7 @@
 """Scheduled tasks (executor half, ext-dep).
 
-Drives the real ``run_scheduled_task_logic`` end-to-end against Postgres
-and the real ``LocalSandboxManager``. Scope of this file:
+Drives ``run_scheduled_task_logic`` against an isolated PostgreSQL database
+and a stub sandbox manager. Scope of this file:
 
 * Dispatcher concurrency (``SELECT ... FOR UPDATE SKIP LOCKED``).
 * Stuck-run cleanup sweeper.
@@ -25,6 +25,7 @@ from unittest.mock import PropertyMock, patch
 from uuid import UUID
 
 import pytest
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.scheduled_tasks.tasks import (
@@ -32,6 +33,7 @@ from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     dispatch_due_scheduled_tasks,
 )
 from onyx.configs.constants import MessageType
+from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.db.enums import (
     SandboxStatus,
     ScheduledTaskErrorClass,
@@ -61,6 +63,8 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_user
+
+pytestmark = pytest.mark.craft_isolated_database
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -107,6 +111,21 @@ def _seed_task_and_queued_run(
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
+
+def test_committed_schedules_are_invisible_to_local_workers(
+    db_session: Session, test_user: User
+) -> None:
+    task, _ = _seed_task_and_queued_run(db_session, test_user)
+    deployment_engine = create_engine(build_connection_string(db_api=SYNC_DB_API))
+    try:
+        with Session(deployment_engine) as deployment_session:
+            assert deployment_session.scalar(text("SELECT current_database()")) != (
+                db_session.scalar(text("SELECT current_database()"))
+            )
+            assert deployment_session.get(ScheduledTask, task.id) is None
+    finally:
+        deployment_engine.dispose()
 
 
 def test_dispatch_uses_skip_locked_to_avoid_dupes(
