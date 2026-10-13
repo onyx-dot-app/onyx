@@ -153,7 +153,10 @@ from onyx.file_store.file_store import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.cc_pair import authorize_pairing
-from onyx.server.documents.credential import assert_credential_share_within_scope
+from onyx.server.documents.credential import (
+    assert_credential_sharing_allowed,
+    credential_ids_to_mask,
+)
 from onyx.server.documents.draft_credentials import resolve_form_credential
 from onyx.server.documents.models import (
     AuthStatus,
@@ -1066,7 +1069,11 @@ def get_connector_status(
             cc_pair.credential_id
         )
 
-    mask_credential_prefix = get_security_settings().mask_credential_prefix
+    masked_credential_ids = credential_ids_to_mask(
+        [cc_pair.credential for cc_pair in cc_pairs if cc_pair.credential],
+        user,
+        db_session,
+    )
     return [
         ConnectorStatus(
             cc_pair_id=cc_pair.id,
@@ -1079,7 +1086,7 @@ def get_connector_status(
             ),
             credential=CredentialSnapshot.from_credential_db_model(
                 cc_pair.credential,
-                mask_credential_prefix=mask_credential_prefix,
+                mask_credential_prefix=cc_pair.credential_id in masked_credential_ids,
             ),
             access_type=cc_pair.access_type,
             groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
@@ -1795,17 +1802,8 @@ def create_connector_with_credential(
     is_draft = credential.is_draft
     sharing = request.credential_sharing or CredentialSharing()
     if is_draft:
-        assert_credential_share_within_scope(
-            CredentialBase(
-                credential_json={},
-                source=credential.source,
-                admin_public=sharing.admin_public,
-                curator_public=sharing.curator_public,
-                groups=sharing.groups,
-                name=sharing.name,
-            ),
-            user,
-            db_session,
+        assert_credential_sharing_allowed(
+            user, db_session, source=credential.source, requested=sharing
         )
     elif request.credential_sharing is not None:
         raise OnyxError(
