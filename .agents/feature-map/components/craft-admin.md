@@ -324,6 +324,9 @@ not cover:
   PostHog feature flag (or `ENABLE_CRAFT`) and also requires the deployment
   tier to reach `LLM_GATEWAY_MIN_TIER` (Business), because every Craft turn
   goes through the tier-gated `/gateway`; Community never gets Craft.
+  When the flag is on but the tier is too low, `is_craft_locked_by_tier` sets
+  `onyx_craft_requires_upgrade` in `/settings`: the sidebar keeps Craft with a
+  Business tag and `/craft/*` renders `CraftUpgradePage`; `/build` stays 403.
   `requiredTier: null` on all three routes confirms Craft admin visibility is
   not tier-gated at the nav level.
 - [[llm-providers]]: the Preferences default-model picker is the `CRAFT`

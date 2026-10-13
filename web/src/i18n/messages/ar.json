@@ -13278,6 +13278,17 @@
       "input": {
         "placeholder": "حلّل بياناتي وأنشئ لوحة معلومات..."
       }
+    },
+    "upgrade": {
+      "title": "يتطلب Craft خطة الأعمال",
+      "adminDescription": "يتوفر Craft في خطتي الأعمال والمؤسسات. لا يتم دعمه في إصدار المجتمع حتى يتم دمج Craft في الدردشة الرئيسية.",
+      "userDescription": "يتوفر Craft في خطتي الأعمال والمؤسسات. اطلب من المسؤول الترقية لاستخدام Craft.",
+      "backToChat": {
+        "label": "العودة إلى الدردشة"
+      },
+      "viewPlans": {
+        "label": "عرض الخطط"
+      }
     }
   },
   "knowledge": {
@@ -14308,7 +14319,8 @@
         "title": "الوكلاء"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "الأعمال"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"

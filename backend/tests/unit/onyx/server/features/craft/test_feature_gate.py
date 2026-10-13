@@ -266,3 +266,33 @@ def test_tier_not_resolved_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
     assert is_craft_enabled_for_user(_make_user()) is False
+
+
+@pytest.mark.parametrize(
+    "tier,expected",
+    [(Tier.COMMUNITY, True), (Tier.BUSINESS, False), (Tier.ENTERPRISE, False)],
+)
+def test_craft_locked_by_tier(
+    monkeypatch: pytest.MonkeyPatch, tier: Tier, expected: bool
+) -> None:
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: tier)
+
+    assert build_utils.is_craft_locked_by_tier(_make_user()) is expected
+
+
+def test_craft_not_locked_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", False)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.COMMUNITY)
+
+    assert build_utils.is_craft_locked_by_tier(_make_user()) is False

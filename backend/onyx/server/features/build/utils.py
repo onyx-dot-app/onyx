@@ -164,6 +164,16 @@ def is_craft_available_for_deployment(user: User) -> bool:
     return tier_at_least(get_current_tier(), LLM_GATEWAY_MIN_TIER)
 
 
+def is_craft_locked_by_tier(user: User) -> bool:
+    """Craft is switched on but the tier is below LLM_GATEWAY_MIN_TIER, so the
+    UI shows an upgrade prompt instead of Craft."""
+    if user.account_type == AccountType.ANONYMOUS:
+        return False
+    if not _craft_flag_enabled(user):
+        return False
+    return not tier_at_least(get_current_tier(), LLM_GATEWAY_MIN_TIER)
+
+
 def is_craft_enabled_for_user(
     user: User,
     deployment_available: bool | None = None,
