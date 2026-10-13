@@ -969,9 +969,9 @@ def test_configured_channels_all_visible_passes() -> None:
     gateway.list_channels.side_effect = _pages(
         SlackChannelsPage(channels=[{"id": "C1", "name": "general"}])
     )
-    # The ``#`` prefix must be stripped, mirroring the connector's ``channels``
-    # setter.
-    context = _context(gateway, connector_specific_config={"channels": ["#general"]})
+    # A typed name is matched without its ``#`` and in any case, as the
+    # connector normalizes it.
+    context = _context(gateway, connector_specific_config={"channels": ["#General"]})
 
     # Under test and postcondition.
     _run("slack_configured_channels_visible", context)
@@ -982,9 +982,9 @@ def test_configured_channels_by_id_pass_after_a_rename() -> None:
     # Precondition.
     gateway = _gateway()
     gateway.list_channels.side_effect = _pages(
-        SlackChannelsPage(channels=[{"id": "C1", "name": "general-renamed"}])
+        SlackChannelsPage(channels=[{"id": "C0GENERAL1", "name": "general-renamed"}])
     )
-    context = _context(gateway, connector_specific_config={"channels": ["C1"]})
+    context = _context(gateway, connector_specific_config={"channels": ["C0GENERAL1"]})
 
     # Under test and postcondition.
     _run("slack_configured_channels_visible", context)
@@ -1069,12 +1069,15 @@ def test_readable_channel_listing_lists_each_grid_workspace() -> None:
     gateway = _gateway()
     gateway.check_auth.return_value = _auth_response(enterprise_id="E1")
     gateway.list_teams.side_effect = _pages(
-        SlackTeamsPage(teams=[{"id": "T1"}, {"id": "T2"}])
+        SlackTeamsPage(
+            teams=[{"id": "T1", "name": "Acme"}, {"id": "T2", "name": "Labs"}]
+        )
     )
     channels_by_team = {
         "T1": [{"id": "C1", "name": "general"}],
         # A shared channel appears in both workspaces and is one option. Another
-        # workspace's own channel with the same name is a second option.
+        # workspace's own channel with the same name is a second option, told
+        # apart by its workspace.
         "T2": [
             {"id": "C1", "name": "general"},
             {"id": "C3", "name": "general"},
@@ -1093,10 +1096,12 @@ def test_readable_channel_listing_lists_each_grid_workspace() -> None:
     # Postcondition.
     listing: CheckFinding = findings[0]
     assert isinstance(listing, OptionsFinding)
-    assert [(option.value, option.label) for option in listing.options] == [
-        ("C1", "general"),
-        ("C3", "general"),
-        ("C2", "eng"),
+    assert [
+        (option.value, option.label, option.detail) for option in listing.options
+    ] == [
+        ("C1", "general", "Acme"),
+        ("C3", "general", "Labs"),
+        ("C2", "eng", "Labs"),
     ]
 
 

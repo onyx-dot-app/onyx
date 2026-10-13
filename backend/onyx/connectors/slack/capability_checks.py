@@ -32,6 +32,8 @@ from collections.abc import Iterator
 from itertools import islice
 from typing import Any, NoReturn
 
+from pydantic import BaseModel
+
 from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -56,6 +58,7 @@ from onyx.connectors.slack.connector import (
     get_channels,
     get_channels_across_teams,
     list_grid_team_ids,
+    normalize_channel_entries,
     validate_channel_regexes,
 )
 from onyx.connectors.slack.source_operations import (
@@ -715,7 +718,7 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
                 "be verified.",
             )
         visible_channels = channel_keys(all_channels)
-        configured = [entry.removeprefix("#") for entry in channels_to_include]
+        configured = normalize_channel_entries(channels_to_include)
         missing = sorted(set(configured) - visible_channels)
         if missing:
             raise ConnectorValidationError(
@@ -727,19 +730,36 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
         return None
 
 
+class _ListedChannel(BaseModel):
+    channel: dict[str, Any]
+    # The Grid workspace the channel was listed in, which tells two
+    # same-named channels apart. None off Grid.
+    workspace: str | None
+
+
+def _grid_workspaces(slack_client: SlackSourceOperations) -> dict[str, str | None]:
+    """Grid team id to workspace name via ``auth.teams.list``."""
+    return {
+        team["id"]: team.get("name")
+        for page in slack_client.list_teams()
+        for team in page.teams
+        if team.get("id")
+    }
+
+
 def _iter_public_channels(
     slack_client: SlackSourceOperations,
-) -> Iterator[dict[str, Any]]:
+) -> Iterator[_ListedChannel]:
     """Every unarchived public channel, read page by page. On Enterprise Grid,
     lists each workspace in turn, as the connector does. A channel shared into
     several workspaces is listed once, by id."""
-    team_ids: list[str | None] = (
-        [*list_grid_team_ids(slack_client)]
+    workspaces: dict[str | None, str | None] = (
+        {**_grid_workspaces(slack_client)}
         if _auth_test(slack_client).enterprise_id
-        else [None]
+        else {None: None}
     )
     seen_ids: set[str] = set()
-    for team_id in team_ids:
+    for team_id, workspace in workspaces.items():
         for page in slack_client.list_channels(
             variant=SlackChannelVariant.PUBLIC,
             channel_types=["public_channel"],
@@ -750,7 +770,7 @@ def _iter_public_channels(
                 if channel["id"] in seen_ids:
                     continue
                 seen_ids.add(channel["id"])
-                yield channel
+                yield _ListedChannel(channel=channel, workspace=workspace)
 
 
 class _ReadableChannelListingCheck(CapabilityCheck):
@@ -776,8 +796,9 @@ class _ReadableChannelListingCheck(CapabilityCheck):
                 _iter_public_channels(_slack_client(context)),
                 key=CheckFindingKey.READABLE_CHANNELS,
                 field_name=_CHANNELS_FIELD,
-                value=lambda channel: channel["id"],
-                label=lambda channel: channel["name"],
+                value=lambda listed: listed.channel["id"],
+                label=lambda listed: listed.channel["name"],
+                detail=lambda listed: listed.workspace,
             )
         except SlackApiError as e:
             _raise_for_slack_api_error(

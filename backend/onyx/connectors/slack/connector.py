@@ -468,6 +468,7 @@ def filter_channels(
 
     if channels_to_include:
         if not include_regex_enabled:
+            channels_to_include = normalize_channel_entries(channels_to_include)
             _validate_channels_exist(all_channels, channels_to_include)
         filtered_channels = [
             channel
@@ -477,6 +478,8 @@ def filter_channels(
 
     # unlike includes, exclude entries aren't validated: excluding a missing channel is harmless
     if channels_to_exclude:
+        if not exclude_regex_enabled:
+            channels_to_exclude = normalize_channel_entries(channels_to_exclude)
         filtered_channels = [
             channel
             for channel in filtered_channels
@@ -484,6 +487,22 @@ def filter_channels(
         ]
 
     return filtered_channels
+
+
+# A channel id: a type letter, then uppercase letters and digits. A channel
+# name is lowercase, so the two never collide.
+_CHANNEL_ID_PATTERN = re.compile(r"[CGD][A-Z0-9]{8,}")
+
+
+def normalize_channel_entries(entries: list[str]) -> list[str]:
+    """Exact config entries as Slack stores them: an id as given, a typed name
+    lowercase without its leading ``#``."""
+    return [
+        entry
+        if _CHANNEL_ID_PATTERN.fullmatch(entry)
+        else entry.removeprefix("#").lower()
+        for entry in entries
+    ]
 
 
 def _channel_matches(
