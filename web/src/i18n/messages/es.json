@@ -12525,6 +12525,17 @@
       "input": {
         "placeholder": "Analiza mis datos y crea un panel..."
       }
+    },
+    "upgrade": {
+      "title": "Craft requiere un plan Business",
+      "adminDescription": "Craft está disponible en los planes Business y Enterprise. No es compatible con Community Edition hasta que Craft se integre en el chat principal.",
+      "userDescription": "Craft está disponible en los planes Business y Enterprise. Pide a tu administrador que actualice el plan para usar Craft.",
+      "backToChat": {
+        "label": "Volver al chat"
+      },
+      "viewPlans": {
+        "label": "Ver planes"
+      }
     }
   },
   "knowledge": {
@@ -13530,7 +13541,8 @@
         "title": "Agentes"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorar agentes"

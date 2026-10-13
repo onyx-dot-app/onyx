@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from onyx.server.settings import api as settings_api
+from onyx.server.settings import tier_order
 from onyx.server.settings.models import CRAFT_INSTRUCTIONS_MAX_LENGTH, Settings
 
 
@@ -29,7 +30,7 @@ def _patch_settings(
     monkeypatch.setattr(settings_api, "store_settings", stored.append)
     monkeypatch.setattr(settings_api, "emit_audit_event", lambda *_a, **_k: None)
     monkeypatch.setattr(settings_api, "settings_write_lock", _noop_lock)
-    monkeypatch.setattr(settings_api.global_version, "is_ee_version", lambda: False)
+    monkeypatch.setattr(tier_order.global_version, "is_ee_version", lambda: False)
     settings_api.admin_patch_settings(
         Settings.model_validate(payload), current_user=MagicMock()
     )
