@@ -189,6 +189,12 @@ CELERY_INDEXING_LOCK_TIMEOUT = CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 900
 # Heartbeat interval for indexing worker liveness detection
 INDEXING_WORKER_HEARTBEAT_INTERVAL = 30  # seconds
 
+# Permission and group sync attempts hold a lease in Postgres: the worker renews
+# heartbeat_at on this interval, and the beat reaper fails attempts whose lease
+# is older than the timeout.
+PERMISSION_SYNC_HEARTBEAT_INTERVAL = 60  # seconds
+PERMISSION_SYNC_LEASE_TIMEOUT = 15 * 60  # seconds
+
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 

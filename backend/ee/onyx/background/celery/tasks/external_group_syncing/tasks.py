@@ -1,6 +1,7 @@
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from typing import Any, cast
 from uuid import uuid4
 
@@ -31,12 +32,15 @@ from onyx.background.celery.celery_redis import (
     celery_get_unacked_task_ids,
 )
 from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
+from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
 from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
+    PERMISSION_SYNC_HEARTBEAT_INTERVAL,
+    PERMISSION_SYNC_LEASE_TIMEOUT,
     DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -52,9 +56,11 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.permission_sync_attempt import (
     complete_external_group_sync_attempt,
     create_external_group_sync_attempt,
+    fail_expired_external_group_sync_attempts,
     get_external_group_sync_retry_after,
     mark_external_group_sync_attempt_failed,
     mark_external_group_sync_attempt_in_progress,
+    renew_external_group_sync_attempt_lease,
 )
 from onyx.db.sync_record import insert_sync_record, update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector
@@ -88,6 +94,25 @@ def _fail_external_group_sync_attempt(attempt_id: int, error_msg: str) -> None:
     with get_session_with_current_tenant() as db_session:
         mark_external_group_sync_attempt_failed(
             attempt_id, db_session, error_message=error_msg
+        )
+
+
+def _renew_external_group_sync_lease(attempt_id: int) -> bool:
+    with get_session_with_current_tenant() as db_session:
+        return renew_external_group_sync_attempt_lease(attempt_id, db_session)
+
+
+def fail_expired_external_group_sync_attempts_for_tenant() -> None:
+    lease_timeout = timedelta(seconds=PERMISSION_SYNC_LEASE_TIMEOUT)
+    with get_session_with_current_tenant() as db_session:
+        failed_ids = fail_expired_external_group_sync_attempts(
+            db_session,
+            lease_timeout=lease_timeout,
+            not_started_timeout=lease_timeout,
+        )
+    if failed_ids:
+        task_logger.warning(
+            f"Failed external group sync attempts with expired leases: {failed_ids}"
         )
 
 
@@ -242,6 +267,9 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
             task_logger.info(
                 f"External group sync queued: cc_pair={cc_pair_id} id={payload_id}"
             )
+
+        lock_beat.reacquire()
+        fail_expired_external_group_sync_attempts_for_tenant()
 
         # we want to run this less frequently than the overall task
         lock_beat.reacquire()
@@ -581,39 +609,69 @@ def _timed_perform_external_group_sync(
         mark_external_group_sync_attempt_in_progress(attempt_id, db_session)
         logger.info("Marked external group sync attempt %s as in progress", attempt_id)
 
-        logger.info(
-            "Syncing external groups for %s for cc_pair: %s", source_type, cc_pair_id
+        heartbeat = LeaseHeartbeat(
+            f"external_group_sync_attempt={attempt_id}",
+            renew=partial(_renew_external_group_sync_lease, attempt_id),
+            interval=PERMISSION_SYNC_HEARTBEAT_INTERVAL,
         )
-        external_user_group_batch: list[ExternalUserGroup] = []
-        seen_users: set[str] = set()  # Track unique users across all groups
-        total_groups_processed = 0
-        total_group_memberships_synced = 0
-        cumulative_upsert_time = 0.0
-        start_time = time.monotonic()
+        heartbeat.start()
         try:
-            external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
-            for external_user_group in external_user_group_generator:
-                # Check if the task has exceeded its timeout
-                # NOTE: Celery's soft_time_limit does not work with thread pools,
-                # so we must enforce timeouts internally.
-                elapsed = time.monotonic() - start_time
-                if elapsed > timeout_seconds:
-                    raise RuntimeError(
-                        f"External group sync task timed out: "
-                        f"cc_pair={cc_pair_id} "
-                        f"elapsed={elapsed:.0f}s "
-                        f"timeout={timeout_seconds}s "
-                        f"groups_processed={total_groups_processed}"
+            logger.info(
+                "Syncing external groups for %s for cc_pair: %s",
+                source_type,
+                cc_pair_id,
+            )
+            external_user_group_batch: list[ExternalUserGroup] = []
+            seen_users: set[str] = set()  # Track unique users across all groups
+            total_groups_processed = 0
+            total_group_memberships_synced = 0
+            cumulative_upsert_time = 0.0
+            start_time = time.monotonic()
+            try:
+                external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
+                for external_user_group in external_user_group_generator:
+                    # Check if the task has exceeded its timeout
+                    # NOTE: Celery's soft_time_limit does not work with thread pools,
+                    # so we must enforce timeouts internally.
+                    elapsed = time.monotonic() - start_time
+                    if elapsed > timeout_seconds:
+                        raise RuntimeError(
+                            f"External group sync task timed out: "
+                            f"cc_pair={cc_pair_id} "
+                            f"elapsed={elapsed:.0f}s "
+                            f"timeout={timeout_seconds}s "
+                            f"groups_processed={total_groups_processed}"
+                        )
+                    if heartbeat.lost.is_set():
+                        raise RuntimeError(
+                            f"External group sync lost its lease: "
+                            f"cc_pair={cc_pair_id} attempt={attempt_id}"
+                        )
+
+                    external_user_group_batch.append(external_user_group)
+
+                    # Track progress
+                    total_groups_processed += 1
+                    total_group_memberships_synced += len(
+                        external_user_group.user_emails
                     )
+                    seen_users.update(external_user_group.user_emails)
 
-                external_user_group_batch.append(external_user_group)
+                    if len(external_user_group_batch) >= _EXTERNAL_GROUP_BATCH_SIZE:
+                        logger.debug(
+                            "New external user groups: %s", external_user_group_batch
+                        )
+                        upsert_start = time.monotonic()
+                        upsert_external_groups(
+                            db_session=db_session,
+                            cc_pair_id=cc_pair_id,
+                            external_groups=external_user_group_batch,
+                            source=cc_pair.connector.source,
+                        )
+                        cumulative_upsert_time += time.monotonic() - upsert_start
+                        external_user_group_batch = []
 
-                # Track progress
-                total_groups_processed += 1
-                total_group_memberships_synced += len(external_user_group.user_emails)
-                seen_users.update(external_user_group.user_emails)
-
-                if len(external_user_group_batch) >= _EXTERNAL_GROUP_BATCH_SIZE:
+                if external_user_group_batch:
                     logger.debug(
                         "New external user groups: %s", external_user_group_batch
                     )
@@ -625,72 +683,62 @@ def _timed_perform_external_group_sync(
                         source=cc_pair.connector.source,
                     )
                     cumulative_upsert_time += time.monotonic() - upsert_start
-                    external_user_group_batch = []
+            except Exception as e:
+                format_error_for_logging(e)
 
-            if external_user_group_batch:
-                logger.debug("New external user groups: %s", external_user_group_batch)
-                upsert_start = time.monotonic()
-                upsert_external_groups(
-                    db_session=db_session,
-                    cc_pair_id=cc_pair_id,
-                    external_groups=external_user_group_batch,
-                    source=cc_pair.connector.source,
+                # Mark as failed (this also updates progress to show partial progress)
+                mark_external_group_sync_attempt_failed(
+                    attempt_id,
+                    db_session,
+                    error_message=str(e),
+                    full_exception_trace=traceback.format_exc(),
                 )
-                cumulative_upsert_time += time.monotonic() - upsert_start
-        except Exception as e:
-            format_error_for_logging(e)
 
-            # Mark as failed (this also updates progress to show partial progress)
-            mark_external_group_sync_attempt_failed(
-                attempt_id,
-                db_session,
-                error_message=str(e),
-                full_exception_trace=traceback.format_exc(),
-            )
+                # TODO: add some notification to the admins here
+                inc_group_sync_errors(connector_type)
+                logger.exception(
+                    "Error syncing external groups for %s for cc_pair: %s %s",
+                    source_type,
+                    cc_pair_id,
+                    e,
+                )
+                raise e
 
-            # TODO: add some notification to the admins here
-            inc_group_sync_errors(connector_type)
-            logger.exception(
-                "Error syncing external groups for %s for cc_pair: %s %s",
+            observe_group_sync_upsert_duration(cumulative_upsert_time, connector_type)
+
+            logger.info(
+                "Removing stale external groups for %s for cc_pair: %s",
                 source_type,
                 cc_pair_id,
-                e,
             )
-            raise e
+            remove_stale_external_groups(db_session, cc_pair_id)
 
-        observe_group_sync_upsert_duration(cumulative_upsert_time, connector_type)
+            # Calculate total unique users processed
+            total_users_processed = len(seen_users)
 
-        logger.info(
-            "Removing stale external groups for %s for cc_pair: %s",
-            source_type,
-            cc_pair_id,
-        )
-        remove_stale_external_groups(db_session, cc_pair_id)
+            # Complete the sync attempt with final progress
+            complete_external_group_sync_attempt(
+                db_session=db_session,
+                attempt_id=attempt_id,
+                total_users_processed=total_users_processed,
+                total_groups_processed=total_groups_processed,
+                total_group_memberships_synced=total_group_memberships_synced,
+                errors_encountered=0,
+            )
+            logger.info(
+                "Completed external group sync attempt %s: %s groups, %s users, %s memberships",
+                attempt_id,
+                total_groups_processed,
+                total_users_processed,
+                total_group_memberships_synced,
+            )
 
-        # Calculate total unique users processed
-        total_users_processed = len(seen_users)
+            inc_group_sync_groups_processed(connector_type, total_groups_processed)
+            inc_group_sync_users_processed(connector_type, total_users_processed)
 
-        # Complete the sync attempt with final progress
-        complete_external_group_sync_attempt(
-            db_session=db_session,
-            attempt_id=attempt_id,
-            total_users_processed=total_users_processed,
-            total_groups_processed=total_groups_processed,
-            total_group_memberships_synced=total_group_memberships_synced,
-            errors_encountered=0,
-        )
-        logger.info(
-            "Completed external group sync attempt %s: %s groups, %s users, %s memberships",
-            attempt_id,
-            total_groups_processed,
-            total_users_processed,
-            total_group_memberships_synced,
-        )
-
-        inc_group_sync_groups_processed(connector_type, total_groups_processed)
-        inc_group_sync_users_processed(connector_type, total_users_processed)
-
-        mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
+            mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
+        finally:
+            heartbeat.stop()
 
     return connector_type
 
