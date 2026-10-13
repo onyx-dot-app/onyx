@@ -112,14 +112,19 @@ export default function useUploadTarget({
     return () => input.removeEventListener("cancel", closePicker);
   }, []);
 
-  function openFilePicker() {
-    if (disabled) return;
+  // Runs on every click of the file input, including one from a field
+  // label, so each way of opening the picker is tracked.
+  function markPickerOpen() {
     pickerOpenRef.current = true;
     // Where the picker sends no cancel event, focus returning to the page
     // marks it closed.
     window.addEventListener("focus", () => setTimeout(closePicker), {
       once: true,
     });
+  }
+
+  function openFilePicker() {
+    if (disabled) return;
     fileInputRef.current?.click();
   }
 
@@ -131,6 +136,7 @@ export default function useUploadTarget({
       name={name}
       accept={accept}
       multiple={multiple}
+      onClick={markPickerOpen}
       onChange={(e) => {
         closePicker();
         takeFiles(Array.from(e.target.files ?? []));

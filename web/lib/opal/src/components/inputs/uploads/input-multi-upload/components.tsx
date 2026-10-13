@@ -74,8 +74,15 @@ export default function InputMultiUpload({
       maxSizeKb,
       onFileSizeExceeded,
       onFiles: (added) => {
+        // Also skips a repeat within one pick or drop.
         const held = new Set(files.map(fileKey));
-        report([...files, ...added.filter((file) => !held.has(fileKey(file)))]);
+        const unique = added.filter((file) => {
+          const key = fileKey(file);
+          if (held.has(key)) return false;
+          held.add(key);
+          return true;
+        });
+        report([...files, ...unique]);
       },
       focusTarget: () => triggerRef.current?.focus(),
     });
