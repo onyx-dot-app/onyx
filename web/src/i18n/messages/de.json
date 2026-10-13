@@ -12879,6 +12879,12 @@
       "csv": {
         "truncated": "Vorschau auf {rows, number} Zeilen, {columns, number} Spalten und {cells, number} Zellen begrenzt. Laden Sie das Original für alle Daten herunter.",
         "malformed": "Diese CSV-Datei enthält ein ungültiges Feld in Anführungszeichen. Laden Sie das Original zur Prüfung herunter."
+      },
+      "imageTooLarge": {
+        "description": "Dieses Bild ist zu groß für die Vorschau. Laden Sie das Original herunter, um es zu öffnen."
+      },
+      "unsupported": {
+        "description": "Diese Datei kann nicht angezeigt werden. Laden Sie das Original herunter, um es zu öffnen."
       }
     },
     "filesTab": {
@@ -12898,9 +12904,34 @@
       },
       "download": {
         "label": "Herunterladen"
+      },
+      "partial": {
+        "label": "Einige Ordner konnten nicht geladen werden. Aktualisieren Sie, um es erneut zu versuchen."
+      },
+      "noMatches": {
+        "label": "Keine passenden Dateien"
+      },
+      "previousPage": {
+        "label": "Vorherige Seite"
+      },
+      "nextPage": {
+        "label": "Nächste Seite"
+      },
+      "page": {
+        "label": "Seite {page} von {total}"
+      },
+      "upload": {
+        "label": "Dateien hochladen",
+        "error": "Dateien konnten nicht hochgeladen werden. Versuchen Sie es erneut."
+      },
+      "emptyDirectory": {
+        "label": "Keine Dateien in diesem Verzeichnis"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Kontrasthintergrund"
+      },
       "error": {
         "description": "Das Bild konnte nicht angezeigt werden",
         "title": "Bild konnte nicht geladen werden"
@@ -12910,9 +12941,6 @@
       },
       "preview": {
         "ariaLabel": "Vorschau von {name}"
-      },
-      "background": {
-        "contrast": "Kontrasthintergrund"
       }
     },
     "inputBar": {
@@ -13569,7 +13597,8 @@
         "ariaLabel": "URL kopieren: {url}"
       },
       "downloadFile": {
-        "tooltip": "Datei herunterladen"
+        "tooltip": "Datei herunterladen",
+        "label": "Herunterladen"
       },
       "export": {
         "button": "Als .docx exportieren",
@@ -13639,6 +13668,144 @@
     "welcome": {
       "input": {
         "placeholder": "Analysiere meine Daten und erstelle ein Dashboard..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "Alle Dateien"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Ausgabe-Tabs"
+      },
+      "close": {
+        "label": "{name} schließen"
+      },
+      "reordered": {
+        "label": "Tab auf Position {position} von {count} verschoben"
+      },
+      "open": {
+        "label": "Tab öffnen"
+      },
+      "outputs": {
+        "label": "Ergebnisse"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Deine App ansehen"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Webapps werden geprüft"
+      },
+      "failed": {
+        "description": "Lokale Webapps konnten nicht geprüft werden. Laden Sie neu und versuchen Sie es erneut."
+      },
+      "unavailable": {
+        "description": "Die Webapp ist nicht verfügbar. Stellen Sie die Sandbox wieder her oder laden Sie neu.",
+        "label": "Nicht verfügbar"
+      },
+      "empty": {
+        "title": "Keine Webapps verfügbar",
+        "description": "Lokale Apps werden hier angezeigt, wenn sie laufen."
+      },
+      "starting": {
+        "label": "Webapp startet"
+      },
+      "loading": {
+        "label": "Webapp wird geladen"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Ausgaben öffnen"
+      },
+      "close": {
+        "ariaLabel": "Ausgaben schließen"
+      },
+      "expand": {
+        "ariaLabel": "Ausgaben vergrößern"
+      },
+      "restore": {
+        "ariaLabel": "Ausgaben wiederherstellen"
+      },
+      "resize": {
+        "ariaLabel": "Größe der Ausgaben ändern"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Dateien suchen"
+        },
+        "location": {
+          "label": "Alle Dateien in Ihrer Sandbox"
+        }
+      },
+      "browser": {
+        "placeholder": "Webapps in deiner Sandbox"
+      },
+      "reload": {
+        "file": "Datei neu laden",
+        "files": "Dateien aktualisieren",
+        "browser": "Webapps aktualisieren",
+        "unavailable": "Stellen Sie zum Aktualisieren die Sandbox wieder her"
+      },
+      "export": {
+        "failed": "Diese Datei konnte nicht exportiert werden. Versuchen Sie es erneut."
+      },
+      "empty": {
+        "title": "Arbeitsbereichsansicht wählen"
+      },
+      "status": {
+        "provisioning": "Sandbox wird initialisiert",
+        "running": "Sandbox läuft",
+        "sleeping": "Sandbox im Ruhezustand",
+        "restoring": "Sitzung wird wiederhergestellt",
+        "terminated": "Sandbox beendet",
+        "failed": "Sandbox fehlgeschlagen",
+        "ready": "Sandbox bereit",
+        "loading": "Sandbox wird gesucht"
+      }
+    },
+    "outputsTab": {
+      "home": {
+        "description": "Von Ihrem Agenten erstellte Dateien"
+      },
+      "empty": {
+        "description": "Hier erscheinen die Dateien, die Ihr Agent erstellt."
+      },
+      "loading": {
+        "label": "Ergebnisse werden geladen…"
+      },
+      "unavailable": {
+        "description": "Die Ergebnisse erscheinen, sobald Ihre Sandbox bereit ist."
+      },
+      "error": {
+        "description": "Ergebnisse konnten nicht aktualisiert werden. Versuchen Sie es erneut."
+      },
+      "incomplete": {
+        "description": "Einige Ergebnisse konnten nicht geladen werden."
+      },
+      "filter": {
+        "label": "Dateityp",
+        "all": "Alle",
+        "folders": "Ordner",
+        "noExtension": "Ohne Dateiendung"
+      },
+      "folders": {
+        "ariaLabel": "Ergebnisordner",
+        "root": "Ergebnisse"
+      },
+      "filtered": {
+        "empty": "Keine passenden Ergebnisse"
+      },
+      "search": {
+        "placeholder": "Ergebnisse suchen"
       }
     }
   },

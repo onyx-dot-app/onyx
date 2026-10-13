@@ -1,8 +1,24 @@
 import { StrictMode } from "react";
 import { act, deferred, renderHook, waitFor } from "@tests/setup/test-utils";
 import { SWRConfig, type State } from "swr";
-import { useFilePreview } from "@/lib/build/hooks";
+import {
+  useFilePreview,
+  useWorkspaceListing,
+  useOutputWebapps,
+} from "@/lib/build/hooks";
+import { fetchWebappInfo } from "@/app/craft/services/apiServices";
 import { FetchError, skipRetryOnAuthError } from "@/lib/fetcher";
+
+let mockPreviewUserId: string | undefined = "test-user";
+jest.mock("@/providers/UserProvider", () => ({
+  useUser: () => ({
+    user: mockPreviewUserId ? { id: mockPreviewUserId } : null,
+  }),
+}));
+jest.mock("@/app/craft/services/apiServices", () => ({
+  ...jest.requireActual("@/app/craft/services/apiServices"),
+  fetchWebappInfo: jest.fn(),
+}));
 
 it("replaces cached bytes across revisions and rejects late responses", async () => {
   const cache = new Map<string, State>();
@@ -444,6 +460,107 @@ it("does not mutate loader errors when associating failures with requests", asyn
   await waitFor(() => expect(result.current.error).toBe(failure));
 });
 
+// Workspace listing invalidation.
+it.each([401, 403, 404])(
+  "purges workspace data and persisted fallback after terminal error (%s)",
+  async (status) => {
+    const load = jest
+      .fn<Promise<string>, [AbortSignal]>()
+      .mockResolvedValueOnce("private listing")
+      .mockRejectedValueOnce(new FetchError("Unavailable", status, null))
+      .mockRejectedValueOnce(new FetchError("Offline", 503, null))
+      .mockResolvedValueOnce("authorized listing");
+    const { result, rerender } = renderHook(
+      ({ refreshGeneration }) =>
+        useWorkspaceListing(`workspace-${status}`, load, {
+          isActive: true,
+          refreshGeneration,
+          fallbackData: "persisted private listing",
+        }),
+      {
+        initialProps: { refreshGeneration: 0 },
+        wrapper: ({ children }) => (
+          <SWRConfig value={{ provider: () => new Map() }}>
+            {children}
+          </SWRConfig>
+        ),
+      }
+    );
+    await waitFor(() => expect(result.current.data).toBe("private listing"));
+    rerender({ refreshGeneration: 1 });
+    await waitFor(() =>
+      expect(result.current.error?.message).toBe("Unavailable")
+    );
+    expect(result.current.data).toBeUndefined();
+    rerender({ refreshGeneration: 2 });
+    await waitFor(() => expect(result.current.error?.message).toBe("Offline"));
+    expect(result.current.data).toBeUndefined();
+    rerender({ refreshGeneration: 3 });
+    await waitFor(() => expect(result.current.data).toBe("authorized listing"));
+  }
+);
+
+it("retains a terminal listing result across remounts without restoring fallback rows", async () => {
+  const cache = new Map<string, State>();
+  const denied = new FetchError("Denied", 403, null);
+  const load = jest
+    .fn<Promise<string>, [AbortSignal]>()
+    .mockRejectedValue(denied);
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <SWRConfig value={{ provider: () => cache }}>{children}</SWRConfig>
+  );
+  const first = renderHook(
+    () =>
+      useWorkspaceListing("denied-listing", load, {
+        isActive: true,
+        refreshGeneration: 0,
+        fallbackData: "stored rows",
+      }),
+    { wrapper }
+  );
+  await waitFor(() => expect(first.result.current.error).toBe(denied));
+  expect(first.result.current.data).toBeUndefined();
+  first.unmount();
+  const second = renderHook(
+    () =>
+      useWorkspaceListing("denied-listing", load, {
+        isActive: false,
+        refreshGeneration: 0,
+        fallbackData: "stored rows",
+      }),
+    { wrapper }
+  );
+  expect(second.result.current.data).toBeUndefined();
+  expect(second.result.current.error).toBe(denied);
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+// Listener updates do not complete pending work.
+it("keeps a pending preview marked refreshing when its callback changes", async () => {
+  const pending = deferred<Blob>();
+  const load = jest.fn(() => pending.promise);
+  const first = jest.fn();
+  const second = jest.fn();
+  const { rerender, unmount } = renderHook(
+    ({ listener }) =>
+      useFilePreview("callback-preview", load, {
+        revision: "v1",
+        onRefreshingChange: listener,
+      }),
+    { initialProps: { listener: first } }
+  );
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+  expect(first).toHaveBeenLastCalledWith(true);
+  rerender({ listener: second });
+  expect(first).not.toHaveBeenCalledWith(false);
+  expect(second).toHaveBeenLastCalledWith(true);
+  expect(second).not.toHaveBeenCalledWith(false);
+  await act(async () => pending.resolve(new Blob(["done"])));
+  await waitFor(() => expect(second).toHaveBeenLastCalledWith(false));
+  unmount();
+  expect(first).not.toHaveBeenCalledWith(false);
+});
+
 // React development replay must not duplicate expensive preview conversion requests.
 it("coalesces StrictMode replay while still superseding a pending preview revision", async () => {
   const old = deferred<Blob>();
@@ -471,6 +588,74 @@ it("coalesces StrictMode replay while still superseding a pending preview revisi
   expect(result.current.data).toBe(accepted);
   await act(async () => old.resolve(new Blob(["old"])));
   expect(result.current.data).toBe(accepted);
+});
+
+it("reads a webapp once for an initial nonzero generation and gates authenticated ownership", async () => {
+  const load = jest.mocked(fetchWebappInfo);
+  const first = deferred<Awaited<ReturnType<typeof fetchWebappInfo>>>();
+  load.mockReset().mockReturnValueOnce(first.promise).mockResolvedValue({
+    has_webapp: false,
+    webapp_url: null,
+    status: "active",
+    ready: false,
+    sharing_scope: "private",
+  });
+  mockPreviewUserId = "test-user";
+  const { result, rerender } = renderHook(
+    ({ revision }) =>
+      useOutputWebapps({
+        session: {
+          sandbox: {
+            id: "sandbox",
+            status: "running",
+            container_id: null,
+            created_at: "2026-10-09T00:00:00Z",
+            last_heartbeat: null,
+          },
+          status: "idle",
+          webappNeedsRefresh: revision,
+        },
+        sessionId: "webapp-session",
+        isOpen: true,
+        hasBrowser: true,
+        activeBrowser: false,
+        appName: "local",
+      }),
+    {
+      initialProps: { revision: 7 },
+      wrapper: ({ children }) => (
+        <SWRConfig value={{ provider: () => new Map() }}>
+          <StrictMode key={mockPreviewUserId}>{children}</StrictMode>
+        </SWRConfig>
+      ),
+    }
+  );
+  try {
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    await act(async () =>
+      first.resolve({
+        has_webapp: true,
+        webapp_url: "/first-user-app",
+        status: "active",
+        ready: true,
+        sharing_scope: "private",
+      })
+    );
+    expect(result.current.apps[0]?.url).toBe("/first-user-app");
+    mockPreviewUserId = undefined;
+    rerender({ revision: 7 });
+    expect(result.current.canQuery).toBe(false);
+    expect(result.current.apps).toEqual([]);
+    expect(load).toHaveBeenCalledTimes(1);
+    mockPreviewUserId = "other-user";
+    rerender({ revision: 7 });
+    expect(result.current.apps).toEqual([]);
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    rerender({ revision: 8 });
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(3));
+  } finally {
+    mockPreviewUserId = "test-user";
+  }
 });
 
 it("does not retry a superseded preview after its new revision succeeds", async () => {
@@ -504,35 +689,6 @@ it("does not retry a superseded preview after its new revision succeeds", async 
     await act(async () => jest.advanceTimersByTime(4000));
     expect(load).toHaveBeenCalledTimes(2);
     expect(result.current.data).toBe(accepted);
-  } finally {
-    jest.useRealTimers();
-  }
-});
-
-it("does not retry a preview after its viewer unmounts", async () => {
-  jest.useFakeTimers();
-  const load = jest
-    .fn()
-    .mockRejectedValue(new FetchError("temporary", 503, null));
-  try {
-    const { unmount, result } = renderHook(
-      () => useFilePreview("retired-preview", load),
-      {
-        wrapper: ({ children }) => (
-          <SWRConfig
-            value={{ provider: () => new Map(), shouldRetryOnError: true }}
-          >
-            {children}
-          </SWRConfig>
-        ),
-      }
-    );
-    await act(async () => {});
-    expect(result.current.error).toBeDefined();
-    expect(load).toHaveBeenCalledTimes(1);
-    unmount();
-    await act(async () => jest.advanceTimersByTime(4000));
-    expect(load).toHaveBeenCalledTimes(1);
   } finally {
     jest.useRealTimers();
   }
@@ -575,6 +731,36 @@ it("skips the old scheduled retry after same-revision activation recovery", asyn
     expect(result.current.isLoading).toBe(false);
     expect(result.current.data).toBe("recovered");
     expect(load).toHaveBeenCalledTimes(2);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+// Preview lifetime and rendering.
+it("does not retry a preview after its viewer unmounts", async () => {
+  jest.useFakeTimers();
+  const load = jest
+    .fn()
+    .mockRejectedValue(new FetchError("temporary", 503, null));
+  try {
+    const { unmount, result } = renderHook(
+      () => useFilePreview("retired-preview", load),
+      {
+        wrapper: ({ children }) => (
+          <SWRConfig
+            value={{ provider: () => new Map(), shouldRetryOnError: true }}
+          >
+            {children}
+          </SWRConfig>
+        ),
+      }
+    );
+    await act(async () => {});
+    expect(result.current.error).toBeDefined();
+    expect(load).toHaveBeenCalledTimes(1);
+    unmount();
+    await act(async () => jest.advanceTimersByTime(4000));
+    expect(load).toHaveBeenCalledTimes(1);
   } finally {
     jest.useRealTimers();
   }

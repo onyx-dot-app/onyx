@@ -7,13 +7,7 @@
  * useBuildStreaming (live SSE) and useBuildSessionStore (DB reload).
  */
 
-import type { TodoItem } from "../types/displayTypes";
-
-// Re-export from displayTypes — single source of truth
-export type {
-  ToolCallKind as ToolKind,
-  ToolCallStatus as ToolStatus,
-} from "../types/displayTypes";
+import type { TodoItem } from "@/app/craft/types/displayTypes";
 
 // ─── Raw Packet Field Access ─────────────────────────────────────────
 // Every backend field name variant is listed ONCE here.

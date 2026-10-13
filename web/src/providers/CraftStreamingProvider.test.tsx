@@ -36,6 +36,7 @@ jest.mock("@/providers/UserProvider", () => ({
   }),
 }));
 jest.mock("swr", () => ({
+  mutate: () => Promise.resolve(undefined),
   useSWRConfig: () => ({ mutate: mockMutate }),
 }));
 jest.mock("@/app/craft/services/apiServices", () => ({

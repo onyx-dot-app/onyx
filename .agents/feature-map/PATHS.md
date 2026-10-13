@@ -174,10 +174,14 @@ so verify the callers rather than a single component.
 |---|---|
 | `web/src/app/app/` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
-| `web/src/app/craft/` | craft-sessions, craft-streaming |
-| `web/src/lib/csv.ts` | craft-streaming, chat-frontend |
-| `web/src/lib/build/hooks.ts` | craft-webapp-proxy |
 | `web/tools/prepare-pdf-assets.cjs` | craft-webapp-proxy |
+| `web/src/app/craft/` | craft-sessions, craft-streaming |
+| `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx` | craft-webapp-proxy |
+| `web/src/lib/csv.ts` | craft-streaming, chat-frontend |
+| `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-webapp-proxy |
+| `web/src/app/craft/services/workspaceDirectorySnapshots.ts` | craft-webapp-proxy |
+| `web/src/app/craft/services/outputInventorySnapshots.ts` | craft-webapp-proxy |
+| `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts` | craft-webapp-proxy |
 | `web/src/app/admin/connector*/`, `admin/indexing-status/`, `admin/index-settings/`, `admin/document-processing/` | connectors, cc-pairs-and-credentials, indexing-pipeline |
 | `web/src/app/admin/documents/`, `admin/groups*/`, `admin/scim/`, `admin/users/`, `admin/service-accounts/` | access-control, auth-and-identity |
 | `web/src/app/admin/agents/` | agents-personas |
