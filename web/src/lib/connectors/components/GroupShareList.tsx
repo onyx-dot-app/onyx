@@ -77,13 +77,13 @@ export default function GroupShareList({
   requiredTier = Tier.COMMUNITY,
 }: GroupShareListProps) {
   const t = useTranslations("admin.connector.groupRestriction");
-  const { data: userGroups, isLoading, error } = useUserGroups();
-  // Without the groups there is nothing to pick from, and the rows already
-  // added cannot show; say so rather than show an empty picker.
   const locked: boolean = !useTierAtLeast(requiredTier);
   const lockForTier = useTierLockedOptions(requiredTier);
-  // Below the tier the groups request is refused, which is expected.
-  const loadFailed = !locked && !isLoading && !!error;
+  // Below the tier the groups request is refused, so it is not sent.
+  const { data: userGroups, isLoading, error } = useUserGroups(!locked);
+  // Without the groups there is nothing to pick from, and the rows already
+  // added cannot show; say so rather than show an empty picker.
+  const loadFailed = !isLoading && !!error;
   const [field, meta, helpers] = useField<number[]>(name);
 
   const selectedIds = new Set(field.value);
@@ -215,7 +215,7 @@ export default function GroupShareList({
         onValueChange={addGroup}
         options={locked ? lockForTier([]) : options}
         placeholder={placeholder}
-        disabled={disabled || (!locked && (isLoading || loadFailed))}
+        disabled={disabled || isLoading || loadFailed}
       />
       {loadFailed && <InputErrorText>{t("loadError")}</InputErrorText>}
       {rows.length > 0 && (
