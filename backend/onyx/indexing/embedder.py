@@ -4,6 +4,10 @@ from collections import defaultdict
 
 import sentry_sdk
 
+from onyx.configs.app_configs import (
+    PASSAGE_EMBEDDING_CACHE_ENABLED,
+    PASSAGE_EMBEDDING_CACHE_TTL_S,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorStopSignal,
@@ -15,12 +19,11 @@ from onyx.document_index.chunk_content_enrichment import (
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.passage_embedding_cache import (
     cache_passage_embeddings,
     get_cached_passage_embeddings,
 )
-from onyx.configs.app_configs import PASSAGE_EMBEDDING_CACHE_ENABLED, PASSAGE_EMBEDDING_CACHE_TTL_S
+from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
 from onyx.utils.timing import log_function_time
