@@ -6,7 +6,7 @@ import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button, Card } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
-import { planTagProps } from "@/lib/tier-badge";
+import { usePlans } from "@/lib/app/plans";
 import { Section } from "@/layouts/general-layouts";
 import { InputNumber } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -44,6 +44,7 @@ function TokenLimitSection({
   disabledTooltip,
 }: TokenLimitSectionProps) {
   const t = useTranslations("admin.groups");
+  const plans = usePlans();
   const [rowKeys, setRowKeys] = useState<{
     keys: number[];
     nextKey: number;
@@ -119,7 +120,7 @@ function TokenLimitSection({
     <Collapsible
       title={t("tokenLimits.section.title")}
       description={t("tokenLimits.section.description")}
-      tag={disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined}
+      tag={disabled ? { ...plans.enterprise.tag, size: "sm" } : undefined}
     >
       <Disabled disabled={disabled} tooltip={disabledTooltip}>
         <Card border="solid" rounding={4}>

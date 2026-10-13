@@ -34,6 +34,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
+import { updateCredentialSharing } from "@/lib/credentials/svc";
 import { getIn, useFormikContext } from "formik";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -175,7 +176,31 @@ export default function AuthenticationAccountSection({
     if (currentCredential !== null) onCredentialChange(null);
   }, [newAccountKey, currentCredential, onCredentialChange]);
 
+  // A picked account that drops out of the list was un-shared or deleted by
+  // someone else: say so and drop the pick. Only an account the list has
+  // shown counts, so a just-created pick waits for the list to catch up.
+  const pickSeenRef = useRef<number | null>(null);
+  const deletingIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (credentials === undefined || selectedSavedId === null) return;
+    if (credentials.some((credential) => credential.id === selectedSavedId)) {
+      pickSeenRef.current = selectedSavedId;
+      return;
+    }
+    if (
+      pickSeenRef.current !== selectedSavedId ||
+      deletingIdRef.current === selectedSavedId
+    ) {
+      return;
+    }
+    pickSeenRef.current = null;
+    toast.error(t("add.accountUnavailable.toast"));
+    onCredentialChange(null);
+  }, [credentials, selectedSavedId, onCredentialChange, t]);
+
   async function onDeleteCredential(credential: Credential<any | null>) {
+    // The user's own delete is not an account going missing.
+    deletingIdRef.current = credential.id;
     const error = await remove(credential, t("add.unknownError.toast"));
     if (error === null) {
       // A deleted account cannot stay picked.
@@ -183,6 +208,7 @@ export default function AuthenticationAccountSection({
     } else {
       toast.error(error);
     }
+    deletingIdRef.current = null;
   }
 
   async function onSwap(selectedCredential: Credential<any>) {
@@ -258,12 +284,11 @@ export default function AuthenticationAccountSection({
                   )}
                 />
               </InputVertical>
-              {businessTier && (
-                <ShareAccountField
-                  namePrefix={NEW_ACCOUNT_FIELD}
-                  disabled={!newAccountReady}
-                />
-              )}
+              <ShareAccountField
+                namePrefix={NEW_ACCOUNT_FIELD}
+                disabled={!newAccountReady}
+                groupsLocked={!businessTier}
+              />
             </Section>
           </Disabled>
         </Section>
@@ -346,6 +371,17 @@ export default function AuthenticationAccountSection({
         onDelete={() => onDeleteCredential(credential)}
         checkReport={checkReports.reportFor(credential.id)}
         onRerunChecks={() => checkReports.rerun(credential.id)}
+        groupsLocked={!businessTier}
+        onUpdateSharing={async (sharing) => {
+          const response = await updateCredentialSharing(
+            credential.id,
+            sharing
+          );
+          if (!response.ok) throw new Error(await response.text());
+          const saved: SimilarCredential = await response.json();
+          refresh();
+          return saved;
+        }}
       />
     );
   }

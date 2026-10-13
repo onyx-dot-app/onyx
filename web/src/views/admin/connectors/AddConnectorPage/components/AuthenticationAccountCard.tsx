@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Disabled } from "@opal/core";
 import {
   Button,
   Card,
+  Divider,
   Modal,
   OverflowText,
   SelectCard,
   Text,
+  Tooltip,
 } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
 import {
@@ -25,14 +27,23 @@ import {
 } from "@opal/icons";
 import type {
   CredentialCheckReport,
+  CredentialSharing,
   SimilarCredential,
 } from "@/lib/credentials/types";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
+import {
+  ShareAccountSelect,
+  shareAccountPayload,
+  shareAccountValues,
+  type ShareAccountFormValues,
+} from "@/lib/credentials/components/ShareAccountField";
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { IconLoader } from "@opal/loaders";
 import { getSourceMetadata } from "@/lib/sources";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 
 interface DetailRowProps {
   label: string;
@@ -92,6 +103,15 @@ interface AuthenticationAccountCardProps {
   checkReport: CredentialCheckReport | null;
   /** Starts the checks on this account; resolves once the run is queued. */
   onRerunChecks: () => Promise<void>;
+  /** Locks sharing with groups, which needs the Business plan. */
+  groupsLocked: boolean;
+  /**
+   * Saves who may reuse the account; resolves to what the server stored and
+   * rejects when the save fails.
+   */
+  onUpdateSharing: (
+    sharing: Pick<CredentialSharing, "admin_public" | "groups">
+  ) => Promise<{ admin_public: boolean; groups?: number[] }>;
 }
 /**
  * One saved account in the Authentication Account section. The whole card
@@ -110,6 +130,8 @@ export default function AuthenticationAccountCard({
   onDelete,
   checkReport,
   onRerunChecks,
+  groupsLocked,
+  onUpdateSharing,
 }: AuthenticationAccountCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
@@ -117,7 +139,7 @@ export default function AuthenticationAccountCard({
   const fieldCopy = useCredentialFieldCopy(source);
   const details = getCredentialDetails(credential, source);
   const format = useFormatter();
-  const { user } = useUser();
+  const { user, permissions } = useUser();
   const [starting, setStarting] = useState<boolean>(false);
   const running: boolean = starting || checkReport?.run_status === "running";
   const lastChecked: string | null = checkReport?.report?.checked_at ?? null;
@@ -143,6 +165,72 @@ export default function AuthenticationAccountCard({
     }
   }
   const [expanded, setExpanded] = useState<boolean>(false);
+  // What the server holds, and what the select shows: group edits stay
+  // local until focus leaves the group picker.
+  const [savedSharing, setSavedSharing] = useState<ShareAccountFormValues>(() =>
+    shareAccountValues(credential)
+  );
+  const [sharing, setSharing] = useState<ShareAccountFormValues>(savedSharing);
+  const [savingSharing, setSavingSharing] = useState<boolean>(false);
+  const hasUnsavedSharing: boolean =
+    JSON.stringify(sharing) !== JSON.stringify(savedSharing);
+
+  // A refetch (e.g. someone else changed it) shows, unless an edit is open.
+  const serverSharing: string = JSON.stringify({
+    admin_public: credential.admin_public,
+    groups: credential.groups ?? [],
+  });
+  useEffect(() => {
+    if (savingSharing || hasUnsavedSharing) return;
+    const next = shareAccountValues(JSON.parse(serverSharing));
+    setSavedSharing(next);
+    setSharing(next);
+    // Only a new server value resets the select.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverSharing]);
+
+  // One save at a time, without locking the select: a change made while a
+  // save runs waits, and only the latest waiting change is sent next.
+  const savedSharingRef = useRef<ShareAccountFormValues>(savedSharing);
+  const sharingInFlightRef = useRef<boolean>(false);
+  const queuedSharingRef = useRef<ShareAccountFormValues | null>(null);
+  // Group edits not yet sent: they wait for the picker's blur, so a save
+  // that lands meanwhile must not replace them.
+  const unsentGroupEditsRef = useRef<boolean>(false);
+  async function saveSharing(next: ShareAccountFormValues) {
+    unsentGroupEditsRef.current = false;
+    setSharing(next);
+    if (sharingInFlightRef.current) {
+      queuedSharingRef.current = next;
+      return;
+    }
+    sharingInFlightRef.current = true;
+    setSavingSharing(true);
+    let target: ShareAccountFormValues | null = next;
+    while (target !== null) {
+      queuedSharingRef.current = null;
+      try {
+        const stored = shareAccountValues(
+          await onUpdateSharing(shareAccountPayload(target))
+        );
+        savedSharingRef.current = stored;
+        setSavedSharing(stored);
+        // A newer change, sent or not, keeps what the select shows.
+        if (queuedSharingRef.current === null && !unsentGroupEditsRef.current) {
+          setSharing(stored);
+        }
+        toast.success(t("shareSaved.toast"));
+      } catch {
+        if (queuedSharingRef.current === null && !unsentGroupEditsRef.current) {
+          setSharing(savedSharingRef.current);
+        }
+        toast.error(t("shareFailed.toast"));
+      }
+      target = queuedSharingRef.current;
+    }
+    sharingInFlightRef.current = false;
+    setSavingSharing(false);
+  }
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
 
   const addedOn: string = format.dateTime(new Date(credential.time_created), {
@@ -158,7 +246,14 @@ export default function AuthenticationAccountCard({
       ? null
       : (credential.user_personal_name ?? credential.user_email);
   const inUse: boolean = credential.usages.length > 0;
-  const isOwnAccount: boolean = user !== null && credential.user_id === user.id;
+  const isOwnAccount: boolean =
+    credential.is_owner ?? (user !== null && credential.user_id === user.id);
+  // The owner, or an admin when the account is shared with admins or has no
+  // owner, may change its sharing; a group-shared user may only use it.
+  const canEditSharing: boolean =
+    isOwnAccount ||
+    (hasPermission(permissions, Permission.MANAGE_CONNECTORS) &&
+      (credential.admin_public || credential.user_id === null));
 
   return (
     <>
@@ -208,7 +303,7 @@ export default function AuthenticationAccountCard({
           data-testid={`authentication-account-${credential.id}`}
           onClick={() => (selected ? onDeselect() : onSelect())}
           expandedContent={
-            <Section padding={2} width="full">
+            <Section padding={2} gap={2} width="full" alignItems="stretch">
               <Card border="none" padding={2} rounding={3}>
                 <Section gap={3} alignItems="stretch" width="full">
                   <ContentAction
@@ -272,6 +367,47 @@ export default function AuthenticationAccountCard({
                   ))}
                 </Section>
               </Card>
+              {/* The one place the flow edits a saved account's sharing. */}
+              <>
+                <Divider paddingParallel={2} paddingPerpendicular={0} />
+                <Tooltip
+                  tooltip={
+                    canEditSharing ? undefined : t("shareLocked.tooltip")
+                  }
+                >
+                  <div className="p-2">
+                    <ShareAccountSelect
+                      value={sharing}
+                      onChange={(next) => {
+                        // A new audience saves now; a group edit waits for
+                        // focus to leave the group picker. "Admins & Groups"
+                        // with no group is stored as "Admins", so it waits
+                        // for its first group.
+                        if (
+                          next.share !== sharing.share &&
+                          !(
+                            next.share === "adminsAndGroups" &&
+                            next.groups.length === 0
+                          )
+                        ) {
+                          void saveSharing(next);
+                          return;
+                        }
+                        unsentGroupEditsRef.current = true;
+                        setSharing(next);
+                      }}
+                      onGroupsBlur={() => {
+                        if (hasUnsavedSharing) void saveSharing(sharing);
+                      }}
+                      disabled={!canEditSharing}
+                      onlyMeDisabledReason={
+                        isOwnAccount ? undefined : t("onlyMeOwnerOnly.tooltip")
+                      }
+                      groupsLocked={groupsLocked}
+                    />
+                  </div>
+                </Tooltip>
+              </>
             </Section>
           }
         >

@@ -124,16 +124,20 @@ export const Row = React.memo(function Row({
     title: row.title,
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
+    tag: row.kind === "option" ? row.tag : undefined,
     descriptionMaxLines:
       row.kind === "option" ? row.descriptionMaxLines : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,
-    tooltip: row.kind === "action" ? row.tooltip : undefined,
+    tooltip:
+      row.kind === "action" || row.kind === "option" ? row.tooltip : undefined,
+    // Beside the list, so it never covers the row above.
+    tooltipSide: "end",
     sizePreset,
     padding: sizePreset === "secondary" ? 0 : 0.5,
-    // `body` resolves to `ContentSm`, which has no description or suffix
-    // slot; a row with either takes the `heading` layout.
+    // `body` resolves to `ContentSm`, which has no description, suffix or
+    // tag slot; a row with any of them takes the `heading` layout.
     variant:
-      row.description || (row.kind === "option" && row.suffix)
+      row.description || (row.kind === "option" && (row.suffix || row.tag))
         ? "heading"
         : "body",
     id,

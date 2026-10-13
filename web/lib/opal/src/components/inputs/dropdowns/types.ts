@@ -1,5 +1,6 @@
 import type { RichStr } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
+import type { TagProps } from "@opal/components/tag/components";
 import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-type-in-tag/components";
 
 /**
@@ -16,6 +17,10 @@ export type SelectOption = {
   suffix?: string;
   icon?: IconFunctionComponent;
   disabled?: boolean;
+  /** Tag beside the title, like a plan badge. */
+  tag?: TagProps;
+  /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
+  tooltip?: string | RichStr;
 };
 
 /**

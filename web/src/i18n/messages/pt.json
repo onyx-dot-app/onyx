@@ -1857,9 +1857,6 @@
           "restoreTooltip": "Restaurar padrão"
         },
         "description": "Especifique por quanto tempo o {appName} deve reter os chats na sua organização.",
-        "enterprisePlanTag": {
-          "label": "Plano Enterprise"
-        },
         "forever": {
           "label": "Para sempre"
         },
@@ -1879,9 +1876,6 @@
         "title": "Manter o histórico de chats"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Plano Business"
-        },
         "description": "Modo de interface para pesquisa rápida de documentos em toda a sua organização.",
         "noConnectorsTooltip": "Configure conectores para usar o modo de pesquisa",
         "tierTooltip": "O modo de pesquisa requer o plano Business ou Enterprise.",
@@ -2772,7 +2766,22 @@
           },
           "rerunFailed": {
             "toast": "Não foi possível iniciar as verificações. Tente novamente."
+          },
+          "shareSaved": {
+            "toast": "Compartilhamento atualizado."
+          },
+          "shareFailed": {
+            "toast": "Não foi possível alterar quem pode usar esta conta. Tente novamente."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Somente quem adicionou esta conta pode torná-la privada."
+          },
+          "shareLocked": {
+            "tooltip": "Somente quem adicionou esta conta, ou um administrador com quem ela foi compartilhada, pode alterar quem pode usá-la."
           }
+        },
+        "accountUnavailable": {
+          "toast": "Esta conta não está mais disponível para você. Escolha outra conta."
         }
       },
       "credentialRequired": {
@@ -9004,9 +9013,6 @@
           "description": "Quando desativado, todos os endpoints do gateway rejeitam solicitações, os tokens existentes param de funcionar e o escopo do gateway fica oculto no seletor de tokens. O tráfego do sandbox do Craft é controlado separadamente nas configurações do Craft."
         }
       },
-      "businessPlanTag": {
-        "label": "Plano Business"
-      },
       "tierTooltip": "O LLM Gateway requer o plano Business ou Enterprise.",
       "scopeNote": {
         "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → LLM Gateway."
@@ -12093,6 +12099,20 @@
         "defaultName": "Folha 1",
         "empty": "Esta folha está vazia.",
         "tooLarge": "Esta folha é grande demais para a pré-visualização. Baixe o arquivo para visualizá-la."
+      }
+    },
+    "plans": {
+      "free": {
+        "title": "Plano gratuito",
+        "tooltip": "Disponível em todos os planos."
+      },
+      "business": {
+        "title": "Plano Business",
+        "tooltip": "Requer o [plano Business ou Enterprise](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Plano Enterprise",
+        "tooltip": "Requer o [plano Enterprise](/admin/billing)."
       }
     }
   },

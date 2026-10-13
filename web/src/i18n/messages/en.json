@@ -1857,9 +1857,6 @@
           "restoreTooltip": "Restore Default"
         },
         "description": "Specify how long {appName} should retain chats in your organization.",
-        "enterprisePlanTag": {
-          "label": "Enterprise Plan"
-        },
         "forever": {
           "label": "Forever"
         },
@@ -1879,9 +1876,6 @@
         "title": "Keep Chat History"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business Plan"
-        },
         "description": "UI mode for quick document search across your organization.",
         "noConnectorsTooltip": "Set up connectors to use Search Mode",
         "tierTooltip": "Search Mode requires the Business or Enterprise plan.",
@@ -2772,7 +2766,22 @@
           },
           "rerunFailed": {
             "toast": "Couldn't start the checks. Try again."
+          },
+          "shareSaved": {
+            "toast": "Sharing updated."
+          },
+          "shareFailed": {
+            "toast": "Couldn't change who can use this account. Try again."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Only the person who added this account can make it private."
+          },
+          "shareLocked": {
+            "tooltip": "Only the person who added this account, or an admin it is shared with, can change who may use it."
           }
+        },
+        "accountUnavailable": {
+          "toast": "This account is no longer available to you. Pick another account."
         }
       },
       "credentialRequired": {
@@ -9004,9 +9013,6 @@
           "description": "When off, every gateway endpoint rejects requests, existing tokens stop working, and the gateway scope is hidden from the token picker. Craft sandbox traffic is controlled separately by the Craft settings."
         }
       },
-      "businessPlanTag": {
-        "label": "Business Plan"
-      },
       "tierTooltip": "The LLM Gateway requires the Business or Enterprise plan.",
       "scopeNote": {
         "title": "Each user configures their own token and connection details under Settings → LLM Gateway."
@@ -12093,6 +12099,20 @@
         "defaultName": "Sheet 1",
         "empty": "This sheet is empty.",
         "tooLarge": "This sheet is too large to preview — download the file to view it."
+      }
+    },
+    "plans": {
+      "free": {
+        "title": "Free Plan",
+        "tooltip": "Available on every plan."
+      },
+      "business": {
+        "title": "Business Plan",
+        "tooltip": "Requires the [Business or Enterprise plan](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Enterprise Plan",
+        "tooltip": "Requires the [Enterprise plan](/admin/billing)."
       }
     }
   },
