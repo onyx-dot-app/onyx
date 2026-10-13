@@ -1872,13 +1872,11 @@
           "message": "Os chats sem atividade por mais de {days, plural, one {# dia} other {# dias}} serão excluídos permanentemente. Esta ação não pode ser desfeita.",
           "title": "Reduzir a retenção de chats?"
         },
-        "tierTooltip": "A retenção do histórico de chats é um recurso do Plano Enterprise.",
         "title": "Manter o histórico de chats"
       },
       "searchMode": {
         "description": "Modo de interface para pesquisa rápida de documentos em toda a sua organização.",
         "noConnectorsTooltip": "Configure conectores para usar o modo de pesquisa",
-        "tierTooltip": "O modo de pesquisa requer o plano Business ou Enterprise.",
         "title": "Modo de pesquisa"
       },
       "systemPrompt": {

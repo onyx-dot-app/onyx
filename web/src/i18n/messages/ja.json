@@ -1872,13 +1872,11 @@
           "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
           "title": "チャットの保持期間を短縮しますか？"
         },
-        "tierTooltip": "チャット履歴の保持は Enterprise プランの機能です。",
         "title": "チャット履歴の保持"
       },
       "searchMode": {
         "description": "組織全体のドキュメントをすばやく検索するための UI モードです。",
         "noConnectorsTooltip": "検索モードを使用するにはコネクターを設定してください",
-        "tierTooltip": "検索モードには Business プランまたは Enterprise プランが必要です。",
         "title": "検索モード"
       },
       "systemPrompt": {

@@ -17,8 +17,8 @@ import {
   getCredentialSpec,
   initialCredentialValues,
 } from "@/lib/credentials/utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import {
   DEFAULT_SHARE_AUDIENCE,
   ShareAccountField,

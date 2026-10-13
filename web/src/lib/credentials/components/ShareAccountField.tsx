@@ -10,7 +10,8 @@ import {
 import { InputHorizontal, Section } from "@opal/layouts";
 import { SvgLock, SvgUserManage, SvgUsers } from "@opal/icons";
 import { useUserGroups } from "@/lib/hooks";
-import { usePlans } from "@/lib/app/plans";
+import { usePlans } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import type { CredentialSharing } from "@/lib/credentials/types";
 
 /** Who may reuse a new credential. */
@@ -136,8 +137,8 @@ export function ShareAccountSelect({
               description: t("adminsAndGroups.description"),
               icon: SvgUsers,
               disabled: groupsLocked,
-              tag: groupsLocked ? plans.business.tag : undefined,
-              tooltip: groupsLocked ? plans.business.tooltip : undefined,
+              tag: groupsLocked ? plans[Tier.BUSINESS].tag : undefined,
+              tooltip: groupsLocked ? plans[Tier.BUSINESS].tooltip : undefined,
             },
             {
               options: [

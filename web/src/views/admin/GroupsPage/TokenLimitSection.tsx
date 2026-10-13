@@ -6,7 +6,8 @@ import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button, Card } from "@opal/components";
 import { Disabled } from "@opal/core";
 import type { RichStr } from "@opal/types";
-import { usePlans } from "@/lib/app/plans";
+import { usePlans } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { Section } from "@/layouts/general-layouts";
 import { InputNumber } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -120,7 +121,7 @@ function TokenLimitSection({
     <Collapsible
       title={t("tokenLimits.section.title")}
       description={t("tokenLimits.section.description")}
-      tag={disabled ? { ...plans.enterprise.tag, size: "sm" } : undefined}
+      tag={disabled ? { ...plans[Tier.ENTERPRISE].tag, size: "sm" } : undefined}
     >
       <Disabled disabled={disabled} tooltip={disabledTooltip}>
         <Card border="solid" rounding={4}>

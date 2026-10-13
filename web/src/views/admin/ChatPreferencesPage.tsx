@@ -1,6 +1,6 @@
 "use client";
 
-import { usePlans } from "@/lib/app/plans";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { markdown } from "@opal/utils";
 import React, {
@@ -83,8 +83,7 @@ import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
 import { MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 
 const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
@@ -1011,37 +1010,40 @@ export default function ChatPreferencesPage() {
           {/* Features */}
           <Card border="solid" rounding={4}>
             <Section alignItems="stretch">
-              <Disabled
-                disabled={!businessTier || uniqueSources.length === 0}
-                allowClick={businessTier}
-                tooltip={
+              {/* Below Business, or with no connectors, the row stays as is;
+              only its switch is locked. */}
+              <InputHorizontal
+                title={t("searchMode.title")}
+                tag={
                   !businessTier
-                    ? t("searchMode.tierTooltip")
-                    : t("searchMode.noConnectorsTooltip")
+                    ? plans[Tier.BUSINESS].tag
+                    : { title: t("betaTag.label"), color: "blue" }
                 }
+                description={t("searchMode.description")}
+                withLabel
               >
-                <InputHorizontal
-                  title={t("searchMode.title")}
-                  tag={
+                <Tooltip
+                  tooltip={
                     !businessTier
-                      ? plans.business.tag
-                      : { title: t("betaTag.label"), color: "blue" }
+                      ? plans[Tier.BUSINESS].tooltip
+                      : uniqueSources.length === 0
+                        ? t("searchMode.noConnectorsTooltip")
+                        : undefined
                   }
-                  description={t("searchMode.description")}
-                  disabled={!businessTier || uniqueSources.length === 0}
-                  withLabel
                 >
-                  <InputSwitch
-                    checked={
-                      businessTier ? (s.search_ui_enabled ?? true) : false
-                    }
-                    onCheckedChange={(checked) => {
-                      void saveSettings({ search_ui_enabled: checked });
-                    }}
-                    disabled={!businessTier || uniqueSources.length === 0}
-                  />
-                </InputHorizontal>
-              </Disabled>
+                  <div>
+                    <InputSwitch
+                      checked={
+                        businessTier ? (s.search_ui_enabled ?? true) : false
+                      }
+                      onCheckedChange={(checked) => {
+                        void saveSettings({ search_ui_enabled: checked });
+                      }}
+                      disabled={!businessTier || uniqueSources.length === 0}
+                    />
+                  </div>
+                </Tooltip>
+              </InputHorizontal>
               <InputHorizontal
                 title={t("autoDetectFilters.title")}
                 description={t("autoDetectFilters.description")}
@@ -1477,29 +1479,37 @@ export default function ChatPreferencesPage() {
             <Section gap={4}>
               <Card border="solid" rounding={4}>
                 <Section alignItems="stretch">
-                  <Disabled
-                    disabled={!enterpriseTier}
-                    tooltip={t("retention.tierTooltip")}
+                  {/* Below Enterprise the row stays as is; only its
+                  dropdown is locked. */}
+                  <InputHorizontal
+                    title={t("retention.title")}
+                    description={t("retention.description", {
+                      appName: settings.appName,
+                    })}
+                    tag={
+                      !enterpriseTier ? plans[Tier.ENTERPRISE].tag : undefined
+                    }
+                    withLabel
+                    fillInput
                   >
-                    <InputHorizontal
-                      title={t("retention.title")}
-                      description={t("retention.description", {
-                        appName: settings.appName,
-                      })}
-                      tag={!enterpriseTier ? plans.enterprise.tag : undefined}
-                      disabled={!enterpriseTier}
-                      withLabel
-                      fillInput
+                    <Tooltip
+                      tooltip={
+                        enterpriseTier
+                          ? undefined
+                          : plans[Tier.ENTERPRISE].tooltip
+                      }
                     >
-                      <RetentionField
-                        value={s.maximum_chat_retention_days ?? null}
-                        disabled={!enterpriseTier}
-                        onSave={(maximum_chat_retention_days) =>
-                          void saveSettings({ maximum_chat_retention_days })
-                        }
-                      />
-                    </InputHorizontal>
-                  </Disabled>
+                      <div className="w-full">
+                        <RetentionField
+                          value={s.maximum_chat_retention_days ?? null}
+                          disabled={!enterpriseTier}
+                          onSave={(maximum_chat_retention_days) =>
+                            void saveSettings({ maximum_chat_retention_days })
+                          }
+                        />
+                      </div>
+                    </Tooltip>
+                  </InputHorizontal>
 
                   <InputHorizontal
                     title={t("queryHistory.title")}

@@ -32,8 +32,8 @@ import {
 } from "@/lib/agents/svc";
 import type { Agent } from "@/lib/agents/types";
 import { ShareAgentModal } from "@/lib/agents/components";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { can } from "@/lib/permissions/resource-actions";
 
 // ---------------------------------------------------------------------------

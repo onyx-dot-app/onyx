@@ -2,7 +2,9 @@
 
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
-import { Divider, MessageCard } from "@opal/components";
+import { Divider, MessageCard, Tooltip } from "@opal/components";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { Content, Section } from "@opal/layouts";
 import { SvgBarChart, SvgEditBig, SvgUserManage } from "@opal/icons";
 import useUsers from "@/hooks/useUsers";
@@ -24,12 +26,17 @@ interface ManageAccessFieldProps {
 
 /**
  * Who can operate or edit the connector: admins always, plus the groups added
- * here (sent as `groups`, so each is an Editor).
+ * here (sent as `groups`, so each is an Editor). Groups need the Business
+ * tier: below it the field still shows, with the picker locked and the
+ * Business plan tag.
  */
 export default function ManageAccessField({
   disabled,
 }: ManageAccessFieldProps) {
   const t = useTranslations("admin.connectorsList.settings.manageAccess");
+  const plans = usePlans();
+  const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const groupsLocked: boolean = disabled === true || !businessTier;
   const tRestriction = useTranslations("admin.connector.groupRestriction");
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -79,7 +86,7 @@ export default function ManageAccessField({
         removeLabel={t("role.removeAccess.label")}
         menuWidth={60}
         ariaLabel={t("role.menu.ariaLabel", { name: group.name })}
-        disabled={disabled}
+        disabled={groupsLocked}
       />
     );
   }
@@ -97,17 +104,26 @@ export default function ManageAccessField({
       <Content
         title={t("title")}
         description={t("description")}
+        tag={businessTier ? undefined : plans[Tier.BUSINESS].tag}
         sizePreset="main-ui"
         variant="section"
       />
-      <GroupShareList
-        name="groups"
-        label={t("title")}
-        placeholder={t("placeholder")}
-        lockedRows={[adminsRow]}
-        rowAction={renderRoleMenu}
-        disabled={disabled}
-      />
+      {/* The list is tall, so the tooltip stays level with the pointer. */}
+      <Tooltip
+        tooltip={businessTier ? undefined : plans[Tier.BUSINESS].tooltip}
+        align="follow"
+      >
+        <div className="w-full">
+          <GroupShareList
+            name="groups"
+            label={t("title")}
+            placeholder={t("placeholder")}
+            lockedRows={[adminsRow]}
+            rowAction={renderRoleMenu}
+            disabled={groupsLocked}
+          />
+        </div>
+      </Tooltip>
       <Divider paddingParallel={0} paddingPerpendicular={0} />
       <MessageCard
         variant="default"

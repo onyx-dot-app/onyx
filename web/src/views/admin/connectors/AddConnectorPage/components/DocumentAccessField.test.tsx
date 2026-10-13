@@ -9,7 +9,8 @@ import {
 jest.mock("@/lib/permissions/hooks", () => ({
   usePermissionAuthority: jest.fn(),
 }));
-jest.mock("@/hooks/useTierAtLeast", () => ({
+jest.mock("@/lib/tiers/hooks", () => ({
+  ...jest.requireActual("@/lib/tiers/hooks"),
   useTierAtLeast: jest.fn(),
 }));
 jest.mock(
@@ -25,7 +26,7 @@ jest.mock("@/lib/connectors/components/GroupShareList", () => ({
 }));
 
 const { usePermissionAuthority } = jest.requireMock("@/lib/permissions/hooks");
-const { useTierAtLeast } = jest.requireMock("@/hooks/useTierAtLeast");
+const { useTierAtLeast } = jest.requireMock("@/lib/tiers/hooks");
 
 function renderForm(connector: ConfigurableSources) {
   return render(
@@ -94,5 +95,15 @@ describe("DocumentAccessField", () => {
     await waitFor(() =>
       expect(screen.getByTestId("access-type")).toHaveTextContent("sync")
     );
+  });
+
+  it("shows the field locked on Everyone, with the Business plan tag, below Business", () => {
+    useTierAtLeast.mockReturnValue(false);
+    renderForm(ValidSources.Web as ConfigurableSources);
+
+    // The field is there, not hidden, and its select cannot be changed.
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(screen.getByText("Business Plan")).toBeInTheDocument();
+    expect(screen.getByTestId("access-type")).toHaveTextContent("public");
   });
 });
