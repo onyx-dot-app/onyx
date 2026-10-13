@@ -156,8 +156,6 @@ class TokenExchangeRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     headers: dict[str, str]
-    # A JSON body may carry the type the provider's API documents (Zendesk's
-    # `expires_in` is an integer); form encoding stringifies either way.
     body: dict[str, Any]
     # How ``body`` is encoded on the wire: JSON (``requests.post(json=...)``)
     # when True, RFC-6749 form-encoded (``data=...``) when False. The callback
