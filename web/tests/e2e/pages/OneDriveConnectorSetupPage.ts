@@ -26,7 +26,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /** The draft account a check run sends, or `null` for a saved account. */
 function parseDraftCredential(
-  value: unknown,
+  value: unknown
 ): OneDriveCredentialRequest | null {
   if (!isRecord(value) || !isRecord(value.credential_json)) return null;
   const credentialJson = value.credential_json;
@@ -55,7 +55,7 @@ export class OneDriveConnectorSetupPage {
   async mockRoutes(connectorError?: string) {
     await this.page.route(
       "**/api/manage/admin/similar-credentials/onedrive*",
-      (route) => route.fulfill({ json: [] }),
+      (route) => route.fulfill({ json: [] })
     );
     await this.page.route("**/api/connector/oauth/details/onedrive", (route) =>
       route.fulfill({
@@ -64,7 +64,7 @@ export class OneDriveConnectorSetupPage {
           supports_manual_credentials: true,
           additional_kwargs: [],
         },
-      }),
+      })
     );
     // Create makes the connector and pairs it in one request.
     await this.page.route(
@@ -99,7 +99,7 @@ export class OneDriveConnectorSetupPage {
         return route.fulfill({
           json: { success: true, message: "", data: 71 },
         });
-      },
+      }
     );
     await mockPassingConnectorChecks(this.page);
     // A typed account travels with the check run, which saves it as a draft.
@@ -110,14 +110,14 @@ export class OneDriveConnectorSetupPage {
         const draft = parseDraftCredential(route.request().postDataJSON());
         if (draft) this.credentialRequest = draft;
         return route.fallback();
-      },
+      }
     );
   }
 
   async goto() {
     await this.page.goto("/admin/connectors/onedrive");
     await expect(
-      this.page.locator('[aria-label="admin-page-title"]'),
+      this.page.locator('[aria-label="admin-page-title"]')
     ).toBeVisible();
   }
 
@@ -166,7 +166,7 @@ export class OneDriveConnectorSetupPage {
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname ===
-          "/api/manage/admin/connector-with-credential",
+          "/api/manage/admin/connector-with-credential"
     );
     await this.page
       .getByRole("button", { name: "Create Connector", exact: true })
@@ -178,7 +178,7 @@ export class OneDriveConnectorSetupPage {
   async submitInvalidConnector(name: string, message: string) {
     await this.page.getByTestId("connector-name").fill(name);
     await expect(
-      this.page.getByRole("button", { name: "Create Connector", exact: true }),
+      this.page.getByRole("button", { name: "Create Connector", exact: true })
     ).toBeDisabled();
     await expect(this.page.getByText(message)).toBeVisible();
   }

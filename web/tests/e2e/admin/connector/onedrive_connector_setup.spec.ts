@@ -67,7 +67,7 @@ test.describe("OneDrive connector setup", () => {
     await setup.selectSpecificScope();
     await setup.submitInvalidConnector(
       "Empty Specific OneDrive",
-      validationMessage,
+      validationMessage
     );
     expect(setup.connectorRequests).toEqual([]);
   });
