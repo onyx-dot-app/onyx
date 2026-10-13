@@ -916,6 +916,31 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "Configure Jira Service Management connector",
+    subtext: `Index the customer requests of one Jira Service Management project.`,
+    values: [
+      {
+        type: "text",
+        query: "Enter the Jira base URL:",
+        label: "Jira Base URL",
+        name: "jira_base_url",
+        optional: false,
+        description:
+          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+      },
+      {
+        type: "text",
+        query: "Enter the project key:",
+        label: "Project Key",
+        name: "project_name",
+        optional: false,
+        description:
+          "The key of the Jira Service Management project to index (e.g., SUP)",
+      },
+    ],
+    advanced_values: [],
+  },
   jira: {
     description: "Configure Jira connector",
     subtext: `Configure which Jira content to index. You can index everything or specify a particular project.`,
