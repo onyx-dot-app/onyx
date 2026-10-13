@@ -15,7 +15,11 @@ export interface ConnectorEditTarget {
 export interface ConnectorEditProposal {
   connector_specific_config: Record<string, unknown>;
   access_type: AccessType;
-  data_access_group_ids: number[];
+  /**
+   * `null` keeps the pair's groups: the editor may see only some of them, so
+   * an unchanged access section must not propose the visible ones.
+   */
+  data_access_group_ids: number[] | null;
   credential_id: number;
   indexing_start: string | null;
   name: string;

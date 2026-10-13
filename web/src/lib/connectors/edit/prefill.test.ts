@@ -114,7 +114,7 @@ describe("buildEditProposal", () => {
     expect(proposalFor(ccPair)).toEqual({
       connector_specific_config: config,
       access_type: "public",
-      data_access_group_ids: [],
+      data_access_group_ids: null,
       credential_id: CREDENTIAL_ID,
       indexing_start: "2025-03-04T05:06:07.000Z",
       name: "Docs repos",
@@ -128,7 +128,7 @@ describe("buildEditProposal", () => {
     ["sync_restricted", [5]],
     ["sync", []],
   ])(
-    "keeps the %s access and its data-access groups when nothing changed",
+    "keeps the %s access and the pair's groups when nothing changed",
     (accessType, groupIds) => {
       const ccPair = githubPair(
         { repo_owner: "onyx-dot-app", repositories: "onyx" },
@@ -138,11 +138,25 @@ describe("buildEditProposal", () => {
       const proposal = proposalFor(ccPair, groupIds);
 
       expect(proposal.access_type).toBe(accessType);
-      expect(proposal.data_access_group_ids).toEqual(
-        [...groupIds].sort((a, b) => a - b)
-      );
+      // The editor may see only some groups: null keeps all of them.
+      expect(proposal.data_access_group_ids).toBeNull();
     }
   );
+
+  it("proposes the picked data-access groups when the access changed", () => {
+    const ccPair = githubPair(
+      { repo_owner: "onyx-dot-app", repositories: "onyx" },
+      { access_type: "private" }
+    );
+
+    const proposal = proposalFor(ccPair, [4], (values) => ({
+      ...values,
+      data_access_group_ids: [7, 4],
+    }));
+
+    expect(proposal.access_type).toBe("private");
+    expect(proposal.data_access_group_ids).toEqual([4, 7]);
+  });
 
   it("proposes the changed values only", () => {
     const config = { repo_owner: "onyx-dot-app", repositories: "onyx" };

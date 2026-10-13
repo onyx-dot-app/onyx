@@ -47,7 +47,8 @@ export default function EditConnectorPage({
     { revalidateOnFocus: false, revalidateOnReconnect: false }
   );
 
-  // Data-access groups are EE only: a failed request means none.
+  // A failed load of the groups fails the page: guessing none would let an
+  // unchanged form propose to drop them.
   const loadDataAccess =
     ccPair !== undefined && usesDataAccessGroups(ccPair.access_type);
   const { data: dataAccess, error: dataAccessError } = useSWR<CCPairDataAccess>(
@@ -61,6 +62,7 @@ export default function EditConnectorPage({
   const pairSource = ccPair?.connector.source;
   const failed =
     error !== undefined ||
+    dataAccessError !== undefined ||
     (pairSource !== undefined &&
       (pairSource !== source || !isEditableSource(pairSource)));
 

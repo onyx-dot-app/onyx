@@ -168,7 +168,11 @@ def _proposed_state(
         input_type=current.input_type,
         connector_specific_config=proposal.connector_specific_config,
         access_type=proposal.access_type,
-        data_access_group_ids=proposal.data_access_group_ids,
+        data_access_group_ids=(
+            proposal.data_access_group_ids
+            if proposal.data_access_group_ids is not None
+            else current.data_access_group_ids
+        ),
         credential_id=proposal.credential_id,
         indexing_start=proposal.indexing_start,
         name=proposal.name,

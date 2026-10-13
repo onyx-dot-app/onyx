@@ -209,8 +209,25 @@ function sortedUnique(ids: number[]): number[] {
   return Array.from(new Set(ids)).sort((a, b) => a - b);
 }
 
-/** The data-access groups of the form's access settings. */
-function proposedDataAccessGroupIds(values: ConnectorFormValues): number[] {
+/** The form fields that set who can read the pair's documents. */
+const ACCESS_FIELDS = [
+  "access_type",
+  "data_access_group_ids",
+  "restrict_access_to_groups",
+  "restriction_group_ids",
+] as const;
+
+/**
+ * The data-access groups of the form's access settings; `null` (keep the
+ * pair's groups) when the admin changed none of them.
+ */
+function proposedDataAccessGroupIds(
+  values: ConnectorFormValues,
+  initialValues: ConnectorFormValues
+): number[] | null {
+  if (ACCESS_FIELDS.every((key) => isEqual(values[key], initialValues[key]))) {
+    return null;
+  }
   const wire = toWireAccess(values.access_type, {
     restrict_access_to_groups: values.restrict_access_to_groups,
     restriction_group_ids: values.restriction_group_ids,
@@ -256,7 +273,7 @@ export function buildEditProposal(
   return {
     connector_specific_config: proposedConfig(input),
     access_type: wire.access_type,
-    data_access_group_ids: proposedDataAccessGroupIds(values),
+    data_access_group_ids: proposedDataAccessGroupIds(values, initialValues),
     credential_id: credentialId,
     indexing_start: proposedIndexingStart(
       values.indexingStart,
