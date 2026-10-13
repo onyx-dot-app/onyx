@@ -39,8 +39,8 @@ A Craft user opens the skills library at `/craft/v1/skills`
 (`web/src/app/craft/v1/skills/page.tsx` renders `SkillsPage`). It lists two
 groups: built-in skills (pptx, image generation, company search, Craft
 documentation, browser, and one per connectable app such as Slack, Linear,
-Gmail, Google Calendar, Google Drive, GitHub, HubSpot, Notion) and custom
-skills (their own, shared with them, or published organization-wide). Each
+Gmail, Google Calendar, Google Drive, GitHub, HubSpot, Notion, Zendesk) and
+custom skills (their own, shared with them, or published organization-wide). Each
 card shows an enable/disable toggle, a preview of the rendered instructions,
 and, for a custom skill they can edit, an edit action.
 
@@ -53,7 +53,7 @@ GitHub repository (`ImportSkillsFromGitHubModal`), which previews every
 `SKILL.md` found in the repo and lets the user pick which to bring in.
 
 An external-app-backed skill (Slack, Linear, Gmail, Google Calendar, Google
-Drive, GitHub, HubSpot, Notion) only becomes usable once the user has
+Drive, GitHub, HubSpot, Notion, Zendesk) only becomes usable once the user has
 connected that app; until then it is visible but not enable-able, and the
 card explains why (see §4.3). If the admin has restricted specific actions
 of a connected app, the pushed skill file itself carries a short list of
@@ -206,7 +206,8 @@ built-in-only mechanism (§4.2).
 `skills/built_in.py:_REGISTRY` is the single source of truth: one
 `SeededBuiltInProvider` (pptx, image-generation, company-search,
 craft-documentation, browser) or `ExternalAppBuiltInProvider` (slack, linear,
-google-calendar, google-drive, gmail, github, hubspot, notion) per built-in,
+google-calendar, google-drive, gmail, github, hubspot, notion, zendesk) per
+built-in,
 each pinned to a directory under `backend/onyx/skills/builtin/<skill_id>/`.
 Import-time validation (`BuiltInSkillRegistry.__init__`) parses every
 built-in's `SKILL.md`/`SKILL.md.template` and fails the process if two

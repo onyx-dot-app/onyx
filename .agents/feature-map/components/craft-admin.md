@@ -35,12 +35,13 @@ in bulk, in a searchable table.
 
 On **Apps**, the admin sees every external service and MCP server the Craft
 agent can reach: built-in apps (Slack, Gmail, Google Calendar, Google Drive, Linear,
-HubSpot, Notion, GitHub), any custom app the admin has registered, and connected MCP
+HubSpot, Notion, GitHub, Zendesk), any custom app the admin has registered, and connected MCP
 servers. For each, the admin can enable or disable it, edit its per-action
 policy (auto-approve, ask, or deny each kind of action), and configure its
-credentials. On Onyx Cloud, built-in apps already have Onyx-managed OAuth
+credentials. On Onyx Cloud, most built-in apps already have Onyx-managed OAuth
 credentials, so the admin can only toggle them on and set policy. Custom apps
-on Cloud keep a normal credential form.
+on Cloud keep a normal credential form, as does a built-in whose OAuth client
+cannot be Onyx-owned because it is registered per customer account (Zendesk).
 
 On **Preferences**, the admin sets a workspace default model for Craft
 sessions and a free-text "organization instructions" block that every Craft

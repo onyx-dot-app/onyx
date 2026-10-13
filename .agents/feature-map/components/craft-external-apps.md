@@ -143,7 +143,13 @@ ActionApproval  -- one row per gated request the proxy parked or auto-decided
 
 - `ExternalApp` (`backend/onyx/db/models.py:ExternalApp`): the configured
   app. `upstream_url_patterns` is a plain regex list for built-ins and a glob
-  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). `organization_credentials` and (on
+  list for `CUSTOM` (translated via `ExternalApp.upstream_url_regexes`). For a
+  built-in the list is provider-derived at write time, not taken from the
+  request: the admin API resolves it through
+  `external_apps/providers/registry.py:resolve_instance_config`, which hands
+  the provider only its non-secret credential fields. Most providers return
+  their static descriptor patterns; one hosted per account (Zendesk) narrows
+  them to the configured account's host. `organization_credentials` and (on
   `ExternalAppUserCredential`) `user_credentials` are `EncryptedJson` /
   `SensitiveValue`, read only via `.get_value(apply_mask=False)`.
 - `ExternalAppUserCredential` (`models.py`): one row per `(external_app_id,
@@ -436,6 +442,13 @@ Providers own scope parameters, client authentication, and token and grant extra
 The callback stamps an absolute `expires_at`
 (`external_apps/token_utils.py:stamp_expires_at`), stores the granted scopes, and refreshes the user's sandbox skills.
 
+The authorize and token URLs come from
+`OAuthExternalAppProvider.resolve_oauth_endpoints`, not straight from the
+spec: a provider whose endpoints live on the customer's own host (Zendesk's
+`<subdomain>.zendesk.com`) resolves them from the app's organization
+credentials. Both OAuth routes and the refresh path resolve them the same
+way, so a rotated subdomain moves all three together.
+
 Refresh is lazy and happens at the credential-injection seam, not on a
 schedule: `ExternalAppResolver.resolve` calls `ensure_fresh_credentials`
 (`external_apps/token_refresh.py`) before rendering headers. It is a fast
@@ -510,18 +523,26 @@ they can never disagree about which server owns a request; see
    request. `_resolve_and_match` sets the 403 and returns before `request()`
    ever reaches credential injection or forwarding
    (`gate.py:GateAddon._resolve_and_match`); no `ActionApproval` row is written for a `DENY`.
-3. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
+3. **A built-in app's `upstream_url_patterns` pin a literal upstream host.**
+   The host is the credential-injection boundary: a pattern spanning a whole
+   domain would let a prompt-injected agent spend this tenant's token on
+   another account of the same vendor. `UrlGlob` enforces this for `CUSTOM`
+   apps (the host may hold no wildcard); built-ins author regexes used as-is,
+   so a provider on a per-account host must resolve the configured host into
+   the pattern rather than matching `*.vendor.com`
+   (`external_apps/providers/zendesk.py:ZendeskProvider.resolve_instance`).
+4. **Identity is not spoofable for the sandbox/user/tenant triple; it *is*
    spoofable for which session within that user gets attributed.** See §4.3.
    Any change to session-tag handling must preserve the "verified against the
    IP-resolved user" check in `resolve_session_by_id`; removing it would let
    a compromised sandbox process attribute an approval to any session,
    including a different user's if that check is what enforces the boundary.
-4. **The CA is scoped to the sandbox and must never leave it.** The private
+5. **The CA is scoped to the sandbox and must never leave it.** The private
    key lives only in the CA store (`Secret`/volume) and the proxy process;
    only the public cert is projected to sandboxes. A change that starts
    mounting `ca.key` (or the K8s `Secret` itself) into the sandbox namespace
    breaks this.
-5. **An unmatched request's default depends on *what* went unmatched, and
+6. **An unmatched request's default depends on *what* went unmatched, and
    the two cases differ:**
    - A request that matches **no connected app and no MCP host at all**
      (`resolve_app_for_url` finds nothing, and no MCP server host claims
@@ -543,11 +564,11 @@ they can never disagree about which server owns a request; see
      applies without credentials.
    - An MCP tool call with no admin override defaults to `ASK`
      (`request_evaluator.py:MCP_TOOL_DEFAULT_POLICY`).
-6. **MCP matching must fail closed when the body cannot be parsed.** Any
+7. **MCP matching must fail closed when the body cannot be parsed.** Any
    non-plumbing, non-well-formed-`tools/call` body on a matched MCP host is
    `UNCLASSIFIABLE` and becomes a synthetic `DENY`
    (`request_evaluator.py:_mcp_tool_actions`), never a silent pass-through.
-7. **The upstream socket must use only validated destination addresses.**
+8. **The upstream socket must use only validated destination addresses.**
    `http_connect` and `request` reject forbidden destinations early.
    Requests recheck pending and connected upstream addresses under current policy.
    `server_connect` calls `resolve_destination` and rejects the entire answer
@@ -556,11 +577,11 @@ they can never disagree about which server owns a request; see
    lookup. Preserve the original hostname for TLS SNI, certificate verification,
    and credential matching. Keep the real TLS tests when changing mitmproxy;
    they verify address pinning, hostname checks, and credential injection.
-8. **`try_record_decision` is the only writer of a terminal decision;** any
+9. **`try_record_decision` is the only writer of a terminal decision;** any
    new path that can end an approval (a new UI action, a new grant source)
    must go through it, not write `ActionApproval.decision` directly, or the
    proxy's wake/expire race arbiter breaks.
-9. **External-app matcher exceptions are fail-open to "off-catalog", by
+10. **External-app matcher exceptions are fail-open to "off-catalog", by
    design; credential resolution and destination blocking are the actual
    security boundary, not the matcher.** A bug in `recognize_actions` must
    not become a way to reach an internal address or bypass the CA/identity

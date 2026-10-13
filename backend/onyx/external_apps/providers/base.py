@@ -119,6 +119,25 @@ class AdminDescriptorSpec(BaseModel):
     setup_instructions: str
 
 
+class AppInstanceConfig(BaseModel):
+    """What one configured app row needs that the static descriptor can't give.
+
+    Most providers talk to a fixed host, so the descriptor is already the whole
+    answer. A provider whose host is per-account (Zendesk, where every account
+    lives on its own ``*.zendesk.com`` subdomain) resolves it from the
+    organization credentials an admin filled in, so the egress gateway keeps a
+    literal host — the credential-injection boundary — and the bundled skill
+    knows which account to call."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # Match-ready regexes, as `ExternalApp.upstream_url_regexes` uses them.
+    upstream_url_patterns: list[str]
+    # Substituted into the provider's ``SKILL.md.template`` as ``{{APP:<key>}}``.
+    # The rendered SKILL.md ships to the sandbox, so never put a secret here.
+    skill_template_values: dict[str, str] = {}
+
+
 class ProviderSpec(BaseModel):
     """The base declarative definition every built-in provider must supply:
     identity, the admin descriptor, and the action catalog. Pydantic enforces
@@ -193,6 +212,22 @@ class ExternalAppProvider(ABC):
         ``action_type``. Empty by default; override to register decoders."""
         return {}
 
+    def resolve_instance(
+        self,
+        org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
+    ) -> AppInstanceConfig:
+        """Resolve one app row's gateway config from the admin-supplied
+        organization credentials. The descriptor's static patterns by default;
+        override when the upstream host depends on that config.
+
+        ``org_credentials`` may carry masked secrets (the admin form echoes them
+        back), so an override must read only fields declared non-secret in
+        ``required_org_credential_fields``. Raise ``OnyxError(INVALID_INPUT)``
+        when a field the host depends on is missing or malformed."""
+        return AppInstanceConfig(
+            upstream_url_patterns=list(self.spec.descriptor.upstream_url_patterns)
+        )
+
 
 class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
     """Interface for a built-in provider whose OAuth client credentials Onyx
@@ -250,6 +285,16 @@ class OnyxManagedExtApp(ExternalAppProvider, abstract=True):
         return None
 
 
+class OAuthEndpoints(BaseModel):
+    """The authorize/token URLs in force for one configured app row. Static for
+    most providers; per-account for a provider hosted on a per-tenant domain."""
+
+    model_config = ConfigDict(frozen=True)
+
+    authorize_url: str
+    token_url: str
+
+
 class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     """A provider whose users authenticate via OAuth 2.0. Subclasses supply an
     :class:`OAuthProviderSpec` and implement :meth:`extract_credentials`.
@@ -270,6 +315,23 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     # Error codes meaning the grant itself is dead, so the user must reconnect
     # (RFC 6749 §5.2).
     terminal_refresh_errors: ClassVar[frozenset[str]] = frozenset({"invalid_grant"})
+
+    # How the refresh POST body is encoded: JSON when True, RFC-6749
+    # form-encoded when False. Mirrors ``TokenExchangeRequest.json_encoded``,
+    # which covers the initial grant.
+    refresh_json_encoded: ClassVar[bool] = False
+
+    def resolve_oauth_endpoints(
+        self,
+        org_credentials: Mapping[str, str],  # noqa: ARG002 — used by overrides
+    ) -> OAuthEndpoints:
+        """The authorize/token URLs for one app row. The spec's static URLs by
+        default; override for a provider whose endpoints live on a per-account
+        domain. Same ``org_credentials`` caveats as ``resolve_instance``."""
+        return OAuthEndpoints(
+            authorize_url=self.spec.oauth.authorize_url,
+            token_url=self.spec.oauth.token_url,
+        )
 
     @abstractmethod
     def extract_credentials(self, response_data: dict[str, Any]) -> dict[str, Any]:
@@ -323,12 +385,16 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
         stored: dict[str, Any],
         client_id: str,
         client_secret: str,
+        *,
+        token_url: str | None = None,
     ) -> dict[str, Any]:
         """Exchange the stored refresh token for a fresh access token (RFC-6749).
 
         Clockless (the caller stamps ``expires_at``), mirroring
         :meth:`extract_credentials`. Override `build_refresh_request` /
-        `classify_token_response` for a divergent provider.
+        `classify_token_response` for a divergent provider. ``token_url``
+        overrides the spec's static endpoint for a per-account provider; the
+        caller resolves it via :meth:`resolve_oauth_endpoints`.
 
         Raises:
             TokenRefreshTerminalError: the grant is dead (reconnect required).
@@ -340,18 +406,25 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
                 "No refresh token stored; the user must reconnect."
             )
 
+        body = self.build_refresh_request(refresh_token, client_id, client_secret)
+        json_encoded = self.refresh_json_encoded
         try:
             response = requests.post(
-                self.spec.oauth.token_url,
+                token_url or self.spec.oauth.token_url,
                 # Ask for JSON so providers that default to form-encoded
                 # refresh responses (e.g. GitHub) still parse via response.json().
                 headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Content-Type": (
+                        "application/json"
+                        if json_encoded
+                        else "application/x-www-form-urlencoded"
+                    ),
                     "Accept": "application/json",
                 },
-                data=self.build_refresh_request(
-                    refresh_token, client_id, client_secret
-                ),
+                # Exactly one of data/json, so `requests` can't silently drop
+                # the form body in favour of a JSON one.
+                data=None if json_encoded else body,
+                json=body if json_encoded else None,
                 timeout=self.refresh_http_timeout_seconds,
             )
         except requests.RequestException as exc:

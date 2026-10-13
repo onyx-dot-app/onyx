@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from typing import Any
+
 from onyx.db.enums import EndpointPolicy, ExternalAppType
 from onyx.db.models import ExternalApp
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -9,7 +12,11 @@ from onyx.external_apps.models import (
     OrgCredentialFieldDescriptor,
 )
 from onyx.external_apps.providers.actions import EndpointSpec
-from onyx.external_apps.providers.base import ExternalAppProvider, OnyxManagedExtApp
+from onyx.external_apps.providers.base import (
+    AppInstanceConfig,
+    ExternalAppProvider,
+    OnyxManagedExtApp,
+)
 from onyx.external_apps.providers.github import GitHubProvider
 from onyx.external_apps.providers.gmail import GmailProvider
 from onyx.external_apps.providers.google_calendar import GoogleCalendarProvider
@@ -18,6 +25,7 @@ from onyx.external_apps.providers.hubspot import HubspotProvider
 from onyx.external_apps.providers.linear import LinearProvider
 from onyx.external_apps.providers.notion import NotionProvider
 from onyx.external_apps.providers.slack import SlackProvider
+from onyx.external_apps.providers.zendesk import ZendeskProvider
 from shared_configs.configs import MULTI_TENANT
 
 _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
@@ -29,6 +37,7 @@ _PROVIDER_CLASSES: list[type[ExternalAppProvider]] = [
     GitHubProvider,
     HubspotProvider,
     NotionProvider,
+    ZendeskProvider,
 ]
 
 
@@ -60,6 +69,31 @@ def get_onyx_managed_provider(app_type: ExternalAppType) -> OnyxManagedExtApp | 
     None`` is the "is this app Onyx-managed" check)."""
     provider = PROVIDERS.get(app_type)
     return provider if isinstance(provider, OnyxManagedExtApp) else None
+
+
+def resolve_instance_config(
+    app_type: ExternalAppType,
+    org_credentials: Mapping[str, Any],
+) -> AppInstanceConfig | None:
+    """The gateway config for one configured built-in app, or ``None`` for
+    CUSTOM / unregistered types (whose config the admin authors directly).
+
+    Only the provider's non-secret credential fields reach
+    ``resolve_instance``: an admin form echoes secrets back masked, so a
+    provider could never read one usefully, and withholding them keeps a
+    secret out of the URL patterns and the rendered SKILL.md.
+    """
+    provider = PROVIDERS.get(app_type)
+    if provider is None:
+        return None
+    public = {
+        field.key: value
+        if isinstance(value := org_credentials.get(field.key), str)
+        else ""
+        for field in provider.spec.descriptor.required_org_credential_fields
+        if not field.secret
+    }
+    return provider.resolve_instance(public)
 
 
 def uses_cloud_scope(app_type: ExternalAppType) -> bool:

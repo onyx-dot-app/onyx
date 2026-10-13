@@ -1,6 +1,7 @@
 """Render dynamic skill templates for the per-user skills fileset."""
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -23,6 +24,13 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 ACTION_AVAILABILITY_PLACEHOLDER = "{{ACTION_AVAILABILITY_SECTION}}"
+
+# ``{{APP:<key>}}`` carries a value the provider resolved from the app's own
+# configuration (a Zendesk account's base URL). Unknown keys render as
+# ``_UNCONFIGURED_VALUE`` so a half-configured app tells the agent so instead of
+# failing the whole push.
+_APP_VALUE_RE = re.compile(r"\{\{APP:([A-Za-z0-9_]+)\}\}")
+_UNCONFIGURED_VALUE = "(not configured — ask an admin to finish setting up this app)"
 
 # ``{{#IF_CLOUD_SCOPE}}`` blocks render only on cloud (``uses_cloud_scope``);
 # ``{{^IF_CLOUD_SCOPE}}`` (mustache-style inverted) only elsewhere. Markers
@@ -128,10 +136,12 @@ def render_external_app_skill(
     template: str,
     app_type: ExternalAppType,
     stored: dict[str, EndpointPolicy],
+    app_values: Mapping[str, str] | None = None,
 ) -> str:
     """Pure template rendering for an external-app SKILL.md: apply the cloud
-    description override, resolve the cloud-scope blocks, then fill the
-    action-availability placeholder."""
+    description override, resolve the cloud-scope blocks, substitute the
+    provider's ``{{APP:<key>}}`` values, then fill the action-availability
+    placeholder."""
     is_cloud = uses_cloud_scope(app_type)
 
     cloud_description = _CLOUD_DESCRIPTION_RE.search(template)
@@ -147,6 +157,10 @@ def render_external_app_skill(
         return match.group(2) if keep else ""
 
     template = _CLOUD_SCOPE_BLOCK_RE.sub(_resolve_block, template)
+    values = app_values or {}
+    template = _APP_VALUE_RE.sub(
+        lambda match: values.get(match.group(1)) or _UNCONFIGURED_VALUE, template
+    )
     section = build_action_availability_section(app_type, stored)
     if section:
         rendered = template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)

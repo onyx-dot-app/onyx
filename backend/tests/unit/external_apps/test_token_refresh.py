@@ -181,6 +181,8 @@ def _capturing_post(
     def _post(url: str, **kwargs: Any) -> object:
         captured["url"] = url
         captured["data"] = kwargs.get("data")
+        captured["json"] = kwargs.get("json")
+        captured["headers"] = kwargs.get("headers")
         return response
 
     monkeypatch.setattr("onyx.external_apps.providers.base.requests.post", _post)
@@ -209,6 +211,46 @@ def test_provider_overrides_only_the_refresh_request(
     assert captured["data"]["resource"] == "r"  # the override took effect
     assert captured["data"]["grant_type"] == "refresh_token"  # inherited default
     assert result["access_token"] == "new"  # inherited mapping
+
+
+def test_refresh_posts_to_a_per_account_token_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A provider whose token endpoint lives on the customer's own host gets it
+    resolved by the caller and passed in; the spec's URL is only the default."""
+    captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
+    GoogleCalendarProvider().refresh_credentials(
+        {"refresh_token": "rt"},
+        "cid",
+        "secret",
+        token_url="https://acme.zendesk.com/oauth/tokens",
+    )
+    assert captured["url"] == "https://acme.zendesk.com/oauth/tokens"
+
+    captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
+    GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+    assert captured["url"] == GoogleCalendarProvider.spec.oauth.token_url
+
+
+def test_refresh_json_encoded_sends_exactly_one_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`refresh_json_encoded` swaps the form body for a JSON one. Only ever one
+    of data/json reaches `requests`, which would otherwise drop the form body."""
+
+    class _JsonProvider(GoogleCalendarProvider, abstract=True):
+        refresh_json_encoded = True
+
+    captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
+    _JsonProvider().refresh_credentials({"refresh_token": "rt"}, "cid", "secret")
+    assert captured["data"] is None
+    assert captured["json"]["grant_type"] == "refresh_token"
+    assert captured["headers"]["Content-Type"] == "application/json"
+
+    captured = _capturing_post(monkeypatch, _response(200, {"access_token": "new"}))
+    GoogleCalendarProvider().refresh_credentials({"refresh_token": "rt"}, "c", "s")
+    assert captured["json"] is None
+    assert captured["data"]["grant_type"] == "refresh_token"
 
 
 def test_provider_overrides_only_the_terminal_error_set(

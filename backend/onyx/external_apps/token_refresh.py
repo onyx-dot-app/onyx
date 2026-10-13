@@ -22,6 +22,7 @@ from onyx.db.external_app import (
     upsert_external_app_user_credential,
 )
 from onyx.db.models import ExternalApp
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import (
     OAuthExternalAppProvider,
     TokenRefreshTerminalError,
@@ -40,8 +41,9 @@ logger = setup_logger()
 _LOCK_HELD_S = 30.0
 _LOCK_WAIT_S = 5.0
 
-# Gathered inside a session for the POST: provider, stored creds, client id/secret.
-_RefreshInputs = tuple[OAuthExternalAppProvider, dict[str, Any], str, str]
+# Gathered inside a session for the POST: provider, stored creds, client
+# id/secret, and the token endpoint (per-account for some providers).
+_RefreshInputs = tuple[OAuthExternalAppProvider, dict[str, Any], str, str, str]
 
 
 def ensure_fresh_credentials(
@@ -101,11 +103,13 @@ def _refresh_under_lock(
         inputs = _load_refresh_inputs(db, external_app_id, user_id)
     if inputs is None:
         return
-    provider, stored, client_id, client_secret = inputs
+    provider, stored, client_id, client_secret, token_url = inputs
 
     # POST with no DB connection held.
     try:
-        refreshed = provider.refresh_credentials(stored, client_id, client_secret)
+        refreshed = provider.refresh_credentials(
+            stored, client_id, client_secret, token_url=token_url
+        )
     except TokenRefreshTransientError as exc:
         # Keep the existing token; retry on a later request.
         logger.warning(
@@ -148,7 +152,8 @@ def _load_refresh_inputs(
     db: Session, external_app_id: int, user_id: UUID
 ) -> _RefreshInputs | None:
     """The POST inputs, or ``None`` when there's nothing to do (app gone /
-    non-OAuth / no stored creds / token still fresh / no client creds)."""
+    non-OAuth / no stored creds / token still fresh / no client creds / no
+    resolvable token endpoint)."""
     app = get_external_app_by_id(db, external_app_id)
     if app is None:
         return None
@@ -167,7 +172,20 @@ def _load_refresh_inputs(
         )
         return None
     client_id, client_secret = client
-    return provider, stored, client_id, client_secret
+    try:
+        token_url = provider.resolve_oauth_endpoints(
+            app.organization_credentials.get_value(apply_mask=False)
+        ).token_url
+    except OnyxError as exc:
+        # A per-account provider whose config an admin has since broken. Nothing
+        # to POST to, so keep the existing token rather than clearing the grant.
+        logger.warning(
+            "ea_token_refresh.unresolvable_token_url external_app_id=%s error=%s",
+            external_app_id,
+            exc,
+        )
+        return None
+    return provider, stored, client_id, client_secret, token_url
 
 
 def _read_stored_credentials(

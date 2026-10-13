@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -32,7 +34,7 @@ from onyx.db.external_app import (
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.skill import affected_user_ids_for_skill
-from onyx.db.utils import UNSET, none_as_unset
+from onyx.db.utils import UNSET, UnsetType, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.models import BuiltInExternalAppDescriptor
@@ -43,6 +45,7 @@ from onyx.external_apps.providers.registry import (
     get_onyx_managed_provider,
     get_provider_for_app,
     resolve_action_overrides,
+    resolve_instance_config,
 )
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.server.features.build import connect_app
@@ -150,6 +153,22 @@ def _to_user_response(
     )
 
 
+def _provider_url_patterns(
+    app_type: ExternalAppType,
+    org_credentials: Mapping[str, Any],
+) -> list[str] | None:
+    """The upstream URL patterns a built-in provider derives for this app's
+    configuration, or ``None`` when no provider owns ``app_type``.
+
+    Provider-derived rather than client-supplied: these patterns decide which
+    requests the gateway signs with this app's credentials, and a provider on a
+    per-account host (Zendesk) can only narrow them to the account the admin
+    just configured.
+    """
+    instance = resolve_instance_config(app_type, org_credentials)
+    return instance.upstream_url_patterns if instance is not None else None
+
+
 # =============================================================================
 # Admin Endpoints
 # =============================================================================
@@ -182,11 +201,19 @@ def create_built_in_external_app(
         request.app_type, request.action_policies, {}
     )
 
+    derived_url_patterns = _provider_url_patterns(
+        request.app_type, request.organization_credentials
+    )
+
     app = create_external_app(
         db_session=db_session,
         name=request.name,
         app_type=request.app_type,
-        upstream_url_patterns=request.upstream_url_patterns,
+        upstream_url_patterns=(
+            derived_url_patterns
+            if derived_url_patterns is not None
+            else request.upstream_url_patterns
+        ),
         auth_template=request.auth_template,
         organization_credentials=request.organization_credentials,
         action_policies=action_policies,
@@ -224,6 +251,24 @@ def update_external_app_admin(
         for pattern in request.upstream_url_patterns:
             UrlGlob.parse(pattern)
 
+    # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
+    # For an unmanaged built-in it is provider-derived, so re-deriving it here is
+    # what moves the patterns when an admin edits the config they depend on (a
+    # Zendesk account's subdomain).
+    url_patterns: list[str] | UnsetType = (
+        UNSET if managed else none_as_unset(request.upstream_url_patterns)
+    )
+    if not managed and app.app_type != ExternalAppType.CUSTOM:
+        derived = _provider_url_patterns(
+            app.app_type,
+            {
+                **app.organization_credentials.get_value(apply_mask=False),
+                **(request.organization_credentials or {}),
+            },
+        )
+        if derived is not None:
+            url_patterns = derived
+
     action_policies = resolve_action_overrides(
         app.app_type,
         request.action_policies,
@@ -238,10 +283,7 @@ def update_external_app_admin(
         app_type=app.app_type,
         enabled=none_as_unset(request.enabled),
         name=none_as_unset(request.name),
-        # Gateway config is Onyx-owned for managed built-ins; leave it untouched.
-        upstream_url_patterns=(
-            UNSET if managed else none_as_unset(request.upstream_url_patterns)
-        ),
+        upstream_url_patterns=url_patterns,
         auth_template=UNSET if managed else none_as_unset(request.auth_template),
         organization_credentials=(
             UNSET if managed else none_as_unset(request.organization_credentials)
