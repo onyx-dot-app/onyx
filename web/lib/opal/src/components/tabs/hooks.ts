@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 /* =============================================================================
    CONTEXT
@@ -24,7 +24,7 @@ export function useTabsContext(): TabsContextValue | undefined {
    useTabIndicator
    ============================================================================= */
 
-/** The active tab's box, relative to the list. */
+/** The active tab's box, relative to the element the indicators live in. */
 export interface IndicatorStyle {
   left: number;
   top: number;
@@ -34,18 +34,23 @@ export interface IndicatorStyle {
 }
 
 /**
- * Tracks the active tab's box so the list's sliding indicators (every
- * variant's active surface, and the pill/underline bar) can move to it. Uses
+ * Tracks the active tab's box so the sliding indicators (every variant's
+ * active surface, and the pill/underline bar) can move to it. Uses
  * MutationObserver to react to Radix's data-state changes and ResizeObserver
  * to react to tab size changes.
+ *
+ * The box is measured in `originRef`'s content coordinates: the element the
+ * indicators are absolutely positioned in. When that element scrolls, the
+ * indicators scroll (and overscroll) with the tabs, so scrolling never
+ * changes the box.
  *
  * `measured` turns true once the first position is known, so the indicators
  * can hold their transition until then and not sweep in from the edge.
  */
 export function useTabIndicator(
   listRef: React.RefObject<HTMLElement | null>,
-  scrollContainerRef?: React.RefObject<HTMLElement | null>
-): { style: IndicatorStyle; isScrolling: boolean; measured: boolean } {
+  originRef: React.RefObject<HTMLElement | null>
+): { style: IndicatorStyle; measured: boolean } {
   const [style, setStyle] = useState<IndicatorStyle>({
     left: 0,
     top: 0,
@@ -54,50 +59,35 @@ export function useTabIndicator(
     opacity: 0,
   });
   const [measured, setMeasured] = useState(false);
-  const [isScrolling, setIsScrolling] = useState(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // The scroll-debounce timer is ref-held and cleared in this effect's
-  // cleanup. The rule cannot trace handler-created timers.
-  // oxlint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     const list = listRef.current;
-    if (!list) return;
-    let lastActiveTab: HTMLElement | null = null;
+    const origin = originRef.current;
+    if (!list || !origin) return;
 
     const updateIndicator = () => {
       const activeTab = list.querySelector<HTMLElement>(
         '[data-state="active"]'
       );
-      // A new active tab is a selection, not a scroll: end any scroll hold
-      // now, so a tab clicked just after scrolling still slides.
-      if (activeTab !== lastActiveTab) {
-        if (lastActiveTab !== null) {
-          if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-          setIsScrolling(false);
-        }
-        lastActiveTab = activeTab;
-      }
-      if (activeTab) {
-        const listRect = list.getBoundingClientRect();
-        const tabRect = activeTab.getBoundingClientRect();
-        setStyle({
-          left: tabRect.left - listRect.left,
-          top: tabRect.top - listRect.top,
-          width: tabRect.width,
-          height: tabRect.height,
-          opacity: 1,
-        });
-        // A frame later, so the first position lands without a transition.
-        requestAnimationFrame(() => setMeasured(true));
-      }
-    };
-
-    const handleScroll = () => {
-      setIsScrolling(true);
-      updateIndicator();
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-      scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 150);
+      if (!activeTab) return;
+      const originRect = origin.getBoundingClientRect();
+      const tabRect = activeTab.getBoundingClientRect();
+      // Visible offset plus the scroll, from the padding edge: the frame an
+      // absolutely positioned child of the origin is placed in. Holds in RTL
+      // too, where scrollLeft runs negative.
+      setStyle({
+        left:
+          tabRect.left -
+          originRect.left -
+          origin.clientLeft +
+          origin.scrollLeft,
+        top: tabRect.top - originRect.top - origin.clientTop + origin.scrollTop,
+        width: tabRect.width,
+        height: tabRect.height,
+        opacity: 1,
+      });
+      // A frame later, so the first position lands without a transition.
+      requestAnimationFrame(() => setMeasured(true));
     };
 
     updateIndicator();
@@ -123,21 +113,13 @@ export function useTabIndicator(
       attributeFilter: ["data-state"],
     });
 
-    const scrollContainer = scrollContainerRef?.current;
-    if (scrollContainer) {
-      scrollContainer.addEventListener("scroll", handleScroll);
-    }
-
     return () => {
       mutationObserver.disconnect();
       resizeObserver.disconnect();
-      if (scrollContainer)
-        scrollContainer.removeEventListener("scroll", handleScroll);
-      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
-  }, [listRef, scrollContainerRef]);
+  }, [listRef, originRef]);
 
-  return { style, isScrolling, measured };
+  return { style, measured };
 }
 
 /* =============================================================================

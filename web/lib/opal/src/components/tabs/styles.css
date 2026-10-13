@@ -24,9 +24,14 @@
   @apply relative flex items-center overflow-hidden bg-transparent rounded-none;
 }
 
-/* Pill keeps a 5px rail below its tabs for the indicator. Underline has none:
-   its indicator lies over the bottom of the tabs. */
-.opal-tabs-list[data-variant="pill"] {
+/* The row of tabs, which the surface and indicator are positioned in. Pill
+   keeps a 5px rail below its tabs for the indicator. Underline has none: its
+   indicator lies over the bottom of the tabs. */
+.opal-tabs-row {
+  @apply relative flex items-center gap-2;
+}
+
+.opal-tabs-list[data-variant="pill"] .opal-tabs-row {
   padding-bottom: 5px;
 }
 
@@ -77,14 +82,6 @@
 .opal-tabs-pill-baseline {
   @apply absolute bottom-0 start-0 h-px bg-border-02 pointer-events-none;
 }
-
-/* Pill and underline: the surface and indicator sit in this layer, which
-   ends where the scroll arrows and right children begin, so neither runs
-   under them when a tab scrolls out of view. */
-.opal-tabs-clip {
-  @apply absolute top-0 bottom-0 start-0 overflow-hidden pointer-events-none;
-}
-
 /* left-0, not start-0: the hook measures offsets from the list's physical
    left edge, in either direction. */
 .opal-tabs-pill-indicator {
@@ -112,9 +109,9 @@
   @apply bg-background-tint-inverted-03;
 }
 
-/* Slide once placed; hold still on the first placement and while scrolling. */
-.opal-tabs-surface[data-measured]:not([data-scrolling]),
-.opal-tabs-pill-indicator[data-measured]:not([data-scrolling]) {
+/* Slide once placed; hold still on the first placement. */
+.opal-tabs-surface[data-measured],
+.opal-tabs-pill-indicator[data-measured] {
   transition:
     transform 200ms ease-out,
     width 200ms ease-out,

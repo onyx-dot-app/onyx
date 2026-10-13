@@ -103,35 +103,28 @@ function TabsList({
   ...props
 }: TabsListProps) {
   const listRef = useRef<HTMLDivElement>(null);
-  const tabsContainerRef = useRef<HTMLDivElement>(null);
+  // The row of tabs. On pill/underline the surface and indicator live in it,
+  // so they scroll, clip and overscroll with the tabs.
+  const rowRef = useRef<HTMLDivElement>(null);
   const scrollArrowsRef = useRef<HTMLDivElement>(null);
   const rightChildrenRef = useRef<HTMLDivElement>(null);
   const [rightOffset, setRightOffset] = useState(0);
-  const [isRtl, setIsRtl] = useState(false);
   const strings = useOpalStrings();
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
 
-  const {
-    style: indicatorStyle,
-    isScrolling,
-    measured,
-  } = useTabIndicator(
+  const { style: indicatorStyle, measured } = useTabIndicator(
     listRef,
-    enableScrollArrows ? tabsContainerRef : undefined
+    isPill ? rowRef : listRef
   );
-  // The indicators slide between tabs, but not on their first placement and
-  // not while the tabs scroll under them.
-  const indicatorState = {
-    "data-measured": measured || undefined,
-    "data-scrolling": isScrolling || undefined,
-  };
+  // The indicators slide between tabs, but not on their first placement.
+  const indicatorState = { "data-measured": measured || undefined };
   const {
     canScrollLeft,
     canScrollRight,
     scrollLeft: handleScrollLeft,
     scrollRight: handleScrollRight,
-  } = useHorizontalScroll(tabsContainerRef, isPill && enableScrollArrows);
+  } = useHorizontalScroll(rowRef, isPill && enableScrollArrows);
 
   // Centred in the 2.25rem underline bar; pill keeps its smaller arrows.
   const arrowSize = variant === "underline" ? "md" : "sm";
@@ -146,9 +139,6 @@ function TabsList({
     }
 
     const updateWidth = () => {
-      if (listRef.current) {
-        setIsRtl(getComputedStyle(listRef.current).direction === "rtl");
-      }
       let totalWidth = 0;
       if (scrollArrowsRef.current)
         totalWidth += scrollArrowsRef.current.offsetWidth;
@@ -168,29 +158,23 @@ function TabsList({
     return () => resizeObserver.disconnect();
   }, [isPill, rightChildren, showScrollArrows]);
 
-  // The clip layer starts at the list's left edge, except in RTL, where its
-  // end side (cut short by the arrows and right children) is on the left.
-  const clipStart = isRtl ? rightOffset : 0;
-
   // The active tab's surface. It slides from tab to tab behind the triggers,
   // which only change their text colour. Underline has none.
-  function renderSurface(offsetLeft: number) {
-    return (
-      <div
-        className="opal-tabs-surface"
-        data-variant={variant}
-        {...indicatorState}
-        style={{
-          // A transform, not left/top: the browser composites it on the
-          // GPU and moves it by sub-pixels, so the slide does not stutter.
-          transform: `translate(${indicatorStyle.left - offsetLeft}px, ${indicatorStyle.top}px)`,
-          width: indicatorStyle.width,
-          height: indicatorStyle.height,
-          opacity: indicatorStyle.opacity,
-        }}
-      />
-    );
-  }
+  const surface = variant !== "underline" && (
+    <div
+      className="opal-tabs-surface"
+      data-variant={variant}
+      {...indicatorState}
+      style={{
+        // A transform, not left/top: the browser composites it on the GPU
+        // and moves it by sub-pixels, so the slide does not stutter.
+        transform: `translate(${indicatorStyle.left}px, ${indicatorStyle.top}px)`,
+        width: indicatorStyle.width,
+        height: indicatorStyle.height,
+        opacity: indicatorStyle.opacity,
+      }}
+    />
+  );
 
   return (
     <TabsPrimitive.List
@@ -206,33 +190,38 @@ function TabsList({
       }
       {...props}
     >
-      {/* The active tab's surface. It slides from tab to tab behind the
-          triggers, which only change their text colour. Underline has none. */}
-      {variant === "contained" && renderSurface(0)}
-
       {isPill ? (
-        enableScrollArrows ? (
+        <div
+          ref={rowRef}
+          className={cn(
+            "opal-tabs-row",
+            enableScrollArrows
+              ? "overflow-x-auto flex-1 min-w-0"
+              : variant === "pill" && "pt-1"
+          )}
+          style={
+            enableScrollArrows
+              ? { scrollbarWidth: "none", msOverflowStyle: "none" }
+              : undefined
+          }
+        >
+          {surface}
+          {children}
           <div
-            ref={tabsContainerRef}
-            // No elastic overscroll: the surface and indicator follow
-            // scrollLeft, which a bounce past either end does not move.
-            className="flex items-center gap-2 overflow-x-auto overscroll-x-none flex-1 min-w-0"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
-            {children}
-          </div>
-        ) : (
-          <div
-            className={cn(
-              "flex items-center gap-2",
-              variant === "pill" && "pt-1"
-            )}
-          >
-            {children}
-          </div>
-        )
+            className="opal-tabs-pill-indicator"
+            {...indicatorState}
+            style={{
+              transform: `translateX(${indicatorStyle.left}px)`,
+              width: indicatorStyle.width,
+              opacity: indicatorStyle.opacity,
+            }}
+          />
+        </div>
       ) : (
-        children
+        <>
+          {surface}
+          {children}
+        </>
       )}
 
       {showScrollArrows && (
@@ -265,33 +254,11 @@ function TabsList({
         </div>
       )}
 
-      {isPill && (
-        <>
-          {variant !== "underline" && (
-            <div
-              className="opal-tabs-pill-baseline"
-              style={{ insetInlineEnd: rightOffset }}
-            />
-          )}
-          {/* Clipped to the tabs' visible area, so a tab scrolled under
-              the arrows or right children does not show its surface or
-              indicator over them. */}
-          <div
-            className="opal-tabs-clip"
-            style={{ insetInlineEnd: rightOffset }}
-          >
-            {variant === "pill" && renderSurface(clipStart)}
-            <div
-              className="opal-tabs-pill-indicator"
-              {...indicatorState}
-              style={{
-                transform: `translateX(${indicatorStyle.left - clipStart}px)`,
-                width: indicatorStyle.width,
-                opacity: indicatorStyle.opacity,
-              }}
-            />
-          </div>
-        </>
+      {variant === "pill" && (
+        <div
+          className="opal-tabs-pill-baseline"
+          style={{ insetInlineEnd: rightOffset }}
+        />
       )}
     </TabsPrimitive.List>
   );
