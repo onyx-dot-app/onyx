@@ -123,7 +123,8 @@ image, pointed at `API_SERVER_HOST=api_server`. The `onyx-cli` installer ships
 `mcp.conf.inc.template` and `mcp_upstream.conf.inc.template` so nginx can
 render the MCP routes.
 
-The Helm chart deploys it unconditionally when `mcpServer.enabled` is set
+The Helm chart deploys it by default (`mcpServer.enabled: true`; set it to
+`false` to drop the server, its ingresses and its nginx routes)
 (`deployment/helm/charts/onyx/templates/mcp-server-deployment.yaml`): its own
 `Deployment` running `python onyx/mcp_server_main.py`, its own `Service`
 (`mcp-server-service.yaml`), an `Ingress` at path `/mcp` on the API host

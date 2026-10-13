@@ -412,7 +412,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "9"
+      onyx.app/nginx-config-version: "10"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -1156,7 +1156,7 @@ slackbot:
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
   extraEnv: []
-  enabled: false  # Disabled by default
+  enabled: true  # Set to false to disable the MCP server and its routes
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
