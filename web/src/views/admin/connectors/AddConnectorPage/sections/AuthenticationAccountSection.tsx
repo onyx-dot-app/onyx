@@ -252,6 +252,8 @@ export default function AuthenticationAccountSection({
             source={connector}
             spec={typedSpec}
             namePrefix={NEW_ACCOUNT_FIELD}
+            // Sent with the account's other values, as the draft holds it.
+            fileValues="base64"
             // Asked for above this section, first.
             exclude={realmKeys}
             authMethod={

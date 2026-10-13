@@ -41,18 +41,13 @@ const OWN_ACCOUNT_SETUP: ReadonlySet<ValidSources> = new Set([
 
 /**
  * The source's credential spec when a new account is typed into the form;
- * `null` when it is not: Google Drive and Gmail set accounts up their own
- * way, and a file field (a key file) cannot be sent as typed values yet, so
- * those still save an account through the account form.
+ * `null` when it is not, as Google Drive and Gmail set accounts up their own
+ * way. A file field (a .pfx certificate) is typed in too, as the file's
+ * base64 text, which is how the account stores it.
  */
 export function typedAccountSpec(source: ValidSources): CredentialSpec | null {
   if (OWN_ACCOUNT_SETUP.has(source)) return null;
-  const spec = getCredentialSpec(source);
-  if (!spec) return null;
-  const hasFile = Object.values(spec.fields).some(
-    (field) => field.kind === "file"
-  );
-  return hasFile ? null : spec;
+  return getCredentialSpec(source) ?? null;
 }
 
 /**

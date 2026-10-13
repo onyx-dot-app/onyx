@@ -53,3 +53,49 @@ test("a new account gets the realm, and the connector config does not", () => {
     )
   ).toEqual({ content_type: "articles" });
 });
+
+test("a Microsoft account's certificate is typed in, as base64 text", () => {
+  const source = ValidSources.Sharepoint;
+  const spec = typedAccountSpec(source);
+  if (spec === null) throw new Error("SharePoint takes a typed account");
+  const formValues: Record<string, unknown> = {
+    [NEW_ACCOUNT_FIELD]: {
+      ...initialNewAccountValues(spec),
+      authentication_method: "certificate",
+      sp_client_id: "client",
+      sp_directory_id: "tenant",
+      sp_certificate_password: "secret",
+      sp_private_key: "MIIKHgIBAzCCCdQ=",
+    },
+  };
+
+  const draft = typedDraft(
+    source,
+    newAccountSchema(spec, MESSAGES),
+    formValues
+  );
+
+  expect(draft?.credential_json).toMatchObject({
+    authentication_method: "certificate",
+    sp_private_key: "MIIKHgIBAzCCCdQ=",
+    sp_certificate_password: "secret",
+  });
+});
+
+test("a Microsoft certificate account is not ready without its file", () => {
+  const source = ValidSources.Sharepoint;
+  const spec = typedAccountSpec(source);
+  if (spec === null) throw new Error("SharePoint takes a typed account");
+
+  const draft = typedDraft(source, newAccountSchema(spec, MESSAGES), {
+    [NEW_ACCOUNT_FIELD]: {
+      ...initialNewAccountValues(spec),
+      authentication_method: "certificate",
+      sp_client_id: "client",
+      sp_directory_id: "tenant",
+      sp_certificate_password: "secret",
+    },
+  });
+
+  expect(draft).toBeNull();
+});

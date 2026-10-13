@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   InputUpload,
   InputPasswordTypeIn,
@@ -22,14 +22,12 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { markdown } from "@opal/utils";
 import { getIn, useField, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
-import {
-  FILE_TYPE_DEFINITIONS,
-  type TypedFile,
-} from "@/lib/connectors/fileTypes";
+import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import { createTypedFile } from "@/lib/connectors/utils";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import {
+  fileToBase64,
   getCredentialFileType,
   getCredentialSpec,
   methodFields,
@@ -41,12 +39,20 @@ import type {
 } from "@/lib/credentials/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 
+/**
+ * How a file field holds its file: a `TypedFile`, uploaded on its own when
+ * the account is saved, or the file's base64 text, sent with the account's
+ * other values (a new account typed into a connector form).
+ */
+export type CredentialFileValues = "typedFile" | "base64";
+
 interface CredentialFieldProps {
   source: ValidSources;
   fieldKey: string;
   field: CredentialSpecField;
   /** The Formik path the field lives under, e.g. `new_account`. */
   namePrefix?: string;
+  fileValues?: CredentialFileValues;
 }
 
 /**
@@ -73,6 +79,7 @@ function CredentialField({
   fieldKey,
   field,
   namePrefix,
+  fileValues = "typedFile",
 }: CredentialFieldProps) {
   const t = useTranslations("admin");
   const copy = useCredentialFieldCopy(source)(fieldKey);
@@ -88,6 +95,7 @@ function CredentialField({
         fieldKey={fieldKey}
         label={label}
         description={copy.description}
+        values={fileValues}
       />
     );
   }
@@ -186,21 +194,38 @@ interface CredentialFileFieldProps {
    * backticks shows as code.
    */
   description?: string | RichStr;
+  /** How the field holds the file. @default "typedFile" */
+  values?: CredentialFileValues;
 }
 
 /**
- * A key file, such as a .pfx certificate. It stays binary: the field holds a
- * `TypedFile`, checked against its type's size and extensions when picked.
+ * A key file, such as a .pfx certificate, checked against its type's size
+ * and extensions when picked. The field holds it as a `TypedFile`, or as its
+ * base64 text with `values="base64"`; either way the bytes stay intact.
  */
 export function CredentialFileField({
   name,
   fieldKey,
   label,
   description,
+  values = "typedFile",
 }: CredentialFileFieldProps) {
   const t = useTranslations("common.field");
-  const [field, , helpers] = useField<TypedFile | null>(name);
+  const [field, , helpers] = useField<TypedFile | string | null>(name);
   const [fileError, setFileError] = useState<string | null>(null);
+  // As base64 text the field cannot name its file, so the picked file is
+  // kept to show; a cleared or reset field drops it.
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const hasValue: boolean = field.value !== null && field.value !== "";
+  useEffect(() => {
+    if (!hasValue) setPickedFile(null);
+  }, [hasValue]);
+  const shownFile: File | null =
+    field.value instanceof TypedFile
+      ? field.value.file
+      : hasValue
+        ? pickedFile
+        : null;
   const fileType = getCredentialFileType(fieldKey);
   const definition = fileType ? FILE_TYPE_DEFINITIONS[fileType] : null;
 
@@ -221,7 +246,10 @@ export function CredentialFileField({
       void helpers.setValue(null);
       return;
     }
-    void helpers.setValue(typedFile);
+    setPickedFile(file);
+    void helpers.setValue(
+      values === "base64" ? await fileToBase64(file) : typedFile
+    );
     void helpers.setTouched(true, false);
   }
 
@@ -239,7 +267,7 @@ export function CredentialFileField({
         name={name}
         data-testid={fieldKey}
         accept={definition?.validation?.allowedExtensions?.join(",")}
-        value={field.value?.file ?? null}
+        value={shownFile}
         onFileChange={(file) => void takeFile(file)}
         variant={fileError ? "error" : "primary"}
       />
@@ -260,6 +288,8 @@ interface CredentialFieldsRendererProps {
   namePrefix?: string;
   /** Field keys this renderer leaves out, e.g. ones drawn elsewhere. */
   exclude?: ReadonlySet<string>;
+  /** How file fields hold their file. @default "typedFile" */
+  fileValues?: CredentialFileValues;
 }
 
 export function CredentialFieldsRenderer({
@@ -269,6 +299,7 @@ export function CredentialFieldsRenderer({
   setAuthMethod,
   namePrefix,
   exclude,
+  fileValues,
 }: CredentialFieldsRendererProps) {
   const t = useTranslations("admin");
   const { values, setValues, setFieldValue } =
@@ -334,6 +365,7 @@ export function CredentialFieldsRenderer({
                     fieldKey={key}
                     field={field}
                     namePrefix={namePrefix}
+                    fileValues={fileValues}
                   />
                 ))}
             </Section>
@@ -354,6 +386,7 @@ export function CredentialFieldsRenderer({
             fieldKey={key}
             field={field}
             namePrefix={namePrefix}
+            fileValues={fileValues}
           />
         ))}
     </>

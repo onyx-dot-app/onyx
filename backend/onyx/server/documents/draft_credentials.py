@@ -21,6 +21,7 @@ from onyx.db.models import Credential, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.models import NAMES_A_CREDENTIAL
+from onyx.server.documents.private_key_types import validate_pkcs12_credential_value
 from onyx.utils.encryption import reject_masked_credentials
 
 
@@ -80,6 +81,9 @@ def resolve_form_credential(
 
     try:
         if credential_json is not None:
+            # A certificate comes as base64 text, not an upload: check it as
+            # the upload is checked.
+            validate_pkcs12_credential_value(source, credential_json)
             if credential is None:
                 # A new draft, or a lost draft made again.
                 return create_draft_credential(
