@@ -47,11 +47,14 @@ export default function ConnectorSourceCard({
         icon={sourceMetadata.icon}
         title={sourceMetadata.displayName}
         description={description}
-        // One line keeps the cards even; a cut description shows in a tooltip.
+        // One line keeps the cards even; a cut title or description shows in
+        // a tooltip.
+        titleMaxLines={1}
         descriptionMaxLines={1}
         sizePreset="main-ui"
         variant="section"
         padding={2}
+        gapping={0}
         rightChildren={
           <Button
             icon={SvgPlusCircle}
