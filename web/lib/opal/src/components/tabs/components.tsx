@@ -6,6 +6,7 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn, mergeRefs } from "@opal/utils";
 import {
   IconFunctionComponent,
+  type RichStr,
   type Spacing,
   type WithoutStyles,
 } from "@opal/types";
@@ -16,6 +17,8 @@ import SvgChevronLeft from "@opal/icons/chevron-left";
 import SvgChevronRight from "@opal/icons/chevron-right";
 import { Tooltip, Button, type TooltipSide } from "@opal/components";
 import { Content } from "@opal/layouts";
+import { Interactive } from "@opal/core";
+import { IconLoader } from "@opal/loaders/icon-loader/components";
 import {
   TabsContext,
   useTabsContext,
@@ -47,12 +50,31 @@ interface TabsRootProps extends WithoutStyles<
   gap?: Spacing;
 }
 
-function TabsRoot({ variant = "contained", gap, ...props }: TabsRootProps) {
-  const contextValue = useMemo(() => ({ variant }), [variant]);
+function TabsRoot({
+  variant = "contained",
+  gap,
+  value,
+  defaultValue,
+  onValueChange,
+  ...props
+}: TabsRootProps) {
+  // Tracked here as well as in Radix, so each trigger knows whether it is
+  // the selected one.
+  const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
+  const activeValue = value ?? uncontrolledValue;
+  const contextValue = useMemo(
+    () => ({ variant, activeValue }),
+    [variant, activeValue]
+  );
   return (
     <TabsContext.Provider value={contextValue}>
       <TabsPrimitive.Root
         {...props}
+        value={activeValue}
+        onValueChange={(next) => {
+          if (value === undefined) setUncontrolledValue(next);
+          onValueChange?.(next);
+        }}
         className={cn("w-full", gap !== undefined && "flex flex-col")}
         style={gap !== undefined ? { gap: spacingToRem(gap) } : undefined}
       />
@@ -81,7 +103,9 @@ function TabsList({
   ...props
 }: TabsListProps) {
   const listRef = useRef<HTMLDivElement>(null);
-  const tabsContainerRef = useRef<HTMLDivElement>(null);
+  // The row of tabs. On pill/underline the surface and indicator live in it,
+  // so they scroll, clip and overscroll with the tabs.
+  const rowRef = useRef<HTMLDivElement>(null);
   const scrollArrowsRef = useRef<HTMLDivElement>(null);
   const rightChildrenRef = useRef<HTMLDivElement>(null);
   const [rightOffset, setRightOffset] = useState(0);
@@ -89,26 +113,21 @@ function TabsList({
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
 
-  const {
-    style: indicatorStyle,
-    isScrolling,
-    measured,
-  } = useTabIndicator(
+  const { style: indicatorStyle, measured } = useTabIndicator(
     listRef,
-    enableScrollArrows ? tabsContainerRef : undefined
+    isPill ? rowRef : listRef
   );
-  // The indicators slide between tabs, but not on their first placement and
-  // not while the tabs scroll under them.
-  const indicatorState = {
-    "data-measured": measured || undefined,
-    "data-scrolling": isScrolling || undefined,
-  };
+  // The indicators slide between tabs, but not on their first placement.
+  const indicatorState = { "data-measured": measured || undefined };
   const {
     canScrollLeft,
     canScrollRight,
     scrollLeft: handleScrollLeft,
     scrollRight: handleScrollRight,
-  } = useHorizontalScroll(tabsContainerRef, isPill && enableScrollArrows);
+  } = useHorizontalScroll(rowRef, isPill && enableScrollArrows);
+
+  // Centred in the 2.25rem underline bar; pill keeps its smaller arrows.
+  const arrowSize = variant === "underline" ? "md" : "sm";
 
   const showScrollArrows =
     isPill && enableScrollArrows && (canScrollLeft || canScrollRight);
@@ -139,6 +158,24 @@ function TabsList({
     return () => resizeObserver.disconnect();
   }, [isPill, rightChildren, showScrollArrows]);
 
+  // The active tab's surface. It slides from tab to tab behind the triggers,
+  // which only change their text colour. Underline has none.
+  const surface = variant !== "underline" && (
+    <div
+      className="opal-tabs-surface"
+      data-variant={variant}
+      {...indicatorState}
+      style={{
+        // A transform, not left/top: the browser composites it on the GPU
+        // and moves it by sub-pixels, so the slide does not stutter.
+        transform: `translate(${indicatorStyle.left}px, ${indicatorStyle.top}px)`,
+        width: indicatorStyle.width,
+        height: indicatorStyle.height,
+        opacity: indicatorStyle.opacity,
+      }}
+    />
+  );
+
   return (
     <TabsPrimitive.List
       ref={mergeRefs(listRef, ref)}
@@ -153,38 +190,38 @@ function TabsList({
       }
       {...props}
     >
-      {/* The active tab's surface. It slides from tab to tab behind the
-          triggers, which only change their text colour. Underline has none. */}
-      {variant !== "underline" && (
-        <div
-          className="opal-tabs-surface"
-          data-variant={variant}
-          {...indicatorState}
-          style={{
-            // A transform, not left/top: the browser composites it on the
-            // GPU and moves it by sub-pixels, so the slide does not stutter.
-            transform: `translate(${indicatorStyle.left}px, ${indicatorStyle.top}px)`,
-            width: indicatorStyle.width,
-            height: indicatorStyle.height,
-            opacity: indicatorStyle.opacity,
-          }}
-        />
-      )}
-
       {isPill ? (
-        enableScrollArrows ? (
+        <div
+          ref={rowRef}
+          className={cn(
+            "opal-tabs-row",
+            enableScrollArrows
+              ? "overflow-x-auto flex-1 min-w-0"
+              : variant === "pill" && "pt-1"
+          )}
+          style={
+            enableScrollArrows
+              ? { scrollbarWidth: "none", msOverflowStyle: "none" }
+              : undefined
+          }
+        >
+          {surface}
+          {children}
           <div
-            ref={tabsContainerRef}
-            className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
-            {children}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 pt-1">{children}</div>
-        )
+            className="opal-tabs-pill-indicator"
+            {...indicatorState}
+            style={{
+              transform: `translateX(${indicatorStyle.left}px)`,
+              width: indicatorStyle.width,
+              opacity: indicatorStyle.opacity,
+            }}
+          />
+        </div>
       ) : (
-        children
+        <>
+          {surface}
+          {children}
+        </>
       )}
 
       {showScrollArrows && (
@@ -195,7 +232,7 @@ function TabsList({
           <Button
             disabled={!canScrollLeft}
             prominence="tertiary"
-            size="sm"
+            size={arrowSize}
             icon={SvgChevronLeft}
             onClick={handleScrollLeft}
             tooltip={strings.scrollTabsLeft}
@@ -203,7 +240,7 @@ function TabsList({
           <Button
             disabled={!canScrollRight}
             prominence="tertiary"
-            size="sm"
+            size={arrowSize}
             icon={SvgChevronRight}
             onClick={handleScrollRight}
             tooltip={strings.scrollTabsRight}
@@ -217,24 +254,11 @@ function TabsList({
         </div>
       )}
 
-      {isPill && (
-        <>
-          {variant !== "underline" && (
-            <div
-              className="opal-tabs-pill-baseline"
-              style={{ insetInlineEnd: rightOffset }}
-            />
-          )}
-          <div
-            className="opal-tabs-pill-indicator"
-            {...indicatorState}
-            style={{
-              transform: `translateX(${indicatorStyle.left}px)`,
-              width: indicatorStyle.width,
-              opacity: indicatorStyle.opacity,
-            }}
-          />
-        </>
+      {variant === "pill" && (
+        <div
+          className="opal-tabs-pill-baseline"
+          style={{ insetInlineEnd: rightOffset }}
+        />
       )}
     </TabsPrimitive.List>
   );
@@ -245,8 +269,12 @@ function TabsList({
    ============================================================================= */
 
 interface TabsTriggerProps extends WithoutStyles<
-  React.ComponentProps<typeof TabsPrimitive.Trigger>
+  Omit<React.ComponentProps<typeof TabsPrimitive.Trigger>, "children">
 > {
+  /** The tab's label. */
+  children: string | RichStr;
+  /** Smaller text below the label. Contained tabs only; other variants ignore it. */
+  description?: string | RichStr;
   /** Tooltip shown on hover. */
   tooltip?: string;
   /** Side where the tooltip appears. @default "top" */
@@ -260,68 +288,104 @@ interface TabsTriggerProps extends WithoutStyles<
 function TabsTrigger({
   tooltip,
   tooltipSide = "top",
-  icon: Icon,
+  icon,
   isLoading,
+  description,
 
   ref,
   children,
   disabled,
   ...props
 }: TabsTriggerProps) {
-  const { variant } = useTabsContext() ?? { variant: "contained" as const };
-  const strings = useOpalStrings();
+  const { variant, activeValue } = useTabsContext() ?? {
+    variant: "contained" as const,
+    activeValue: undefined,
+  };
+  const isActive = props.value === activeValue;
+  const sizePreset = variant === "contained" ? "main-ui" : "secondary";
+  // Only contained tabs have room for a description.
+  const shownDescription = variant === "contained" ? description : undefined;
 
-  // A string label renders as Content, which takes its title and icon
-  // colours from this trigger's interactive foregrounds (set per state in
-  // styles.css) and its font from the variant's size.
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      description !== undefined &&
+      variant !== "contained"
+    ) {
+      console.warn(
+        `Tabs.Trigger: description is only shown on contained tabs, not "${variant}".`
+      );
+    }
+  }, [description, variant]);
+
+  // The label is always a Content, which takes its title and icon colours
+  // from this trigger's interactive foregrounds (set per state in styles.css)
+  // and its font from the variant's size. Fit, so the trigger's
+  // justify-center centres it.
   const inner = (
     <>
-      {typeof children === "string" ? (
+      {shownDescription === undefined ? (
         <Content
-          icon={Icon}
+          icon={icon}
           title={children}
           color="interactive"
-          sizePreset={variant === "contained" ? "main-ui" : "secondary"}
+          sizePreset={sizePreset}
           variant="body"
-          // Fit, so the trigger's justify-center centres the label.
           width="fit"
         />
       ) : (
-        <>
-          {Icon && (
-            <div className="p-0.5">
-              <Icon size={14} className="interactive-foreground-icon" />
-            </div>
-          )}
-          {children}
-        </>
+        <Content
+          icon={icon}
+          title={children}
+          description={shownDescription}
+          color="interactive"
+          sizePreset={sizePreset}
+          variant="section"
+          width="fit"
+        />
       )}
       {isLoading && (
-        <span
-          className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ms-1"
-          aria-label={strings.loading}
+        // Sized and spaced like the label's own icon: 1rem on contained
+        // (main-ui), 0.75rem otherwise (secondary), 0.25rem from the title.
+        <IconLoader
+          className={cn(
+            "ms-1 interactive-foreground-icon",
+            variant === "contained" ? "size-4" : "size-3"
+          )}
         />
       )}
     </>
   );
 
+  // An Interactive surface: hover, pressed and disabled text colours come
+  // from the default tertiary styles (styles.css drops their backgrounds).
+  // The selected tab holds the hover state.
   const trigger = (
-    <TabsPrimitive.Trigger
-      ref={ref}
+    <Interactive.Stateless
+      variant="default"
+      prominence="tertiary"
+      type="button"
       disabled={disabled}
-      data-variant={variant}
-      // An interactive surface, so a Content inside follows its foregrounds.
-      className="interactive opal-tabs-trigger"
-      {...props}
+      interaction={isActive ? "hover" : "rest"}
     >
-      {tooltip && !disabled ? (
-        <Tooltip tooltip={tooltip} side={tooltipSide}>
-          <span className="inline-flex items-center gap-inherit">{inner}</span>
-        </Tooltip>
-      ) : (
-        inner
-      )}
-    </TabsPrimitive.Trigger>
+      <TabsPrimitive.Trigger
+        ref={ref}
+        disabled={disabled}
+        data-variant={variant}
+        className="opal-tabs-trigger"
+        {...props}
+      >
+        {tooltip && !disabled ? (
+          <Tooltip tooltip={tooltip} side={tooltipSide}>
+            <span className="inline-flex items-center gap-inherit">
+              {inner}
+            </span>
+          </Tooltip>
+        ) : (
+          inner
+        )}
+      </TabsPrimitive.Trigger>
+    </Interactive.Stateless>
   );
 
   // Disabled buttons don't emit pointer events so tooltips won't fire.

@@ -21,7 +21,7 @@ import { Tabs } from "@opal/components";
 
 ### Contained (default)
 
-Equal-width tabs, 36px tall, laid out in a grid on a tinted background. The active tab sits on a white card with a subtle shadow, which slides to the next tab when the selection changes. Best for primary page-level navigation.
+Equal-width tabs, at least 2.25rem tall, laid out in a grid on a tinted background. The active tab sits on a white card with a subtle shadow, which slides to the next tab when the selection changes. Best for primary page-level navigation.
 
 ```tsx
 <Tabs variant="contained">
@@ -34,7 +34,7 @@ Equal-width tabs, 36px tall, laid out in a grid on a tinted background. The acti
 
 ### Pill
 
-Content-width tabs. The active tab's filled background and the underline indicator both slide between tabs. Good for secondary navigation or filter-style tabs.
+Content-width tabs, at least 1.75rem tall. The active tab's filled background and the underline indicator both slide between tabs. Good for secondary navigation or filter-style tabs.
 
 ```tsx
 <Tabs variant="pill">
@@ -47,7 +47,7 @@ Content-width tabs. The active tab's filled background and the underline indicat
 
 ### Underline
 
-Like pill but without the filled active background — only the underline indicator is shown, and it slides between tabs.
+Like pill, but 2.25rem tall with the indicator over the bottom of the tabs, and without the filled active background — only the underline indicator is shown, and it slides between tabs.
 
 ```tsx
 <Tabs variant="underline">
@@ -62,7 +62,7 @@ Like pill but without the filled active background — only the underline indica
 
 The active state slides from the old tab to the new one: in `contained` the white card, in `pill` both the filled background and the underline bar, in `underline` the bar. It moves with a `transform`, holds still on its first placement and while the tabs scroll, and turns off for reduced motion. Panels (`Tabs.Content`) swap without animation.
 
-A string label renders as an Opal `Content` with `color="interactive"`: each tab is an interactive surface whose state sets `--interactive-foreground` and `--interactive-foreground-icon`, so title and icon colours fade with the slide. Contained labels use the `main-ui` size (16px icon); pill and underline use `secondary` (12px icon).
+Every label renders as an Opal `Content` with `color="interactive"`: each tab is an interactive surface whose state sets `--interactive-foreground` and `--interactive-foreground-icon`, so title and icon colours fade with the slide. Contained labels use the `main-ui` size (16px icon); pill and underline use `secondary` (12px icon).
 
 ## Features
 
@@ -162,6 +162,8 @@ Forwards all [Radix Tabs.Root](https://www.radix-ui.com/docs/primitives/componen
 | Prop          | Type                                     | Default      | Description                            |
 | ------------- | ---------------------------------------- | ------------ | -------------------------------------- |
 | `value`       | `string`                                 | **required** | Tab value                              |
+| `children`    | `string \| RichStr`                      | **required** | The label; always rendered as `Content` |
+| `description` | `string \| RichStr`                      | —            | Smaller text below the label; contained tabs only, other variants ignore it |
 | `icon`        | `FunctionComponent<IconProps>`           | —            | Icon before the label                  |
 | `tooltip`     | `string`                                 | —            | Tooltip on hover                       |
 | `tooltipSide` | `"top" \| "bottom" \| "start" \| "end"` | `"top"`      | Tooltip placement; `start`/`end` follow the text direction |
