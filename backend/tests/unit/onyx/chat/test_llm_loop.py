@@ -2144,6 +2144,8 @@ def test_project_instructions_supplement_agent_prompt(
         assert history[1].message == "Use the project glossary."
         assert "Base prompt" not in text
     elif base_prompt:
-        assert history[1].message_type == MessageType.USER
+        assert history[1].message_type == MessageType.SYSTEM
+        assert "# User Information" in history[1].message
+        assert history[2].message_type == MessageType.USER
     else:
         assert history[0].message_type == MessageType.SYSTEM

@@ -32,6 +32,7 @@ from onyx.chat.models import (
 from onyx.chat.prompt_utils import (
     build_reminder_message,
     build_system_prompt,
+    build_user_information_prompt,
     get_default_base_system_prompt,
     process_prompt_template,
 )
@@ -331,6 +332,7 @@ def construct_message_history(
     reminder_message: ChatMessageSimple | None,
     context_files: ExtractedContextFiles | None,
     available_tokens: int,
+    user_info_prompt: ChatMessageSimple | None = None,
     last_n_user_messages: int | None = None,
     token_counter: Callable[[str], int] | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
@@ -369,6 +371,7 @@ def construct_message_history(
 
     history_token_budget = available_tokens
     history_token_budget -= system_prompt.token_count if system_prompt else 0
+    history_token_budget -= user_info_prompt.token_count if user_info_prompt else 0
     history_token_budget -= (
         custom_agent_prompt.token_count if custom_agent_prompt else 0
     )
@@ -380,6 +383,10 @@ def construct_message_history(
 
     if system_prompt:
         system_prompt.should_cache = True
+    # Per-user, but stable across the turns of a chat. Kept out of the system
+    # message so that one stays byte-identical (and cache-shareable) across users.
+    if user_info_prompt:
+        user_info_prompt.should_cache = True
 
     # These are byte-stable across turns (persona task prompt, project file
     # contents), so keep them in the cacheable prefix.
@@ -391,6 +398,8 @@ def construct_message_history(
     # If no history, build minimal context
     if not simple_chat_history:
         result = [system_prompt] if system_prompt else []
+        if user_info_prompt:
+            result.append(user_info_prompt)
         if custom_agent_prompt:
             result.append(custom_agent_prompt)
         result.extend(project_messages)
@@ -537,6 +546,8 @@ def construct_message_history(
     # [last_user_message], [messages_after_last_user], [file_metadata_notices],
     # [reminder]
     result = [system_prompt] if system_prompt else []
+    if user_info_prompt:
+        result.append(user_info_prompt)
 
     # 1. Add truncated history before last user message
     result.extend(truncated_history_before)
@@ -871,6 +882,7 @@ def run_llm_loop(
                 prompt_db_session
             )
         system_prompt = None
+        user_info_prompt: ChatMessageSimple | None = None
         custom_agent_prompt_msg = None
 
         # Resolve author-controlled `{{user.<key>}}` placeholders in the
@@ -980,14 +992,23 @@ def run_llm_loop(
                     system_prompt_str = build_system_prompt(
                         base_system_prompt=default_base_system_prompt,
                         datetime_aware=persona_datetime_aware,
-                        user_memory_context=prompt_memory_context,
                         tools=tools,
+                        include_user_info=False,
                     )
                     system_prompt = ChatMessageSimple(
                         message=system_prompt_str,
                         token_count=token_counter(system_prompt_str),
                         message_type=MessageType.SYSTEM,
                     )
+                    user_info_str = build_user_information_prompt(
+                        prompt_memory_context
+                    ).strip()
+                    if user_info_str:
+                        user_info_prompt = ChatMessageSimple(
+                            message=user_info_str,
+                            token_count=token_counter(user_info_str),
+                            message_type=MessageType.SYSTEM,
+                        )
                 else:
                     # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty
                     processed_custom_agent_prompt = (
@@ -1045,6 +1066,7 @@ def run_llm_loop(
             truncated_message_history = construct_message_history(
                 system_prompt=system_prompt,
                 custom_agent_prompt=custom_agent_prompt_msg,
+                user_info_prompt=user_info_prompt,
                 simple_chat_history=simple_chat_history,
                 reminder_message=reminder_msg,
                 context_files=context_files,

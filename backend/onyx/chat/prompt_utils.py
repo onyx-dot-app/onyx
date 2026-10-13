@@ -259,6 +259,15 @@ def _build_user_information_section(
     return USER_INFORMATION_HEADER + "\n".join(sections)
 
 
+def build_user_information_prompt(
+    user_memory_context: UserMemoryContext | None,
+) -> str:
+    """The '# User Information' block (identity, org profile, language,
+    preferences, memories, company context). Empty string if there is nothing
+    to say about the user."""
+    return _build_user_information_section(user_memory_context, get_company_context())
+
+
 def build_system_prompt(
     base_system_prompt: str,
     datetime_aware: bool = False,
@@ -266,9 +275,13 @@ def build_system_prompt(
     tools: Sequence[Tool] | None = None,
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
+    include_user_info: bool = True,
 ) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
+
+    With include_user_info=False the per-user block is left out so the result is
+    byte-identical across users; emit it separately via build_user_information_prompt.
     """
     system_prompt, should_append_citation_guidance = apply_prompt_placeholders(
         base_system_prompt,
@@ -279,11 +292,8 @@ def build_system_prompt(
         append_citation_if_missing=True,
     )
 
-    company_context = get_company_context()
-    user_info_section = _build_user_information_section(
-        user_memory_context, company_context
-    )
-    system_prompt += user_info_section
+    if include_user_info:
+        system_prompt += build_user_information_prompt(user_memory_context)
 
     # Append citation guidance after company context if placeholder was not present
     # This maintains backward compatibility and ensures citations are always enforced when needed
