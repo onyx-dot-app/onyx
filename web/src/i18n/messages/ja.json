@@ -12111,7 +12111,11 @@
       "enterprise": {
         "title": "エンタープライズプラン",
         "tooltip": "[エンタープライズプラン](/admin/billing)が必要です。"
-      }
+      },
+      "upgrade": {
+        "label": "プランをアップグレード"
+      },
+      "availableFor": "{plan}で利用可能"
     }
   },
   "craft": {

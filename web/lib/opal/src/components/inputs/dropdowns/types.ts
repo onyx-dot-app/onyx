@@ -21,6 +21,8 @@ export type SelectOption = {
   tag?: TagProps;
   /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
   tooltip?: string | RichStr;
+  /** Makes the row a link: picking it follows `href` instead of selecting it. */
+  href?: string;
 };
 
 /**

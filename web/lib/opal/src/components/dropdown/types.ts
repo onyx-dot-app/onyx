@@ -30,6 +30,8 @@ export interface DropdownOption extends DropdownRowBase {
   tag?: TagProps;
   /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
   tooltip?: string | RichStr;
+  /** Makes the row a link: activating it follows `href` instead of selecting it. */
+  href?: string;
 }
 
 /**

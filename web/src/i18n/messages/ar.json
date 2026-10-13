@@ -12111,7 +12111,11 @@
       "enterprise": {
         "title": "خطة المؤسسات",
         "tooltip": "يتطلب [خطة المؤسسات](/admin/billing)."
-      }
+      },
+      "upgrade": {
+        "label": "ترقية الخطة"
+      },
+      "availableFor": "متاح في {plan}"
     }
   },
   "craft": {

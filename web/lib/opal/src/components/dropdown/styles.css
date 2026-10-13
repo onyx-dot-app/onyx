@@ -44,6 +44,16 @@
 
 /* Under a search field the rows take no top inset: the field's own 4px
    below it is the gap. */
+/* A selected row that cannot be changed (every option locked) still reads
+   as the selection: it keeps the full selected look, not the muted disabled
+   one. */
+.opal-dropdown-scroll
+  .interactive[data-interactive-variant="select-heavy"][data-interactive-state="selected"][data-disabled] {
+  @apply bg-[var(--action-selection-01)];
+  --interactive-foreground: var(--action-selection-05);
+  --interactive-foreground-icon: var(--action-selection-05);
+}
+
 .opal-dropdown-scroll[data-under-search] {
   @apply pt-0;
 }
