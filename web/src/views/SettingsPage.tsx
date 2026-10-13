@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
@@ -23,7 +24,6 @@ import {
   SvgTrash,
   SvgUnplug,
 } from "@opal/icons";
-import { getSourceMetadata } from "@/lib/sources";
 import {
   Card,
   InputTextArea,

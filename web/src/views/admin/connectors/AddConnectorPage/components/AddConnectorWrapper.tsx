@@ -7,6 +7,18 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  getSourceDisplayName,
+  getSourceDocLink,
+  getSourceMetadata,
+  isValidSource,
+  connectorConfigFromForm,
+  connectorFormControlFieldNames,
+  createConnectorInitialValues,
+  createConnectorValidationSchema,
+  isLoadState,
+  splitCredentialBoundFields,
+} from "@/lib/connectors/utils";
 import { Formik, type FormikErrors } from "formik";
 import * as Yup from "yup";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -27,12 +39,6 @@ import { SvgAlertCircle, SvgArrowExchange } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import {
-  getSourceDisplayName,
-  getSourceDocLink,
-  getSourceMetadata,
-  isValidSource,
-} from "@/lib/sources";
 import { Logo } from "@/lib/app/components";
 import {
   createConnectorWithCredential,
@@ -59,14 +65,6 @@ import {
   defaultRefreshFreqMinutes,
   useConnectorConfiguration,
 } from "@/lib/connectors/connectors";
-import {
-  connectorConfigFromForm,
-  connectorFormControlFieldNames,
-  createConnectorInitialValues,
-  createConnectorValidationSchema,
-  isLoadState,
-  splitCredentialBoundFields,
-} from "@/lib/connectors/utils";
 import type {
   ConnectionConfiguration,
   Connector,

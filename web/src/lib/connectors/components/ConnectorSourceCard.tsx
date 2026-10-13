@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { type SourceMetadata } from "@/lib/connectors/types/source";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -9,7 +10,6 @@ import { ContentAction } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
-import type { SourceMetadata } from "@/lib/search/types";
 
 export interface ConnectorSourceCardProps {
   sourceMetadata: SourceMetadata;

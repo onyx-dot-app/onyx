@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useFormatter, useTranslations } from "next-intl";
 import { Disabled } from "@opal/core";
 import {
@@ -40,7 +41,6 @@ import {
 import { getCredentialDetails } from "@/lib/credentials/utils";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { IconLoader } from "@opal/loaders";
-import { getSourceMetadata } from "@/lib/sources";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
 import { Permission } from "@/lib/types";

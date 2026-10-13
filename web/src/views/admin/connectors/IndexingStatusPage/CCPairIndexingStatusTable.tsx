@@ -1,5 +1,6 @@
 import React from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
 import {
   Table,
   TableRow,
@@ -29,7 +30,6 @@ import {
 } from "react-icons/fi";
 import { Tooltip } from "@opal/components";
 import { SourceIcon } from "@/components/SourceIcon";
-import { getSourceDisplayName } from "@/lib/sources";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";

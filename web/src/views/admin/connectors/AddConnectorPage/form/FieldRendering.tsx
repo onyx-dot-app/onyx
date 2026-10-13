@@ -1,5 +1,6 @@
 import React, { FC, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
 import type {
   BooleanOption,
   TabOption,
@@ -32,7 +33,6 @@ import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import FindingListField from "@/views/admin/connectors/AddConnectorPage/form/FindingListField";
 import type { StoredReportScope } from "@/lib/connectors/checks/findings";
-import { getSourceDisplayName } from "@/lib/sources";
 import { markdown } from "@opal/utils";
 
 // Define a general type for form values

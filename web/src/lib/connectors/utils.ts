@@ -1,11 +1,18 @@
 import * as Yup from "yup";
+import {
+  SOURCE_METADATA_MAP,
+  type PartialSourceMetadata,
+} from "@/lib/connectors/constants";
+import {
+  type SourceMetadata,
+  ValidSources,
+  type ConfigurableSources,
+} from "@/lib/connectors/types/source";
 import type {
   ConnectorAccessFormValues,
   ConnectorGroupRestrictionFormValues,
 } from "@/lib/connectors/accessType";
-import { ValidSources } from "@/lib/connectors/types/source";
 import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
-import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   connectorConfigs,
@@ -438,3 +445,94 @@ export function colorClassForStage(stage: IndexAttemptStage): string {
 
 export const gmailConnectorNameBuilder = (values: GmailConfig) =>
   "GmailConnector";
+
+// ---------------------------------------------------------------------------
+// Source metadata
+// ---------------------------------------------------------------------------
+
+function fillSourceMetadata(
+  partialMetadata: PartialSourceMetadata,
+  internalName: ValidSources
+): SourceMetadata {
+  return {
+    internalName: partialMetadata.baseSourceType || internalName,
+    ...partialMetadata,
+    adminUrl: `/admin/connectors/${internalName}`,
+  };
+}
+
+export function getSourceMetadata(sourceType: ValidSources): SourceMetadata {
+  const partialMetadata = SOURCE_METADATA_MAP[sourceType];
+
+  // Fallback to not_applicable if sourceType not found in map
+  if (!partialMetadata) {
+    return fillSourceMetadata(
+      SOURCE_METADATA_MAP[ValidSources.NotApplicable],
+      ValidSources.NotApplicable
+    );
+  }
+
+  return fillSourceMetadata(partialMetadata, sourceType);
+}
+
+export function listSourceMetadata(): SourceMetadata[] {
+  /* This gives back all the viewable / common sources, primarily for
+  display in the Add Connector page */
+  const entries = Object.entries(SOURCE_METADATA_MAP)
+    .filter(
+      ([source, _]) =>
+        source !== "not_applicable" &&
+        source !== "ingestion_api" &&
+        source !== "mock_connector" &&
+        // use the "regular" slack connector when listing
+        source !== "federated_slack" &&
+        // user_file is for internal use (projects), not the Add Connector page
+        source !== "user_file" &&
+        // craft_file backs the Craft user library, which has its own upload UI
+        source !== "craft_file" &&
+        // TODO: unhide once the rest of the Zoom connector stack has merged
+        source !== "zoom"
+    )
+    .map(([source, metadata]) => {
+      return fillSourceMetadata(metadata, source as ValidSources);
+    });
+  return entries;
+}
+
+export function getSourceDocLink(sourceType: ValidSources): string | null {
+  return SOURCE_METADATA_MAP[sourceType].docs || null;
+}
+
+export function isValidSource(sourceType: string): boolean {
+  return Object.keys(SOURCE_METADATA_MAP).includes(sourceType);
+}
+
+export function getSourceDisplayName(sourceType: ValidSources): string | null {
+  return getSourceMetadata(sourceType).displayName;
+}
+
+/** The configured sources, one entry per source type. */
+export function getConfiguredSources(
+  availableSources: ValidSources[]
+): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
+  const seen = new Set<string>();
+  const result: Array<
+    SourceMetadata & { originalName: string; uniqueKey: string }
+  > = [];
+
+  for (const sourceName of availableSources) {
+    const cleanName = sourceName.replace("federated_", "") as ValidSources;
+    if (seen.has(cleanName)) continue;
+    seen.add(cleanName);
+
+    const metadata = getSourceMetadata(cleanName);
+    if (metadata.internalName === ValidSources.NotApplicable) continue;
+
+    result.push({
+      ...metadata,
+      originalName: sourceName,
+      uniqueKey: cleanName,
+    });
+  }
+  return result;
+}

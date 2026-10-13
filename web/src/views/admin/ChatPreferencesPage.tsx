@@ -5,6 +5,7 @@ import {
   useTierAtLeast,
   useTierLockedOptions,
 } from "@/lib/tiers/hooks";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { markdown } from "@opal/utils";
 import React, {
@@ -57,7 +58,6 @@ import {
 } from "@opal/layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
-import { getSourceMetadata } from "@/lib/sources";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import {

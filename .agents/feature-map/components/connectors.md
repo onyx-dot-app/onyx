@@ -69,7 +69,7 @@ shows only when an index run fails or returns nothing.
 | File | Holds |
 |---|---|
 | `web/src/lib/connectors/connectors.tsx` | `connectorConfigs`, keyed by source: the form schema (fields, types, defaults) the add-connector page renders and posts as `connector_specific_config`. |
-| `web/src/lib/sources.ts` | `SOURCE_METADATA_MAP`: icon, display name, and docs link per source, read by `getSourceMetadata`/`isValidSource`-style helpers. |
+| `web/src/lib/connectors/constants.ts` | `SOURCE_METADATA_MAP`: icon, display name, and docs link per source. `getSourceMetadata`, `isValidSource` and the other getters live in `web/src/lib/connectors/utils.ts`; `SourceMetadata` and `SourceCategory` in `web/src/lib/connectors/types/source.ts`. |
 
 `backend/onyx/connectors/README.md:96,113` names exactly these two files as the
 frontend changes a new connector requires.
@@ -660,7 +660,7 @@ family keep the source's shape and stay usable by that source only.
 
 | If your change... | Also check |
 |---|---|
-| adds a new connector | `DocumentSource` enum, `registry.py:CONNECTOR_CLASS_MAP`, the class itself, `web/src/lib/connectors/connectors.tsx` (`connectorConfigs`), `web/src/lib/sources.ts` (`SOURCE_METADATA_MAP`), a folder under `backend/tests/daily/connectors/`, and (if attachments exist) the `include_attachments` gating on both the main and slim pass |
+| adds a new connector | `DocumentSource` enum, `registry.py:CONNECTOR_CLASS_MAP`, the class itself, `web/src/lib/connectors/connectors.tsx` (`connectorConfigs`), `web/src/lib/connectors/constants.ts` (`SOURCE_METADATA_MAP`), a folder under `backend/tests/daily/connectors/`, and (if attachments exist) the `include_attachments` gating on both the main and slim pass |
 | changes the `Document`/`Section`/`SlimDocument` model | every connector that constructs one directly (no central factory does this for them); [[indexing-pipeline]]'s consumption of the new/changed field; the dedup logic keyed on `Document.id` and `content_hash` |
 | changes `interfaces.py` (adds/renames a base class or method) | `factory.py:_validate_connector_supports_input_type` and `identify_connector_class`; `connector_runner.py`'s `isinstance` branches; every connector implementing the affected interface |
 | changes checkpoint serialization (`ConnectorCheckpoint` or a subclass) | `validate_checkpoint_json` for that connector; any in-flight, persisted checkpoint from a prior run becomes unreadable, which [[indexing-pipeline]]'s resume logic must handle |
