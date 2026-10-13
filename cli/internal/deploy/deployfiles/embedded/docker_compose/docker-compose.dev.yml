@@ -47,10 +47,9 @@ services:
     healthcheck:
       start_interval: 1s
 
-  # Uncomment the block below to enable the MCP server for Onyx.
-  # mcp_server:
-  #   ports:
-  #     - "8090:8090"
+  mcp_server:
+    ports:
+      - "8090:8090"
 
   relational_db:
     ports:
