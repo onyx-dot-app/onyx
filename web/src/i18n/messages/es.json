@@ -9298,10 +9298,10 @@
         "window": "De {start} a {end}",
         "windowFromStart": "Todo hasta {end}",
         "waiting": "Espera su ejecución.",
+        "runningNow": "Un intento de indexación lo ejecuta ahora.",
         "retry": "{count, plural, one {Falló una vez. Próximo reintento: {time}.} other {Falló # veces. Próximo reintento: {time}.}}",
-        "scoped": "Solo elementos agregados",
-        "failures": "{count, plural, one {# fallo} other {# fallos}}",
-        "running": "Ahora se ejecuta un relleno con un intento."
+        "scoped": "Solo elementos añadidos o cambiados",
+        "failures": "{count, plural, one {# fallo} other {# fallos}}"
       }
     }
   },

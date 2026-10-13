@@ -9298,10 +9298,10 @@
         "window": "{start} ~ {end}",
         "windowFromStart": "{end}까지 전체",
         "waiting": "실행을 기다리는 중입니다.",
+        "runningNow": "인덱싱 시도가 지금 실행 중입니다.",
         "retry": "{count, plural, other {#회 실패했습니다. 다음 재시도: {time}.}}",
-        "scoped": "추가된 항목만",
-        "failures": "{count, plural, other {실패 #회}}",
-        "running": "시도가 있는 백필이 지금 실행 중입니다."
+        "scoped": "추가되거나 변경된 항목만",
+        "failures": "{count, plural, other {실패 #회}}"
       }
     }
   },

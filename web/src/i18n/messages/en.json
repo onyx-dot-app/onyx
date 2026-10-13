@@ -9298,10 +9298,10 @@
         "window": "{start} to {end}",
         "windowFromStart": "Everything up to {end}",
         "waiting": "Waits for its run.",
+        "runningNow": "An index attempt runs it now.",
         "retry": "{count, plural, one {Failed once. Next retry: {time}.} other {Failed # times. Next retry: {time}.}}",
-        "scoped": "Added items only",
-        "failures": "{count, plural, one {# failure} other {# failures}}",
-        "running": "A backfill with an attempt runs now."
+        "scoped": "Added or changed items only",
+        "failures": "{count, plural, one {# failure} other {# failures}}"
       }
     }
   },

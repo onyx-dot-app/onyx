@@ -9298,10 +9298,10 @@
         "window": "{start} bis {end}",
         "windowFromStart": "Alles bis {end}",
         "waiting": "Wartet auf den Lauf.",
+        "runningNow": "Ein Indexierungsversuch führt ihn jetzt aus.",
         "retry": "{count, plural, one {Einmal fehlgeschlagen. Nächster Versuch: {time}.} other {# Mal fehlgeschlagen. Nächster Versuch: {time}.}}",
-        "scoped": "Nur hinzugefügte Elemente",
-        "failures": "{count, plural, one {# Fehler} other {# Fehler}}",
-        "running": "Eine Nachindexierung mit einem Versuch läuft gerade."
+        "scoped": "Nur hinzugefügte oder geänderte Elemente",
+        "failures": "{count, plural, one {# Fehler} other {# Fehler}}"
       }
     }
   },

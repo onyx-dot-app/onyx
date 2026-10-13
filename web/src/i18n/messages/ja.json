@@ -9298,10 +9298,10 @@
         "window": "{start} ～ {end}",
         "windowFromStart": "{end} まですべて",
         "waiting": "実行を待機しています。",
+        "runningNow": "インデックス試行が現在実行しています。",
         "retry": "{count, plural, other {# 回失敗しました。次の再試行: {time}。}}",
-        "scoped": "追加した項目のみ",
-        "failures": "{count, plural, other {失敗 # 回}}",
-        "running": "試行中のバックフィルが現在実行されています。"
+        "scoped": "追加または変更された項目のみ",
+        "failures": "{count, plural, other {失敗 # 回}}"
       }
     }
   },

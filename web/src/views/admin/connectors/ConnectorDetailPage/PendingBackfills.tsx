@@ -2,7 +2,7 @@
 
 import { windowCoversAllHistory } from "@/lib/connectors/edit/window";
 import { useFormatter, useTranslations } from "next-intl";
-import { Card, Tag, Text } from "@opal/components";
+import { Card, Tag } from "@opal/components";
 import { Content, ContentAction, Section } from "@opal/layouts";
 import { SvgHistory } from "@opal/icons";
 import type { PendingBackfillSnapshot } from "@/lib/connectors/types";
@@ -43,12 +43,14 @@ export default function PendingBackfills({ backfills }: PendingBackfillsProps) {
                   })
             }
             description={
-              backfill.retry_after === null
-                ? t("waiting")
-                : t("retry", {
-                    count: backfill.failure_count,
-                    time: dateTime(backfill.retry_after),
-                  })
+              backfill.attempt_id !== null
+                ? t("runningNow")
+                : backfill.retry_after === null
+                  ? t("waiting")
+                  : t("retry", {
+                      count: backfill.failure_count,
+                      time: dateTime(backfill.retry_after),
+                    })
             }
             sizePreset="main-ui"
             variant="section"
@@ -65,11 +67,6 @@ export default function PendingBackfills({ backfills }: PendingBackfillsProps) {
             }
           />
         ))}
-        {backfills.some((backfill) => backfill.attempt_id !== null) && (
-          <Text font="secondary-body" color="text-03">
-            {t("running")}
-          </Text>
-        )}
       </Section>
     </Card>
   );

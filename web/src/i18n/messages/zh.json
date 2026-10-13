@@ -9298,10 +9298,10 @@
         "window": "{start} 至 {end}",
         "windowFromStart": "截至 {end} 的全部内容",
         "waiting": "等待运行。",
+        "runningNow": "索引尝试正在运行它。",
         "retry": "{count, plural, other {已失败 # 次。下次重试：{time}。}}",
-        "scoped": "仅新增项",
-        "failures": "{count, plural, other {失败 # 次}}",
-        "running": "有一个回填正在运行。"
+        "scoped": "仅限新增或更改的项目",
+        "failures": "{count, plural, other {失败 # 次}}"
       }
     }
   },

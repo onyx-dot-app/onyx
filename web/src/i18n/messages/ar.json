@@ -9298,10 +9298,10 @@
         "window": "من {start} إلى {end}",
         "windowFromStart": "كل شيء حتى {end}",
         "waiting": "في انتظار التشغيل.",
+        "runningNow": "تعمل محاولة فهرسة عليها الآن.",
         "retry": "{count, plural, one {فشل مرة واحدة. إعادة المحاولة التالية: {time}.} other {فشل # مرات. إعادة المحاولة التالية: {time}.}}",
-        "scoped": "العناصر المضافة فقط",
-        "failures": "{count, plural, one {إخفاق واحد (#)} other {# إخفاقات}}",
-        "running": "يعمل الآن ملء له محاولة."
+        "scoped": "العناصر المضافة أو المتغيرة فقط",
+        "failures": "{count, plural, one {إخفاق واحد (#)} other {# إخفاقات}}"
       }
     }
   },

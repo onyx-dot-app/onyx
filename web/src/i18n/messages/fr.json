@@ -9298,10 +9298,10 @@
         "window": "Du {start} au {end}",
         "windowFromStart": "Tout jusqu'au {end}",
         "waiting": "En attente de son exécution.",
+        "runningNow": "Une tentative d'indexation l'exécute maintenant.",
         "retry": "{count, plural, one {Échec une fois. Prochaine tentative : {time}.} other {Échec # fois. Prochaine tentative : {time}.}}",
-        "scoped": "Éléments ajoutés uniquement",
-        "failures": "{count, plural, one {# échec} other {# échecs}}",
-        "running": "Un rattrapage avec une tentative est en cours."
+        "scoped": "Éléments ajoutés ou modifiés uniquement",
+        "failures": "{count, plural, one {# échec} other {# échecs}}"
       }
     }
   },
