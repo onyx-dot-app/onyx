@@ -125,6 +125,19 @@ def test_prune_keeps_false_and_zero() -> None:
     }
 
 
+def test_search_only_slims_ticket_hits() -> None:
+    """Search spans tickets, users and organizations. Cutting a user down to
+    the ticket field list would drop the `name` and `email` that identify it."""
+    user = {"result_type": "user", "id": 7, "name": "Ada", "email": "a@b.co"}
+    assert zendesk._slim_result(user, full=False) == user
+
+    ticket = {"result_type": "ticket", "id": 1, "subject": "s", "ticket_form_id": 9}
+    assert zendesk._slim_result(ticket, full=False) == {"id": 1, "subject": "s"}
+
+    # A payload with no result_type (a plain ticket list) still slims.
+    assert zendesk._slim_result({"id": 1, "ticket_form_id": 9}, full=False) == {"id": 1}
+
+
 def test_slim_keeps_the_readable_subset_unless_full() -> None:
     ticket = {"id": 1, "subject": "s", "forum_topic_id": None, "ticket_form_id": 9}
     assert zendesk._slim(ticket, full=False) == {"id": 1, "subject": "s"}

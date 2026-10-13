@@ -12,10 +12,14 @@ from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
-from onyx.db.models import User
+from onyx.db.enums import EndpointPolicy, ExternalAppType, GatedAppKind
+from onyx.db.external_app import get_external_app_by_skill_id
+from onyx.db.gated_app import get_action_policies
+from onyx.db.models import ExternalApp, Skill, User
+from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
     action_policy_views,
+    resolve_instance_config,
     uses_cloud_scope,
     withheld_on_cloud,
 )
@@ -173,3 +177,48 @@ def render_external_app_skill(
         offending = next(line for line in rendered.splitlines() if "{{" in line)
         raise ValueError(f"Unresolved skill-template markup: {offending!r}")
     return rendered
+
+
+def app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
+    """The provider's ``{{APP:<key>}}`` values for this app row, or ``{}`` when
+    there is no row or its config no longer resolves. Rendering is a read-only
+    projection of committed state, so a provider that rejects the stored config
+    leaves the placeholders unconfigured rather than failing the render."""
+    if external_app is None:
+        return {}
+    try:
+        instance = resolve_instance_config(
+            external_app.app_type,
+            external_app.organization_credentials.get_value(apply_mask=False),
+        )
+    except OnyxError:
+        logger.warning(
+            "Could not resolve app config for external_app %s; rendering its "
+            "skill with unconfigured placeholders",
+            external_app.id,
+        )
+        return {}
+    return dict(instance.skill_template_values) if instance else {}
+
+
+def render_external_app_skill_for(
+    db_session: Session,
+    skill: Skill,
+    app_type: ExternalAppType,
+    source_dir: Path,
+) -> str:
+    """``skill``'s SKILL.md exactly as the sandbox will see it: the template
+    resolved against this app row's action policies and its configuration.
+
+    Shared by the skill push and the library preview, so what a user previews
+    is what the agent reads — no unresolved ``{{...}}`` markup in either."""
+    external_app = get_external_app_by_skill_id(db_session, skill.id)
+    stored = (
+        get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
+        if external_app
+        else {}
+    )
+    template = (source_dir / "SKILL.md.template").read_text()
+    return render_external_app_skill(
+        template, app_type, stored, app_template_values(external_app)
+    )

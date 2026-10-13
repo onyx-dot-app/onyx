@@ -112,6 +112,15 @@ def _slim(ticket: Any, full: bool) -> Any:
     return {key: ticket[key] for key in _TICKET_FIELDS if key in ticket}
 
 
+def _slim_result(result: Any, full: bool) -> Any:
+    """One search hit. Search spans tickets, users and organizations, so only a
+    ticket may be cut down to the ticket field list — slimming a user would
+    drop the very `name` and `email` the agent searched for."""
+    if isinstance(result, dict) and result.get("result_type") not in (None, "ticket"):
+        return result
+    return _slim(result, full)
+
+
 def _request(
     base_url: str, method: str, path: str, body: dict[str, Any] | None = None
 ) -> Any:
@@ -325,7 +334,7 @@ def _dispatch_read(a: argparse.Namespace) -> dict[str, Any] | None:
             "sort_order": a.sort_order,
         }
         result = _paginate(site, "/api/v2/search.json", "results", limit, params)
-        result["results"] = [_slim(r, a.full) for r in result["results"]]
+        result["results"] = [_slim_result(r, a.full) for r in result["results"]]
         return result
 
     if a.cmd == "ticket":
@@ -405,19 +414,25 @@ def _dispatch_write(a: argparse.Namespace) -> dict[str, Any]:
         created = _request(site, "POST", "/api/v2/tickets.json", {"ticket": ticket})
         return {"ok": True, "ticket": _slim(created.get("ticket"), a.full)}
 
-    if a.cmd in ("update", "comment", "tag"):
+    if a.cmd == "tag":
+        tags = _tags(a.tags)
+        if not tags:
+            raise ZendeskError("--tags must name at least one tag")
+        # The dedicated tags endpoint, not a ticket update: it is what the
+        # "Change a ticket's tags" action governs, so tagging follows that
+        # setting rather than the one for ticket updates. PUT sets the whole
+        # tag list, POST adds to it.
+        path = _path("/api/v2/tickets/{0}/tags.json", a.id)
+        updated = _request(site, "PUT" if a.replace else "POST", path, {"tags": tags})
+        return {"ok": True, "tags": updated.get("tags")}
+
+    if a.cmd in ("update", "comment"):
         if a.cmd == "update":
             ticket = _pairs(a.set)
             if not ticket:
                 raise ZendeskError("no fields given; pass at least one --set key=value")
-        elif a.cmd == "comment":
-            ticket = {"comment": {"body": a.body, "public": a.public}}
         else:
-            tags = _tags(a.tags)
-            if not tags:
-                raise ZendeskError("--tags must name at least one tag")
-            # `tags` replaces the set; `additional_tags` merges into it.
-            ticket = {"tags": tags} if a.replace else {"additional_tags": tags}
+            ticket = {"comment": {"body": a.body, "public": a.public}}
         path = _path("/api/v2/tickets/{0}.json", a.id)
         updated = _request(site, "PUT", path, {"ticket": ticket})
         return {"ok": True, "ticket": _slim(updated.get("ticket"), a.full)}

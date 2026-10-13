@@ -75,7 +75,8 @@ python zendesk_api.py --site acme tag 12345 --tags needs-review [--replace]
 
 JSON on stdout. List commands return `{"ok": true, "<collection>": [...],
 "count": N, "truncated": bool}` (`truncated` means more results existed past
-`--limit`). HTTP failures return `{"ok": false, "status": <code>, "error":
+`--limit`). `tag` returns the ticket's resulting tag list, the other writes
+return the ticket. HTTP failures return `{"ok": false, "status": <code>, "error":
 "<message>"}` and exit non-zero — surface the error rather than retrying
 blindly. A `429` also carries `retry_after_seconds`; wait that long before the
 next call.
@@ -83,7 +84,8 @@ next call.
 ## Notes
 
 - Tickets come back as a readable subset of their fields. `--full` keeps every
-  field, `--raw` keeps empty ones.
+  field, `--raw` keeps empty ones. A `search` hit that is a user or an
+  organization is never cut down.
 - A comment is a ticket update in Zendesk: `comment` writes an internal note by
   default, and `--public` makes it a reply the requester sees.
 - `--set key=value` is repeatable and takes Zendesk ticket field names

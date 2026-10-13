@@ -27,6 +27,7 @@ from onyx.db.external_app import (
     placeholders_in_template,
     replace_custom_skill_associations__no_commit,
     required_user_credential_keys,
+    resolve_masked_credentials,
     update_external_app,
     upsert_external_app_user_credential,
     validate_auth_template,
@@ -164,6 +165,10 @@ def _provider_url_patterns(
     requests the gateway signs with this app's credentials, and a provider on a
     per-account host (Zendesk) can only narrow them to the account the admin
     just configured.
+
+    ``org_credentials`` must already have its masks restored — the admin form
+    echoes every stored value back masked, so deriving from the raw request
+    would read a mask as the account name on every edit.
     """
     instance = resolve_instance_config(app_type, org_credentials)
     return instance.upstream_url_patterns if instance is not None else None
@@ -201,9 +206,11 @@ def create_built_in_external_app(
         request.app_type, request.action_policies, {}
     )
 
-    derived_url_patterns = _provider_url_patterns(
-        request.app_type, request.organization_credentials
-    )
+    # Nothing to restore from on a create, so this only rejects a mask the
+    # client should never have sent — the same check ``create_external_app``
+    # would make, pulled forward so the patterns derive from real values.
+    org_credentials = resolve_masked_credentials(request.organization_credentials, None)
+    derived_url_patterns = _provider_url_patterns(request.app_type, org_credentials)
 
     app = create_external_app(
         db_session=db_session,
@@ -215,7 +222,7 @@ def create_built_in_external_app(
             else request.upstream_url_patterns
         ),
         auth_template=request.auth_template,
-        organization_credentials=request.organization_credentials,
+        organization_credentials=org_credentials,
         action_policies=action_policies,
     )
     skill = associate_built_in_skill__no_commit(db_session, app)
@@ -259,12 +266,19 @@ def update_external_app_admin(
         UNSET if managed else none_as_unset(request.upstream_url_patterns)
     )
     if not managed and app.app_type != ExternalAppType.CUSTOM:
+        # Restore masks first, then overlay onto the stored values: a partial
+        # PATCH (an enable toggle, a policy edit) carries no credentials at all
+        # and must still derive from what is stored.
+        submitted = (
+            resolve_masked_credentials(
+                request.organization_credentials, app.organization_credentials
+            )
+            if request.organization_credentials is not None
+            else {}
+        )
         derived = _provider_url_patterns(
             app.app_type,
-            {
-                **app.organization_credentials.get_value(apply_mask=False),
-                **(request.organization_credentials or {}),
-            },
+            {**app.organization_credentials.get_value(apply_mask=False), **submitted},
         )
         if derived is not None:
             url_patterns = derived

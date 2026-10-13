@@ -9,13 +9,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import GatedAppKind
-from onyx.db.external_app import (
-    get_connectable_apps_for_user,
-    get_external_app_by_skill_id,
-)
-from onyx.db.gated_app import get_action_policies
-from onyx.db.models import ExternalApp, Skill, User
+from onyx.db.external_app import get_connectable_apps_for_user
+from onyx.db.models import Skill, User
 from onyx.db.skill import (
     SkillValidityUpdate,
     affected_user_ids_for_skill,
@@ -24,7 +19,6 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.registry import resolve_instance_config
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
@@ -42,7 +36,10 @@ from onyx.skills.built_in import (
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
 )
-from onyx.skills.rendering import render_company_search_skill, render_external_app_skill
+from onyx.skills.rendering import (
+    render_company_search_skill,
+    render_external_app_skill_for,
+)
 from onyx.skills.validation import (
     load_stored_custom_skill_bundle,
     validate_stored_custom_skill,
@@ -118,15 +115,8 @@ def _render_template(
 
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is not None:
-        external_app = get_external_app_by_skill_id(db_session, skill.id)
-        stored = (
-            get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
-            if external_app
-            else {}
-        )
-        template = (definition.source_dir / "SKILL.md.template").read_text()
-        rendered = render_external_app_skill(
-            template, app_type, stored, _app_template_values(external_app)
+        rendered = render_external_app_skill_for(
+            db_session, skill, app_type, definition.source_dir
         )
         files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
         return
@@ -134,29 +124,6 @@ def _render_template(
     logger.warning(
         "Built-in %s has_template=True but no renderer", definition.built_in_skill_id
     )
-
-
-def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
-    """The provider's ``{{APP:<key>}}`` values for this app row, or ``{}`` when
-    there is no row or its config no longer resolves. Pushing skills is a
-    best-effort projection of committed state, so a provider that rejects the
-    stored config leaves the placeholders unconfigured rather than failing the
-    push for every other skill in the fileset."""
-    if external_app is None:
-        return {}
-    try:
-        instance = resolve_instance_config(
-            external_app.app_type,
-            external_app.organization_credentials.get_value(apply_mask=False),
-        )
-    except OnyxError:
-        logger.warning(
-            "Could not resolve app config for external_app %s; rendering its "
-            "skill with unconfigured placeholders",
-            external_app.id,
-        )
-        return {}
-    return dict(instance.skill_template_values) if instance else {}
 
 
 def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:

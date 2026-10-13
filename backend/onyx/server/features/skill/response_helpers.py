@@ -25,11 +25,17 @@ from onyx.server.features.skill.models import (
     SkillResponse,
     SkillsList,
 )
-from onyx.skills.built_in import BUILT_IN_SKILLS
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+    BuiltInSkillDefinition,
+)
+from onyx.skills.bundle import strip_skill_md_frontmatter
 from onyx.skills.content import (
     read_builtin_skill_instructions,
     read_custom_skill_bundle_instructions,
 )
+from onyx.skills.rendering import render_external_app_skill_for
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -185,6 +191,26 @@ def skills_list_response_for_user(
     return SkillsList(builtins=builtins, customs=customs)
 
 
+def _builtin_instructions(
+    skill: Skill,
+    definition: BuiltInSkillDefinition,
+    db_session: Session,
+) -> str:
+    """A built-in skill's instructions as the user should read them.
+
+    An external-app built-in is rendered against this app row's policies and
+    configuration, the same way the push path renders it, so the preview shows
+    the connected account and the withheld actions rather than the template's
+    ``{{...}}`` markers. Everything else is read from disk as-is."""
+    app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
+    if app_type is None or not definition.has_template:
+        return read_builtin_skill_instructions(definition)
+    rendered = render_external_app_skill_for(
+        db_session, skill, app_type, definition.source_dir
+    )
+    return strip_skill_md_frontmatter(rendered)
+
+
 def skill_preview_response(
     skill: Skill,
     user: User,
@@ -205,7 +231,7 @@ def skill_preview_response(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         return SkillPreviewResponse.from_builtin(
             skill,
-            instructions_markdown=read_builtin_skill_instructions(definition),
+            instructions_markdown=_builtin_instructions(skill, definition, db_session),
             external_app=external_app,
         )
 
