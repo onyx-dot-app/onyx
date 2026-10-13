@@ -47,7 +47,7 @@ Content-width tabs, at least 1.75rem tall. The active tab's filled background an
 
 ### Underline
 
-Like pill, but at least 2.25rem tall and without the filled active background — only the underline indicator is shown, and it slides between tabs.
+Like pill, but 2.25rem tall with the indicator over the bottom of the tabs, and without the filled active background — only the underline indicator is shown, and it slides between tabs.
 
 ```tsx
 <Tabs variant="underline">

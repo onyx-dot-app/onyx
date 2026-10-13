@@ -22,6 +22,11 @@
 .opal-tabs-list[data-variant="pill"],
 .opal-tabs-list[data-variant="underline"] {
   @apply relative flex items-center overflow-hidden bg-background-tint-00 rounded-none;
+}
+
+/* Pill keeps a 5px rail below its tabs for the indicator. Underline has none:
+   its indicator lies over the bottom of the tabs. */
+.opal-tabs-list[data-variant="pill"] {
   padding-bottom: 5px;
 }
 
@@ -34,9 +39,9 @@
   @apply relative z-1 inline-flex items-center justify-center whitespace-nowrap rounded-08;
 }
 
-/* Minimum heights, border included; taller content grows the tab. Contained
-   and underline: 2.25rem with 0.5rem vertical padding. Pill: 1.75rem with
-   0.375rem. */
+/* Minimum heights, border included; taller content grows the tab. Contained:
+   2.25rem with 0.5rem vertical padding. Pill: 1.75rem with 0.375rem.
+   Underline: 2.25rem, no vertical padding, the indicator over its bottom. */
 .opal-tabs-trigger[data-variant="contained"] {
   @apply min-h-9 px-2 py-2 gap-2 border border-transparent;
 }
@@ -46,7 +51,7 @@
 }
 
 .opal-tabs-trigger[data-variant="underline"] {
-  @apply min-h-9 px-1 py-2;
+  @apply min-h-9 px-1;
 }
 
 /* contained (the surface paints the active background) */
@@ -86,6 +91,14 @@
 
 .opal-tabs-pill-baseline {
   @apply absolute bottom-0 start-0 h-px bg-border-02 pointer-events-none;
+}
+
+/* Underline's indicator track: the bottom 2px of the list, ending where the
+   scroll arrows and right children begin, so the indicator never runs under
+   them. */
+.opal-tabs-indicator-track {
+  @apply absolute bottom-0 start-0 z-10 overflow-hidden pointer-events-none;
+  height: 2px;
 }
 
 /* left-0, not start-0: the hook measures offsets from the list's physical

@@ -86,6 +86,7 @@ function TabsList({
   const scrollArrowsRef = useRef<HTMLDivElement>(null);
   const rightChildrenRef = useRef<HTMLDivElement>(null);
   const [rightOffset, setRightOffset] = useState(0);
+  const [isRtl, setIsRtl] = useState(false);
   const strings = useOpalStrings();
   const { variant } = useTabsContext() ?? { variant: "contained" as const };
   const isPill = variant === "pill" || variant === "underline";
@@ -111,6 +112,9 @@ function TabsList({
     scrollRight: handleScrollRight,
   } = useHorizontalScroll(tabsContainerRef, isPill && enableScrollArrows);
 
+  // Centred in the 2.25rem underline bar; pill keeps its smaller arrows.
+  const arrowSize = variant === "underline" ? "md" : "sm";
+
   const showScrollArrows =
     isPill && enableScrollArrows && (canScrollLeft || canScrollRight);
 
@@ -121,6 +125,9 @@ function TabsList({
     }
 
     const updateWidth = () => {
+      if (listRef.current) {
+        setIsRtl(getComputedStyle(listRef.current).direction === "rtl");
+      }
       let totalWidth = 0;
       if (scrollArrowsRef.current)
         totalWidth += scrollArrowsRef.current.offsetWidth;
@@ -182,7 +189,14 @@ function TabsList({
             {children}
           </div>
         ) : (
-          <div className="flex items-center gap-2 pt-1">{children}</div>
+          <div
+            className={cn(
+              "flex items-center gap-2",
+              variant === "pill" && "pt-1"
+            )}
+          >
+            {children}
+          </div>
         )
       ) : (
         children
@@ -196,7 +210,7 @@ function TabsList({
           <Button
             disabled={!canScrollLeft}
             prominence="tertiary"
-            size="sm"
+            size={arrowSize}
             icon={SvgChevronLeft}
             onClick={handleScrollLeft}
             tooltip={strings.scrollTabsLeft}
@@ -204,7 +218,7 @@ function TabsList({
           <Button
             disabled={!canScrollRight}
             prominence="tertiary"
-            size="sm"
+            size={arrowSize}
             icon={SvgChevronRight}
             onClick={handleScrollRight}
             tooltip={strings.scrollTabsRight}
@@ -226,15 +240,34 @@ function TabsList({
               style={{ insetInlineEnd: rightOffset }}
             />
           )}
-          <div
-            className="opal-tabs-pill-indicator"
-            {...indicatorState}
-            style={{
-              transform: `translateX(${indicatorStyle.left}px)`,
-              width: indicatorStyle.width,
-              opacity: indicatorStyle.opacity,
-            }}
-          />
+          {variant === "underline" ? (
+            <div
+              className="opal-tabs-indicator-track"
+              style={{ insetInlineEnd: rightOffset }}
+            >
+              <div
+                className="opal-tabs-pill-indicator"
+                {...indicatorState}
+                style={{
+                  // The track starts at the list's left edge, except in RTL,
+                  // where its end side is on the left.
+                  transform: `translateX(${indicatorStyle.left - (isRtl ? rightOffset : 0)}px)`,
+                  width: indicatorStyle.width,
+                  opacity: indicatorStyle.opacity,
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              className="opal-tabs-pill-indicator"
+              {...indicatorState}
+              style={{
+                transform: `translateX(${indicatorStyle.left}px)`,
+                width: indicatorStyle.width,
+                opacity: indicatorStyle.opacity,
+              }}
+            />
+          )}
         </>
       )}
     </TabsPrimitive.List>
