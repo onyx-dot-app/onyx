@@ -1,6 +1,7 @@
 """Anthropic provider adapter for prompt caching."""
 
 from collections.abc import Sequence
+from functools import partial
 
 from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
@@ -10,24 +11,28 @@ from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transfor
 
 def _add_anthropic_cache_control(
     messages: Sequence[ChatCompletionMessage],
+    mark_tail: bool = True,
 ) -> Sequence[ChatCompletionMessage]:
     """Add cache_control parameters to messages for Anthropic caching.
 
-    Anthropic allows up to 4 cache breakpoints. We mark the last cacheable
-    message (tail of the prefix) and, when there is more than one, the first
-    (usually the system prompt): the head breakpoint keeps the stable prefix
-    readable when history truncation moves the tail breakpoint.
+    Anthropic allows up to 4 cache breakpoints. We mark the first cacheable
+    message (usually the system prompt, so the stable prefix stays readable
+    when history truncation moves the tail) and the last one, so later
+    tool-loop iterations re-read the whole prefix. The tail is skipped for a
+    one-shot prompt nothing will re-read: a cache write costs more than
+    plain input.
 
     Args:
         messages: Messages to transform
+        mark_tail: Whether the last message gets a breakpoint
 
     Returns:
         Messages with cache_control added
     """
     result: list[ChatCompletionMessage] = list(messages)
-    result[-1] = result[-1].model_copy(update={"cache_control": {"type": "ephemeral"}})
-    if len(result) > 1:
-        result[0] = result[0].model_copy(
+    result[0] = result[0].model_copy(update={"cache_control": {"type": "ephemeral"}})
+    if mark_tail and len(result) > 1:
+        result[-1] = result[-1].model_copy(
             update={"cache_control": {"type": "ephemeral"}}
         )
     return result
@@ -52,6 +57,7 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
         suffix: list[ChatCompletionMessage],
         continuation: bool,
         cache_metadata: CacheMetadata | None,  # noqa: ARG002
+        mark_tail: bool = True,
     ) -> list[ChatCompletionMessage]:
         """Prepare messages for Anthropic caching.
 
@@ -71,7 +77,9 @@ class AnthropicPromptCacheProvider(PromptCacheProvider):
             cacheable_prefix=cacheable_prefix,
             suffix=suffix,
             continuation=continuation,
-            transform_cacheable=_add_anthropic_cache_control,
+            transform_cacheable=partial(
+                _add_anthropic_cache_control, mark_tail=mark_tail
+            ),
         )
 
     def extract_cache_metadata(
