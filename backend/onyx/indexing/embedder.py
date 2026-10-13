@@ -1,9 +1,16 @@
+import hashlib
+import json
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 
 import sentry_sdk
 
+from onyx.configs.app_configs import (
+    LARGE_CHUNK_RATIO,
+    PASSAGE_EMBEDDING_CACHE_ENABLED,
+    PASSAGE_EMBEDDING_CACHE_TTL_S,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorStopSignal,
@@ -15,15 +22,20 @@ from onyx.document_index.chunk_content_enrichment import (
 )
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
+from onyx.natural_language_processing.passage_embedding_cache import (
+    embed_cached_passages,
+)
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import (
+    DOC_EMBEDDING_CONTEXT_SIZE,
     INDEXING_MODEL_SERVER_HOST,
     INDEXING_MODEL_SERVER_PORT,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
+from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
 
@@ -100,6 +112,8 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         reduced_dimension: int | None = None,
         callback: IndexingHeartbeatInterface | None = None,
         embedding_model: EmbeddingModel | None = None,
+        search_settings_id: int | None = None,
+        embedding_dimension: int | None = None,
     ):
         super().__init__(
             model_name,
@@ -115,6 +129,28 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             callback,
             embedding_model,
         )
+        self.search_settings_id = search_settings_id
+        self.callback = callback
+        self.embedding_dimension = embedding_dimension
+        # Include mutable endpoint options as well as the immutable settings ID.
+        self.cache_scope = hashlib.sha256(
+            json.dumps(
+                [
+                    search_settings_id,
+                    model_name,
+                    provider_type,
+                    normalize,
+                    passage_prefix,
+                    api_url,
+                    api_version,
+                    deployment_name,
+                    reduced_dimension,
+                    embedding_dimension,
+                    DOC_EMBEDDING_CONTEXT_SIZE,
+                    LARGE_CHUNK_RATIO,
+                ],
+            ).encode("utf-8")
+        ).hexdigest()
 
     @log_function_time()
     def embed_chunks(
@@ -151,13 +187,37 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     raise RuntimeError("Large chunk contains mini chunks")
                 flat_chunk_texts.extend(chunk.mini_chunk_texts)
 
-        embeddings = self.embedding_model.encode(
-            texts=flat_chunk_texts,
-            text_type=EmbedTextType.PASSAGE,
-            large_chunks_present=large_chunks_present,
-            tenant_id=tenant_id,
-            request_id=request_id,
-        )
+        if not flat_chunk_texts:
+            return []
+
+        if self.callback and self.callback.should_stop():
+            raise ConnectorStopSignal("Passage embedding detected stop signal")
+
+        def encode(texts: list[str]) -> list[Embedding]:
+            return self.embedding_model.encode(
+                texts=texts,
+                text_type=EmbedTextType.PASSAGE,
+                large_chunks_present=large_chunks_present,
+                tenant_id=tenant_id,
+                request_id=request_id,
+            )
+
+        if (
+            PASSAGE_EMBEDDING_CACHE_ENABLED
+            and self.search_settings_id is not None
+            and self.embedding_dimension is not None
+            and self.embedding_dimension > 0
+        ):
+            embeddings = embed_cached_passages(
+                flat_chunk_texts,
+                encode,
+                scope=f"{self.cache_scope}:{large_chunks_present}",
+                dimension=self.embedding_dimension,
+                tenant_id=tenant_id,
+                ttl_seconds=PASSAGE_EMBEDDING_CACHE_TTL_S,
+            )
+        else:
+            embeddings = encode(flat_chunk_texts)
 
         # Mapping embeddings to chunks
         embedded_chunks: list[IndexChunk] = []
@@ -199,6 +259,9 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             api_version=search_settings.api_version,
             deployment_name=search_settings.deployment_name,
             reduced_dimension=search_settings.reduced_dimension,
+            search_settings_id=search_settings.id,
+            embedding_dimension=search_settings.reduced_dimension
+            or search_settings.model_dim,
             callback=callback,
             embedding_model=EmbeddingModel.from_db_model(
                 search_settings,

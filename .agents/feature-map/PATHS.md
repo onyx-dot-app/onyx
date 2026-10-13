@@ -56,6 +56,7 @@ here. Read the component that documents the setting in its env table.
 | `backend/onyx/document_index/` | document-index |
 | `backend/onyx/server/manage/opensearch_health/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx` | document-index |
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
+| `backend/onyx/natural_language_processing/passage_embedding_cache.py` | indexing-pipeline |
 | `backend/onyx/db/search_settings.py`, `db/swap_index.py` | document-index |
 | `backend/onyx/server/manage/search_settings.py`, `server/manage/embedding/` | document-index |
 | `backend/onyx/server/features/search/`, `server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/search_backend.py`, `backend/ee/onyx/search/` | internal-search |
