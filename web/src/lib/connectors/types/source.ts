@@ -121,5 +121,3 @@ export const oauthSupportedSources: ConfigurableSources[] = [
   // ValidSources.GoogleDrive,
   ValidSources.Confluence,
 ];
-
-export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
