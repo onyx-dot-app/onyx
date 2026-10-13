@@ -16,6 +16,8 @@ export class AdminConnectorDetailPage {
   /** Opens the action menu; present only when the caller may edit. */
   readonly manageButton: Locator;
   readonly deleteMenuItem: Locator;
+  /** Enters the inline file editor of a file connector. */
+  readonly filesEditButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -26,6 +28,15 @@ export class AdminConnectorDetailPage {
       exact: true,
     });
     this.deleteMenuItem = page.getByRole("menuitem", { name: /Delete/i });
+    // exact: the header's "Edit connector" button also contains "Edit"
+    this.filesEditButton = page.getByRole("button", {
+      name: "Edit",
+      exact: true,
+    });
+  }
+
+  async openFilesEditor(): Promise<void> {
+    await this.filesEditButton.click();
   }
 
   async goto(ccPairId: number): Promise<void> {

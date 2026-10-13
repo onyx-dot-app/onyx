@@ -9076,6 +9076,25 @@
         "inProgress": "Prüfungen laufen...",
         "waiting": "Warten auf Connector-Einstellungen..."
       }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Connector bearbeiten"
+      },
+      "header": {
+        "title": "{name} bearbeiten",
+        "description": "Ändern Sie die Einstellungen dieses {source}-Connectors. Sie prüfen den Plan, bevor die Änderungen angewendet werden.",
+        "reviewButton": {
+          "label": "Änderungen prüfen"
+        }
+      },
+      "loadError": {
+        "title": "Der Connector konnte nicht geladen werden",
+        "description": "Laden Sie die Seite neu oder kehren Sie zum Connector zurück.",
+        "backButton": {
+          "label": "Zurück zum Connector"
+        }
+      }
     }
   },
   "agents": {

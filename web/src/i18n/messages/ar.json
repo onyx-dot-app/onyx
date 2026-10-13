@@ -9076,6 +9076,25 @@
         "inProgress": "عمليات التحقق قيد التنفيذ...",
         "waiting": "بانتظار إعدادات الموصل..."
       }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "تعديل الموصل"
+      },
+      "header": {
+        "title": "تعديل {name}",
+        "description": "غيّر إعدادات موصل {source} هذا. ستراجع الخطة قبل تطبيق التغييرات.",
+        "reviewButton": {
+          "label": "مراجعة التغييرات"
+        }
+      },
+      "loadError": {
+        "title": "تعذّر تحميل الموصل",
+        "description": "أعد تحميل الصفحة، أو ارجع إلى الموصل.",
+        "backButton": {
+          "label": "العودة إلى الموصل"
+        }
+      }
     }
   },
   "agents": {
