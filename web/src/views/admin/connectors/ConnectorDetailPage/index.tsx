@@ -1,5 +1,6 @@
 "use client";
 
+import { isEditableSource } from "@/lib/connectors/edit/editable";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageLoader } from "@opal/loaders";
@@ -537,19 +538,21 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
 
         <div className="ms-auto flex gap-x-2">
-          {!isDeleting && can(ccPair, "edit") && (
-            <Button
-              prominence="secondary"
-              icon={SvgEdit}
-              onClick={() =>
-                router.push(
-                  `/admin/connectors/${ccPair.connector.source}/edit/${ccPair.id}`
-                )
-              }
-            >
-              {editT("editButton.label")}
-            </Button>
-          )}
+          {!isDeleting &&
+            can(ccPair, "edit") &&
+            isEditableSource(ccPair.connector.source) && (
+              <Button
+                prominence="secondary"
+                icon={SvgEdit}
+                onClick={() =>
+                  router.push(
+                    `/admin/connectors/${ccPair.connector.source}/edit/${ccPair.id}`
+                  )
+                }
+              >
+                {editT("editButton.label")}
+              </Button>
+            )}
           {can(ccPair, "operate") && (
             <Dropdown>
               <Dropdown.Trigger asChild>

@@ -14,14 +14,9 @@ import { SvgPlugBroken } from "@opal/illustrations";
 import { SvgAlertCircle } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
-import { connectorConfigs } from "@/lib/connectors/connectors";
+import { isEditableSource } from "@/lib/connectors/edit/editable";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
-import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { AddConnectorForm } from "@/views/admin/connectors/AddConnectorPage/components/AddConnectorWrapper";
-
-function isConfigurableSource(source: string): source is ConfigurableSources {
-  return Object.hasOwn(connectorConfigs, source);
-}
 
 export interface EditConnectorPageProps {
   /** The source in the URL; it must match the pair's source. */
@@ -50,7 +45,7 @@ export default function EditConnectorPage({
   const failed =
     error !== undefined ||
     (pairSource !== undefined &&
-      (pairSource !== source || !isConfigurableSource(pairSource)));
+      (pairSource !== source || !isEditableSource(pairSource)));
 
   if (failed) {
     return (
@@ -84,7 +79,7 @@ export default function EditConnectorPage({
   if (
     ccPair === undefined ||
     pairSource === undefined ||
-    !isConfigurableSource(pairSource)
+    !isEditableSource(pairSource)
   ) {
     return <PageLoader />;
   }

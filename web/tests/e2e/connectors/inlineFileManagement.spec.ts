@@ -1,6 +1,7 @@
 import { test, expect, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { AdminConnectorDetailPage } from "@tests/e2e/pages/AdminConnectorDetailPage";
 
 /** Upload a file through the inline manager, retrying on transient failures. */
 async function uploadTestFile(
@@ -74,7 +75,7 @@ test.describe("InlineFileManagement", () => {
 
     await expect(page.getByText(/Files \(/)).toBeVisible({ timeout: 10000 });
     await expect(
-      page.getByRole("button", { name: "Edit", exact: true })
+      new AdminConnectorDetailPage(page).filesEditButton
     ).toBeVisible();
   });
 
@@ -82,7 +83,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await expect(page.getByRole("button", { name: /cancel/i })).toBeVisible();
     await expect(
       page.getByRole("button", { name: /save changes/i })
@@ -92,7 +93,7 @@ test.describe("InlineFileManagement", () => {
     ).toBeVisible();
     await page.getByRole("button", { name: /cancel/i }).click();
     await expect(
-      page.getByRole("button", { name: "Edit", exact: true })
+      new AdminConnectorDetailPage(page).filesEditButton
     ).toBeVisible();
   });
 
@@ -100,7 +101,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -116,7 +117,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -132,7 +133,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -161,7 +162,7 @@ test.describe("InlineFileManagement", () => {
     await page.goto(`/admin/connector/${testCcPairId}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await new AdminConnectorDetailPage(page).openFilesEditor();
     await page.waitForTimeout(500);
     await uploadTestFile(
       page,
@@ -170,7 +171,7 @@ test.describe("InlineFileManagement", () => {
     );
     await page.getByRole("button", { name: /cancel/i }).click();
     await expect(
-      page.getByRole("button", { name: "Edit", exact: true })
+      new AdminConnectorDetailPage(page).filesEditButton
     ).toBeVisible();
     await expect(page.getByText("discard-test.txt")).not.toBeVisible();
   });
