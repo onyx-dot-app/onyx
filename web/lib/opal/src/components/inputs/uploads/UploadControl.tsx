@@ -22,7 +22,7 @@ export interface UploadBaseProps {
   /** Submitted with the hidden file input. */
   name?: string;
   /** Called when focus leaves the control (not when the picker takes it). */
-  onBlur?: (event: React.FocusEvent<HTMLButtonElement>) => void;
+  onBlur?: (event: React.FocusEvent<HTMLElement>) => void;
   "data-testid"?: string;
   /**
    * The file picker's filter, as the HTML `accept` attribute

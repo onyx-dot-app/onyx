@@ -101,7 +101,7 @@ export default function InputMultiUpload({
       data-drag={drag ?? undefined}
       data-testid={rest["data-testid"]}
       // Focus moving to the picker is not the user leaving the field.
-      onBlur={(e: React.FocusEvent<HTMLButtonElement>) => {
+      onBlur={(e: React.FocusEvent<HTMLDivElement>) => {
         if (pickerOpenRef.current) return;
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
         onBlur?.(e);

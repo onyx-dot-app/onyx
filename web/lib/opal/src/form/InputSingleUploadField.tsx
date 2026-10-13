@@ -35,7 +35,7 @@ function InputSingleUploadField({
     id: props.id ?? name,
     name,
     variant: variant ?? (isError ? "error" : "primary"),
-    onBlur: (event: React.FocusEvent<HTMLButtonElement>) => {
+    onBlur: (event: React.FocusEvent<HTMLElement>) => {
       onBlur?.(event);
       void helpers.setTouched(true);
     },
