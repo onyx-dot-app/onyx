@@ -51,7 +51,7 @@ from onyx.server.settings.store import (
     settings_write_lock,
     store_settings,
 )
-from onyx.server.settings.tier_order import tier_at_least
+from onyx.server.settings.tier_order import get_current_tier, tier_at_least
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -80,12 +80,7 @@ def admin_patch_settings(
     ),
     db_session: Session = Depends(get_session),
 ) -> Settings:
-    if global_version.is_ee_version():
-        from ee.onyx.utils.tier import get_tier
-
-        current_tier = get_tier()
-    else:
-        current_tier = Tier.COMMUNITY
+    current_tier = get_current_tier()
 
     # Serialize the read-modify-write so two concurrent partial patches cannot
     # each merge onto a stale snapshot and drop the other's field.
