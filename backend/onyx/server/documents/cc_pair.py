@@ -342,10 +342,12 @@ def get_cc_pair_runs(
 def _cancel_index_attempt(
     db_session: Session, attempt: IndexAttempt, reason: str
 ) -> None:
-    """Cancels an active attempt. A queued one ends here for the caller to
-    commit, since its task may never run to read a request. A running one gets
-    a request, which commits. Either way its task is revoked."""
-    if not cancel_queued_index_attempt__no_commit(db_session, attempt.id, reason):
+    """Cancels an active attempt and commits. A queued one ends in the database
+    before its task is revoked, so a revoked task never leaves it queued. A
+    running one gets a request, which its task reads."""
+    if cancel_queued_index_attempt__no_commit(db_session, attempt.id, reason):
+        db_session.commit()
+    else:
         IndexingCoordination.request_cancellation(db_session, attempt.id)
     if attempt.celery_task_id:
         client_app.control.revoke(attempt.celery_task_id)
