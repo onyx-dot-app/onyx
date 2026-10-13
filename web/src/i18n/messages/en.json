@@ -9136,6 +9136,10 @@
             "label": "Plan again"
           }
         },
+        "expired": {
+          "title": "The plan expired",
+          "description": "This plan expired or was already applied. Compute the plan again."
+        },
         "applyFailed": {
           "title": "Could not apply the changes"
         },

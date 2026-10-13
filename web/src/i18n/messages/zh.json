@@ -9136,6 +9136,10 @@
             "label": "重新计划"
           }
         },
+        "expired": {
+          "title": "计划已过期",
+          "description": "此计划已过期或已应用。请重新计算计划。"
+        },
         "applyFailed": {
           "title": "无法应用更改"
         },

@@ -9136,6 +9136,10 @@
             "label": "Volver a planificar"
           }
         },
+        "expired": {
+          "title": "El plan caducó",
+          "description": "Este plan caducó o ya se aplicó. Vuelva a calcular el plan."
+        },
         "applyFailed": {
           "title": "No se pudieron aplicar los cambios"
         },

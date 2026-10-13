@@ -38,13 +38,130 @@ const COVERED_BY: Record<ExtraStep, EditStepKind[]> = {
   prune: ["prune", "full_reindex_then_prune"],
 };
 
+// Mirrors `normalize_steps` in `onyx/connectors/edit_plan/planner.py`.
+const STEP_ORDER: EditStepKind[] = [
+  "access_groups",
+  "access_type",
+  "enter_perm_sync",
+  "leave_perm_sync",
+  "restart_attempt",
+  "full_reindex_then_prune",
+  "full_reindex",
+  "scoped_backfill",
+  "window_backfill",
+  "prune",
+];
+const SUBSUMES: [EditStepKind, EditStepKind[]][] = [
+  [
+    "full_reindex_then_prune",
+    ["full_reindex", "scoped_backfill", "window_backfill", "prune"],
+  ],
+  ["full_reindex", ["scoped_backfill", "window_backfill"]],
+];
+const RECONCILIATION_STEP_KINDS: Record<ReconciliationOption, EditStepKind[]> =
+  {
+    prune: ["prune"],
+    full_reindex: ["full_reindex"],
+    both: ["full_reindex_then_prune"],
+    nothing: [],
+  };
+
+function mergeInto(kind: EditStepKind, steps: EditStep[]): EditStep {
+  return {
+    kind,
+    required: steps.some((step) => step.required),
+    reasons: [...new Set(steps.flatMap((step) => step.reasons))],
+    field_names: [...new Set(steps.flatMap((step) => step.field_names))],
+    backfill:
+      steps.find((step) => step.kind === kind && step.backfill !== null)
+        ?.backfill ?? null,
+  };
+}
+
+/** Merges duplicate kinds and folds each step into the step that covers it. */
+export function normalizeSteps(steps: EditStep[]): EditStep[] {
+  const byKind = new Map<EditStepKind, EditStep[]>();
+  for (const step of steps) {
+    byKind.set(step.kind, [...(byKind.get(step.kind) ?? []), step]);
+  }
+  // A re-index and a prune merge only when both are required or both are not.
+  const reindex = byKind.get("full_reindex");
+  const prune = byKind.get("prune");
+  if (
+    reindex &&
+    prune &&
+    reindex.some((step) => step.required) ===
+      prune.some((step) => step.required)
+  ) {
+    byKind.set(
+      "full_reindex_then_prune",
+      byKind.get("full_reindex_then_prune") ?? []
+    );
+  }
+  for (const [kind, subsumed] of SUBSUMES) {
+    const kindSteps = byKind.get(kind);
+    if (!kindSteps) continue;
+    for (const subsumedKind of subsumed) {
+      kindSteps.push(...(byKind.get(subsumedKind) ?? []));
+      byKind.delete(subsumedKind);
+    }
+  }
+  return STEP_ORDER.flatMap((kind) => {
+    const kindSteps = byKind.get(kind);
+    return kindSteps && kindSteps.length > 0
+      ? [mergeInto(kind, kindSteps)]
+      : [];
+  });
+}
+
+function choiceSteps(plan: EditPlan, choices: EditPlanChoices): EditStep[] {
+  const steps: EditStep[] = [];
+  const reconciliation = plan.reconciliation_choice;
+  if (reconciliation !== null && choices.reconciliation !== null) {
+    steps.push(
+      ...RECONCILIATION_STEP_KINDS[choices.reconciliation].map((kind) => ({
+        kind,
+        required: false,
+        reasons: ["opaque_scope_choice" as const],
+        field_names: reconciliation.field_names,
+        backfill: null,
+      }))
+    );
+  }
+  if (
+    plan.credential_choice !== null &&
+    (choices.credentialPath ?? plan.credential_choice.default) ===
+      "full_reindex_and_prune"
+  ) {
+    steps.push({
+      kind: "full_reindex_then_prune",
+      required: false,
+      reasons: ["credential_full_path"],
+      field_names: [],
+      backfill: null,
+    });
+  }
+  return steps;
+}
+
+/**
+ * The plan's steps merged with the steps of the admin's choices, as apply
+ * resolves them. Drops apply to these steps.
+ */
+export function resolvedSteps(
+  plan: EditPlan,
+  choices: EditPlanChoices
+): EditStep[] {
+  return normalizeSteps([...plan.steps, ...choiceSteps(plan, choices)]);
+}
+
 function keptSteps(plan: EditPlan, choices: EditPlanChoices): EditStep[] {
-  return plan.steps.filter(
+  return resolvedSteps(plan, choices).filter(
     (step) => step.required || !choices.droppedSteps.includes(step.kind)
   );
 }
 
-/** Whether the admin can add the step: no kept plan step covers it. */
+/** Whether the admin can add the step: no kept step covers it. */
 export function canAddStep(
   plan: EditPlan,
   choices: EditPlanChoices,
@@ -94,7 +211,7 @@ export function buildApplyRequest(
         ? null
         : (choices.credentialPath ?? plan.credential_choice.default),
     added_steps: addedSteps,
-    dropped_steps: plan.steps
+    dropped_steps: resolvedSteps(plan, choices)
       .filter(
         (step) => !step.required && choices.droppedSteps.includes(step.kind)
       )

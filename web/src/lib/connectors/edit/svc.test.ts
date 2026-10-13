@@ -37,6 +37,18 @@ describe("applyConnectorEdit", () => {
     );
   });
 
+  it("reports an expired plan on 404 NOT_FOUND", async () => {
+    respond(404, {
+      error_code: "NOT_FOUND",
+      detail: "The edit plan does not exist or has expired.",
+    });
+
+    await expect(applyConnectorEdit(3, REQUEST)).resolves.toEqual({
+      kind: "expired",
+      detail: "The edit plan does not exist or has expired.",
+    });
+  });
+
   it("reports any other failure as an error", async () => {
     respond(400, {
       error_code: "INVALID_INPUT",

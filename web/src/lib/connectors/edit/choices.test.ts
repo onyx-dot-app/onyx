@@ -3,6 +3,7 @@ import {
   buildApplyRequest,
   canAddStep,
   initialChoices,
+  resolvedSteps,
 } from "@/lib/connectors/edit/choices";
 import type {
   ConnectorEditPlanResponse,
@@ -122,6 +123,68 @@ describe("buildApplyRequest", () => {
     expect(canAddStep(response.plan, choices, "full_reindex")).toBe(false);
     expect(canAddStep(response.plan, choices, "prune")).toBe(false);
     expect(buildApplyRequest(response, choices).added_steps).toEqual([]);
+  });
+
+  it("drops the merged step that a choice folds a plan step into", () => {
+    const response = planResponse({
+      steps: [step({ kind: "scoped_backfill", required: false })],
+      reconciliation_choice: {
+        field_names: ["cql_query"],
+        options: ["prune", "full_reindex", "both", "nothing"],
+      },
+    });
+    const choices = {
+      ...initialChoices(response.plan),
+      reconciliation: "both" as const,
+      droppedSteps: [
+        "scoped_backfill" as const,
+        "full_reindex_then_prune" as const,
+      ],
+    };
+
+    expect(resolvedSteps(response.plan, choices)).toEqual([
+      {
+        kind: "full_reindex_then_prune",
+        required: false,
+        reasons: ["opaque_scope_choice", "behavior_changed"],
+        field_names: ["cql_query"],
+        backfill: null,
+      },
+    ]);
+    expect(buildApplyRequest(response, choices).dropped_steps).toEqual([
+      "full_reindex_then_prune",
+    ]);
+  });
+
+  it("merges a required re-index and a required prune", () => {
+    const response = planResponse({
+      steps: [
+        step({ kind: "full_reindex", required: true }),
+        step({ kind: "prune", required: true, reasons: ["items_removed"] }),
+      ],
+    });
+
+    expect(
+      resolvedSteps(response.plan, initialChoices(response.plan)).map(
+        (merged) => [merged.kind, merged.required]
+      )
+    ).toEqual([["full_reindex_then_prune", true]]);
+  });
+
+  it("adds the credential path's re-index and prune to the steps", () => {
+    const response = planResponse({
+      steps: [step({ kind: "access_type", required: true })],
+      credential_choice: {
+        default: "full_reindex_and_prune",
+        options: ["keep_indexed", "full_reindex_and_prune"],
+      },
+    });
+    const choices = initialChoices(response.plan);
+
+    expect(
+      resolvedSteps(response.plan, choices).map((merged) => merged.kind)
+    ).toEqual(["access_type", "full_reindex_then_prune"]);
+    expect(canAddStep(response.plan, choices, "prune")).toBe(false);
   });
 
   it("blocks apply when validation fails", () => {

@@ -9136,6 +9136,10 @@
             "label": "Recalculer le plan"
           }
         },
+        "expired": {
+          "title": "Le plan a expiré",
+          "description": "Ce plan a expiré ou a déjà été appliqué. Calculez le plan à nouveau."
+        },
         "applyFailed": {
           "title": "Impossible d'appliquer les modifications"
         },

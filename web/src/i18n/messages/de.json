@@ -9136,6 +9136,10 @@
             "label": "Neu planen"
           }
         },
+        "expired": {
+          "title": "Der Plan ist abgelaufen",
+          "description": "Dieser Plan ist abgelaufen oder wurde bereits angewendet. Berechnen Sie den Plan erneut."
+        },
         "applyFailed": {
           "title": "Die Änderungen konnten nicht angewendet werden"
         },

@@ -9136,6 +9136,10 @@
             "label": "Planejar novamente"
           }
         },
+        "expired": {
+          "title": "O plano expirou",
+          "description": "Este plano expirou ou já foi aplicado. Calcule o plano novamente."
+        },
         "applyFailed": {
           "title": "Não foi possível aplicar as alterações"
         },

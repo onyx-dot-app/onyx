@@ -69,14 +69,17 @@ export async function planConnectorEdit(
 }
 
 const EDIT_PLAN_STALE = "EDIT_PLAN_STALE";
+// Apply gives NOT_FOUND for a plan that expired or was already applied.
+const PLAN_NOT_FOUND = "NOT_FOUND";
 
 /**
- * How an apply ended. `stale`: the pair changed after planning, so the
- * admin must plan again.
+ * How an apply ended. `stale`: the pair changed after planning. `expired`:
+ * the plan expired or was already applied. Both need a new plan.
  */
 export type ApplyEditOutcome =
   | { kind: "applied"; response: ConnectorEditApplyResponse }
   | { kind: "stale"; detail: string }
+  | { kind: "expired"; detail: string }
   | { kind: "error"; detail: string };
 
 export async function applyConnectorEdit(
@@ -102,7 +105,9 @@ export async function applyConnectorEdit(
     const stale =
       body.error_code === EDIT_PLAN_STALE ||
       (body.error_code === undefined && response.status === 409);
-    return stale ? { kind: "stale", detail } : { kind: "error", detail };
+    if (stale) return { kind: "stale", detail };
+    if (body.error_code === PLAN_NOT_FOUND) return { kind: "expired", detail };
+    return { kind: "error", detail };
   } catch (error) {
     return { kind: "error", detail: String(error) };
   }

@@ -1,5 +1,6 @@
 "use client";
 
+import type { RichStr } from "@opal/types";
 import { windowCoversAllHistory } from "@/lib/connectors/edit/window";
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
@@ -20,6 +21,7 @@ import { SvgCheckSquare, SvgRefreshCw } from "@opal/icons";
 import {
   applyBlockOf,
   buildApplyRequest,
+  resolvedSteps,
   canAddStep,
   initialChoices,
   type EditPlanChoices,
@@ -120,8 +122,8 @@ function StepCard({ step, dropped, disabled, onDroppedChange }: StepCardProps) {
 
 interface ChoiceCardProps {
   selected: boolean;
-  title: string;
-  description: string;
+  title: string | RichStr;
+  description: string | RichStr;
   disabled: boolean;
   onSelect: () => void;
 }
@@ -140,7 +142,7 @@ function ChoiceCard({
       rounding={3}
       role="radio"
       aria-checked={selected}
-      aria-label={title}
+      aria-label={typeof title === "string" ? title : title.raw}
       disabled={disabled}
       onClick={onSelect}
     >
@@ -193,7 +195,7 @@ export default function EditPlanModal({
   );
   const [busy, setBusy] = useState<"applying" | "replanning" | null>(null);
   const [failure, setFailure] = useState<{
-    kind: "stale" | "error";
+    kind: "stale" | "expired" | "error";
     detail: string;
   } | null>(null);
 
@@ -201,6 +203,7 @@ export default function EditPlanModal({
     setChoices((current) => ({ ...current, ...next }));
 
   const block = applyBlockOf(planResponse, choices);
+  const steps = resolvedSteps(plan, choices);
   const disabled = busy !== null;
 
   const validation = plan.validation;
@@ -270,11 +273,11 @@ export default function EditPlanModal({
                 : t("changes.none")}
             </Text>
 
-            {failure?.kind === "stale" && (
+            {(failure?.kind === "stale" || failure?.kind === "expired") && (
               <MessageCard
                 variant="warning"
-                title={t("stale.title")}
-                description={t("stale.description")}
+                title={t(`${failure.kind}.title`)}
+                description={t(`${failure.kind}.description`)}
                 bottomChildren={
                   <Button
                     prominence="secondary"
@@ -423,14 +426,12 @@ export default function EditPlanModal({
               <Content
                 title={t("steps.title")}
                 description={
-                  plan.steps.length === 0
-                    ? t("steps.none")
-                    : t("steps.description")
+                  steps.length === 0 ? t("steps.none") : t("steps.description")
                 }
                 sizePreset="main-ui"
                 variant="section"
               />
-              {plan.steps.map((step) => (
+              {steps.map((step) => (
                 <StepCard
                   key={step.kind}
                   step={step}
@@ -512,7 +513,10 @@ export default function EditPlanModal({
             submit={
               <Button
                 disabled={
-                  disabled || block !== null || failure?.kind === "stale"
+                  disabled ||
+                  block !== null ||
+                  failure?.kind === "stale" ||
+                  failure?.kind === "expired"
                 }
                 icon={busy === "applying" ? IconLoader : undefined}
                 tooltip={block === null ? undefined : t(`blocked.${block}`)}
