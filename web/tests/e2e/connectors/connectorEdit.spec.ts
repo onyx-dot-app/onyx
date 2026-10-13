@@ -46,7 +46,7 @@ test.describe("Connector edit through a plan", () => {
     await detailPage.expectName(newName);
   });
 
-  test("adds a file and indexes it on apply", async ({ page }) => {
+  test("adds a file through the plan", async ({ page }) => {
     const id = ccPairId ?? -1;
     const editPage = new ConnectorEditPage(page);
 
