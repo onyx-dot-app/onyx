@@ -3,9 +3,7 @@
 import Image from "next/image";
 import { StaticImageData } from "next/image";
 import { useTranslations } from "next-intl";
-import googleCloudStorageIcon from "@public/GoogleCloudStorage.png";
 import openSourceIcon from "@public/OpenSource.png";
-import s3Icon from "@public/S3.png";
 import trelloIcon from "@public/Trello.png";
 import serviceNowIcon from "@public/Servicenow.png";
 import zAIIcon from "@public/Z_AI.png";
@@ -235,12 +233,7 @@ export const WindowsIcon = ({
 // THIRD-PARTY / COMPANY ICONS (Alphabetically)
 // Only icons that don't yet have opal logo equivalents remain here.
 // ============================================================================
-export const GoogleStorageIcon = createLogoIcon(googleCloudStorageIcon, {
-  sizeAdjustment: 4,
-  classNameAddition: "-m-0.5",
-});
 export const OpenSourceIcon = createLogoIcon(openSourceIcon);
-export const S3Icon = createLogoIcon(s3Icon);
 export const ServiceNowIcon = createLogoIcon(serviceNowIcon);
 export const TrelloIcon = createLogoIcon(trelloIcon);
 export const ZAIIcon = createLogoIcon(zAIIcon);

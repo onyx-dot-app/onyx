@@ -1,4 +1,3 @@
-import { S3Icon, GoogleStorageIcon } from "@/components/icons/icons";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import React from "react";
@@ -7,6 +6,7 @@ import { SvgFileText, SvgGlobe, SvgUploadCloud, SvgMail } from "@opal/icons";
 import {
   SvgAirtable,
   SvgAsana,
+  SvgAWS,
   SvgAxero,
   SvgBitbucket,
   SvgBookStack,
@@ -30,6 +30,7 @@ import {
   SvgGitLab,
   SvgGmail,
   SvgGong,
+  SvgGoogleCloud,
   SvgGoogleDrive,
   SvgGoogleSites,
   SvgGuru,
@@ -226,14 +227,14 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/dropbox`,
   },
   s3: {
-    icon: S3Icon,
-    displayName: "S3",
+    icon: SvgAWS,
+    displayName: "Amazon S3",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/s3`,
   },
   google_cloud_storage: {
-    icon: GoogleStorageIcon,
-    displayName: "Google Storage",
+    icon: SvgGoogleCloud,
+    displayName: "Google Cloud Storage",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/google_storage`,
   },
@@ -251,7 +252,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   },
   r2: {
     icon: SvgCloudflare,
-    displayName: "R2",
+    displayName: "Cloudflare R2",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/r2`,
   },
