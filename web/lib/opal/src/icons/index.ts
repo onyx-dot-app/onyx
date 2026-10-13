@@ -108,7 +108,7 @@ export { default as SvgShareWebhook } from "@opal/icons/share-webhook";
 export { default as SvgHourglass } from "@opal/icons/hourglass";
 export { default as SvgImage } from "@opal/icons/image";
 export { default as SvgImageSmall } from "@opal/icons/image-small";
-export { default as SvgImport } from "@opal/icons/import-icon";
+export { default as SvgImport } from "@opal/icons/import";
 export { default as SvgInfo } from "@opal/icons/info";
 export { default as SvgInfoSmall } from "@opal/icons/info-small";
 export { default as SvgKey } from "@opal/icons/key";

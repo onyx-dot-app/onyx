@@ -3519,7 +3519,7 @@
         "jiraUserEmail": "Obligatoire pour Jira Cloud.",
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
-        "pfxFile": "Un fichier PFX.",
+        "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
         "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io."
       },
       "methods": {
@@ -14161,8 +14161,14 @@
       "year": "Année"
     },
     "inputFile": {
-      "attachFile": "Joindre un fichier",
       "clearFile": "Effacer le fichier"
+    },
+    "inputUpload": {
+      "placeholder": "Ajouter un fichier…",
+      "pasted": "Texte collé",
+      "attached": "Fichier joint",
+      "dropToAdd": "Déposez le fichier ici pour l’ajouter",
+      "dropToReplace": "Déposez ici pour remplacer le fichier"
     },
     "inputImage": {
       "alt": "Image",

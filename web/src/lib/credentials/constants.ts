@@ -3,7 +3,6 @@ import { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import type {
   CredentialDisplayName,
   CredentialFieldOptions,
-  CredentialHint,
   CredentialJsonOf,
   CredentialMethodDescription,
   CredentialMethodLabel,
@@ -108,7 +107,6 @@ interface MicrosoftAppSpecOptions {
   brandName: string;
   fileType: FileTypeCategory;
   privateKeyDisplayName: CredentialDisplayName;
-  privateKeyHint?: CredentialHint;
   certificateLabel: CredentialMethodLabel;
   descriptions?: {
     clientSecret: CredentialMethodDescription;
@@ -142,7 +140,8 @@ function microsoftAppSpec<const TPrefix extends string>(
     [key("private_key")]: file(
       options.privateKeyDisplayName,
       options.fileType,
-      options.privateKeyHint ? { hint: options.privateKeyHint } : {}
+      // Every Microsoft source takes the same .pfx certificate.
+      { hint: { key: "pfxFile" } }
     ),
   } as MicrosoftAppFields<TPrefix>;
 
@@ -370,7 +369,6 @@ export const CREDENTIAL_SPECS = {
     brandName: "Microsoft Teams",
     fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
     privateKeyDisplayName: "privateKey",
-    privateKeyHint: { key: "pfxFile" },
     certificateLabel: "certificateAuthentication",
     descriptions: {
       clientSecret: "teamsClientSecret",
@@ -381,7 +379,6 @@ export const CREDENTIAL_SPECS = {
     brandName: "Microsoft Outlook",
     fileType: FileTypeCategory.SHAREPOINT_PFX_FILE,
     privateKeyDisplayName: "privateKey",
-    privateKeyHint: { key: "pfxFile" },
     certificateLabel: "certificateAuthentication",
     descriptions: {
       clientSecret: "outlookClientSecret",

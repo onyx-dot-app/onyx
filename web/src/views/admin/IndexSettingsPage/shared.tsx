@@ -1,11 +1,11 @@
 "use client";
 
-import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { markdown } from "@opal/utils";
-import { Divider, InputFile } from "@opal/components";
+import { Divider } from "@opal/components";
+import { InputUploadField } from "@opal/form";
 import type { RichStr } from "@opal/types";
 import { InputHorizontal, InputVertical } from "@opal/layouts";
 import type {
@@ -74,27 +74,12 @@ export function ApiUrlField({
 
 export function GoogleCredentialsField() {
   const t = useTranslations("admin.indexSettings");
-  const [, meta, helpers] = useField<string>("apiKey");
   return (
     <InputVertical
       title={t("fields.googleCredentials.title")}
       withLabel="apiKey"
     >
-      <InputFile
-        id="apiKey"
-        name="apiKey"
-        error={meta.touched && !!meta.error}
-        setValue={(value) => {
-          void helpers.setValue(value);
-        }}
-        onValueSet={() => {
-          void helpers.setTouched(true);
-        }}
-        onBlur={() => {
-          void helpers.setTouched(true);
-        }}
-        accept=".json"
-      />
+      <InputUploadField name="apiKey" accept=".json" />
     </InputVertical>
   );
 }

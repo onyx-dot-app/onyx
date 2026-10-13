@@ -3519,7 +3519,7 @@
         "jiraUserEmail": "Jira Cloud では必須です。",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
-        "pfxFile": "PFX ファイルです。",
+        "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",
         "testrailBaseUrl": "例: https://yourcompany.testrail.io。"
       },
       "methods": {
@@ -14161,8 +14161,14 @@
       "year": "年"
     },
     "inputFile": {
-      "attachFile": "ファイルを添付",
       "clearFile": "ファイルをクリア"
+    },
+    "inputUpload": {
+      "placeholder": "ファイルを追加…",
+      "pasted": "貼り付けたテキスト",
+      "attached": "ファイル添付済み",
+      "dropToAdd": "ここにファイルをドロップして追加",
+      "dropToReplace": "ここにドロップしてファイルを置き換え"
     },
     "inputImage": {
       "alt": "画像",
