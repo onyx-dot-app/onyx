@@ -138,6 +138,7 @@ def plan_connector_edit(
             source=current.source,
             access_type=proposed.access_type,
             data_access_group_ids=proposed.data_access_group_ids,
+            current_access_type=current.access_type,
         )
 
     credential = fetch_proposed_credential(

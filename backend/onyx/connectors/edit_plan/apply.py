@@ -360,6 +360,7 @@ def _apply_claimed_plan(
             source=current.source,
             access_type=proposed.access_type,
             data_access_group_ids=proposed.data_access_group_ids,
+            current_access_type=current.access_type,
         )
     credential = fetch_proposed_credential(
         db_session, user=user, current=current, proposed=proposed
