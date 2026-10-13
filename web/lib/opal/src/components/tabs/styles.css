@@ -33,10 +33,17 @@
 /* ── Trigger ────────────────────────────────────────────────────────────────── */
 
 /* Above the sliding surface, which paints the active state behind them. The
-   trigger is an interactive surface: each state sets the two interactive
+   trigger is an Interactive surface: its state sets the two interactive
    foregrounds, which its label (a Content) reads, and which fade on change. */
 .opal-tabs-trigger {
   @apply relative z-1 inline-flex items-center justify-center whitespace-nowrap rounded-08;
+}
+
+/* Only the text responds to hover and press. A tab never paints its own
+   background, whatever its Interactive state; the sliding surface is the
+   only one. */
+.opal-tabs-trigger.interactive {
+  @apply bg-transparent!;
 }
 
 /* Minimum heights, border included; taller content grows the tab. Contained:
@@ -54,37 +61,15 @@
   @apply min-h-9 px-1;
 }
 
-/* contained (the surface paints the active background) */
-.opal-tabs-trigger[data-variant="contained"][data-state="active"] {
-  --interactive-foreground: var(--text-04);
-  --interactive-foreground-icon: var(--text-03);
-}
-
-.opal-tabs-trigger[data-variant="contained"][data-state="inactive"] {
-  --interactive-foreground: var(--text-03);
-  --interactive-foreground-icon: var(--text-03);
-}
-
-/* pill (the surface paints the filled background) */
-.opal-tabs-trigger[data-variant="pill"][data-state="active"] {
+/* Text colours come from Interactive's default tertiary styles: text-03 at
+   rest, text-04 on hover and for the selected tab (it holds the hover state),
+   then pressed and disabled. The pill's selected label sits on the dark
+   surface, so it stays inverted; the list and :not() raise it above the hover
+   and pressed rules. */
+.opal-tabs-list[data-variant="pill"]
+  .interactive.opal-tabs-trigger[data-state="active"]:not([data-disabled]) {
   --interactive-foreground: var(--text-inverted-05);
   --interactive-foreground-icon: var(--text-inverted-05);
-}
-
-.opal-tabs-trigger[data-variant="pill"][data-state="inactive"] {
-  --interactive-foreground: var(--text-03);
-  --interactive-foreground-icon: var(--text-03);
-}
-
-/* underline */
-.opal-tabs-trigger[data-variant="underline"][data-state="active"] {
-  --interactive-foreground: var(--text-05);
-  --interactive-foreground-icon: var(--text-05);
-}
-
-.opal-tabs-trigger[data-variant="underline"][data-state="inactive"] {
-  --interactive-foreground: var(--text-03);
-  --interactive-foreground-icon: var(--text-03);
 }
 
 /* ── Pill / underline indicator ─────────────────────────────────────────────── */

@@ -8,6 +8,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 
 export interface TabsContextValue {
   variant: "contained" | "pill" | "underline";
+  /** The selected tab's value, so a trigger knows whether it is selected. */
+  activeValue: string | undefined;
 }
 
 export const TabsContext = React.createContext<TabsContextValue | undefined>(

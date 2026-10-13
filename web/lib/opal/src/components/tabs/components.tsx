@@ -17,6 +17,7 @@ import SvgChevronLeft from "@opal/icons/chevron-left";
 import SvgChevronRight from "@opal/icons/chevron-right";
 import { Tooltip, Button, type TooltipSide } from "@opal/components";
 import { Content } from "@opal/layouts";
+import { Interactive } from "@opal/core";
 import {
   TabsContext,
   useTabsContext,
@@ -48,12 +49,31 @@ interface TabsRootProps extends WithoutStyles<
   gap?: Spacing;
 }
 
-function TabsRoot({ variant = "contained", gap, ...props }: TabsRootProps) {
-  const contextValue = useMemo(() => ({ variant }), [variant]);
+function TabsRoot({
+  variant = "contained",
+  gap,
+  value,
+  defaultValue,
+  onValueChange,
+  ...props
+}: TabsRootProps) {
+  // Tracked here as well as in Radix, so each trigger knows whether it is
+  // the selected one.
+  const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
+  const activeValue = value ?? uncontrolledValue;
+  const contextValue = useMemo(
+    () => ({ variant, activeValue }),
+    [variant, activeValue]
+  );
   return (
     <TabsContext.Provider value={contextValue}>
       <TabsPrimitive.Root
         {...props}
+        value={activeValue}
+        onValueChange={(next) => {
+          if (value === undefined) setUncontrolledValue(next);
+          onValueChange?.(next);
+        }}
         className={cn("w-full", gap !== undefined && "flex flex-col")}
         style={gap !== undefined ? { gap: spacingToRem(gap) } : undefined}
       />
@@ -307,7 +327,11 @@ function TabsTrigger({
   disabled,
   ...props
 }: TabsTriggerProps) {
-  const { variant } = useTabsContext() ?? { variant: "contained" as const };
+  const { variant, activeValue } = useTabsContext() ?? {
+    variant: "contained" as const,
+    activeValue: undefined,
+  };
+  const isActive = props.value === activeValue;
   const strings = useOpalStrings();
   const sizePreset = variant === "contained" ? "main-ui" : "secondary";
   // Only contained tabs have room for a description.
@@ -360,23 +384,35 @@ function TabsTrigger({
     </>
   );
 
+  // An Interactive surface: hover, pressed and disabled text colours come
+  // from the default tertiary styles (styles.css drops their backgrounds).
+  // The selected tab holds the hover state.
   const trigger = (
-    <TabsPrimitive.Trigger
-      ref={ref}
+    <Interactive.Stateless
+      variant="default"
+      prominence="tertiary"
+      type="button"
       disabled={disabled}
-      data-variant={variant}
-      // An interactive surface, so a Content inside follows its foregrounds.
-      className="interactive opal-tabs-trigger"
-      {...props}
+      interaction={isActive ? "hover" : "rest"}
     >
-      {tooltip && !disabled ? (
-        <Tooltip tooltip={tooltip} side={tooltipSide}>
-          <span className="inline-flex items-center gap-inherit">{inner}</span>
-        </Tooltip>
-      ) : (
-        inner
-      )}
-    </TabsPrimitive.Trigger>
+      <TabsPrimitive.Trigger
+        ref={ref}
+        disabled={disabled}
+        data-variant={variant}
+        className="opal-tabs-trigger"
+        {...props}
+      >
+        {tooltip && !disabled ? (
+          <Tooltip tooltip={tooltip} side={tooltipSide}>
+            <span className="inline-flex items-center gap-inherit">
+              {inner}
+            </span>
+          </Tooltip>
+        ) : (
+          inner
+        )}
+      </TabsPrimitive.Trigger>
+    </Interactive.Stateless>
   );
 
   // Disabled buttons don't emit pointer events so tooltips won't fire.
