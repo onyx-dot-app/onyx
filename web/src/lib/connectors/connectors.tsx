@@ -1747,7 +1747,7 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
       {
         type: "file",
         query: "Enter the zip path:",
-        label: "File Locations",
+        label: "Site Export",
         name: "file_locations",
         optional: false,
         description:
