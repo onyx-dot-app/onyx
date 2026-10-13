@@ -14,6 +14,7 @@ import {
   connectorConfigFromForm,
   connectorFormControlFieldNames,
   createConnectorInitialValues,
+  formOnlyFieldNames,
 } from "@/lib/connectors/utils";
 import { NEW_ACCOUNT_FIELD } from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import type { AccessType } from "@/lib/types";
@@ -51,8 +52,13 @@ function tabFor(
 ): string | null {
   const stored = config[field.name];
   if (typeof stored === "string") return stored;
+  // Only a field that selects a scope picks the tab: a supporting checkbox
+  // (e.g. Confluence's index_recursively) is stored under any scope.
   const withValues = field.tabs.find((option) =>
-    option.fields.some((tabField) => storesValue(config, tabField.name))
+    option.fields.some(
+      (tabField) =>
+        tabField.type !== "checkbox" && storesValue(config, tabField.name)
+    )
   );
   const withoutInput = field.tabs.find((option) =>
     option.fields.every((tabField) => tabField.type === "string_tab")
@@ -69,6 +75,25 @@ function tabValues(
     if (field.type !== "tab") continue;
     const tab = tabFor(field, config);
     if (tab !== null) values[field.name] = tab;
+  }
+  return values;
+}
+
+/**
+ * The source's form-only realm fields (e.g. GitLab's URL), which the saved
+ * credential holds rather than the config. The form filters the saved
+ * accounts with them, so they must match the pair's credential.
+ */
+function credentialRealmValues(
+  source: ConfigurableSources,
+  ccPair: CCPairFullInfo
+): Record<string, string> {
+  const credentialJson: Record<string, unknown> =
+    ccPair.credential.credential_json ?? {};
+  const values: Record<string, string> = {};
+  for (const name of formOnlyFieldNames(source)) {
+    const value = credentialJson[name];
+    if (typeof value === "string" && value !== "") values[name] = value;
   }
   return values;
 }
@@ -126,6 +151,7 @@ export function editInitialValues(
       config
     ),
     ...config,
+    ...credentialRealmValues(source, ccPair),
     ...accessValues(ccPair.access_type, dataAccessGroupIds),
     name: ccPair.name,
     refreshFreq: refresh_freq === null ? undefined : refresh_freq / 60,

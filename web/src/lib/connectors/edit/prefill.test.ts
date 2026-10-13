@@ -189,3 +189,59 @@ describe("buildEditProposal", () => {
     expect(values.github_mode).toBe("everything");
   });
 });
+
+describe("editInitialValues", () => {
+  it("opens the Everything tab when only a supporting checkbox is stored", () => {
+    const ccPair = githubPair({});
+    const confluencePair: CCPairFullInfo = {
+      ...ccPair,
+      connector: {
+        ...ccPair.connector,
+        source: ValidSources.Confluence,
+        connector_specific_config: {
+          wiki_base: "https://acme.atlassian.net/wiki",
+          is_cloud: true,
+          space: "",
+          page_id: "",
+          cql_query: "",
+          index_recursively: true,
+        },
+      },
+    };
+
+    const values = editInitialValues(
+      ValidSources.Confluence,
+      connectorConfigs[ValidSources.Confluence],
+      confluencePair,
+      []
+    );
+
+    expect(values.indexing_scope).toBe("everything");
+  });
+
+  it("fills the realm fields from the pair's credential", () => {
+    const ccPair = githubPair({});
+    const gitlabPair: CCPairFullInfo = {
+      ...ccPair,
+      connector: {
+        ...ccPair.connector,
+        source: ValidSources.GitLab,
+        connector_specific_config: { project_owner: "acme" },
+      },
+      credential: {
+        ...ccPair.credential,
+        source: ValidSources.GitLab,
+        credential_json: { gitlab_url: "https://gitlab.acme.com" },
+      },
+    };
+
+    const values = editInitialValues(
+      ValidSources.GitLab,
+      connectorConfigs[ValidSources.GitLab],
+      gitlabPair,
+      []
+    );
+
+    expect(values.gitlab_url).toBe("https://gitlab.acme.com");
+  });
+});
