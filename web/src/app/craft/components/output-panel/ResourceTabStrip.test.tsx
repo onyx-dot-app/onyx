@@ -372,7 +372,7 @@ test("plus opens Outputs and the tab has a clear label", async () => {
   );
   expect(screen.getByRole("tab", { name: "Outputs" })).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Open a tab" }));
-  await user.click(screen.getByRole("menuitem", { name: "Outputs" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Outputs" }));
   expect(callbacks.onOpenOutputs).toHaveBeenCalledTimes(1);
 });
 
