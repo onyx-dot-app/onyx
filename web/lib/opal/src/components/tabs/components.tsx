@@ -18,6 +18,7 @@ import SvgChevronRight from "@opal/icons/chevron-right";
 import { Tooltip, Button, type TooltipSide } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { Interactive } from "@opal/core";
+import { IconLoader } from "@opal/loaders/icon-loader/components";
 import {
   TabsContext,
   useTabsContext,
@@ -332,7 +333,6 @@ function TabsTrigger({
     activeValue: undefined,
   };
   const isActive = props.value === activeValue;
-  const strings = useOpalStrings();
   const sizePreset = variant === "contained" ? "main-ui" : "secondary";
   // Only contained tabs have room for a description.
   const shownDescription = variant === "contained" ? description : undefined;
@@ -376,9 +376,13 @@ function TabsTrigger({
         />
       )}
       {isLoading && (
-        <span
-          className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin ms-1"
-          aria-label={strings.loading}
+        // Sized and spaced like the label's own icon: 1rem on contained
+        // (main-ui), 0.75rem otherwise (secondary), 0.25rem from the title.
+        <IconLoader
+          className={cn(
+            "ms-1 interactive-foreground-icon",
+            variant === "contained" ? "size-4" : "size-3"
+          )}
         />
       )}
     </>

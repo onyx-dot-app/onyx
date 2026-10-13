@@ -50,7 +50,7 @@
    2.25rem with 0.5rem vertical padding. Pill: 1.75rem with 0.375rem.
    Underline: 2.25rem, no vertical padding, the indicator over its bottom. */
 .opal-tabs-trigger[data-variant="contained"] {
-  @apply min-h-9 px-2 py-2 gap-2 border border-transparent;
+  @apply min-h-9 px-2 py-2 border border-transparent;
 }
 
 .opal-tabs-trigger[data-variant="pill"] {
