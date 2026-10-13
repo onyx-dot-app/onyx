@@ -1,5 +1,6 @@
 "use client";
 
+import { isEditableSource } from "@/lib/connectors/edit/editable";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageLoader } from "@opal/loaders";
@@ -27,6 +28,7 @@ import {
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexAttemptsTable } from "./IndexAttemptsTable";
 import InlineFileManagement from "./InlineFileManagement";
+import PendingBackfills from "@/views/admin/connectors/ConnectorDetailPage/PendingBackfills";
 import { SyncAttemptsTabs } from "./SyncAttemptsTabs";
 import { Section } from "@/layouts/general-layouts";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -41,30 +43,25 @@ import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import * as Yup from "yup";
-import {
-  AlertCircle,
-  PlayIcon,
-  PauseIcon,
-  Trash2Icon,
-  RefreshCwIcon,
-} from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { IndexAttemptSnapshot } from "@/lib/types";
 import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 import { Card } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
 import { timeAgo } from "@opal/time";
 import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
 import { useReIndexModal } from "./ReIndexModal";
-import { Button } from "@opal/components";
-import { SvgSettings } from "@opal/icons";
+import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
+import {
+  SvgEdit,
+  SvgPauseCircle,
+  SvgPlayCircle,
+  SvgRefreshCw,
+  SvgSettings,
+  SvgTrash,
+} from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -95,6 +92,7 @@ const PAGES_PER_BATCH = 8;
 
 function Main({ ccPairId }: { ccPairId: number }) {
   const t = useTranslations("admin.connector");
+  const editT = useTranslations("admin.connectorEdit");
   const locale = useLocale();
   const router = useRouter();
   const { user } = useUser();
@@ -369,6 +367,66 @@ function Main({ ccPairId }: { ccPairId: number }) {
     indexing_start: indexingStart,
   } = ccPair.connector;
 
+  // The reason a row is disabled is its tooltip.
+  const reIndexBlocked = ccPair.indexing
+    ? t("manageMenu.reIndex.tooltip.indexing")
+    : ccPair.status === ConnectorCredentialPairStatus.PAUSED
+      ? t("manageMenu.reIndex.tooltip.paused")
+      : ccPair.status === ConnectorCredentialPairStatus.INVALID
+        ? t("manageMenu.reIndex.tooltip.invalid")
+        : undefined;
+  const manageItems: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "re-index",
+      icon: SvgRefreshCw,
+      title: t("manageMenu.reIndex.label"),
+      tooltip: reIndexBlocked,
+      disabled: reIndexBlocked !== undefined,
+      onSelect: showReIndexModal,
+    },
+    ...(!isDeleting
+      ? [
+          {
+            kind: "action" as const,
+            id: "toggle-status",
+            icon: statusIsNotCurrentlyActive(ccPair.status)
+              ? SvgPlayCircle
+              : SvgPauseCircle,
+            title: statusIsNotCurrentlyActive(ccPair.status)
+              ? t("manageMenu.toggleStatus.resume.label")
+              : t("manageMenu.toggleStatus.pause.label"),
+            tooltip: isStatusUpdating
+              ? t("manageMenu.toggleStatus.tooltip.updating")
+              : undefined,
+            disabled: isStatusUpdating,
+            onSelect: () =>
+              handleStatusUpdate(
+                statusIsNotCurrentlyActive(ccPair.status)
+                  ? ConnectorCredentialPairStatus.ACTIVE
+                  : ConnectorCredentialPairStatus.PAUSED
+              ),
+          },
+        ]
+      : []),
+    ...(!isDeleting && can(ccPair, "delete")
+      ? [
+          {
+            kind: "action" as const,
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("manageMenu.delete.label"),
+            tooltip: !statusIsNotCurrentlyActive(ccPair.status)
+              ? t("manageMenu.delete.tooltip.active")
+              : undefined,
+            disabled: !statusIsNotCurrentlyActive(ccPair.status),
+            onSelect: () => setShowDeleteConnectorConfirmModal(true),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
       {showIsResolvingKickoffLoader && !isResolvingErrors && <Spinner />}
@@ -481,92 +539,33 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
 
         <div className="ms-auto flex gap-x-2">
+          {!isDeleting &&
+            can(ccPair, "edit") &&
+            isEditableSource(ccPair.connector.source) && (
+              <Button
+                prominence="secondary"
+                icon={SvgEdit}
+                onClick={() =>
+                  router.push(
+                    `/admin/connectors/${ccPair.connector.source}/edit/${ccPair.id}`
+                  )
+                }
+              >
+                {editT("editButton.label")}
+              </Button>
+            )}
           {can(ccPair, "operate") && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <Dropdown>
+              <Dropdown.Trigger asChild>
                 <Button prominence="secondary" icon={SvgSettings}>
                   {t("manageMenu.trigger.label")}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItemWithTooltip
-                  onClick={() => {
-                    if (
-                      !ccPair.indexing &&
-                      ccPair.status !== ConnectorCredentialPairStatus.PAUSED &&
-                      ccPair.status !== ConnectorCredentialPairStatus.INVALID
-                    ) {
-                      showReIndexModal();
-                    }
-                  }}
-                  disabled={
-                    ccPair.indexing ||
-                    ccPair.status === ConnectorCredentialPairStatus.PAUSED ||
-                    ccPair.status === ConnectorCredentialPairStatus.INVALID
-                  }
-                  className="flex items-center gap-x-2 cursor-pointer px-3 py-2"
-                  tooltip={
-                    ccPair.indexing
-                      ? t("manageMenu.reIndex.tooltip.indexing")
-                      : ccPair.status === ConnectorCredentialPairStatus.PAUSED
-                        ? t("manageMenu.reIndex.tooltip.paused")
-                        : ccPair.status ===
-                            ConnectorCredentialPairStatus.INVALID
-                          ? t("manageMenu.reIndex.tooltip.invalid")
-                          : undefined
-                  }
-                >
-                  <RefreshCwIcon className="h-4 w-4" />
-                  <span>{t("manageMenu.reIndex.label")}</span>
-                </DropdownMenuItemWithTooltip>
-                {!isDeleting && (
-                  <DropdownMenuItemWithTooltip
-                    onClick={() =>
-                      handleStatusUpdate(
-                        statusIsNotCurrentlyActive(ccPair.status)
-                          ? ConnectorCredentialPairStatus.ACTIVE
-                          : ConnectorCredentialPairStatus.PAUSED
-                      )
-                    }
-                    disabled={isStatusUpdating}
-                    className="flex items-center gap-x-2 cursor-pointer px-3 py-2"
-                    tooltip={
-                      isStatusUpdating
-                        ? t("manageMenu.toggleStatus.tooltip.updating")
-                        : undefined
-                    }
-                  >
-                    {statusIsNotCurrentlyActive(ccPair.status) ? (
-                      <PlayIcon className="h-4 w-4" />
-                    ) : (
-                      <PauseIcon className="h-4 w-4" />
-                    )}
-                    <span>
-                      {statusIsNotCurrentlyActive(ccPair.status)
-                        ? t("manageMenu.toggleStatus.resume.label")
-                        : t("manageMenu.toggleStatus.pause.label")}
-                    </span>
-                  </DropdownMenuItemWithTooltip>
-                )}
-                {!isDeleting && can(ccPair, "delete") && (
-                  <DropdownMenuItemWithTooltip
-                    onClick={() => {
-                      setShowDeleteConnectorConfirmModal(true);
-                    }}
-                    disabled={!statusIsNotCurrentlyActive(ccPair.status)}
-                    className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    tooltip={
-                      !statusIsNotCurrentlyActive(ccPair.status)
-                        ? t("manageMenu.delete.tooltip.active")
-                        : undefined
-                    }
-                  >
-                    <Trash2Icon className="h-4 w-4" />
-                    <span>{t("manageMenu.delete.label")}</span>
-                  </DropdownMenuItemWithTooltip>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("manageMenu.trigger.label")}
+                items={manageItems}
+              />
+            </Dropdown>
           )}
         </div>
       </div>
@@ -617,6 +616,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
             )}
           </AlertDescription>
         </Alert>
+      )}
+
+      {ccPair.pending_backfills.length > 0 && (
+        <div className="mt-6">
+          <PendingBackfills backfills={ccPair.pending_backfills} />
+        </div>
       )}
 
       <Title className="mb-2 mt-6" size="md">

@@ -31,6 +31,7 @@ from onyx.connectors.zoom.recordings.models import (
     Host,
     HostScope,
     OccurrenceWork,
+    ProvenRecording,
     ZoomListingIncomplete,
     ZoomSessionType,
     fails_the_whole_run,
@@ -179,10 +180,10 @@ class DiscoveryStepResult(BaseModel):
 
 class InventoryScope(BaseModel):
     hosts: list[HostScope] = Field(default_factory=list)
-    # Occurrences Zoom answered for directly, kept whatever a host listing goes
+    # Recordings Zoom answered for directly, kept whatever a host listing goes
     # on to say later. A listing reaches neither a recording made on-premise nor
     # one whose owner nobody can resolve.
-    proven: list[OccurrenceWork] = Field(default_factory=list)
+    proven: list[ProvenRecording] = Field(default_factory=list)
     # Hosts and sessions Zoom has no record of. Tracked so the walk can tell
     # one that was deleted from a credential pointed at the wrong Zoom account,
     # which makes every one of them look deleted.
@@ -339,16 +340,10 @@ class IdAllowlistSource(DiscoverySource):
             handler = get_session_type_handler(session_type)
             found = handler.find_host(client, session_id)
 
-            proven: list[OccurrenceWork] = []
+            proven: list[ProvenRecording] = []
             if found.anchor is not None:
                 proven.append(
-                    OccurrenceWork(
-                        session_type=session_type,
-                        session_id=session_id,
-                        occurrence_uuid=found.anchor.uuid,
-                        start_time=found.anchor.start_time,
-                        topic=found.anchor.topic,
-                    )
+                    ProvenRecording(session_type=session_type, recording=found.anchor)
                 )
 
             if found.host_id is not None and found.host_id not in listable:

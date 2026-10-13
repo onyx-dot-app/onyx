@@ -8,6 +8,7 @@ import requests
 from tenacity import (
     before_sleep_log,
     before_sleep_nothing,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
     stop_never,
@@ -37,10 +38,12 @@ def retry_builder(
     jitter: tuple[float, float] | float = 1,
     exceptions: type[Exception] | tuple[type[Exception], ...] = (Exception,),
     log_errors: bool = True,
+    retry_if: Callable[[BaseException], bool] | None = None,
 ) -> Callable[[F], F]:
     """Builds a generic wrapper/decorator for calls to external APIs that
     may fail due to rate limiting, flakes, or other reasons. Applies exponential
-    backoff with jitter to retry the call."""
+    backoff with jitter to retry the call. ``retry_if`` narrows the retried
+    ``exceptions`` further, e.g. to the transient HTTP statuses."""
 
     # mirror the semantics of the legacy `retry` package: the n-th wait is
     # `delay * backoff**n` capped at `max_delay`, plus a random jitter
@@ -64,7 +67,11 @@ def retry_builder(
         # `wrapped_func`. Final metadata is correct either way (tenacity
         # applies `functools.wraps` to whatever it wraps).
         @tenacity_retry(
-            retry=retry_if_exception_type(exceptions),
+            retry=(
+                retry_if_exception_type(exceptions) & retry_if_exception(retry_if)
+                if retry_if is not None
+                else retry_if_exception_type(exceptions)
+            ),
             wait=wait,
             stop=stop,
             before_sleep=before_sleep_log(cast(Logger, logger), logging.WARNING)

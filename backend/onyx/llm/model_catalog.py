@@ -14,11 +14,17 @@ models), and OpenRouter (gap-fill pricing for its section).
 
 import json
 import re
+import threading
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, ONYX_AIRGAPPED
 
 logger = setup_logger()
 
@@ -158,29 +164,177 @@ def provider_names() -> list[str]:
     return sorted(_catalog())
 
 
+# Modes a catalog entry can serve a chat request under — entries in any
+# other mode (embedding/rerank/image/audio/...) must stay out of
+# chat-model surfaces.
+CHAT_MODES = frozenset({"chat", "responses", "completion"})
+
+# Name heuristic behind resolve_model_mode's fallback — used for catalog
+# entries vendored without a mode and for names outside the catalog. Rerank
+# ids check first: the embed-class pattern matches them too.
+_RERANK_NAME_PATTERN = re.compile(r"rerank", re.IGNORECASE)
+_EMBEDDING_NAME_PATTERN = re.compile(
+    r"embed|e5-|bge-|gte-|jina|voyage|rerank|colbert|uae-|instructor",
+    re.IGNORECASE,
+)
+
+
+def _mode_from_name(model_name: str) -> str:
+    tail = model_name.split("/")[-1]
+    if _RERANK_NAME_PATTERN.search(tail):
+        return "rerank"
+    if _EMBEDDING_NAME_PATTERN.search(tail):
+        return "embedding"
+    return "chat"
+
+
+def _catalog_mode(entry: dict[str, Any], model_name: str) -> str:
+    """Entries vendored from sources without a mode concept (models.dev-only
+    providers like vercel_ai_gateway) ship no mode; without one every
+    embedding/rerank entry would resolve as a chat model."""
+    mode: Any = entry.get("mode")
+    return mode or _mode_from_name(model_name)
+
+
 def iter_models(provider: str, mode: str | None = None) -> list[str]:
     """Real model ids under a provider (aliases excluded). Pass ``mode``
     (e.g. "chat") to restrict to that kind; entries without a mode field
-    are chat models."""
+    count as chat unless the id looks non-chat."""
     models = _catalog().get(provider, {}).get("models", {})
     if mode is None:
         return sorted(models)
     return sorted(
         model_id
         for model_id, entry in models.items()
-        if entry.get("mode", "chat") == mode
+        if _catalog_mode(entry, model_id) == mode
     )
 
 
-def _lookup_provider(provider: str, model_name: str) -> dict[str, Any] | None:
+def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
+    """A model's vendored catalog entry for the provider (direct or alias)."""
     section = _catalog().get(provider)
     if not section:
         return None
+    return _model_in_section(section, model_name)
+
+
+def _model_in_section(
+    section: dict[str, Any], model_name: str
+) -> dict[str, Any] | None:
+    """A model's raw catalog entry inside one provider's section."""
     entry = section["models"].get(model_name)
     if entry is not None:
         return entry
     target = section["aliases"].get(model_name)
     return section["models"].get(target) if target else None
+
+
+# Providers whose inference runs on customer-owned hardware — there is no
+# per-token API bill, so catalog pricing (and the cross-provider fallback scan,
+# which could match identically-named hosted models) must not apply. Admins
+# can still assign a rate via ModelCostOverride.
+_LOCAL_PROVIDERS = frozenset({"ollama_chat", "lm_studio"})
+
+
+# ---------------------------------------------------------------------------
+# Remote catalog (preferred)
+#
+# Lookups prefer the provider's price_table file on main over the vendored
+# copy — a deployment's vendored table is frozen at release time and main's
+# sync keeps pace with new models and corrected specs. The vendored file is
+# the offline floor: unreachable/failed fetches (and ONYX_AIRGAPPED, which
+# never fetches) resolve against it, and entries remote lacks still resolve
+# vendored. Provider-scoped only — remote never bare-scans, so a file is
+# fetched at most once per provider per TTL window.
+# ---------------------------------------------------------------------------
+
+_REMOTE_CATALOG_URL = (
+    "https://raw.githubusercontent.com/onyx-dot-app/onyx/main/"
+    "backend/onyx/llm/price_table"
+)
+_REMOTE_FETCH_TIMEOUT_SECONDS = 5.0
+# provider -> (fetched_at epoch, section or None). None negative-caches
+# failures so repeated misses don't refetch every lookup.
+_remote_sections: ThreadSafeDict[str, tuple[float, dict[str, Any] | None]] = (
+    ThreadSafeDict()
+)
+# One lock per provider: workers missing the same provider share one
+# download per cache window without serializing unrelated providers
+# behind each other's timeouts.
+_remote_locks: ThreadSafeDict[str, threading.Lock] = ThreadSafeDict()
+
+
+def _fetch_provider_file(provider: str) -> httpx.Response:
+    """One HTTP call for the provider's remote file. Tests patch this seam
+    instead of ``httpx.get`` so unrelated httpx users stay untouched."""
+    return httpx.get(
+        f"{_REMOTE_CATALOG_URL}/{provider}.json",
+        timeout=_REMOTE_FETCH_TIMEOUT_SECONDS,
+        follow_redirects=True,
+    )
+
+
+def _remote_section(provider: str) -> dict[str, Any] | None:
+    """The provider's price_table file from main, TTL + negative cached."""
+    if ONYX_AIRGAPPED or provider in _LOCAL_PROVIDERS:
+        return None
+    now: float = time.time()
+    cached: tuple[float, dict[str, Any] | None] | None = _remote_sections.get(provider)
+    if cached is not None and now - cached[0] < AUTO_LLM_UPDATE_INTERVAL_SECONDS:
+        return cached[1]
+    provider_lock: threading.Lock = _remote_locks.setdefault(provider, threading.Lock())
+    with provider_lock:
+        # Another worker may have fetched while we waited on the lock.
+        cached = _remote_sections.get(provider)
+        if cached is not None and now - cached[0] < AUTO_LLM_UPDATE_INTERVAL_SECONDS:
+            return cached[1]
+        section: dict[str, Any] | None = None
+        try:
+            response: httpx.Response = _fetch_provider_file(provider)
+            if response.status_code == 200:
+                # Reject malformed payloads instead of caching shapes that
+                # would raise inside _model_in_section / _compat_entry.
+                data: dict[str, Any] = response.json()
+                models: Any = data.get("models")
+                if isinstance(data, dict) and isinstance(models, dict):
+                    aliases: Any = data.get("aliases")
+                    section = {
+                        "models": models,
+                        "aliases": aliases if isinstance(aliases, dict) else {},
+                    }
+        except Exception as e:
+            logger.warning("Remote catalog fetch failed for %s: %s", provider, e)
+        _remote_sections[provider] = (now, section)
+        return section
+
+
+def find_remote_model_obj(
+    provider: str, candidates: list[str]
+) -> dict[str, Any] | None:
+    """Remote entry rendered in the compat model-map shape."""
+    section = _remote_section(provider)
+    if section is None:
+        return None
+    for candidate in candidates:
+        entry = _model_in_section(section, candidate)
+        if entry is None:
+            continue
+        try:
+            return _compat_entry(provider, entry, candidate)
+        except Exception as e:
+            # A malformed remote entry is a remote miss, not an error — the
+            # vendored floor still resolves the lookup.
+            logger.warning(
+                "Malformed remote catalog entry %s/%s: %s", provider, candidate, e
+            )
+            return None
+    return None
+
+
+def reset_remote_cache() -> None:
+    """Testing hook: forget fetched sections."""
+    _remote_sections.clear()
+    _remote_locks.clear()
 
 
 def _strip_colon_tag(model_name: str) -> str:
@@ -190,9 +344,12 @@ def _strip_colon_tag(model_name: str) -> str:
 def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
     """Resolve a catalog entry for (provider, model_name).
 
-    Tries provider-scoped direct hits and aliases first, with the same name
-    normalization find_model_obj used (extra provider prefix strip, Ollama
-    ``:tag`` strip), then a bare-name scan across providers.
+    The provider's remote section wins when fetchable (fresher than the
+    release-frozen vendored file), then vendored provider-scoped hits and
+    aliases — with the same name normalization find_model_obj used (extra
+    provider prefix strip, Ollama ``:tag`` strip) — then a bare-name scan
+    across vendored providers. Remote is provider-scoped only; a remote
+    bare-scan would fetch a file per provider per miss.
     """
     candidates = [model_name]
     if "/" in model_name:
@@ -201,26 +358,37 @@ def find_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
         _strip_colon_tag(c) for c in list(candidates) if ":" in c.split("/")[-1]
     )
 
-    for candidate in candidates:
-        entry = _lookup_provider(provider, candidate)
-        if entry is not None:
+    remote = _remote_section(provider)
+    if remote is not None:
+        for candidate in candidates:
+            entry = _model_in_section(remote, candidate)
+            if entry is None:
+                continue
+            if not isinstance(entry, dict):
+                # A malformed remote entry is a remote miss — resolve against
+                # the vendored floor rather than return corrupt data to
+                # cost/limit lookups.
+                logger.warning(
+                    "Malformed remote catalog entry %s/%s", provider, candidate
+                )
+                break
             return entry
+
+    section = _catalog().get(provider)
+    if section is not None:
+        for candidate in candidates:
+            entry = _model_in_section(section, candidate)
+            if entry is not None:
+                return entry
 
     for other in provider_names():
         if other == provider:
             continue
         for candidate in candidates:
-            entry = _lookup_provider(other, candidate)
+            entry = _vendored_model_entry(other, candidate)
             if entry is not None:
                 return entry
     return None
-
-
-# Providers whose inference runs on customer-owned hardware — there is no
-# per-token API bill, so catalog pricing (and the cross-provider fallback scan,
-# which could match identically-named hosted models) must not apply. Admins
-# can still assign a rate via ModelCostOverride.
-_LOCAL_PROVIDERS = frozenset({"ollama_chat", "lm_studio"})
 
 
 def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:
@@ -232,7 +400,9 @@ def find_model_cost(provider: str, model_name: str) -> dict[str, Any] | None:
     return entry.get("cost") if entry else None
 
 
-def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
+def _compat_entry(
+    provider: str, entry: dict[str, Any], model_name: str
+) -> dict[str, Any]:
     """Render a catalog entry in the legacy litellm.model_cost shape consumed
     by model_capabilities and the model name parser."""
     limit = entry.get("limit") or {}
@@ -240,12 +410,37 @@ def _compat_entry(provider: str, entry: dict[str, Any]) -> dict[str, Any]:
     inputs = modalities.get("input") or []
     display_name = re.sub(r"\s*\(latest\)\s*$", "", entry.get("name") or "")
 
+    mode: str = _catalog_mode(entry, model_name)
+
+    # Meta-models (openrouter/auto and friends) route each request to a
+    # pool endpoint smaller than their advertised pool-max limits. Emitting
+    # no output limit keeps callers from sending a max_tokens the routed
+    # endpoint then rejects.
+    unbounded: bool = bool(entry.get("unbounded"))
+
+    # An output limit at or above the context window is a pool-max
+    # fabrication — no chat model emits its whole context on top of input.
+    # Upstream vendors these anyway (~250 entries), so treat the claim as
+    # untrusted and emit no output limit, same as unbounded.
+    limit_output: Any = limit.get("output")
+    context: Any = limit.get("context")
+    if (
+        not unbounded
+        and mode == "chat"
+        and isinstance(limit_output, (int, float))
+        and isinstance(context, (int, float))
+        and context > 0
+        and limit_output >= context
+    ):
+        limit_output = None
+
     return {
         "litellm_provider": provider,
-        "mode": entry.get("mode") or "chat",
+        "mode": mode,
         "max_input_tokens": limit.get("input") or limit.get("context"),
         "max_tokens": limit.get("context"),
-        "max_output_tokens": limit.get("output"),
+        "max_output_tokens": None if unbounded else limit_output,
+        "unbounded": unbounded or None,
         "supports_vision": "image" in inputs,
         "supports_reasoning": entry.get("reasoning"),
         "supports_none_reasoning_effort": entry.get("supports_none_reasoning_effort"),
@@ -275,14 +470,14 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     for provider in ordered_providers:
         section = catalog[provider]
         for model_id, entry in section["models"].items():
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, model_id)
             model_map[f"{provider}/{model_id}"] = compat
             model_map.setdefault(model_id, compat)
         for alias, target in section["aliases"].items():
             entry = section["models"].get(target)
             if entry is None:
                 continue
-            compat = _compat_entry(provider, entry)
+            compat = _compat_entry(provider, entry, alias)
             model_map[f"{provider}/{alias}"] = compat
             model_map.setdefault(alias, compat)
 
@@ -302,17 +497,17 @@ def build_model_map() -> dict[str, dict[str, Any]]:
     return model_map
 
 
-# Name-pattern heuristic for models outside the catalog — used to filter
-# model lists fetched from user gateways (LiteLLM proxy, OpenRouter, LM
-# Studio). Catalog-known models use their ``mode`` field instead.
-_EMBEDDING_NAME_PATTERN = re.compile(
-    r"embed|e5-|bge-|gte-|jina|voyage|rerank|colbert|uae-|instructor",
-    re.IGNORECASE,
-)
-
-
-def is_embedding_model_name(model_name: str) -> bool:
+def resolve_model_mode(model_name: str) -> str:
+    """Resolve a model's type ("chat", "embedding", "rerank", "image", ...)
+    from its name — the codebase's single name-based resolver. A cataloged
+    entry's mode wins; mode-less and uncataloged names fall back to the
+    shared id heuristic."""
     entry = build_model_map().get(model_name)
-    if entry is not None and entry.get("mode"):
-        return entry["mode"] == "embedding"
-    return bool(_EMBEDDING_NAME_PATTERN.search(model_name.split("/")[-1]))
+    if entry is not None:
+        return _catalog_mode(entry, model_name)
+    return _mode_from_name(model_name)
+
+
+def is_non_chat_model_name(model_name: str) -> bool:
+    """Should this name stay out of chat-model listings?"""
+    return resolve_model_mode(model_name) not in CHAT_MODES

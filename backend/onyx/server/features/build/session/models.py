@@ -70,6 +70,17 @@ class SandboxStatusResponse(BaseModel):
     status: SandboxStatus | None
 
 
+class OutputFileResponse(BaseModel):
+    path: str
+    revision: str
+    size: int
+
+
+class OutputInventoryResponse(BaseModel):
+    files: list[OutputFileResponse]
+    complete: bool
+
+
 class ArtifactResponse(BaseModel):
     """Artifact metadata in session response."""
 
@@ -231,9 +242,7 @@ class SubagentMessageRequest(BaseModel):
 
 
 class MessageInterruptResponse(BaseModel):
-    """Response to an interrupt request. ``interrupted`` is False when there was
-    no directly-interruptible turn (no running sandbox or no opencode session);
-    the interrupt fence is set regardless."""
+    """Whether the requested turn was selected for cancellation."""
 
     interrupted: bool
 

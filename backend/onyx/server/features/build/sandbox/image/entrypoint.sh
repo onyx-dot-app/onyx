@@ -9,6 +9,7 @@
 set -euo pipefail
 
 OPENCODE_PORT=4096
+SANDBOX_LISTEN_HOST="${SANDBOX_LISTEN_HOST:-0.0.0.0}"
 export XDG_DATA_HOME="${OPENCODE_DATA_HOME:-/workspace/.opencode-data}"
 mkdir -p "$XDG_DATA_HOME"
 
@@ -56,9 +57,9 @@ backoff=1
 max_backoff=30
 
 while true; do
-    echo "[entrypoint] starting opencode serve on 0.0.0.0:$OPENCODE_PORT (XDG_DATA_HOME=$XDG_DATA_HOME)"
+    echo "[entrypoint] starting opencode serve on $SANDBOX_LISTEN_HOST:$OPENCODE_PORT (XDG_DATA_HOME=$XDG_DATA_HOME)"
     set +e
-    opencode serve --hostname 0.0.0.0 --port "$OPENCODE_PORT" --print-logs &
+    opencode serve --hostname "$SANDBOX_LISTEN_HOST" --port "$OPENCODE_PORT" --print-logs &
     child_pid=$!
     wait "$child_pid"
     exit_code=$?

@@ -52,7 +52,6 @@ def test_streaming_separates_reasoning_content_from_visible_content(
 
     prompt: list[ChatCompletionMessage] = [
         UserMessage(
-            role="user",
             content=(
                 "Think briefly about what 12 * 7 is, then respond with just the number."
             ),

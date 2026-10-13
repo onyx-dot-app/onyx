@@ -6,6 +6,7 @@
  */
 
 import type { ValidSources } from "@/lib/connectors/types/source";
+import { withoutFormOnlyFields } from "@/lib/connectors/utils";
 
 /** Body of `POST /manage/admin/credential/{id}/binding-check`. */
 export interface CredentialBindingCheckRequest {
@@ -52,9 +53,15 @@ export interface CredentialBindingCheckResponse {
  * - `done`: the backend answered for this input.
  * - `unavailable`: the request failed, or there is no credential to check.
  *   Creation checks the binding again, so this does not lock the form.
+ * - `awaitingRun`: a typed account whose values no check run has saved yet.
+ *   A binding check sends no values, so it waits for a run.
+ * - `notNeeded`: every bound field is form-only (the realm), so the backend
+ *   has nothing to check. The form compares the realm with the account.
  */
 export type BindingCheckState =
   | { kind: "idle" }
+  | { kind: "awaitingRun" }
+  | { kind: "notNeeded" }
   | { kind: "checking" }
   | { kind: "done"; response: CredentialBindingCheckResponse }
   | { kind: "unavailable" };
@@ -65,6 +72,7 @@ export type BindingGateReason =
   | { kind: "fixField"; label: string }
   | { kind: "selectCredential" }
   | { kind: "awaitingCheck" }
+  | { kind: "runChecks" }
   | { kind: "checking" }
   | { kind: "fieldRejected"; label: string; error: CredentialBindingFieldError }
   | { kind: "rejected"; rejection: CredentialBindingRejection }
@@ -147,6 +155,7 @@ export function decideBindingGate(input: BindingGateInput): BindingGate {
 
   const { binding } = input;
   if (binding.kind === "idle") return locked({ kind: "awaitingCheck" });
+  if (binding.kind === "awaitingRun") return locked({ kind: "runChecks" });
   if (binding.kind === "checking") return CHECKING_GATE;
   if (binding.kind === "done") {
     const [rejectedName, fieldError] =
@@ -168,17 +177,21 @@ export function decideBindingGate(input: BindingGateInput): BindingGate {
 }
 
 /**
- * The bound values the binding check sends, and the key that identifies a
- * credential and those values. A response for another key is stale.
+ * The bound values the binding check sends, without the form-only ones, and
+ * the key that identifies a credential and those values. A response for
+ * another key is stale.
  */
 export function bindingCheckInput(
-  credentialId: number | null,
+  source: ValidSources,
+  /** Names the credential; `null` when none is selected. */
+  credentialKey: string | null,
   boundFieldNames: string[],
   values: Record<string, unknown>
 ): { key: string; config: Record<string, unknown> } {
-  const config: Record<string, unknown> = {};
+  const bound: Record<string, unknown> = {};
   for (const name of [...boundFieldNames].sort()) {
-    if (values[name] !== undefined) config[name] = values[name];
+    if (values[name] !== undefined) bound[name] = values[name];
   }
-  return { key: JSON.stringify({ credentialId, config }), config };
+  const config = withoutFormOnlyFields(source, bound);
+  return { key: JSON.stringify({ credentialKey, config }), config };
 }

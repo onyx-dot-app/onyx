@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import { Button, OpenButton, SelectButton } from "@opal/components";
-import { SvgOpenai } from "@opal/logos";
+import { SvgOpenAI } from "@opal/logos";
 import {
   SvgPlusCircle,
   SvgArrowUp,
@@ -38,7 +38,7 @@ export default function SharedAppInputBar() {
 
           {/* Right side controls */}
           <div className="flex flex-row items-center gap-1">
-            <OpenButton disabled icon={SvgOpenai}>
+            <OpenButton disabled icon={SvgOpenAI}>
               {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- model name, not copy */}
               GPT-4o
             </OpenButton>

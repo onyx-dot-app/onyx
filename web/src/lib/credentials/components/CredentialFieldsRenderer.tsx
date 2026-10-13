@@ -17,7 +17,7 @@ import {
 } from "@opal/layouts";
 import { InputCheckboxField } from "@opal/form";
 import type { IconFunctionComponent } from "@opal/types";
-import { useFormikContext } from "formik";
+import { getIn, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
 import { TypedFileUploadFormField } from "@/components/Field";
 import { FormikField } from "@/refresh-components/form/FormikField";
@@ -34,6 +34,8 @@ interface CredentialFieldProps {
   source: ValidSources;
   fieldKey: string;
   field: CredentialSpecField;
+  /** The Formik path the field lives under, e.g. `new_account`. */
+  namePrefix?: string;
 }
 
 /**
@@ -55,16 +57,23 @@ function useCheckboxIcon(name: string, label: string): IconFunctionComponent {
 }
 
 /** One field of a credential spec, drawn with the Opal input for its kind. */
-function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
+function CredentialField({
+  source,
+  fieldKey,
+  field,
+  namePrefix,
+}: CredentialFieldProps) {
   const t = useTranslations("admin");
   const copy = useCredentialFieldCopy(source)(fieldKey);
   const label = copy.title;
-  const checkboxIcon = useCheckboxIcon(fieldKey, label);
+  // The Formik path; the spec key stays the copy and test id.
+  const name: string = namePrefix ? `${namePrefix}.${fieldKey}` : fieldKey;
+  const checkboxIcon = useCheckboxIcon(name, label);
 
   // A file such as a .pfx key is binary; Opal's InputFile reads text, so
   // this field keeps the typed upload until Opal can hand back a File.
   if (field.kind === "file") {
-    return <TypedFileUploadFormField name={fieldKey} label={label} />;
+    return <TypedFileUploadFormField name={name} label={label} />;
   }
 
   // The checkbox stands in for the icon, left of the title. The label around
@@ -87,7 +96,7 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
     return (
       <InputHorizontal withLabel title={label}>
         <FormikField<boolean>
-          name={fieldKey}
+          name={name}
           render={(formikField, helper) => (
             <InputSwitch
               checked={!!formikField.value}
@@ -118,17 +127,17 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
     // The field name ties the label to the input's id and shows the field's
     // Formik error under it.
     <InputVertical
-      withLabel={fieldKey}
+      withLabel={name}
       title={label}
       subDescription={subDescription}
     >
       <FormikField<string>
-        name={fieldKey}
+        name={name}
         render={(formikField, _helper, _meta, status) =>
           field.kind === "secret" ? (
             <InputPasswordTypeIn
               {...formikField}
-              id={fieldKey}
+              id={name}
               data-testid={fieldKey}
               value={formikField.value ?? ""}
               placeholder={placeholder}
@@ -137,7 +146,7 @@ function CredentialField({ source, fieldKey, field }: CredentialFieldProps) {
           ) : (
             <InputTypeIn
               {...formikField}
-              id={fieldKey}
+              id={name}
               data-testid={fieldKey}
               value={formikField.value ?? ""}
               placeholder={placeholder}
@@ -155,6 +164,13 @@ interface CredentialFieldsRendererProps {
   spec: CredentialSpec;
   authMethod?: string;
   setAuthMethod?: (method: string) => void;
+  /**
+   * The Formik path the credential's values live under, e.g. `new_account`
+   * inside a larger form. Unset, they are the form's own values.
+   */
+  namePrefix?: string;
+  /** Field keys this renderer leaves out, e.g. ones drawn elsewhere. */
+  exclude?: ReadonlySet<string>;
 }
 
 export function CredentialFieldsRenderer({
@@ -162,10 +178,16 @@ export function CredentialFieldsRenderer({
   spec,
   authMethod,
   setAuthMethod,
+  namePrefix,
+  exclude,
 }: CredentialFieldsRendererProps) {
   const t = useTranslations("admin");
-  const { values, setValues } = useFormikContext<CredentialFieldValues>();
+  const { values, setValues, setFieldValue } =
+    useFormikContext<CredentialFieldValues>();
   const methods = spec.methods;
+  const credentialValues: CredentialFieldValues = namePrefix
+    ? (getIn(values, namePrefix) ?? {})
+    : values;
 
   // Switching auth method drops the fields only the other methods use.
   function handleAuthMethodChange(newMethod: string) {
@@ -173,13 +195,17 @@ export function CredentialFieldsRenderer({
       methods?.find((method) => method.value === newMethod)?.fields
     );
     const cleaned: CredentialFieldValues = {
-      ...values,
+      ...credentialValues,
       authentication_method: newMethod,
     };
     Object.keys(spec.fields).forEach((fieldKey) => {
       if (!kept.has(fieldKey)) delete cleaned[fieldKey];
     });
-    setValues(cleaned);
+    if (namePrefix) {
+      setFieldValue(namePrefix, cleaned);
+    } else {
+      setValues(cleaned);
+    }
     setAuthMethod?.(newMethod);
   }
 
@@ -210,14 +236,17 @@ export function CredentialFieldsRenderer({
                   )}
                 />
               )}
-              {methodFields(spec, method).map(([key, field]) => (
-                <CredentialField
-                  key={key}
-                  source={source}
-                  fieldKey={key}
-                  field={field}
-                />
-              ))}
+              {methodFields(spec, method)
+                .filter(([key]) => !exclude?.has(key))
+                .map(([key, field]) => (
+                  <CredentialField
+                    key={key}
+                    source={source}
+                    fieldKey={key}
+                    field={field}
+                    namePrefix={namePrefix}
+                  />
+                ))}
             </Section>
           </Tabs.Content>
         ))}
@@ -227,14 +256,17 @@ export function CredentialFieldsRenderer({
 
   return (
     <>
-      {Object.entries(spec.fields).map(([key, field]) => (
-        <CredentialField
-          key={key}
-          source={source}
-          fieldKey={key}
-          field={field}
-        />
-      ))}
+      {Object.entries(spec.fields)
+        .filter(([key]) => !exclude?.has(key))
+        .map(([key, field]) => (
+          <CredentialField
+            key={key}
+            source={source}
+            fieldKey={key}
+            field={field}
+            namePrefix={namePrefix}
+          />
+        ))}
     </>
   );
 }

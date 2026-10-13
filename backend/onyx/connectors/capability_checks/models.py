@@ -1,13 +1,18 @@
-import hashlib
-import json
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from functools import cached_property
-from typing import Any, Generic
+from typing import Annotated, Any, Generic, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+)
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
@@ -20,6 +25,122 @@ from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.connectors.source_operations import SourceOperations
 from onyx.db.enums import AccessType, CapabilityCheckTrigger
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+# Findings: structured information a capability check discovers about what a
+# credential and config reach, beside its pass/fail outcome. A finding names what
+# it describes with a closed ``key``; the frontend turns the key into a localized
+# label, so findings carry no display text. ``field_name`` names the config field
+# a finding informs, for a form that offers the finding's options in that field.
+# Findings stay conservative: names and ids of containers (drives, spaces,
+# channels, mailboxes) and counts. Never document content, and never lists of
+# users: users are a count. A container name can still name a person, for
+# example a personal Confluence space.
+
+# TODO(evan-onyx): a search endpoint for sources whose listings exceed this.
+MAX_FINDING_OPTIONS: int = 1000
+# Longest option value, label or detail. Bounds the stored report and every
+# draft snapshot write.
+MAX_FINDING_TEXT_LENGTH: int = 500
+
+
+class CheckFindingKey(str, Enum):
+    SHARED_DRIVES = "shared_drives"
+    VISIBLE_ORGANIZATION_USERS = "visible_organization_users"
+    VISIBLE_SPACES = "visible_spaces"
+    READABLE_CHANNELS = "readable_channels"
+    READABLE_MAILBOXES = "readable_mailboxes"
+    READABLE_DRIVES = "readable_drives"
+
+
+class CheckFindingType(str, Enum):
+    COUNT = "count"
+    OPTIONS = "options"
+
+
+class CountFinding(BaseModel):
+    type: Literal[CheckFindingType.COUNT] = CheckFindingType.COUNT
+    key: CheckFindingKey
+    field_name: str | None = None
+    count: int = Field(ge=0)
+    # The listing stopped at a cap, so the real count is at least ``count``.
+    at_least: bool = False
+
+
+class FindingOption(BaseModel):
+    # What a form puts in the config field: an id or a URL.
+    value: str = Field(max_length=MAX_FINDING_TEXT_LENGTH)
+    # What the admin reads.
+    label: str = Field(max_length=MAX_FINDING_TEXT_LENGTH)
+    # An optional second line.
+    detail: str | None = Field(default=None, max_length=MAX_FINDING_TEXT_LENGTH)
+
+
+class OptionsFinding(BaseModel):
+    type: Literal[CheckFindingType.OPTIONS] = CheckFindingType.OPTIONS
+    key: CheckFindingKey
+    field_name: str | None = None
+    options: list[FindingOption] = Field(max_length=MAX_FINDING_OPTIONS)
+    # The listing stopped at MAX_FINDING_OPTIONS.
+    truncated: bool = False
+
+
+CheckFinding = Annotated[CountFinding | OptionsFinding, Field(discriminator="type")]
+
+_CHECK_FINDING_ADAPTER: TypeAdapter[CheckFinding] = TypeAdapter(CheckFinding)
+
+
+def parse_known_findings(raw: Any) -> list[CheckFinding]:
+    """Keeps the findings this version understands. A stored finding with a
+    newer type or key is dropped, not an error, so a report written by a newer
+    version still reads."""
+    if not isinstance(raw, list):
+        return []
+    known: list[CheckFinding] = []
+    for item in raw:
+        try:
+            known.append(_CHECK_FINDING_ADAPTER.validate_python(item))
+        except ValidationError:
+            logger.debug("Dropping an unknown capability check finding")
+    return known
+
+
+# Advisories: free text a check adds to its result, at any status. An advisory
+# says what the check could not verify or what the admin should know, for
+# example "the channel is empty, so thread reads were not verified".
+# Advisories are not findings: the findings setting does not hide them, so they
+# must not list what the credential reaches.
+MAX_ADVISORY_LENGTH: int = 1000
+MAX_CHECK_ADVISORIES: int = 20
+
+
+class CheckAdvisory(BaseModel):
+    message: str
+
+    @field_validator("message")
+    @classmethod
+    def _bounded(cls, message: str) -> str:
+        if len(message) <= MAX_ADVISORY_LENGTH:
+            return message
+        return message[: MAX_ADVISORY_LENGTH - 1] + "…"
+
+
+class CheckOutput(BaseModel):
+    """What a passing check returns: findings, and advisories about what it
+    could not verify."""
+
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = Field(default=[], max_length=MAX_CHECK_ADVISORIES)
+
+
+class CheckNotApplicableError(Exception):
+    """Raised by a check that learns at run time that it does not apply, for
+    example a Grid-only check on a workspace that is not on Enterprise Grid.
+    The result is SKIPPED and not applicable, like a check that the config
+    excludes."""
 
 
 class CapabilityCheckStatus(str, Enum):
@@ -102,7 +223,8 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
 
     Concrete checks pass their metadata to ``__init__`` and implement ``run``,
     which raises a ``ValidationError``-family exception on failure and returns
-    nothing on success; the runner maps exceptions to statuses.
+    nothing or a ``CheckOutput`` on success; the runner maps exceptions to
+    statuses.
 
     A check that reads the connector config sets ``config_class`` to the source's
     ``ConnectorConfig`` and reads it through ``config``. It declares:
@@ -143,13 +265,19 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         remediation: str | None = None,
         docs_link: str | None = None,
         validates_binding: bool = False,
+        discovery: bool = False,
     ) -> None:
         self.capability = capability
         self.check_id = check_id
         self.display_name = display_name
         # Required checks gate the capability verdict; non-required checks only
-        # downgrade PASSED to PASSED_WITH_WARNINGS (partial capability).
-        self.required = required
+        # downgrade PASSED to PASSED_WITH_WARNINGS (partial capability). A
+        # discovery check is never required.
+        self.required = required and not discovery
+        # Retrieves findings (``findings.py``) that take much longer to gather
+        # than validation. It never counts toward the verdict, runs after the
+        # validation checks of its run, and does not run at pairing creation.
+        self.discovery = discovery
         self.requires_connector_instance = requires_connector_instance
         # Needs a config to read, even if every field it reads is optional.
         # Implied by a non-empty ``requires_fields``.
@@ -177,8 +305,11 @@ class CapabilityCheck(ABC, Generic[ConfigT]):
         self.validates_binding = validates_binding
 
     @abstractmethod
-    def run(self, context: CapabilityCheckContext) -> None:
-        """Probes the capability; raises on failure, returns on success."""
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
+        """Probes the capability; raises on failure, returns on success. A
+        passing check may return a ``CheckOutput``: findings (what the
+        credential and config reach) and advisories (what it could not
+        verify)."""
 
     @property
     def reads_connector_config(self) -> bool:
@@ -239,6 +370,16 @@ class CapabilityCheckResult(BaseModel):
     # config. It does not count toward the verdict.
     applicable: bool = True
     validates_binding: bool = False
+    # A discovery check: never part of the verdict.
+    discovery: bool = False
+    # What a passing check found. Empty for every other status.
+    findings: list[CheckFinding] = []
+    advisories: list[CheckAdvisory] = []
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _known_findings(cls, findings: Any) -> Any:
+        return parse_known_findings(findings)
 
 
 class CredentialCapabilityReport(BaseModel):
@@ -254,16 +395,44 @@ class CredentialCapabilityReport(BaseModel):
     check_results: list[CapabilityCheckResult]
 
 
-def compute_connector_config_hash(config: dict[str, Any] | None) -> str | None:
-    """Returns the sha256 of the canonical config JSON a report ran with.
+class NamedCheckRun(BaseModel):
+    """The outcome of the named checks after the blocking budget."""
 
-    This is the staleness signal, shared by every report writer so stored hashes
-    stay comparable.
-    """
-    if config is None:
-        return None
-    canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode()).hexdigest()
+    # Results of the checks that finished, reused draft results included.
+    finished_results: list[CapabilityCheckResult]
+    # Checks that were still running at the end of the budget.
+    unfinished_check_ids: frozenset[str]
+
+    @property
+    def failed_required_results(self) -> list[CapabilityCheckResult]:
+        """The finished required checks that failed. Only these block a
+        pairing."""
+        return [
+            result
+            for result in self.finished_results
+            if result.required and result.status == CapabilityCheckStatus.FAILED
+        ]
+
+
+class ProposedPairingValidation(BaseModel):
+    """The result of validating a pairing state that is not stored."""
+
+    # Set when the credential binding, the connector construction, or the
+    # legacy validation failed. The named checks do not run then.
+    validation_error: str | None = None
+    # Named checks only: the finished results, and the checks still running at
+    # the end of the blocking budget.
+    check_results: list[CapabilityCheckResult] = []
+    unfinished_check_ids: frozenset[str] = frozenset()
+
+    @property
+    def blocks_pairing(self) -> bool:
+        """True when the validation failed or a finished required check
+        failed."""
+        return self.validation_error is not None or any(
+            result.required and result.status == CapabilityCheckStatus.FAILED
+            for result in self.check_results
+        )
 
 
 def aggregate_capability_verdict(
@@ -283,7 +452,9 @@ def aggregate_capability_verdict(
     """
     if not applicable:
         return CapabilityVerdict.NOT_APPLICABLE
-    results = [result for result in results if result.applicable]
+    results = [
+        result for result in results if result.applicable and not result.discovery
+    ]
     if any(
         result.status == CapabilityCheckStatus.FAILED and result.required
         for result in results

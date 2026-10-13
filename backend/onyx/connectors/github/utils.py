@@ -1,13 +1,11 @@
-from collections.abc import Callable
-from typing import cast
+from collections.abc import Callable, Mapping
+from typing import Any, cast
 from urllib.parse import ParseResult, urlparse
 
-from github import Github
-from github.Repository import Repository
-
 from onyx.access.models import ExternalAccess
+from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.github.models import SerializedRepository
+from onyx.connectors.github.models import GitHubRepository
 from onyx.server.security.models import web_connector_ssrf_enforced
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
@@ -81,9 +79,31 @@ def validate_credential_base_url(base_url: str) -> None:
         ) from e
 
 
-def get_external_access_permission(
-    repo: Repository, github_client: Github
-) -> ExternalAccess:
+def parse_repository_names(repositories: str | None) -> list[str]:
+    """The repository names of the comma-separated setting, without blanks.
+    Empty means every repository of the owner."""
+    return [name.strip() for name in (repositories or "").split(",") if name.strip()]
+
+
+def resolve_github_base_url(credentials: Mapping[str, Any]) -> str | None:
+    """The API root the client calls. None means github.com.
+
+    The credential's URL wins, so one deployment can index github.com and a
+    GitHub Enterprise Server at once; ``GITHUB_CONNECTOR_BASE_URL`` is the
+    fallback. Each side is normalized, so a blank credential value cannot
+    shadow the env var. Only the credential is user input, so only it gets
+    the SSRF check.
+    """
+    credential_base_url: str | None = normalize_github_base_url(
+        credentials.get("github_base_url")
+    )
+    if credential_base_url is not None:
+        validate_credential_base_url(credential_base_url)
+        return credential_base_url
+    return normalize_github_base_url(GITHUB_CONNECTOR_BASE_URL)
+
+
+def get_external_access_permission(repo: GitHubRepository) -> ExternalAccess:
     """
     Get the external access permission for a repository.
     This functionality requires Enterprise Edition.
@@ -95,39 +115,11 @@ def get_external_access_permission(
 
     # Fetch the EE implementation
     ee_get_external_access_permission = cast(
-        Callable[[Repository, Github, bool], ExternalAccess],
+        Callable[[GitHubRepository, bool], ExternalAccess],
         fetch_versioned_implementation(
             "onyx.external_permissions.github.utils",
             "get_external_access_permission",
         ),
     )
 
-    return ee_get_external_access_permission(repo, github_client, True)
-
-
-def deserialize_repository(
-    cached_repo: SerializedRepository, github_client: Github
-) -> Repository:
-    """
-    Deserialize a SerializedRepository back into a Repository object.
-    """
-    # Try to access the requester - different PyGithub versions may use different attribute names
-    try:
-        # Try to get the requester using getattr to avoid linter errors
-        requester = getattr(github_client, "_requester", None)  # ods: ignore[getattr]
-        if requester is None:
-            requester = getattr(  # ods: ignore[getattr]
-                github_client, "_Github__requester", None
-            )
-        if requester is None:
-            # If we can't find the requester attribute, we need to fall back to recreating the repo
-            raise AttributeError("Could not find requester attribute")
-
-        return cached_repo.to_Repository(requester)
-    except Exception as e:
-        # If all else fails, re-fetch the repo directly
-        logger.warning(
-            "Failed to deserialize repository: %s. Attempting to re-fetch.", e
-        )
-        repo_id = cached_repo.id
-        return github_client.get_repo(repo_id)
+    return ee_get_external_access_permission(repo, True)

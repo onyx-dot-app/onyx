@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/lib/credentials/svc";
@@ -16,8 +17,8 @@ import {
   getCredentialSpec,
   initialCredentialValues,
 } from "@/lib/credentials/utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import {
   DEFAULT_SHARE_AUDIENCE,
   ShareAccountField,
@@ -145,8 +146,10 @@ export default function CreateCredential({
         }
         onClose();
       } else {
+        // With `onSwitch`, the new credential is picked at once, and the
+        // picked credential is the confirmation.
         if (isSuccess) {
-          toast.success(message);
+          if (!onSwitch) toast.success(message);
         } else {
           toast.error(message);
         }
@@ -232,9 +235,12 @@ export default function CreateCredential({
               and the Create button. */}
               <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-              {businessTier && (
-                <ShareAccountField disabled={!formikProps.isValid} />
-              )}
+              <Disabled disabled={!formikProps.isValid}>
+                <ShareAccountField
+                  disabled={!formikProps.isValid}
+                  groupsLocked={!businessTier}
+                />
+              </Disabled>
 
               <Section flexDirection="row" justifyContent="end">
                 <CreateButton

@@ -1,4 +1,40 @@
 {
+  "mcpOAuth": {
+    "consent": {
+      "title": "Connect to Onyx",
+      "request": "Allow {clientName} to search Onyx?",
+      "account": "Signed in as {email}",
+      "workspace": "Workspace: {workspaceName}",
+      "appAddress": "App address: {origin}",
+      "access": "Read search results from documents you can access. Use web search and open web pages.",
+      "allow": "Allow access",
+      "deny": "Deny",
+      "pending": "Saving your choice...",
+      "loading": "Loading authorization request...",
+      "unavailable": "This request expired or changed. Start again from your app.",
+      "failed": "Authorization could not finish. Start again from your app.",
+      "signInRequired": "Sign in to authorize this app.",
+      "signIn": "Sign in",
+      "forbidden": "You cannot authorize this app. Contact your workspace administrator.",
+      "loadFailed": "Onyx could not load this request. Try again.",
+      "retry": "Try again"
+    },
+    "connections": {
+      "cancel": "Cancel",
+      "title": "Connected apps",
+      "description": "Apps you have allowed to search Onyx.",
+      "empty": "No connected apps.",
+      "loading": "Loading connected apps...",
+      "expires": "Expires {date}",
+      "disconnect": "Disconnect",
+      "disconnectAriaLabel": "Disconnect {clientName}",
+      "pending": "Disconnecting...",
+      "failed": "Could not disconnect the app. Try again.",
+      "loadFailed": "Could not load connected apps.",
+      "confirmTitle": "Disconnect {clientName}?",
+      "confirmDescription": "This app will lose access to Onyx. You can connect it again later."
+    }
+  },
   "accountPopover": {
     "accountFallback": {
       "label": "Account"
@@ -1388,6 +1424,43 @@
           "text": "You will be billed on <value>{date}</value> After your 1-month free trial ends."
         }
       },
+      "downgrade": {
+        "failed": {
+          "text": "Failed to downgrade"
+        },
+        "link": {
+          "label": "Downgrade to Community"
+        },
+        "modal": {
+          "changes": {
+            "text": "When you downgrade:"
+          },
+          "confirmButton": {
+            "label": "Downgrade",
+            "loading": "Downgrading..."
+          },
+          "deleted": {
+            "text": "**Deleted:** User groups, service account API keys, token rate limits, and hooks;"
+          },
+          "description": "Removes your license and every paid feature.",
+          "disabled": {
+            "text": "**Disabled:** Standard answers and SCIM tokens;"
+          },
+          "intro": {
+            "text": "Access controls are removed from this deployment. **This starts a re-index** so search results reflect the change, which can take a while on a large index."
+          },
+          "madePublic": {
+            "text": "**Made public:** All connectors, plus any agents, document sets, LLM providers, MCP servers, and skills shared with a user group;"
+          },
+          "reset": {
+            "text": "**Reset to defaults:** Custom branding and chat retention policy."
+          },
+          "title": "Downgrade to Community Edition",
+          "warning": {
+            "text": "Documents restricted by synced permissions or user groups become **visible to all users**. This cannot be undone."
+          }
+        }
+      },
       "footer": {
         "activateLicenseKey": {
           "label": "Activate License Key"
@@ -1787,9 +1860,6 @@
           "restoreTooltip": "Restore Default"
         },
         "description": "Specify how long {appName} should retain chats in your organization.",
-        "enterprisePlanTag": {
-          "label": "Enterprise Plan"
-        },
         "forever": {
           "label": "Forever"
         },
@@ -1805,16 +1875,11 @@
           "message": "Chats with no activity for longer than {days, plural, one {# day} other {# days}} will be permanently deleted. This cannot be undone.",
           "title": "Reduce chat retention?"
         },
-        "tierTooltip": "Chat history retention is an Enterprise Plan feature.",
         "title": "Keep Chat History"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business Plan"
-        },
         "description": "UI mode for quick document search across your organization.",
         "noConnectorsTooltip": "Set up connectors to use Search Mode",
-        "tierTooltip": "Search Mode requires the Business or Enterprise plan.",
         "title": "Search Mode"
       },
       "systemPrompt": {
@@ -1966,25 +2031,6 @@
       }
     },
     "connector": {
-      "accessType": {
-        "autoSyncOption": {
-          "description": "We will automatically sync permissions from the source. A document will be searchable in {appName} if and only if the user performing the search has permission to access the document in the source.",
-          "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
-          "name": "Auto Sync Permissions"
-        },
-        "heading": {
-          "description": "Control who has access to the documents indexed by this connector.",
-          "title": "Document Access"
-        },
-        "privateOption": {
-          "description": "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
-          "name": "Private"
-        },
-        "publicOption": {
-          "description": "Everyone with an account on {appName} can access the documents pulled in by this connector",
-          "name": "Public"
-        }
-      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# day} other {# days}}",
@@ -2160,6 +2206,7 @@
           "description": "Everyone keeps the access synced from the source.",
           "title": "No restriction until groups are added"
         },
+        "loadError": "Could not load groups. Reload the page to try again.",
         "memberCount": "{count, plural, one {# member} other {# members}}",
         "picker": {
           "placeholder": "Add groups to restrict access to this connector"
@@ -2167,26 +2214,12 @@
         "remove": {
           "tooltip": "Remove {name}"
         },
+        "table": {
+          "group": "Group"
+        },
         "toggle": {
           "description": "Limit access to members of selected groups. Synced permissions still apply.",
           "title": "Restrict Access to Groups"
-        }
-      },
-      "groupSelector": {
-        "assignGroupAccess": {
-          "title": "Assign group access for this Connector"
-        },
-        "assignToGroup": {
-          "title": "Groups that can manage this Connector"
-        },
-        "scopedManagerGroups": {
-          "description": "Select one or more of the groups you manage to give access to this Connector"
-        },
-        "syncGroups": {
-          "description": "The groups below control who can manage this Connector. Access to its documents is inherited from the source's own permissions."
-        },
-        "visibleToGroups": {
-          "description": "This Connector will be visible/accessible by the groups selected below"
         }
       },
       "indexAttemptsTable": {
@@ -2565,7 +2598,7 @@
       "oneDrive": {
         "description": "Configure OneDrive connector",
         "indexingScope": {
-          "label": "Whose OneDrive files should Onyx index?",
+          "label": "OneDrive files to index",
           "general": {
             "label": "General",
             "description": "Index all eligible users that the Microsoft application can access."
@@ -2581,7 +2614,7 @@
         },
         "excludedPaths": {
           "label": "Excluded Paths",
-          "description": "Glob patterns matched against each file path and filename, such as '*.tmp' or 'Archive/*'."
+          "description": "Glob patterns matched against each file path and filename, such as `*.tmp` or `Archive/*`."
         },
         "organizationLinks": {
           "label": "Treat organization links as public",
@@ -2596,22 +2629,28 @@
           "description": "Microsoft Graph host. Use https://graph.microsoft.us for GCC High or DoD."
         }
       },
+      "linear": {
+        "description": "Configure Linear connector",
+        "teams": {
+          "label": "Teams",
+          "description": "Linear team keys (e.g. ENG) to index. Leave empty to index every team the connected user can see."
+        },
+        "projects": {
+          "label": "Projects",
+          "description": "Linear project names or URLs to index. Leave empty to index every project. With teams set too, an issue must match both."
+        },
+        "syncNotice": "Connect as a workspace member, not a guest, who belongs to every private team you want to index. Onyx cannot see private teams the connected user is not in. Issues in public teams are searchable by every workspace member, and issues in private or restricted teams by their members."
+      },
       "add": {
         "authorizeButton": {
           "label": "Authorize with {source}",
           "pendingLabel": "Authorizing..."
-        },
-        "collapseButton": {
-          "ariaLabel": "Collapse"
         },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Create New"
-        },
-        "credentialDeleted": {
-          "toast": "Credential deleted successfully!"
         },
         "credentialModal": {
           "title": "Create a {source} credential"
@@ -2624,14 +2663,8 @@
           "description": "Use a shared service account. {appName} indexes content as this account.",
           "title": "Authentication Account"
         },
-        "credentialSwapped": {
-          "toast": "Swapped credential successfully!"
-        },
         "error": {
           "toast": "Error: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Expand"
         },
         "federated": {
           "tooltip": {
@@ -2663,19 +2696,100 @@
         "retryButton": {
           "label": "Retry"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}",
+          "expandButton": {
+            "ariaLabel": "Show saved accounts"
+          },
+          "collapseButton": {
+            "ariaLabel": "Hide saved accounts"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(New Account)",
+          "editButton": {
+            "label": "Edit Account"
+          }
         },
         "timeout": {
           "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
         },
         "unknownError": {
           "toast": "An unknown error occurred"
+        },
+        "account": {
+          "untitled": {
+            "label": "Untitled"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Added on {date}"
+          },
+          "selected": {
+            "label": "Selected"
+          },
+          "useButton": {
+            "label": "Use Account"
+          },
+          "unsupportedRealm": {
+            "label": "Unsupported site domain"
+          },
+          "expandButton": {
+            "ariaLabel": "Show account details"
+          },
+          "collapseButton": {
+            "ariaLabel": "Hide account details"
+          },
+          "deleteButton": {
+            "label": "Delete Account",
+            "inUseTooltip": "Cannot delete this credential because there are other connectors that are using it."
+          },
+          "usedBy": {
+            "label": "Used by {count, plural, one {# connector} other {# connectors}}"
+          },
+          "owner": {
+            "you": "{name} (you)"
+          },
+          "lastTested": {
+            "title": "Last Tested {date}"
+          },
+          "notTested": {
+            "title": "Not Tested Yet"
+          },
+          "details": {
+            "description": "Saved account credentials can't be edited or redirected to a different host. You can test the account before reuse or add a new account instead."
+          },
+          "rerunButton": {
+            "label": "Re-run Checks"
+          },
+          "authenticationType": {
+            "label": "Authentication Type"
+          },
+          "rerunFailed": {
+            "toast": "Couldn't start the checks. Try again."
+          },
+          "shareSaved": {
+            "toast": "Sharing updated."
+          },
+          "shareFailed": {
+            "toast": "Couldn't change who can use this account. Try again."
+          },
+          "renameSaved": {
+            "toast": "Account renamed."
+          },
+          "renameFailed": {
+            "toast": "Couldn't rename this account. Try again."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Only the person who added this account can make it private."
+          },
+          "shareLocked": {
+            "tooltip": "Only the person who added this account, or an admin it is shared with, can change who may use it."
+          }
+        },
+        "accountUnavailable": {
+          "toast": "This account is no longer available to you. Pick another account."
         }
-      },
-      "connectorName": {
-        "label": "Connector Name",
-        "subtext": "A descriptive name for the connector."
       },
       "credentialRequired": {
         "tooltip": "Select a credential first."
@@ -2684,6 +2798,7 @@
         "enterField": "Enter the {field}.",
         "fixField": "Check the {field}.",
         "awaitingCheck": "Leave the field to check it with the credential.",
+        "runChecks": "Run the checks to check the new account with these settings.",
         "checking": "Checking the credential…",
         "fieldInvalid": "Check the {field}: {detail}",
         "rejected": "This credential cannot be used with these settings. {detail}"
@@ -2692,9 +2807,6 @@
         "title": "Failed to load credentials."
       },
       "field": {
-        "optional": {
-          "label": "(optional)"
-        },
         "optionalSuffix": {
           "label": "optional"
         }
@@ -2822,7 +2934,7 @@
           "label": "Cancel"
         },
         "connectButton": {
-          "label": "Connect"
+          "label": "Create Connector"
         },
         "description": "Connect to {source} and set up the connector for {appName}.{hasDocs, select, true { View [docs]({url})} other {}}"
       },
@@ -2927,22 +3039,13 @@
           "title": "Error during submission."
         }
       },
-      "sections": {
-        "configuration": {
-          "title": "Configuration"
-        }
+      "content": {
+        "title": "Connector Content",
+        "description": "Select content to index for this connector."
       },
       "selectInput": {
         "emptyOption": {
           "label": "Select an option"
-        }
-      },
-      "stringPairList": {
-        "addButton": {
-          "label": "Add New"
-        },
-        "removeButton": {
-          "tooltip": "Remove"
         }
       },
       "tabs": {
@@ -2954,8 +3057,10 @@
         "confluenceCloud": "Confluence Cloud",
         "confluenceDataCenter": "Confluence Data Center"
       },
+      "subDescriptions": {
+        "siteUrl": "Paste your site URL. {connectorName}'s REST API must be reachable there."
+      },
       "boundFields": {
-        "advancedOptions": "Advanced Options",
         "errors": {
           "missing": "Enter a value.",
           "invalid": "This value is not valid: {detail}"
@@ -2981,6 +3086,57 @@
           "hours": "hours",
           "minutes": "minutes"
         }
+      },
+      "settings": {
+        "description": "Connector information and access.",
+        "displayName": {
+          "title": "Connector Display Name"
+        },
+        "documentAccess": {
+          "description": "Control who can access documents indexed by this connector.",
+          "everyone": {
+            "description": "Documents indexed by this connector will be public to everyone in your organization.",
+            "title": "Everyone in Your Organization"
+          },
+          "specificGroups": {
+            "description": "Name groups who can access documents from this connector.",
+            "required": "Pick at least one group.",
+            "title": "Specific Groups"
+          },
+          "sync": {
+            "description": "{appName} syncs permissions with the source. Users can search only what they can see in the source.",
+            "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
+            "title": "Sync with {source}"
+          },
+          "title": "Document Access"
+        },
+        "manageAccess": {
+          "admins": {
+            "alwaysShared": "Always shared",
+            "title": "Admins"
+          },
+          "description": "Control who can operate (schedule and monitor indexing) and/or edit the connector configurations.",
+          "note": "Only users with “Manage Connectors” permissions (group manager role or group permissions) will be granted access to operate and/or edit connectors.",
+          "placeholder": "Add groups to share this connector",
+          "role": {
+            "editor": {
+              "description": "Update/delete configurations.",
+              "label": "Editor"
+            },
+            "menu": {
+              "ariaLabel": "Role for {name}"
+            },
+            "operator": {
+              "description": "Schedule/monitor indexing.",
+              "label": "Operator"
+            },
+            "removeAccess": {
+              "label": "Remove Access"
+            }
+          },
+          "title": "Connector Manage Access"
+        },
+        "title": "Connector Settings"
       }
     },
     "costOverrides": {
@@ -3245,6 +3401,10 @@
       "create": {
         "accountEmailField": {
           "subDescription": "Use the account email that owns the API token."
+        },
+        "nameField": {
+          "title": "Display Name",
+          "placeholder": "Name your authentication account"
         },
         "apiTokenField": {
           "subDescription": "Paste your API token to access {source}."
@@ -4351,6 +4511,7 @@
           "tooltip": "Document embeddings are being updated due to recent changes to this group."
         },
         "systemGroup": {
+          "basicDescription": "{appName} manages this group. Members are the only thing it holds, and the permissions below apply to everyone in it.",
           "description": "{appName} manages this group. Members are the only thing it holds, and the only thing you can change.",
           "title": "System group"
         },
@@ -5046,6 +5207,16 @@
           "title": "Target URL"
         }
       },
+      "bifrost": {
+        "apiUrl": {
+          "description": "The base URL of your Bifrost gateway. {appName} sends embedding requests to its /v1/embeddings endpoint.",
+          "title": "Base URL"
+        },
+        "modelName": {
+          "description": "The Bifrost model ID, for example openai/text-embedding-3-large. When you save, {appName} embeds a test string to make sure this is an embedding model and to get its dimension.",
+          "editDescription": "{appName} uses this model now. Saving tests it against the new URL and key. To use another model, select it in the model list."
+        }
+      },
       "cancelReindexModal": {
         "description": "Cancelling will revert to the previous embedding model and all re-indexing progress will be lost.",
         "submit": {
@@ -5058,6 +5229,10 @@
         "title": "Captioning LLM"
       },
       "changesBanner": {
+        "contextualDisableOnly": {
+          "description": "Stop generating context for new and updated documents now, or rebuild all documents to also remove the context already generated.",
+          "title": "Choose how to turn off Contextual Retrieval"
+        },
         "contextualModelMissing": {
           "description": "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run.",
           "title": "Select a Contextual Retrieval LLM"
@@ -5076,6 +5251,10 @@
         },
         "orSeparator": {
           "label": "or"
+        },
+        "quantizationOnly": {
+          "description": "Only the vector quantization changed, so Onyx rebuilds the index from the stored vectors without re-embedding. This is much faster than a full re-index.",
+          "title": "The index will be rebuilt."
         },
         "reindex": {
           "description": "Re-indexing may take *hours or days* depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)",
@@ -5174,6 +5353,10 @@
       "forwardOnlyModal": {
         "description": "Existing documents will keep context generated by the previous model. The new model will apply only when documents are added or updated. Contextual enrichment can differ between documents.",
         "title": "Apply Contextual Retrieval LLM going forward"
+      },
+      "disableForwardModal": {
+        "description": "Contextual Retrieval stops for documents added or updated from now on. Existing documents keep the context already generated until they are updated or you re-index.",
+        "title": "Turn off Contextual Retrieval going forward"
       },
       "header": {
         "description": "Configure how documents are indexed, embedded, and prepared for search and retrieval."
@@ -5293,7 +5476,9 @@
         "cancelButton": {
           "label": "Cancel Re-index & Revert"
         },
+        "copyTitle": "Rebuilding the index…",
         "description": {
+          "copy": "Onyx is rebuilding the index from the stored vectors, without re-embedding. This is much faster than re-embedding.",
           "withModel": "New embedding settings (**{model}**) are being applied as re-indexing progresses. This may take **hours or days** depending on corpus size.",
           "withoutModel": "New embedding settings are being applied as re-indexing progresses. This may take **hours or days** depending on corpus size."
         },
@@ -5311,9 +5496,6 @@
             "label": "Add Configuration"
           },
           "title": "Add configs for your {provider} embedding providers."
-        },
-        "deprecated": {
-          "suffix": "(deprecated)"
         },
         "disconnect": {
           "errorToast": "Failed to disconnect {provider}",
@@ -5393,6 +5575,8 @@
         "contextualModelRequired": "Select a Contextual Retrieval LLM before re-indexing.",
         "contextualModelUpdateFailed": "Failed to update Contextual Retrieval LLM",
         "contextualModelUpdated": "Contextual Retrieval LLM updated",
+        "contextualRetrievalDisableFailed": "Failed to turn off Contextual Retrieval",
+        "contextualRetrievalDisabled": "Contextual Retrieval turned off",
         "modelNotFound": "Could not find the selected model",
         "providerResolveFailed": "Could not resolve provider",
         "reindexCanceled": "Re-indexing canceled",
@@ -5416,17 +5600,17 @@
         "googleProjectRequired": "GCP Project ID is required"
       },
       "vectorQuantization": {
-        "description": "Store document vectors with fewer bits to use less memory. Fewer bits can lower search quality.",
+        "description": "Store document vectors with fewer bits so vector search uses less memory. Fewer bits can lower search quality. Changing only this setting rebuilds the index from the stored vectors, without re-embedding.",
         "none": {
           "description": "Full 32-bit precision.",
           "label": "None"
         },
         "scalar1Bit": {
-          "description": "32x less memory. Needs OpenSearch 3.6 or later.",
+          "description": "The least vector search memory, with a small loss in search quality. Recommended for large indexes. Needs OpenSearch 3.6 or later.",
           "label": "1-bit"
         },
         "scalar7Bit": {
-          "description": "4x less memory. Almost no loss in search quality.",
+          "description": "About 4x less vector search memory. Almost no loss in search quality.",
           "label": "7-bit"
         },
         "title": "Vector Quantization"
@@ -5451,12 +5635,71 @@
         "googleGeminiEmbedding2": "Google's latest multimodal embedding model (GA). Highest-quality retrieval with a 3072-dim output.",
         "googleGeminiEmbedding2Preview": "Preview version of Gemini Embedding 2. Superseded by gemini-embedding-2 for new setups.",
         "voyageLarge2Instruct": "Voyage's large embedding model. High performance with instruction fine-tuning.",
+        "voyage4Large": "Voyage's largest 4-series embedding model. Best Voyage retrieval quality, multilingual.",
+        "voyage4": "Voyage's general-purpose 4-series embedding model. High retrieval quality at moderate cost.",
+        "voyage4Lite": "Voyage's lightweight 4-series embedding model. Lowest cost and highest rate limits.",
         "voyageLight2Instruct": "Voyage's lightweight embedding model. Good balance of performance and efficiency.",
         "nomicEmbedTextV1": "Nomic's embedding model specialized for retrieval, similarity, clustering and classification.",
         "e5BaseV2": "A smaller and faster model than the default. It is around 2x faster than the default model at the cost of lower search quality.",
         "e5SmallV2": "The smallest and fastest version of the E5 line of models. If you're running {appName} on a resource constrained system, then this may be a good choice.",
         "multilingualE5Base": "For corpora in other languages besides English, this is the one to choose.",
         "multilingualE5Small": "For corpora in other languages besides English, as well as being on a resource constrained system, this is the one to choose."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Every chunk in the search index has its connector IDs. Search uses connector-level access.",
+            "off": "Every chunk in the search index has its connector IDs. Search uses the document access lists. Connector-level access is turned off.",
+            "shadow": "Every chunk in the search index has its connector IDs. Search uses the document access lists and compares them with connector-level access."
+          },
+          "title": "Connector access update complete"
+        },
+        "notStarted": {
+          "description": "A background job will add connector IDs to the existing chunks in the search index. It starts within a few minutes.",
+          "title": "Connector access update has not started"
+        },
+        "progress": {
+          "ariaLabel": "Connector access update progress"
+        },
+        "running": {
+          "description": "A background job adds connector IDs to the existing chunks in the search index. Connector-level search access can be enforced only after it completes.",
+          "title": "Updating the search index for connector access…"
+        },
+        "status": {
+          "connectors": "{done, number} of {total, number} connectors done",
+          "connectorsLeft": "{count, plural, one {# connector left} other {# connectors left}}",
+          "current": "Current connector: {name}",
+          "documentsLeft": "{count, plural, one {# document left} other {# documents left}}"
+        },
+        "mode": {
+          "description": "How search decides which documents a user can see.",
+          "enforcePending": "Enforce is set and starts when the update completes.",
+          "enforceUnavailable": "Available after the search index update completes.",
+          "label": "Search access mode",
+          "options": {
+            "enforce": {
+              "description": "Search uses connector-level access.",
+              "title": "Enforce"
+            },
+            "off": {
+              "description": "Search uses the document access lists.",
+              "title": "Off"
+            },
+            "shadow": {
+              "description": "Search uses the document access lists and logs where connector-level access gives a different result.",
+              "title": "Shadow"
+            }
+          },
+          "placeholder": "Select a mode",
+          "toasts": {
+            "error": "Could not update the search access mode.",
+            "success": "Search access mode set to {mode}."
+          }
+        },
+        "loadError": {
+          "description": "Reload the page to try again.",
+          "title": "Could not load the connector access update"
+        }
       }
     },
     "indexing": {
@@ -6117,6 +6360,19 @@
         "settingsUpdateFailed": "Failed to update settings",
         "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
+      },
+      "modelRouting": {
+        "autoMode": {
+          "title": "Auto Mode",
+          "description": "Add an Auto option to the model picker that picks the best-fit model for each message."
+        },
+        "target": {
+          "title": "Router Model",
+          "description": "Handles model routing for Auto mode.",
+          "empty": "No router models found. Enable a router model on a gateway provider first.",
+          "error": "Failed to load router models.",
+          "retry": "Retry"
+        }
       }
     },
     "mcpActions": {
@@ -8447,6 +8703,9 @@
         "makeAdmin": {
           "label": "Make Admin"
         },
+        "menuButton": {
+          "ariaLabel": "User actions"
+        },
         "removeAdmin": {
           "label": "Remove Admin Access"
         },
@@ -8802,6 +9061,312 @@
           "label": "API Base URL",
           "description": "Your Firecrawl API base URL."
         }
+      }
+    },
+    "llmGateway": {
+      "header": {
+        "title": "LLM Gateway",
+        "description": "Control direct API access to workspace language models from external tools."
+      },
+      "access": {
+        "title": "Direct model API access",
+        "description": "Allow users to call workspace language models from external tools such as Claude Code or Cursor. Calls use scoped access tokens and are billed to your configured providers.",
+        "toggle": {
+          "title": "Enable LLM Gateway",
+          "description": "When off, every gateway endpoint rejects requests, existing tokens stop working, and the gateway scope is hidden from the token picker. Craft sandbox traffic is controlled separately by the Craft settings."
+        }
+      },
+      "tierTooltip": "The LLM Gateway requires the Business or Enterprise plan.",
+      "scopeNote": {
+        "title": "Each user configures their own token and connection details under Settings → LLM Gateway."
+      },
+      "toasts": {
+        "settingsUpdated": "Settings updated",
+        "settingsUpdateFailed": "Failed to update settings"
+      }
+    },
+    "connectorChecks": {
+      "lockReason": "Run the connector checks above, and resolve any failures, to continue.",
+      "prompt": {
+        "title": "Test Connection",
+        "description": "{appName} will run checks to validate required scopes before proceeding.",
+        "startButton": {
+          "label": "Start Checks"
+        }
+      },
+      "title": "Connector Checks",
+      "groups": {
+        "failed": "{count} Failed",
+        "indeterminate": "{count} Unverified",
+        "passed": "{count} Completed",
+        "skipped": "{count} Skipped",
+        "running": "{count} Running",
+        "expected": "{count} Expected"
+      },
+      "status": {
+        "passed": "Passed",
+        "failed": "Failed",
+        "indeterminate": "Could not be verified",
+        "skipped": "Skipped",
+        "running": "Testing…",
+        "pending": "Queued",
+        "waiting": "Waiting for settings"
+      },
+      "required": {
+        "label": "Required"
+      },
+      "empty": {
+        "label": "No checks have run yet."
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "foldButton": {
+        "fold": "Fold",
+        "expand": "Expand"
+      },
+      "titleCount": "({complete}/{total})",
+      "summary": {
+        "failed": "{count} failed",
+        "unverified": "{count} unverified",
+        "inProgress": "{count} in progress",
+        "expected": "{count} more expected",
+        "skipped": "{count} skipped",
+        "successful": "{count} successful"
+      },
+      "failedToRun": "Checks failed to run. Try again.",
+      "requiredFailed": "{count, plural, one {# required check failed} other {# required checks failed}}",
+      "state": {
+        "completed": "Checks completed.",
+        "inProgress": "Checks in progress...",
+        "waiting": "Waiting for connector settings..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Edit connector"
+      },
+      "header": {
+        "title": "Edit {name}",
+        "description": "Change the settings of this {source} connector. You review the plan before the changes are applied.",
+        "reviewButton": {
+          "label": "Review changes"
+        }
+      },
+      "loadError": {
+        "title": "Could not load the connector",
+        "description": "Reload the page, or go back to the connector.",
+        "backButton": {
+          "label": "Back to the connector"
+        }
+      },
+      "credentialSwap": {
+        "title": "You picked another credential",
+        "description": "The plan lets you keep the indexed documents, or re-index everything and prune the documents the new credential cannot see."
+      },
+      "files": {
+        "title": "Files",
+        "description": "Add or remove files. New files are indexed only after you apply the plan.",
+        "empty": "The connector has no files.",
+        "addButton": {
+          "label": "Add files"
+        },
+        "remove": {
+          "tooltip": "Remove {name}"
+        },
+        "uploadFailed": {
+          "toast": "Could not upload the files: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "Could not compute the plan: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Save the new account before you review the changes, or pick a saved account."
+      },
+      "applied": {
+        "toast": "The changes are applied."
+      },
+      "plan": {
+        "title": "Review the plan",
+        "description": "{count, plural, one {The connector has # indexed document.} other {The connector has # indexed documents.}}",
+        "changes": {
+          "list": "Changed: {fields}",
+          "none": "Nothing changed."
+        },
+        "stale": {
+          "title": "The connector changed",
+          "description": "The connector changed after this plan was computed. Compute the plan again before you apply.",
+          "replanButton": {
+            "label": "Plan again"
+          }
+        },
+        "expired": {
+          "title": "The plan expired",
+          "description": "This plan expired or was already applied. Compute the plan again."
+        },
+        "applyFailed": {
+          "title": "Could not apply the changes"
+        },
+        "validation": {
+          "title": "Validation",
+          "blocks": "The new settings failed validation. Fix them before you apply.",
+          "warns": "Some optional checks failed. You can still apply.",
+          "error": {
+            "title": "The settings are not valid"
+          }
+        },
+        "warnings": {
+          "title": "Warnings"
+        },
+        "notes": {
+          "title": "Notes"
+        },
+        "reconciliation": {
+          "title": "Choose how to reconcile the scope change",
+          "description": "The plan cannot tell if the change to {fields} adds or removes documents. Choose what apply does.",
+          "option": {
+            "prune": {
+              "title": "Prune",
+              "description": "Remove the documents that are no longer in scope."
+            },
+            "full_reindex": {
+              "title": "Full re-index",
+              "description": "Index everything again from the start date, to add the documents now in scope."
+            },
+            "both": {
+              "title": "Full re-index, then prune",
+              "description": "Index everything again, then remove the documents that are no longer in scope."
+            },
+            "nothing": {
+              "title": "Do nothing",
+              "description": "Keep the indexed documents. Later runs use the new settings."
+            }
+          }
+        },
+        "credential": {
+          "title": "Credential change",
+          "description": "Choose what happens to the documents indexed with the old credential.",
+          "option": {
+            "keep_indexed": {
+              "title": "Keep the indexed documents",
+              "description": "Later runs use the new credential. This is the fast path."
+            },
+            "full_reindex_and_prune": {
+              "title": "Full re-index and prune",
+              "description": "Index everything again with the new credential, then remove the documents it cannot see."
+            }
+          }
+        },
+        "steps": {
+          "title": "Steps",
+          "description": "What apply does, in order. You can turn off optional steps.",
+          "none": "Apply saves the settings. No indexing work is needed.",
+          "required": {
+            "label": "Required"
+          },
+          "optional": {
+            "label": "Optional"
+          },
+          "include": {
+            "ariaLabel": "Run the step: {step}"
+          },
+          "fields": "Fields: {fields}",
+          "window": "Window: {start} to {end}",
+          "windowFromStart": "Window: everything up to {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Update the data-access groups",
+              "description": "Search applies the new groups at once."
+            },
+            "access_type": {
+              "title": "Change the access type",
+              "description": "Who can read the documents changes."
+            },
+            "enter_perm_sync": {
+              "title": "Start permission sync",
+              "description": "The documents stay hidden until the first permission sync completes."
+            },
+            "leave_perm_sync": {
+              "title": "Stop permission sync",
+              "description": "The source's permissions no longer decide who reads the documents."
+            },
+            "restart_attempt": {
+              "title": "Restart the running index attempt",
+              "description": "The running attempt stops, and a new one starts with the new settings."
+            },
+            "full_reindex_then_prune": {
+              "title": "Full re-index, then prune",
+              "description": "Index everything again, then remove the documents the source no longer returns."
+            },
+            "full_reindex": {
+              "title": "Full re-index",
+              "description": "Index everything again from the start date."
+            },
+            "scoped_backfill": {
+              "title": "Backfill the added items",
+              "description": "Index the history of the added items only."
+            },
+            "window_backfill": {
+              "title": "Backfill the earlier window",
+              "description": "Index the time between the new and the old start date."
+            },
+            "prune": {
+              "title": "Prune",
+              "description": "Remove the documents the source no longer returns."
+            }
+          },
+          "reason": {
+            "identity_changed": "Document ids change",
+            "behavior_changed": "Processing changed",
+            "scope_widened": "Scope widened",
+            "scope_narrowed": "Scope narrowed",
+            "items_added_or_changed": "Items added or changed",
+            "items_removed": "Items removed",
+            "opaque_scope_choice": "Your scope choice",
+            "indexing_start_earlier": "Earlier start date",
+            "credential_full_path": "Credential full path",
+            "access_changed": "Access changed",
+            "permissions_fetched_during_indexing": "Permissions come with indexing",
+            "attempt_running": "An attempt is running",
+            "scoped_backfill_superseded": "An earlier backfill is replaced",
+            "admin_added": "Added by you",
+            "indexing_start_later": "Later start date"
+          }
+        },
+        "extra": {
+          "title": "Extra work",
+          "description": "Add work that the plan does not need.",
+          "fullReindex": {
+            "title": "Add a full re-index",
+            "description": "Index everything again from the start date."
+          },
+          "prune": {
+            "title": "Add a prune",
+            "description": "Remove the documents the source no longer returns."
+          }
+        },
+        "backButton": {
+          "label": "Back to editing"
+        },
+        "applyButton": {
+          "label": "Apply"
+        },
+        "blocked": {
+          "validation": "Fix the validation failures first.",
+          "reconciliation": "Choose how to reconcile the scope change first."
+        }
+      },
+      "pendingBackfills": {
+        "title": "Pending backfills",
+        "description": "An edit requested these runs. Each stays here until a run of it succeeds.",
+        "window": "{start} to {end}",
+        "windowFromStart": "Everything up to {end}",
+        "waiting": "Waits for its run.",
+        "runningNow": "An index attempt runs it now.",
+        "retry": "{count, plural, one {Failed once. Next retry: {time}.} other {Failed # times. Next retry: {time}.}}",
+        "scoped": "Added or changed items only",
+        "failures": "{count, plural, one {# failure} other {# failures}}"
       }
     }
   },
@@ -11051,6 +11616,10 @@
       },
       "unsupportedSetting": {
         "tooltip": "Modifying this setting is not supported for this model."
+      },
+      "autoItem": {
+        "label": "Auto",
+        "description": "Picks the best model for each message"
       }
     },
     "nrf": {
@@ -11237,6 +11806,9 @@
         "expand": {
           "ariaLabel": "Expand project"
         },
+        "options": {
+          "label": "Project options"
+        },
         "rename": {
           "label": "Rename Project"
         }
@@ -11295,6 +11867,20 @@
     }
   },
   "common": {
+    "fileDropzoneField": {
+      "chooseButton": {
+        "label": "{multiple, select, true {Choose files} other {Choose a file}}"
+      },
+      "prompt": "{multiple, select, true {Or drag and drop files here.} other {Or drag and drop a file here.}}"
+    },
+    "textListField": {
+      "addButton": {
+        "label": "Add New"
+      },
+      "removeButton": {
+        "tooltip": "Remove"
+      }
+    },
     "adminChrome": {
       "openSidebar": {
         "ariaLabel": "Open Sidebar"
@@ -11458,6 +12044,9 @@
       "accessRestricted": {
         "billingAdminHint": {
           "text": "If you are the administrator, please visit the <billingLink>Admin Billing</billingLink> page to {hadLicense, select, true {renew} other {activate}} your license, sign up through Stripe or reach out to <supportLink>support@onyx.app</supportLink> for billing assistance."
+        },
+        "downgradeButton": {
+          "label": "Downgrade to Community"
         },
         "heading": {
           "title": "Access Restricted"
@@ -11801,6 +12390,24 @@
         "empty": "This sheet is empty.",
         "tooLarge": "This sheet is too large to preview — download the file to view it."
       }
+    },
+    "plans": {
+      "free": {
+        "title": "Free Plan",
+        "tooltip": "Available on every plan."
+      },
+      "business": {
+        "title": "Business Plan",
+        "tooltip": "Requires the [Business or Enterprise plan](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Enterprise Plan",
+        "tooltip": "Requires the [Enterprise plan](/admin/billing)."
+      },
+      "upgrade": {
+        "label": "Upgrade Plan"
+      },
+      "availableFor": "Available for {plan}"
     }
   },
   "craft": {
@@ -11876,7 +12483,6 @@
         }
       },
       "associatedSkills": {
-        "associateAriaLabel": "Associate {name}",
         "associateButton": "Associate existing",
         "create": {
           "github": {
@@ -12115,6 +12721,11 @@
       },
       "toggleItem": {
         "ariaLabel": "Toggle {name}"
+      },
+      "status": {
+        "loading": "Loading outputs…",
+        "incomplete": "Some outputs could not be listed. Open Files to browse the workspace.",
+        "error": "Could not refresh outputs. Try again."
       }
     },
     "chatPanel": {
@@ -12140,6 +12751,17 @@
         "operationWait": "Please wait for the current operation to complete.",
         "sandboxWait": "Please wait for sandbox to initialize",
         "scheduledRunWait": "Please wait for the scheduled run to finish."
+      },
+      "loadError": {
+        "title": "Could not load the session",
+        "retry": "Try again"
+      },
+      "queuedSendError": {
+        "title": "Could not send the queued message"
+      },
+      "settlementError": {
+        "title": "Could not confirm task completion",
+        "description": "Try again to check the task and load its saved response."
       }
     },
     "compaction": {
@@ -12253,6 +12875,10 @@
       },
       "noContent": {
         "label": "No content"
+      },
+      "csv": {
+        "truncated": "Preview limited to {rows, number} rows, {columns, number} columns, and {cells, number} cells. Download the original for all data.",
+        "malformed": "This CSV contains an invalid quoted field. Download the original to inspect it."
       }
     },
     "filesTab": {
@@ -12260,17 +12886,11 @@
         "description": "Files created during the build will appear here",
         "title": "No files yet"
       },
-      "emptyDirectory": {
-        "label": "No files in this directory"
-      },
       "error": {
         "title": "Error loading files"
       },
       "loading": {
         "label": "Loading files..."
-      },
-      "loadingChildren": {
-        "label": "Loading..."
       },
       "preparing": {
         "description": "Setting up your development environment",
@@ -12287,6 +12907,9 @@
       },
       "preview": {
         "ariaLabel": "Preview of {name}"
+      },
+      "background": {
+        "contrast": "Contrast background"
       }
     },
     "inputBar": {
@@ -12430,6 +13053,9 @@
       }
     },
     "outputPanel": {
+      "closeTab": {
+        "ariaLabel": "Close {fileName}"
+      },
       "artifactsEmpty": {
         "tooltip": "Start building something to see artifacts!"
       },
@@ -12453,6 +13079,15 @@
       }
     },
     "pptxPreview": {
+      "slides": {
+        "label": "Slides"
+      },
+      "previous": {
+        "label": "Previous slide"
+      },
+      "next": {
+        "label": "Next slide"
+      },
       "converting": {
         "label": "Converting presentation..."
       },
@@ -12467,6 +13102,9 @@
       },
       "slide": {
         "counter": "Slide {current} of {total}"
+      },
+      "resize": {
+        "ariaLabel": "Resize slide thumbnails"
       }
     },
     "previewTab": {
@@ -12587,6 +13225,9 @@
       },
       "newSession": {
         "label": "Start Crafting"
+      },
+      "options": {
+        "label": "Session options"
       },
       "rename": {
         "label": "Rename"
@@ -12855,9 +13496,6 @@
       "group": {
         "calls": {
           "tag": "{count, plural, one {# call} other {# calls}}"
-        },
-        "failed": {
-          "tag": "{count} failed"
         },
         "working": {
           "label": "Working"
@@ -13295,6 +13933,9 @@
       "sevenDays": "7D",
       "threeMonths": "3M"
     },
+    "iconTooltip": {
+      "label": "More information"
+    },
     "input": {
       "day": "Day",
       "hidePassword": "Hide password",
@@ -13585,6 +14226,10 @@
       "title": "Danger Zone"
     },
     "gateway": {
+      "adminDisabled": {
+        "description": "An admin turned off the LLM gateway for this workspace. Contact an admin to turn it back on.",
+        "title": "LLM Gateway is off"
+      },
       "accessToken": {
         "button": "New token",
         "description": "Create a scoped token before you connect an application.",
@@ -13896,6 +14541,9 @@
         "languageModels": {
           "label": "Language Models"
         },
+        "llmGateway": {
+          "label": "LLM Gateway"
+        },
         "mcpActions": {
           "label": "MCP Actions"
         },
@@ -14044,6 +14692,9 @@
       },
       "moveToProject": {
         "label": "Move to Project"
+      },
+      "options": {
+        "label": "Chat options"
       },
       "projectSearchInput": {
         "placeholder": "Search Projects"
@@ -14606,5 +15257,18 @@
         }
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch needs more resources",
+    "disk": "OpenSearch disk usage is at least 85% on a data node. Indexing may stop as the disk fills.",
+    "jvmMemory": "OpenSearch JVM memory usage stayed above 85% across repeated checks. Search and indexing may fail.",
+    "vectorMemory": "OpenSearch vector memory is nearly full or has reached its limit. Search and indexing may fail.",
+    "contact": "Contact your system administrator or the Onyx team at [support@onyx.app](mailto:support@onyx.app).",
+    "stale": "The latest check is unavailable. This warning reflects the last successful check; recovery has not been confirmed.",
+    "dismiss": "Dismiss",
+    "diskTitle": "Disk space",
+    "jvmMemoryTitle": "JVM memory",
+    "vectorMemoryTitle": "Vector memory",
+    "viewDetails": "View details"
   }
 }

@@ -1,4 +1,5 @@
-"""End-to-end composition test for the reindex port flow (MODEL_ONLY strategy).
+"""End-to-end composition test for the reindex port flow (MODEL_ONLY and
+COPY_VECTORS strategies).
 
 Proves the layers COMPOSE with NO PortCopier mocking: check_for_port kickoff ->
 run_port_attempt (real PIT scan of PRESENT + real re-embed under the FUTURE model
@@ -101,7 +102,6 @@ def _make_chunk(
         document_id=document_id,
         chunk_index=chunk_index,
         title=None,
-        title_vector=None,
         content=content,
         content_vector=list(_PLACEHOLDER_VECTOR),
         source_type=DocumentSource.FILE.value,
@@ -130,17 +130,20 @@ def _make_saved_settings(
     index_name: str,
     use_port_flow: bool,
     switchover_type: SwitchoverType,
+    passage_prefix: str = ASYM_PASSAGE_PREFIX,
+    vector_quantization: VectorQuantization = VectorQuantization.NONE,
 ) -> SavedSearchSettings:
-    """nomic MODEL_ONLY settings (contextual RAG off, provider None -> local
-    model server)."""
+    """nomic settings (contextual RAG off, provider None -> local model
+    server)."""
     return SavedSearchSettings(
         model_name="nomic-ai/nomic-embed-text-v1",
         model_dim=_VECTOR_DIM,
         normalize=True,
         query_prefix=ASYM_QUERY_PREFIX,
-        passage_prefix=ASYM_PASSAGE_PREFIX,
+        passage_prefix=passage_prefix,
         provider_type=None,
         index_name=index_name,
+        vector_quantization=vector_quantization,
         multipass_indexing=False,
         reduced_dimension=None,
         enable_contextual_rag=False,
@@ -151,26 +154,53 @@ def _make_saved_settings(
     )
 
 
-def _create_os_index(index_name: str) -> OpenSearchIndexClient:
+def _create_os_index(
+    index_name: str,
+    vector_quantization: VectorQuantization = VectorQuantization.NONE,
+) -> OpenSearchIndexClient:
     client = OpenSearchIndexClient(index_name=index_name)
     mappings = DocumentSchema.get_document_schema(
-        vector_dimension=_VECTOR_DIM, multitenant=False
+        vector_dimension=_VECTOR_DIM,
+        multitenant=False,
+        vector_quantization=vector_quantization,
     )
     settings = DocumentSchema.get_index_settings_based_on_environment()
     client.create_index(mappings=mappings, settings=settings)
     return client
 
 
-# The port re-embeds PRESENT -> FUTURE against the local embedding model server;
-# ext-dep shards run with it disabled, so this composition test only runs where
-# a real model server is present (local dev / nightly with the server up).
-@pytest.mark.skipif(
-    MODEL_SERVER_HOST == "disabled",
-    reason="hits the real embedding model server, which is disabled in this env",
+@pytest.mark.parametrize(
+    "present_passage_prefix,future_quantization,expect_copy",
+    [
+        # A changed passage prefix changes the vector, so the port re-embeds
+        # against the local embedding model server. Ext-dep shards run with it
+        # disabled, so this case only runs where a real model server is present.
+        pytest.param(
+            "",
+            VectorQuantization.NONE,
+            False,
+            id="model_only",
+            marks=pytest.mark.skipif(
+                MODEL_SERVER_HOST == "disabled",
+                reason="hits the real embedding model server, which is disabled "
+                "in this env",
+            ),
+        ),
+        # Only the quantization changes, so the port copies the stored vector.
+        pytest.param(
+            ASYM_PASSAGE_PREFIX,
+            VectorQuantization.SCALAR_1_BIT,
+            True,
+            id="copy_vectors",
+        ),
+    ],
 )
 def test_port_flow_end_to_end(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
+    present_passage_prefix: str,
+    future_quantization: VectorQuantization,
+    expect_copy: bool,
 ) -> None:
     tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
     present_index_name = f"test_e2e_present_{uuid4().hex[:8]}"
@@ -199,6 +229,7 @@ def test_port_flow_end_to_end(
                 index_name=present_index_name,
                 use_port_flow=False,
                 switchover_type=SwitchoverType.REINDEX,
+                passage_prefix=present_passage_prefix,
             ),
             db_session,
             status=IndexModelStatus.PAST,
@@ -209,6 +240,7 @@ def test_port_flow_end_to_end(
                 index_name=future_index_name,
                 use_port_flow=True,
                 switchover_type=SwitchoverType.REINDEX,
+                vector_quantization=future_quantization,
             ),
             db_session,
             status=IndexModelStatus.FUTURE,
@@ -217,7 +249,7 @@ def test_port_flow_end_to_end(
 
         # --- SETUP: OpenSearch indices + seed PRESENT chunks ---
         present_client = _create_os_index(present_index_name)
-        future_client = _create_os_index(future_index_name)
+        future_client = _create_os_index(future_index_name, future_quantization)
 
         seeded_ts = datetime.now(timezone.utc).replace(microsecond=0)
         seeded_content: dict[tuple[str, int], str] = {}
@@ -252,7 +284,7 @@ def test_port_flow_end_to_end(
         assert result == 1
         attempt_id = celery_app.send_task.call_args.kwargs["kwargs"]["port_attempt_id"]
 
-        # --- PORT: real PortCopier (re-embed via model server) ---
+        # --- PORT: real PortCopier (re-embed via model server, or copy) ---
         # get_current_search_settings is patched to our present-like row only
         # (the dev DB's live current row has no real model / index).
         with patch.object(
@@ -282,8 +314,11 @@ def test_port_flow_end_to_end(
                 fetched = future_client.get_document(document_chunk_id=chunk_id)
                 assert fetched.content == seeded_content[(doc_id, c_i)]
                 assert len(fetched.content_vector) == _VECTOR_DIM
-                # The port re-embedded: the vector is NOT the seeded placeholder.
-                assert fetched.content_vector != _PLACEHOLDER_VECTOR
+                if expect_copy:
+                    assert fetched.content_vector == pytest.approx(_PLACEHOLDER_VECTOR)
+                else:
+                    # Re-embedded: the vector is NOT the seeded placeholder.
+                    assert fetched.content_vector != _PLACEHOLDER_VECTOR
 
         # --- SWAP ---
         port_row = get_port_attempt(db_session, attempt_id)

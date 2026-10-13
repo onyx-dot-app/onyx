@@ -20,6 +20,7 @@ export enum EmbeddingProviderName {
   GOOGLE = "google",
   LITELLM = "litellm",
   AZURE = "azure",
+  BIFROST = "bifrost",
 
   // Self-hosted
   NOMIC = "nomic",
@@ -62,13 +63,6 @@ export interface EmbeddingProvider {
   costslink?: string;
   apiLink?: string;
   embeddingModels: EmbeddingModel[];
-
-  /**
-   * When true, this provider is no longer recommended for new deployments.
-   * Existing usage is allowed, but selecting it as a new embedding model is
-   * blocked in the UI.
-   */
-  deprecated?: boolean;
 }
 
 export interface EmbeddingModel {
@@ -79,9 +73,18 @@ export interface EmbeddingModel {
   passagePrefix?: string | null;
   // Absent for custom models, which have no registry description.
   descriptionKey?: IndexSettingsMessageKey;
+
+  /**
+   * When true, existing usage is allowed, but selecting it as a new embedding
+   * model is blocked.
+   */
+  deprecated?: boolean;
 }
 
-export type EmbeddingModelSpec = Omit<EmbeddingModel, "descriptionKey">;
+export type EmbeddingModelSpec = Omit<
+  EmbeddingModel,
+  "descriptionKey" | "deprecated"
+>;
 
 /**
  * Always write all three fields together. A name without its spec and provider forces
@@ -202,7 +205,7 @@ export interface LLMContextualCost {
   cost: number;
 }
 
-/** Mirrors backend `ReindexProgressCounts`; buckets partition `total`. */
+/** Mirrors backend `ReindexProgress`; buckets partition `total`. */
 export interface ReindexProgress {
   total: number;
   waiting: number;
@@ -210,6 +213,33 @@ export interface ReindexProgress {
   completed: number;
   failed: number;
   paused: number;
+  /** False when the port copies the stored vectors instead of re-embedding. */
+  reembeds: boolean;
+}
+
+/** Mirrors backend `CCPairAccessMode`. */
+export type CCPairAccessMode = "off" | "shadow" | "enforce";
+
+/**
+ * Mirrors backend `CCPairIdsBackfillStatus`. Counts are null when the backfill
+ * has not started or is complete; totals are also null for progress stored
+ * before the backend kept a snapshot.
+ */
+export interface CCPairIdsBackfillStatus {
+  index_name: string;
+  started: boolean;
+  completed: boolean;
+  total_cc_pairs: number | null;
+  pending_cc_pairs: number | null;
+  total_documents: number | null;
+  completed_documents: number | null;
+  remaining_documents: number | null;
+  current_cc_pair_name: string | null;
+  access_mode: CCPairAccessMode;
+  filter_enabled: boolean;
+  enforce_requested: boolean;
+  /** False in multi-tenant deployments, where operators own the mode. */
+  mode_editable: boolean;
 }
 
 /** Mirrors backend `ReindexErrorRow`; exactly one of cc_pair_id / user_id set. */

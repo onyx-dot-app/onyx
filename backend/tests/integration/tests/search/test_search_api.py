@@ -95,7 +95,7 @@ def test_document_set_filtering(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group permissions are Enterprise-only",
 )
 def test_acl_enforcement(

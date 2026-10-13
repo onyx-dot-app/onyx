@@ -3,7 +3,13 @@
 import { IconLoader } from "@opal/loaders";
 import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { Button, InputCheckbox, Divider, Tooltip } from "@opal/components";
+import {
+  Button,
+  Divider,
+  Dropdown,
+  InputCheckbox,
+  Tooltip,
+} from "@opal/components";
 import {
   ConfigurationFieldSpec,
   FederatedConnectorCreateRequest,
@@ -20,20 +26,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
 import Text from "@/refresh-components/texts/Text";
-import { AlertTriangle, Check, Loader2, Trash2Icon, Info } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Info } from "lucide-react";
 import BackButton from "@/refresh-components/buttons/BackButton";
 import Title from "@/components/ui/title";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
 import { toast } from "@opal/layouts";
 
 import { Badge } from "@/components/ui/badge";
 import { InputList } from "@opal/components";
-import { SvgSettings } from "@opal/icons";
+import { SvgSettings, SvgTrash } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
   connector: ConfigurableSources;
@@ -821,32 +821,33 @@ export function FederatedConnectorForm({
 
         {isEditMode && (
           <div className="ms-auto flex gap-x-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div>
-                  <Button prominence="secondary" icon={SvgSettings}>
-                    {t("manageButton.label")}
-                  </Button>
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItemWithTooltip
-                  onClick={handleDeleteConnector}
-                  disabled={isDeleting}
-                  className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                  tooltip={
-                    isDeleting ? t("deleteItem.inProgressTooltip") : undefined
-                  }
-                >
-                  <Trash2Icon className="h-4 w-4" />
-                  <span>
-                    {isDeleting
+            <Dropdown>
+              <Dropdown.Trigger asChild>
+                <Button prominence="secondary" icon={SvgSettings}>
+                  {t("manageButton.label")}
+                </Button>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("manageButton.label")}
+                items={[
+                  {
+                    kind: "action",
+                    id: "delete",
+                    icon: SvgTrash,
+                    danger: true,
+                    disabled: isDeleting,
+                    title: isDeleting
                       ? t("deleteItem.deleting")
-                      : t("deleteItem.label")}
-                  </span>
-                </DropdownMenuItemWithTooltip>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                      : t("deleteItem.label"),
+                    // The reason a row is disabled is its tooltip.
+                    tooltip: isDeleting
+                      ? t("deleteItem.inProgressTooltip")
+                      : undefined,
+                    onSelect: handleDeleteConnector,
+                  },
+                ]}
+              />
+            </Dropdown>
           </div>
         )}
       </div>

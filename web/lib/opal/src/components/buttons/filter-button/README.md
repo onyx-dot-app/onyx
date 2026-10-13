@@ -2,7 +2,7 @@
 
 **Import:** `import { FilterButton, type FilterButtonProps } from "@opal/components";`
 
-A stateful filter trigger with a built-in chevron (when empty) and a clear button (when selected). Hardcodes `variant="select-filter"` and delegates to `Interactive.Stateful`, adding automatic open-state detection from Radix `data-state`. Designed to sit inside a `Popover.Trigger` for filter dropdowns.
+A stateful filter trigger with a built-in chevron (when empty) and a clear button (when selected). Hardcodes `variant="select-filter"` and delegates to `Interactive.Stateful`, adding automatic open-state detection from its trigger. Designed to sit inside a `Dropdown.Trigger` or `Popover.Trigger` for filter dropdowns.
 
 ## Relationship to OpenButton
 
@@ -35,7 +35,7 @@ div.relative                               <- bounding wrapper
     └─ Button (SvgX, size="2xs", prominence="tertiary")
 ```
 
-- **Open-state detection** reads `data-state="open"` injected by Radix triggers (e.g. `Popover.Trigger`), falling back to the explicit `interaction` prop.
+- **Open-state detection**: the explicit `interaction` prop takes priority; otherwise the component reads the trigger attributes merged onto it: `data-state="open"` from Radix triggers (e.g. `Popover.Trigger`), or `aria-expanded` from an Opal `Dropdown.Trigger`.
 - **Chevron rotation** uses the shared `ChevronIcon` component and `buttons/chevron.css`, which rotates 180deg when `data-interaction="hover"`.
 - **Clear button** is absolutely positioned outside the `<button>` element tree to avoid invalid nested `<button>` elements. An invisible spacer inside the button reserves the same space so layout doesn't shift between states.
 
@@ -47,7 +47,7 @@ div.relative                               <- bounding wrapper
 | `children`    | `string`                        | **required** | Label text between icon and trailing indicator                               |
 | `active`      | `boolean`                       | `false`      | Whether the filter has an active selection                                   |
 | `onClear`     | `() => void`                    | **required** | Called when the clear (X) button is clicked                                  |
-| `interaction` | `"rest" \| "hover" \| "active"` | auto         | JS-controlled interaction override. Falls back to Radix `data-state="open"`. |
+| `interaction` | `"rest" \| "hover" \| "active"` | auto         | JS-controlled interaction override. Falls back to Radix `data-state="open"` or Opal Dropdown `aria-expanded`. |
 | `tooltip`     | `string`                        | —            | Tooltip text shown on hover                                                  |
 | `tooltipSide` | `TooltipSide`                   | `"top"`      | Which side the tooltip appears on                                            |
 

@@ -2,6 +2,7 @@
 
 import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
+import { Fold } from "@opal/components/fold/components";
 import type { OrientationVariants, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
@@ -90,7 +91,8 @@ type DividerFoldableProps = Omit<
   children?: React.ReactNode;
   /**
    * Overrides the header's interaction state (a listbox highlights the
-   * title the keyboard stopped on). Unset, an open header reads as hover.
+   * title the keyboard stopped on). Unset, the header follows the pointer,
+   * open or folded.
    */
   interaction?: InteractiveStatelessInteraction;
   /**
@@ -214,7 +216,7 @@ function FoldableDivider({
       <Interactive.Stateless
         variant="default"
         prominence="tertiary"
-        interaction={interaction ?? (isOpen ? "hover" : "rest")}
+        interaction={interaction}
         onClick={toggle}
       >
         <Interactive.Container
@@ -246,16 +248,11 @@ function FoldableDivider({
           </div>
         </Interactive.Container>
       </Interactive.Stateless>
-      {/* The content stays mounted so the fold can close as smoothly as it
+      {/* The content stays mounted, so the fold closes as smoothly as it
           opens; closed, it is inert and hidden from assistive tech. */}
-      <div
-        className="opal-divider-fold"
-        data-open={isOpen}
-        aria-hidden={!isOpen || undefined}
-        inert={!isOpen || undefined}
-      >
-        <div className="opal-divider-fold-inner">{children}</div>
-      </div>
+      <Fold open={isOpen} keepMounted>
+        {children}
+      </Fold>
     </>
   );
 }

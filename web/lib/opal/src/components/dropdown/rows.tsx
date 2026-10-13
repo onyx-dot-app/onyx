@@ -3,12 +3,12 @@
 import React from "react";
 import { LineItemButton } from "@opal/components/buttons/line-item-button/components";
 import { InputSwitch } from "@opal/components/inputs/booleans/input-switch/components";
-import { SvgChevronRight } from "@opal/icons";
 import { rowElementId } from "@opal/components/dropdown/model";
 import type {
   DropdownMode,
   DropdownRow,
   DropdownRowProps,
+  DropdownSizePreset,
 } from "@opal/components/dropdown/types";
 
 /**
@@ -27,6 +27,7 @@ interface RowProps {
   listId: string;
   mode: DropdownMode;
   row: DropdownRow;
+  sizePreset: DropdownSizePreset;
   /** The row's keyboard stop, or -1 while it is withheld (folded). */
   index: number;
   isHighlighted: boolean;
@@ -47,6 +48,7 @@ export const Row = React.memo(function Row({
   listId,
   mode,
   row,
+  sizePreset,
   index,
   isHighlighted,
   isSelected,
@@ -89,7 +91,8 @@ export const Row = React.memo(function Row({
         icon={row.icon}
         title={row.title}
         description={row.description}
-        sizePreset="main-ui"
+        sizePreset={sizePreset}
+        padding={sizePreset === "secondary" ? 0 : 0.5}
         variant={row.description ? "heading" : "body"}
         // The switch only shows the state: the row is the control, so the
         // switch takes no pointer or focus of its own.
@@ -121,17 +124,20 @@ export const Row = React.memo(function Row({
     title: row.title,
     description: row.description,
     suffix: row.kind === "option" ? row.suffix : undefined,
+    tag: row.kind === "option" ? row.tag : undefined,
+    descriptionMaxLines:
+      row.kind === "option" ? row.descriptionMaxLines : undefined,
     color: row.kind === "action" && row.danger ? "danger" : undefined,
-    // A row that leads to a view says so with a chevron.
-    rightChildren:
-      row.kind === "action" && row.opensView ? (
-        <SvgChevronRight className="opal-dropdown-chevron" />
-      ) : undefined,
-    sizePreset: "main-ui",
-    // `body` resolves to `ContentSm`, which has no description or suffix
-    // slot; a row with either takes the `heading` layout.
+    tooltip:
+      row.kind === "action" || row.kind === "option" ? row.tooltip : undefined,
+    // Beside the list, so it never covers the row above.
+    tooltipSide: "end",
+    sizePreset,
+    padding: sizePreset === "secondary" ? 0 : 0.5,
+    // `body` resolves to `ContentSm`, which has no description, suffix or
+    // tag slot; a row with any of them takes the `heading` layout.
     variant:
-      row.description || (row.kind === "option" && row.suffix)
+      row.description || (row.kind === "option" && (row.suffix || row.tag))
         ? "heading"
         : "body",
     id,
@@ -147,6 +153,10 @@ export const Row = React.memo(function Row({
     // A real link: the click navigates natively, and Enter clicks it, so
     // middle-click, modifier-click and copy-link work.
     return <LineItemButton {...content} href={row.href} target={row.target} />;
+  }
+  if (row.kind === "option" && row.href !== undefined) {
+    // A link among the options, the same way.
+    return <LineItemButton {...content} href={row.href} />;
   }
   return <LineItemButton presentational {...content} />;
 });

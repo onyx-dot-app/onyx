@@ -33,10 +33,10 @@ Sidebar entry point. Handles three viewport sizes:
 - **Mobile** (`≤ 724 px`) — full-height fixed overlay with a tinted and
   blurred backdrop that closes on click.
 
-| Prop       | Type        | Default | Description                           |
-| ---------- | ----------- | ------- | ------------------------------------- |
-| `foldable` | `boolean`   | `false` | Enable fold/unfold on desktop         |
-| `children` | `ReactNode` | —       | `Header`, `Body`, `Footer`, `Section` |
+| Prop       | Type        | Default | Description                                      |
+| ---------- | ----------- | ------- | ------------------------------------------------ |
+| `foldable` | `boolean`   | `false` | Enable fold/unfold on desktop                    |
+| `children` | `ReactNode` | —       | `Header`, `Body`, `Footer`, `Section`, `Divider` |
 
 ### `SidebarLayouts.Header`
 
@@ -74,6 +74,11 @@ optional hover-revealed action.
 | `action`   | `ReactNode`         | —       | Optional element shown on hover (e.g. a `+` button)   |
 | `disabled` | `boolean`           | —       | Dims the section header to indicate it is unavailable |
 | `children` | `ReactNode`         | —       |                                                       |
+
+### `SidebarLayouts.Divider`
+
+Horizontal rule between groups in the sidebar. Takes no props. It has
+`0.5rem` padding on all sides.
 
 ## Hooks
 

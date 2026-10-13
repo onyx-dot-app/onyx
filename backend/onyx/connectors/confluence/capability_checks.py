@@ -30,27 +30,33 @@ import requests
 from requests import HTTPError
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
+from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.form_state import FormState
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckFindingKey,
+    CheckOutput,
     CredentialCapability,
+    OptionsFinding,
 )
-from onyx.connectors.confluence.config import ConfluenceConnectorConfig
+from onyx.connectors.confluence.config import (
+    ConfluenceConnectorConfig,
+    ConfluenceIndexingMode,
+    get_indexing_mode,
+)
 from onyx.connectors.confluence.connector import (
     ATTACHMENT_EXPANSION_FIELDS,
     COMMENT_EXPANSION_FIELDS,
     PER_PAGE_RESTRICTIONS_EXPANSION_FIELDS,
     PRUNING_EXPANSION_FIELDS,
     RESTRICTIONS_EXPANSION_FIELDS,
-    ConfluenceIndexingMode,
     build_attachment_cql,
     build_base_page_cql,
     build_comment_cql,
     build_label_filter,
     build_page_cql,
     build_page_retrieval_url,
-    get_indexing_mode,
 )
 from onyx.connectors.confluence.models import ConfluenceUser
 from onyx.connectors.confluence.source_operations import (
@@ -80,9 +86,12 @@ logger = setup_logger()
 
 _DOCS_LINK = "https://docs.onyx.app/admins/connectors/official/confluence"
 _SITE_FIELDS = frozenset({"wiki_base", "is_cloud"})
+_SPACE_FIELD = "space"
 
 # Pages sampled when a probe needs a page with attachments.
 _SAMPLE_PAGES = 5
+# Spaces per page when listing every visible space.
+_SPACE_LISTING_PAGE_SIZE = 250
 _SAMPLE_ATTACHMENTS = 25
 # The attachment probe downloads one file; larger files only prove the listing.
 _MAX_PROBE_DOWNLOAD_BYTES = 5 * 1024 * 1024
@@ -251,6 +260,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
         required: bool = True,
         capability: CredentialCapability = CredentialCapability.INDEXING,
         validates_binding: bool = False,
+        discovery: bool = False,
     ) -> None:
         super().__init__(
             capability=capability,
@@ -262,6 +272,7 @@ class _ConfluenceCheck(CapabilityCheck[ConfluenceConnectorConfig]):
             remediation=remediation,
             docs_link=_DOCS_LINK,
             validates_binding=validates_binding,
+            discovery=discovery,
         )
 
 
@@ -382,6 +393,34 @@ class _SpacesVisibleCheck(_ConfluenceCheck):
             raise InsufficientPermissionsError(
                 f"No Confluence space is visible to this credential. {hint}"
             )
+
+
+class _SpaceListingCheck(_ConfluenceCheck):
+    """Lists every visible space, as options for the space field. Separate from
+    ``confluence_spaces_visible``, which reads one space to validate."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            check_id="confluence_space_listing",
+            display_name="Lists the visible spaces",
+            remediation="Give the token's user view permission on the spaces to index.",
+            discovery=True,
+        )
+
+    def run(self, context: CapabilityCheckContext) -> CheckOutput:
+        try:
+            finding: OptionsFinding = bounded_options(
+                _gateway(context).list_spaces(limit=_SPACE_LISTING_PAGE_SIZE),
+                key=CheckFindingKey.VISIBLE_SPACES,
+                field_name=_SPACE_FIELD,
+                value=lambda space: space["key"],
+                label=lambda space: space.get("name") or space["key"],
+            )
+        except HTTPError as e:
+            _raise_for_http_error(
+                e, denied="The credential cannot list Confluence spaces."
+            )
+        return CheckOutput(findings=[finding])
 
 
 class _ConfiguredSpaceCheck(_ConfluenceCheck):
@@ -780,6 +819,7 @@ def build_confluence_indexing_checks() -> list[CapabilityCheck]:
         _SiteAuthCheck(scoped=False),
         _SiteAuthCheck(scoped=True),
         _SpacesVisibleCheck(),
+        _SpaceListingCheck(),
         _ConfiguredSpaceCheck(),
         _ConfiguredPageCheck(),
         _CqlQueryCheck(),

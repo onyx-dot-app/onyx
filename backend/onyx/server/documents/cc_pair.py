@@ -8,10 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.auth.scoped_permissions import (
-    assert_within_scope,
-    get_visible_user_group_ids,
-)
+from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_generator_task
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
@@ -27,6 +24,8 @@ from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
+from onyx.connectors.pairing_access import validate_pairing_access
+from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     add_credential_to_connector,
@@ -46,6 +45,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     IndexingStatus,
     Permission,
     PermissionSyncStatus,
@@ -77,8 +77,11 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.credential import credential_ids_to_mask
+from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
     CCPairFullInfo,
+    CCPairHierarchyBreakdown,
     CCPairSyncAttemptsResponse,
     CCPropertyUpdateRequest,
     CCStatusUpdateRequest,
@@ -94,7 +97,6 @@ from onyx.server.documents.models import (
     synthesize_unaccounted,
 )
 from onyx.server.models import StatusResponse
-from onyx.server.security.store import get_security_settings
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -444,7 +446,9 @@ def get_cc_pair_full_info(
 
     return CCPairFullInfo.from_models(
         cc_pair_model=cc_pair,
-        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        mask_credential_prefix=bool(
+            credential_ids_to_mask([cc_pair.credential], user, db_session)
+        ),
         is_connectors_admin=has_global_permission(user, Permission.MANAGE_CONNECTORS),
         can_edit=can_edit,
         groups=[
@@ -500,6 +504,21 @@ def get_cc_pair_full_info(
             cc_pair.connector.source, cc_pair.connector.input_type
         ),
     )
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/hierarchy-breakdown")
+def get_cc_pair_hierarchy_breakdown(
+    cc_pair_id: int,
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairHierarchyBreakdown | None:
+    """Document counts per hierarchy node (e.g. Confluence spaces). None until
+    the pair has a successful index attempt. A separate route, because the count
+    reads every document of the pair and the detail page must load fast."""
+    cc_pair = _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+    return build_cc_pair_hierarchy_breakdown(db_session, cc_pair)
 
 
 def _connector_supports_targeted_reindex(
@@ -850,13 +869,33 @@ def get_cc_pair_indexing_errors(
     )
 
 
-def _assert_sync_restricted_allowed() -> None:
-    if not get_security_settings().allow_connector_group_restrictions:
-        raise OnyxError(
-            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
-            "Group restrictions on permission-synced connectors are turned off "
-            "for this workspace.",
+def authorize_pairing(
+    metadata: ConnectorCredentialPairMetadata, user: User, db_session: Session
+) -> dict[int, ConnectorManageRole]:
+    """Runs the GATE 2 scope check for a new pair's manage groups, and returns
+    them. Shared by every path that pairs a connector with a credential. The
+    access-type rules are ``validate_pairing_access``."""
+
+    # GATE 2 write authorization (see assert_within_scope).
+    #
+    # A permission-synced connector carrying no groups is exempt: its ACLs are
+    # mirrored from the source, so it cannot surface a document to anyone who
+    # could not already read it there. There is no reach for a group to bound,
+    # and requiring one would attach a group that does not affect access at all.
+    # Groups may still be supplied to scope who may *manage* it, and those are
+    # checked normally below.
+    manage_access = metadata.manage_roles_by_group()
+    is_groupless_perm_sync = metadata.access_type.is_perm_synced() and not manage_access
+    if not is_groupless_perm_sync:
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=[],
+            requested_group_ids=manage_access.keys(),
+            is_non_public=metadata.access_type != AccessType.PUBLIC,
         )
+    return manage_access
 
 
 @router.put(
@@ -878,49 +917,7 @@ def associate_credential_to_connector(
     The intent of this endpoint is to handle connectors that actually need credentials.
     """
 
-    if metadata.access_type == AccessType.SYNC_RESTRICTED:
-        _assert_sync_restricted_allowed()
-        if not metadata.data_access:
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "A restricted connector needs at least one data-access group.",
-            )
-
-    if metadata.data_access:
-        if metadata.access_type not in AccessType.data_access_types():
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "Data-access groups can only be set on private or restricted "
-                "connectors.",
-            )
-        visible_group_ids = get_visible_user_group_ids(user, db_session)
-        if visible_group_ids is not None and not visible_group_ids.issuperset(
-            metadata.data_access
-        ):
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "You can't give data access to groups you can't see.",
-            )
-
-    # GATE 2 write authorization (see assert_within_scope).
-    #
-    # A permission-synced connector carrying no groups is exempt: its ACLs are
-    # mirrored from the source, so it cannot surface a document to anyone who
-    # could not already read it there. There is no reach for a group to bound,
-    # and requiring one would attach a group that does not affect access at all.
-    # Groups may still be supplied to scope who may *manage* it, and those are
-    # checked normally below.
-    manage_access = metadata.manage_roles_by_group()
-    is_groupless_perm_sync = metadata.access_type.is_perm_synced() and not manage_access
-    if not is_groupless_perm_sync:
-        assert_within_scope(
-            user,
-            db_session,
-            permission=Permission.MANAGE_CONNECTORS,
-            current_group_ids=[],
-            requested_group_ids=manage_access.keys(),
-            is_non_public=metadata.access_type != AccessType.PUBLIC,
-        )
+    manage_access = authorize_pairing(metadata, user, db_session)
 
     # GATE 2 on the connector: it carries no creator or groups, so its pairs are what
     # says who may edit it. Empty means nobody owns it yet (create-then-associate)
@@ -941,6 +938,22 @@ def associate_credential_to_connector(
             f"Credential {credential_id} does not exist or does not belong to user",
         )
 
+    # After GATE 2: the access rules name the connector's source in their
+    # errors, so only a user who may edit the connector reaches them.
+    connector = fetch_connector_by_id(connector_id, db_session)
+    if connector is None:
+        raise OnyxError(
+            OnyxErrorCode.CONNECTOR_NOT_FOUND,
+            f"Connector {connector_id} does not exist",
+        )
+    validate_pairing_access(
+        db_session,
+        user=user,
+        source=connector.source,
+        access_type=metadata.access_type,
+        data_access_group_ids=metadata.data_access,
+    )
+
     # Validation claims the pairing's report row, so a duplicate request must
     # stop before it: it would replace the live pair's report and fence out its
     # run. The add below still answers a concurrent duplicate.
@@ -956,7 +969,11 @@ def associate_credential_to_connector(
 
     try:
         validate_ccpair_for_user(
-            connector_id, credential_id, metadata.access_type, db_session
+            connector_id,
+            credential_id,
+            metadata.access_type,
+            db_session,
+            user=user,
         )
 
         response = add_credential_to_connector(

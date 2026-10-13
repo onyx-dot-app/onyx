@@ -30,8 +30,13 @@ export async function getChatSession(
 }
 
 // client abort alone leaves the backend generating
-export async function stopChatSession(sessionId: string): Promise<void> {
-  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}`, {
+// streamId scopes Stop to one response; omitted, the backend stops whichever is in flight.
+export async function stopChatSession(
+  sessionId: string,
+  streamId?: number,
+): Promise<void> {
+  const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
+  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}${query}`, {
     method: "POST",
   });
 }

@@ -19,7 +19,6 @@ from onyx.db.models import (
     ExternalGroupPermissionSyncAttempt,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.telemetry import RecordType, optional_telemetry
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
@@ -181,16 +180,6 @@ def mark_doc_permission_sync_attempt_failed(
         attempt.total_docs_synced = total_docs_synced
         attempt.docs_with_permission_errors = docs_with_permission_errors
         db_session.commit()
-
-        # Add telemetry for permission sync attempt status change
-        optional_telemetry(
-            record_type=RecordType.PERMISSION_SYNC_COMPLETE,
-            data={
-                "doc_permission_sync_attempt_id": attempt_id,
-                "status": PermissionSyncStatus.FAILED.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
     except Exception:
         db_session.rollback()
         raise
@@ -238,16 +227,6 @@ def complete_doc_permission_sync_attempt(
 
         attempt.time_finished = func.now()
         db_session.commit()
-
-        # Add telemetry
-        optional_telemetry(
-            record_type=RecordType.PERMISSION_SYNC_COMPLETE,
-            data={
-                "doc_permission_sync_attempt_id": attempt_id,
-                "status": attempt.status.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         return attempt
     except Exception:
         db_session.rollback()
@@ -457,16 +436,6 @@ def mark_external_group_sync_attempt_failed(
         attempt.error_message = error_message
         attempt.full_exception_trace = full_exception_trace
         db_session.commit()
-
-        # Add telemetry for permission sync attempt status change
-        optional_telemetry(
-            record_type=RecordType.PERMISSION_SYNC_COMPLETE,
-            data={
-                "external_group_sync_attempt_id": attempt_id,
-                "status": PermissionSyncStatus.FAILED.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
     except Exception:
         db_session.rollback()
         raise
@@ -523,16 +492,6 @@ def complete_external_group_sync_attempt(
 
         attempt.time_finished = func.now()
         db_session.commit()
-
-        # Add telemetry
-        optional_telemetry(
-            record_type=RecordType.PERMISSION_SYNC_COMPLETE,
-            data={
-                "external_group_sync_attempt_id": attempt_id,
-                "status": attempt.status.value,
-                "cc_pair_id": attempt.connector_credential_pair_id,
-            },
-        )
         return attempt
     except Exception:
         db_session.rollback()

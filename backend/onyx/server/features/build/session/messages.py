@@ -40,6 +40,9 @@ from onyx.server.features.build.interactive_turns.state import (
     get_turn_for_request,
 )
 from onyx.server.features.build.sandbox.models import PromptAttachment
+from onyx.server.features.build.sandbox.util.agent_instructions import (
+    build_attachment_prompt,
+)
 from onyx.server.features.build.session.llm_config import GatewaySelection
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.models import (
@@ -181,7 +184,10 @@ def send_message(
             session_id=session_id,
             user_id=user.id,
             client_request_id=client_request_id,
-            prompt=request.content,
+            prompt=build_attachment_prompt(
+                request.content,
+                (attachment.path for attachment in request.attachments),
+            ),
             turn_index=turn_index,
             attachments=prompt_attachments,
         )
@@ -240,7 +246,7 @@ def send_subagent_message(
         # Capture values needed for streaming before the endpoint returns and
         # FastAPI tears down the dependency-injected db_session.
         user_id = user.id
-        message_content = request.content
+        message_content = build_attachment_prompt(request.content, [])
         events_yielded = 0
 
         try:
@@ -289,6 +295,7 @@ def send_subagent_message(
 @router.post("/sessions/{session_id}/interrupt", tags=PUBLIC_API_TAGS)
 def interrupt_message(
     session_id: UUID,
+    turn_id: UUID | None = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MessageInterruptResponse:
@@ -298,5 +305,5 @@ def interrupt_message(
     streams then terminate through their normal completion path.
     """
     session_manager = SessionManager(db_session)
-    interrupted = session_manager.interrupt_message(session_id, user.id)
+    interrupted = session_manager.interrupt_message(session_id, user.id, turn_id)
     return MessageInterruptResponse(interrupted=interrupted)

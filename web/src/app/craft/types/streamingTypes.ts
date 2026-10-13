@@ -181,6 +181,7 @@ export interface ApiInteractiveTurnResponse {
   session_id: string;
   status: InteractiveTurnStatus;
   turn_index: number;
+  error_detail?: string | null;
 }
 
 export interface ApiArtifactResponse {
@@ -200,6 +201,17 @@ export interface ApiWebappInfoResponse {
   status: string;
   ready: boolean;
   sharing_scope: SharingScope;
+}
+
+export interface OutputFile {
+  path: string;
+  revision: string;
+  size: number;
+}
+
+export interface OutputInventory {
+  files: OutputFile[];
+  complete: boolean;
 }
 
 export interface FileSystemEntry {

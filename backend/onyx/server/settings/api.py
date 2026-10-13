@@ -18,6 +18,10 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import KV_REINDEX_KEY, NotificationType
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.llm import (
+    mark_model_configuration_visible,
+    require_router_model_configuration,
+)
 from onyx.db.models import User
 from onyx.db.notification import (
     dismiss_all_notifications,
@@ -28,11 +32,13 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.oauth_provider.config import OAUTH_PROVIDER_SETTINGS
 from onyx.server.features.build.utils import (
     is_craft_available_for_deployment,
     is_craft_enabled_for_user,
 )
 from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.settings.models import (
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_NO_VECTOR_DB,
     DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB,
@@ -72,6 +78,7 @@ def admin_patch_settings(
     current_user: User = Depends(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
+    db_session: Session = Depends(get_session),
 ) -> Settings:
     if global_version.is_ee_version():
         from ee.onyx.utils.tier import get_tier
@@ -124,6 +131,25 @@ def admin_patch_settings(
                 OnyxErrorCode.FEATURE_NOT_AVAILABLE,
                 "Chat history retention requires the Enterprise plan.",
             )
+        # The LLM gateway is Business+; keep the write gate aligned with the
+        # tier_gate middleware that rejects /api/gateway calls below it.
+        if merged.llm_gateway_enabled != existing.llm_gateway_enabled and (
+            not tier_at_least(current_tier, Tier.BUSINESS)
+        ):
+            raise OnyxError(
+                OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+                "The LLM gateway requires the Business or Enterprise plan.",
+            )
+
+        routing_id = merged.model_routing_model_configuration_id
+        if (
+            "model_routing_model_configuration_id" in settings.model_fields_set
+            and routing_id is not None
+        ):
+            routing_model = require_router_model_configuration(db_session, routing_id)
+            # Hidden routers don't reach the picker's provider payload.
+            if mark_model_configuration_visible(db_session, routing_model):
+                invalidate_provider_listing_cache()
 
         store_settings(merged)
 
@@ -134,6 +160,15 @@ def admin_patch_settings(
                 actor=actor_from_user(current_user),
                 resource_type="settings",
                 extra={"craft_default_enabled": merged.craft_default_enabled},
+            )
+
+        if merged.llm_gateway_enabled != existing.llm_gateway_enabled:
+            emit_audit_event(
+                AuditAction.LLM_GATEWAY_ENABLED_CHANGE,
+                AuditOutcome.SUCCESS,
+                actor=actor_from_user(current_user),
+                resource_type="settings",
+                extra={"llm_gateway_enabled": merged.llm_gateway_enabled},
             )
 
         # Read back rather than returning `merged`, so the response matches what
@@ -202,6 +237,7 @@ def fetch_settings(
 
     return UserSettings(
         **general_settings.model_dump(),
+        oauth_provider_enabled=OAUTH_PROVIDER_SETTINGS is not None,
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,

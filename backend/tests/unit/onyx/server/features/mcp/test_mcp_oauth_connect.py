@@ -65,7 +65,7 @@ def test_tool_discovery_reports_reauthentication_as_unauthenticated(
     user = cast(User, SimpleNamespace(id=uuid4(), email="user@example.com"))
     credentials = MagicMock()
     credentials.can_authenticate.return_value = True
-    credentials.connection_config = SimpleNamespace(id=101)
+    credentials.connection_config_id = 101
     credentials.build_headers.return_value = {"Authorization": "Bearer stale"}
 
     monkeypatch.setattr(api, "get_mcp_server_by_id", lambda *_args: server)

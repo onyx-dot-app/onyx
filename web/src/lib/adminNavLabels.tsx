@@ -21,6 +21,7 @@ export function useAdminNavLabels(): Record<AdminNavItemId, string> {
       voice: t("adminNav.items.voice.label"),
       codeInterpreter: t("adminNav.items.codeInterpreter.label"),
       chatPreferences: t("adminNav.items.chatPreferences.label"),
+      llmGateway: t("adminNav.items.llmGateway.label"),
       craftAccess: t("adminNav.items.craftAccess.label"),
       craftApps: t("adminNav.items.craftApps.label"),
       craftPreferences: t("adminNav.items.craftPreferences.label"),

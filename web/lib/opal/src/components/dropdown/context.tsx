@@ -8,6 +8,7 @@ import type {
 import type {
   DropdownMode,
   DropdownViews,
+  DropdownWidth,
 } from "@opal/components/dropdown/types";
 
 /**
@@ -42,11 +43,15 @@ export interface DropdownContextValue {
   setFloatingRef: (node: HTMLDivElement | null) => void;
   floatingStyles: React.CSSProperties;
   isPositioned: boolean;
+  /** The edge the list grows from, as floating-ui placed it. */
+  anchoredEdge: "top" | "bottom";
   /** Filled by `Dropdown.Data`; read by the keyboard handler at event time. */
   listRef: React.RefObject<ListModel>;
   /** Picker or menu, as `Dropdown.Data` declared it. */
   mode: DropdownMode;
   setMode: (mode: DropdownMode) => void;
+  /** The width the view on top asks for, if any. */
+  setViewWidth: (width: DropdownWidth | undefined) => void;
   /** The highlighted stop's element id, for `aria-activedescendant`. */
   activeId: string | undefined;
   setActiveId: (id: string | undefined) => void;
@@ -60,7 +65,11 @@ export interface DropdownContextValue {
    * trigger is a combobox; a menu's keeps its own role. A type-in trigger
    * also announces list autocomplete.
    */
-  getTriggerProps: (options: { typeIn: boolean }) => DropdownTriggerProps;
+  getTriggerProps: (options: {
+    typeIn: boolean;
+    /** The trigger is a `<button>`: it keeps its role and its name. */
+    nativeButton?: boolean;
+  }) => DropdownTriggerProps;
 }
 
 export interface DropdownTriggerProps {

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
+import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
 import { Button, Modal, Text } from "@opal/components";
 import { useModalClose } from "@opal/components/modal/context";
 
@@ -11,6 +11,8 @@ import { useModalClose } from "@opal/components/modal/context";
 
 interface ConfirmationModalProps {
   icon: IconFunctionComponent;
+  /** Colour mode of the header icon and title, as on `Content`. */
+  color?: ColorTypes;
   title: string | RichStr;
   description?: string | RichStr;
 
@@ -40,6 +42,7 @@ interface ConfirmationModalProps {
  */
 function ConfirmationModalLayout({
   icon,
+  color,
   title,
   description,
   children,
@@ -66,6 +69,7 @@ function ConfirmationModalLayout({
       <Modal.Content width="sm">
         <Modal.Header
           icon={icon}
+          color={color}
           title={title}
           description={description}
           onClose={canClose ? onClose : undefined}

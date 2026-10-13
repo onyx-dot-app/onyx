@@ -11,7 +11,12 @@ from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transfor
 def _add_anthropic_cache_control(
     messages: Sequence[ChatCompletionMessage],
 ) -> Sequence[ChatCompletionMessage]:
-    """Add cache_control parameter to messages for Anthropic caching.
+    """Add cache_control parameters to messages for Anthropic caching.
+
+    Anthropic allows up to 4 cache breakpoints. We mark the last cacheable
+    message (tail of the prefix) and, when there is more than one, the first
+    (usually the system prompt): the head breakpoint keeps the stable prefix
+    readable when history truncation moves the tail breakpoint.
 
     Args:
         messages: Messages to transform
@@ -19,10 +24,13 @@ def _add_anthropic_cache_control(
     Returns:
         Messages with cache_control added
     """
-    last_message = messages[-1].model_copy(
-        update={"cache_control": {"type": "ephemeral"}}
-    )
-    return list(messages[:-1]) + [last_message]
+    result: list[ChatCompletionMessage] = list(messages)
+    result[-1] = result[-1].model_copy(update={"cache_control": {"type": "ephemeral"}})
+    if len(result) > 1:
+        result[0] = result[0].model_copy(
+            update={"cache_control": {"type": "ephemeral"}}
+        )
+    return result
 
 
 class AnthropicPromptCacheProvider(PromptCacheProvider):

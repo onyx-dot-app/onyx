@@ -5,19 +5,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from onyx.context.search.models import BaseFilters, SearchDocsResponse
-from onyx.tools.models import ToolCallException
+from onyx.tools.models import ToolCallException, ToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 def _make_tool(
     user_selected_filters: BaseFilters | None,
     project_id_filter: int | None = None,
+    persona_id_filter: int | None = None,
 ) -> SearchTool:
     """A SearchTool with only the state the empty-selection guard reads,
     avoiding the heavy __init__ (DB, emitter, etc.)."""
     tool = SearchTool.__new__(SearchTool)
     tool.user_selected_filters = user_selected_filters
     tool.project_id_filter = project_id_filter
+    tool.persona_id_filter = persona_id_filter
     return tool
 
 
@@ -72,3 +74,16 @@ def test_malformed_call_raises_despite_empty_selection() -> None:
 
     with pytest.raises(ToolCallException):
         tool.run(placement=MagicMock(), override_kwargs=MagicMock())
+
+
+def test_custom_agent_in_project_respects_empty_source_selection() -> None:
+    tool: SearchTool = _make_tool(
+        BaseFilters(source_type=[]), project_id_filter=42, persona_id_filter=7
+    )
+
+    response: ToolResponse = tool.run(
+        placement=MagicMock(), override_kwargs=MagicMock(), queries=["q"]
+    )
+
+    assert isinstance(response.rich_response, SearchDocsResponse)
+    assert response.rich_response.search_docs == []

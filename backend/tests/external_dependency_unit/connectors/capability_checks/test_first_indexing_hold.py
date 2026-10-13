@@ -4,6 +4,7 @@ report has no required check that is running, failed or failed to run."""
 
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,8 +29,8 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
     CredentialCapability,
     CredentialCapabilityReport,
-    compute_connector_config_hash,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.db.credential_capability import (
     get_capability_report_row,
     mark_capability_report_running,
@@ -225,8 +226,10 @@ def _complete(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
     results: list[CapabilityCheckResult],
+    connector_specific_config: dict[str, Any] | None = None,
 ) -> None:
-    """Marks the row RUNNING and lands a completed report on it."""
+    """Marks the row RUNNING and lands a completed report on it, run with
+    ``connector_specific_config`` (default: the pair's saved config)."""
     row = mark_capability_report_running(
         db_session,
         credential_id=cc_pair.credential_id,
@@ -253,6 +256,8 @@ def _complete(
         ),
         connector_config_hash=compute_connector_config_hash(
             cc_pair.connector.connector_specific_config
+            if connector_specific_config is None
+            else connector_specific_config
         ),
         run_id=row.run_id,
     )
@@ -314,6 +319,22 @@ def test_starts_on_indeterminate_or_skipped(
 ) -> None:
     _complete(db_session, slack_pair, [_result(status)])
 
+    beat.run()
+    beat.assert_started()
+
+
+def test_a_report_for_another_config_does_not_hold(
+    db_session: Session, slack_pair: ConnectorCredentialPair, beat: _Beat
+) -> None:
+    # E.g. the report of an edit's proposed config that apply rejected.
+    _complete(
+        db_session,
+        slack_pair,
+        [_result(CapabilityCheckStatus.FAILED)],
+        connector_specific_config={"channels": ["not-the-saved-config"]},
+    )
+
+    assert _hold_reason(db_session, slack_pair) is None
     beat.run()
     beat.assert_started()
 

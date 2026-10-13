@@ -24,10 +24,8 @@ func devtoolBackendRepo(t *testing.T, template string) (root, uvCalls, uvEnv str
 		t.Fatal(err)
 	}
 	uvEnv = filepath.Join(binDir, "uv.env")
-	uvCalls = devtoolFakeTool(t, binDir, "uv", `printf 'FROM_FILE=%s\nSHELL_WINS=%s\nEE=%s\nLICENSE=%s\n' `+
-		`"$FROM_FILE" "$SHELL_WINS" "${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES-unset}" "${LICENSE_ENFORCEMENT_ENABLED-unset}" > "$0.env"`+"\n")
-	devtoolUnsetenv(t, "ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")
-	devtoolUnsetenv(t, "LICENSE_ENFORCEMENT_ENABLED")
+	uvCalls = devtoolFakeTool(t, binDir, "uv", `printf 'FROM_FILE=%s\nSHELL_WINS=%s\n' "$FROM_FILE" "$SHELL_WINS" > "$0.env"`+"\n")
+	devtoolUnsetenv(t, devLicenseEnv)
 	devtoolUnsetenv(t, "FROM_FILE")
 	return root, uvCalls, uvEnv
 }
@@ -60,10 +58,9 @@ func TestBackendCommand_runsUvicornWithMergedEnv(t *testing.T) {
 		name       string
 		subcommand []string
 		module     string
-		wantEE     string
 	}{
-		{"api with EE", []string{"api"}, "onyx.main:app", "EE=true\nLICENSE=false\n"},
-		{"model server without EE", []string{"model_server", "--no-ee"}, "model_server.main:app", "EE=false\nLICENSE=unset\n"},
+		{"api", []string{"api"}, "onyx.main:app"},
+		{"model server", []string{"model_server"}, "model_server.main:app"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -85,9 +82,89 @@ func TestBackendCommand_runsUvicornWithMergedEnv(t *testing.T) {
 			if got := devtoolReadFile(t, filepath.Join(root, ".vscode", ".env")); got != template {
 				t.Fatalf("expected .env copied from the template, got %q", got)
 			}
-			wantEnv := "FROM_FILE=quoted value\nSHELL_WINS=shell\n" + c.wantEE
+			wantEnv := "FROM_FILE=quoted value\nSHELL_WINS=shell\n"
 			if got := devtoolReadFile(t, uvEnv); got != wantEnv {
 				t.Fatalf("expected env %q, got %q", wantEnv, got)
+			}
+		})
+	}
+}
+
+func TestBackendCommand_seedsTheDevLicenseBeforeTheAPIOnly(t *testing.T) {
+	seed := []string{"run", "python", "-m", "scripts.seed_dev_license"}
+	cases := []struct {
+		name     string
+		service  string
+		module   string
+		shell    string
+		envFile  string
+		wantSeed bool
+	}{
+		{name: "api with a license in the shell", service: "api", module: "onyx.main:app", shell: "license-blob", wantSeed: true},
+		{name: "api with a license in .vscode/.env", service: "api", module: "onyx.main:app", envFile: "ONYX_DEV_LICENSE=license-blob\n", wantSeed: true},
+		{name: "api with an empty license", service: "api", module: "onyx.main:app"},
+		{name: "multi-tenant api with a license", service: "api", module: "onyx.main:app", shell: "license-blob", envFile: "MULTI_TENANT=true\n"},
+		{name: "model server with a license", service: "model_server", module: "model_server.main:app", shell: "license-blob"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root, uvCalls, _ := devtoolBackendRepo(t, c.envFile)
+			if c.shell != "" {
+				t.Setenv(devLicenseEnv, c.shell)
+			}
+			port := strconv.Itoa(devtoolFreePort(t))
+
+			if err := runBackendService(c.service, c.module, port); err != nil {
+				t.Fatalf("runBackendService: %v", err)
+			}
+
+			backendDir := filepath.Join(root, "backend")
+			want := []devtoolCall{{Dir: backendDir, Args: []string{"run", "uvicorn", c.module, "--reload", "--port", port}}}
+			if c.wantSeed {
+				want = append([]devtoolCall{{Dir: backendDir, Args: seed}}, want...)
+			}
+			if got := devtoolCalls(t, uvCalls); !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected %q, got %q", want, got)
+			}
+		})
+	}
+}
+
+func TestRunBackendService_seedOutcomeDecidesTheStart(t *testing.T) {
+	seed := []string{"run", "python", "-m", "scripts.seed_dev_license"}
+	cases := []struct {
+		name    string
+		envFile string
+		shell   string
+		wantErr string
+	}{
+		// The license is only in the file, so the seed must be handed the merged env.
+		{name: "seed accepts the license from .vscode/.env", envFile: "ONYX_DEV_LICENSE=wanted\n"},
+		{name: "seed rejects the license", shell: "rejected", wantErr: "Failed to seed the dev license"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root, _, _ := devtoolBackendRepo(t, c.envFile)
+			uvCalls := devtoolFakeTool(t, os.Getenv("PATH"), "uv", `[ "$ONYX_DEV_LICENSE" = wanted ] || exit 4`+"\n")
+			if c.shell != "" {
+				t.Setenv(devLicenseEnv, c.shell)
+			}
+			port := strconv.Itoa(devtoolFreePort(t))
+
+			err := runBackendService("api", "onyx.main:app", port)
+
+			backendDir := filepath.Join(root, "backend")
+			want := []devtoolCall{{Dir: backendDir, Args: seed}}
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("runBackendService: %v", err)
+				}
+				want = append(want, devtoolCall{Dir: backendDir, Args: []string{"run", "uvicorn", "onyx.main:app", "--reload", "--port", port}})
+			} else if err == nil || !strings.HasPrefix(err.Error(), c.wantErr) {
+				t.Fatalf("expected an error starting with %q, got %v", c.wantErr, err)
+			}
+			if got := devtoolCalls(t, uvCalls); !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected %q, got %q", want, got)
 			}
 		})
 	}
@@ -98,7 +175,7 @@ func TestRunBackendService_keepsAnExistingEnvFile(t *testing.T) {
 	envFile := filepath.Join(root, ".vscode", ".env")
 	writeFile(t, envFile, "FROM_FILE=edited\n")
 
-	if err := runBackendService("api", "onyx.main:app", strconv.Itoa(devtoolFreePort(t)), &BackendOptions{}); err != nil {
+	if err := runBackendService("api", "onyx.main:app", strconv.Itoa(devtoolFreePort(t))); err != nil {
 		t.Fatalf("runBackendService: %v", err)
 	}
 
@@ -119,7 +196,7 @@ func TestRunBackendService_movesOffABusyPort(t *testing.T) {
 	defer func() { _ = ln.Close() }()
 	busy := ln.Addr().(*net.TCPAddr).Port
 
-	if err := runBackendService("api", "onyx.main:app", strconv.Itoa(busy), &BackendOptions{}); err != nil {
+	if err := runBackendService("api", "onyx.main:app", strconv.Itoa(busy)); err != nil {
 		t.Fatalf("runBackendService: %v", err)
 	}
 
@@ -222,7 +299,7 @@ func TestRunBackendService_errors(t *testing.T) {
 				port = strconv.Itoa(devtoolFreePort(t))
 			}
 
-			err := runBackendService("api", "onyx.main:app", port, &BackendOptions{})
+			err := runBackendService("api", "onyx.main:app", port)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("expected an error containing %q, got %v", c.want, err)
 			}

@@ -68,6 +68,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         documents: list[Document],
         ignore_time_skip: bool,
         index_to_secondary: bool,
+        force_update: bool = False,
     ) -> DocumentBatchPrepareContext | None:
         """Upsert docs, map CC pairs, return context or mark as indexed if no-op.
 
@@ -81,6 +82,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
                 db_session=db_session,
                 ignore_time_skip=ignore_time_skip,
                 index_to_secondary=index_to_secondary,
+                force_update=force_update,
             )
 
             if not context:

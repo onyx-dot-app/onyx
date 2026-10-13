@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from onyx.deep_research.dr_mock_tools import THINK_TOOL_NAME
+from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.deep_research.utils import create_think_tool_token_processor
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
