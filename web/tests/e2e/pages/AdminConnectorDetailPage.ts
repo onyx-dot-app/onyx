@@ -18,6 +18,8 @@ export class AdminConnectorDetailPage {
   readonly deleteMenuItem: Locator;
   /** Enters the inline file editor of a file connector. */
   readonly filesEditButton: Locator;
+  /** Opens the connector in the creation form in edit mode. */
+  readonly editConnectorButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -31,6 +33,10 @@ export class AdminConnectorDetailPage {
     // exact: the header's "Edit connector" button also contains "Edit"
     this.filesEditButton = page.getByRole("button", {
       name: "Edit",
+      exact: true,
+    });
+    this.editConnectorButton = page.getByRole("button", {
+      name: "Edit connector",
       exact: true,
     });
   }
@@ -50,6 +56,18 @@ export class AdminConnectorDetailPage {
   async openManageMenu(): Promise<void> {
     await expect(this.manageButton).toBeVisible({ timeout: 30000 });
     await this.manageButton.click();
+  }
+
+  async openEditForm(): Promise<void> {
+    await expect(this.editConnectorButton).toBeVisible({ timeout: 30000 });
+    await this.editConnectorButton.click();
+  }
+
+  /** The connector name in the page header. */
+  async expectName(name: string): Promise<void> {
+    await expect(
+      this.page.getByText(name, { exact: true }).first()
+    ).toBeVisible({ timeout: 30000 });
   }
 
   async expectDeleteOffered(offered: boolean): Promise<void> {
