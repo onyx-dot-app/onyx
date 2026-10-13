@@ -767,6 +767,11 @@ function DropdownData(props: DropdownDataProps) {
       activatingRef.current = rowElementId(id, row);
       switch (row.kind) {
         case "option": {
+          // A link option navigates as an anchor; it is not a pick.
+          if (row.href !== undefined) {
+            setIsOpen(false);
+            break;
+          }
           const moved = runHandler(() => onSelect?.(row, views));
           if (closeOnSelect && !moved) setIsOpen(false);
           break;
@@ -793,7 +798,10 @@ function DropdownData(props: DropdownDataProps) {
     (item: NavItem) => {
       if (item.kind === "row") {
         const { row } = item;
-        if (row.kind === "action" && row.href !== undefined) {
+        if (
+          (row.kind === "action" || row.kind === "option") &&
+          row.href !== undefined
+        ) {
           // Enter clicks the anchor, so the browser navigates as it would
           // for a pointer click; the click handler then runs activateRow.
           document.getElementById(rowElementId(id, row))?.click();

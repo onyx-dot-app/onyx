@@ -423,6 +423,11 @@ class GoogleDirectoryUser(BaseModel):
     is_delegated_admin: bool
 
 
+class GoogleSharedDrive(BaseModel):
+    id: str
+    name: str
+
+
 class GoogleGroupMember(BaseModel):
     email: str | None
     # USER, GROUP or CUSTOMER.

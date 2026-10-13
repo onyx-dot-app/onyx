@@ -79,9 +79,9 @@ frontend changes a new connector requires.
 | Method | Path | Notes |
 |---|---|---|
 | POST | `/admin/connector` | Create a `Connector` row (`create_connector_from_model`). |
-| POST | `/admin/connector-with-credential` | Create a connector and pair it with a saved credential or the user's draft (`create_connector_with_credential`). The request names the credential by `credential_id`, `credential_json` or both, as for draft runs. A draft is promoted to a saved credential with `credential_sharing`. A failure removes the connector and makes a promoted draft a draft again. The add-connector page uses it. |
+| POST | `/admin/connector-with-credential` | Create a connector and pair it with a saved credential or the user's draft (`create_connector_with_credential`). The request names the credential by `credential_id`, `credential_json` or both, as for draft runs. A draft is promoted to a saved credential with `credential_sharing`. The pairing validation applies the credential use rule (§4.9) before it builds the connector. A failure removes the connector and makes a promoted draft a draft again. The add-connector page uses it. |
 | POST | `/admin/draft-credential/binding-check` | Check a form's bound fields against a new account's `credential_json`, which is saved as (or updates) the user's draft first; the response returns the draft's `credential_id` (`server/documents/draft_credentials.py`). |
-| PATCH | `/admin/connector/{connector_id}` | Update config, schedule, etc. |
+| PATCH | `/admin/connector/{connector_id}` | Update config, schedule, etc. Applies the credential use rule (§4.9) to every credential the connector is paired with. |
 | DELETE | `/admin/connector/{connector_id}` | |
 | POST | `/admin/connector/run-once` | On-demand index trigger. |
 | GET | `/admin/connector/status`, `/admin/connector/indexing-status` (POST) | Status and index-attempt history for the admin UI. |
@@ -89,8 +89,8 @@ frontend changes a new connector requires.
 | POST | `/admin/connector/file/upload`, GET/POST `/admin/connector/{id}/files*` | File-connector-specific upload and file-list management. |
 | GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
-| POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). |
-| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The add-connector form sends a typed account's values only with a check run or Create, and its binding check names the draft by id once a run saved the current values. The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. |
+| POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). A run applies the credential use rule (§4.9) to the config it uses. A `connector_specific_config` override needs credential visibility; only a run on the stored config of an existing pair is open to a pairing manager who cannot see the credential. |
+| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The add-connector form sends a typed account's values only with a check run or Create, and its binding check names the draft by id once a run saved the current values. The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. A run starts only when the credential use rule (§4.9) allows the form's config. |
 | POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
@@ -426,8 +426,13 @@ whose required permission depends on an argument) onto each public method;
 method on the subclass lacks the stamp, or if the subclass overrides
 `__init__`. Operations must return plain data, never live SDK objects, because
 lazily-evaluated SDK attribute access (PyGithub, office365) can fire network
-calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, and Notion have
+calls outside any wrapper. Only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub have
 a gateway today (`<source>/source_operations.py`); most connectors still call their SDK directly.
+SharePoint's gateway is also the only importer of `msal`, `requests` and `office365`
+under `connectors/sharepoint/` and `ee/.../external_permissions/sharepoint/`. Its
+permission reads are shared with Teams through `microsoft_utils/sharepoint_rest.py`.
+The GitHub gateway calls the REST API through PyGithub's requester and parses the
+JSON into the models in `github/models.py`, so no PyGithub object leaves it.
 
 ### 4.8 Capabilities and capability checks
 
@@ -435,7 +440,7 @@ a gateway today (`<source>/source_operations.py`); most connectors still call th
 `EXTERNAL_GROUP_SYNC`) is the vocabulary. `capability_checks/applicability.py`
 decides which capabilities apply to a source on this build (CE: `INDEXING`
 only; EE adds the perm-sync ones). `capability_checks/registry.py` maps a
-source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, and Notion
+source to named `CapabilityCheck`s (only Slack, Confluence, OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub
 register real ones today; every other source gets a synthesized fallback wrapping
 `validate_connector_settings`). A source with named checks must have a
 `SourceOperations` gateway; `get_capability_checks` asserts this. `capability_checks/runner.py:generate_capability_report`
@@ -506,7 +511,35 @@ Every registry entry has a `ConnectorConfig` (`connector_config.py`). Each field
 mirrors one `__init__` kwarg of the connector. A config may inherit a
 `CredentialBinding` model for fields whose valid values depend on the account behind
 the credential, such as a site URL. `factory.py:validate_credential_binding` checks
-those fields at pairing and on config edit.
+those fields at pairing and on config edit, against what the credential itself
+records (for example the site of a Confluence OAuth grant).
+
+`factory.py:assert_user_can_use_credential` is the rule for who may use a
+credential with a config. Every pairing, credential swap, edit and check run
+applies it before it builds a connector. A user may use the credential when:
+
+- they own it, or it has no owner and they hold `MANAGE_CONNECTORS` globally;
+- it is visible to them ([[cc-pairs-and-credentials]] §4.7) and the config's
+  bound values, as the binding model validates them, equal those of a pair of
+  the same source that uses the credential. A credential with no pair is for
+  its owner only. A config-less run still needs such a pair;
+- the caller passes the pair the user edits or operates, and that pair already
+  uses the credential with the same bound values; or
+- the credential is visible and its source has no real secret
+  (`CREDENTIAL_PERMISSIONS_TO_IGNORE`).
+
+The comparison skips a binding's `credential_derived_fields`: values the form
+takes from the credential and `validate_credential` pins to it, such as Google
+Drive's `credential_kind`.
+
+The pairs are the record of the bound values; the credential stores none. The
+rule runs in `validate_ccpair_for_user` (its `user` is None only for system
+work), `validate_connector_credential_bindings`,
+`server/documents/capability_check_runs.py:start_capability_check_run` and
+`start_draft_capability_check_run` (create-form draft runs and cc-pair dry
+runs), and `edit_plan/state.py:fetch_proposed_credential` (edit plan and
+apply). A refusal is `CREDENTIAL_NOT_FOUND` when the credential is not visible
+and `INSUFFICIENT_PERMISSIONS` when the bound values match no pair.
 
 A realm (where an account works: its site, host or subdomain) lives in the
 credential only, and the connector reads it from there. The connector config does
@@ -632,7 +665,7 @@ family keep the source's shape and stay usable by that source only.
 | changes `interfaces.py` (adds/renames a base class or method) | `factory.py:_validate_connector_supports_input_type` and `identify_connector_class`; `connector_runner.py`'s `isinstance` branches; every connector implementing the affected interface |
 | changes checkpoint serialization (`ConnectorCheckpoint` or a subclass) | `validate_checkpoint_json` for that connector; any in-flight, persisted checkpoint from a prior run becomes unreadable, which [[indexing-pipeline]]'s resume logic must handle |
 | changes `capabilities.py` or the `CredentialCapability` enum | `capability_checks/applicability.py`, `registry.py`, `runner.py`, and the `credential_capability_report` schema; the admin UI surface that reads capability reports |
-| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook`, `hubspot` `source_operations.py`) and the import-fence test guarding SDK imports |
+| changes `source_operations.py`'s decorator or `SourceOperations` base | every existing gateway (`slack`, `confluence`, `onedrive`, `outlook`, `jira`, `linear`, `hubspot`, `google_drive`, `notion`, `sharepoint`, `github` `source_operations.py`) and the import-fence test guarding SDK imports |
 | changes pruning's diff logic | the invariant in §5.5; verify a connector auth failure still raises rather than producing an empty slim result |
 | touches `credentials_provider.py` | the Redis lock TTL and rotation semantics for every `CredentialsConnector`; static-credential paths used by daily tests |
 
@@ -724,8 +757,8 @@ lack of a key, ask instead. The shared helper
   not assume a checkpoint is small or simple when reasoning about serialization
   changes.
 - **`SourceOperations` is opt-in and mostly unused.** Only Slack, Confluence,
-  OneDrive, Outlook, Jira, Linear, and HubSpot have a gateway; most connectors still make source-API
-  calls inline, so the "one file that talks to the source" guarantee only holds for those nine today.
+  OneDrive, Outlook, Jira, Linear, HubSpot, Google Drive, Notion, SharePoint, and GitHub have a gateway; most connectors still make source-API
+  calls inline, so the "one file that talks to the source" guarantee only holds for those eleven today.
 - **`include_attachments` default differs by connector age.** New connectors
   default to `False`; connectors retrofitted with the flag default to `True`
   to preserve existing behavior for connector rows that predate the setting.

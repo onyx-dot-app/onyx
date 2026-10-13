@@ -30,9 +30,9 @@ def isolated_gateway_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})
 
 
-def _register_github_gateway() -> None:
-    class _GithubOperations(SourceOperations):
-        source = DocumentSource.GITHUB
+def _register_box_gateway() -> None:
+    class _BoxOperations(SourceOperations):
+        source = DocumentSource.BOX
         sdk_modules = ()
 
 
@@ -44,16 +44,16 @@ def test_named_indexing_checks_require_a_gateway(
     # Precondition.
     named_check = _NamedCheck(
         capability=CredentialCapability.INDEXING,
-        check_id="github_named_check",
+        check_id="box_named_check",
         display_name="Named check",
     )
     monkeypatch.setitem(
-        registry._INDEXING_CHECKS_BY_SOURCE, DocumentSource.GITHUB, [named_check]
+        registry._INDEXING_CHECKS_BY_SOURCE, DocumentSource.BOX, [named_check]
     )
 
     # Under test and postcondition.
     with pytest.raises(AssertionError, match="source-operations gateway"):
-        get_capability_checks(DocumentSource.GITHUB)
+        get_capability_checks(DocumentSource.BOX)
 
 
 @pytest.mark.usefixtures("isolated_gateway_registry")
@@ -62,18 +62,18 @@ def test_named_indexing_checks_pass_with_a_gateway(
 ) -> None:
     """Verifies a migrated source registers named checks freely."""
     # Precondition.
-    _register_github_gateway()
+    _register_box_gateway()
     named_check = _NamedCheck(
         capability=CredentialCapability.INDEXING,
-        check_id="github_named_check",
+        check_id="box_named_check",
         display_name="Named check",
     )
     monkeypatch.setitem(
-        registry._INDEXING_CHECKS_BY_SOURCE, DocumentSource.GITHUB, [named_check]
+        registry._INDEXING_CHECKS_BY_SOURCE, DocumentSource.BOX, [named_check]
     )
 
     # Under test and postcondition.
-    assert named_check in get_capability_checks(DocumentSource.GITHUB)
+    assert named_check in get_capability_checks(DocumentSource.BOX)
 
 
 @pytest.mark.usefixtures("isolated_gateway_registry")
@@ -84,18 +84,18 @@ def test_named_perm_sync_checks_require_a_gateway(
     # Precondition.
     named_check = _NamedCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,
-        check_id="github_named_check",
+        check_id="box_named_check",
         display_name="Named check",
     )
     monkeypatch.setitem(
         ee_capability_checks._DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE,
-        DocumentSource.GITHUB,
+        DocumentSource.BOX,
         [named_check],
     )
 
     # Under test and postcondition.
     with pytest.raises(AssertionError, match="source-operations gateway"):
-        get_perm_sync_capability_checks(DocumentSource.GITHUB)
+        get_perm_sync_capability_checks(DocumentSource.BOX)
 
 
 @pytest.mark.usefixtures("isolated_gateway_registry")
@@ -104,27 +104,27 @@ def test_named_perm_sync_checks_pass_with_a_gateway(
 ) -> None:
     """Verifies a migrated source registers named perm-sync checks freely."""
     # Precondition.
-    _register_github_gateway()
+    _register_box_gateway()
     named_check = _NamedCheck(
         capability=CredentialCapability.DOC_PERMISSION_SYNC,
-        check_id="github_named_check",
+        check_id="box_named_check",
         display_name="Named check",
     )
     monkeypatch.setitem(
         ee_capability_checks._DOC_PERMISSION_SYNC_CHECKS_BY_SOURCE,
-        DocumentSource.GITHUB,
+        DocumentSource.BOX,
         [named_check],
     )
 
     # Under test and postcondition.
-    assert named_check in get_perm_sync_capability_checks(DocumentSource.GITHUB)
+    assert named_check in get_perm_sync_capability_checks(DocumentSource.BOX)
 
 
 @pytest.mark.usefixtures("isolated_gateway_registry")
 def test_fallback_path_needs_no_gateway() -> None:
     """Verifies unmigrated sources keep their fallback coverage untouched."""
     # Under test.
-    checks = get_capability_checks(DocumentSource.GITHUB)
+    checks = get_capability_checks(DocumentSource.BOX)
 
     # Postcondition.
     assert any(check.is_fallback for check in checks)

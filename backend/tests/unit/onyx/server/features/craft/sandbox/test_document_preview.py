@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -17,6 +18,7 @@ from onyx.server.features.build.sandbox.base import (
     parse_document_preview_response,
 )
 from onyx.server.features.build.sandbox.models import (
+    FatalWriteError,
     PushResult,
     RetriableWriteError,
 )
@@ -156,6 +158,94 @@ def test_failed_bundle_deployment_is_not_marked_ready() -> None:
         )
 
 
+# Atomic bundle publication shared by skills and document previews.
+def test_docker_bundle_swap_keeps_previous_readers_and_complete_concurrent_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from onyx.server.features.build.sandbox.docker import (
+        docker_sandbox_manager as docker,
+    )
+
+    manager = docker.DockerSandboxManager.__new__(docker.DockerSandboxManager)
+    monkeypatch.setattr(manager, "_require_container", MagicMock())
+    mount = tmp_path / "converter"
+
+    def execute_archive(_container: object, command: list[str], archive: bytes) -> None:
+        script = command[2]
+        # BSD mv uses -h for the same no-follow behavior as GNU mv -T.
+        if sys.platform == "darwin":
+            script = script.replace("mv -Tf", "mv -fh")
+        # Keep grace-period directories in this test; tmp_path removes them.
+        script = script.replace(
+            '(sleep 60; rm -rf "$old_target") </dev/null >/dev/null 2>&1 &', ":"
+        )
+        subprocess.run(
+            ["sh", "-c", script], input=archive, check=True, capture_output=True
+        )
+
+    monkeypatch.setattr(
+        docker, "_stream_stdin_to_container_as_sandbox_user", execute_archive
+    )
+    sandbox_id = uuid4()
+
+    def push(value: bytes) -> None:
+        manager.write_files_to_sandbox(
+            sandbox_id=sandbox_id,
+            mount_path=str(mount),
+            files={"preview.py": value, "office/soffice.py": value},
+        )
+
+    push(b"initial")
+    previous = mount.resolve()
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(push, [b"second", b"third", b"fourth", b"fifth"]))
+    assert mount.is_symlink()
+    assert (previous / "preview.py").read_bytes() == b"initial"
+    current = mount.resolve()
+    assert (current / "preview.py").read_bytes() == (
+        current / "office/soffice.py"
+    ).read_bytes()
+    assert not list(tmp_path.glob("*.link"))
+
+
+def test_docker_failed_upload_does_not_replace_published_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from onyx.server.features.build.sandbox.docker import (
+        docker_sandbox_manager as docker,
+    )
+
+    manager = docker.DockerSandboxManager.__new__(docker.DockerSandboxManager)
+    monkeypatch.setattr(manager, "_require_container", MagicMock())
+    mount = tmp_path / "converter"
+    prior = tmp_path / "prior"
+    prior.mkdir()
+    (prior / "preview.py").write_bytes(b"published")
+    mount.symlink_to(prior, target_is_directory=True)
+
+    def execute_bad_archive(
+        _container: object, command: list[str], _archive: bytes
+    ) -> None:
+        result = subprocess.run(
+            command, input=b"not a tar archive", capture_output=True
+        )
+        if result.returncode:
+            raise docker.ExecError("Invalid archive")
+
+    monkeypatch.setattr(
+        docker, "_stream_stdin_to_container_as_sandbox_user", execute_bad_archive
+    )
+    with pytest.raises(FatalWriteError, match="write_files_to_sandbox failed"):
+        manager.write_files_to_sandbox(
+            sandbox_id=uuid4(),
+            mount_path=str(mount),
+            files={"preview.py": b"replacement"},
+        )
+    assert mount.resolve() == prior
+    assert (mount / "preview.py").read_bytes() == b"published"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["converter", "prior"]
+
+
 # Existing push retry contract
 def test_document_bundle_uses_existing_push_retries(
     monkeypatch: pytest.MonkeyPatch,
@@ -188,3 +278,114 @@ def test_failed_bundle_push_stops_before_verification() -> None:
             cast(SandboxManager, manager), uuid4(), runner
         )
     assert runner.call_count == 1
+
+
+@pytest.mark.parametrize("lookup", [True, False])
+@pytest.mark.parametrize("transient", [True, False])
+def test_docker_bundle_writer_classifies_exec_failure(
+    monkeypatch: pytest.MonkeyPatch, transient: bool, lookup: bool
+) -> None:
+    from docker.errors import APIError
+    from requests import Response
+
+    from onyx.server.features.build.sandbox.docker import (
+        docker_sandbox_manager as docker,
+    )
+
+    manager = docker.DockerSandboxManager.__new__(docker.DockerSandboxManager)
+    monkeypatch.setattr(manager, "_require_container", MagicMock())
+    response = Response()
+    response.status_code = 503 if transient else 403
+
+    def fail_write(*_args: object) -> None:
+        try:
+            raise APIError("Engine error", response=response)
+        except APIError as error:
+            raise docker.ExecError("exec failed") from error
+
+    if lookup:
+        monkeypatch.setattr(
+            manager,
+            "_require_container",
+            MagicMock(side_effect=APIError("Engine error", response=response)),
+        )
+    else:
+        monkeypatch.setattr(
+            docker, "_stream_stdin_to_container_as_sandbox_user", fail_write
+        )
+    with pytest.raises(RetriableWriteError if transient else FatalWriteError):
+        manager.write_files_to_sandbox(
+            sandbox_id=uuid4(),
+            mount_path="/workspace/managed/test",
+            files={"file": b"content"},
+        )
+
+
+@pytest.mark.parametrize("lookup", [True, False])
+@pytest.mark.parametrize(
+    "failure", [OSError("socket closed"), TimeoutError("socket timeout")]
+)
+def test_docker_bundle_writer_marks_socket_failure_retriable(
+    monkeypatch: pytest.MonkeyPatch, failure: OSError, lookup: bool
+) -> None:
+    from onyx.server.features.build.sandbox.docker import (
+        docker_sandbox_manager as docker,
+    )
+
+    manager = docker.DockerSandboxManager.__new__(docker.DockerSandboxManager)
+    monkeypatch.setattr(manager, "_require_container", MagicMock())
+    monkeypatch.setattr(
+        manager if lookup else docker,
+        "_require_container"
+        if lookup
+        else "_stream_stdin_to_container_as_sandbox_user",
+        MagicMock(side_effect=failure),
+    )
+    with pytest.raises(RetriableWriteError):
+        manager.write_files_to_sandbox(
+            sandbox_id=uuid4(),
+            mount_path="/workspace/managed/test",
+            files={"file": b"content"},
+        )
+
+
+@pytest.mark.parametrize("traversal", [False, True])
+def test_docker_cleanup_only_removes_direct_bundle_children(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, traversal: bool
+) -> None:
+    from onyx.server.features.build.sandbox.docker import (
+        docker_sandbox_manager as docker,
+    )
+
+    manager = docker.DockerSandboxManager.__new__(docker.DockerSandboxManager)
+    monkeypatch.setattr(manager, "_require_container", MagicMock())
+    mount = tmp_path / "converter"
+    previous = tmp_path / ".bundle-converter-old"
+    previous.mkdir()
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    (sessions / "user.txt").write_text("keep")
+    mount.symlink_to(f"{previous}/../sessions" if traversal else previous)
+
+    def execute_archive(_container: object, command: list[str], archive: bytes) -> None:
+        script = command[2]
+        if sys.platform == "darwin":
+            script = script.replace("mv -Tf", "mv -fh")
+        # Run cleanup immediately and synchronously to check its actual target.
+        script = script.replace(
+            '(sleep 60; rm -rf "$old_target") </dev/null >/dev/null 2>&1 &',
+            'rm -rf "$old_target"',
+        )
+        subprocess.run(
+            ["sh", "-c", script], input=archive, check=True, capture_output=True
+        )
+
+    monkeypatch.setattr(
+        docker, "_stream_stdin_to_container_as_sandbox_user", execute_archive
+    )
+    manager.write_files_to_sandbox(
+        sandbox_id=uuid4(), mount_path=str(mount), files={"preview.py": b"new"}
+    )
+    assert (sessions / "user.txt").read_text() == "keep"
+    assert previous.exists() is traversal
+    assert (mount / "preview.py").read_bytes() == b"new"

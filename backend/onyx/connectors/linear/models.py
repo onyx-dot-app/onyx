@@ -70,14 +70,6 @@ class WorkspaceUsers(BaseModel):
     users: list[LinearUser]
 
 
-class WorkspaceMembers(BaseModel):
-    """The workspace's id, which names its members group, and the emails of
-    its active non-guest, non-app users."""
-
-    organization_id: str
-    emails: set[str]
-
-
 def member_emails(users: Iterable[LinearUser]) -> set[str]:
     """Deactivated users keep their membership rows and an app user is nobody
     to grant, so both are left out."""

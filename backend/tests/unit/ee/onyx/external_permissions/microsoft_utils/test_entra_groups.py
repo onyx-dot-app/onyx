@@ -20,6 +20,7 @@ from tests.unit.onyx.connectors.microsoft_utils.fake_sharepoint_reader import (
 )
 
 MODULE = "ee.onyx.external_permissions.microsoft_utils.entra_groups"
+PRINCIPALS = "onyx.connectors.microsoft_utils.sharepoint_principals"
 GROUP_ID = "11111111-1111-1111-1111-111111111111"
 NESTED_GROUP_ID = "22222222-2222-2222-2222-222222222222"
 
@@ -32,7 +33,7 @@ def test_normalize_email_noop_for_normal_domain() -> None:
     assert normalize_email("user@contoso.com") == "user@contoso.com"
 
 
-@patch(f"{MODULE}.find_group_id_by_name", return_value=None)
+@patch(f"{PRINCIPALS}.find_group_id_by_name", return_value=None)
 def test_unresolved_group_keeps_the_none_suffix(_mock_find: MagicMock) -> None:
     """Persisted ACLs were written with this name, so it must not change."""
     name = resolve_entra_group_name(MagicMock(), "Engineering", "Engineering")

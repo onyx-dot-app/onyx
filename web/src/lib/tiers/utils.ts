@@ -1,4 +1,4 @@
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 
 export const TIER_RANK: Record<Tier, number> = {
   [Tier.COMMUNITY]: 0,

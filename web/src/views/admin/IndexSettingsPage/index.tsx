@@ -117,6 +117,7 @@ import {
 import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
+import CCPairIdsBackfillCard from "@/views/admin/IndexSettingsPage/CCPairIdsBackfillCard";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -166,7 +167,7 @@ function CloudDisabled({
     : tooltipProp;
 
   return (
-    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="right">
+    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="end">
       {children}
     </Disabled>
   );
@@ -1565,6 +1566,8 @@ export default function IndexSettingsPage() {
                       </div>
                     </ConfirmationModalLayout>
                   </wontPortConsentModal.Provider>
+
+                  <CCPairIdsBackfillCard />
 
                   {isReindexing ? (
                     secondarySearchSettings?.use_port_flow ||

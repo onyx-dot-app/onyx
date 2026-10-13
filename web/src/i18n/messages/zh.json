@@ -1857,9 +1857,6 @@
           "restoreTooltip": "恢复默认"
         },
         "description": "指定 {appName} 在您的组织中保留对话的时长。",
-        "enterprisePlanTag": {
-          "label": "企业版套餐"
-        },
         "forever": {
           "label": "永久"
         },
@@ -1875,16 +1872,11 @@
           "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
           "title": "缩短对话保留期？"
         },
-        "tierTooltip": "对话历史保留是企业版套餐的功能。",
         "title": "保留对话历史"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "商业版套餐"
-        },
         "description": "用于在组织内快速搜索文档的界面模式。",
         "noConnectorsTooltip": "设置连接器后才能使用搜索模式",
-        "tierTooltip": "搜索模式需要商业版或企业版套餐。",
         "title": "搜索模式"
       },
       "systemPrompt": {
@@ -2772,7 +2764,28 @@
           },
           "rerunFailed": {
             "toast": "无法启动检查，请重试。"
+          },
+          "shareSaved": {
+            "toast": "共享已更新。"
+          },
+          "shareFailed": {
+            "toast": "无法更改可使用此账户的人员。请重试。"
+          },
+          "renameSaved": {
+            "toast": "账号已重命名。"
+          },
+          "renameFailed": {
+            "toast": "无法重命名此账号。请重试。"
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "只有添加此账户的人才能将其设为私有。"
+          },
+          "shareLocked": {
+            "tooltip": "只有添加此账户的人或与其共享的管理员可以更改可使用此账户的人员。"
           }
+        },
+        "accountUnavailable": {
+          "toast": "此账户已不可用。请选择其他账户。"
         }
       },
       "credentialRequired": {
@@ -5628,6 +5641,62 @@
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",
         "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
         "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "搜索索引中的每个分块都有其连接器 ID。搜索使用连接器级访问。",
+            "off": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表。连接器级访问已关闭。",
+            "shadow": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表，并将其与连接器级访问进行比较。"
+          },
+          "title": "连接器访问更新已完成"
+        },
+        "notStarted": {
+          "description": "后台任务将为搜索索引中的现有分块添加连接器 ID。它会在几分钟内开始。",
+          "title": "连接器访问更新尚未开始"
+        },
+        "progress": {
+          "ariaLabel": "连接器访问更新进度"
+        },
+        "running": {
+          "description": "后台任务正在为搜索索引中的现有分块添加连接器 ID。只有在完成后才能强制执行连接器级搜索访问。",
+          "title": "正在为连接器访问更新搜索索引…"
+        },
+        "status": {
+          "connectors": "已完成 {done, number}/{total, number} 个连接器",
+          "connectorsLeft": "{count, plural, one {剩余 # 个连接器} other {剩余 # 个连接器}}",
+          "current": "当前连接器：{name}",
+          "documentsLeft": "{count, plural, one {剩余 # 个文档} other {剩余 # 个文档}}"
+        },
+        "mode": {
+          "description": "搜索如何决定用户可以看到哪些文档。",
+          "enforcePending": "已设置强制，将在更新完成后开始。",
+          "enforceUnavailable": "搜索索引更新完成后可用。",
+          "label": "搜索访问模式",
+          "options": {
+            "enforce": {
+              "description": "搜索使用连接器级访问。",
+              "title": "强制"
+            },
+            "off": {
+              "description": "搜索使用文档访问列表。",
+              "title": "关闭"
+            },
+            "shadow": {
+              "description": "搜索使用文档访问列表，并记录连接器级访问结果不同的情况。",
+              "title": "影子"
+            }
+          },
+          "placeholder": "选择模式",
+          "toasts": {
+            "error": "无法更新搜索访问模式。",
+            "success": "搜索访问模式已设置为{mode}。"
+          }
+        },
+        "loadError": {
+          "description": "请重新加载页面后重试。",
+          "title": "无法加载连接器访问更新"
+        }
       }
     },
     "indexing": {
@@ -9004,9 +9073,6 @@
           "description": "关闭后，所有网关端点都会拒绝请求，现有令牌将失效，令牌选择器中也会隐藏网关范围。Craft 沙箱流量由 Craft 设置单独控制。"
         }
       },
-      "businessPlanTag": {
-        "label": "商业版套餐"
-      },
       "tierTooltip": "LLM 网关需要商业版或企业版套餐。",
       "scopeNote": {
         "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
@@ -9071,6 +9137,233 @@
         "completed": "检查已完成。",
         "inProgress": "检查进行中...",
         "waiting": "正在等待连接器设置..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "编辑连接器"
+      },
+      "header": {
+        "title": "编辑 {name}",
+        "description": "更改此 {source} 连接器的设置。应用更改前，你将先查看计划。",
+        "reviewButton": {
+          "label": "查看更改"
+        }
+      },
+      "loadError": {
+        "title": "无法加载连接器",
+        "description": "请重新加载页面，或返回连接器。",
+        "backButton": {
+          "label": "返回连接器"
+        }
+      },
+      "credentialSwap": {
+        "title": "你选择了其他凭据",
+        "description": "在计划中，你可以保留已索引的文档，或全部重新索引并清除新凭据无法访问的文档。"
+      },
+      "files": {
+        "title": "文件",
+        "description": "添加或移除文件。新文件仅在你应用计划后才会被索引。",
+        "empty": "该连接器没有文件。",
+        "addButton": {
+          "label": "添加文件"
+        },
+        "remove": {
+          "tooltip": "移除 {name}"
+        },
+        "uploadFailed": {
+          "toast": "无法上传文件：{detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "无法计算计划：{detail}"
+      },
+      "typedAccount": {
+        "toast": "请先保存新账户再查看更改，或选择一个已保存的账户。"
+      },
+      "applied": {
+        "toast": "更改已应用。"
+      },
+      "plan": {
+        "title": "查看计划",
+        "description": "{count, plural, other {该连接器有 # 个已索引的文档。}}",
+        "changes": {
+          "list": "已更改：{fields}",
+          "none": "没有任何更改。"
+        },
+        "stale": {
+          "title": "连接器已更改",
+          "description": "此计划计算后连接器发生了更改。请在应用前重新计算计划。",
+          "replanButton": {
+            "label": "重新计划"
+          }
+        },
+        "expired": {
+          "title": "计划已过期",
+          "description": "此计划已过期或已应用。请重新计算计划。"
+        },
+        "applyFailed": {
+          "title": "无法应用更改"
+        },
+        "validation": {
+          "title": "验证",
+          "blocks": "新设置未通过验证。请在应用前修复。",
+          "warns": "部分可选检查失败。你仍然可以应用。",
+          "error": {
+            "title": "设置无效"
+          }
+        },
+        "warnings": {
+          "title": "警告"
+        },
+        "notes": {
+          "title": "说明"
+        },
+        "reconciliation": {
+          "title": "选择如何协调范围更改",
+          "description": "计划无法判断对 {fields} 的更改会添加还是移除文档。请选择应用时的操作。",
+          "option": {
+            "prune": {
+              "title": "清除",
+              "description": "移除不再在范围内的文档。"
+            },
+            "full_reindex": {
+              "title": "完全重新索引",
+              "description": "从开始日期起重新索引全部内容，以添加现在在范围内的文档。"
+            },
+            "both": {
+              "title": "完全重新索引后清除",
+              "description": "重新索引全部内容，然后移除不再在范围内的文档。"
+            },
+            "nothing": {
+              "title": "不执行任何操作",
+              "description": "保留已索引的文档。之后的运行使用新设置。"
+            }
+          }
+        },
+        "credential": {
+          "title": "凭据更改",
+          "description": "选择如何处理使用旧凭据索引的文档。",
+          "option": {
+            "keep_indexed": {
+              "title": "保留已索引的文档",
+              "description": "之后的运行使用新凭据。这是快速方式。"
+            },
+            "full_reindex_and_prune": {
+              "title": "完全重新索引并清除",
+              "description": "使用新凭据重新索引全部内容，然后移除其无法访问的文档。"
+            }
+          }
+        },
+        "steps": {
+          "title": "步骤",
+          "description": "应用时按顺序执行的操作。你可以关闭可选步骤。",
+          "none": "应用会保存设置。无需索引工作。",
+          "required": {
+            "label": "必需"
+          },
+          "optional": {
+            "label": "可选"
+          },
+          "include": {
+            "ariaLabel": "运行步骤：{step}"
+          },
+          "fields": "字段：{fields}",
+          "window": "时间范围：{start} 至 {end}",
+          "windowFromStart": "时间范围：截至 {end} 的全部内容",
+          "kind": {
+            "access_groups": {
+              "title": "更新数据访问组",
+              "description": "搜索会立即应用新组。"
+            },
+            "access_type": {
+              "title": "更改访问类型",
+              "description": "可读取文档的人员会发生变化。"
+            },
+            "enter_perm_sync": {
+              "title": "开始权限同步",
+              "description": "在首次权限同步完成之前，文档保持隐藏。"
+            },
+            "leave_perm_sync": {
+              "title": "停止权限同步",
+              "description": "来源的权限不再决定谁可以读取文档。"
+            },
+            "restart_attempt": {
+              "title": "重新开始正在运行的索引尝试",
+              "description": "正在运行的尝试会停止，并使用新设置开始新的尝试。"
+            },
+            "full_reindex_then_prune": {
+              "title": "完全重新索引后清除",
+              "description": "重新索引全部内容，然后移除来源不再返回的文档。"
+            },
+            "full_reindex": {
+              "title": "完全重新索引",
+              "description": "从开始日期起重新索引全部内容。"
+            },
+            "scoped_backfill": {
+              "title": "回填新增项",
+              "description": "仅索引新增项的历史记录。"
+            },
+            "window_backfill": {
+              "title": "回填更早的时间范围",
+              "description": "索引新旧开始日期之间的时间段。"
+            },
+            "prune": {
+              "title": "清除",
+              "description": "移除来源不再返回的文档。"
+            }
+          },
+          "reason": {
+            "identity_changed": "文档 ID 发生变化",
+            "behavior_changed": "处理方式已更改",
+            "scope_widened": "范围扩大",
+            "scope_narrowed": "范围缩小",
+            "items_added_or_changed": "新增或更改的项",
+            "items_removed": "已移除的项",
+            "opaque_scope_choice": "你的范围选择",
+            "indexing_start_earlier": "更早的开始日期",
+            "credential_full_path": "凭据完整方式",
+            "access_changed": "访问权限已更改",
+            "permissions_fetched_during_indexing": "权限随索引获取",
+            "attempt_running": "有尝试正在运行",
+            "scoped_backfill_superseded": "替换之前的回填",
+            "admin_added": "由你添加",
+            "indexing_start_later": "更晚的开始日期"
+          }
+        },
+        "extra": {
+          "title": "额外工作",
+          "description": "添加计划不需要的工作。",
+          "fullReindex": {
+            "title": "添加完全重新索引",
+            "description": "从开始日期起重新索引全部内容。"
+          },
+          "prune": {
+            "title": "添加清除",
+            "description": "移除来源不再返回的文档。"
+          }
+        },
+        "backButton": {
+          "label": "返回编辑"
+        },
+        "applyButton": {
+          "label": "应用"
+        },
+        "blocked": {
+          "validation": "请先修复验证失败。",
+          "reconciliation": "请先选择如何协调范围更改。"
+        }
+      },
+      "pendingBackfills": {
+        "title": "待处理的回填",
+        "description": "某次编辑请求了这些运行。每项会保留在此，直到其运行成功。",
+        "window": "{start} 至 {end}",
+        "windowFromStart": "截至 {end} 的全部内容",
+        "waiting": "等待运行。",
+        "runningNow": "索引尝试正在运行它。",
+        "retry": "{count, plural, other {已失败 # 次。下次重试：{time}。}}",
+        "scoped": "仅限新增或更改的项目",
+        "failures": "{count, plural, other {失败 # 次}}"
       }
     }
   },
@@ -12094,6 +12387,24 @@
         "empty": "此工作表为空。",
         "tooLarge": "此工作表过大，无法预览。请下载文件查看。"
       }
+    },
+    "plans": {
+      "free": {
+        "title": "免费版",
+        "tooltip": "所有版本均可用。"
+      },
+      "business": {
+        "title": "商业版",
+        "tooltip": "需要[商业版或企业版](/admin/billing)。"
+      },
+      "enterprise": {
+        "title": "企业版",
+        "tooltip": "需要[企业版](/admin/billing)。"
+      },
+      "upgrade": {
+        "label": "升级方案"
+      },
+      "availableFor": "{plan}可用"
     }
   },
   "craft": {

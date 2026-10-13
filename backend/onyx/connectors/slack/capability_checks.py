@@ -29,13 +29,16 @@ Scope-to-capability mapping (see also the OAuth scope list in
 """
 
 from collections.abc import Iterator
+from itertools import islice
 from typing import Any, NoReturn
 
 from onyx.connectors.capability_checks.findings import bounded_options
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
+    CheckAdvisory,
     CheckFindingKey,
+    CheckNotApplicableError,
     CheckOutput,
     CredentialCapability,
     OptionsFinding,
@@ -85,8 +88,23 @@ _EMAIL_PROBE_PAGE_SIZE = 100
 # indexing job's rate-limit backoff.
 _CHANNEL_ENUMERATION_TIMEOUT_SECONDS = 1800.0
 
+# Bound on the search for one channel of a type. Slack applies ``limit`` before
+# it filters by type, so a page can be empty and still have a cursor; the
+# search follows the cursor across this many pages, about 200 channels in all.
+# Two requests stay well inside the check timeout.
+_CHANNEL_SCAN_PAGE_SIZE = 100
+_CHANNEL_SCAN_PAGE_LIMIT = 2
+_CHANNEL_SCAN_BOUND = _CHANNEL_SCAN_PAGE_SIZE * _CHANNEL_SCAN_PAGE_LIMIT
+
+_NOT_ON_GRID_MESSAGE = "The workspace is not on Enterprise Grid."
+
 # The config field that holds the channel names to index.
 _CHANNELS_FIELD = "channels"
+
+
+def _advisory_output(message: str) -> CheckOutput:
+    """A passing result that says what the check did not verify."""
+    return CheckOutput(advisories=[CheckAdvisory(message=message)])
 
 
 def _slack_client(context: CapabilityCheckContext) -> SlackSourceOperations:
@@ -168,6 +186,26 @@ def _first_grid_team_id(slack_client: SlackSourceOperations) -> str | None:
     return str(teams[0]["id"])
 
 
+def _find_channel(
+    slack_client: SlackSourceOperations,
+    variant: SlackChannelVariant,
+    exclude_archived: bool | None,
+) -> dict[str, Any] | None:
+    """Returns the first channel of the variant that the bot sees, None when
+    the bounded search finds none. Raises ``SlackApiError`` for the caller to
+    map."""
+    pages = slack_client.list_channels(
+        variant=variant,
+        channel_types=[f"{variant.value}_channel"],
+        exclude_archived=exclude_archived,
+        limit=_CHANNEL_SCAN_PAGE_SIZE,
+    )
+    for page in islice(pages, _CHANNEL_SCAN_PAGE_LIMIT):
+        if page.channels:
+            return page.channels[0]
+    return None
+
+
 def _first_private_channel(
     slack_client: SlackSourceOperations,
 ) -> dict[str, Any] | None:
@@ -180,21 +218,27 @@ def _first_private_channel(
     into a pass of a required check.
     """
     try:
-        listing = next(
-            slack_client.list_channels(
-                variant=SlackChannelVariant.PRIVATE,
-                channel_types=["private_channel"],
-                exclude_archived=True,
-                limit=1,
-            )
+        return _find_channel(
+            slack_client, SlackChannelVariant.PRIVATE, exclude_archived=True
         )
     except SlackApiError as e:
         error = e.response.get("error", "") if e.response is not None else ""
         if error == "missing_scope":
             return None
         _raise_for_slack_api_error(e, "The bot token cannot list private channels.")
-    channels = listing.channels
-    return channels[0] if channels else None
+
+
+def _no_private_channel_output(
+    private_channel: dict[str, Any] | None,
+) -> CheckOutput | None:
+    """An advisory when the private listing works but finds no channel."""
+    if private_channel is not None:
+        return None
+    return _advisory_output(
+        "The check found no private channel for the bot in the first "
+        f"{_CHANNEL_SCAN_BOUND} channels that Slack scanned. The bot "
+        "sees a private channel only after you invite it to that channel."
+    )
 
 
 def _probe_channel_history(
@@ -203,11 +247,12 @@ def _probe_channel_history(
     channel_id: str,
     history_scope_message: str,
     replies_scope_message: str,
-) -> None:
+) -> CheckOutput | None:
     """Reads one message page, then one thread, from the channel.
 
-    ``not_in_channel`` passes: membership is not scope, and indexing self-joins
-    public channels.
+    ``not_in_channel`` passes with an advisory: Slack checks scope before
+    membership, and indexing self-joins public channels. An empty channel
+    passes with an advisory: the history read worked, but no thread was read.
     """
     try:
         history_page = next(
@@ -217,15 +262,20 @@ def _probe_channel_history(
         )
     except SlackApiError as e:
         if e.response is not None and e.response.get("error") == "not_in_channel":
-            return
+            return _advisory_output(
+                f"The bot is not a member of the {variant.value} channel that "
+                "the check selected. Slack accepted the history scope, but the "
+                "check did not read messages or threads."
+            )
         _raise_for_slack_api_error(e, history_scope_message)
     messages = history_page.messages
-    if not messages:
-        # An empty channel proves history access; there is no thread to read.
-        return
-    thread_ts = messages[0].get("ts")
+    thread_ts = messages[0].get("ts") if messages else None
     if not thread_ts:
-        return
+        return _advisory_output(
+            f"The {variant.value} channel that the check selected has no "
+            "messages. The check read the channel history, but it did not read "
+            "a thread."
+        )
     try:
         next(
             slack_client.fetch_thread_replies(
@@ -234,6 +284,7 @@ def _probe_channel_history(
         )
     except SlackApiError as e:
         _raise_for_slack_api_error(e, replies_scope_message)
+    return None
 
 
 class _TokenAuthCheck(CapabilityCheck):
@@ -284,15 +335,11 @@ class _PublicChannelListingCheck(CapabilityCheck):
             docs_link=_SLACK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         slack_client = _slack_client(context)
         try:
-            listing = next(
-                slack_client.list_channels(
-                    variant=SlackChannelVariant.PUBLIC,
-                    channel_types=["public_channel"],
-                    limit=1,
-                )
+            channel = _find_channel(
+                slack_client, SlackChannelVariant.PUBLIC, exclude_archived=None
             )
         except SlackApiError as e:
             _raise_for_slack_api_error(
@@ -301,13 +348,14 @@ class _PublicChannelListingCheck(CapabilityCheck):
                 "(`conversations.list`), which indexing requires to enumerate "
                 "what to index.",
             )
-        channels = listing.channels
-        if not channels:
-            # Listing itself is proven; an empty workspace leaves no channel
-            # whose metadata could be read.
-            return
+        if channel is None:
+            return _advisory_output(
+                "The check found no public channel in the first "
+                f"{_CHANNEL_SCAN_BOUND} channels that Slack scanned, so it did "
+                "not read channel metadata (`conversations.info`)."
+            )
         try:
-            slack_client.fetch_channel_info(channel_id=channels[0]["id"])
+            slack_client.fetch_channel_info(channel_id=channel["id"])
         except SlackApiError as e:
             _raise_for_slack_api_error(
                 e,
@@ -315,10 +363,11 @@ class _PublicChannelListingCheck(CapabilityCheck):
                 "(`conversations.info`), which indexing uses to resolve "
                 "channels when resuming from a checkpoint.",
             )
+        return None
 
 
 class _PrivateChannelListingCheck(CapabilityCheck):
-    """Lists one private channel.
+    """Searches for one private channel.
 
     Not required: indexing does not fail without ``groups:read``, it silently
     falls back to public channels only.
@@ -335,14 +384,12 @@ class _PrivateChannelListingCheck(CapabilityCheck):
             docs_link=_SLACK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         try:
-            next(
-                _slack_client(context).list_channels(
-                    variant=SlackChannelVariant.PRIVATE,
-                    channel_types=["private_channel"],
-                    limit=1,
-                )
+            private_channel = _find_channel(
+                _slack_client(context),
+                SlackChannelVariant.PRIVATE,
+                exclude_archived=None,
             )
         except SlackApiError as e:
             _raise_for_slack_api_error(
@@ -351,6 +398,7 @@ class _PrivateChannelListingCheck(CapabilityCheck):
                 "fail on this: it silently falls back to public channels only, "
                 "so private channels would be skipped without any error.",
             )
+        return _no_private_channel_output(private_channel)
 
 
 class _MessageHistoryReadCheck(CapabilityCheck):
@@ -366,7 +414,7 @@ class _MessageHistoryReadCheck(CapabilityCheck):
             docs_link=_SLACK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         slack_client = _slack_client(context)
         try:
             listing = next(
@@ -397,7 +445,7 @@ class _MessageHistoryReadCheck(CapabilityCheck):
             (channel for channel in channels if channel.get("is_member")),
             channels[0],
         )
-        _probe_channel_history(
+        return _probe_channel_history(
             slack_client,
             SlackChannelVariant.PUBLIC,
             channel["id"],
@@ -436,12 +484,15 @@ class _PrivateMessageHistoryReadCheck(CapabilityCheck):
             docs_link=_SLACK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         slack_client = _slack_client(context)
         channel = _first_private_channel(slack_client)
         if channel is None:
-            return
-        _probe_channel_history(
+            return _advisory_output(
+                "The check found no private channel to read, so it did not "
+                "verify private-channel message reads."
+            )
+        return _probe_channel_history(
             slack_client,
             SlackChannelVariant.PRIVATE,
             channel["id"],
@@ -507,7 +558,7 @@ class _ChannelJoinScopeCheck(CapabilityCheck):
 
 
 class _GridWorkspaceListingCheck(CapabilityCheck):
-    """Lists one Grid workspace when the org is an Enterprise Grid."""
+    """Lists one Grid workspace. Does not apply off Grid."""
 
     def __init__(self) -> None:
         super().__init__(
@@ -522,7 +573,7 @@ class _GridWorkspaceListingCheck(CapabilityCheck):
     def run(self, context: CapabilityCheckContext) -> None:
         slack_client = _slack_client(context)
         if not _auth_test(slack_client).enterprise_id:
-            return
+            raise CheckNotApplicableError(_NOT_ON_GRID_MESSAGE)
         try:
             next(slack_client.list_teams(limit=1))
         except SlackApiError as e:
@@ -553,7 +604,7 @@ class _UserProfileReadCheck(CapabilityCheck):
             docs_link=_SLACK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         slack_client = _slack_client(context)
         team_id = _first_grid_team_id(slack_client)
         try:
@@ -567,7 +618,10 @@ class _UserProfileReadCheck(CapabilityCheck):
             )
         members = users_page.members
         if not members:
-            return
+            return _advisory_output(
+                "Slack returned no user, so the check did not read a user "
+                "profile (`users.info`)."
+            )
         try:
             slack_client.fetch_user_info(members[0]["id"])
         except SlackApiError as e:
@@ -578,6 +632,7 @@ class _UserProfileReadCheck(CapabilityCheck):
                 "authors. Authors would appear as raw Slack ids instead of "
                 "names.",
             )
+        return None
 
 
 class _ChannelPatternsCheck(CapabilityCheck[SlackConnectorConfig]):
@@ -631,15 +686,17 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
             docs_link=_SLACK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         config = self.config(context)
         channels_to_include = config.channels
         if not channels_to_include:
             # No channel filter configured; whatever is visible gets indexed.
-            return
+            return None
         if config.channel_regex_enabled:
-            # Regex includes match dynamically; existence cannot be pre-checked.
-            return
+            return _advisory_output(
+                "The channel names are regular expressions, so the check did "
+                "not verify that any channel matches them."
+            )
         slack_client = _slack_client(context)
         try:
             if _auth_test(slack_client).enterprise_id:
@@ -666,6 +723,7 @@ class _ConfiguredChannelsVisibleCheck(CapabilityCheck[SlackConnectorConfig]):
                 "the bot has not been invited to (private channels also "
                 "require the `groups:read` scope to be listed)."
             )
+        return None
 
 
 def _iter_public_channels(
@@ -767,7 +825,7 @@ class _PermSyncChannelListingCheck(CapabilityCheck):
 
 
 class _PermSyncPrivateChannelListingCheck(CapabilityCheck):
-    """Lists one private channel under the permission-sync capability.
+    """Searches for one private channel under the permission-sync capability.
 
     Not required: doc sync has the same silent public-only fallback indexing has
     when private channels cannot be listed, so the capability degrades rather
@@ -785,14 +843,12 @@ class _PermSyncPrivateChannelListingCheck(CapabilityCheck):
             docs_link=_SLACK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         try:
-            next(
-                _slack_client(context).list_channels(
-                    variant=SlackChannelVariant.PRIVATE,
-                    channel_types=["private_channel"],
-                    limit=1,
-                )
+            private_channel = _find_channel(
+                _slack_client(context),
+                SlackChannelVariant.PRIVATE,
+                exclude_archived=None,
             )
         except SlackApiError as e:
             _raise_for_slack_api_error(
@@ -804,6 +860,7 @@ class _PermSyncPrivateChannelListingCheck(CapabilityCheck):
                 "access lists, so users removed from a private channel keep "
                 "access in Onyx.",
             )
+        return _no_private_channel_output(private_channel)
 
 
 class _UserEmailVisibilityCheck(CapabilityCheck):
@@ -880,11 +937,14 @@ class _PrivateChannelMemberListingCheck(CapabilityCheck):
             docs_link=_SLACK_DOCS_LINK,
         )
 
-    def run(self, context: CapabilityCheckContext) -> None:
+    def run(self, context: CapabilityCheckContext) -> CheckOutput | None:
         slack_client = _slack_client(context)
         channel = _first_private_channel(slack_client)
         if channel is None:
-            return
+            return _advisory_output(
+                "The check found no private channel to read, so it did not "
+                "verify private-channel member listing."
+            )
         try:
             members_page = next(
                 slack_client.list_channel_members(channel_id=channel["id"])
@@ -898,7 +958,11 @@ class _PrivateChannelMemberListingCheck(CapabilityCheck):
             )
         members = members_page.members
         if not members:
-            return
+            return _advisory_output(
+                "Slack returned no member for the private channel that the "
+                "check selected, so the check did not read a member profile "
+                "(`users.info`)."
+            )
         try:
             slack_client.fetch_user_info(members[0])
         except SlackApiError as e:
@@ -908,6 +972,7 @@ class _PrivateChannelMemberListingCheck(CapabilityCheck):
                 "profiles (`users.info`), which permission sync uses for "
                 "members missing from the workspace user list.",
             )
+        return None
 
 
 class _GridPublicChannelScopingCheck(CapabilityCheck):
@@ -937,7 +1002,7 @@ class _GridPublicChannelScopingCheck(CapabilityCheck):
         team_id = _first_grid_team_id(slack_client)
         if team_id is None:
             # Off-Grid, public channels are workspace-public by design.
-            return
+            raise CheckNotApplicableError(_NOT_ON_GRID_MESSAGE)
         try:
             next(slack_client.list_users(limit=1, team_id=team_id))
         except SlackApiError as e:

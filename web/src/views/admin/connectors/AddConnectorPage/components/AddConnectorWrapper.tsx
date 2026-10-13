@@ -61,6 +61,7 @@ import {
 } from "@/lib/connectors/connectors";
 import {
   connectorConfigFromForm,
+  connectorFormControlFieldNames,
   createConnectorInitialValues,
   createConnectorValidationSchema,
   isLoadState,
@@ -79,6 +80,7 @@ import {
   useGoogleDriveCredentials,
   useResetSavedDraftCredential,
   useSavedDraftCredential,
+  refreshSourceCredentials,
 } from "@/lib/credentials/hooks";
 import {
   NEW_ACCOUNT_FIELD,
@@ -98,6 +100,7 @@ import AuthenticationAccountSection from "@/views/admin/connectors/AddConnectorP
 import ConnectorContentSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorContentSection";
 import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
+import EditFileLocations from "@/views/admin/connectors/AddConnectorPage/form/EditFileLocations";
 import CredentialBoundFields from "@/views/admin/connectors/AddConnectorPage/form/CredentialBoundFields";
 import { BoundFieldsGate } from "@/views/admin/connectors/AddConnectorPage/form/BoundFieldsGate";
 import { CredentialDerivedConfig } from "@/views/admin/connectors/AddConnectorPage/form/CredentialDerivedConfig";
@@ -105,6 +108,21 @@ import {
   useConnectorChecks,
   useResetConnectorChecks,
 } from "@/lib/connectors/checks/hooks";
+import type {
+  ConnectorEditPlanResponse,
+  ConnectorEditProposal,
+  ConnectorEditTarget,
+} from "@/lib/connectors/edit/types";
+import {
+  buildEditProposal,
+  editInitialValues,
+  type ConnectorFormValues,
+} from "@/lib/connectors/edit/prefill";
+import {
+  applyConnectorEdit,
+  planConnectorEdit,
+} from "@/lib/connectors/edit/svc";
+import EditPlanModal from "@/views/admin/connectors/EditConnectorPage/EditPlanModal";
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
@@ -119,6 +137,8 @@ interface ConnectorChecksGates {
 interface ConnectorChecksGateProps {
   source: ConfigurableSources;
   credential: CredentialRef | null;
+  /** Set when the form edits this pair: the checks are dry runs of it. */
+  ccPairId: number | null;
   children: (gates: ConnectorChecksGates) => ReactNode;
 }
 
@@ -130,11 +150,13 @@ interface ConnectorChecksGateProps {
 function ConnectorChecksGate({
   source,
   credential,
+  ccPairId,
   children,
 }: ConnectorChecksGateProps) {
   const { formUnlocked, createReady } = useConnectorChecks({
     source,
     credential,
+    ccPairId,
   });
   return children({ formUnlocked, createReady });
 }
@@ -197,16 +219,20 @@ async function submitConnector<T>(
   }
 }
 
-interface AddConnectorFormProps {
+export interface AddConnectorFormProps {
   connector: ConfigurableSources;
+  /** Set in edit mode: the form edits this pair instead of creating one. */
+  edit?: ConnectorEditTarget;
 }
 
 /**
  * The setup form for one valid, non-federated source. It is its own
- * component so its hooks never run behind the wrapper's early returns.
+ * component so its hooks never run behind the wrapper's early returns. The
+ * edit page renders it in edit mode.
  */
-function AddConnectorForm({ connector }: AddConnectorFormProps) {
+export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const t = useTranslations("admin.connectorsList");
+  const editT = useTranslations("admin.connectorEdit");
   const oneDriveT = useTranslations("admin.connectorsList.oneDrive");
   // The string-pair editor (InputKeyValue) shows these same messages.
   const keyValueT = useTranslations("opal.keyValue");
@@ -217,9 +243,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     : 600; // 25 days fallback until settings load
 
   // The picked saved account. Clicking a saved card picks it; typing into
-  // the new account drops the pick (see AuthenticationAccountSection).
+  // the new account drops the pick (see AuthenticationAccountSection). Edit
+  // mode starts on the pair's credential.
   const [currentCredential, setCurrentCredential] =
-    useState<Credential<any> | null>(null);
+    useState<Credential<any> | null>(edit?.ccPair.credential ?? null);
 
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -237,15 +264,85 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
   );
   // Form keys that are not connector config: tab controls, and the typed
   // account, which Create sends as the credential.
-  const formControlFieldNames = new Set([
-    ...[...configuration.values, ...configuration.advanced_values]
-      .filter((field) => field.type === "tab")
-      .map((field) => field.name),
+  const formControlFieldNames = connectorFormControlFieldNames(configuration, [
     NEW_ACCOUNT_FIELD,
   ]);
 
+  // In edit mode, the file connector's files are a list of stored and
+  // staged file ids, not files picked for upload.
+  const editsFileList = edit !== undefined && connector === "file";
+  const contentConfiguration: ConnectionConfiguration = editsFileList
+    ? {
+        ...credentialBoundFields.rest,
+        values: credentialBoundFields.rest.values.filter(
+          (field) => field.type !== "file"
+        ),
+      }
+    : credentialBoundFields.rest;
+  // Edit mode fills the form with the pair's state once, at mount.
+  const [editValues] = useState(() =>
+    edit
+      ? editInitialValues(
+          connector,
+          configuration,
+          edit.ccPair,
+          edit.dataAccessGroupIds
+        )
+      : null
+  );
+
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
+  // Edit mode: the plan shown for review, with the proposal it was computed
+  // for, so a stale plan can be computed again.
+  const [planning, setPlanning] = useState(false);
+  const [editPlan, setEditPlan] = useState<{
+    proposal: ConnectorEditProposal;
+    plan: ConnectorEditPlanResponse;
+  } | null>(null);
+
+  const planEdit = async (
+    target: ConnectorEditTarget,
+    proposal: ConnectorEditProposal
+  ) => {
+    setPlanning(true);
+    try {
+      const outcome = await planConnectorEdit(target.ccPair.id, proposal);
+      if (outcome.kind === "error") {
+        toast.error(editT("planFailed.toast", { detail: outcome.detail }));
+        return;
+      }
+      setEditPlan({ proposal, plan: outcome.plan });
+    } finally {
+      setPlanning(false);
+    }
+  };
+
+  /**
+   * Plans the edit the form proposes. The plan takes a saved account only, so
+   * a typed one must be saved first.
+   */
+  const submitEdit = async (
+    values: ConnectorFormValues,
+    target: ConnectorEditTarget,
+    targetInitialValues: ConnectorFormValues
+  ): Promise<void> => {
+    const account = accountFor(values);
+    if (account !== null && isDraftCredential(account)) {
+      toast.error(editT("typedAccount.toast"));
+      return;
+    }
+    await planEdit(
+      target,
+      buildEditProposal({
+        values,
+        initialValues: targetInitialValues,
+        configuration,
+        ccPair: target.ccPair,
+        credentialId: account?.id ?? target.ccPair.credential.id,
+      })
+    );
+  };
 
   // Connector creation timeout management
   const timeoutErrorHappenedRef = useRef<boolean>(false);
@@ -522,7 +619,17 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
           } else if (!timeoutErrorHappenedRef.current) {
             // Only show error if timeout didn't happen
             const errorData = await createResponse.json();
-            toast.error(errorData.detail || errorData.message);
+            if (
+              errorData.error_code === "CREDENTIAL_NOT_FOUND" &&
+              !isDraftCredential(credential)
+            ) {
+              // The saved account is gone from this user's reach. The
+              // account section sees it leave the list, says so and drops
+              // the pick.
+              await refreshSourceCredentials(connector);
+            } else {
+              toast.error(errorData.detail || errorData.message);
+            }
           }
         }
 
@@ -556,12 +663,29 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
     }
   };
 
+  /**
+   * What the header button and Formik's submit run. Edit mode plans the edit
+   * and never creates a connector.
+   */
+  const submitForm = async (values: typeof initialValues): Promise<void> => {
+    if (edit) {
+      if (editValues) await submitEdit(values, edit, editValues);
+      return;
+    }
+    await createConnectorFromForm(values);
+  };
+
   return (
     <Formik
-      initialValues={initialValues}
+      // Edit mode lays the pair's state over the create form's values, so
+      // form-only fields (e.g. the typed account) keep their defaults.
+      initialValues={
+        editValues ? { ...initialValues, ...editValues } : initialValues
+      }
       validationSchema={createConnectorValidationSchema(
         connector,
-        isScopedManager,
+        // Edit mode leaves the manage groups alone, so it needs none.
+        isScopedManager && edit === undefined,
         {
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
@@ -578,10 +702,10 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
         // `blockingErrorsEmpty`).
         [NEW_ACCOUNT_FIELD]: accountSchema ?? Yup.mixed(),
       })}
-      onSubmit={createConnectorFromForm}
+      onSubmit={submitForm}
     >
       {(formikProps) => {
-        const busy = uploading || creatingConnector;
+        const busy = uploading || creatingConnector || planning;
         const formCredential = accountFor(formikProps.values);
         const canCreate = noCredentials || formCredential !== null;
         const newAccountReady =
@@ -600,10 +724,21 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
         ].filter((field) => !field.hidden);
         const hasVisibleBoundFields = visibleBoundFields.length > 0;
         const checkedCredential = canCreate ? formCredential : null;
+        // Another account than the pair's is a credential swap; the plan
+        // offers to keep what is indexed or to re-index in full. A typed
+        // account is another account too.
+        const credentialSwapped: boolean =
+          edit !== undefined &&
+          formCredential !== null &&
+          !(
+            "id" in formCredential &&
+            formCredential.id === edit.ccPair.credential.id
+          );
         return (
           <ConnectorChecksGate
             source={connector}
             credential={toCredentialRef(checkedCredential)}
+            ccPairId={edit?.ccPair.id ?? null}
           >
             {(checks) => {
               const formUnlocked: boolean =
@@ -622,18 +757,24 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                     icon={sourceMetadata.icon}
                     moreIcon1={SvgArrowExchange}
                     moreIcon2={Logo}
-                    title={displayName}
+                    title={
+                      edit
+                        ? editT("header.title", { name: edit.ccPair.name })
+                        : displayName
+                    }
                     // Failed, the page offers nothing to set up, so the header drops
                     // its docs pointer; the Connect button stays, disabled.
                     description={
-                      credentialsFailed
-                        ? t("header.description", {
-                            source: displayName,
-                            appName: settings.appName,
-                            hasDocs: "false",
-                            url: "",
-                          })
-                        : headerDescription
+                      edit
+                        ? editT("header.description", { source: displayName })
+                        : credentialsFailed
+                          ? t("header.description", {
+                              source: displayName,
+                              appName: settings.appName,
+                              hasDocs: "false",
+                              url: "",
+                            })
+                          : headerDescription
                     }
                     divider
                     actions={[
@@ -641,7 +782,13 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                         key="cancel"
                         prominence="secondary"
                         disabled={busy}
-                        onClick={() => router.push("/admin/connectors")}
+                        onClick={() =>
+                          router.push(
+                            edit
+                              ? `/admin/connector/${edit.ccPair.id}`
+                              : "/admin/connectors"
+                          )
+                        }
                       >
                         {t("header.cancelButton.label")}
                       </Button>,
@@ -661,18 +808,20 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                           const errors = await formikProps.validateForm();
                           if (blockingErrorsEmpty(errors)) {
                             // Formik's own submit stops at any error.
-                            await createConnectorFromForm(formikProps.values);
+                            await submitForm(formikProps.values);
                           } else {
                             // Marks every field touched, so its error shows.
                             formikProps.handleSubmit();
                           }
                         }}
                       >
-                        {t("header.connectButton.label")}
+                        {edit
+                          ? editT("header.reviewButton.label")
+                          : t("header.connectButton.label")}
                       </Button>,
                     ]}
                   >
-                    {hasFederatedOption && (
+                    {hasFederatedOption && !edit && (
                       <MessageCard
                         variant="info"
                         title={t("add.federated.tooltip.title")}
@@ -768,6 +917,15 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                                 !configUnlocked &&
                                 gate?.reason?.kind !== "runChecks"
                               }
+                              editCCPairId={edit?.ccPair.id ?? null}
+                            />
+                          )}
+
+                          {credentialSwapped && (
+                            <MessageCard
+                              variant="info"
+                              title={editT("credentialSwap.title")}
+                              description={editT("credentialSwap.description")}
                             />
                           )}
 
@@ -786,16 +944,28 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                           <Disabled
                             disabled={!formUnlocked}
                             tooltip={formLockReason}
+                            // The locked form is page-tall: the tooltip stays
+                            // level with the pointer, not the form's middle.
+                            tooltipAlign="follow"
                             data-testid="connector-form"
                           >
                             <Section gap={6} alignItems="stretch" width="full">
                               <ConnectorContentSection
-                                config={credentialBoundFields.rest}
+                                config={contentConfiguration}
                                 values={formikProps.values}
                                 connector={connector}
                                 currentCredential={formCredential}
                                 disabled={!formUnlocked}
-                              />
+                              >
+                                {edit && editsFileList && (
+                                  <EditFileLocations
+                                    ccPairId={edit.ccPair.id}
+                                    // Review waits for the upload: a plan
+                                    // made earlier would miss its files.
+                                    onUploadingChange={setUploading}
+                                  />
+                                )}
+                              </ConnectorContentSection>
 
                               <Divider
                                 paddingParallel={0}
@@ -805,6 +975,7 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                                 connector={connector}
                                 currentCredential={formCredential}
                                 disabled={!formUnlocked}
+                                editing={edit !== undefined}
                               />
 
                               {connector !== "file" && (
@@ -825,6 +996,25 @@ function AddConnectorForm({ connector }: AddConnectorFormProps) {
                           </Disabled>
                         </Section>
                       </>
+                    )}
+                    {edit && editPlan && (
+                      <EditPlanModal
+                        key={editPlan.plan.plan_id}
+                        planResponse={editPlan.plan}
+                        onApply={async (request) => {
+                          const outcome = await applyConnectorEdit(
+                            edit.ccPair.id,
+                            request
+                          );
+                          if (outcome.kind === "applied") {
+                            toast.success(editT("applied.toast"));
+                            router.push(`/admin/connector/${edit.ccPair.id}`);
+                          }
+                          return outcome;
+                        }}
+                        onReplan={() => planEdit(edit, editPlan.proposal)}
+                        onClose={() => setEditPlan(null)}
+                      />
                     )}
                   </SettingsLayouts.Body>
                 </SettingsLayouts.Root>

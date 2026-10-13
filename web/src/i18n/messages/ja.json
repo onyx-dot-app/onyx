@@ -1857,9 +1857,6 @@
           "restoreTooltip": "既定値に戻す"
         },
         "description": "組織のチャットを {appName} が保持する期間を指定します。",
-        "enterprisePlanTag": {
-          "label": "Enterprise プラン"
-        },
         "forever": {
           "label": "無期限"
         },
@@ -1875,16 +1872,11 @@
           "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
           "title": "チャットの保持期間を短縮しますか？"
         },
-        "tierTooltip": "チャット履歴の保持は Enterprise プランの機能です。",
         "title": "チャット履歴の保持"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Business プラン"
-        },
         "description": "組織全体のドキュメントをすばやく検索するための UI モードです。",
         "noConnectorsTooltip": "検索モードを使用するにはコネクターを設定してください",
-        "tierTooltip": "検索モードには Business プランまたは Enterprise プランが必要です。",
         "title": "検索モード"
       },
       "systemPrompt": {
@@ -2772,7 +2764,28 @@
           },
           "rerunFailed": {
             "toast": "チェックを開始できませんでした。もう一度お試しください。"
+          },
+          "shareSaved": {
+            "toast": "共有を更新しました。"
+          },
+          "shareFailed": {
+            "toast": "このアカウントを使用できるユーザーを変更できませんでした。もう一度お試しください。"
+          },
+          "renameSaved": {
+            "toast": "アカウント名を変更しました。"
+          },
+          "renameFailed": {
+            "toast": "このアカウントの名前を変更できませんでした。もう一度お試しください。"
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "このアカウントを追加したユーザーのみが非公開にできます。"
+          },
+          "shareLocked": {
+            "tooltip": "このアカウントを追加したユーザー、または共有されている管理者のみが、使用できるユーザーを変更できます。"
           }
+        },
+        "accountUnavailable": {
+          "toast": "このアカウントは利用できなくなりました。別のアカウントを選択してください。"
         }
       },
       "credentialRequired": {
@@ -5628,6 +5641,62 @@
         "e5SmallV2": "E5 系モデルの中で最小かつ最速のバージョン。リソースが限られた環境で {appName} を実行している場合に適しています。",
         "multilingualE5Base": "英語以外の言語のコーパスには、これを選択してください。",
         "multilingualE5Small": "英語以外の言語のコーパスで、かつリソースが限られた環境の場合は、これを選択してください。"
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はコネクタ単位のアクセスを使用します。",
+            "off": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はドキュメントのアクセスリストを使用します。コネクタ単位のアクセスはオフです。",
+            "shadow": "検索インデックスのすべてのチャンクにコネクタIDがあります。検索はドキュメントのアクセスリストを使用し、コネクタ単位のアクセスと比較します。"
+          },
+          "title": "コネクタアクセスの更新が完了しました"
+        },
+        "notStarted": {
+          "description": "バックグラウンドジョブが検索インデックス内の既存チャンクにコネクタIDを追加します。数分以内に開始されます。",
+          "title": "コネクタアクセスの更新はまだ開始されていません"
+        },
+        "progress": {
+          "ariaLabel": "コネクタアクセス更新の進行状況"
+        },
+        "running": {
+          "description": "バックグラウンドジョブが検索インデックス内の既存チャンクにコネクタIDを追加しています。コネクタ単位の検索アクセスは、完了後にのみ適用できます。",
+          "title": "コネクタアクセス用に検索インデックスを更新しています…"
+        },
+        "status": {
+          "connectors": "{total, number} 個中 {done, number} 個のコネクタが完了",
+          "connectorsLeft": "{count, plural, one {残り # 個のコネクタ} other {残り # 個のコネクタ}}",
+          "current": "現在のコネクタ: {name}",
+          "documentsLeft": "{count, plural, one {残り # 件のドキュメント} other {残り # 件のドキュメント}}"
+        },
+        "mode": {
+          "description": "ユーザーが閲覧できるドキュメントを検索がどのように判断するか。",
+          "enforcePending": "適用が設定されており、更新の完了時に開始されます。",
+          "enforceUnavailable": "検索インデックスの更新完了後に利用できます。",
+          "label": "検索アクセスモード",
+          "options": {
+            "enforce": {
+              "description": "検索はコネクタ単位のアクセスを使用します。",
+              "title": "適用"
+            },
+            "off": {
+              "description": "検索はドキュメントのアクセスリストを使用します。",
+              "title": "オフ"
+            },
+            "shadow": {
+              "description": "検索はドキュメントのアクセスリストを使用し、コネクタ単位のアクセスで結果が異なる場合を記録します。",
+              "title": "シャドウ"
+            }
+          },
+          "placeholder": "モードを選択",
+          "toasts": {
+            "error": "検索アクセスモードを更新できませんでした。",
+            "success": "検索アクセスモードを{mode}に設定しました。"
+          }
+        },
+        "loadError": {
+          "description": "ページを再読み込みして、もう一度お試しください。",
+          "title": "コネクタアクセスの更新を読み込めませんでした"
+        }
       }
     },
     "indexing": {
@@ -9004,9 +9073,6 @@
           "description": "オフにすると、すべてのゲートウェイエンドポイントがリクエストを拒否し、既存のトークンは動作しなくなり、トークン選択からゲートウェイスコープが非表示になります。Craft サンドボックスのトラフィックは Craft 設定で個別に制御されます。"
         }
       },
-      "businessPlanTag": {
-        "label": "Business プラン"
-      },
       "tierTooltip": "LLM ゲートウェイには Business プランまたは Enterprise プランが必要です。",
       "scopeNote": {
         "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
@@ -9071,6 +9137,233 @@
         "completed": "チェックが完了しました。",
         "inProgress": "チェックを実行中...",
         "waiting": "コネクタ設定を待機中..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "コネクタを編集"
+      },
+      "header": {
+        "title": "{name} を編集",
+        "description": "この {source} コネクタの設定を変更します。変更を適用する前にプランを確認します。",
+        "reviewButton": {
+          "label": "変更を確認"
+        }
+      },
+      "loadError": {
+        "title": "コネクタを読み込めませんでした",
+        "description": "ページを再読み込みするか、コネクタに戻ってください。",
+        "backButton": {
+          "label": "コネクタに戻る"
+        }
+      },
+      "credentialSwap": {
+        "title": "別の認証情報を選択しました",
+        "description": "プランでは、インデックス済みのドキュメントを保持するか、すべてを再インデックスして新しい認証情報で参照できないドキュメントを削除するかを選べます。"
+      },
+      "files": {
+        "title": "ファイル",
+        "description": "ファイルを追加または削除します。新しいファイルは、プランを適用した後にのみインデックスされます。",
+        "empty": "コネクタにファイルがありません。",
+        "addButton": {
+          "label": "ファイルを追加"
+        },
+        "remove": {
+          "tooltip": "{name} を削除"
+        },
+        "uploadFailed": {
+          "toast": "ファイルをアップロードできませんでした: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "プランを作成できませんでした: {detail}"
+      },
+      "typedAccount": {
+        "toast": "変更を確認する前に新しいアカウントを保存するか、保存済みのアカウントを選択してください。"
+      },
+      "applied": {
+        "toast": "変更を適用しました。"
+      },
+      "plan": {
+        "title": "プランを確認",
+        "description": "{count, plural, other {コネクタには # 件のインデックス済みドキュメントがあります。}}",
+        "changes": {
+          "list": "変更: {fields}",
+          "none": "変更はありません。"
+        },
+        "stale": {
+          "title": "コネクタが変更されました",
+          "description": "このプランの作成後にコネクタが変更されました。適用する前にプランを作成し直してください。",
+          "replanButton": {
+            "label": "プランを再作成"
+          }
+        },
+        "expired": {
+          "title": "プランの有効期限が切れました",
+          "description": "このプランは期限切れか、すでに適用されています。プランを再計算してください。"
+        },
+        "applyFailed": {
+          "title": "変更を適用できませんでした"
+        },
+        "validation": {
+          "title": "検証",
+          "blocks": "新しい設定は検証に失敗しました。適用する前に修正してください。",
+          "warns": "一部の任意のチェックが失敗しました。適用は可能です。",
+          "error": {
+            "title": "設定が無効です"
+          }
+        },
+        "warnings": {
+          "title": "警告"
+        },
+        "notes": {
+          "title": "注意事項"
+        },
+        "reconciliation": {
+          "title": "スコープ変更の調整方法を選択",
+          "description": "{fields} の変更によってドキュメントが追加されるか削除されるかをプランで判断できません。適用時の動作を選択してください。",
+          "option": {
+            "prune": {
+              "title": "削除",
+              "description": "スコープ外になったドキュメントを削除します。"
+            },
+            "full_reindex": {
+              "title": "完全な再インデックス",
+              "description": "開始日からすべてを再インデックスし、スコープ内になったドキュメントを追加します。"
+            },
+            "both": {
+              "title": "完全な再インデックス後に削除",
+              "description": "すべてを再インデックスしてから、スコープ外になったドキュメントを削除します。"
+            },
+            "nothing": {
+              "title": "何もしない",
+              "description": "インデックス済みのドキュメントを保持します。以降の実行では新しい設定を使用します。"
+            }
+          }
+        },
+        "credential": {
+          "title": "認証情報の変更",
+          "description": "古い認証情報でインデックスされたドキュメントの扱いを選択してください。",
+          "option": {
+            "keep_indexed": {
+              "title": "インデックス済みのドキュメントを保持",
+              "description": "以降の実行では新しい認証情報を使用します。高速な方法です。"
+            },
+            "full_reindex_and_prune": {
+              "title": "完全な再インデックスと削除",
+              "description": "新しい認証情報ですべてを再インデックスし、参照できないドキュメントを削除します。"
+            }
+          }
+        },
+        "steps": {
+          "title": "ステップ",
+          "description": "適用時に行う処理の順序です。任意のステップはオフにできます。",
+          "none": "適用すると設定が保存されます。インデックス作業は不要です。",
+          "required": {
+            "label": "必須"
+          },
+          "optional": {
+            "label": "任意"
+          },
+          "include": {
+            "ariaLabel": "ステップを実行: {step}"
+          },
+          "fields": "フィールド: {fields}",
+          "window": "期間: {start} ～ {end}",
+          "windowFromStart": "期間: {end} まですべて",
+          "kind": {
+            "access_groups": {
+              "title": "データアクセスグループを更新",
+              "description": "検索に新しいグループがすぐに適用されます。"
+            },
+            "access_type": {
+              "title": "アクセスタイプを変更",
+              "description": "ドキュメントを閲覧できるユーザーが変わります。"
+            },
+            "enter_perm_sync": {
+              "title": "権限の同期を開始",
+              "description": "最初の権限同期が完了するまで、ドキュメントは非表示のままです。"
+            },
+            "leave_perm_sync": {
+              "title": "権限の同期を停止",
+              "description": "ソースの権限でドキュメントの閲覧者が決まらなくなります。"
+            },
+            "restart_attempt": {
+              "title": "実行中のインデックス処理を再開",
+              "description": "実行中の処理が停止し、新しい設定で新しい処理が開始されます。"
+            },
+            "full_reindex_then_prune": {
+              "title": "完全な再インデックス後に削除",
+              "description": "すべてを再インデックスしてから、ソースが返さなくなったドキュメントを削除します。"
+            },
+            "full_reindex": {
+              "title": "完全な再インデックス",
+              "description": "開始日からすべてを再インデックスします。"
+            },
+            "scoped_backfill": {
+              "title": "追加した項目をバックフィル",
+              "description": "追加した項目の履歴のみをインデックスします。"
+            },
+            "window_backfill": {
+              "title": "以前の期間をバックフィル",
+              "description": "新しい開始日と以前の開始日の間の期間をインデックスします。"
+            },
+            "prune": {
+              "title": "削除",
+              "description": "ソースが返さなくなったドキュメントを削除します。"
+            }
+          },
+          "reason": {
+            "identity_changed": "ドキュメント ID が変わる",
+            "behavior_changed": "処理が変更された",
+            "scope_widened": "スコープが拡大",
+            "scope_narrowed": "スコープが縮小",
+            "items_added_or_changed": "項目の追加または変更",
+            "items_removed": "項目の削除",
+            "opaque_scope_choice": "スコープの選択",
+            "indexing_start_earlier": "開始日を前倒し",
+            "credential_full_path": "認証情報の完全な方法",
+            "access_changed": "アクセスが変更された",
+            "permissions_fetched_during_indexing": "権限はインデックス時に取得",
+            "attempt_running": "処理を実行中",
+            "scoped_backfill_superseded": "以前のバックフィルを置き換え",
+            "admin_added": "あなたが追加",
+            "indexing_start_later": "開始日を後ろ倒し"
+          }
+        },
+        "extra": {
+          "title": "追加の作業",
+          "description": "プランに必要ない作業を追加します。",
+          "fullReindex": {
+            "title": "完全な再インデックスを追加",
+            "description": "開始日からすべてを再インデックスします。"
+          },
+          "prune": {
+            "title": "削除を追加",
+            "description": "ソースが返さなくなったドキュメントを削除します。"
+          }
+        },
+        "backButton": {
+          "label": "編集に戻る"
+        },
+        "applyButton": {
+          "label": "適用"
+        },
+        "blocked": {
+          "validation": "先に検証エラーを修正してください。",
+          "reconciliation": "先にスコープ変更の調整方法を選択してください。"
+        }
+      },
+      "pendingBackfills": {
+        "title": "保留中のバックフィル",
+        "description": "編集によってこれらの実行が要求されました。実行が成功するまでここに表示されます。",
+        "window": "{start} ～ {end}",
+        "windowFromStart": "{end} まですべて",
+        "waiting": "実行を待機しています。",
+        "runningNow": "インデックス試行が現在実行しています。",
+        "retry": "{count, plural, other {# 回失敗しました。次の再試行: {time}。}}",
+        "scoped": "追加または変更された項目のみ",
+        "failures": "{count, plural, other {失敗 # 回}}"
       }
     }
   },
@@ -12094,6 +12387,24 @@
         "empty": "このシートは空です。",
         "tooLarge": "このシートは大きすぎてプレビューできません。ファイルをダウンロードして表示してください。"
       }
+    },
+    "plans": {
+      "free": {
+        "title": "無料プラン",
+        "tooltip": "すべてのプランで利用できます。"
+      },
+      "business": {
+        "title": "ビジネスプラン",
+        "tooltip": "[ビジネスプランまたはエンタープライズプラン](/admin/billing)が必要です。"
+      },
+      "enterprise": {
+        "title": "エンタープライズプラン",
+        "tooltip": "[エンタープライズプラン](/admin/billing)が必要です。"
+      },
+      "upgrade": {
+        "label": "プランをアップグレード"
+      },
+      "availableFor": "{plan}で利用可能"
     }
   },
   "craft": {
