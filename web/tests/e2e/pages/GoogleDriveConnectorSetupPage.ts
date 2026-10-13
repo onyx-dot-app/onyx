@@ -29,6 +29,14 @@ export class GoogleDriveConnectorSetupPage {
   credentialJson: Record<string, unknown> | null = null;
   /** The connector config of each create request. */
   readonly connectorConfigs: Record<string, unknown>[] = [];
+  /**
+   * The account each create request names: the draft's id, plus its
+   * values when they changed.
+   */
+  readonly createCredentials: {
+    credential_id: unknown;
+    credential_json: unknown;
+  }[] = [];
 
   constructor(private readonly page: Page) {}
 
@@ -60,6 +68,12 @@ export class GoogleDriveConnectorSetupPage {
           throw new Error("Connector request must include its configuration");
         }
         this.connectorConfigs.push(connector.connector_specific_config);
+        this.createCredentials.push({
+          credential_id: isRecord(request) ? request.credential_id : undefined,
+          credential_json: isRecord(request)
+            ? request.credential_json
+            : undefined,
+        });
         return route.fulfill({
           json: { success: true, message: "", data: 71 },
         });
@@ -106,13 +120,27 @@ export class GoogleDriveConnectorSetupPage {
     }).toPass();
   }
 
-  tab(name: "Service Account" | "OAuth") {
-    return this.accountForm.getByRole("tab", { name, exact: true });
+  async expectPrimaryAdminEmpty() {
+    await expect(this.primaryAdmin).toHaveValue("");
+  }
+
+  async openOAuthTab() {
+    await this.tab("OAuth").click();
+  }
+
+  /** The OAuth tab: its sign-in saves the account, so there is no Create. */
+  async expectOAuthSetup() {
+    await expect(
+      this.page.getByRole("button", { name: "Authenticate with Google Drive" })
+    ).toBeDisabled();
+    await expect(
+      this.page.getByRole("button", { name: "Create", exact: true })
+    ).toHaveCount(0);
   }
 
   async fillServiceAccount(primaryAdmin: string) {
     await this.tab("Service Account").click();
-    await this.page.getByTestId("google_primary_admin").fill(primaryAdmin);
+    await this.primaryAdmin.fill(primaryAdmin);
     await this.accountForm
       .locator('input[type="file"]')
       .first()
@@ -145,6 +173,14 @@ export class GoogleDriveConnectorSetupPage {
 
   async expectCreated() {
     await expect(this.page).toHaveURL(/\/admin\/indexing-status/);
+  }
+
+  private tab(name: "Service Account" | "OAuth") {
+    return this.accountForm.getByRole("tab", { name, exact: true });
+  }
+
+  private get primaryAdmin() {
+    return this.page.getByTestId("google_primary_admin");
   }
 
   /** The new-account card's fold. */

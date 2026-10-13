@@ -321,6 +321,13 @@ function getStoredAuthMethod(
   credentialJson: Readonly<Record<string, unknown>>,
   sourceType: ValidSources
 ): string | undefined {
+  // Google stores "uploaded" for an uploaded OAuth app as well as for a
+  // service account, so its keys say which tab the account belongs to.
+  if (sourceType === ValidSources.GoogleDrive) {
+    const kind = googleCredentialKind({ credential_json: credentialJson });
+    if (kind === "service_account") return "uploaded";
+    if (kind === "oauth") return "oauth";
+  }
   const standardMethod = credentialJson[AUTHENTICATION_METHOD_KEY];
   if (typeof standardMethod === "string") {
     return standardMethod;

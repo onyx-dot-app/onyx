@@ -12,6 +12,8 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credential_families import credential_family_for_source
+from onyx.connectors.credential_family_base import CredentialFamily
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
@@ -28,8 +30,6 @@ from onyx.server.documents.models import NAMES_A_CREDENTIAL, GoogleServiceAccoun
 from onyx.server.documents.private_key_types import validate_pkcs12_credential_value
 from onyx.utils.encryption import reject_masked_credentials
 
-_GOOGLE_SOURCES = frozenset({DocumentSource.GOOGLE_DRIVE, DocumentSource.GMAIL})
-
 
 def validate_google_service_account_key(
     source: DocumentSource, credential_json: dict[str, Any]
@@ -41,7 +41,7 @@ def validate_google_service_account_key(
     Raises:
         ValueError: the key is not a service-account key's JSON text.
     """
-    if source not in _GOOGLE_SOURCES:
+    if credential_family_for_source(source) != CredentialFamily.GOOGLE:
         return
     key = credential_json.get(DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY)
     if key is None:
