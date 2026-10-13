@@ -8,6 +8,7 @@ import {
   cancelDraftCheckRun,
   fetchDraftCheckPlan,
   startDraftCheckRun,
+  startPairEditCheckRun,
 } from "@/lib/connectors/checks/svc";
 import type {
   DraftCheckPlan,
@@ -18,16 +19,20 @@ import { ValidSources } from "@/lib/connectors/types/source";
 
 jest.mock("@/lib/connectors/checks/svc", () => ({
   startDraftCheckRun: jest.fn(),
+  startPairEditCheckRun: jest.fn(),
   fetchDraftCheckPlan: jest.fn(),
   cancelDraftCheckRun: jest.fn(async () => undefined),
 }));
 // A run fetch returns what the latest start request returned.
 jest.mock("@/lib/fetcher", () => ({
   errorHandlingFetcher: jest.fn(async () => {
-    const { startDraftCheckRun } = jest.requireMock(
+    const { startDraftCheckRun, startPairEditCheckRun } = jest.requireMock(
       "@/lib/connectors/checks/svc"
     );
-    return startDraftCheckRun.mock.results.at(-1)?.value;
+    return (
+      startDraftCheckRun.mock.results.at(-1)?.value ??
+      startPairEditCheckRun.mock.results.at(-1)?.value
+    );
   }),
 }));
 // No credential-bound fields: the credential alone binds a result. Every form
@@ -48,6 +53,9 @@ jest.mock("@/lib/connectors/checks/formState", () => ({
 
 const startMock = startDraftCheckRun as jest.MockedFunction<
   typeof startDraftCheckRun
+>;
+const pairStartMock = startPairEditCheckRun as jest.MockedFunction<
+  typeof startPairEditCheckRun
 >;
 const planMock = fetchDraftCheckPlan as jest.MockedFunction<
   typeof fetchDraftCheckPlan
@@ -136,6 +144,7 @@ function renderChecks(credentialId: number | null = 1) {
 
 beforeEach(() => {
   startMock.mockReset();
+  pairStartMock.mockReset();
   planMock.mockReset();
   planMock.mockResolvedValue(plan([BINDING, CONTENT]));
 });
@@ -370,4 +379,46 @@ it("cancels a run whose start answers after a newer start", async () => {
     expect(jest.mocked(cancelDraftCheckRun)).toHaveBeenCalledWith("run-1")
   );
   expect(jest.mocked(cancelDraftCheckRun)).not.toHaveBeenCalledWith("run-2");
+});
+
+it("runs the checks of an edit form as dry runs of the pair", async () => {
+  pairStartMock.mockResolvedValue(
+    run([check({ ...BINDING, state: "passed" }), CONTENT])
+  );
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: refFor(1),
+        ccPairId: 3,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(result.current.status).toBe("passed"));
+  expect(startMock).not.toHaveBeenCalled();
+  expect(pairStartMock).toHaveBeenCalledWith(3, {
+    connector_specific_config: {},
+    access_type: "public",
+    credential_id: 1,
+    rerun: "none",
+  });
+});
+
+it("runs a typed account of an edit form as a draft", async () => {
+  startMock.mockResolvedValue(run([check({ ...BINDING, state: "passed" })]));
+  const { result } = renderHook(
+    () =>
+      useConnectorChecks({
+        source: ValidSources.Confluence,
+        credential: { credential_json: { token: "typed" } },
+        ccPairId: 3,
+      }),
+    { wrapper }
+  );
+
+  act(() => result.current.begin());
+  await waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
+  expect(pairStartMock).not.toHaveBeenCalled();
 });

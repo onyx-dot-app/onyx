@@ -81,6 +81,8 @@ interface AuthenticationAccountSectionProps {
   checkedCredential: Credential<any> | DraftCredential | null;
   /** Locks the Start Checks prompt, as the configuration below is locked. */
   checksLocked: boolean;
+  /** Set when the form edits this pair: the checks are dry runs of it. */
+  editCCPairId?: number | null;
 }
 
 /**
@@ -97,6 +99,7 @@ export default function AuthenticationAccountSection({
   newAccountReady,
   checkedCredential,
   checksLocked,
+  editCCPairId = null,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const tCreate = useTranslations("admin.credentials.create");
@@ -574,6 +577,7 @@ export default function AuthenticationAccountSection({
             locked={checksLocked || !checkedCredential}
             // Starting the checks completes the account step, so it folds.
             onStart={foldAccounts}
+            ccPairId={editCCPairId}
           />
         </Section>
       )}

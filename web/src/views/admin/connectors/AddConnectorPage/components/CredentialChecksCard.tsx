@@ -497,17 +497,20 @@ export interface CredentialChecksCardProps {
   locked: boolean;
   /** Called when Start Checks starts the first run. */
   onStart?: () => void;
+  /** Set when the form edits this pair: the checks are dry runs of it. */
+  ccPairId?: number | null;
 }
 export default function CredentialChecksCard({
   source,
   credential,
   locked,
   onStart,
+  ccPairId = null,
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
   useResetChecksOnCredentialChange({ source, credential });
-  const checks = useConnectorChecks({ source, credential });
+  const checks = useConnectorChecks({ source, credential, ccPairId });
   useConnectorChecksAutoRun(checks);
   // No check applies to this source and access type: nothing to start.
   if (checks.plan?.checks.every((check) => check.state === "not_applicable")) {

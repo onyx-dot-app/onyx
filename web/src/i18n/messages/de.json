@@ -9094,6 +9094,10 @@
         "backButton": {
           "label": "Zurück zum Connector"
         }
+      },
+      "credentialSwap": {
+        "title": "Sie haben andere Anmeldedaten gewählt",
+        "description": "Im Plan können Sie die indexierten Dokumente behalten oder alles neu indexieren und die Dokumente entfernen, die die neuen Anmeldedaten nicht sehen."
       }
     }
   },

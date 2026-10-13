@@ -19,6 +19,7 @@ import {
   cancelDraftCheckRun,
   fetchDraftCheckPlan,
   startDraftCheckRun,
+  startPairEditCheckRun,
 } from "@/lib/connectors/checks/svc";
 import { INDETERMINATE_CHECKS_BLOCK } from "@/lib/connectors/checks/constants";
 import { connectorFormState } from "@/lib/connectors/checks/formState";
@@ -159,6 +160,12 @@ export interface UseConnectorChecksInput {
   source: ConfigurableSources;
   /** The saved credential or draft the checks run with; `null` until one is usable. */
   credential: CredentialRef | null;
+  /**
+   * Set when the form edits this pair: a saved credential's runs are dry
+   * runs of the proposed edit. The edit endpoint takes no typed account, so
+   * one still runs as a draft.
+   */
+  ccPairId?: number | null;
 }
 
 /** Names a credential for comparisons; `null` for none. */
@@ -220,6 +227,7 @@ export interface UseConnectorChecksResult {
 export function useConnectorChecks({
   source,
   credential,
+  ccPairId = null,
 }: UseConnectorChecksInput): UseConnectorChecksResult {
   // Names the credential; effects follow it rather than the object.
   const credentialKey: string | null = credentialKeyOf(credential);
@@ -302,14 +310,22 @@ export function useConnectorChecks({
       try {
         // A typed account's values go only with a run, which saves them in
         // the user's draft; later requests name the draft.
-        const accepted: DraftCheckRunSnapshot = await startDraftCheckRun({
-          source,
-          ...toCredentialRequest(credential, savedDraft),
-          access_type: accessType,
-          draft_key: draftKey,
-          form_state: formState,
-          rerun: mode,
-        });
+        const accepted: DraftCheckRunSnapshot =
+          ccPairId !== null && "credential_id" in credential
+            ? await startPairEditCheckRun(ccPairId, {
+                connector_specific_config: formState,
+                access_type: accessType,
+                credential_id: credential.credential_id,
+                rerun: mode,
+              })
+            : await startDraftCheckRun({
+                source,
+                ...toCredentialRequest(credential, savedDraft),
+                access_type: accessType,
+                draft_key: draftKey,
+                form_state: formState,
+                rerun: mode,
+              });
         if ("credential_json" in credential) {
           await rememberDraft(
             accepted.credential_id,
@@ -341,6 +357,7 @@ export function useConnectorChecks({
     [
       // The key, not the object: callers may build a new one each render.
       credentialKey,
+      ccPairId,
       savedDraft,
       rememberDraft,
       session,

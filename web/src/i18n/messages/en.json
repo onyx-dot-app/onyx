@@ -9094,6 +9094,10 @@
         "backButton": {
           "label": "Back to the connector"
         }
+      },
+      "credentialSwap": {
+        "title": "You picked another credential",
+        "description": "The plan lets you keep the indexed documents, or re-index everything and prune the documents the new credential cannot see."
       }
     }
   },

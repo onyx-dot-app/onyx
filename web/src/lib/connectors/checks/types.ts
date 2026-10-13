@@ -126,6 +126,18 @@ export interface DraftCheckPlanRequest {
 }
 
 /**
+ * Body of `POST /manage/admin/cc-pair/{id}/edit/checks`: a dry run of the
+ * checks on a proposed edit of the pair.
+ */
+export interface PairEditCheckRunRequest {
+  connector_specific_config: Record<string, unknown>;
+  access_type: AccessType;
+  /** `null` keeps the pair's credential. */
+  credential_id: number | null;
+  rerun: DraftRerunMode;
+}
+
+/**
  * Body of `POST /manage/admin/connector-checks/runs`: a run on a saved
  * credential, or on a typed account, which the run saves as a draft.
  */
