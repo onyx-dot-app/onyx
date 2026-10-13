@@ -1156,7 +1156,7 @@ slackbot:
 # Allows LLMs to use Onyx like invoking tools or accessing resources
 mcpServer:
   extraEnv: []
-  enabled: false  # Disabled by default
+  enabled: true  # Set to false to disable the MCP server and its routes
   replicaCount: 1
   image:
     repository: onyxdotapp/onyx-backend
