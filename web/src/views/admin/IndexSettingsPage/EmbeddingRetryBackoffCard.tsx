@@ -69,38 +69,41 @@ function SecondsField({
   const restoringRef = useRef(false);
 
   return (
-    <Hoverable.Root group={name} width="full">
-      <InputTypeIn
-        inputMode="decimal"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={String(defaultValue)}
-        variant={error ? "error" : undefined}
-        rightChildren={
-          value !== String(defaultValue) ? (
-            <Hoverable.Item group={name} variant="appear-on-hover">
-              <Button
-                icon={SvgRefreshCw}
-                tooltip={t("restoreDefault")}
-                prominence="internal"
-                onClick={() => {
-                  restoringRef.current = true;
-                  onCommit(String(defaultValue));
-                }}
-              />
-            </Hoverable.Item>
-          ) : undefined
-        }
-        onBlur={() => {
-          // The restore button blurs the input; it already committed.
-          if (restoringRef.current) {
-            restoringRef.current = false;
-            return;
+    <div className="w-48">
+      <Hoverable.Root group={name} width="full">
+        <InputTypeIn
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={String(defaultValue)}
+          variant={error ? "error" : undefined}
+          rightChildren={
+            value !== String(defaultValue) ? (
+              <Hoverable.Item group={name} variant="appear-on-hover">
+                <Button
+                  icon={SvgRefreshCw}
+                  tooltip={t("restoreDefault")}
+                  prominence="internal"
+                  size="sm"
+                  onClick={() => {
+                    restoringRef.current = true;
+                    onCommit(String(defaultValue));
+                  }}
+                />
+              </Hoverable.Item>
+            ) : undefined
           }
-          onCommit(value);
-        }}
-      />
-    </Hoverable.Root>
+          onBlur={() => {
+            // The restore button blurs the input; it already committed.
+            if (restoringRef.current) {
+              restoringRef.current = false;
+              return;
+            }
+            onCommit(value);
+          }}
+        />
+      </Hoverable.Root>
+    </div>
   );
 }
 
