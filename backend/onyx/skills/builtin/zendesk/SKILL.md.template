@@ -44,7 +44,8 @@ python zendesk_api.py --site acme metrics 12345
 ### What changed since last time
 
 For a scheduled task, poll the incremental export rather than re-searching the
-whole backlog. `--since` takes a unix timestamp or an ISO-8601 instant.
+whole backlog. `--since` takes a unix timestamp or an ISO-8601 instant, and
+must be at least a minute in the past.
 
 ```
 python zendesk_api.py --site acme changed --since 2026-10-01T00:00:00Z [--limit N]

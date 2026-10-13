@@ -16,6 +16,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any
 
 _HTTP_TIMEOUT_SECONDS = 180
@@ -58,6 +59,24 @@ _TICKET_FIELDS = (
 
 class ZendeskError(Exception):
     """A request this script refuses to make (bad arguments, unusable site)."""
+
+
+def _epoch_seconds(value: str) -> int:
+    """``--since`` as the unix timestamp the incremental export requires. Takes
+    an epoch value already, or an ISO-8601 instant (which the agent is far more
+    likely to have to hand). A naive instant is read as UTC."""
+    text = value.strip()
+    if text.isdigit():
+        return int(text)
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        raise ZendeskError(
+            f"--since must be a unix timestamp or an ISO-8601 instant, got {value!r}"
+        ) from None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return int(moment.timestamp())
 
 
 def _site_base_url(value: str) -> str:
@@ -320,12 +339,13 @@ def _dispatch_read(a: argparse.Namespace) -> dict[str, Any] | None:
 
     if a.cmd == "metrics":
         path = _path("/api/v2/tickets/{0}/metrics.json", a.id)
-        return {"ok": True, "ticket_metric": _request(site, "GET", path)}
+        metric = _request(site, "GET", path).get("ticket_metric")
+        return {"ok": True, "ticket_metric": metric}
 
     if a.cmd == "changed":
         # Cursor-based incremental export: the one endpoint built for "what
         # moved since last run", which is how a scheduled task should poll.
-        params = {"start_time": a.since}
+        params = {"start_time": _epoch_seconds(a.since)}
         return _paginate(
             site, "/api/v2/incremental/tickets/cursor.json", "tickets", a.limit, params
         )
@@ -402,6 +422,9 @@ def _dispatch_write(a: argparse.Namespace) -> dict[str, Any]:
         updated = _request(site, "PUT", path, {"ticket": ticket})
         return {"ok": True, "ticket": _slim(updated.get("ticket"), a.full)}
 
+    if a.cmd != "call":
+        raise ZendeskError(f"unknown command {a.cmd!r}")
+
     # `call` raw escape hatch.
     body = None
     if a.body:
@@ -409,8 +432,8 @@ def _dispatch_write(a: argparse.Namespace) -> dict[str, Any]:
         if not isinstance(parsed, dict):
             raise ZendeskError("body must be a JSON object")
         body = parsed
-    if not a.path.startswith("/api/v2/"):
-        raise ZendeskError("path must start with /api/v2/")
+    if not a.path.startswith("/api/v2/") or ".." in a.path:
+        raise ZendeskError("path must start with /api/v2/ and contain no '..'")
     return {"ok": True, "data": _request(site, a.method, a.path, body)}
 
 
@@ -434,7 +457,7 @@ def main(argv: list[str]) -> int:
     a = _build_parser().parse_args(argv[1:])
     try:
         result = _dispatch(a)
-    except (ZendeskError, json.JSONDecodeError, KeyError) as e:
+    except (ZendeskError, json.JSONDecodeError) as e:
         print(f"invalid input: {e}", file=sys.stderr)
         return 2
     except urllib.error.HTTPError as e:
