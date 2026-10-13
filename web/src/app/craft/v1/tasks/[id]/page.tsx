@@ -140,7 +140,9 @@ export default function ScheduledTaskDetailPage() {
         actions={
           data
             ? [
-                <TaskStatusBadge key="status" status={data.status} />,
+                <div key="status" className="flex items-center self-stretch">
+                  <TaskStatusBadge status={data.status} />
+                </div>,
                 <Button
                   key="run"
                   icon={SvgPlayCircle}
