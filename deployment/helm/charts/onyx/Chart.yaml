@@ -20,15 +20,9 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: Configure Craft proxy, OpenCode, daemon, and generated web app
-        listeners for IPv6-only clusters while keeping IPv4 defaults.
-    - kind: security
-      description: Apply one destination policy to HTTP requests and CONNECT tunnels.
-        Require internal network ranges for IPv6 proxy deployments and a known sandbox identity.
-    - kind: fixed
-      description: Permit IPv6 neighbor discovery during sandbox firewall lockdown and
-        normalize IPv4-mapped proxy client addresses.
+    - kind: changed
+      description: Enable the MCP server by default (mcpServer.enabled true), with its
+        ingresses and nginx routes. Set mcpServer.enabled to false to opt out.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
