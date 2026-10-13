@@ -8,7 +8,7 @@ Doc permission sync (connector_permission_sync_generator_task):
   3. Documents successfully synced
   4. Documents with permission errors
 
-External group sync (_perform_external_group_sync):
+External group sync (connector_external_group_sync_generator_task):
   1. Overall sync duration
   2. Cumulative batch upsert duration
   3. Groups processed

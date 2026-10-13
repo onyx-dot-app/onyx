@@ -43,11 +43,12 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccessType, ConnectorManageRole, Permission
 from onyx.db.models import ConnectorCredentialPair, User
-from onyx.db.permission_sync_attempt import get_open_doc_permission_sync_attempt
+from onyx.db.permission_sync_attempt import (
+    get_open_doc_permission_sync_attempt,
+    get_open_external_group_sync_attempt,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import manage_access_by_group
 from onyx.server.models import StatusResponse
 from onyx.utils.audit import (
@@ -195,10 +196,7 @@ def sync_cc_pair_groups(
         )
     _assert_perm_synced(cc_pair)
 
-    r = get_redis_client()
-
-    redis_connector = RedisConnector(tenant_id, cc_pair_id)
-    if redis_connector.external_group_sync.fenced:
+    if get_open_external_group_sync_attempt(cc_pair_id, db_session) is not None:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
             "External group sync task already in progress.",
@@ -211,16 +209,18 @@ def sync_cc_pair_groups(
         cc_pair.credential_id,
         cc_pair.connector.name,
     )
-    payload_id = try_creating_external_group_sync_task(
-        client_app, cc_pair_id, r, tenant_id
+    attempt_id = try_creating_external_group_sync_task(
+        client_app, cc_pair_id, tenant_id
     )
-    if not payload_id:
+    if attempt_id is None:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "External group sync task creation failed.",
         )
 
-    logger.info("External group sync queued: cc_pair=%s id=%s", cc_pair_id, payload_id)
+    logger.info(
+        "External group sync queued: cc_pair=%s attempt=%s", cc_pair_id, attempt_id
+    )
 
     return StatusResponse(
         success=True,

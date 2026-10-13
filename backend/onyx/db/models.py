@@ -6312,6 +6312,8 @@ class ExternalGroupPermissionSyncAttempt(Base):
         DateTime(timezone=True), default=None
     )
 
+    celery_task_id: Mapped[str | None] = mapped_column(String, default=None)
+
     # Relationships
     connector_credential_pair: Mapped[ConnectorCredentialPair | None] = relationship(
         "ConnectorCredentialPair"
@@ -6322,6 +6324,13 @@ class ExternalGroupPermissionSyncAttempt(Base):
             "ix_group_sync_attempt_cc_pair_time",
             "connector_credential_pair_id",
             "time_created",
+        ),
+        # At most one open attempt per cc_pair: this is the group sync lock
+        Index(
+            "uq_group_sync_attempt_open_cc_pair",
+            "connector_credential_pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('NOT_STARTED', 'IN_PROGRESS')"),
         ),
         Index(
             "ix_group_sync_attempt_status_time",
