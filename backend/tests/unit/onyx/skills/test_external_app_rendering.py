@@ -14,6 +14,7 @@ from onyx.db.enums import ExternalAppType
 from onyx.db.models import Skill
 from onyx.skills.built_in import BUILT_IN_SKILLS, BUILTIN_SKILLS_PATH
 from onyx.skills.rendering import (
+    render_external_app_files,
     render_external_app_skill,
     render_external_app_skill_for,
 )
@@ -111,3 +112,33 @@ def test_an_unresolvable_app_config_still_renders(
     )
     assert "not configured" in rendered
     assert "{{" not in rendered
+
+
+def test_a_helper_template_is_rendered_beside_the_skill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bundled helper gets the connected account baked in, so no command it
+    offers takes an account it could only be given one value for."""
+
+    class _App:
+        id = 1
+        app_type = ExternalAppType.ZENDESK
+        organization_credentials = SimpleNamespace(
+            get_value=lambda **_: {"subdomain": "acme"}
+        )
+
+    monkeypatch.setattr(
+        "onyx.skills.rendering.get_external_app_by_skill_id", lambda *_: _App()
+    )
+    monkeypatch.setattr("onyx.skills.rendering.get_action_policies", lambda *_: {})
+
+    rendered = render_external_app_files(
+        cast(Session, None),
+        cast(Skill, SimpleNamespace(id=uuid4())),
+        ExternalAppType.ZENDESK,
+        BUILT_IN_SKILLS["zendesk"].source_dir,
+    )
+    assert rendered["account.txt"].strip() == "https://acme.zendesk.com"
+    assert "SKILL.md" in rendered
+    # The raw templates never ship; only their rendered names do.
+    assert not any(name.endswith(".template") for name in rendered)

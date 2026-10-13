@@ -238,7 +238,11 @@ Zendesk account's base URL), and fills `{{ACTION_AVAILABILITY_SECTION}}` with a 
 actions are unavailable and should not be attempted" list built from
 `build_action_availability_section`: cloud-withheld actions plus the admin's
 stored `DENY` overrides (`external_apps/providers/registry.py:action_policy_views`).
-The library preview calls the same renderer
+Any other `*.template` sibling in the directory is rendered the same way and
+shipped under its de-suffixed name (`rendering.py:render_external_app_files`),
+which is how a bundled helper gets per-app config baked in; `_is_excluded`
+keeps the raw templates out of the sandbox either way. The library preview
+calls the same renderer
 (`server/features/skill/response_helpers.py:_builtin_instructions`), so what a
 user reads in the preview is what the agent gets — not the raw markers.
 Only `DENY` is surfaced; `ALWAYS` and `ASK` actions are left undocumented

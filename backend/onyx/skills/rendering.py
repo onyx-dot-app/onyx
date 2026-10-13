@@ -23,9 +23,12 @@ from onyx.external_apps.providers.registry import (
     uses_cloud_scope,
     withheld_on_cloud,
 )
+from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_SKILL_TEMPLATE_NAME = f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}"
 
 ACTION_AVAILABILITY_PLACEHOLDER = "{{ACTION_AVAILABILITY_SECTION}}"
 
@@ -135,6 +138,14 @@ def build_action_availability_section(
     return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
 
 
+def substitute_app_values(template: str, values: Mapping[str, str]) -> str:
+    """Fill ``{{APP:<key>}}`` from ``values``; an unknown or blank key renders
+    as ``_UNCONFIGURED_VALUE`` so a half-configured app says so."""
+    return _APP_VALUE_RE.sub(
+        lambda match: values.get(match.group(1)) or _UNCONFIGURED_VALUE, template
+    )
+
+
 def render_external_app_skill(
     template: str,
     app_type: ExternalAppType,
@@ -160,10 +171,7 @@ def render_external_app_skill(
         return match.group(2) if keep else ""
 
     template = _CLOUD_SCOPE_BLOCK_RE.sub(_resolve_block, template)
-    values = app_values or {}
-    template = _APP_VALUE_RE.sub(
-        lambda match: values.get(match.group(1)) or _UNCONFIGURED_VALUE, template
-    )
+    template = substitute_app_values(template, app_values or {})
     section = build_action_availability_section(app_type, stored)
     if section:
         rendered = template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
@@ -198,22 +206,44 @@ def app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
         return {}
 
 
-def render_external_app_skill_for(
+def render_external_app_files(
     db_session: Session,
     skill: Skill,
     app_type: ExternalAppType,
     source_dir: Path,
-) -> str:
-    """``skill``'s SKILL.md as the sandbox will see it: the template resolved
-    against this app row's action policies and configuration. Shared by the
-    push and the library preview, so a user previews what the agent reads."""
+) -> dict[str, str]:
+    """Every rendered file for an external-app built-in, keyed by its path in
+    the sandbox: ``SKILL.md`` plus any other ``*.template`` sibling, which is
+    how a bundled helper gets the connected account baked in rather than taking
+    it as an argument it could only ever be given one value for."""
     external_app = get_external_app_by_skill_id(db_session, skill.id)
     stored = (
         get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, external_app.id)
         if external_app
         else {}
     )
-    template = (source_dir / "SKILL.md.template").read_text()
-    return render_external_app_skill(
-        template, app_type, stored, app_template_values(external_app)
-    )
+    values = app_template_values(external_app)
+    rendered = {
+        SKILL_MD_NAME: render_external_app_skill(
+            (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, stored, values
+        )
+    }
+    for path in sorted(source_dir.rglob(f"*{TEMPLATE_SUFFIX}")):
+        if path.name == _SKILL_TEMPLATE_NAME:
+            continue
+        name = path.relative_to(source_dir).with_suffix("").as_posix()
+        rendered[name] = substitute_app_values(path.read_text(), values)
+    return rendered
+
+
+def render_external_app_skill_for(
+    db_session: Session,
+    skill: Skill,
+    app_type: ExternalAppType,
+    source_dir: Path,
+) -> str:
+    """``skill``'s SKILL.md as the sandbox will see it. Shared by the push and
+    the library preview, so a user previews what the agent reads."""
+    return render_external_app_files(db_session, skill, app_type, source_dir)[
+        SKILL_MD_NAME
+    ]

@@ -38,7 +38,7 @@ from onyx.skills.built_in import (
 )
 from onyx.skills.rendering import (
     render_company_search_skill,
-    render_external_app_skill_for,
+    render_external_app_files,
 )
 from onyx.skills.validation import (
     load_stored_custom_skill_bundle,
@@ -115,10 +115,11 @@ def _render_template(
 
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is not None:
-        rendered = render_external_app_skill_for(
+        rendered = render_external_app_files(
             db_session, skill, app_type, definition.source_dir
         )
-        files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
+        for name, content in rendered.items():
+            files[f"{skill.name}/{name}"] = content.encode("utf-8")
         return
 
     logger.warning(

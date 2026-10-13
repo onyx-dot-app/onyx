@@ -8,12 +8,12 @@ only ids reach a URL path, percent-encoded. Output is JSON on stdout.
 
 import argparse
 import json
-import re
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 _HTTP_TIMEOUT_SECONDS = 180
@@ -28,9 +28,8 @@ _FIELDS_LIMIT = 200
 # otherwise loop forever on a `--limit` the results never reach.
 _MAX_PAGES = 50
 
-# A DNS label. Repeated from the provider's `normalise_subdomain`, which this
-# script cannot import from inside the sandbox.
-_SUBDOMAIN_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
+# Rendered beside this script at push time from `account.txt.template`.
+_ACCOUNT_FILE = Path(__file__).with_name("account.txt")
 
 # Zendesk returns ~40 fields per ticket; the rest are nulls and internal ids.
 _TICKET_FIELDS = (
@@ -58,6 +57,22 @@ class ZendeskError(Exception):
     """A request this script refuses to make (bad arguments, unusable site)."""
 
 
+def _base_url() -> str:
+    """The connected account's API base URL, written beside this script when
+    the skill is pushed. One Onyx workspace connects one Zendesk account, so
+    this is configuration rather than an argument."""
+    try:
+        value = _ACCOUNT_FILE.read_text().strip()
+    except OSError:
+        value = ""
+    if not value.startswith("https://"):
+        raise ZendeskError(
+            "no Zendesk account is configured for this workspace; ask an admin "
+            "to finish setting up the Zendesk app"
+        )
+    return value
+
+
 def _epoch_seconds(value: str) -> int:
     """``--since`` as the unix timestamp the incremental export requires, from
     an epoch value or an ISO-8601 instant. A naive instant is read as UTC."""
@@ -73,19 +88,6 @@ def _epoch_seconds(value: str) -> int:
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     return int(moment.timestamp())
-
-
-def _site_base_url(value: str) -> str:
-    """The API base URL for ``--site``, from a bare subdomain (``acme``) or an
-    account URL. Anything that is not a single Zendesk subdomain is rejected."""
-    host = re.sub(r"^https?://", "", value.strip().lower())
-    host = re.split(r"[/?#]", host, maxsplit=1)[0]
-    subdomain = host.partition(":")[0].removesuffix(".zendesk.com")
-    if not _SUBDOMAIN_RE.fullmatch(subdomain):
-        raise argparse.ArgumentTypeError(
-            f"--site must be a Zendesk subdomain or account URL, got {value!r}"
-        )
-    return f"https://{subdomain}.zendesk.com"
 
 
 def _prune(value: Any) -> Any:
@@ -263,12 +265,6 @@ def _tags(value: str | None) -> list[str]:
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="zendesk_api.py", description="Zendesk Support.")
-    p.add_argument(
-        "--site",
-        required=True,
-        type=_site_base_url,
-        help="Zendesk subdomain or account URL, e.g. acme",
-    )
     p.add_argument("--raw", action="store_true", help="don't prune empty fields")
     p.add_argument(
         "--full",
@@ -362,13 +358,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
     """Run the chosen subcommand, reads and writes split so each stays flat."""
-    result = _dispatch_read(a)
-    return result if result is not None else _dispatch_write(a)
+    site = _base_url()
+    result = _dispatch_read(a, site)
+    return result if result is not None else _dispatch_write(a, site)
 
 
-def _dispatch_read(a: argparse.Namespace) -> dict[str, Any] | None:
+def _dispatch_read(a: argparse.Namespace, site: str) -> dict[str, Any] | None:
     """The read subcommands, or ``None`` when ``a.cmd`` is not one of them."""
-    site: str = a.site
 
     if a.cmd == "search":
         if a.limit <= 0:
@@ -438,9 +434,8 @@ def _dispatch_read(a: argparse.Namespace) -> dict[str, Any] | None:
     return None
 
 
-def _dispatch_write(a: argparse.Namespace) -> dict[str, Any]:
+def _dispatch_write(a: argparse.Namespace, site: str) -> dict[str, Any]:
     """The write subcommands plus the `call` escape hatch."""
-    site: str = a.site
 
     if a.cmd == "create":
         ticket: dict[str, Any] = {

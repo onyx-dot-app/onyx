@@ -4,22 +4,19 @@ importable package, so load it by path. No network, no onyx imports."""
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
-_HELPER = (
-    Path(__file__).resolve().parents[3]
-    / "onyx/skills/builtin"
-    / "zendesk/zendesk_api.py"
-)
+_SKILL_DIR = Path(__file__).resolve().parents[3] / "onyx/skills/builtin" / "zendesk"
 
 
 def _load() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("zendesk_api", _HELPER)
+    spec = importlib.util.spec_from_file_location(
+        "zendesk_api", _SKILL_DIR / "zendesk_api.py"
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -31,21 +28,41 @@ zendesk = _load()
 _BASE = "https://acme.zendesk.com"
 
 
-@pytest.mark.parametrize(
-    "value",
-    ["acme", "ACME", "acme.zendesk.com", "https://acme.zendesk.com/agent/filters"],
-)
-def test_site_accepts_a_subdomain_or_an_account_url(value: str) -> None:
-    assert zendesk._site_base_url(value) == _BASE
+def test_base_url_is_read_from_the_rendered_account_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One workspace connects one account, so the helper takes no account
+    argument — the push writes it beside the script."""
+    account = tmp_path / "account.txt"
+    account.write_text("https://acme.zendesk.com\n")
+    monkeypatch.setattr(zendesk, "_ACCOUNT_FILE", account)
+    assert zendesk._base_url() == _BASE
 
 
-@pytest.mark.parametrize(
-    "value", ["", "acme corp", "acme.example.com", "https://evil.test/acme"]
-)
-def test_site_rejects_anything_but_a_zendesk_account(value: str) -> None:
-    """The proxy matches this host to inject the account's token."""
-    with pytest.raises(argparse.ArgumentTypeError):
-        zendesk._site_base_url(value)
+@pytest.mark.parametrize("contents", ["", "   ", "acme", "ftp://acme.zendesk.com"])
+def test_an_unconfigured_account_is_an_input_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contents: str
+) -> None:
+    """A half-configured app must say so, not emit a confusing network error."""
+    account = tmp_path / "account.txt"
+    account.write_text(contents)
+    monkeypatch.setattr(zendesk, "_ACCOUNT_FILE", account)
+    with pytest.raises(zendesk.ZendeskError):
+        zendesk._base_url()
+
+
+def test_a_missing_account_file_is_an_input_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(zendesk, "_ACCOUNT_FILE", tmp_path / "nope.txt")
+    with pytest.raises(zendesk.ZendeskError):
+        zendesk._base_url()
+
+
+def test_the_account_template_renders_the_providers_base_url() -> None:
+    """The template beside the script is what the push fills in."""
+    template = (_SKILL_DIR / "account.txt.template").read_text()
+    assert template.strip() == "{{APP:base_url}}"
 
 
 def test_since_accepts_an_epoch_or_an_iso_instant() -> None:
@@ -97,8 +114,8 @@ def test_changed_requires_exactly_one_starting_point() -> None:
     """Both together would silently ignore one of them."""
     parser = zendesk._build_parser()
     for argv in (
-        ["--site", "acme", "changed"],
-        ["--site", "acme", "changed", "--since", "1759276800", "--cursor", "c"],
+        ["changed"],
+        ["changed", "--since", "1759276800", "--cursor", "c"],
     ):
         with pytest.raises(zendesk.ZendeskError):
             zendesk._incremental_tickets(
@@ -130,7 +147,7 @@ def test_changed_stops_on_a_page_boundary_and_returns_the_cursor(
 
     monkeypatch.setattr(zendesk, "_request", _fake_request)
     args = zendesk._build_parser().parse_args(
-        ["--site", "acme", "changed", "--since", "1759276800", "--limit", "1"]
+        ["changed", "--since", "1759276800", "--limit", "1"]
     )
     result = zendesk._incremental_tickets(_BASE, args)
 
@@ -151,9 +168,7 @@ def test_changed_resumes_from_a_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
         return {"tickets": [], "after_cursor": "c9", "end_of_stream": True}
 
     monkeypatch.setattr(zendesk, "_request", _fake_request)
-    args = zendesk._build_parser().parse_args(
-        ["--site", "acme", "changed", "--cursor", "c8"]
-    )
+    args = zendesk._build_parser().parse_args(["changed", "--cursor", "c8"])
     result = zendesk._incremental_tickets(_BASE, args)
     assert "cursor=c8" in captured[0]
     assert "start_time" not in captured[0]
@@ -178,9 +193,7 @@ def test_a_page_that_never_ends_is_bounded(monkeypatch: pytest.MonkeyPatch) -> N
         }
 
     monkeypatch.setattr(zendesk, "_request", _fake_request)
-    args = zendesk._build_parser().parse_args(
-        ["--site", "acme", "changed", "--since", "1759276800"]
-    )
+    args = zendesk._build_parser().parse_args(["changed", "--since", "1759276800"])
     result = zendesk._incremental_tickets(_BASE, args)
     assert calls == zendesk._MAX_PAGES
     assert result["count"] == 0
@@ -190,8 +203,8 @@ def test_a_page_that_never_ends_is_bounded(monkeypatch: pytest.MonkeyPatch) -> N
 @pytest.mark.parametrize(
     "argv, expected_method",
     [
-        (["--site", "acme", "tag", "1", "--tags", "a"], "PUT"),
-        (["--site", "acme", "tag", "1", "--tags", "a", "--replace"], "POST"),
+        (["tag", "1", "--tags", "a"], "PUT"),
+        (["tag", "1", "--tags", "a", "--replace"], "POST"),
     ],
 )
 def test_tag_uses_zendesks_reversed_tag_methods(
@@ -207,16 +220,14 @@ def test_tag_uses_zendesks_reversed_tag_methods(
         return {"tags": ["a"]}
 
     monkeypatch.setattr(zendesk, "_request", _fake_request)
-    result = zendesk._dispatch_write(zendesk._build_parser().parse_args(argv))
+    result = zendesk._dispatch_write(zendesk._build_parser().parse_args(argv), _BASE)
     assert seen == [expected_method]
     assert result == {"ok": True, "tags": ["a"]}
 
 
 def test_changed_rejects_a_blank_cursor() -> None:
     """It passes the "exactly one" check but names no position."""
-    args = zendesk._build_parser().parse_args(
-        ["--site", "acme", "changed", "--cursor", ""]
-    )
+    args = zendesk._build_parser().parse_args(["changed", "--cursor", ""])
     with pytest.raises(zendesk.ZendeskError):
         zendesk._incremental_tickets(_BASE, args)
 

@@ -9,19 +9,17 @@ Call the Zendesk Support API as the connected user via the bundled helper. **You
 are already authenticated** — the egress proxy injects the user's Zendesk token
 on the wire, so never pass credentials yourself.
 
-This workspace is connected to **{{APP:base_url}}**. Pass that account to every
-command as `--site`.
+This workspace is connected to **{{APP:base_url}}**; the helper already knows
+it, so no command takes an account.
 
 {{ACTION_AVAILABILITY_SECTION}}
 
 ## Usage
 
-    python .opencode/skills/zendesk/zendesk_api.py --site <account> <command> [args]
+    python .opencode/skills/zendesk/zendesk_api.py <command> [args]
 
-`<account>` is the subdomain (`acme`) or the account URL
-(`https://acme.zendesk.com`). Read commands auto-paginate and prune empty
-fields. `python zendesk_api.py --site <account> <command> -h` shows a command's
-flags.
+Read commands auto-paginate and prune empty fields. `python zendesk_api.py
+<command> -h` shows a command's flags.
 
 ### Find tickets
 
@@ -29,16 +27,16 @@ flags.
 and is the way to answer most questions.
 
 ```
-python zendesk_api.py --site acme search "type:ticket status:open tags:billing" [--limit N]
-python zendesk_api.py --site acme search "type:ticket created>2026-10-01" --sort-by created_at --sort-order desc
+python zendesk_api.py search "type:ticket status:open tags:billing" [--limit N]
+python zendesk_api.py search "type:ticket created>2026-10-01" --sort-by created_at --sort-order desc
 ```
 
 ### Read one ticket
 
 ```
-python zendesk_api.py --site acme ticket 12345
-python zendesk_api.py --site acme comments 12345
-python zendesk_api.py --site acme metrics 12345
+python zendesk_api.py ticket 12345
+python zendesk_api.py comments 12345
+python zendesk_api.py metrics 12345
 ```
 
 ### What changed since last time
@@ -49,8 +47,8 @@ run returned — that is what makes a repeating task skip nothing and re-read
 nothing.
 
 ```
-python zendesk_api.py --site acme changed --since 2026-10-01T00:00:00Z [--limit N]
-python zendesk_api.py --site acme changed --cursor <cursor from last run>
+python zendesk_api.py changed --since 2026-10-01T00:00:00Z [--limit N]
+python zendesk_api.py changed --cursor <cursor from last run>
 ```
 
 `--since` takes a unix timestamp or an ISO-8601 instant and must be at least a
@@ -63,21 +61,21 @@ always safe to resume from.
 ### Queues, people, and feedback
 
 ```
-python zendesk_api.py --site acme views
-python zendesk_api.py --site acme view-tickets 360001 [--limit N]
-python zendesk_api.py --site acme satisfaction [--score bad] [--limit N]
-python zendesk_api.py --site acme user me
-python zendesk_api.py --site acme organization 42
-python zendesk_api.py --site acme fields
+python zendesk_api.py views
+python zendesk_api.py view-tickets 360001 [--limit N]
+python zendesk_api.py satisfaction [--score bad] [--limit N]
+python zendesk_api.py user me
+python zendesk_api.py organization 42
+python zendesk_api.py fields
 ```
 
 ### Write
 
 ```
-python zendesk_api.py --site acme create --subject "Billing error" --body "..." [--tags billing,urgent]
-python zendesk_api.py --site acme update 12345 --set status=solved --set priority=high
-python zendesk_api.py --site acme comment 12345 --body "Looked into this." [--public]
-python zendesk_api.py --site acme tag 12345 --tags needs-review [--replace]
+python zendesk_api.py create --subject "Billing error" --body "..." [--tags billing,urgent]
+python zendesk_api.py update 12345 --set status=solved --set priority=high
+python zendesk_api.py comment 12345 --body "Looked into this." [--public]
+python zendesk_api.py tag 12345 --tags needs-review [--replace]
 ```
 
 ## Output
