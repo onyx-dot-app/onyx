@@ -513,3 +513,26 @@ def test_converse_keeps_disabled_thinking_after_tool_calls() -> None:
 def test_converse_still_drops_enabled_thinking_after_tool_calls() -> None:
     fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
     assert not (fields or {}).get("thinking")
+
+
+def test_openrouter_chunk_parser_keeps_served_model() -> None:
+    from litellm.llms.openrouter.chat.transformation import (
+        OpenRouterChatCompletionStreamingHandler,
+    )
+
+    apply_monkey_patches()
+    handler = OpenRouterChatCompletionStreamingHandler(
+        streaming_response=iter([]), sync_stream=True
+    )
+    chunk = {
+        "id": "gen-1",
+        "created": 1762544600,
+        "model": "deepseek/deepseek-v4-flash",
+        "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": None}],
+    }
+
+    parsed = handler.chunk_parser(chunk)
+
+    assert parsed.provider_specific_fields == {
+        "routed_model": "deepseek/deepseek-v4-flash"
+    }

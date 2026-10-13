@@ -363,3 +363,22 @@ def test_from_litellm_model_response_parses_tool_calls() -> None:
     assert tool_call.type == "function"
     assert tool_call.function.name == "search_documents"
     assert tool_call.function.arguments == '{"query": "test"}'
+
+
+def test_from_litellm_model_response_stream_prefers_routed_model() -> None:
+    payload = _build_usage_only_chunk_payload()
+    payload["model"] = "openrouter/auto"
+    payload["provider_specific_fields"] = {"routed_model": "deepseek/deepseek-v4-flash"}
+
+    response = from_litellm_model_response_stream(_make_stream_double(payload))
+
+    assert response.model == "deepseek/deepseek-v4-flash"
+
+
+def test_from_litellm_model_response_stream_falls_back_to_chunk_model() -> None:
+    payload = _build_usage_only_chunk_payload()
+    payload["model"] = "gpt-4o"
+
+    response = from_litellm_model_response_stream(_make_stream_double(payload))
+
+    assert response.model == "gpt-4o"
