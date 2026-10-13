@@ -19,6 +19,7 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     DocPermissionSyncAttempt,
+    DocumentByConnectorCredentialPair,
     ExternalGroupPermissionSyncAttempt,
     HierarchyFetchAttempt,
     IndexAttempt,
@@ -85,6 +86,33 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
         .limit(ROW_LIMIT)
     )
     return [dict(row) for row in db_session.execute(statement).mappings()]
+
+
+def has_indexed_connectors__no_commit(db_session: Session) -> bool:
+    # Exclude the seeded upload connector; scan beyond the inventory reporting cap.
+    return bool(
+        db_session.scalar(
+            select(
+                select(ConnectorCredentialPair.id)
+                .join(
+                    DocumentByConnectorCredentialPair,
+                    (
+                        DocumentByConnectorCredentialPair.connector_id
+                        == ConnectorCredentialPair.connector_id
+                    )
+                    & (
+                        DocumentByConnectorCredentialPair.credential_id
+                        == ConnectorCredentialPair.credential_id
+                    ),
+                )
+                .where(
+                    ConnectorCredentialPair.connector_id > 0,
+                    DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+                )
+                .exists()
+            )
+        )
+    )
 
 
 def attempt_rows(db_session: Session, since: datetime) -> list[dict[str, Any]]:

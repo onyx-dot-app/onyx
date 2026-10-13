@@ -12,21 +12,31 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from onyx.db.connector_credential_pair import update_connector_credential_pair
+from onyx.db.document import (
+    mark_document_as_indexed_for_cc_pair__no_commit,
+    upsert_document_by_connector_credential_pair,
+    upsert_documents,
+)
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import SyncType
 from onyx.db.fleet_telemetry import (
     attempt_rows,
     email_domain_rows,
+    has_indexed_connectors__no_commit,
     job_rows,
     license_row,
     limit_statement_time,
     stage_rows,
 )
+from onyx.db.models import ConnectorCredentialPair, DocumentByConnectorCredentialPair
 from onyx.db.sync_record import insert_sync_record
+from onyx.document_index.document_metadata import DocumentMetadata
+from onyx.server.features.build.db import user_library
 from onyx.utils import fleet_telemetry_collector as collector
 from tests.unit.fakes import FakeCache
 from tests.utils.fleet_telemetry import make_sender
@@ -35,6 +45,8 @@ _TABLES: tuple[str, ...] = (
     "license",
     "connector",
     "connector_credential_pair",
+    "document",
+    "document_by_connector_credential_pair",
     "index_attempt",
     "index_attempt_errors",
     "index_attempt_stage_metric",
@@ -215,6 +227,7 @@ def test_one_pass_sends_only_safe_events(
     for event in events:
         by_type.setdefault(event["event_type"], []).append(event["data"])
     assert {key: len(value) for key, value in by_type.items()} == {
+        "heartbeat": 1,
         "connector": 2,
         "tenant_domain": 2,
         "license": 1,
@@ -246,3 +259,114 @@ def test_deployment_key_is_persistent_and_race_safe(
         )
     assert len(set(keys)) == 1 and len(keys[0]) == 64
     assert fleet_enrollment.get_or_create_deployment_key() == keys[0]
+
+
+def _add_document_link(
+    db_session: Session, connector_id: int, credential_id: int, doc_id: str
+) -> None:
+    upsert_documents(
+        db_session,
+        [DocumentMetadata(connector_id, credential_id, doc_id, "Test document", "")],
+    )
+    upsert_document_by_connector_credential_pair(
+        db_session, connector_id, credential_id, [doc_id]
+    )
+
+
+def test_indexed_connector_presence_follows_successful_indexing(schema: str) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        limit_statement_time(db_session)
+        assert not has_indexed_connectors__no_commit(db_session)
+        _add_document_link(db_session, 2, 1, "indexed-document")
+        assert not has_indexed_connectors__no_commit(db_session)
+        mark_document_as_indexed_for_cc_pair__no_commit(
+            db_session, 2, 1, ["indexed-document"]
+        )
+        assert has_indexed_connectors__no_commit(db_session)
+        # Indexing updates the link, not the pair's legacy counter.
+        assert (
+            db_session.scalar(
+                select(ConnectorCredentialPair.total_docs_indexed).where(
+                    ConnectorCredentialPair.id == 2
+                )
+            )
+            == 0
+        )
+        db_session.execute(
+            delete(DocumentByConnectorCredentialPair).where(
+                DocumentByConnectorCredentialPair.id == "indexed-document"
+            )
+        )
+        assert not has_indexed_connectors__no_commit(db_session)
+
+
+def test_raw_library_upload_does_not_count_as_indexed(
+    schema: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    file_store = Mock()
+    file_store.save_file.return_value = "test-raw-upload"
+    monkeypatch.setattr(user_library, "get_default_file_store", lambda: file_store)
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        # Use the upload path's actual writes, with only blob storage replaced.
+        user_library.store_user_file(
+            db_session=db_session,
+            user_id=uuid.uuid4(),
+            connector_id=2,
+            credential_id=1,
+            file_path="/test.txt",
+            content=b"test raw upload",
+            mime_type="text/plain",
+        )
+        update_connector_credential_pair(db_session, 2, 1, net_docs=1)
+        assert (
+            db_session.scalar(
+                select(ConnectorCredentialPair.total_docs_indexed).where(
+                    ConnectorCredentialPair.id == 2
+                )
+            )
+            == 1
+        )
+        assert not has_indexed_connectors__no_commit(db_session)
+
+
+def test_indexed_presence_excludes_seeded_uploads_and_unconfigured_pairs(
+    schema: str,
+) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        db_session.execute(
+            text(
+                f'INSERT INTO "{schema}".connector '
+                "(id,name,source,connector_specific_config) VALUES (0,'Upload','FILE','{}'); "
+                f'UPDATE "{schema}".connector_credential_pair SET connector_id=0 WHERE id=1'
+            )
+        )
+        _add_document_link(db_session, 0, 1, "personal-upload")
+        mark_document_as_indexed_for_cc_pair__no_commit(
+            db_session, 0, 1, ["personal-upload"]
+        )
+        assert not has_indexed_connectors__no_commit(db_session)
+        _add_document_link(db_session, 2, 99, "orphaned-link")
+        mark_document_as_indexed_for_cc_pair__no_commit(
+            db_session, 2, 99, ["orphaned-link"]
+        )
+        assert not has_indexed_connectors__no_commit(db_session)
+
+
+def test_indexed_connector_presence_scans_beyond_inventory_cap(schema: str) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        db_session.execute(
+            text(
+                f'INSERT INTO "{schema}".connector_credential_pair '
+                "(id,name,status,connector_id,credential_id,access_type,total_docs_indexed) "
+                "SELECT id,'Test connector','ACTIVE',2,id,'PUBLIC',0 "
+                "FROM generate_series(3,1002) id"
+            )
+        )
+        _add_document_link(db_session, 2, 1002, "beyond-inventory-cap")
+        mark_document_as_indexed_for_cc_pair__no_commit(
+            db_session, 2, 1002, ["beyond-inventory-cap"]
+        )
+        assert 1002 not in {
+            row["cc_pair_id"] for row in collector.connector_rows(db_session)
+        }
+        assert has_indexed_connectors__no_commit(db_session)

@@ -21,6 +21,7 @@ from onyx.db.fleet_telemetry import (
     attempt_rows,
     connector_rows,
     email_domain_rows,
+    has_indexed_connectors__no_commit,
     job_rows,
     license_row,
     limit_statement_time,
@@ -28,6 +29,7 @@ from onyx.db.fleet_telemetry import (
 )
 from onyx.utils.fleet_telemetry import (
     CONNECTOR_ROW_SETTINGS,
+    DEPLOYMENT_TYPE,
     SAFE_BOOLEAN_SETTINGS,
     SAFE_NUMBER_SETTINGS,
     BoundedTelemetry,
@@ -353,6 +355,7 @@ def collect_snapshots(tenant_id: str) -> None:
         )
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             limit_statement_time(db_session)
+            has_indexed_connectors = has_indexed_connectors__no_commit(db_session)
             inventory: list[tuple[str, dict[str, Any]]] = [
                 ("connector", connector_data(row)) for row in connector_rows(db_session)
             ]
@@ -437,6 +440,19 @@ def collect_snapshots(tenant_id: str) -> None:
                 ),
             )
         # Work goes first, so a large inventory cannot hold it back.
+        sender.emit(
+            "heartbeat",
+            {
+                # Workers can have different Lite settings from the API.
+                **(
+                    {"deployment_type": DEPLOYMENT_TYPE.value}
+                    if sender.service == "api"
+                    else {}
+                ),
+                "has_indexed_connectors": has_indexed_connectors,
+            },
+            tenant_id=tenant_id,
+        )
         _send_inventory(sender, cache, tenant_id, inventory)
         next_since: datetime = min(
             [started - _OVERLAP, *(point for point in resume if point is not None)]
