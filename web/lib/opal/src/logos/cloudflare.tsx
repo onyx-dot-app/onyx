@@ -20,7 +20,7 @@ const SvgCloudflare = ({ size, ...props }: IconProps) => (
     </g>
     <defs>
       <clipPath id="clip0_2129_46279">
-        <rect width={52} height={52} fill="white" />
+        <rect fill="white" />
       </clipPath>
     </defs>
   </svg>

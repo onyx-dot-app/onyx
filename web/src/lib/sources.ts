@@ -1,10 +1,4 @@
-import {
-  R2Icon,
-  S3Icon,
-  GoogleStorageIcon,
-  BraintrustIcon,
-  BoxIcon,
-} from "@/components/icons/icons";
+import { S3Icon, GoogleStorageIcon } from "@/components/icons/icons";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { SourceCategory, SourceMetadata } from "@/lib/search/types";
 import React from "react";
@@ -16,8 +10,11 @@ import {
   SvgAxero,
   SvgBitbucket,
   SvgBookStack,
+  SvgBox,
+  SvgBraintrust,
   SvgCanvas,
   SvgClickUp,
+  SvgCloudflare,
   SvgCoda,
   SvgConfluence,
   SvgDiscord,
@@ -217,7 +214,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/onedrive`,
   },
   box: {
-    icon: BoxIcon,
+    icon: SvgBox,
     displayName: "Box",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/box`,
@@ -253,7 +250,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: `${DOCS_ADMINS_PATH}/connectors/official/oci_storage`,
   },
   r2: {
-    icon: R2Icon,
+    icon: SvgCloudflare,
     displayName: "R2",
     category: SourceCategory.Storage,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/r2`,
@@ -455,7 +452,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     isPopular: false, // Needs to be false to hide from the Add Connector page
   },
   braintrust: {
-    icon: BraintrustIcon,
+    icon: SvgBraintrust,
     displayName: "Braintrust",
     category: SourceCategory.AiObservability,
   },
