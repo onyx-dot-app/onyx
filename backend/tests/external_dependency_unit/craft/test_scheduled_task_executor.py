@@ -60,7 +60,6 @@ from onyx.server.features.build.session.manager import SessionManager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.common.craft.stubs import StubSandboxManager
-from tests.external_dependency_unit.craft.db_helpers import make_user
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -111,7 +110,7 @@ def _seed_task_and_queued_run(
 
 def test_dispatch_uses_skip_locked_to_avoid_dupes(
     db_session: Session,
-    test_user: User,  # noqa: ARG001
+    test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two concurrent dispatchers each claim a disjoint subset of due tasks.
@@ -123,7 +122,7 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
     duplicate ``(task_id, status=QUEUED)`` insertion.
     """
     _ = monkeypatch  # autouse'd elsewhere; kept for symmetry with sibling tests
-    user = make_user(db_session)
+    user = test_user
     now = datetime.datetime.now(datetime.timezone.utc)
     task_ids: list[UUID] = []
     for i in range(3):
@@ -215,11 +214,11 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
 
 def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
     db_session: Session,
-    test_user: User,  # noqa: ARG001
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """A QUEUED run older than 15 min → ``cleanup_stuck_scheduled_runs`` marks it FAILED."""
-    user = make_user(db_session)
+    user = test_user
     task = ScheduledTask(
         user_id=user.id,
         name="stale",
@@ -258,7 +257,7 @@ def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
 
 def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     db_session: Session,
-    test_user: User,  # noqa: ARG001
+    test_user: User,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """A RUNNING run older than the running threshold → ``cleanup_stuck_scheduled_runs`` marks it FAILED.
@@ -266,7 +265,7 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     Production threshold is ``SCHEDULED_RUN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
     (i.e. 75 min). Backdating ``started_at`` by 80 min puts the run past that.
     """
-    user = make_user(db_session)
+    user = test_user
     task = ScheduledTask(
         user_id=user.id,
         name="long-running",
