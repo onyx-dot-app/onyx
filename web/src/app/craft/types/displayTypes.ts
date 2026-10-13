@@ -142,7 +142,7 @@ export type OutputPanelMode = "closed" | "medium" | "full";
 
 export function normalizePanelPath(path: string): string {
   const segments: string[] = [];
-  for (const segment of path.replaceAll("\\", "/").split("/")) {
+  for (const segment of path.split("/")) {
     if (!segment || segment === ".") continue;
     if (segment === "..") segments.pop();
     else segments.push(segment);

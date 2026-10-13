@@ -33,8 +33,7 @@ test.describe("Craft outputs", () => {
     await outputs.reorderBrowserLeft();
     await outputs.expectTabs(["Apps", "All Files"]);
     await outputs.expectHeaderStable(async () => {
-      await outputs.expand.click();
-      await outputs.expectMode("full");
+      await outputs.expandToFullMode();
     });
     await outputs.screenshot("craft-outputs-full");
     await outputs.expectHeaderStable(async () => {
@@ -63,8 +62,7 @@ test.describe("Craft outputs", () => {
     await outputs.open();
     await outputs.openTab("Apps");
     await outputs.expectHeaderStable(async () => {
-      await outputs.expand.click();
-      await outputs.expectMode("full");
+      await outputs.expandToFullMode();
     });
     await outputs.screenshot("craft-outputs-narrow");
     await outputs.close();

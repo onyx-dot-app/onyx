@@ -141,15 +141,18 @@ function mergeSearchInventory(
 ): SearchInventory {
   if (inventory.complete || !previous) return inventory;
   const entries = new Map(
-    previous.entries
-      .filter((entry) =>
-        inventory.failedDirectories.some(
-          (directory) => !directory || entry.path.startsWith(`${directory}/`)
-        )
-      )
-      .map((entry) => [entry.path, entry])
+    inventory.entries.map((entry) => [entry.path, entry])
   );
-  inventory.entries.forEach((entry) => entries.set(entry.path, entry));
+  for (const entry of previous.entries) {
+    if (entries.size >= MAX_SEARCH_ENTRIES) break;
+    if (
+      !entries.has(entry.path) &&
+      inventory.failedDirectories.some(
+        (directory) => !directory || entry.path.startsWith(`${directory}/`)
+      )
+    )
+      entries.set(entry.path, entry);
+  }
   return {
     ...inventory,
     entries: [...entries.values()].slice(0, MAX_SEARCH_ENTRIES),

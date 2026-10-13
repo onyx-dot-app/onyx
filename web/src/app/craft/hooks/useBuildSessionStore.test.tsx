@@ -196,6 +196,19 @@ describe("Output resources and inventory", () => {
     expect(session()?.activePanelTabId).toBe("file:attachments/old.pdf");
   });
 
+  it("preserves literal backslashes as distinct Linux filenames", () => {
+    const literal = String.raw`outputs/report\final.txt`;
+    store().openFilePreview(sessionId, literal, String.raw`report\final.txt`);
+    store().openFilePreview(sessionId, "outputs/report/final.txt", "final.txt");
+    expect(session()?.panelTabs).toEqual([
+      { kind: "file", path: literal, fileName: String.raw`report\final.txt` },
+      { kind: "file", path: "outputs/report/final.txt", fileName: "final.txt" },
+    ]);
+    store().openFilePreview(sessionId, literal, String.raw`report\final.txt`);
+    expect(session()?.activePanelTabId).toBe(`file:${literal}`);
+    expect(session()?.panelTabs).toHaveLength(2);
+  });
+
   it("keeps Files unique and recreates it after closing", () => {
     store().openFilesTab(sessionId);
     store().openFilesTab(sessionId);

@@ -221,6 +221,7 @@ provisioning entirely, since nothing will view them live.
 
 `OutputPanel.tsx` owns resource tabs and passes inventory revisions to `FilePreviewContent.tsx`.
 Outputs and All Files open the same file tabs. [[craft-streaming]] owns inventory refresh and automatic selection rules.
+Tab paths use sandbox POSIX separators and preserve literal backslashes in filenames.
 The panel retains Outputs, All Files, Apps, and five recently visited file viewers.
 Hidden bodies remain mounted but invisible, inert, and hidden from assistive technology.
 Stable body order preserves app frames through tab reorder and layout changes.
@@ -261,6 +262,7 @@ Manual reload waits for pending visible directories. Successful uploads and dele
 `workspaceFiles.ts` searches names and session-relative paths through bounded directory batches.
 A scan visits at most 128 directories and 10,000 entries, and starts no new batches after ten seconds.
 Incomplete results preserve prior hits only beneath failed directories; successful reads remove deleted hits.
+Fresh results take priority when retained hits would exceed the search inventory limit.
 Clearing search returns to the retained tree. Expansion and scroll belong to session UI state; listings do not.
 `WorkspaceUploadButton.tsx` owns the hidden picker and upload state.
 Download actions support hover, keyboard focus, and touch without opening files or toggling folders.

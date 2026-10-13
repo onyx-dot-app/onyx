@@ -795,3 +795,25 @@ it.each(["root", "folder"])(
     expect(row).not.toHaveAttribute("aria-busy");
   }
 );
+
+it("keeps fresh search results ahead of retained rows at the inventory limit", async () => {
+  const oldFiles = Array.from({ length: 10_000 }, (_, index) =>
+    file(`old-${index}.txt`, `old-${index}.txt`)
+  );
+  listing.mockResolvedValue({ path: "", entries: oldFiles });
+  const view = render(<FilesTab sessionId="session" searchQuery="fresh" />);
+  await screen.findByText("No matching files");
+  listing.mockResolvedValue({
+    path: "",
+    entries: [file("fresh.txt", "fresh.txt"), ...oldFiles],
+  });
+  view.rerender(
+    <FilesTab sessionId="session" searchQuery="fresh" refreshKey={1} />
+  );
+  expect(
+    await screen.findByRole("button", { name: "fresh.txt" })
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Some folders could not be loaded. Refresh to try again.")
+  ).toBeInTheDocument();
+});

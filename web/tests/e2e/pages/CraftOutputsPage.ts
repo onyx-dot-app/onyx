@@ -37,6 +37,10 @@ export class CraftOutputsPage {
       await intro.getByRole("button", { name: "Close", exact: true }).click();
     await expect(this.toggle).toBeVisible();
   }
+  async expandToFullMode() {
+    await this.expand.click();
+    await this.expectMode("full");
+  }
   async exitFullMode() {
     await this.page.keyboard.press("Escape");
     await this.expectMode("medium");
