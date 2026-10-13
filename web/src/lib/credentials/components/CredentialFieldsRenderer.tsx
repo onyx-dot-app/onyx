@@ -18,7 +18,7 @@ import {
   Section,
 } from "@opal/layouts";
 import { InputCheckboxField } from "@opal/form";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { markdown } from "@opal/utils";
 import { getIn, useField, useFormikContext } from "formik";
 import { useTranslations } from "next-intl";
@@ -180,9 +180,12 @@ interface CredentialFileFieldProps {
   name: string;
   /** The spec key: it picks the file's type and names it to the server. */
   fieldKey: string;
-  label: string;
-  /** The field's hint, as markdown: `.pfx` in backticks shows as code. */
-  description?: string;
+  label: string | RichStr;
+  /**
+   * The field's hint. A plain string is read as markdown, so `.pfx` in
+   * backticks shows as code.
+   */
+  description?: string | RichStr;
 }
 
 /**
@@ -226,7 +229,9 @@ export function CredentialFileField({
     <InputVertical
       withLabel={name}
       title={label}
-      subDescription={description ? markdown(description) : undefined}
+      subDescription={
+        typeof description === "string" ? markdown(description) : description
+      }
     >
       <InputUpload
         mode="file"

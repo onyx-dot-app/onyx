@@ -14160,9 +14160,11 @@
       "valueCannotBeRevealed": "La valeur ne peut pas être affichée",
       "year": "Année"
     },
-    "inputUpload": {
+    "inputFile": {
       "attachFile": "Joindre un fichier",
-      "clearFile": "Effacer le fichier",
+      "clearFile": "Effacer le fichier"
+    },
+    "inputUpload": {
       "pasted": "Texte collé",
       "attached": "Fichier joint",
       "dropToAdd": "Déposez le fichier ici pour l’ajouter",

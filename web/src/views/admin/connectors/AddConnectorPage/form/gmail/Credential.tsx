@@ -87,7 +87,7 @@ export const GmailAuthSection = ({
           )}
         </Text>
         <InputUpload
-          accept="application/json"
+          accept="application/json,.json"
           placeholder={t("gmail.oauthUpload.placeholder")}
           setValue={(value) => {
             setOauthAppCredential(
@@ -137,7 +137,7 @@ export const GmailAuthSection = ({
           {t("gmail.serviceAccountOption.title")}
         </Text>
         <InputUpload
-          accept="application/json"
+          accept="application/json,.json"
           placeholder={t("gmail.serviceAccountUpload.placeholder")}
           setValue={(value) => {
             if (!value) {

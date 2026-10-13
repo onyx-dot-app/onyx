@@ -5,10 +5,10 @@
   @apply w-full;
 }
 
-/* The field itself picks a file: no caret, a pointer, and the row's text
-   one line tall, as a typed input's is. */
+/* The field itself picks a file: a bare button with no caret, a pointer, and
+   the row's text one line tall, as a typed input's is. */
 .opal-input-upload-trigger {
-  @apply flex flex-1 min-w-0 items-center h-6 cursor-pointer select-none outline-hidden;
+  @apply flex flex-1 min-w-0 items-center h-6 cursor-pointer select-none outline-hidden bg-transparent border-0 p-0 text-start;
 }
 
 .opal-input[data-variant="disabled"] .opal-input-upload-trigger {
@@ -19,13 +19,14 @@
   @apply cursor-default;
 }
 
-/* The uploaded file's name, or the placeholder in its muted style. */
+/* The uploaded file's name, or the placeholder in its muted colour; the
+   font is the Text's own. */
 .opal-input-upload-label {
-  @apply truncate p-0.5 font-main-ui-body text-text-04;
+  @apply flex min-w-0 py-0.5 text-text-04;
 }
 
 .opal-input-upload-label[data-placeholder] {
-  @apply font-main-ui-muted text-text-02;
+  @apply text-text-02;
 }
 
 .opal-input[data-variant="disabled"] .opal-input-upload-label {
@@ -44,7 +45,6 @@
 }
 
 .opal-input-upload[data-drag] .opal-input-upload-label {
-  @apply font-main-ui-action;
   color: var(--action-selection-05);
 }
 

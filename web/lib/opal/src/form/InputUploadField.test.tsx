@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import userEvent from "@testing-library/user-event";
 import { Formik, type FormikProps } from "formik";
-import { InputUploadField } from "./InputUploadField";
+import { InputUploadField } from "@opal/form/InputUploadField";
 
 interface KeyForm {
   key: string;

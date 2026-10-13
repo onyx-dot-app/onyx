@@ -14160,9 +14160,11 @@
       "valueCannotBeRevealed": "Value cannot be revealed",
       "year": "Year"
     },
-    "inputUpload": {
+    "inputFile": {
       "attachFile": "Attach file",
-      "clearFile": "Clear file",
+      "clearFile": "Clear file"
+    },
+    "inputUpload": {
       "pasted": "Pasted text",
       "attached": "File attached",
       "dropToAdd": "Drop file here to add",

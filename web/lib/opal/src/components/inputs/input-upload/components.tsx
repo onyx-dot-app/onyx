@@ -5,23 +5,24 @@ import "@opal/components/inputs/input-upload/styles.css";
 import React, { useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@opal/components/buttons/button/components";
+import { Text } from "@opal/components/text/components";
 import { SvgImport, SvgX } from "@opal/icons";
 import { noProp } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
 import useWindowFileDrag from "@opal/hooks/useWindowFileDrag";
-import type { InputVariants } from "@opal/types";
+import type { InputVariants, RichStr } from "@opal/types";
 
 interface InputUploadBaseProps {
   /** Visual state, as on the other inputs. @default "primary" */
   variant?: InputVariants;
-  /** Shown while nothing is uploaded; also the control's accessible name. */
-  placeholder?: string;
-  /** The control's id, so a label can point at it. */
+  /** Shown while nothing is uploaded. Accepts `markdown()`. */
+  placeholder?: string | RichStr;
+  /** The control's id, so a `<label htmlFor>` names it and opens it. */
   id?: string;
   /** Submitted with the hidden file input. */
   name?: string;
   /** Called when focus leaves the control. */
-  onBlur?: (event: React.FocusEvent<HTMLDivElement>) => void;
+  onBlur?: (event: React.FocusEvent<HTMLButtonElement>) => void;
   "data-testid"?: string;
   /**
    * The file picker's filter, as the HTML `accept` attribute
@@ -35,7 +36,7 @@ interface InputUploadBaseProps {
 }
 
 /** The default: the uploaded file's text, or pasted text. */
-export interface InputUploadTextProps extends InputUploadBaseProps {
+export type InputUploadTextProps = InputUploadBaseProps & {
   mode?: "text";
   /**
    * The value, when the caller owns it. Unset, the control keeps its own.
@@ -44,16 +45,16 @@ export interface InputUploadTextProps extends InputUploadBaseProps {
   value?: string;
   /** Receives the uploaded file's text or the pasted text; `""` once cleared. */
   setValue: (value: string) => void;
-}
+};
 
 /** The uploaded file itself, for a binary file such as a certificate. */
-export interface InputUploadFileProps extends InputUploadBaseProps {
+export type InputUploadFileProps = InputUploadBaseProps & {
   mode: "file";
   /** The file, when the caller owns it. Unset, the control keeps its own. */
   value?: File | null;
   /** Receives the uploaded file, or `null` once it is cleared. */
   onFileChange: (file: File | null) => void;
-}
+};
 
 export type InputUploadProps = InputUploadTextProps | InputUploadFileProps;
 
@@ -235,7 +236,7 @@ export default function InputUpload(props: InputUploadProps) {
     e.target.value = "";
   }
 
-  function handlePaste(e: React.ClipboardEvent<HTMLDivElement>) {
+  function handlePaste(e: React.ClipboardEvent<HTMLButtonElement>) {
     if (props.mode === "file" || isNonEditable) return;
     const pastedText = e.clipboardData.getData("text");
     if (!pastedText) return;
@@ -261,21 +262,16 @@ export default function InputUpload(props: InputUploadProps) {
         disabled={isNonEditable}
       />
       <div className="opal-input" data-variant={variant}>
-        {/* The whole field picks a file; the × beside it is its own button. */}
-        <div
+        {/* The whole field picks a file, as a button a label can point at;
+        the × beside it is its own button. Its name is the label, else its
+        text. Enter and Space open the picker, as on any button. */}
+        <button
           id={id}
-          role="button"
-          tabIndex={isNonEditable ? -1 : 0}
-          aria-label={shownLabel ?? placeholder ?? strings.attachFile}
-          aria-disabled={isNonEditable || undefined}
+          type="button"
+          disabled={isNonEditable}
           data-testid={props["data-testid"]}
           className="opal-input-upload-trigger"
           onClick={openFilePicker}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter" && e.key !== " ") return;
-            e.preventDefault();
-            openFilePicker();
-          }}
           onPaste={handlePaste}
           onBlur={onBlur}
         >
@@ -286,9 +282,22 @@ export default function InputUpload(props: InputUploadProps) {
             className="opal-input-upload-label"
             data-placeholder={shownLabel === null ? true : undefined}
           >
-            {shownLabel ?? placeholder}
+            <Text
+              as="p"
+              font={
+                drag !== null
+                  ? "main-ui-action"
+                  : shownLabel === null
+                    ? "main-ui-muted"
+                    : "main-ui-body"
+              }
+              color="inherit"
+              maxLines={1}
+            >
+              {shownLabel ?? placeholder ?? strings.attachFile}
+            </Text>
           </span>
-        </div>
+        </button>
         {hasValue && !isNonEditable && drag === null && (
           <Button
             icon={SvgX}

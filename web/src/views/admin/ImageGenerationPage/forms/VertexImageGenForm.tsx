@@ -185,7 +185,7 @@ function VertexFormFields(
                         ? "error"
                         : undefined
                   }
-                  accept="application/json"
+                  accept="application/json,.json"
                   placeholder={t("form.credentials.placeholder")}
                 />
               </FormField.Control>

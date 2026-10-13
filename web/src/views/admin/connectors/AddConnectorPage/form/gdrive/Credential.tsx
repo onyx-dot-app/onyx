@@ -81,7 +81,7 @@ export const DriveAuthSection = ({
           )}
         </Text>
         <InputUpload
-          accept="application/json"
+          accept="application/json,.json"
           placeholder={t("gdrive.oauthUpload.placeholder")}
           setValue={(value) => {
             setOauthAppCredential(
@@ -126,7 +126,7 @@ export const DriveAuthSection = ({
           {t("gdrive.serviceAccountOption.title")}
         </Text>
         <InputUpload
-          accept="application/json"
+          accept="application/json,.json"
           placeholder={t("gdrive.serviceAccountUpload.placeholder")}
           setValue={(value) => {
             if (!value) {

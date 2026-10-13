@@ -14160,9 +14160,11 @@
       "valueCannotBeRevealed": "값을 표시할 수 없습니다",
       "year": "년"
     },
-    "inputUpload": {
+    "inputFile": {
       "attachFile": "파일 첨부",
-      "clearFile": "파일 지우기",
+      "clearFile": "파일 지우기"
+    },
+    "inputUpload": {
       "pasted": "붙여넣은 텍스트",
       "attached": "파일 첨부됨",
       "dropToAdd": "여기에 파일을 놓아 추가",
