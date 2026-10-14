@@ -2508,7 +2508,7 @@
       },
       "stageDetails": {
         "title": "Detalles de etapas",
-        "batches": "Lotes",
+        "calls": "Llamadas",
         "averageTime": "Tiempo medio",
         "maxTime": "Tiempo máximo",
         "uneven": {

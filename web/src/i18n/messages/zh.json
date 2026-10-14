@@ -2508,7 +2508,7 @@
       },
       "stageDetails": {
         "title": "阶段详情",
-        "batches": "批次",
+        "calls": "调用次数",
         "averageTime": "平均时间",
         "maxTime": "最长时间",
         "uneven": {

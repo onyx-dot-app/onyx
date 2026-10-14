@@ -262,7 +262,7 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
           </Text>
         </Section>
         <HeaderStat
-          label={t("stageDetails.batches")}
+          label={t("stageDetails.calls")}
           value={total === undefined ? "-" : format.number(total.event_count)}
           align="end"
         />
