@@ -12797,6 +12797,17 @@
       "input": {
         "placeholder": "Analyse mes données et crée un tableau de bord..."
       }
+    },
+    "upgrade": {
+      "title": "Craft nécessite un forfait Business",
+      "adminDescription": "Craft est disponible avec les forfaits Business et Enterprise. Il n’est pas pris en charge dans la Community Edition tant que Craft n’est pas intégré au chat principal.",
+      "userDescription": "Craft est disponible avec les forfaits Business et Enterprise. Demandez à votre administrateur de passer à un forfait supérieur pour utiliser Craft.",
+      "backToChat": {
+        "label": "Retour au chat"
+      },
+      "viewPlans": {
+        "label": "Voir les forfaits"
+      }
     }
   },
   "knowledge": {
@@ -13810,7 +13821,8 @@
         "title": "Agents"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorer les agents"

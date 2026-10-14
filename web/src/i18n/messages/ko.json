@@ -12797,6 +12797,17 @@
       "input": {
         "placeholder": "데이터를 분석하고 대시보드를 만들어 주세요..."
       }
+    },
+    "upgrade": {
+      "title": "Craft를 사용하려면 Business 플랜이 필요합니다",
+      "adminDescription": "Craft는 Business 및 Enterprise 플랜에서 사용할 수 있습니다. Craft가 메인 채팅에 통합될 때까지 Community Edition에서는 지원되지 않습니다.",
+      "userDescription": "Craft는 Business 및 Enterprise 플랜에서 사용할 수 있습니다. Craft를 사용하려면 관리자에게 업그레이드를 요청하세요.",
+      "backToChat": {
+        "label": "채팅으로 돌아가기"
+      },
+      "viewPlans": {
+        "label": "플랜 보기"
+      }
     }
   },
   "knowledge": {
@@ -13810,7 +13821,8 @@
         "title": "에이전트"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "에이전트 둘러보기"
