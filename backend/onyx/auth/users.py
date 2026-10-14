@@ -4,7 +4,7 @@ import os
 import secrets
 import string
 import uuid
-from collections.abc import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
@@ -63,6 +63,7 @@ from sqlalchemy.orm import Session
 from starlette.routing import BaseRoute
 
 from onyx.auth.api_key import get_hashed_api_key_from_request
+from onyx.auth.constants import API_KEY_HEADER_NAME, BEARER_PREFIX
 from onyx.auth.disposable_email_validator import is_disposable_email
 from onyx.auth.email_utils import (
     send_forgot_password_email,
@@ -101,6 +102,7 @@ from onyx.configs.app_configs import (
     EMAIL_CONFIGURED,
     INTEGRATION_TESTS_MODE,
     REDIS_AUTH_KEY_PREFIX,
+    REDIS_USER_SESSIONS_KEY_PREFIX,
     REQUIRE_EMAIL_VERIFICATION,
     SESSION_EXPIRE_TIME_SECONDS,
     USER_AUTH_SECRET,
@@ -120,6 +122,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.api_key import fetch_api_key_auth_result, is_api_key_email_address
 from onyx.db.auth import (
+    delete_access_tokens_for_user,
     get_access_token_db,
     get_default_admin_user_emails,
     get_user_count,
@@ -1468,6 +1471,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user: User,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
+        await self.revoke_sessions(user)
         emit_audit_event(
             AuditAction.PASSWORD_RESET,
             AuditOutcome.SUCCESS,
@@ -1612,30 +1616,31 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             return user
 
     async def reset_password_as_admin(self, user_id: uuid.UUID) -> str:
-        """Admin-only. Generate a random password for a user and return it."""
+        """Admin-only. Generate a random password for a user, sign out all of
+        their sessions, and return the password."""
         user = await self.get(user_id)
         new_password = generate_password()
         await self._update(user, {"password": new_password})
+        await self.revoke_sessions(user)
         return new_password
 
     async def change_password_if_old_matches(
-        self, user: User, old_password: str, new_password: str
+        self,
+        user: User,
+        old_password: str,
+        new_password: str,
+        keep_token: str | None = None,
     ) -> None:
         """
-        For normal users to change password if they know the old one.
+        For normal users to change password if they know the old one. Signs
+        out the user's other sessions; ``keep_token`` is the caller's session.
         Raises 400 if old password doesn't match.
         """
         verified, updated_password_hash = self.password_helper.verify_and_update(
             old_password, user.hashed_password
         )
         if not verified:
-            # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException, status
-
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid current password",
-            )
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid current password")
 
         # If the hash was upgraded behind the scenes, we can keep it before setting the new password:
         if updated_password_hash:
@@ -1643,6 +1648,26 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Now apply and validate the new password
         await self._update(user, {"password": new_password})
+        await self.revoke_sessions(user, keep_token=keep_token)
+
+    async def revoke_sessions(self, user: User, keep_token: str | None = None) -> None:
+        """
+        Signs out every session of ``user`` (cookie and mobile bearer) except
+        ``keep_token``. JWT sessions are stateless and stay valid until expiry.
+        """
+        if AUTH_BACKEND == AuthBackend.REDIS:
+            await TenantAwareRedisStrategy().revoke_user_sessions(
+                str(user.id), keep_token=keep_token
+            )
+        elif AUTH_BACKEND == AuthBackend.POSTGRES:
+            await delete_access_tokens_for_user(
+                self.user_db.session, user.id, keep_token=keep_token
+            )
+        else:
+            logger.warning(
+                "Cannot revoke sessions for user %s: JWT sessions are stateless",
+                user.id,
+            )
 
 
 async def get_user_manager(
@@ -1670,6 +1695,17 @@ cookie_transport = CookieTransport(
 # strategy's read_token simply finds nothing and the request falls through to
 # Onyx's own API-key/PAT handlers (see `optional_user`).
 bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
+
+
+def get_session_token_from_request(request: Request) -> str | None:
+    """The session token of the request: the auth cookie, else a Bearer header."""
+    cookie_token = request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if cookie_token:
+        return cookie_token
+    auth_header = request.headers.get(API_KEY_HEADER_NAME)
+    if auth_header and auth_header.startswith(BEARER_PREFIX):
+        return auth_header[len(BEARER_PREFIX) :].strip() or None
+    return None
 
 
 T = TypeVar("T", covariant=True)
@@ -1724,7 +1760,44 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             ),
             ex=physical_session_ttl_seconds(self.lifetime_seconds),
         )
+        await self._index_session(str(user.id), token)
         return token
+
+    async def _index_session(self, user_id: str, token: str) -> None:
+        # Per-user set of session tokens, so revoke_user_sessions needs no scan.
+        # It lives as long as the user's newest session.
+        redis = await get_async_redis_connection()
+        index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
+        await cast(Awaitable[int], redis.sadd(index_key, token))
+        ttl = physical_session_ttl_seconds(self.lifetime_seconds)
+        if ttl is not None:
+            await redis.expire(index_key, ttl)
+
+    async def revoke_user_sessions(
+        self, user_id: str, keep_token: str | None = None
+    ) -> None:
+        """
+        Tombstones every indexed session of the user except ``keep_token``.
+        Sessions written before the index existed are not covered until they
+        are refreshed.
+        """
+        redis = await get_async_redis_connection()
+        index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
+        members = await cast(Awaitable[set[bytes | str]], redis.smembers(index_key))
+        for member in members:
+            token = member.decode() if isinstance(member, bytes) else member
+            if token == keep_token:
+                continue
+            token_key = f"{self.key_prefix}{token}"
+            raw_value = await redis.get(token_key)
+            result = classify_session_token_value(raw_value)
+            if not isinstance(result, SessionRejection) and result.sub == user_id:
+                await redis.set(
+                    token_key,
+                    build_session_tombstone_value(raw_value, fallback_user_id=user_id),
+                    ex=SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+                )
+            await cast(Awaitable[int], redis.srem(index_key, member))
 
     async def read_token(
         self, token: Optional[str], user_manager: BaseUserManager[User, uuid.UUID]
@@ -1766,6 +1839,10 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             ),
             ex=SESSION_TOKEN_GRACE_PERIOD_SECONDS,
         )
+        await cast(
+            Awaitable[int],
+            redis.srem(f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user.id}", token),
+        )
 
     async def refresh_token(self, token: Optional[str], user: User) -> str:
         """Refreshes a token by extending its expiration time in Redis."""
@@ -1794,6 +1871,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             ),
             ex=physical_session_ttl_seconds(self.lifetime_seconds),
         )
+        await self._index_session(result.sub, token)
 
         return token
 

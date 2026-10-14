@@ -906,6 +906,8 @@ if REDIS_SENTINEL_HOSTS and USE_REDIS_IAM_AUTH:
     )
 
 REDIS_AUTH_KEY_PREFIX = "fastapi_users_token:"
+# Per-user set of live session tokens, used to revoke all of a user's sessions.
+REDIS_USER_SESSIONS_KEY_PREFIX = "fastapi_users_user_sessions:"
 
 # Rate limiting for auth endpoints
 RATE_LIMIT_WINDOW_SECONDS: int | None = None
