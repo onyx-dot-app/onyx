@@ -20,6 +20,7 @@ import {
   buildConfigEntries,
   ConfigDisplay,
 } from "@/views/admin/connectors/ConnectorDetailPage/ConfigDisplay";
+import HierarchyBreakdown from "@/views/admin/connectors/ConnectorDetailPage/HierarchyBreakdown";
 import InlineFileManagement from "@/views/admin/connectors/ConnectorDetailPage/InlineFileManagement";
 
 interface LabeledConfigDisplayProps {
@@ -123,6 +124,7 @@ export default function IndexConfigurationsSection({
             ) : (
               <ConfigDisplay configEntries={entries} />
             ))}
+          <HierarchyBreakdown ccPairId={ccPair.id} />
           {manageFiles && (
             <InlineFileManagement
               connectorId={ccPair.connector.id}

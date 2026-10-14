@@ -2404,6 +2404,29 @@
         "description": "{source} • {count, plural, one {# Einstellung} other {# Einstellungen}}",
         "editButton": {
           "label": "Konfiguration bearbeiten"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {Ordner} other {Ordner}}",
+            "source": "{count, plural, one {Quelle} other {Quellen}}",
+            "stub": "{count, plural, one {Knoten} other {Knoten}}",
+            "shared_drive": "{count, plural, one {Geteilte Ablage} other {Geteilte Ablagen}}",
+            "my_drive": "{count, plural, one {Meine Ablage} other {Meine Ablagen}}",
+            "space": "{count, plural, one {Bereich} other {Bereiche}}",
+            "page": "{count, plural, one {Seite} other {Seiten}}",
+            "project": "{count, plural, one {Projekt} other {Projekte}}",
+            "database": "{count, plural, one {Datenbank} other {Datenbanken}}",
+            "workspace": "{count, plural, one {Arbeitsbereich} other {Arbeitsbereiche}}",
+            "site": "{count, plural, one {Website} other {Websites}}",
+            "drive": "{count, plural, one {Dokumentbibliothek} other {Dokumentbibliotheken}}",
+            "channel": "{count, plural, one {Kanal} other {Kanäle}}",
+            "mailbox": "{count, plural, one {Postfach} other {Postfächer}}"
+          },
+          "docs": "{count, plural, one {# Dokument} other {# Dokumente}}",
+          "notIndexed": "Nicht indexiert",
+          "other": "Weitere Dokumente",
+          "loadError": "Die Dokumentaufschlüsselung konnte nicht geladen werden.",
+          "open": "In der Quelle öffnen"
         }
       },
       "sharing": {

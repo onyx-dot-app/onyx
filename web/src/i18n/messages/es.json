@@ -2404,6 +2404,29 @@
         "description": "{source} • {count, plural, one {# ajuste} other {# ajustes}}",
         "editButton": {
           "label": "Editar configuración"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {Carpeta} other {Carpetas}}",
+            "source": "{count, plural, one {Fuente} other {Fuentes}}",
+            "stub": "{count, plural, one {Nodo} other {Nodos}}",
+            "shared_drive": "{count, plural, one {Unidad compartida} other {Unidades compartidas}}",
+            "my_drive": "{count, plural, one {Mi unidad} other {Mis unidades}}",
+            "space": "{count, plural, one {Espacio} other {Espacios}}",
+            "page": "{count, plural, one {Página} other {Páginas}}",
+            "project": "{count, plural, one {Proyecto} other {Proyectos}}",
+            "database": "{count, plural, one {Base de datos} other {Bases de datos}}",
+            "workspace": "{count, plural, one {Espacio de trabajo} other {Espacios de trabajo}}",
+            "site": "{count, plural, one {Sitio} other {Sitios}}",
+            "drive": "{count, plural, one {Biblioteca de documentos} other {Bibliotecas de documentos}}",
+            "channel": "{count, plural, one {Canal} other {Canales}}",
+            "mailbox": "{count, plural, one {Buzón} other {Buzones}}"
+          },
+          "docs": "{count, plural, one {# documento} other {# documentos}}",
+          "notIndexed": "No indexado",
+          "other": "Otros documentos",
+          "loadError": "No se pudo cargar el desglose de documentos.",
+          "open": "Abrir en la fuente"
         }
       },
       "sharing": {

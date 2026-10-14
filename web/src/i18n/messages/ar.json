@@ -2404,6 +2404,29 @@
         "description": "{source} • {count, plural, one {# إعداد} other {# إعدادات}}",
         "editButton": {
           "label": "تعديل الإعدادات"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {مجلد} other {مجلدات}}",
+            "source": "{count, plural, one {مصدر} other {مصادر}}",
+            "stub": "{count, plural, one {عقدة} other {عقد}}",
+            "shared_drive": "{count, plural, one {مساحة تخزين مشتركة} other {مساحات تخزين مشتركة}}",
+            "my_drive": "{count, plural, one {ملفاتي} other {ملفاتي}}",
+            "space": "{count, plural, one {مساحة} other {مساحات}}",
+            "page": "{count, plural, one {صفحة} other {صفحات}}",
+            "project": "{count, plural, one {مشروع} other {مشاريع}}",
+            "database": "{count, plural, one {قاعدة بيانات} other {قواعد بيانات}}",
+            "workspace": "{count, plural, one {مساحة عمل} other {مساحات عمل}}",
+            "site": "{count, plural, one {موقع} other {مواقع}}",
+            "drive": "{count, plural, one {مكتبة مستندات} other {مكتبات مستندات}}",
+            "channel": "{count, plural, one {قناة} other {قنوات}}",
+            "mailbox": "{count, plural, one {صندوق بريد} other {صناديق بريد}}"
+          },
+          "docs": "{count, plural, zero {لا مستندات} one {مستند واحد} two {مستندان} few {# مستندات} many {# مستندًا} other {# مستند}}",
+          "notIndexed": "غير مفهرس",
+          "other": "مستندات أخرى",
+          "loadError": "تعذر تحميل توزيع المستندات.",
+          "open": "فتح في المصدر"
         }
       },
       "sharing": {
