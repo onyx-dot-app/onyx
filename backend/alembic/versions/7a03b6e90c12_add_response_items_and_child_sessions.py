@@ -71,15 +71,14 @@ def upgrade() -> None:
                 f"ALTER TABLE {quoted_schema}.chat_message ADD CONSTRAINT "
                 "uq_chat_message_run_id UNIQUE USING INDEX uq_chat_message_run_id"
             )
-        # Each validation runs after the initial ALTER TABLE locks are released.
-        conn.exec_driver_sql(
-            f"ALTER TABLE {quoted_schema}.chat_session "
-            "VALIDATE CONSTRAINT fk_chat_session_spawned_by_message"
-        )
-        conn.exec_driver_sql(
-            f"ALTER TABLE {quoted_schema}.chat_message "
-            "VALIDATE CONSTRAINT fk_chat_message_invocation"
-        )
+        # Validate only after releasing the initial ALTER TABLE locks.
+        for table, constraint in (
+            ("chat_session", "fk_chat_session_spawned_by_message"),
+            ("chat_message", "fk_chat_message_invocation"),
+        ):
+            conn.exec_driver_sql(
+                f"ALTER TABLE {quoted_schema}.{table} VALIDATE CONSTRAINT {constraint}"
+            )
 
 
 def _add_response_storage() -> None:
@@ -117,18 +116,12 @@ def _add_response_storage() -> None:
         postgresql_not_valid=True,
     )
     for column in (
-        sa.Column("tool_name", sa.String(), nullable=True),
-        sa.Column("argument_error", sa.Text(), nullable=True),
-        sa.Column("raw_arguments", sa.Text(), nullable=True),
-        sa.Column(
-            "arguments_complete", sa.Boolean(), nullable=False, server_default=sa.true()
-        ),
         sa.Column("operation_status", sa.String(), nullable=True),
         sa.Column("result", postgresql.JSONB(), nullable=True),
     ):
         op.add_column("tool_call", column)
     op.create_table(
-        "chat_response_message",
+        "chat_response_item",
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column(
             "chat_message_id",
@@ -136,11 +129,10 @@ def _add_response_storage() -> None:
             sa.ForeignKey("chat_message.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("step_index", sa.Integer(), nullable=False),
-        sa.Column("operation_status", sa.String(), nullable=True),
+        sa.Column("generation_status", sa.String(), nullable=True),
         sa.Column("is_answer", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("content", postgresql.JSONB(), nullable=True),
+        sa.Column("message", postgresql.JSONB(), nullable=True),
         sa.Column(
             "tool_call_id",
             sa.Integer(),
@@ -148,34 +140,28 @@ def _add_response_storage() -> None:
             nullable=True,
         ),
         sa.Column("rendering", postgresql.JSONB(), nullable=True),
-        sa.UniqueConstraint(
-            "chat_message_id", "position", name="uq_response_message_position"
-        ),
-        sa.UniqueConstraint("tool_call_id", name="uq_response_message_tool"),
+        sa.UniqueConstraint("tool_call_id", name="uq_response_item_tool"),
+        sa.CheckConstraint("step_index >= 0", name="ck_response_item_step_index"),
         sa.CheckConstraint(
-            "position >= 0 AND step_index >= 0", name="ck_response_message_position"
-        ),
-        sa.CheckConstraint(
-            "(content IS NOT NULL AND tool_call_id IS NULL AND operation_status IS NOT NULL) OR (content IS NULL AND tool_call_id IS NOT NULL AND operation_status IS NULL AND NOT is_answer)",
-            name="ck_response_message_content",
+            "(message IS NOT NULL AND tool_call_id IS NULL AND generation_status IS NOT NULL) OR (message IS NULL AND tool_call_id IS NOT NULL AND generation_status IS NULL AND NOT is_answer)",
+            name="ck_response_item_kind",
         ),
     )
     op.create_index(
-        "ix_chat_response_message_chat_message_id",
-        "chat_response_message",
-        ["chat_message_id"],
+        "ix_response_item_step",
+        "chat_response_item",
+        ["chat_message_id", "step_index"],
     )
-
     op.create_index(
-        "uq_response_message_step",
-        "chat_response_message",
+        "uq_response_item_step",
+        "chat_response_item",
         ["chat_message_id", "step_index"],
         unique=True,
-        postgresql_where=sa.text("content IS NOT NULL"),
+        postgresql_where=sa.text("message IS NOT NULL"),
     )
     op.create_index(
-        "uq_response_message_answer",
-        "chat_response_message",
+        "uq_response_item_answer",
+        "chat_response_item",
         ["chat_message_id"],
         unique=True,
         postgresql_where=sa.text("is_answer"),
@@ -190,7 +176,9 @@ def _add_response_storage() -> None:
             sa.ForeignKey("chat_message.id", ondelete="CASCADE"),
             primary_key=True,
         ),
-        sa.Column("revision", sa.BigInteger(), server_default="0", nullable=False),
+        sa.Column(
+            "ownership_version", sa.BigInteger(), server_default="0", nullable=False
+        ),
         sa.Column("state", postgresql.JSONB(), nullable=False),
     )
 
@@ -202,14 +190,10 @@ def downgrade() -> None:
 
     # The public answer projections remain readable by the original schema.
     op.execute("""
-        UPDATE tool_call SET tool_call_response = CASE jsonb_typeof(result->'content')
-            WHEN 'string' THEN result->>'content'
-            ELSE coalesce((SELECT string_agg(block->>'text', '' ORDER BY ordinal)
-                FROM jsonb_array_elements(result->'content') WITH ORDINALITY AS blocks(block, ordinal)
-                WHERE block->>'type' = 'text'), '') END
+        UPDATE tool_call SET tool_call_response = result->>'content'
         WHERE result IS NOT NULL AND result <> 'null'::jsonb
     """)
-    op.drop_table("chat_response_message")
+    op.drop_table("chat_response_item")
     op.execute("DELETE FROM chat_session WHERE spawned_by_message_id IS NOT NULL")
     op.execute("DELETE FROM tool_call WHERE tool_id IS NULL")
     op.alter_column("tool_call", "tool_id", existing_type=sa.Integer(), nullable=False)
@@ -226,10 +210,6 @@ def downgrade() -> None:
     ):
         op.drop_column("chat_session", column)
     for column in (
-        "tool_name",
-        "argument_error",
-        "raw_arguments",
-        "arguments_complete",
         "operation_status",
         "result",
     ):
