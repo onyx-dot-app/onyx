@@ -22,12 +22,12 @@ here. Read the component that documents the setting in its env table.
 
 | Path | Component(s) |
 |---|---|
-| `backend/onyx/chat/agent.py`, `backend/onyx/chat/execution.py`, `backend/onyx/agents/runtime.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/models.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
+| `backend/onyx/chat/agent.py`, `backend/onyx/chat/prepare.py`, `backend/onyx/chat/execution.py`, `backend/onyx/agents/runtime.py`, `backend/onyx/chat/process_message.py`, `backend/onyx/chat/models.py`, `backend/onyx/chat/chat_processing_checker.py`, `backend/onyx/chat/stop_signal_checker.py` | core-chat-loop |
 | `backend/onyx/chat/emitter.py`, `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py`, `stream_buffer.py` | core-chat-loop, streaming-protocol |
-| `backend/onyx/chat/prompt_utils.py`, `compression.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
+| `backend/onyx/chat/prompt_utils.py`, `backend/onyx/chat/prompt_formatting.py`, `backend/onyx/agents/compaction.py`, `incognito*.py`, `backend/onyx/llm/token_budget.py` | context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly, agents-personas |
 | `backend/onyx/chat/citation_processor.py`, `citation_utils.py` | citations |
-| `backend/onyx/chat/persistence.py`, `backend/onyx/chat/history_store.py`, `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
+| `backend/onyx/chat/persistence.py`, `backend/onyx/chat/history_store.py`, `backend/onyx/chat/restoration.py`, `backend/onyx/chat/checkpoint.py`, `backend/onyx/chat/run_store.py`, `backend/onyx/chat/subagents.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_checkpoint.py`, `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat.py`, `db/chat_search.py`, `db/feedback.py` | chat-persistence |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `models.py`, `session_loading.py`, `chat_utils.py` | core-chat-loop, chat-persistence |
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `placement.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |

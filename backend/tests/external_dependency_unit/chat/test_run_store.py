@@ -23,6 +23,7 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
+    AgentLifetime,
     AgentTool,
     HumanToolAnswer,
     InputDecision,
@@ -39,7 +40,7 @@ from onyx.chat.presentation import project_response
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.chat.run_store import ChatRunStore
 from onyx.configs.constants import FileOrigin, MessageType
-from onyx.db.chat import delete_messages_and_files_from_chat_session
+from onyx.db.chat import delete_messages_and_files_from_chat_session, root_response_id
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     claim_checkpoint__no_commit,
@@ -49,9 +50,10 @@ from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, ChatSession
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.file_store.postgres_file_store import PostgresBackedFileStore
-from onyx.llm.cancellation import AgentCancelled
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationRequest,
     TextContent,
     ToolCall,
     ToolDefinition,
@@ -96,6 +98,7 @@ def branch(db_session: Session) -> Generator[tuple[UUID, int], None, None]:
         yield chat.id, response.id
     finally:
         db_session.rollback()
+        delete_messages_and_files_from_chat_session(chat.id, db_session)
         db_session.execute(delete(ChatSession).where(ChatSession.id == chat.id))
         db_session.commit()
 
@@ -113,13 +116,14 @@ def store(
     branch: tuple[UUID, int],
     *,
     root_response: RunStore | None = None,
+    visible_response_ids: list[int] | None = None,
 ) -> ChatRunStore:
     return ChatRunStore(
         root_response=root_response,
         tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
         chat_session_id=branch[0],
         response_id=branch[1],
-        visible_response_ids=[],
+        visible_response_ids=visible_response_ids or [],
         cache=get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
     )
 
@@ -135,8 +139,13 @@ def poll_run_owners(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, No
         branch: tuple[UUID, int],
         *,
         root_response: RunStore | None = None,
+        visible_response_ids: list[int] | None = None,
     ) -> ChatRunStore:
-        created = create_store(branch, root_response=root_response)
+        created = create_store(
+            branch,
+            root_response=root_response,
+            visible_response_ids=visible_response_ids,
+        )
         with lock:
             stores.append(created)
         return created
@@ -318,11 +327,11 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
                 with pytest.raises(RuntimeError, match="cache unavailable"):
                     owner.handoff(run.id)
             assert remote.resume(run.id, context=context) is None
-            owner.cache.delete(owner._owner_key(run.id))
+            owner.cache.delete(owner._owner_key(int(run.id)))
         elif scenario == "ownership_lock":
-            with owner._ownership_lock(run.id):
+            with owner._ownership_lock(int(run.id)):
                 threading.Event().wait(1.5)
-                assert owner.cache.exists(owner._owner_key(run.id))
+                assert owner.cache.exists(owner._owner_key(int(run.id)))
             owner.handoff(run.id)
         elif scenario == "slow_release":
 
@@ -348,12 +357,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             not {"execution", "operations", "status", "messages", "failure"}
             & row.state.keys()
         )
-        assert (
-            db_session.scalar(
-                select(ChatMessage.run_id).where(ChatMessage.id == branch[1])
-            )
-            == run.id
-        )
+        assert run.id == str(branch[1])
         db_session.rollback()
         with pytest.raises(ValueError, match="history changed"):
             remote.resume(
@@ -689,7 +693,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             captured = ExecutionCheckpoint(
                 agent_state=AgentState(),
                 run_state=RunState(
-                    run_id="files",
+                    run_id=str(branch[1]),
                     steps=[],
                     agent_id=str(branch[0]),
                     status=RunStatus.SUSPENDED,
@@ -708,7 +712,7 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 captured.agent_state,
                 CheckpointBinding(
                     tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-                    branch_id=str(branch[1]),
+                    response_id=str(branch[1]),
                 ),
             )
             restored = codec.load(encoded)
@@ -784,7 +788,7 @@ def test_owner_cleanup_failure_releases_local_control(
             with pytest.raises(RuntimeError, match="cache cleanup failed"):
                 run.wait_for_idle(timeout=10)
             assert not owner.has_owned_work
-        owner.cache.delete(owner._owner_key(run.id))
+        owner.cache.delete(owner._owner_key(int(run.id)))
     finally:
         assert coordinator.close(timeout=10)
 
@@ -844,3 +848,477 @@ def test_terminal_run_retains_control_until_cancelled_tool_drains(
     finally:
         release.set()
         assert coordinator.close(timeout=10)
+
+
+def test_parallel_children_use_reserved_response_identity(
+    branch: tuple[UUID, int], db_session: Session, user_message: UserMessage
+) -> None:
+    owner = store(branch)
+    coordinator = AgentCoordinator()
+    child_barrier = threading.Barrier(2)
+
+    def unexpected_restore(_: ExecutionCheckpoint) -> Agent:
+        raise RuntimeError("Completed children do not require restoration")
+
+    view = owner.bind(
+        coordinator,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=unexpected_restore,
+    )
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        def child_reply(
+            _request: GenerationRequest, _cancellation: CancellationSignal
+        ) -> AssistantMessage:
+            child_barrier.wait(timeout=10)
+            return AssistantMessage(content=[TextContent(text=invocation.call_id)])
+
+        spawned = invocation.agents.spawn_agent(
+            Agent(FakeModelClient(child_reply)),
+            name=invocation.call_id,
+            description="Parallel research",
+            messages=[UserMessage(content=invocation.call_id)],
+            max_steps=1,
+        )
+        result = invocation.agents.wait_run(spawned.run_id, timeout=10)
+        assert result is not None
+        return ToolResult(content=result.output.text)
+
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(id="first", name="delegate", arguments={}),
+                    ToolCall(id="second", name="delegate", arguments={}),
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="done")]),
+        ]
+    )
+    agent = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        agent_id=str(branch[0]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+            )
+        ],
+    )
+    try:
+        run = agent.start(messages=[user_message], max_steps=2, coordinator=view)
+        assert run.result(timeout=20).output.text == "done"
+        assert run.wait_for_idle(timeout=10)
+        assert run.id == str(branch[1])
+        snapshot = run.snapshot()
+        assert len(snapshot.child_runs) == 2
+        assert len({child.run_id for child in snapshot.child_runs}) == 2
+        db_session.expire_all()
+        for child in snapshot.child_runs:
+            row = db_session.get(ChatMessage, int(child.run_id))
+            assert row is not None
+            assert row.chat_session_id == UUID(child.agent_id)
+            assert row.parent_message is not None
+            assert row.parent_message.invoking_tool_call is not None
+            assert (
+                row.parent_message.invoking_tool_call.parent_chat_message_id
+                == branch[1]
+            )
+            assert child.parent_run_id == run.id
+            assert child.messages[0].id == f"{child.run_id}:0"
+            restored = owner.read_run(child.run_id, str(branch[0]))
+            assert restored is not None
+            assert restored.run_id == child.run_id
+            assert restored.messages == child.messages
+        with pytest.raises(ValueError, match="unavailable for a new run"):
+            agent.start(messages=[user_message], max_steps=1, coordinator=view)
+        restored_root = owner.read_run(run.id, "")
+        assert restored_root is not None
+        assert [message.model_dump() for message in restored_root.messages] == [
+            message.model_dump() for message in snapshot.messages
+        ]
+    finally:
+        assert coordinator.close(timeout=10)
+
+
+@pytest.mark.parametrize("existing_child", [False, True])
+@pytest.mark.parametrize("failure_point", ["bind", "worker", "owner_publication"])
+def test_failed_child_start_can_retry_without_an_orphan_response(
+    branch: tuple[UUID, int],
+    db_session: Session,
+    user_message: UserMessage,
+    existing_child: bool,
+    failure_point: str,
+) -> None:
+    owner = store(branch)
+    coordinator = AgentCoordinator()
+
+    def unexpected_restore(_: ExecutionCheckpoint) -> Agent:
+        raise RuntimeError("Child remains loaded during this test")
+
+    view = owner.bind(
+        coordinator,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=unexpected_restore,
+    )
+    child = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="child answer")])
+        )
+    )
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        def start_child() -> str:
+            if existing_child:
+                return invocation.agents.start_run(
+                    child.id,
+                    messages=[UserMessage(content="next request")],
+                    max_steps=1,
+                )
+            return invocation.agents.spawn_agent(
+                child,
+                name="research",
+                description="Research",
+                messages=[UserMessage(content="first request")],
+                max_steps=1,
+            ).run_id
+
+        if existing_child:
+            first = invocation.agents.spawn_agent(
+                child,
+                name="research",
+                description="Research",
+                messages=[UserMessage(content="first request")],
+                max_steps=1,
+            )
+            assert invocation.agents.wait_run(first.run_id, timeout=10) is not None
+
+        target = (
+            "onyx.agents.agent_coordination.AgentCoordinator.bind"
+            if failure_point == "bind"
+            else "onyx.agents.runtime.start_thread_with_context"
+        )
+        failed_start = (
+            patch.object(owner.cache, "set", side_effect=RuntimeError("start failed"))
+            if failure_point == "owner_publication"
+            else patch(target, side_effect=RuntimeError("start failed"))
+        )
+        with failed_start:
+            with pytest.raises(RuntimeError, match="start failed"):
+                start_child()
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            assert (
+                session.get(ChatSession, UUID(child.id)) is not None
+            ) == existing_child
+            parent_response = session.get(ChatMessage, branch[1])
+            assert parent_response is not None
+            assert parent_response.response_status == RunStatus.RUNNING
+        retried_id = start_child()
+        completed = invocation.agents.wait_run(retried_id, timeout=10)
+        assert completed is not None
+        return ToolResult(content=completed.output.text)
+
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            ),
+            AssistantMessage(content=[TextContent(text="done")]),
+        ]
+    )
+    agent = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        agent_id=str(branch[0]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+            )
+        ],
+    )
+    try:
+        run = agent.start(messages=[user_message], max_steps=2, coordinator=view)
+        assert run.result(timeout=20).output.text == "done"
+        assert run.wait_for_idle(timeout=10)
+        tool_result = run.snapshot().messages[1]
+        assert isinstance(tool_result, ToolResult)
+        assert not tool_result.is_error
+        assert tool_result.content == "child answer"
+        db_session.expire_all()
+        rows = list(
+            db_session.scalars(
+                select(ChatMessage)
+                .where(ChatMessage.chat_session_id == UUID(child.id))
+                .order_by(ChatMessage.id)
+            )
+        )
+        responses = [row for row in rows if row.message_type == MessageType.ASSISTANT]
+        questions = [row for row in rows if row.message_type == MessageType.USER]
+        assert len(responses) == len(questions) == (2 if existing_child else 1)
+        assert all(row.response_status == RunStatus.COMPLETE for row in responses)
+        assert questions[0].parent_message_id is None
+        if existing_child:
+            assert questions[1].parent_message_id == responses[0].id
+        assert not owner.has_owned_work
+    finally:
+        assert coordinator.close(timeout=10)
+
+
+@pytest.mark.parametrize("failure_point", ["worker", "owner_publication"])
+def test_root_start_failure_releases_reserved_response_for_retry(
+    branch: tuple[UUID, int],
+    db_session: Session,
+    user_message: UserMessage,
+    failure_point: str,
+) -> None:
+    owner = store(branch)
+    coordinator = AgentCoordinator()
+
+    def unexpected_restore(_: ExecutionCheckpoint) -> Agent:
+        raise RuntimeError("Retry starts a fresh execution")
+
+    view = owner.bind(
+        coordinator,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=unexpected_restore,
+    )
+    agent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(content=[TextContent(text="done")])
+        ),
+        agent_id=str(branch[0]),
+    )
+    try:
+        failed_start = (
+            patch.object(owner.cache, "set", side_effect=RuntimeError("start failed"))
+            if failure_point == "owner_publication"
+            else patch(
+                "onyx.agents.runtime.start_thread_with_context",
+                side_effect=RuntimeError("start failed"),
+            )
+        )
+        with failed_start:
+            with pytest.raises(RuntimeError, match="start failed"):
+                agent.start(messages=[user_message], max_steps=1, coordinator=view)
+        assert not owner.has_owned_work
+        response = db_session.get(ChatMessage, branch[1])
+        assert response is not None
+        assert response.response_status is None
+        assert response.response_items == []
+        run = agent.start(messages=[user_message], max_steps=1, coordinator=view)
+        assert run.id == str(response.id)
+        assert run.result(timeout=10).output.text == "done"
+        assert run.wait_for_idle(timeout=10)
+    finally:
+        assert coordinator.close(timeout=10)
+
+
+def test_resumed_child_keeps_its_original_response_tree(
+    branch: tuple[UUID, int], db_session: Session, user_message: UserMessage
+) -> None:
+    owner = store(branch)
+    first, second = AgentCoordinator(), AgentCoordinator()
+    child_ids: list[str] = []
+    grandchild_ids: list[str] = []
+    ask = AgentTool(
+        definition=ToolDefinition(name="ask", description="", parameters={}),
+        execute=lambda _: PendingToolInput(
+            request_id="answer", prompt="Continue?", mode=InputMode.RESULT
+        ),
+    )
+
+    def nested_delegate(invocation: ToolInvocation) -> ToolResult:
+        spawned = invocation.agents.spawn_agent(
+            Agent(
+                FakeModelClient(
+                    lambda *_: AssistantMessage(content=[TextContent(text="facts")])
+                )
+            ),
+            name="facts",
+            description="Nested research",
+            messages=[UserMessage(content="Find facts")],
+            max_steps=1,
+        )
+        grandchild_ids.append(spawned.run_id)
+        result = invocation.agents.wait_run(spawned.run_id, timeout=10)
+        assert result is not None
+        return ToolResult(content=result.output.text)
+
+    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+        replies = iter(
+            [
+                AssistantMessage(
+                    content=[ToolCall(id="nested", name="delegate", arguments={})]
+                ),
+                AssistantMessage(content=[TextContent(text="child done")]),
+            ]
+        )
+        return Agent(
+            FakeModelClient(lambda *_: next(replies)),
+            agent_id=checkpoint.run_state.agent_id,
+            state=checkpoint.agent_state,
+            tools=[
+                ask,
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="delegate", description="", parameters={}
+                    ),
+                    execute=nested_delegate,
+                ),
+            ],
+        )
+
+    view = owner.bind(
+        first,
+        directory=FakeAgentDirectory(
+            lookup_agent=owner.lookup_agent,
+            read_run=owner.read_run,
+            read_run_status=owner.read_run_status,
+            cancel_run=owner.cancel_run,
+        ),
+        build_agent=rebuild,
+    )
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        child = invocation.agents.spawn_agent(
+            Agent(
+                FakeModelClient(
+                    lambda *_: AssistantMessage(
+                        content=[ToolCall(id="ask", name="ask", arguments={})]
+                    )
+                ),
+                tools=[ask],
+            ),
+            name="research",
+            description="Background research",
+            messages=[UserMessage(content="Research")],
+            max_steps=3,
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        child_ids.append(child.run_id)
+        running_child = view.run(child.run_id)
+        assert running_child is not None
+        assert (
+            running_child.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
+        )
+        assert running_child.wait_for_idle(timeout=10)
+        owner.handoff(child.run_id)
+        return ToolResult(content="paused")
+
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            ),
+            AssistantMessage(content=[TextContent(text="parent done")]),
+        ]
+    )
+    agent = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        agent_id=str(branch[0]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+            )
+        ],
+    )
+    try:
+        root = agent.start(messages=[user_message], max_steps=2, coordinator=view)
+        assert root.result(timeout=20).output.text == "parent done"
+        assert root.wait_for_idle(timeout=10)
+        original = db_session.get(ChatMessage, branch[1])
+        assert original is not None
+        next_question = ChatMessage(
+            chat_session_id=branch[0],
+            parent_message_id=original.id,
+            message="next",
+            token_count=1,
+            message_type=MessageType.USER,
+        )
+        db_session.add(next_question)
+        db_session.flush()
+        next_response = ChatMessage(
+            chat_session_id=branch[0],
+            parent_message_id=next_question.id,
+            message="",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+        )
+        sibling = ChatMessage(
+            chat_session_id=branch[0],
+            parent_message_id=original.parent_message_id,
+            message="",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+        )
+        db_session.add_all([next_response, sibling])
+        db_session.commit()
+        remote = store(
+            (branch[0], next_response.id), visible_response_ids=[original.id]
+        )
+        remote.bind(
+            second,
+            directory=FakeAgentDirectory(
+                lookup_agent=remote.lookup_agent,
+                read_run=remote.read_run,
+                read_run_status=remote.read_run_status,
+                cancel_run=remote.cancel_run,
+            ),
+            build_agent=rebuild,
+        )
+        sibling_store = store((branch[0], sibling.id))
+        with pytest.raises(ValueError, match="unavailable on this branch"):
+            sibling_store.read_run(child_ids[0], str(branch[0]))
+        resumed = remote.resume(child_ids[0], context=AgentState())
+        assert resumed is not None
+        resumed.submit(
+            HumanToolAnswer(
+                request_id="answer",
+                decision=InputDecision.RESULT,
+                result=ToolResult(content="approved"),
+            )
+        )
+        assert resumed.result(timeout=20).output.text == "child done"
+        assert resumed.wait_for_idle(timeout=10)
+        assert len(grandchild_ids) == 1
+        db_session.expire_all()
+        grandchild = db_session.get(ChatMessage, int(grandchild_ids[0]))
+        assert grandchild is not None
+        assert root_response_id(db_session, grandchild) == original.id
+        assert grandchild.parent_message is not None
+        assert grandchild.parent_message.invoking_tool_call is not None
+        assert (
+            grandchild.parent_message.invoking_tool_call.parent_chat_message_id
+            == int(child_ids[0])
+        )
+        assert next_response.response_status is None
+        assert sibling.response_status is None
+        restored = remote.read_run(grandchild_ids[0], resumed.agent_id)
+        assert restored is not None and restored.status == RunStatus.COMPLETE
+    finally:
+        assert first.close(timeout=10)
+        assert second.close(timeout=10)

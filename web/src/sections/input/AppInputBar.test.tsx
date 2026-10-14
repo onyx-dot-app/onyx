@@ -156,46 +156,56 @@ test("a failed save keeps queued messages paused when manual input is available"
   expect(inputProps.onSubmit).not.toHaveBeenCalled();
 });
 
-test("retrying completion preserves the draft and paused queue", async () => {
-  const user = setupUser();
-  const idle = deferred<void>();
-  jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
-  jest.mocked(fetchSettledChatSession).mockResolvedValue({
-    chat_session_id: "session",
-    description: "Existing chat",
-    persona_id: 0,
-    persona_name: "Assistant",
-    time_created: "2026-10-02T00:00:00Z",
-    time_updated: "2026-10-02T00:00:00Z",
-    shared_status: ChatSessionSharedStatus.Private,
-    current_temperature_override: null,
-    current_reasoning_effort_override: null,
-    owner_name: null,
-    messages: [],
-    packets: [],
-    is_processing: false,
-    current_stream: null,
-  });
-  const store = useChatSessionStore.getState();
-  store.updateSessionData("session", {
-    chatState: "unconfirmed",
-    queuedMessagesPaused: true,
-  });
-  const inputProps = props("unconfirmed");
-  const { rerender } = render(<AppInputBar {...inputProps} />);
-  await user.click(screen.getByRole("button", { name: /Check again$/ }));
-  expect(screen.getByRole("button", { name: /Check again$/ })).toBeDisabled();
-  expect(inputProps.onSubmit).not.toHaveBeenCalled();
-  await act(async () => idle.resolve());
-  expect(
-    useChatSessionStore.getState().sessions.get("session")?.chatState
-  ).toBe("input");
-  rerender(<AppInputBar {...inputProps} chatState="input" />);
-  expect(
-    screen.getByRole("textbox", { name: "Message input" })
-  ).toHaveTextContent("Keep this draft");
-  expect(
-    useChatSessionStore.getState().sessions.get("session")?.queuedMessages
-  ).toHaveLength(1);
-  expect(inputProps.onSubmit).not.toHaveBeenCalled();
-});
+test.each([false, true])(
+  "retrying completion preserves the draft and paused queue (failed acknowledgement: %s)",
+  async (failedAcknowledgement) => {
+    const user = setupUser();
+    const idle = deferred<void>();
+    jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+    jest.mocked(fetchSettledChatSession).mockResolvedValue({
+      chat_session_id: "session",
+      description: "Existing chat",
+      persona_id: 0,
+      persona_name: "Assistant",
+      time_created: "2026-10-02T00:00:00Z",
+      time_updated: "2026-10-02T00:00:00Z",
+      shared_status: ChatSessionSharedStatus.Private,
+      current_temperature_override: null,
+      current_reasoning_effort_override: null,
+      owner_name: null,
+      messages: [],
+      packets: [],
+      is_processing: false,
+      current_stream: null,
+    });
+    const store = useChatSessionStore.getState();
+    const sendAcknowledged = failedAcknowledgement
+      ? Promise.reject(new TypeError("Connection lost before admission"))
+      : undefined;
+    void sendAcknowledged?.catch(() => {});
+    store.updateSessionData("session", {
+      chatState: "unconfirmed",
+      queuedMessagesPaused: true,
+      sendAcknowledged,
+    });
+    const inputProps = props("unconfirmed");
+    const { rerender } = render(<AppInputBar {...inputProps} />);
+    await user.click(screen.getByRole("button", { name: /Check again$/ }));
+    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+    expect(screen.getByRole("button", { name: /Check again$/ })).toBeDisabled();
+    expect(inputProps.onSubmit).not.toHaveBeenCalled();
+    await act(async () => idle.resolve());
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input");
+    rerender(<AppInputBar {...inputProps} chatState="input" />);
+    expect(
+      screen.getByRole("textbox", { name: "Message input" })
+    ).toHaveTextContent("Keep this draft");
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.queuedMessages
+    ).toHaveLength(1);
+    expect(inputProps.onSubmit).not.toHaveBeenCalled();
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+  }
+);

@@ -10,7 +10,7 @@ from onyx.agents.execution_records import (
     ExecutionStatus,
     RunStatus,
 )
-from onyx.agents.models import StepRecord, ToolExecutionRecord
+from onyx.agents.models import AgentInfo, StepRecord, ToolExecutionRecord
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
@@ -20,7 +20,10 @@ from onyx.chat.subagents import create_chat_agent_coordinator
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_db_search_doc
-from onyx.db.chat_response import save_response_content
+from onyx.db.chat_response import (
+    reserve_child_response__no_commit,
+    save_response_content,
+)
 from onyx.db.chat_subagents import (
     load_agent_history,
     load_session_agent_metadata,
@@ -107,7 +110,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
     db_session.add(response)
     db_session.flush()
     root_id = str(session.id)
-    agent_id, first_run = (str(uuid4()) for _ in range(2))
+    agent_id = str(uuid4())
     source = SearchDoc(
         document_id="source",
         chunk_ind=0,
@@ -125,14 +128,14 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         language_section="",
         reasoning_effort=ReasoningEffort.LOW,
     )
-    run_id = str(uuid4())
+    previous_run_id = str(previous.id)
     transcript = ResponseRecord(
-        run_id=run_id,
+        run_id=previous_run_id,
         agent_id=root_id,
         input_messages=[UserMessage(content="Investigate cedar")],
         status=RunStatus.COMPLETE,
         steps=_steps(
-            run_id,
+            previous_run_id,
             [
                 AssistantMessage(
                     content=[ToolCall(id="delegate", name="delegate", arguments={})]
@@ -140,30 +143,45 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             ],
         ),
         answer_step_index=None,
-        child_runs=[
-            ResponseRecord(
-                run_id=first_run,
-                agent_id=agent_id,
-                agent_path="/root/research",
-                agent_description="Check evidence",
-                restoration_config=settings,
-                status=RunStatus.COMPLETE,
-                input_messages=[UserMessage(content="Investigate cedar")],
-                steps=_steps(
-                    first_run,
-                    [
-                        AssistantMessage(
-                            content=[TextContent(text="Cedar evidence [1].")]
-                        )
-                    ],
-                ),
-                answer_step_index=None,
-            )
-        ],
     )
-    transcript.child_runs[0].parent_run_id = transcript.run_id
-    transcript.child_runs[0].parent_message_id = f"{transcript.run_id}:0"
-    transcript.child_runs[0].parent_tool_call_id = "delegate"
+    save_response_content(
+        previous, transcript, db_session=db_session, persist_content=True
+    )
+    child_response_id = reserve_child_response__no_commit(
+        db_session,
+        previous.id,
+        agent=AgentInfo(
+            id=agent_id,
+            parent_id=root_id,
+            path="/root/research",
+            description="Check evidence",
+            restoration_config=settings,
+        ),
+        instruction=UserMessage(content="Investigate cedar"),
+        previous_response_id=None,
+        parent_response_id=previous.id,
+        parent_message_id=f"{previous_run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    first_response_id = str(child_response_id)
+    transcript.child_runs.append(
+        ResponseRecord(
+            run_id=first_response_id,
+            agent_id=agent_id,
+            agent_path="/root/research",
+            agent_description="Check evidence",
+            restoration_config=settings,
+            status=RunStatus.COMPLETE,
+            input_messages=[UserMessage(content="Investigate cedar")],
+            steps=_steps(
+                first_response_id,
+                [AssistantMessage(content=[TextContent(text="Cedar evidence [1].")])],
+            ),
+            parent_run_id=previous_run_id,
+            parent_message_id=f"{previous_run_id}:0",
+            parent_tool_call_id="delegate",
+        )
+    )
     child_message = transcript.child_runs[0].messages[0]
     assert isinstance(child_message, AssistantMessage)
     assert child_message.id is not None
@@ -345,14 +363,14 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
     db_session.add(response)
     db_session.flush()
     image_content = '[{"file_id":"image","revised_prompt":"Evidence chart"}]'
-    run_id = str(uuid4())
+    stored_response_id = str(response.id)
     transcript = ResponseRecord(
-        run_id=run_id,
+        run_id=stored_response_id,
         agent_id=str(session.id),
         status=RunStatus.COMPLETE,
         input_messages=[UserMessage(content=question.message)],
         steps=_steps(
-            run_id,
+            stored_response_id,
             [
                 AssistantMessage(
                     content=[

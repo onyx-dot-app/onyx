@@ -30,6 +30,7 @@ from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
 )
+from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
@@ -257,7 +258,6 @@ def _process_query(
 
 
 class _PreparedHistory(BaseModel):
-    previous_run_id: str | None
     history: ChatHistoryResult
     files: list[ChatFile]
 
@@ -284,16 +284,7 @@ def _prepare_history(
         additional_context=additional_context,
         token_counter=token_counter,
     )
-    previous_run_id = next(
-        (
-            message.agent_run_id
-            for message in reversed(chat_history)
-            if message.agent_run_id is not None
-        ),
-        None,
-    )
     return _PreparedHistory(
-        previous_run_id=previous_run_id,
         history=history,
         files=tool_files,
     )
@@ -427,6 +418,19 @@ def prepare_chat_turn(
                 replace_base_system_prompt=persona.replace_base_system_prompt,
             )
             tool_configuration = capture_persona_tool_configuration(persona)
+            previous_run_id = (
+                next(
+                    (
+                        str(message.id)
+                        for message in reversed(chat_history)
+                        if message.message_type == MessageType.ASSISTANT
+                        and message.response_status is not None
+                    ),
+                    None,
+                )
+                if record_mode_persists_content(incognito_record_mode)
+                else None
+            )
             captured_history = capture_chat_history(
                 chat_history,
                 tool_names,
@@ -488,10 +492,8 @@ def prepare_chat_turn(
                 and bool(history.history.messages)
                 and isinstance(history.history.messages[-1], UserMessage)
             )
-            history.history.messages, history.previous_run_id = (
-                history_store.prepare_messages(
-                    history.history.messages, history.previous_run_id, accepted_text
-                )
+            history.history.messages, previous_run_id = history_store.prepare_messages(
+                history.history.messages, previous_run_id, accepted_text
             )
             if should_save_user_message:
                 new_user_message = (
@@ -503,6 +505,8 @@ def prepare_chat_turn(
                     )
                 admission.refresh()
                 history_store.save_user_message(new_user_message)
+            if incognito_session_ended(chat_session_id):
+                raise RuntimeError("Incognito session ended")
         admission.refresh()
         # Reserve assistant message IDs so each model response has a saved identity.
         with get_session_with_current_tenant() as session:
@@ -547,7 +551,7 @@ def prepare_chat_turn(
             responses=models,
             messages=history.history.messages[:-1],
             input_messages=history.history.messages[-1:],
-            previous_run_id=history.previous_run_id,
+            previous_run_id=previous_run_id,
             extracted_context_files=extracted_files,
             stream_id=user_message_id if is_multi else models[0].message_id,
             reasoning_effort=reasoning_effort,
@@ -642,12 +646,7 @@ def create_chat_agent(
         }:
             raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
 
-        history_store = get_chat_history_store(
-            message_id=setup.user_message_id,
-            chat_session_id=setup.chat_session_id,
-            persist_content=record_mode_persists_content(setup.incognito_record_mode),
-        )
-        agent_id = history_store.root_agent_id(str(setup.chat_session_id))
+        agent_id = str(setup.chat_session_id)
 
         if len(setup.responses) == 1 and setup.new_msg_req.deep_research:
             if setup.chat_session_project_id:

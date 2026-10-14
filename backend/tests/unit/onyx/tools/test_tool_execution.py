@@ -27,6 +27,7 @@ from onyx.tools.models import (
     ToolExecutionException,
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -201,6 +202,31 @@ def test_binding_resolves_context_when_execution_and_completion_start(
     assert bound.result_from_children(invocation, []) is output
     assert observed_contexts == [context]
     assert context_reads == 2
+
+
+def test_child_completion_does_not_repeat_tool_start_telemetry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool = MemoryTool(tool_id=1, llm=MagicMock(spec=LLM))
+    result = ToolResult(content="Done")
+    monkeypatch.setattr(tool, "_run", MagicMock(return_value=result))
+    tool.result_from_children = MagicMock(return_value=result)
+    bound = tool.bind(lambda: ToolContext())
+    invocation = ToolInvocation(
+        call_id="memory",
+        arguments={},
+        cancellation=CancellationSignal(),
+        update=lambda _: None,
+    )
+    observation = MagicMock(spec=QueryObservation)
+    token = CURRENT_QUERY_OBSERVATION.set(observation)
+    try:
+        assert bound.execute(invocation) is result
+        assert bound.result_from_children is not None
+        assert bound.result_from_children(invocation, []) is result
+    finally:
+        CURRENT_QUERY_OBSERVATION.reset(token)
+    observation.tool_started.assert_called_once_with(is_search=False)
 
 
 @pytest.mark.parametrize("display_error", [False, True])

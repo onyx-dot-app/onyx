@@ -827,8 +827,7 @@ def handle_responses_request(
             if span is not None:
                 span.set_error({"message": f"{type(e).__name__}: {e}", "data": None})
             logger.exception(
-                "LLM gateway responses invoke failed for model %s",
-                request.model,
+                "LLM gateway responses invoke failed for model %s", request.model
             )
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,
@@ -1380,8 +1379,7 @@ def handle_anthropic_messages(
             if span is not None:
                 span.set_error({"message": f"{type(e).__name__}: {e}", "data": None})
             logger.exception(
-                "LLM gateway anthropic invoke failed for model %s",
-                request.model,
+                "LLM gateway anthropic invoke failed for model %s", request.model
             )
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,

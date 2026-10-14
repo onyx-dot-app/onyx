@@ -56,6 +56,17 @@ class RunStore(Protocol):
 class RunOwnership(Protocol):
     """Reserve execution until workers drain, or undo a failed start."""
 
+    def reserve_run_id(
+        self,
+        *,
+        agent: AgentInfo,
+        messages: Sequence[Message],
+        previous_run_id: str | None,
+        parent_run_id: str | None,
+        parent_message_id: str | None,
+        parent_tool_call_id: str | None,
+    ) -> str: ...
+
     def register(self, run: Run) -> None: ...
 
     def release(self, run_id: str) -> None: ...
@@ -283,6 +294,16 @@ class AgentCoordinator:
             raise ValueError("Run is not owned by this coordinator")
         return future
 
+    def child_completion(self, run_id: str, parent_id: str) -> Future[RunState]:
+        """Authorize a dependency and use its persisted completion as the result."""
+        snapshot = self.run_state(run_id, parent_id)
+        with self._state.lock:
+            future = self._state.completions.get(run_id)
+        if future is None:
+            self.restore_completed(snapshot)
+            future = self.completion(run_id)
+        return future
+
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
     ) -> Future[None]:
@@ -333,13 +354,47 @@ class AgentCoordinator:
         else:
             future.set_result(run.snapshot())
 
+    def reserve_run_id(
+        self,
+        *,
+        agent_id: str,
+        messages: Sequence[Message],
+        previous_run_id: str | None,
+        parent_run_id: str | None,
+        parent_message_id: str | None,
+        parent_tool_call_id: str | None,
+    ) -> str:
+        if self._ownership is None:
+            return str(uuid4())
+        with self._state.lock:
+            self.check_open()
+            info = self._state.registrations.get(agent_id)
+            if info is None:
+                if parent_run_id is not None:
+                    raise ValueError("Child agent is not registered")
+                info = AgentInfo(
+                    id=agent_id,
+                    path="/root",
+                    parent_id=None,
+                    description="",
+                    restoration_config=None,
+                )
+        return self._ownership.reserve_run_id(
+            agent=info,
+            messages=messages,
+            previous_run_id=previous_run_id,
+            parent_run_id=parent_run_id,
+            parent_message_id=parent_message_id,
+            parent_tool_call_id=parent_tool_call_id,
+        )
+
     def begin(self, run: Run) -> None:
         if self._ownership is not None:
             self._ownership.register(run)
 
-    def abort_start(self, run: Run) -> None:
+    def abort_start(self, run_id: str) -> None:
         if self._ownership is not None:
-            self._ownership.abort_start(run.id)
+            self._ownership.abort_start(run_id)
 
     def finish(self, run: Run) -> None:
         """Release execution ownership after terminal output is saved."""
@@ -901,10 +956,17 @@ class RunCoordination:
             raise failure
         return records
 
-    def child_states(self, run_ids: Sequence[str]) -> list[RunState]:
-        return [
-            self.coordinator.run_state(run_id, self.run.agent_id) for run_id in run_ids
-        ]
+    def completed_child_states(self, run_ids: Sequence[str]) -> list[RunState] | None:
+        """Return completed dependencies, or wait; propagate failures from any child."""
+        states: list[RunState] = []
+        pending = False
+        for run_id in run_ids:
+            future = self.coordinator.child_completion(run_id, self.run.agent_id)
+            if future.done():
+                states.append(future.result().model_copy(deep=True))
+            else:
+                pending = True
+        return None if pending else states
 
     def release(self) -> None:
         self.coordinator.release(self.run)

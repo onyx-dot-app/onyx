@@ -59,12 +59,81 @@ beforeEach(() => {
   jest.mocked(processRawChatHistory).mockReturnValue(new Map());
 });
 
-function settle() {
+function settle(mode: "completion" | "recovery" = "completion") {
   const controller = useChatSessionStore
     .getState()
     .sessions.get("session")!.abortController;
-  return settleChatSession({ sessionId: "session", controller, errorMessage });
+  return settleChatSession({
+    sessionId: "session",
+    controller,
+    errorMessage,
+    mode,
+  });
 }
+
+test("explicit recovery checks server state after acknowledgement fails", async () => {
+  const log = jest.spyOn(console, "error").mockImplementation(() => {});
+  const acknowledgement = Promise.reject(new TypeError("Connection lost"));
+  useChatSessionStore.getState().updateSessionData("session", {
+    sendAcknowledged: acknowledgement,
+  });
+  try {
+    await settle();
+    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "unconfirmed",
+      queuedMessagesPaused: true,
+    });
+
+    const idle = Promise.withResolvers<void>();
+    const polling = Promise.withResolvers<void>();
+    jest.mocked(waitForChatSessionIdle).mockImplementation(() => {
+      polling.resolve();
+      return idle.promise;
+    });
+    const saved = new Map([[42, message(42, "assistant", "Saved answer")]]);
+    jest.mocked(processRawChatHistory).mockReturnValue(saved);
+    const recovery = settle("recovery");
+    await polling.promise;
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("unconfirmed");
+
+    idle.resolve();
+    await recovery;
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({
+      chatState: "input",
+      sendAcknowledged: undefined,
+      messageTree: saved,
+      queuedMessagesPaused: true,
+      uncaughtError: null,
+    });
+  } finally {
+    log.mockRestore();
+  }
+});
+
+test("explicit recovery still waits for a pending send acknowledgement", async () => {
+  const acknowledgement = Promise.withResolvers<number | null>();
+  useChatSessionStore.getState().updateSessionData("session", {
+    chatState: "unconfirmed",
+    sendAcknowledged: acknowledgement.promise,
+  });
+  const recovery = settle("recovery");
+  await Promise.resolve();
+  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  acknowledgement.resolve(42);
+  await recovery;
+  expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+  expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+});
 
 test("a rejected send without a reserved row keeps its submitted text and error", async () => {
   const user = message(-1, "user", "Keep this question");

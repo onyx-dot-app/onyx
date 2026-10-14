@@ -37,10 +37,10 @@ def ownership(
         cache=cache,
         control_cache=cache,
     )
-    lease = _OwnerLease(ResponseOwner(token=uuid4(), message_id=1, root_message_id=1))
+    lease = _OwnerLease(ResponseOwner(token=uuid4(), root_message_id=1))
     run = MagicMock(spec=Run)
-    store._leases["run"] = lease
-    store._owned["run"] = _OwnedRun(run, lease)
+    store._leases[1] = lease
+    store._owned[1] = _OwnedRun(run, lease)
     return store, lease, run, cache, clock
 
 
@@ -139,11 +139,9 @@ def test_root_and_child_control_calls_use_the_callers_thread(
 ) -> None:
     store, _, root, cache, clock = ownership
     child = MagicMock(spec=Run)
-    child_lease = _OwnerLease(
-        ResponseOwner(token=uuid4(), message_id=2, root_message_id=1)
-    )
-    store._leases["child"] = child_lease
-    store._owned["child"] = _OwnedRun(child, child_lease)
+    child_lease = _OwnerLease(ResponseOwner(token=uuid4(), root_message_id=1))
+    store._leases[2] = child_lease
+    store._owned[2] = _OwnedRun(child, child_lease)
     calling_thread = threading.current_thread()
     checks: list[str] = []
     renewals: list[str] = []
@@ -151,7 +149,7 @@ def test_root_and_child_control_calls_use_the_callers_thread(
     def read_stop(key: str) -> bool:
         assert threading.current_thread() is calling_thread
         checks.append(key)
-        return key == store._stop_key("child")
+        return key == store._stop_key(2)
 
     def renew(key: str, _value: bytes, _ttl: int) -> bool:
         assert threading.current_thread() is calling_thread
@@ -162,7 +160,7 @@ def test_root_and_child_control_calls_use_the_callers_thread(
     cache.renew_if_value.side_effect = renew
     clock.now = 10
     store.poll_control()
-    assert checks == [store._stop_key("run"), store._stop_key("child")]
-    assert renewals == [store._owner_key("run"), store._owner_key("child")]
+    assert checks == [store._stop_key(1), store._stop_key(2)]
+    assert renewals == [store._owner_key(1), store._owner_key(2)]
     root.cancel.assert_not_called()
     child.cancel.assert_called_once()

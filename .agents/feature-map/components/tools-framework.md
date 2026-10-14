@@ -14,7 +14,7 @@
 `backend/onyx/db/tools.py`
 
 **Read first:** `[[core-chat-loop]]`. This component supplies the tool set that
-`run_llm_loop` calls into and executes; it does not run the LLM loop itself.
+the SDK loop executes; it does not run the LLM loop itself.
 
 ---
 
@@ -85,7 +85,7 @@ and `BashTool`, checked in `python_tool.py:is_available` and `bash_tool.py:is_av
   is *available* to a persona. Availability here does not imply usability; a
   persona can list `ImageGenerationTool` while no image provider is configured.
 - `ToolCall` (owned by `[[chat-persistence]]`): the persisted record of one
-  invocation, written after `run_tool_calls` returns, not by this component.
+  invocation. Chat persistence writes it from SDK state.
 
 ---
 
@@ -93,29 +93,28 @@ and `BashTool`, checked in `python_tool.py:is_available` and `bash_tool.py:is_av
 
 ### 4.1 The `Tool` interface (`tools/interface.py`)
 
-`class Tool(abc.ABC, Generic[TOverride])`. Every concrete tool subclasses it,
-parameterizing `TOverride` with its own override-kwargs model (for example
-`SearchTool(Tool[SearchToolOverrideKwargs])`).
+`Tool` is the application base class. Implementations provide `id`, `name`,
+`description`, `display_name`, `tool_definition()`, and `_run(invocation, context)`.
+The final `run()` method owns cancellation checks, tracing, and error conversion.
+Implementers override `_run`, not `run`.
 
-Abstract members every tool must implement:
-- `id`, `name`, `description`, `display_name` (properties)
-- `tool_definition() -> dict`: the JSON schema handed to the LLM provider
-- `emit_start(placement)`: emits the tool's specific "start" packet
-- `run(placement, override_kwargs, **llm_kwargs) -> ToolResponse`: executes the tool
+`Tool.bind(get_context)` creates an SDK `AgentTool`. It resolves application context
+when execution starts. Child-result completion uses the same tracing and error policy,
+without repeating initial invocation telemetry.
 
-Overridable with defaults:
-- `is_available(cls, db_session) -> bool`, default `True`. A dynamic, per-request
-  gate (does a provider key exist, is an index configured, is a service healthy).
-- `should_emit_argument_deltas(cls) -> bool`, default `False`. Controls whether the
-  LLM's streamed tool-call arguments are forwarded token-by-token.
+`AgentTool` supplies the SDK with a schema, execution callback, execution mode, and
+optional merge or child-result callbacks. It does not require a database tool row.
+`ToolBatch` owns parallel execution, waits, and ordered result acceptance.
 
-The constructor takes an optional `Emitter`; `Tool.emitter` (`interface.py:emitter`)
-raises `ValueError` if it was never set, so a tool built without an emitter fails
-loudly on first emit rather than silently dropping packets.
+`is_available(cls, db_session)` defaults to `True`. Implementations can check whether
+required services or credentials exist. `merge_list_argument` opts compatible calls
+into argument merging. Tools publish typed progress through `ToolInvocation`; chat
+renderers create browser packets.
 
 ### 4.2 Tool output: content and application details
 
-Tools return `ToolResultMessage` (`llm/models.py`). Its `content` is the text sent to the model.
+Tools return `ToolResult` (`llm/models.py`), or a pending input or child wait.
+The SDK adds call identity to produce `ToolResultMessage`. Its `content` reaches the model.
 Its `details` carries structured data for application code and rendering: search documents,
 Python output, generated files, or another typed result. Provider serialization excludes `details`.
 Neither field can generally be derived from the other.
@@ -149,7 +148,7 @@ runtime lookup `tool_constructor.py` uses for every persona-attached built-in to
 belongs to the knowledge graph, an incomplete feature (see INDEX.md, Incomplete
 features). It is present in `BUILT_IN_TOOL_MAP` (`built_in_tools.py`), so
 `get_built_in_tool_by_id` resolves it and `is_available` is checked for it. Its
-`run` raises `NotImplementedError`, and its dispatch branch in
+`_run` raises `NotImplementedError`, and its dispatch branch in
 `tool_constructor.py:_construct_tools_impl` is commented out. The if/elif chain has
 no trailing `else`, so a persona row with `in_code_tool_id="KnowledgeGraphTool"`
 passes the availability check but is never added to `tool_dict`.
@@ -245,18 +244,16 @@ are available; application tools do not manage browser packet placement.
 3. **Providers receive `ToolResultMessage.content`, not `details`.** Keep model
    instructions and evidence in content. Preserve structured application output in
    details so live and saved rendering can use the same result types.
-4. **Citation-number ranges must not collide.** Any new citation-producing tool run
-   through `run_tool_calls` must consume `starting_citation_num` and advance it,
-   matching the pattern for `SearchTool`/`WebSearchTool`/`OpenURLTool`.
-5. **`emit_start` must fire before `run`.** `run_tool_calls` calls them in that
-   order for every tool call; a tool that emits its own start packet inside `run`
-   instead will render out of order.
-6. **Every tool call must emit a `SectionEnd`.** `_safe_run_single_tool` emits it
-   unconditionally after `run`, including on every exception path. Do not add a new
-   early-return path that skips it.
-7. **Exceptions from `Tool.run` must never propagate out of `run_tool_calls`.**
-   `_safe_run_single_tool` converts `ToolCallException`, `ToolExecutionException`,
-   and bare `Exception` into a `ToolResponse`, keeping the turn alive.
+4. **Citation-number ranges must not collide.** Citeable tools use
+   `ToolContext.next_citation_num` plus `CITATIONS_PER_TOOL_CALL * invocation.call_index`.
+5. **Tool start precedes execution.** `ToolBatch` emits the start event. `ToolRenderer`
+   maps it to the tool's browser packet; application tools do not emit start packets.
+6. **Completed tools emit `SectionEnd`.** `ToolRenderer` closes completed tool sections.
+   Cancellation uses terminal `OverallStop` handling; pending tools need not emit `SectionEnd`.
+7. **Ordinary tool errors become model-readable results.** Application `Tool` owns
+   tracing and error conversion. SDK execution also protects direct `AgentTool`
+   callbacks. Cancellation remains control flow, not a failed tool result.
+
 8. **`MemoryTool` bypasses `allowed_tool_ids`.** Its injection in
    `_construct_tools_impl` happens after, and independently of, the persona-tool
    loop that checks the whitelist. A change to per-message tool filtering must
@@ -271,8 +268,8 @@ are available; application tools do not manage browser packet placement.
 ## 6. Relationships
 
 **Depends on**
-- `[[streaming-protocol]]`: every tool's `emit_start`, argument-delta, and
-  `SectionEnd` packets use the shared `Placement`/`Packet` vocabulary.
+- `[[streaming-protocol]]`: chat renderers map tool events to the shared
+  `Placement`/`Packet` vocabulary.
 - `[[chat-persistence]]`: saves result content and typed details in `ToolCall.result`.
   Search-document links and generated-file records retain their existing storage.
 - `[[agents-personas]]`: `persona.tools` is the input to `construct_tools`; persona
@@ -280,12 +277,11 @@ are available; application tools do not manage browser packet placement.
   scope.
 - `[[llm-providers]]`: `tool.tool_definition()` output is what the provider-facing
   request includes as callable functions.
-- `[[observability]]`: `run_tool_calls` and `_safe_run_single_tool` open a
-  `function_span(tool.name)` for every call.
+- `[[observability]]`: the application tool wrapper opens a
+  `function_span(tool.name)` for each invocation or child-result completion.
 
 **Depended on by**
-- `[[core-chat-loop]]`: calls `construct_tools` once per turn and `run_tool_calls`
-  once per LLM cycle.
+- `[[core-chat-loop]]`: constructs application tools, then binds them for SDK steps.
 - `[[internal-search]]`, `[[web-search]]`, `[[image-generation]]`,
   `[[code-execution]]`, `[[mcp-and-custom-tools]]`: each is a concrete `Tool`
   implementation documented separately; this component is their shared contract.
@@ -298,14 +294,14 @@ are available; application tools do not manage browser packet placement.
 
 | If your change… | Also check |
 |---|---|
-| adds a built-in tool | `BUILT_IN_TOOL_MAP`, a seeding migration for its `Tool` row, a construction branch in `tool_constructor.py`, a renderer case in `renderMessageComponent.tsx`, and whether it needs a `MERGEABLE_TOOL_FIELDS` entry |
-| renames a tool's `NAME` | Saved chat history stores the old name in `ToolCallSimple.tool_name`; a rename breaks replay of old sessions and the frontend's type-based renderer switch in `renderMessageComponent.tsx` |
+| adds a built-in tool | `BUILT_IN_TOOL_MAP`, a seeding migration for its `Tool` row, a construction branch in `tool_constructor.py`, a renderer case in `renderMessageComponent.tsx`, and whether it should declare `merge_list_argument` |
+| renames a tool's `NAME` | SDK history stores original names in model calls and results; verify replay, restored tools, and renderer lookup |
 | changes a durable tool detail type | its tool implementation, `StoredToolResult`, checkpoint serialization, and live/saved rendering |
 | changes `is_available` for any built-in tool | the tool-listing/admin UI, and whether the change can raise (see §5 contract 2) |
-| changes error wrapping in `_safe_run_single_tool` | the exact `GENERIC_TOOL_ERROR_MESSAGE` string other code may pattern-match on, and whether `SectionEnd` still always fires |
+| changes application or SDK tool error wrapping | the exact `GENERIC_TOOL_ERROR_MESSAGE` string other code may pattern-match on, completed-tool `SectionEnd` and cancelled-response Stop handling |
 | changes `allowed_tool_ids` filtering | `MemoryTool`'s bypass and `should_disable_open_url_web_fetch`, both of which sit outside the main filter |
 | changes MCP tool construction or caching | `[[mcp-and-custom-tools]]`, and `_disambiguate_mcp_tool_names` |
-| changes citation-range allocation (`starting_citation_num`) | `[[citations]]`, and every citeable tool in `CITEABLE_TOOLS_NAMES` |
+| changes citation-range allocation (`next_citation_num` and `call_index`) | `[[citations]]`, and every citeable tool in `CITEABLE_TOOLS_NAMES` |
 
 ---
 
@@ -316,8 +312,8 @@ are available; application tools do not manage browser packet placement.
 ```bash
 # Integration tests are preferred for tool construction and execution behavior.
 cd backend && uv run pytest tests/integration -k tool
-# Unit tests for tool_runner merging/citation logic
-cd backend && uv run pytest tests/unit -k "tool_runner or tool_constructor"
+# Unit tests for SDK execution and application tool policy
+uv run pytest backend/tests/unit/onyx/agents backend/tests/unit/onyx/tools
 ```
 
 See `backend/AGENTS.md` for authoritative commands and required env.
@@ -325,19 +321,18 @@ See `backend/AGENTS.md` for authoritative commands and required env.
 ### Adding a new built-in tool, end to end
 
 1. Implement the class under `tools/tool_implementations/<name>/`, subclassing
-   `Tool[YourOverrideKwargs]` and implementing every abstract member in §4.1.
+   `Tool` and implementing the abstract members in §4.1.
 2. Add it to `BUILT_IN_TOOL_MAP` in `built_in_tools.py`.
 3. Write an alembic migration that inserts a `Tool` row with
    `in_code_tool_id=YourTool.__name__` (mirror
    `backend/alembic/versions/d3fd499c829c_add_file_reader_tool.py`).
 4. Add a construction branch in `tool_constructor.py:_construct_tools_impl` if the
    tool needs config beyond the default constructor args.
-5. If the tool produces citations, add its `NAME` to `MERGEABLE_TOOL_FIELDS` and
-   `CITEABLE_TOOLS_NAMES` as appropriate, and handle its `starting_citation_num` in
-   `run_tool_calls`.
+5. If the tool produces citations, allocate them from its invocation context.
+   Declare `merge_list_argument` only when combining requests preserves their meaning.
 6. Add a renderer case in
    `web/src/app/app/message/messageComponents/renderMessageComponent.tsx` for the
-   packet type(s) the tool emits, and a dedicated renderer component alongside the
+   packet types produced by `ToolRenderer`, and a renderer component alongside the
    existing ones (`InternalSearchToolRenderer`, `PythonToolRenderer`, etc.).
 7. Attach the tool to a persona in the admin UI or via a test fixture, then run a
    chat turn that forces the tool to fire.
@@ -373,21 +368,17 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `tool_constructor.py` dispatch branch is commented out and there is no fallback
   branch, so it is never added to a turn's tool set. Do not assume it runs because
   the class is in the map, and do not delete it as dead code.
-- **`BashTool` is never persisted and uses a sentinel id.** The coding agent
-  constructs it directly with `BASH_TOOL_SENTINEL_ID = 0`
-  (`backend/onyx/coding_agent/agent.py`), not through `tool_constructor.py`, and it cannot
-  be attached to a persona.
+- **`BashTool` has no persona tool row.** Coding constructs it with
+  `BASH_TOOL_SENTINEL_ID = 0`. Its SDK executions and results are still saved as
+  `ToolCall` records, without a configured `tool_id`.
 - **Control tools do not need DB tool rows.** `backend/onyx/coding_agent/agent.py:CodingAgent`
   and `backend/onyx/deep_research/agent.py:DeepResearchAgent` use the shared SDK runtime.
   Their internal control signals use definitions from the corresponding
   `tool_definitions.py` modules. They are not persona-attachable built-in tools.
 
-- **Tool responses are dropped from saved chat history.** Only the tool-call
-  *arguments* survive into the next turn's context; the `llm_facing_response` is
-  replaced with a placeholder by `[[core-chat-loop]]`'s history construction. A
-  tool that expects the model to recall its own past output must put the durable
-  fact in the arguments or accept it will be re-fetched.
-- **Merged tool calls mean the executed call is not the call the LLM wrote.**
-  `_merge_tool_calls` collapses N calls to `SearchTool`/`WebSearchTool`/`OpenURLTool`
-  into one before execution and before it enters history, so the model later sees
-  the merged, expanded arguments rather than what it originally emitted.
+- **SDK tool results survive into later-turn history.** Compaction can replace older
+  content with a summary. Legacy responses can still use placeholder results.
+
+- **Merged execution preserves each model call.** Compatible calls share one tool
+  invocation. The SDK retains their original identities and results in call order.
+  Tool authors must ensure merged arguments preserve each call's meaning.

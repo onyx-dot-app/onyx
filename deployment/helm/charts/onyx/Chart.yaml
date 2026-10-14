@@ -26,6 +26,10 @@ annotations:
     - kind: removed
       description: Remove CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT and
         CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT. These syncs now hold their lock in Postgres.
+    - kind: added
+      description: Configure the maximum wait for a full chat response after
+        delivery ends with CHAT_RESPONSE_WAIT_TIMEOUT_S. Agent execution continues
+        independently of this wait.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

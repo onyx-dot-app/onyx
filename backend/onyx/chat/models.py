@@ -118,6 +118,7 @@ class ResponseRecord(BaseModel):
     previous_run_id: str | None = None
     parent_run_id: str | None = None
     parent_tool_call_id: str | None = None
+    # The model message containing the call, within parent_run_id.
     parent_message_id: str | None = None
     input_messages: list[Message] = Field(default_factory=list)
     steps: list[StepRecord] = Field(default_factory=list)
@@ -172,7 +173,6 @@ class ChatHistoryMessage(BaseModel):
     files: list[FileDescriptor]
     is_clarification: bool
     response_messages: list[Message]
-    agent_run_id: str | None = None
     checkpoint: CompactionCheckpoint | None = None
 
 
@@ -258,14 +258,6 @@ class ChatFullResponse(BaseModel):
     error_msg: str | None = None
 
 
-class SearchParams(BaseModel):
-    """Resolved search filter IDs and search-tool usage for a chat turn."""
-
-    project_id_filter: int | None
-    persona_id_filter: int | None
-    search_usage: SearchToolUsage
-
-
 class ChatHistoryResult(BaseModel):
     """Result of converting chat history to simple format.
 
@@ -278,6 +270,14 @@ class ChatHistoryResult(BaseModel):
 
     messages: list[Message]
     all_injected_file_metadata: dict[str, FileToolMetadata]
+
+
+class SearchParams(BaseModel):
+    """Resolved search filter IDs and search-tool usage for a chat turn."""
+
+    project_id_filter: int | None
+    persona_id_filter: int | None
+    search_usage: SearchToolUsage
 
 
 class ChatSearchResult(SearchDocsResponse):
@@ -482,7 +482,7 @@ class CheckpointBinding(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     tenant_id: str
-    branch_id: str
+    response_id: str
 
 
 class MessagePayload(BaseModel):

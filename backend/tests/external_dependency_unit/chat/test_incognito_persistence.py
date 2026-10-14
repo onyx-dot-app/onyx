@@ -305,12 +305,11 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
     from onyx.agents.execution_records import RunStatus
     from onyx.chat.incognito_context import (
         INCOGNITO_CONTEXT_TTL_SECONDS,
-        get_or_create_incognito_root_id,
         save_incognito_response,
     )
 
     session_id = uuid4()
-    root_id, child_id = str(uuid4()), str(uuid4())
+    root_id, child_id = str(session_id), str(uuid4())
     tool_result = ToolResultMessage(
         tool_call_id="lookup",
         tool_name="lookup",
@@ -358,8 +357,6 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
     client = get_redis_client()
     try:
         append_incognito_message(session_id, UserMessage(content="root question"))
-        assert get_or_create_incognito_root_id(session_id, root_id) == root_id
-        assert get_or_create_incognito_root_id(session_id, str(uuid4())) == root_id
         assert _load_agent_history(session_id, [1]) == []
         assert child.run_id is not None
         sources = {child.run_id: {1: _search_doc("private-source")}}
@@ -444,8 +441,6 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
                 messages=next_root.messages,
             )
         assert not client.exists(key)
-        with pytest.raises(RuntimeError, match="session ended"):
-            get_or_create_incognito_root_id(session_id, root_id)
     finally:
         teardown_incognito_session(session_id)
 
@@ -469,23 +464,6 @@ def test_incognito_context_and_predecessor_share_one_write() -> None:
         teardown_incognito_session(session_id)
 
 
-def test_temporary_agents_require_live_session_context() -> None:
-    from onyx.chat.incognito_context import get_or_create_incognito_root_id
-
-    session_id = uuid4()
-    client = get_redis_client()
-    try:
-        with pytest.raises(RuntimeError, match="session ended"):
-            get_or_create_incognito_root_id(session_id, str(uuid4()))
-        append_incognito_message(session_id, UserMessage(content="initial"))
-        get_or_create_incognito_root_id(session_id, str(uuid4()))
-        client.delete(f"incognito_ctx:{session_id}")
-        with pytest.raises(RuntimeError, match="session ended"):
-            get_or_create_incognito_root_id(session_id, str(uuid4()))
-    finally:
-        teardown_incognito_session(session_id)
-
-
 @pytest.mark.parametrize("history_full", [False, True])
 def test_incognito_response_restores_agents_without_database_content(
     db_session: Session, owner: User, history_full: bool
@@ -495,7 +473,6 @@ def test_incognito_response_restores_agents_without_database_content(
     from onyx.agents.runtime import Agent
     from onyx.agents.tools import AgentTool, ToolInvocation
     from onyx.chat.history_store import get_chat_history_store
-    from onyx.chat.incognito_context import get_or_create_incognito_root_id
     from onyx.chat.models import ChatResponseSnapshot, MessageRendering
     from onyx.chat.subagents import create_chat_agent_coordinator
     from onyx.db.enums import IncognitoRecordMode
@@ -550,7 +527,6 @@ def test_incognito_response_restores_agents_without_database_content(
         append_incognito_message(
             session.id, UserMessage(content="private root question")
         )
-        assert get_or_create_incognito_root_id(session.id, root.id) == root.id
         coordinator = create_chat_agent_coordinator(
             root,
             previous_run_id=None,
@@ -671,7 +647,6 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
 
     from onyx.agents.execution_records import RunStatus
     from onyx.chat.incognito_context import (
-        get_or_create_incognito_root_id,
         save_incognito_response,
     )
     from onyx.db.chat_subagents import load_chat_branch
@@ -697,7 +672,7 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
         message_id: load_chat_branch(message_id).message_ids
         for message_id in sibling_ids
     }
-    root_id = str(uuid4())
+    root_id = str(session_id)
     ancestor_run = ResponseRecord(
         agent_id=root_id,
         run_id=str(uuid4()),
@@ -713,7 +688,6 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
     barrier = Barrier(2)
 
     def save_sibling(message_id: int) -> tuple[str, str]:
-        assert get_or_create_incognito_root_id(session_id, str(uuid4())) == root_id
         root_run_id, child_id, child_run_id = str(uuid4()), str(uuid4()), str(uuid4())
 
         barrier.wait(timeout=5)
@@ -752,7 +726,6 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
 
     try:
         append_incognito_message(session_id, UserMessage(content="question"))
-        get_or_create_incognito_root_id(session_id, root_id)
         assert ancestor_run.run_id is not None
 
         if ancestor_finishes_first:

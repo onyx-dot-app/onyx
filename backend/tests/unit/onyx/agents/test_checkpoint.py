@@ -144,7 +144,7 @@ def test_json_round_trip_preserves_typed_payloads_at_every_execution_location() 
     serialized = codec().save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
     )
     restored = codec().load(serialized)
     assert restored == captured
@@ -169,7 +169,7 @@ def test_coding_rendering_survives_checkpoint_round_trip(
     serialized = storage.save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
     )
     restored = storage.load(serialized)
     metadata = restored.run_state.steps[0].message.metadata
@@ -184,12 +184,14 @@ def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
         CheckpointStorage({}).save(
             captured.run_state,
             captured.agent_state,
-            CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+            CheckpointBinding(
+                tenant_id="tenant", response_id=captured.run_state.run_id
+            ),
         )
     serialized = codec().save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
     )
     with pytest.raises(ValueError, match="Unknown checkpoint payload"):
         CheckpointStorage({}).load(serialized)
@@ -200,8 +202,34 @@ def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
     with pytest.raises(ValueError, match="selected context"):
         codec().load(
             serialized,
-            expected_binding=CheckpointBinding(tenant_id="tenant", branch_id="other"),
+            expected_binding=CheckpointBinding(tenant_id="tenant", response_id="other"),
         )
+
+
+@pytest.mark.parametrize("mismatch", ["save_response", "stored_response", "tenant"])
+def test_checkpoint_rejects_a_different_response_or_tenant(mismatch: str) -> None:
+    captured = checkpoint()
+    binding = CheckpointBinding(
+        tenant_id="tenant", response_id=captured.run_state.run_id
+    )
+    storage = codec()
+    if mismatch == "save_response":
+        with pytest.raises(ValueError, match="another response"):
+            storage.save(
+                captured.run_state,
+                captured.agent_state,
+                binding.model_copy(update={"response_id": "another-response"}),
+            )
+        return
+    saved = SavedCheckpoint.model_validate_json(
+        storage.save(captured.run_state, captured.agent_state, binding)
+    )
+    if mismatch == "stored_response":
+        saved.response.run_id = "another-response"
+    else:
+        binding = binding.model_copy(update={"tenant_id": "another-tenant"})
+    with pytest.raises(ValueError, match="selected context"):
+        storage.load(saved.model_dump_json(), expected_binding=binding)
 
 
 def _make_executable_agent(counts: dict[str, int], context: AgentState) -> Agent:
@@ -332,7 +360,9 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
         codec().save(
             captured.run_state,
             captured.agent_state,
-            CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+            CheckpointBinding(
+                tenant_id="tenant", response_id=captured.run_state.run_id
+            ),
         )
     )
     old_agent = weakref.ref(agent)
@@ -373,7 +403,7 @@ def test_checkpoint_restores_when_parallel_outcomes_load_in_call_order() -> None
     serialized = storage.save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
     )
     saved = SavedCheckpoint.model_validate_json(serialized)
     saved_tools = saved.response.steps[0].tools

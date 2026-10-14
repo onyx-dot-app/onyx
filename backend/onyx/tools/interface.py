@@ -107,6 +107,35 @@ def merge_tool_arguments(
     return merged_args
 
 
+def _invoke_tool[T: ToolOutcome](
+    name: str, invocation: ToolInvocation, execute: Callable[[], T]
+) -> T | ToolResult:
+    """Apply application tracing, error conversion, and cancellation to a callback."""
+    invocation.cancellation.check()
+    with function_span(name) as span:
+        span.span_data.input = str(invocation.arguments)
+        try:
+            result = execute()
+        except ToolCallException as error:
+            logger.warning("Tool call rejected by %s: %s", name, error)
+            result = ToolResult(content=error.llm_facing_message, is_error=True)
+        except Exception as error:
+            logger.exception("Tool execution failed for %s", name)
+            span.set_error({"message": str(error), "data": {"tool_name": name}})
+            result = ToolResult(
+                content=f"Tool failed with error: {error}",
+                is_error=True,
+                details=ToolExecutionError(message=str(error))
+                if isinstance(error, ToolExecutionException) and error.emit_error_packet
+                else None,
+            )
+        span.span_data.output = (
+            result.text if isinstance(result, ToolResult) else result.model_dump_json()
+        )
+    invocation.cancellation.check()
+    return result
+
+
 ToolResultFromChildren = Callable[
     [ToolInvocation, ToolContext, list["RunState"]], ToolResult
 ]
@@ -161,41 +190,18 @@ class Tool(abc.ABC):
     @final
     def run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         """Run with tracing and return tool errors to the model; cancellation propagates."""
-        invocation.cancellation.check()
-        with function_span(self.name) as span:
-            span.span_data.input = str(invocation.arguments)
-            try:
-                if observation := CURRENT_QUERY_OBSERVATION.get():
-                    # Local import breaks the Tool / SearchTool inheritance cycle.
-                    from onyx.tools.tool_implementations.search.search_tool import (
-                        SearchTool,
-                    )
 
-                    observation.tool_started(is_search=isinstance(self, SearchTool))
-                result = self._run(invocation, context)
-            except ToolCallException as error:
-                logger.warning("Tool call rejected by %s: %s", self.name, error)
-                result = ToolResult(content=error.llm_facing_message, is_error=True)
-            except Exception as error:
-                logger.exception("Tool execution failed for %s", self.name)
-                span.set_error(
-                    {"message": str(error), "data": {"tool_name": self.name}}
+        def execute() -> ToolOutcome:
+            if observation := CURRENT_QUERY_OBSERVATION.get():
+                # Local import breaks the Tool / SearchTool inheritance cycle.
+                from onyx.tools.tool_implementations.search.search_tool import (
+                    SearchTool,
                 )
-                result = ToolResult(
-                    content=f"Tool failed with error: {error}",
-                    is_error=True,
-                    details=ToolExecutionError(message=str(error))
-                    if isinstance(error, ToolExecutionException)
-                    and error.emit_error_packet
-                    else None,
-                )
-            span.span_data.output = (
-                result.text
-                if isinstance(result, ToolResult)
-                else result.model_dump_json()
-            )
-        invocation.cancellation.check()
-        return result
+
+                observation.tool_started(is_search=isinstance(self, SearchTool))
+            return self._run(invocation, context)
+
+        return _invoke_tool(self.name, invocation, execute)
 
     def bind(self, get_context: Callable[[], ToolContext]) -> AgentTool:
         """Bind runtime callbacks; resolve application context only when they execute."""
@@ -207,32 +213,11 @@ class Tool(abc.ABC):
                 invocation: ToolInvocation, children: list["RunState"]
             ) -> ToolResult:
                 context = get_context()
-                invocation.cancellation.check()
-                with function_span(self.name) as span:
-                    span.span_data.input = str(invocation.arguments)
-                    try:
-                        result = convert_child_results(invocation, context, children)
-                    except ToolCallException as error:
-                        logger.warning("Tool call rejected by %s: %s", self.name, error)
-                        result = ToolResult(
-                            content=error.llm_facing_message, is_error=True
-                        )
-                    except Exception as error:
-                        logger.exception("Tool completion failed for %s", self.name)
-                        span.set_error(
-                            {"message": str(error), "data": {"tool_name": self.name}}
-                        )
-                        result = ToolResult(
-                            content=f"Tool failed with error: {error}",
-                            is_error=True,
-                            details=ToolExecutionError(message=str(error))
-                            if isinstance(error, ToolExecutionException)
-                            and error.emit_error_packet
-                            else None,
-                        )
-                    span.span_data.output = result.text
-                invocation.cancellation.check()
-                return result
+                return _invoke_tool(
+                    self.name,
+                    invocation,
+                    lambda: convert_child_results(invocation, context, children),
+                )
 
         return AgentTool(
             definition=self.tool_definition(),

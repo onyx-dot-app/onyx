@@ -67,8 +67,7 @@ def test_slack_copy_preserves_sdk_and_legacy_display_content(
         )
         response.response_status = RunStatus.COMPLETE
         response.reasoning_tokens = "Stale duplicate thinking"
-        run_id = str(uuid4())
-        response.run_id = run_id
+        run_id = str(response.id)
         source_answer_id = f"{run_id}:1"
         content: list[AssistantContent] = []
         if thinking:
@@ -150,7 +149,6 @@ def test_slack_copy_preserves_sdk_and_legacy_display_content(
         assert copied.id != source_response_id
         assert copied.message == display_answer
         assert copied.reasoning_tokens == (thinking or "")
-        assert copied.run_id is None
         assert copied.response_status is None
         assert copied.tool_calls == []
         assert copied.response_items == []

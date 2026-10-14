@@ -101,18 +101,21 @@ sub-loop (the deep research agent, the coding agent), or the AI assistant genera
 
 | Term | Meaning |
 |---|---|
-| Step / cycle | One LLM inference with a given context and tool set. A turn contains up to `MAX_LLM_CYCLES` of them. |
+| Step / cycle | One model generation and the tool calls it requests. A run can contain several steps. |
+| Run | One SDK execution. Its state records input, steps, outcome, and children. Durable chat uses the assistant response row ID as its run ID. |
 | Emitter | The object a deep call uses to push a packet without returning it up the stack. It stamps `model_index`. |
-| State container | The per-model accumulator that streaming code fills and persistence reads at the end of a turn to build the saved rows. Deep-research tool code also reads its prior tool calls. |
+| Run state | Recorded SDK input, steps, outcomes, and compaction checkpoint. Live synchronization and workers belong to `Run`, not this data model. |
 | Reminder | A trailing user message carrying one or two critical instructions. It is last because models attend hardest to final tokens. |
 | Custom agent prompt | The persona's instructions, injected as a user message that moves to sit above the newest user message each turn. |
 | Fence | A cache key acting as a flag. The stop fence means the user pressed stop. The processing fence means a turn is live. |
-| Incognito | A session mode where content is not persisted to the chat tables. |
+| Incognito | Hides the session from ordinary history. Its pinned record mode selects full history or usage-only durable storage. |
 
-## Three representations of a message
+## Message types
 
-Mixing these is the most common mistake in the chat code.
-
-1. `ChatMessage`: the database row. Convert it early, never pass it deep.
-2. `ChatMessageSimple`: the canonical in-code model. Extend this one.
-3. `ChatCompletionMessage`: the LLM-facing form. Deliberately minimal.
+| Type | Owner and purpose |
+| --- | --- |
+| `ChatMessage` | Database row for user input, an assistant response, or a summary. Public feedback and branching attach here. |
+| `Message` (`llm/models.py`) | Typed model content: user, system, assistant, or tool result. The SDK uses it for execution and history. |
+| `ChatResponseItem` | Stored assistant model generation, keyed by response and step. Tool results live on `ToolCall`. |
+| `ChatCompletionMessage` | Provider request format. The LLM adapter converts shared messages into it. |
+| `Packet` | Browser display update, with placement and model identity. Chat renderers derive it from execution content. |

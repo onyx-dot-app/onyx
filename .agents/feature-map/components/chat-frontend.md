@@ -197,6 +197,12 @@ Before publishing the loaded message tree, the controller clears the active
 assistant row's placeholder text and packets. Its saved `stop` packet must not
 advance the renderer's packet cursor before replay starts.
 
+When completion cannot be confirmed, the input stays blocked and offers **Check again**.
+`settleChatSession` waits for server idle state and reloads saved history before releasing input.
+Automatic settlement requires the send acknowledgement. Explicit recovery can proceed after
+that acknowledgement rejects, but still waits for a pending acknowledgement. Recovery uses
+the original controller identity so it cannot overwrite a newer request's state.
+
 ### 4.4 Rendering: packets to components
 
 `RendererComponent` (`message/messageComponents/renderMessageComponent.tsx`) is the

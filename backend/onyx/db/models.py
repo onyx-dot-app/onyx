@@ -3418,9 +3418,6 @@ class ChatMessage(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    # Correlate live SDK output with its response before and after archival.
-    run_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
-
     response_status: Mapped[RunStatus | None] = mapped_column(
         Enum(
             RunStatus,
@@ -3572,26 +3569,16 @@ class ChatMessage(Base):
 
 
 class ChatResponseItem(Base):
+    """One recorded model generation and its display settings."""
+
     __tablename__ = "chat_response_item"
     __table_args__ = (
-        UniqueConstraint("tool_call_id"),
         CheckConstraint("step_index >= 0", name="ck_response_item_step_index"),
-        CheckConstraint(
-            "(message IS NOT NULL AND tool_call_id IS NULL AND generation_status IS NOT NULL) OR "
-            "(message IS NULL AND tool_call_id IS NOT NULL AND generation_status IS NULL AND NOT is_answer)",
-            name="ck_response_item_kind",
-        ),
-        Index(
-            "ix_response_item_step",
-            "chat_message_id",
-            "step_index",
-        ),
         Index(
             "uq_response_item_step",
             "chat_message_id",
             "step_index",
             unique=True,
-            postgresql_where=text("message IS NOT NULL"),
         ),
         Index(
             "uq_response_item_answer",
@@ -3605,23 +3592,18 @@ class ChatResponseItem(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE")
     )
     step_index: Mapped[int] = mapped_column(Integer)
-    message: Mapped[AssistantMessage | None] = mapped_column(
+    message: Mapped[AssistantMessage] = mapped_column(
         PydanticType(AssistantMessage, sanitize_strings=True, none_as_null=True),
-        nullable=True,
     )
-    generation_status: Mapped[ExecutionStatus | None] = mapped_column(
+    generation_status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
             ExecutionStatus,
             native_enum=False,
             values_callable=lambda values: [v.value for v in values],
         ),
-        nullable=True,
     )
     is_answer: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
-    )
-    tool_call_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True
     )
     rendering: Mapped[dict[str, JsonValue] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
@@ -3630,9 +3612,6 @@ class ChatResponseItem(Base):
         "ChatMessage",
         back_populates="response_items",
         foreign_keys=[chat_message_id],
-    )
-    tool_call: Mapped["ToolCall | None"] = relationship(
-        "ToolCall", foreign_keys=[tool_call_id], lazy="selectin"
     )
 
 

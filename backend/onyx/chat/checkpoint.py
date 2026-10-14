@@ -238,7 +238,7 @@ def serialize_checkpoint(
         raise ValueError("Checkpoint requires a safely suspended run")
     if snapshot.child_runs:
         raise ValueError("Save each child response independently before checkpointing")
-    if snapshot.run_id != response.run_id:
+    if snapshot.run_id != response.run_id or binding.response_id != response.run_id:
         raise ValueError("Checkpoint belongs to another response")
     serializer = _CheckpointSerializer(_checkpoint_model_types())
 
@@ -286,7 +286,7 @@ def deserialize_checkpoint(
         raise ValueError("Checkpoint history changed")
     if _response_digest(response) != data.response_digest:
         raise ValueError("Checkpoint response changed")
-    if data.binding != binding:
+    if data.binding != binding or binding.response_id != response.run_id:
         raise ValueError("Checkpoint does not match the selected context")
     return _restore_checkpoint_state(data, response, context, serializer)
 

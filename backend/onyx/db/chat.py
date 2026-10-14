@@ -1097,8 +1097,6 @@ def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
         key=lambda item: item.step_index,
         reverse=True,
     ):
-        if item.message is None:
-            continue
         if chat_message.response_status == RunStatus.COMPLETE and not item.is_answer:
             continue
         rendering = (

@@ -64,7 +64,9 @@ Cancellation preserves accepted partial output; `snapshot()` copies that state f
 Message events carry an explicit message ID. Updates reuse the LLM content delta types.
 Provider retries happen within this message lifecycle; they do not start another agent message.
 Chat converts these events into frontend packets for text, reasoning, tool activity, and response completion.
-It saves the response under a chat message ID. Message IDs connect SDK events to saved response items.
+For durable chat, the run ID is the reserved assistant chat message ID, represented as a string.
+Message IDs identify the individual model messages within that response.
+Standalone and temporary incognito runs use generated run IDs.
 
 ## Quick start
 
@@ -346,7 +348,8 @@ Use `run.snapshot()` to inspect an isolated copy while execution continues.
 
 Message content and execution status change under the run lock. Event listeners cannot change recorded data.
 Child records are collected when the parent finishes; a parent snapshot is not a live view of every child.
-Chat saves the same step structure in a detached `ResponseRecord`, after removing application metadata and tool details.
+Chat saves the same step structure in a detached `ResponseRecord`.
+It removes transient metadata and stores search documents through database relations.
 Saved rendering reads the recorded steps. Model-context loading excludes unfinished tool calls without changing saved output.
 
 Archived child restoration rebuilds a conversation from messages, a compaction checkpoint, and the previous run identity.
@@ -439,8 +442,8 @@ and references the parent response that created it. The root controls access, sh
 The runtime agent ID identifies this session.
 
 An assistant `chat_message` owns one complete or partial response, its outcome, and feedback.
-Its user-message parent owns the input. Ordered `chat_response_item` rows store shared assistant messages or reference tool results.
-Assistant rows retain message identity, content, generation status, and provider metadata, including empty messages.
+Its user-message parent owns the input. `chat_response_item` stores each assistant model generation in step order.
+These items retain message identity, content, generation status, and provider metadata, including empty messages.
 `tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
 Argument parsing details remain in the saved assistant message; tool rows do not store another copy.
 
@@ -517,7 +520,12 @@ Its `build_chat_prompt` function selects chat instructions and reminders before 
 Chat persistence receives the tool IDs and citation metadata needed to save their output.
 
 Chat keeps accepted output in `ChatMessage`, `ChatResponseItem`, and `ToolCall`.
-A response's `run_id` connects live SDK handles to that same history.
+The assistant `ChatMessage.id` identifies its SDK run throughout execution, storage, and resumption.
+Chat reserves child question and response rows before constructing their runs.
+The ownership implementation supplies that identity; the SDK treats it as an opaque string.
+Ownership tokens and checkpoint versions distinguish execution owners across API pods.
+`ResponseRecord` retains the run identity and ancestry from `RunState`.
+Database operations use the integer assistant-message ID; execution records use its string form.
 Chat uses one execution worker per active agent, one turn control worker, and one event-delivery worker.
 The execution worker consumes model streams directly.
 Cancellation takes effect when a blocked provider read returns or times out; the run retains ownership until then.

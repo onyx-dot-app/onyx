@@ -21,7 +21,10 @@ from onyx.deep_research.research_agent import ResearchAgent
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.tools.interface import Tool
-from shared_configs.contextvars import get_current_tenant_id
+from shared_configs.contextvars import (
+    CURRENT_TENANT_ID_CONTEXTVAR,
+    get_current_tenant_id,
+)
 
 
 class ChatAgentDirectory(AgentDirectory):
@@ -41,6 +44,9 @@ class ChatAgentDirectory(AgentDirectory):
         self.tools = tools
         self.user_identity = user_identity
         self.store = store
+        self.tenant_id = (
+            store.tenant_id if store is not None else get_current_tenant_id()
+        )
 
     def lookup_agent(self, agent_id: str, parent_id: str) -> AgentInfo | None:
         if self.store is not None:
@@ -51,10 +57,20 @@ class ChatAgentDirectory(AgentDirectory):
         saved = self.lookup_agent(agent_id, parent_id)
         if saved is None:
             raise ValueError("Agent is not a visible child of this parent")
-        if self.store is not None and saved.latest_run_id is not None:
-            history = self.store.load_history(saved.latest_run_id, parent_id)
-        else:
+        if (
+            self.store is not None
+            and saved.latest_run_id is not None
+            and not self.store.read_run_status(
+                saved.latest_run_id, parent_id
+            ).is_terminal
+        ):
+            raise ValueError("Response must finish before another run starts")
+        # Restoration must use the conversation's tenant, not the worker's context.
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
+        try:
             history = self.history_store.load_agent_history(saved.id)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         configuration = history.configuration
         if configuration is None:
             raise ValueError("This agent's external resources are no longer available")

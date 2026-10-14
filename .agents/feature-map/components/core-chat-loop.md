@@ -107,7 +107,7 @@ Both are tenant-scoped through `CacheBackend`.
 
 ```text
 handle_send_chat_message                     server/query_and_chat/chat_backend.py
-  -> process_message                        chat/process_message.py
+  -> _stream_chat_turn                      chat/process_message.py
   -> prepare_chat_turn                      chat/prepare.py
   -> ChatTurnExecution                      chat/execution.py
        -> ChatAgent                         chat/agent.py
@@ -146,17 +146,18 @@ Preparation resolves:
   reused by prompt loading and tools; `extract_context_files` applies the shared budget
 - reserved token count via `calculate_reserved_tokens` (`chat/prompt_utils.py`)
 - the user message row via `create_new_chat_message`
-- assistant message IDs via `reserve_message_id` or `reserve_multi_model_message_ids`
+- assistant message IDs via `reserve_chat_response_ids`
 
-### 4.3 Execution: `_run_models`
+### 4.3 Execution
 
-One worker thread per model in a `ThreadPoolExecutor`, each submitted with a copied
-`contextvars.Context`. Tenant ID and tracing context live in contextvars, so losing
-the copy is a real bug class.
+`ChatTurnExecution` starts one synchronous response worker per selected model with
+`start_thread_future`. This utility copies tenant and tracing context into the thread.
+Each worker constructs its feature agent and calls `Agent.start(background=False)`.
+Child agents and parallel tools use additional workers when needed.
 
-Each worker gets:
-- its own `Emitter(model_idx=i, merged_queue, drain_done)`
-- its own `ChatStateContainer`
+All responses share one `ChatDelivery`. Its event dispatcher renders SDK events,
+publishes browser packets, and writes the replay buffer. `Emitter` stamps each
+response's model index. Closing the browser reader does not stop execution.
 
 Each worker passes a lazy SEARCH_SELECTION client factory into `construct_tools`.
 Search keeps the answer client for rewrites and filters, resolving the separate
@@ -165,11 +166,9 @@ The factory captures the session's pinned incognito policy and request headers.
 An unset SEARCH_SELECTION returns that same answer client and never falls back
 to the independent CHAT_NAMING designation.
 
-All workers write `(model_idx, packet)` tuples to **one shared `merged_queue`**.
-A single writer thread, `_drain_to_completion`, drains it and publishes packets to the
-stream buffer and reader tee in arrival order. `_read_stream` is the generator that
-yields them to the caller. A failing worker yields a `StreamingError` for that model only;
-the others keep running.
+The chat control thread polls Stop and ownership state. It observes response worker
+and persistence outcomes, then releases session admission after work and delivery finish.
+A failed response reports its error without discarding other models' output.
 
 See [[file-store-and-user-files]] §4.4 for project/persona file-loading
 session boundaries.
@@ -180,7 +179,7 @@ session boundaries.
 
 ```
 [system] [history before last user] [custom agent prompt] [context/project files]
-[forgotten-files notice] [last user message] [tool calls and responses] [reminder]
+[last user message] [tool calls and responses] [file notices] [reminder]
 ```
 
 The reasoning behind each position is in `backend/onyx/chat/README.md` and in
@@ -219,19 +218,16 @@ preserves the checkpoint needed to continue the selected message branch.
 
 ### 4.6 Stop, resume, heartbeat
 
-- Stop: `POST /chat/stop-chat-session/{id}` sets the stop fence for the stream ID
-  (from the `stream_id` query parameter, or else from the processing fence).
-- The writer thread polls `check_is_connected()` every **50 ms**, on each
-  `merged_queue.get` timeout.
-- On stop it persists every model's partial output, emits
-  `OverallStop(stop_reason="user_cancelled")`, and sets `drain_done`.
-- `drain_done` turns every `Emitter.emit` into a no-op, so worker threads cannot keep
-  growing the queue after cancellation. It does not interrupt a worker. A worker stays
-  active until its in-flight LLM or tool call returns.
-- The processing fence is re-armed every 60 s. `resume_chat_stream` uses it to detect
-  a dead writer.
-- Heartbeats (`ChatHeartbeat`) go out every `CHAT_HEARTBEAT_INTERVAL_S` on both the
-  live and the resumed stream.
+- Stop sets a fence for the active stream ID. Later turns use a different fence.
+- The chat control thread checks Stop and run ownership every 250 ms between calls.
+  Slow cache calls can delay the next check.
+- Cancellation signals reach root runs, children, and tool work. Accepted partial
+  output is saved; late events cannot append new response output.
+- The browser shows cancellation in progress while active work drains. Session
+  admission remains held until workers, persistence, and delivery finish.
+- Processing status refreshes every 60 seconds. Resume uses the replay buffer and
+  processing status to distinguish active streams from completed work.
+- Heartbeats go out every `CHAT_HEARTBEAT_INTERVAL_S` on live and resumed streams.
 
 ---
 
@@ -245,21 +241,20 @@ whenever you touch this component.
    The generic SDK and provider adapter do not write chat database rows.
    MemoryTool owns memory side effects, subject to the incognito guard.
 
-2. **`ChatTurnSetup` is frozen and detached.** No ORM object may cross into a worker
-   thread. Passing a live SQLAlchemy object is a `DetachedInstanceError` waiting for
-   production load.
+2. **`ChatTurnSetup` is frozen and detached.** Preparation captures configuration
+   and history before closing its DB session. Workers must not lazy-load that ORM state.
 3. **Worker threads get a copied `contextvars.Context`.** Tenant ID and tracing live
    there. A new thread without the copy silently writes to the wrong tenant.
 4. **Browser rendering must not drive execution.** SDK state owns model and tool
    progress. The presenter and renderer consume that state to produce packets.
-5. **A turn gets one save attempt.** Anything new that can end a turn must route
-   through `_persist_model_outcome`, not call the save path directly.
+5. **Root finalization uses `ChatResponsePersistence`.** It reports one final
+   outcome. Progressive execution saves and checkpoints belong to `ChatRunStore`.
 6. **The assistant message row exists before the first token.** IDs are reserved up
    front. Do not move reservation later.
 7. **Every packet carries a `Placement`.** `model_index` is stamped by the `Emitter`,
    never by the producer. See [[streaming-protocol]].
-8. **`drain_done` makes emitters no-ops.** Do not add an emit path that bypasses the
-   check, or a cancelled turn will leak packets and threads.
+8. **Cancelled execution cannot publish late response output.** The runtime
+   fences accepted state, and `ChatTurnExecution._publish` checks cancellation.
 9. **The reminder message stays last.** Anything appended after it silently degrades
    citation reliability.
 10. **Multi-model requires streaming** and is capped at 2-3 models. Deep research
@@ -299,11 +294,11 @@ whenever you touch this component.
 |---|---|
 | adds or renames a streaming packet | [[streaming-protocol]] and the frontend parser and renderer in [[chat-frontend]]; then [[mobile-app]], which parses the same stream |
 | changes the order or content of assembled context | [[context-assembly]]; re-read the rationale in `chat/README.md` before moving anything; citation quality is the usual casualty |
-| adds a field to `ChatStateContainer` | `save_chat_turn`, `gather_stream_full` (non-streaming path), `_save_errored_message`, and the incognito path |
-| adds a new way for a turn to end | `_persist_model_outcome` must be the route; verify the stop path and the error path both still make one save attempt |
-| touches thread creation or the queue | `contextvars` copying, `drain_done` handling, and the 50 ms cancel poll |
+| changes SDK output or its chat projection | `ChatResponsePersistence`, `save_chat_turn`, non-streaming responses, and incognito storage |
+| adds a new way for a turn to end | verify `ChatResponsePersistence` reports a final outcome for stop, startup failure, and runtime failure |
+| touches thread creation or the queue | context propagation, cancellation fences, delivery drain, and the control poll |
 | changes `save_chat_turn` or the tables | [[chat-persistence]]; the session-replay path `GET /chat/get-chat-session/{id}` must render the same packets the live stream produced |
-| changes the tool set or tool results | [[tools-framework]] and every tool implementation; later turns see a placeholder instead of the tool response (the active turn keeps it), so anything a later turn needs must live in the tool-call arguments |
+| changes the tool set or tool results | [[tools-framework]] and every tool implementation; SDK history retains results; legacy history can use placeholders |
 | changes prompts | run an eval; see [[observability]] for tracing, and `backend/onyx/evals/` |
 | changes anything in this component at all | the Slack and Discord bots, the public API, and MCP all share this loop |
 
@@ -380,21 +375,17 @@ launching Playwright ad hoc.
 ### What "working" looks like
 
 - No orphaned assistant message rows with empty content and no error.
-- Exactly one save per model per turn.
-- Stop returns control in well under a second.
+- One final outcome per model, with progressive execution saves as needed.
+- Stop shows cancellation until active work drains; admission stays held during that wait.
 - Replay of a saved session is visually identical to the live stream.
 
 ---
 
 ## 9. Footguns
 
-- **Tool responses are discarded from later-turn history.** Inside the active turn,
-  the next cycle still receives the tool response. When a later message rebuilds
-  history, a fixed placeholder string replaces the response
-  (`chat_utils.py:_build_tool_call_response_history_message`). Only the tool-call
-  *arguments* survive. The exception is image generation. Its file ids and revised
-  prompts stay in later-turn history. If a later turn needs another fact, it must be
-  in the arguments or re-fetched.
+- **SDK responses retain completed tool results.** Later requests can use them until
+  compaction replaces older context. Legacy responses can use placeholders.
+
 - **Search tool arguments in history are the LLM's original arguments, not the
   expanded queries.** Query expansion happens inside `SearchTool.run`. It emits
   the expanded set in `SearchToolQueriesDelta` and does not change
@@ -402,17 +393,17 @@ launching Playwright ad hoc.
 - **`turn_index` is not a backend turn.** It is a frontend rendering block. One LLM
   inference that produces reasoning plus a tool call is one backend step but two
   frontend turns.
-- **Three representations of a message exist** and mixing them is the most common
-  mistake here: `ChatMessage` (DB, convert early and never pass deep),
-  `ChatMessageSimple` (the canonical in-code model, and the one to extend), and
-  `ChatCompletionMessage` (`llm/model_request.py`, deliberately minimal, LLM-facing).
+- **Message types have different owners.** `ChatMessage` is a database row.
+  SDK `Message` holds model conversation content. Provider `ChatCompletionMessage`
+  is a wire format; browser `Packet` is a display format.
+
 - **Moving a sentence inside the system prompt changes behaviour a lot.** The team
   measured instruction-follow rates swinging from roughly 30% to 90% by moving the
   same sentence into the right section. Do not reorganise prompt text for tidiness.
-- **Multi-model uses the smallest context window across all selected models** for
-  compression math and for `llm_max_context_window`.
-- **Only one model claims compression** after a multi-model turn, via
-  `compression_claimed`. Do not make compression run per model.
+- **File extraction uses the smallest selected context window.** Each SDK run
+  then fits and compacts its prompt against its own model context budget.
+- **Compaction belongs to each SDK run.** The saved summary is tied to its response
+  branch. A later turn must use the summary from its selected ancestry.
 - **Anonymous access is allowed** on several of these endpoints
   (`allow_anonymous=True`). A change that assumes a logged-in user will break the
   anonymous flow.

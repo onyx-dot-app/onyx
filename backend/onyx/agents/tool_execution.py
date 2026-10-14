@@ -221,10 +221,10 @@ class ToolBatch:
                                 raise ValueError(
                                     "Child dependency requires an execution coordinator"
                                 )
-                            children = self.run._coordination.child_states(
+                            children = self.run._coordination.completed_child_states(
                                 pending.run_ids
                             )
-                            if any(not child.status.is_terminal for child in children):
+                            if children is None:
                                 self.run._watch_children(pending.run_ids)
                                 continue
                             self._resolve_tool_wait(call)
