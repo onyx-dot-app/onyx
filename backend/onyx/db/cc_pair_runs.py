@@ -233,14 +233,15 @@ def count_cc_pair_runs_by_status_group(
 def get_index_runs_since(
     db_session: Session, cc_pair_id: int, since: datetime
 ) -> list[IndexAttempt]:
-    """The pair's index runs created since ``since``, plus any still active,
-    oldest first. Creation time, not ``time_updated``, keys the window because
-    checkpoint cleanup touches old attempts days later."""
+    """The pair's index runs created or last heard from since ``since``, plus
+    any still active, oldest first. ``time_updated`` is left out of the window
+    because checkpoint cleanup touches old attempts days later."""
     stmt = (
         _index_runs_of_pair(cc_pair_id)
         .where(
             or_(
                 IndexAttempt.time_created >= since,
+                IndexAttempt.last_heartbeat_time >= since,
                 IndexAttempt.status.in_(
                     [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
                 ),

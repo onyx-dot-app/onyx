@@ -420,19 +420,22 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
     other = _create_cc_pair(db_session, AccessType.PUBLIC)
     now = datetime.now(timezone.utc)
     recent = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    # Began before the window and ran 11 of its 12 hours inside it.
+    overlapping = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     old = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
     foreign = _index_attempt(db_session, other, 0, IndexingStatus.SUCCESS)
     # Cleanup touched this one days after it ran, as checkpoint cleanup does.
     cleaned = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
-    for attempt, ended in [
-        (recent, now - timedelta(hours=2)),
-        (old, now - timedelta(days=2)),
-        (foreign, now - timedelta(hours=2)),
-        (cleaned, now - timedelta(days=9)),
+    for attempt, ran_for, ended in [
+        (recent, timedelta(hours=1), now - timedelta(hours=2)),
+        (overlapping, timedelta(hours=12), now - timedelta(hours=1)),
+        (old, timedelta(hours=1), now - timedelta(days=2)),
+        (foreign, timedelta(hours=1), now - timedelta(hours=2)),
+        (cleaned, timedelta(hours=1), now - timedelta(days=9)),
     ]:
-        attempt.time_created = ended - timedelta(hours=1)
-        attempt.time_started = ended - timedelta(hours=1)
-        attempt.time_updated = ended
+        attempt.time_created = ended - ran_for
+        attempt.time_started = ended - ran_for
+        attempt.last_heartbeat_time = ended
         attempt.total_docs_indexed = 100
     cleaned.time_updated = now - timedelta(minutes=5)
     db_session.commit()
@@ -444,5 +447,5 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
         db_session=db_session,
     )
 
-    assert sum(response.docs_indexed) == 100
+    assert sum(response.docs_indexed) == 100 + round(100 * 11 / 12)
     assert [run.started for run in response.runs] == [recent.time_started]

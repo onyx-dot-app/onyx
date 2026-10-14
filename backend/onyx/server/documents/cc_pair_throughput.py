@@ -21,12 +21,15 @@ def docs_indexed_per_slice(
         if attempt.time_started is None or docs == 0:
             continue
         run_start = attempt.time_started
-        # A run has no end time. Its last update stands in for one.
-        run_end = (
-            max(attempt.time_updated, run_start)
-            if attempt.is_finished()
-            else window_end
-        )
+        # A run has no end time. Its last heartbeat stands in for one, since
+        # checkpoint cleanup bumps time_updated days later. A finished run that
+        # never reached a heartbeat check ran for less than one, so it is instant.
+        if not attempt.is_finished():
+            run_end = window_end
+        elif attempt.last_heartbeat_time is None:
+            run_end = run_start
+        else:
+            run_end = max(attempt.last_heartbeat_time, run_start)
         if run_end < window_start or run_start >= window_end:
             continue
         if run_end == run_start:
