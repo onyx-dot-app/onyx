@@ -67,6 +67,9 @@ export interface Settings {
   // Gates visibility of the admin Craft-access controls.
   onyx_craft_available?: boolean;
 
+  // Craft is switched on but the tier is too low: show the upgrade prompt.
+  onyx_craft_requires_upgrade?: boolean;
+
   // Workspace default for Craft access; per-user overrides win.
   craft_default_enabled?: boolean;
 
