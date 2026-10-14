@@ -75,7 +75,7 @@ packages:
   src/lib/hierarchy: 100
   src/lib/hooks: 95.8
   src/lib/languageModels: 99
-  src/lib/mcp: 97.9
+  src/lib/mcp: 98.2
   src/lib/multiModel: 100
   src/lib/notifications: 99.3
   src/lib/oauth: 100
@@ -113,7 +113,7 @@ packages:
   src/refresh-components/texts: 99.4
   src/refresh-components/tiles: 100
   src/sections: 100
-  src/sections/actions: 99.1
+  src/sections/actions: 99.3
   src/sections/admin: 100
   src/sections/agents: 99.8
   src/sections/banners: 99.1

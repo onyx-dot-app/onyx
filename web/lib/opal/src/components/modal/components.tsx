@@ -17,6 +17,7 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
 import useContainerCenter from "@opal/hooks/useContainerCenter";
 import { useOpalStrings } from "@opal/strings";
+import useAnimatedHeight from "@opal/components/modal/useAnimatedHeight";
 
 // ---------------------------------------------------------------------------
 // Root + Overlay
@@ -424,11 +425,14 @@ interface ModalBodyProps extends WithoutStyles<SectionProps> {
   ref?: React.Ref<HTMLDivElement>;
   /** Gray body background separating it from the header/footer. */
   twoTone?: boolean;
+  /** Animate natural content height changes while preserving body scrolling. */
+  animateHeight?: boolean;
 }
 
 function ModalBody({
   ref,
   twoTone = true,
+  animateHeight = false,
   children,
   /*
    * Defaulted here rather than written before the spread below: a spread
@@ -442,13 +446,19 @@ function ModalBody({
   alignItems = "start",
   ...props
 }: ModalBodyProps) {
+  const sectionRef = React.useRef<HTMLDivElement>(null);
+
+  useAnimatedHeight(sectionRef, animateHeight);
+
   return (
     <div
       ref={ref}
       className="opal-modal-body"
+      data-animate-height={animateHeight || undefined}
       {...(twoTone && { "data-two-tone": "" })}
     >
       <Section
+        ref={sectionRef}
         height={height}
         padding={padding}
         gap={gap}
@@ -513,15 +523,35 @@ interface BasicModalFooterProps {
   left?: React.ReactNode;
   cancel?: React.ReactNode;
   submit?: React.ReactNode;
+  /** Put navigation above actions on narrow screens. Requires a wrapping footer. */
+  stackOnSmallScreens?: boolean;
 }
 
 /** Footer layout with an optional left slot and right-aligned cancel/submit. */
-function BasicModalFooter({ left, cancel, submit }: BasicModalFooterProps) {
+function BasicModalFooter({
+  left,
+  cancel,
+  submit,
+  stackOnSmallScreens = false,
+}: BasicModalFooterProps) {
   return (
     <>
-      {left && <Section alignItems="start">{left}</Section>}
+      {left && (
+        <Section
+          alignItems="start"
+          className={stackOnSmallScreens ? "sm:w-auto sm:flex-1" : undefined}
+        >
+          {left}
+        </Section>
+      )}
       {(cancel || submit) && (
-        <Section flexDirection="row" justifyContent="end" gap={2}>
+        <Section
+          flexDirection="row"
+          justifyContent="end"
+          gap={2}
+          wrap={stackOnSmallScreens}
+          className={stackOnSmallScreens ? "sm:w-auto" : undefined}
+        >
           {cancel}
           {submit}
         </Section>

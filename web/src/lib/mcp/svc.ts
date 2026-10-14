@@ -4,6 +4,7 @@
 
 import { parseErrorDetail } from "@/lib/fetcher";
 import {
+  MCPOAuthDiscovery,
   MCPServer,
   MCPServerCreateRequest,
   MCPServerUpdateRequest,
@@ -45,8 +46,7 @@ export async function refreshMCPServerTools(
     `/api/admin/mcp/server/${serverId}/tools/snapshots?source=mcp`
   );
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to refresh tools");
+    throw new Error(await parseErrorDetail(response, "Failed to load tools"));
   }
 
   return await response.json();
@@ -121,8 +121,9 @@ export async function updateMCPServerStatus(
   );
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to update MCP server status");
+    throw new Error(
+      await parseErrorDetail(response, "Failed to update MCP server status")
+    );
   }
 }
 
@@ -162,6 +163,7 @@ export async function upsertMCPServer(serverData: {
   oauth_client_id_changed?: boolean;
   oauth_client_secret_changed?: boolean;
   auth_template?: MCPAuthTemplate;
+  auth_template_headers_changed?: Record<string, boolean>;
   admin_credentials?: Record<string, string>;
   // Per-key analogue of `oauth_client_*_changed` for `admin_credentials`.
   admin_credentials_changed?: Record<string, boolean>;
@@ -177,18 +179,25 @@ export async function upsertMCPServer(serverData: {
     });
 
     if (!response.ok) {
-      const errorDetail = (await response.json()).detail;
       return {
         data: null,
-        error: `Failed to create MCP server: ${errorDetail}`,
+        error: await parseErrorDetail(
+          response,
+          "Failed to save MCP server settings"
+        ),
       };
     }
 
     const result: UpsertMCPServerResponse = await response.json();
     return { data: result, error: null };
   } catch (error) {
-    console.error("Error creating MCP server:", error);
-    return { data: null, error: `Error creating MCP server: ${error}` };
+    return {
+      data: null,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to save MCP server settings",
+    };
   }
 }
 
@@ -216,6 +225,83 @@ export function getMCPUserOAuthNavigationUrl(
     : response.redirect_url;
 }
 
+export type MCPOAuthFailureReason =
+  | "client_registration_failed"
+  | "discovery_failed"
+  | "connection_failed"
+  | "oauth_failed";
+
+export class MCPOAuthError extends Error {
+  constructor(
+    message: string,
+    readonly reason: MCPOAuthFailureReason
+  ) {
+    super(message);
+  }
+}
+
+async function readMCPOAuthError(response: Response): Promise<Error> {
+  const fallback =
+    "Could not start OAuth sign-in. Check the server settings and try again.";
+  const body: unknown = await response.json().catch(() => null);
+  if (!body || typeof body !== "object")
+    return new MCPOAuthError(fallback, "oauth_failed");
+  const detail =
+    "detail" in body &&
+    typeof body.detail === "string" &&
+    !/<(?:!doctype|html|head|body)[\s>]/i.test(body.detail)
+      ? body.detail
+      : fallback;
+  const reason = "oauth_error" in body ? body.oauth_error : undefined;
+  if (
+    reason === "client_registration_failed" ||
+    reason === "discovery_failed" ||
+    reason === "connection_failed" ||
+    reason === "oauth_failed"
+  ) {
+    return new MCPOAuthError(detail, reason);
+  }
+  return new Error(detail);
+}
+
+export async function discoverMCPOAuth(
+  serverId: number
+): Promise<MCPOAuthDiscovery> {
+  const response = await fetch("/api/admin/mcp/oauth/discover", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ server_id: serverId }),
+  });
+  if (!response.ok) throw new Error("Could not check OAuth setup support");
+  return response.json();
+}
+
+export async function startMCPAdminOAuth(
+  serverId: number,
+  returnPath: string,
+  options: {
+    oauth_client_id?: string;
+    oauth_client_secret?: string;
+    oauth_client_id_changed?: boolean;
+    oauth_client_secret_changed?: boolean;
+  } = {}
+): Promise<MCPUserOAuthStartResponse> {
+  const response = await fetch("/api/admin/mcp/oauth/connect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      server_id: serverId,
+      return_path: returnPath,
+      include_resource_param: true,
+      ...options,
+    }),
+  });
+  if (!response.ok) {
+    throw await readMCPOAuthError(response);
+  }
+  return response.json();
+}
+
 /** Start OAuth or return the internal destination when already authenticated. */
 export async function startMCPUserOAuth(
   serverId: number,
@@ -233,9 +319,7 @@ export async function startMCPUserOAuth(
     }),
   });
   if (!res.ok) {
-    throw new Error(
-      await parseErrorDetail(res, "Failed to start authorization")
-    );
+    throw await readMCPOAuthError(res);
   }
   return res.json();
 }

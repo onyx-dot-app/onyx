@@ -29,7 +29,9 @@
 
 .opal-modal-positioner {
   @apply fixed -translate-x-1/2;
-  @apply max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-2rem)];
+  @apply max-w-[calc(100dvw-2rem)];
+  --opal-modal-available-height: calc(100dvh - 2rem);
+  max-height: var(--opal-modal-available-height);
   z-index: var(--z-modal);
 }
 .opal-modal-positioner[data-position="center"] {
@@ -40,6 +42,7 @@
 }
 .opal-modal-positioner[data-position="top"] {
   @apply top-[72px];
+  --opal-modal-available-height: calc(100dvh - 72px - 1rem);
 }
 .opal-modal-positioner[data-position="top"][data-viewport-centered] {
   @apply left-1/2;
@@ -71,10 +74,12 @@
   @apply h-fit;
 }
 .opal-modal-card[data-height="sm"] {
-  @apply max-h-120 overflow-y-auto;
+  @apply overflow-y-auto;
+  max-height: min(30rem, var(--opal-modal-available-height));
 }
 .opal-modal-card[data-height="lg"] {
-  @apply max-h-[calc(100dvh-4rem)] overflow-y-auto;
+  @apply overflow-y-auto;
+  max-height: min(calc(100dvh - 4rem), var(--opal-modal-available-height));
 }
 .opal-modal-card[data-height="full"] {
   @apply h-[80dvh] overflow-y-auto;
@@ -110,4 +115,20 @@
 }
 .opal-modal-body[data-two-tone] {
   @apply bg-background-tint-01;
+}
+
+/* Animate the measured content basis, so the viewport clamp still controls scrolling. */
+.opal-modal-body[data-animate-height] {
+  transition: flex-basis 200ms cubic-bezier(0.2, 0, 0, 1);
+  scrollbar-gutter: stable;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-modal-body[data-animate-height] {
+    transition: none;
+  }
+}
+
+.opal-modal-body[data-resizing] {
+  overflow-y: hidden;
 }

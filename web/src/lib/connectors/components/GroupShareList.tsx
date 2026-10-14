@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   InputSingleComboBox,
+  Tag,
   Table,
   type TableColumn,
 } from "@opal/components";
@@ -42,19 +43,12 @@ export interface GroupShareGroup {
   name: string;
 }
 
-interface GroupShareListProps {
+interface GroupShareListBaseProps {
   /** Formik field holding the selected group ids. */
   name: "groups" | "data_access_group_ids";
-  /** The table's accessible name; it has no visible header. */
+  /** Accessible name for the selected groups, as a table or pill region. */
   label: string;
   placeholder: string;
-  /** Fixed rows shown before the selected groups (e.g. "Admins"). */
-  lockedRows?: GroupShareLockedRow[];
-  /**
-   * Each picked group's trailing control, in place of the remove button,
-   * e.g. a role menu. `remove` drops the group.
-   */
-  rowAction?: (group: GroupShareGroup, remove: () => void) => React.ReactNode;
   disabled?: boolean;
   /**
    * The tier groups need. Below it the workspace has no groups to pick, so
@@ -63,9 +57,27 @@ interface GroupShareListProps {
   requiredTier?: Tier;
 }
 
+type GroupShareListProps = GroupShareListBaseProps &
+  (
+    | { variant: "pills"; lockedRows?: never; rowAction?: never }
+    | {
+        variant?: "rows";
+        /** Fixed rows shown before the selected groups (e.g. "Admins"). */
+        lockedRows?: GroupShareLockedRow[];
+        /**
+         * Each picked group's trailing control, in place of the remove button,
+         * e.g. a role menu. `remove` drops the group.
+         */
+        rowAction?: (
+          group: GroupShareGroup,
+          remove: () => void
+        ) => React.ReactNode;
+      }
+  );
+
 /**
- * A group combo box over a table of the groups already added. Each row shows
- * the group's member count and a remove button.
+ * Search for groups, then show selections as table rows or removable pills.
+ * Pills scroll within a bounded region below the search input.
  */
 export default function GroupShareList({
   name,
@@ -75,6 +87,7 @@ export default function GroupShareList({
   rowAction,
   disabled,
   requiredTier = Tier.COMMUNITY,
+  variant = "rows",
 }: GroupShareListProps) {
   const t = useTranslations("admin.connector.groupRestriction");
   const locked: boolean = !useTierAtLeast(requiredTier);
@@ -229,8 +242,29 @@ export default function GroupShareList({
         placeholder={placeholder}
         disabled={disabled || isLoading || loadFailed}
       />
+      {variant === "pills" && rows.length > 0 && (
+        <div
+          role="group"
+          aria-label={label}
+          className="flex max-h-40 flex-wrap gap-2 overflow-y-auto p-1"
+        >
+          {rows.map((row) => {
+            const groupId = row.groupId;
+            return groupId === undefined ? null : (
+              <Tag
+                key={row.id}
+                title={row.name}
+                icon={row.icon}
+                size="md"
+                onRemove={() => removeGroup(groupId)}
+                disabled={disabled || isLoading || loadFailed}
+              />
+            );
+          })}
+        </div>
+      )}
       {loadFailed && <InputErrorText>{t("loadError")}</InputErrorText>}
-      {rows.length > 0 && (
+      {variant === "rows" && rows.length > 0 && (
         <Table
           label={label}
           items={rows}

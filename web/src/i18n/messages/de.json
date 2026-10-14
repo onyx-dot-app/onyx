@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "Authentifizieren und mit {serverName} verbinden",
-        "label": "Authentifizieren"
+        "ariaLabel": "Authentifizierung für {serverName} einrichten",
+        "label": "Authentifizierung einrichten"
       },
       "deleteButton": {
         "ariaLabel": "Server {serverName} löschen",
@@ -130,14 +130,13 @@
       "authStatus": {
         "apiTokenDescription": "API-Token konfiguriert",
         "connectedDescription": "Verbunden",
-        "oauthDescription": "OAuth mit {owner} verbunden",
         "title": "Authentifiziert & verbunden"
       },
       "cancelButton": {
         "label": "Abbrechen"
       },
       "description": {
-        "placeholder": "Weitere Details zum MCP-Server",
+        "placeholder": "Was kann Ihr Team mit diesem Server tun?",
         "suffix": "optional",
         "title": "Beschreibung"
       },
@@ -145,21 +144,20 @@
         "tooltip": "Server trennen"
       },
       "editConfigsButton": {
-        "label": "Konfiguration bearbeiten"
+        "label": "Verbindungseinstellungen"
       },
       "manageHeader": {
         "description": "Aktualisieren Sie die Konfiguration Ihres MCP-Servers und verwalten Sie die Authentifizierung.",
         "title": "MCP-Server verwalten"
       },
       "name": {
-        "placeholder": "Benennen Sie Ihren MCP-Server",
+        "placeholder": "z. B. Linear",
         "required": "Der Servername ist erforderlich",
         "title": "Servername"
       },
       "serverUrl": {
         "invalid": "Muss eine gültige URL sein",
         "required": "Die Server-URL ist erforderlich",
-        "subDescription": "Verbinden Sie sich nur mit Servern, denen Sie vertrauen. Sie sind für die über diese Verbindung ausgeführten Aktionen und für die Aktualität Ihrer Tools verantwortlich.",
         "title": "MCP-Server-URL"
       },
       "submitButton": {
@@ -173,6 +171,33 @@
         "serverCreated": "MCP-Server erfolgreich erstellt",
         "serverUpdated": "MCP-Server erfolgreich aktualisiert",
         "updateFailed": "Der MCP-Server konnte nicht aktualisiert werden"
+      },
+      "access": {
+        "title": "Zugriffssteuerung",
+        "description": "Wählen Sie, wer diesen MCP verwenden kann.",
+        "public": {
+          "label": "Öffentlich",
+          "description": "Alle in Ihrer Organisation können diesen MCP verwenden"
+        },
+        "groups": {
+          "label": "Benutzergruppen",
+          "description": "Ausgewählte Benutzergruppen können diesen MCP verwenden.",
+          "placeholder": "Benutzergruppen hinzufügen",
+          "required": "Wählen Sie mindestens eine Benutzergruppe."
+        },
+        "scoped": {
+          "description": "Wählen Sie mindestens eine Gruppe, die Sie verwalten."
+        },
+        "retainedUsers": "{count, plural, one {Auch direkt mit # Benutzer geteilt.} other {Auch direkt mit # Benutzern geteilt.}}",
+        "planNote": "Gruppenzugriff erfordert einen Business-Tarif."
+      },
+      "craft": {
+        "title": "In Craft verfügbar",
+        "description": "Benutzer können in Craft auf diesen MCP-Server zugreifen."
+      },
+      "defaultChat": {
+        "title": "Im Standardchat von Onyx verfügbar",
+        "description": "Wenn deaktiviert, müssen Benutzer diesen Server einem benutzerdefinierten Agenten hinzufügen, um ihn im Chat zu verwenden."
       }
     },
     "addOpenApiModal": {
@@ -279,54 +304,47 @@
       "additionalAuthParams": {
         "label": "Zusätzliche Auth-Parameter (JSON)"
       },
-      "advanced": {
-        "description": "Konfigurieren Sie einen bekannten OAuth-Anbieter mit expliziten Autorisierungs- und Token-Endpunkten statt mit automatischer Erkennung.",
-        "title": "Erweitert"
-      },
       "apiKey": {
         "required": "Das API-Token ist erforderlich"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "Gemeinsamer Schlüssel (Administrator)"
+          "label": "Gemeinsames Token"
         },
         "perUser": {
-          "label": "Individueller Schlüssel (pro Benutzer)"
+          "label": "Persönliches Token"
         }
       },
       "authPerformer": {
-        "required": "Die authentifizierende Instanz ist erforderlich"
+        "required": "Wählen Sie persönliche oder gemeinsame Zugangsdaten."
       },
       "authType": {
         "apiToken": {
-          "description": "Verwenden Sie einen individuellen API-Schlüssel pro Benutzer oder einen gemeinsamen API-Schlüssel für die gesamte Organisation.",
           "label": "API-Schlüssel"
         },
         "label": "Authentifizierungsmethode",
         "none": {
-          "description": "Nicht empfohlen",
-          "label": "Keine"
+          "label": "Keine Authentifizierung"
         },
         "oauth": {
-          "description": "Jeder Benutzer muss sich über OAuth mit eigenen Anmeldedaten authentifizieren.",
           "label": "OAuth"
         },
         "placeholder": "Methode auswählen",
         "ptOauth": {
-          "description": "Das OAuth-Zugriffstoken des Benutzers weiterleiten, mit dem {appName} authentifiziert wird.",
           "label": "OAuth Pass-through"
         },
         "required": "Der Authentifizierungstyp ist erforderlich"
       },
       "authorizationEndpoint": {
         "label": "Autorisierungs-Endpunkt",
-        "required": "Im Modus für bekannte Anbieter ist der Autorisierungs-Endpunkt erforderlich"
+        "required": "Geben Sie den Autorisierungsendpunkt Ihres Anbieters ein."
       },
       "cancelButton": {
         "label": "Abbrechen"
       },
       "clientId": {
-        "label": "Client ID"
+        "label": "Client ID",
+        "required": "Geben Sie Ihre OAuth-Client-ID ein."
       },
       "clientSecret": {
         "label": "Client Secret"
@@ -335,25 +353,30 @@
         "additionalParamsInvalid": "Ungültiges JSON für zusätzliche Auth-Parameter",
         "additionalParamsInvalidWithReason": "Ungültiges JSON für zusätzliche Auth-Parameter: {reason}",
         "additionalParamsNotObject": "Zusätzliche Auth-Parameter müssen ein JSON-Objekt sein",
-        "oauthInitFailed": "OAuth konnte nicht gestartet werden: {detail}",
         "saveAuthFailed": "Die Authentifizierungskonfiguration konnte nicht gespeichert werden",
-        "saveConfigFailed": "Die Serverkonfiguration konnte nicht gespeichert werden"
+        "saveConfigFailed": "Die Serverkonfiguration konnte nicht gespeichert werden",
+        "saveStage": "Verbindungseinstellungen konnten nicht gespeichert werden",
+        "oauthStage": "Anmeldung konnte nicht gestartet werden",
+        "discoveryStage": "Server-Tools konnten nicht geladen werden",
+        "loadStage": "Verbindungseinstellungen konnten nicht geladen werden",
+        "clientRegistrationFailed": "Die automatische Client-Registrierung ist fehlgeschlagen. Verwenden Sie Ihren eigenen OAuth-Client oder prüfen Sie die Einrichtungsanforderungen des Anbieters.",
+        "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
+        "connectionFailed": "Der OAuth-Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
+        "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut."
       },
       "header": {
-        "defaultTitle": "MCP-Server authentifizieren",
-        "description": "Authentifizieren Sie Ihre Verbindung, um den MCP-Server zu verwenden.",
-        "title": "*{name}* authentifizieren"
-      },
-      "knownProvider": {
-        "hint": "Der Modus für bekannte Anbieter erfordert eine Endpunktkonfiguration. Referenz-Endpunkte von Google: Autorisierung {authorizationEndpoint} und Token {tokenEndpoint}."
+        "defaultTitle": "Authentifizierung konfigurieren",
+        "description": "Authentifizierung des MCP-Servers konfigurieren",
+        "title": "*{name}* konfigurieren"
       },
       "noAuthNotice": {
-        "description": "Für diese Verbindung wird keine Authentifizierung verwendet. Stellen Sie sicher, dass Sie diesem Server vertrauen. Sie sind für die über diese Verbindung ausgeführten Aktionen verantwortlich.",
-        "title": "Keine Authentifizierung für diesen MCP-Server"
+        "description": "Benutzer können diesen Server ohne Anmeldung verwenden. Konfigurierte benutzerdefinierte Header werden weiterhin gesendet.",
+        "title": "Keine Authentifizierung erforderlich"
       },
       "oauthInfo": {
-        "discovery": "Client ID und Secret sind optional. Bei der automatischen Erkennung verwendet {appName} ein Client ID Metadata Document (CIMD), sofern unterstützt, und greift sonst auf Dynamic Client Registration (DCR) zurück.",
-        "manualRegistration": "Wenn Ihr Server keine der beiden Methoden unterstützt, registrieren Sie Ihre {appName}-Instanz zuerst beim Anbieter des Servers. Gewähren Sie {appName} die für Ihre Aktionen nötigen Scopes."
+        "discovery": "Jeder Benutzer meldet sich mit seinem eigenen Konto an.",
+        "manualRegistration": "Registrieren Sie diese Weiterleitungs-URI bei Ihrem Anbieter.",
+        "title": "OAuth-Konfiguration"
       },
       "passThroughNotice": {
         "description": "{appName} leitet das OAuth-Zugriffstoken des Benutzers direkt als Authorization-Header an den Server weiter. Stellen Sie sicher, dass der Server die Authentifizierung mit demselben Anbieter unterstützt.",
@@ -361,14 +384,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "Den Challenge-/Discovery-Ablauf des MCP-SDK verwenden (Standard).",
-          "label": "Automatische Erkennung"
+          "description": "Die vom Server veröffentlichten Anmeldeeinstellungen lesen.",
+          "label": "Anmelde-Endpunkte automatisch finden"
         },
         "knownProvider": {
-          "description": "Die konfigurierten Autorisierungs-/Token-Endpunkte verwenden.",
-          "label": "Bekannter Anbieter"
+          "description": "Geben Sie die Anmelde- und Token-URLs selbst ein.",
+          "label": "Endpunkte manuell eingeben"
         },
-        "label": "Anbietermodus",
+        "label": "OAuth-Endpunkte",
         "placeholder": "Modus auswählen"
       },
       "redirectUri": {
@@ -379,20 +402,55 @@
         "label": "Scopes überschreiben (durch Kommas getrennt)"
       },
       "sharedApiKey": {
-        "description": "Verwenden Sie nicht Ihren persönlichen API-Schlüssel. Stellen Sie sicher, dass dieser Schlüssel dafür geeignet ist, ihn mit allen in Ihrer Organisation zu teilen.",
+        "description": "Dieser Schlüssel dient zum Testen der Einrichtung und zum Verbinden aller Zugriffsberechtigten. Verwenden Sie einen Arbeitsbereichsschlüssel, keinen persönlichen Schlüssel.",
         "label": "API-Schlüssel",
         "placeholder": "Gemeinsamer API-Schlüssel für Ihre Organisation"
       },
       "submitButton": {
-        "label": "Verbinden",
-        "pendingLabel": "Wird verbunden..."
+        "label": "Änderungen speichern",
+        "pendingLabel": "Wird gespeichert…"
       },
       "tokenEndpoint": {
         "label": "Token-Endpunkt",
-        "required": "Im Modus für bekannte Anbieter ist der Token-Endpunkt erforderlich"
+        "required": "Geben Sie den Token-Endpunkt Ihres Anbieters ein."
       },
       "transport": {
-        "required": "Der Transport ist erforderlich"
+        "required": "Der Transport ist erforderlich",
+        "label": "Verbindungstransport",
+        "description": "Verwenden Sie Streamable HTTP, sofern Ihr Server kein älteres SSE erfordert. Diese Einstellung wird nicht automatisch erkannt.",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE (veraltet)"
+      },
+      "advancedSettings": {
+        "title": "Erweiterte Einstellungen"
+      },
+      "apiTokenInfo": {
+        "title": "API-Schlüssel-Konfiguration",
+        "description": "Wählen Sie, ob jeder Benutzer ein persönliches Token verwendet oder alle ein gemeinsames Token verwenden."
+      },
+      "oauthSetup": {
+        "label": "OAuth-Einrichtung",
+        "automatic": {
+          "label": "Automatisch einrichten",
+          "description": "Lassen Sie {appName} anhand der veröffentlichten Servereinstellungen einen OAuth-Client registrieren."
+        },
+        "ownClient": {
+          "label": "Eigenen OAuth-Client verwenden",
+          "description": "Geben Sie eine Client-ID Ihres Anbieters ein. Fügen Sie nur bei Bedarf ein Geheimnis hinzu."
+        }
+      },
+      "discovery": {
+        "checking": "Automatische Einrichtung wird geprüft…",
+        "supported": "Automatische Einrichtung ist verfügbar",
+        "requiresClient": "Dieser Server gibt keine Unterstützung für automatische Client-Registrierung an. Wir empfehlen, einen eigenen OAuth-Client einzurichten. Sie können die automatische Registrierung dennoch versuchen.",
+        "missing": "Prüfen Sie die Server-URL oder geben Sie die Anmelde- und Token-Endpunkte Ihres Anbieters ein.",
+        "unreachable": "Der Server ist möglicherweise nicht erreichbar oder blockiert Erkennungsanfragen.",
+        "retry": "Erneut prüfen",
+        "manual": "OAuth-Einstellungen manuell eingeben",
+        "useOwnClient": "Eigenen OAuth-Client verwenden",
+        "unreachableTitle": "Verfügbarkeit der automatischen Einrichtung konnte nicht ermittelt werden",
+        "missingTitle": "OAuth-Endpunkte wurden nicht gefunden",
+        "requiresClientTitle": "Automatische Einrichtung ist möglicherweise nicht verfügbar"
       }
     },
     "mcpCard": {
@@ -415,6 +473,20 @@
       "refreshToolsButton": {
         "ariaLabel": "Tools aktualisieren",
         "tooltip": "Tools aktualisieren"
+      },
+      "setupIncomplete": {
+        "label": "Einrichtung unvollständig.",
+        "actionHint": "Einrichtung unvollständig. Klicken Sie, um die Einrichtung abzuschließen."
+      },
+      "status": {
+        "ready": "Bereit · {count, plural, one {# Tool} other {# Tools}}",
+        "incomplete": "Einrichtung unvollständig",
+        "loading": "Tools werden geladen",
+        "disconnected": "Getrennt"
+      },
+      "authenticationButton": {
+        "tooltip": "Authentifizierung konfigurieren",
+        "ariaLabel": "Authentifizierung für {serverName} konfigurieren"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +565,7 @@
         "toolUpdateFailed": "Das Tool konnte nicht aktualisiert werden",
         "toolsDisabled": "{count, plural, one {# Tool erfolgreich deaktiviert} other {# Tools erfolgreich deaktiviert}}",
         "toolsEnabled": "{count, plural, one {# Tool erfolgreich aktiviert} other {# Tools erfolgreich aktiviert}}",
-        "toolsFetched": "Verbindung hergestellt und Tools erfolgreich abgerufen",
+        "toolsFetched": "Tools geladen",
         "toolsRefreshed": "Tools erfolgreich aktualisiert"
       }
     },
@@ -633,10 +705,8 @@
         "placeholder": "{field} eingeben"
       },
       "credentials": {
-        "perUserDescription": "Die folgenden Anmeldedaten werden nicht mit Ihrer Organisation geteilt.",
-        "perUserTitle": "Nur für Ihr eigenes Konto",
-        "sharedDescription": "Diese Werte werden für jeden Benutzer in Ihrer Organisation verwendet.",
-        "sharedTitle": "Gemeinsame Werte der Organisation"
+        "perUserDescription": "Verwenden Sie Ihre Zugangsdaten, um diesen MCP zu testen und seine Tools zu laden. Sie werden nur in Ihrem Konto gespeichert.",
+        "sharedDescription": "Diese Werte werden für jeden Benutzer in Ihrer Organisation verwendet."
       },
       "headers": {
         "addButton": {
@@ -646,8 +716,8 @@
           "message": "Mindestens ein Header-Wert muss den Platzhalter {apiKey} enthalten."
         },
         "keyTitle": "Header-Name",
-        "label": "Authentifizierungs-Header",
-        "perUserDescription": "Formatieren Sie die Header so, dass jeder Benutzer seine individuellen Anmeldedaten einträgt. Verwenden Sie Platzhalter wie <mono>{apiKey}</mono> oder <mono>{userEmail}</mono>. Benutzer werden aufgefordert, Werte für die Platzhalter anzugeben (außer user_email).",
+        "label": "Benutzerdefinierte Header",
+        "perUserDescription": "Verwenden Sie <mono>{apiKey}</mono> für den API-Schlüssel jedes Benutzers. <mono>{userEmail}</mono> verwendet automatisch dessen E-Mail-Adresse. Andere Platzhalter fragen Benutzer nach einem Wert.",
         "sharedDescription": "Formatieren Sie die Header, die mit den gemeinsamen Anmeldedaten Ihrer Organisation gesendet werden. Verwenden Sie Platzhalter wie <mono>{apiKey}</mono> in mindestens einem Header-Wert; er wird durch den gemeinsamen Schlüssel Ihrer Organisation ersetzt.",
         "valueTitle": "Header-Wert"
       }
@@ -809,6 +879,42 @@
         "ariaLabel": "Tools durchsuchen",
         "placeholder": "Tools durchsuchen…"
       }
+    },
+    "mcpSetup": {
+      "serverDetails": "Serverdetails",
+      "authentication": "Authentifizierung",
+      "continue": "Authentifizierung konfigurieren",
+      "back": "Serverkonfiguration"
+    },
+    "mcpTools": {
+      "title": "Tools",
+      "description": "Wählen Sie verfügbare Tools und legen Sie ihre Berechtigungen fest.",
+      "enabledTab": "Verfügbare Tools",
+      "policiesTab": "Craft-Berechtigungen",
+      "enabledDescription": "Wählen Sie die Tools aus, die Benutzer in Onyx verwenden können.",
+      "policiesDescription": "Legen Sie fest, wann Craft vor der Verwendung eines Tools um Zustimmung fragt.",
+      "back": "Authentifizierung",
+      "refresh": "Tools aktualisieren",
+      "loadError": "Tools konnten nicht geladen werden",
+      "saveError": "Tool-Einstellungen konnten nicht gespeichert werden",
+      "refreshError": "Tools konnten nicht aktualisiert werden",
+      "search": "Tools suchen"
+    },
+    "mcpDetail": {
+      "back": "MCP-Server",
+      "configuration": "Serverkonfiguration",
+      "editConfiguration": "Serverkonfiguration bearbeiten",
+      "authentication": "Authentifizierung",
+      "editAuthentication": "Authentifizierung bearbeiten",
+      "availability": "Verfügbarkeit",
+      "edit": "Bearbeiten",
+      "loadError": "MCP-Server konnte nicht geladen werden",
+      "notFound": "MCP-Server nicht gefunden",
+      "unavailable": "Dieser Server wurde möglicherweise gelöscht, oder Sie haben keinen Zugriff.",
+      "retry": "Erneut versuchen",
+      "restrictedAccess": "{groups, plural, one {# Gruppe} other {# Gruppen}} · {users, plural, one {# Benutzer} other {# Benutzer}}",
+      "authenticationIncomplete": "Die Authentifizierung ist nicht konfiguriert.",
+      "availabilitySaved": "Verfügbarkeit aktualisiert"
     }
   },
   "admin": {
@@ -12638,7 +12744,7 @@
             "tabLabel": "Apps · {count}"
           },
           "mcp": {
-            "blurb": "Server, die ein Admin für Craft verfügbar gemacht hat. Nutze sie, wenn die benötigte App nicht unter Apps aufgeführt ist oder du gezielt die eigenen MCP-Tools eines Servers willst.",
+            "blurb": "Server, die ein Administrator für Craft freigegeben hat. Wenn ein Server persönliche Zugangsdaten erfordert, verbinden Sie vor der Tool-Nutzung Ihr eigenes Konto.",
             "empty": "Es wurden noch keine MCP-Server für Craft verfügbar gemacht.",
             "emptyTitle": "Noch keine MCP-Server",
             "tabLabel": "MCP-Server · {count}"

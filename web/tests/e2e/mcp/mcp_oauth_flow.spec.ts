@@ -130,12 +130,12 @@ async function configureOauthServer(
   await oauthFlow.completeFlow({
     expectReturnPathContains: ADMIN_ROUTES.MCP_ACTIONS.path,
     confirmConnected: async () => {
-      await adminMcp.expectServerCard(options.serverName);
+      await adminMcp.expectServerDetail(options.serverName);
     },
   });
 
-  await adminMcp.expectServerCard(options.serverName);
-  await adminMcp.setCardToolEnabled(options.toolName, true);
+  await adminMcp.expectServerDetail(options.serverName);
+  await adminMcp.setToolEnabled(options.toolName, true);
   return serverId;
 }
 

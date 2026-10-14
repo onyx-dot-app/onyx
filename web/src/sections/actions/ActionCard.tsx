@@ -1,14 +1,18 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@opal/utils";
 import { ActionStatus } from "@/lib/tools/types";
-import type { IconProps } from "@opal/types";
+import type { IconProps, RichStr } from "@opal/types";
 import { SvgServer } from "@opal/icons";
+import { SelectCard } from "@opal/components";
 import { Hoverable } from "@opal/core";
+
+const CARD_CONTROL_SELECTOR =
+  "button, a, input, textarea, select, [role='button'], [role='switch'], [contenteditable='true']";
 
 export interface ActionCardProps {
   // Core content
@@ -18,20 +22,20 @@ export interface ActionCardProps {
 
   // Status
   status: ActionStatus;
+  pendingDescription?: string | RichStr;
 
   // Header actions (right side of header)
   actions: React.ReactNode;
+  footer?: React.ReactNode;
 
-  // Edit handler for header
-  onEdit?: () => void;
+  // Optional card action; nested controls and expanded tools keep their own actions.
+  onActivate?: () => void;
 
   // Rename handler for header
   onRename?: (newName: string) => Promise<void>;
 
-  // Expansion control (can be controlled or uncontrolled)
-  initialExpanded?: boolean;
+  // Expansion is controlled by the server or action card.
   isExpanded?: boolean;
-  onExpandedChange?: (expanded: boolean) => void;
 
   // Search functionality
   enableSearch?: boolean;
@@ -57,12 +61,12 @@ export default function ActionCard({
   description,
   icon,
   status,
+  pendingDescription,
   actions,
-  onEdit,
+  footer,
+  onActivate,
   onRename,
-  initialExpanded = false,
-  isExpanded: controlledIsExpanded,
-  onExpandedChange,
+  isExpanded = false,
   enableSearch = false,
   searchQuery = "",
   onSearchQueryChange,
@@ -72,25 +76,8 @@ export default function ActionCard({
   className,
 }: ActionCardProps) {
   const t = useTranslations("actions");
-
-  // Internal state for uncontrolled mode
-  const [internalExpanded, setInternalExpanded] = useState(initialExpanded);
-
-  const hasInitializedExpansion = useRef(false);
-
-  // Determine if we're in controlled mode
-  const isControlled = controlledIsExpanded !== undefined;
-  const isExpandedActual = isControlled
-    ? controlledIsExpanded
-    : internalExpanded;
-
-  // Apply initial expansion only once per component lifetime (uncontrolled mode)
-  useEffect(() => {
-    if (!isControlled && initialExpanded && !hasInitializedExpansion.current) {
-      setInternalExpanded(true);
-      hasInitializedExpansion.current = true;
-    }
-  }, [initialExpanded, isControlled]);
+  const [isControlHovered, setIsControlHovered] = useState(false);
+  const [isCardKeyboardFocused, setIsCardKeyboardFocused] = useState(false);
 
   const isConnected = status === ActionStatus.CONNECTED;
   const isDisconnected = status === ActionStatus.DISCONNECTED;
@@ -101,53 +88,105 @@ export default function ActionCard({
       ? "bg-background-neutral-02"
       : "";
 
+  const header = (
+    <div className="flex items-start justify-between gap-2 p-3 w-full min-w-0">
+      <ActionCardHeader
+        title={title}
+        description={description}
+        icon={icon || SvgServer}
+        status={status}
+        pendingDescription={pendingDescription}
+        showStatus={!footer}
+        onRename={onRename}
+      />
+      <div className="shrink-0 flex items-start">{actions}</div>
+    </div>
+  );
+
+  const expandedContent = (
+    <>
+      {enableSearch && (
+        <ToolsSection
+          onFold={onFold}
+          searchQuery={searchQuery}
+          onSearchQueryChange={onSearchQueryChange || (() => {})}
+        />
+      )}
+      {children && (
+        <div className="p-2 border-t border-border-01">{children}</div>
+      )}
+    </>
+  );
+
   return (
     <Hoverable.Root group="action-card">
-      <div
-        className={cn(
-          "w-full",
-          backgroundColor,
-          "border border-border-01 rounded-16",
-          "transition-shadow duration-200",
-          "hover:shadow-box-00",
-          className
-        )}
-        role="article"
-        aria-label={ariaLabel || t("actionCard.card.ariaLabel", { title })}
-      >
-        <div className="flex flex-col w-full">
-          {/* Header Section */}
-          <div className="flex items-start justify-between gap-2 p-3 w-full">
-            <ActionCardHeader
-              title={title}
-              description={description}
-              icon={icon || SvgServer}
-              status={status}
-              onEdit={onEdit}
-              onRename={onRename}
-            />
-
-            {/* Action Buttons */}
-            <div className="shrink-0 flex items-start">{actions}</div>
-          </div>
-
-          {/* Tools Section (Only when expanded and search is enabled) */}
-          {isExpandedActual && enableSearch && (
-            <ToolsSection
-              onFold={onFold}
-              searchQuery={searchQuery}
-              onSearchQueryChange={onSearchQueryChange || (() => {})}
-            />
+      {onActivate ? (
+        <div
+          className={cn(
+            "w-full min-w-0 rounded-16",
+            backgroundColor,
+            className
           )}
+        >
+          <SelectCard
+            expandable
+            expanded={isExpanded}
+            expandedContent={expandedContent}
+            expandableContentHeight="full"
+            state={isConnected ? "filled" : "empty"}
+            passive={isControlHovered && !isCardKeyboardFocused}
+            onPointerOver={(event) => {
+              const target = event.target;
+              setIsControlHovered(
+                target instanceof Element &&
+                  !!target.closest(CARD_CONTROL_SELECTOR)
+              );
+            }}
+            onPointerLeave={() => setIsControlHovered(false)}
+            onFocusCapture={(event) =>
+              setIsCardKeyboardFocused(
+                event.target === event.currentTarget &&
+                  event.currentTarget.matches(":focus-visible")
+              )
+            }
+            onBlurCapture={() => setIsCardKeyboardFocused(false)}
+            padding={0}
+            rounding={4}
+            role="article"
+            aria-label={ariaLabel || t("actionCard.card.ariaLabel", { title })}
+            onClick={(event) => {
+              const target = event.target;
+              if (
+                !(target instanceof Element) ||
+                !event.currentTarget.contains(target)
+              )
+                return;
+              if (target.closest(CARD_CONTROL_SELECTOR)) return;
+              onActivate();
+            }}
+          >
+            {header}
+            {footer}
+          </SelectCard>
         </div>
-
-        {/* Content Area - Only render when expanded */}
-        {isExpandedActual && children && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-2 border-t border-border-01">
-            {children}
-          </div>
-        )}
-      </div>
+      ) : (
+        <div
+          className={cn(
+            "w-full min-w-0",
+            backgroundColor,
+            "border border-border-01 rounded-16",
+            "transition-shadow duration-200",
+            "hover:shadow-box-00",
+            className
+          )}
+          role="article"
+          aria-label={ariaLabel || t("actionCard.card.ariaLabel", { title })}
+        >
+          {header}
+          {footer}
+          {isExpanded && expandedContent}
+        </div>
+      )}
     </Hoverable.Root>
   );
 }

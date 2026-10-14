@@ -58,6 +58,12 @@ delete action (`AgentRowActions.tsx`,
 `db/persona.py:mark_persona_as_deleted` also refuses any built-in persona for
 every caller, admin included. See §5.
 
+MCP server configuration can also change default Chat tool attachments. Turning
+server availability off removes only its default Chat attachments. Custom agents
+keep theirs. The default Chat tool editor updates the same availability flag when
+its last selected server tool is removed. Discovery adds new tools for enabled
+servers without restoring existing tools the admin deselected.
+
 ---
 
 ## 2. Surfaces

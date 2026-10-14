@@ -178,7 +178,6 @@ export default function OpenApiActionCard({
         actions={actionsComponent}
         onRename={canEdit ? handleRename : undefined}
         isExpanded={isToolsExpanded}
-        onExpandedChange={setIsToolsExpanded}
         enableSearch={true}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}

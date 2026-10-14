@@ -2,12 +2,11 @@
 
 import React, { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { ActionStatus } from "@/lib/tools/types";
-import Text from "@/refresh-components/texts/Text";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import type { IconProps } from "@opal/types";
+import type { IconProps, RichStr } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgEdit } from "@opal/icons";
 import { Hoverable } from "@opal/core";
@@ -17,7 +16,8 @@ interface ActionCardHeaderProps {
   description: string;
   icon: React.FunctionComponent<IconProps>;
   status: ActionStatus;
-  onEdit?: () => void;
+  showStatus?: boolean;
+  pendingDescription?: string | RichStr;
   onRename?: (newName: string) => Promise<void>;
 }
 
@@ -26,7 +26,8 @@ function ActionCardHeader({
   description,
   icon: Icon,
   status,
-  onEdit,
+  showStatus = true,
+  pendingDescription,
   onRename,
 }: ActionCardHeaderProps) {
   const t = useTranslations("actions");
@@ -96,26 +97,6 @@ function ActionCardHeader({
               </Truncated>
             </div>
           )}
-          {isPending && !isRenaming && (
-            <Text
-              as="p"
-              mainUiMuted
-              text03
-              className="shrink-0 whitespace-nowrap"
-            >
-              {t("cardHeader.notAuthenticated.label")}
-            </Text>
-          )}
-          {isDisconnected && !isRenaming && (
-            <Text
-              as="p"
-              mainUiMuted
-              text02
-              className="shrink-0 whitespace-nowrap"
-            >
-              {t("cardHeader.disconnected.label")}
-            </Text>
-          )}
           {showRenameIcon && (
             <Hoverable.Item group="action-card" variant="appear-on-hover">
               <div className="opacity-70 hover:opacity-100">
@@ -132,14 +113,31 @@ function ActionCardHeader({
           )}
         </div>
 
-        {isConnected ? (
-          <Text as="p" secondaryBody text03 className="w-full">
-            {description}
+        {showStatus && isPending && !pendingDescription && !isRenaming && (
+          <Text as="p" font="main-ui-muted" color="text-03" maxLines={1}>
+            {t("cardHeader.notAuthenticated.label")}
           </Text>
-        ) : (
-          <Text as="p" secondaryBody text02 className="w-full">
-            {description}
+        )}
+        {showStatus && isDisconnected && !isRenaming && (
+          <Text as="p" font="main-ui-muted" color="text-02" maxLines={1}>
+            {t("cardHeader.disconnected.label")}
           </Text>
+        )}
+        <Text
+          as="p"
+          font="secondary-body"
+          color={isConnected ? "text-03" : "text-02"}
+          maxLines={2}
+          wordWrap="wrap-anywhere"
+        >
+          {description}
+        </Text>
+        {showStatus && isPending && pendingDescription && !isRenaming && (
+          <div className="pt-2">
+            <Text as="p" font="secondary-body" color="text-03">
+              {pendingDescription}
+            </Text>
+          </div>
         )}
       </div>
     </div>

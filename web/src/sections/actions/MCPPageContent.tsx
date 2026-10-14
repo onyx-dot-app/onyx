@@ -1,33 +1,27 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import ActionCardSkeleton from "@/sections/actions/skeleton/ActionCardSkeleton";
 import { getActionIcon } from "@/lib/tools/utils";
-import { ActionStatus, ToolSnapshot } from "@/lib/tools/types";
+import { ActionStatus } from "@/lib/tools/types";
 import { MCPServerStatus, MCPServer } from "@/lib/mcp/types";
 import { toast } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
-import MCPAuthenticationModal from "@/sections/actions/modals/MCPAuthenticationModal";
-import AddMCPServerModal from "@/sections/actions/modals/AddMCPServerModal";
-import DisconnectEntityModal from "./modals/DisconnectEntityModal";
-import { updateToolStatus, updateToolsStatus } from "@/lib/tools/svc";
-import {
-  deleteMCPServer,
-  refreshMCPServerTools,
-  updateMCPServerStatus,
-  updateMCPServer,
-} from "@/lib/mcp/svc";
+import MCPServerSetupModal from "@/sections/actions/modals/MCPServerSetupModal";
+import { refreshMCPServerTools, updateMCPServerStatus } from "@/lib/mcp/svc";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { useAdminMcpServers } from "@/lib/mcp/hooks";
 
 export default function MCPPageContent() {
   const t = useTranslations("actions");
+  const { mutate } = useSWRConfig();
 
   // Data fetching
   const {
@@ -37,18 +31,9 @@ export default function MCPPageContent() {
   } = useAdminMcpServers();
 
   // Modal management
-  const authModal = useCreateModal();
-  const disconnectModal = useCreateModal();
   const manageServerModal = useCreateModal();
 
   // Local state
-  const [activeServer, setActiveServer] = useState<MCPServer | null>(null);
-  const [serverToExpand, setServerToExpand] = useState<number | null>(null);
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [showSharedOverlay, setShowSharedOverlay] = useState(false);
-  const [fetchingToolsServerIds, setFetchingToolsServerIds] = useState<
-    number[]
-  >([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   const mcpServers = useMemo<MCPServer[]>(
@@ -60,90 +45,22 @@ export default function MCPPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Server whose `?trigger_fetch=true` was already handled. The effect below
-  // re-runs whenever a dependency changes identity, and the URL param is only
-  // cleared after async work, so this keeps the fetch one-shot.
-  const handledTriggerFetchServerIdRef = useRef<number | null>(null);
-
+  const handledOAuthReturn = useRef<string | null>(null);
   useEffect(() => {
     const serverId = searchParams.get("server_id");
-    const triggerFetch = searchParams.get("trigger_fetch");
-
-    // Only process if we have a server_id and trigger_fetch flag
     if (
       serverId &&
-      triggerFetch === "true" &&
-      handledTriggerFetchServerIdRef.current !== parseInt(serverId) &&
-      !fetchingToolsServerIds.includes(parseInt(serverId))
+      /^\d+$/.test(serverId) &&
+      Number(serverId) > 0 &&
+      searchParams.get("trigger_fetch") === "true" &&
+      handledOAuthReturn.current !== serverId
     ) {
-      const serverIdInt = parseInt(serverId);
-      handledTriggerFetchServerIdRef.current = serverIdInt;
-
-      const handleFetchingTools = async () => {
-        try {
-          await updateMCPServerStatus(
-            serverIdInt,
-            MCPServerStatus.FETCHING_TOOLS
-          );
-
-          await mutateMcpServers();
-
-          router.replace(ADMIN_ROUTES.MCP_ACTIONS.path);
-
-          // Automatically expand the tools for this server
-          setServerToExpand(serverIdInt);
-
-          await refreshMCPServerTools(serverIdInt);
-
-          toast.success(t("mcpPage.toasts.toolsFetched"));
-
-          await mutateMcpServers();
-        } catch (error) {
-          console.error("Failed to fetch tools:", error);
-          toast.error(
-            t("mcpPage.toasts.fetchToolsFailed", {
-              error:
-                error instanceof Error
-                  ? error.message
-                  : t("mcpPage.errors.unknown"),
-            })
-          );
-          await mutateMcpServers();
-        }
-      };
-
-      handleFetchingTools();
+      handledOAuthReturn.current = serverId;
+      router.replace(
+        `${ADMIN_ROUTES.MCP_ACTIONS.path}/${serverId}?trigger_fetch=true`
+      );
     }
-  }, [
-    searchParams,
-    router,
-    fetchingToolsServerIds,
-    mutateMcpServers,
-    setServerToExpand,
-    t,
-  ]);
-
-  // Track fetching tools server IDs
-  useEffect(() => {
-    const fetchingIds = mcpServers
-      .filter((server) => server.status === MCPServerStatus.FETCHING_TOOLS)
-      .map((server) => server.id);
-    // Keep the previous array when the ids are unchanged so effects that
-    // depend on it do not re-run for a new identity with the same contents.
-    setFetchingToolsServerIds((prev) =>
-      prev.length === fetchingIds.length &&
-      prev.every((id, index) => id === fetchingIds[index])
-        ? prev
-        : fetchingIds
-    );
-  }, [mcpServers]);
-
-  // Track if any modal is open to manage the shared overlay
-  useEffect(() => {
-    const anyModalOpen =
-      authModal.isOpen || disconnectModal.isOpen || manageServerModal.isOpen;
-    setShowSharedOverlay(anyModalOpen);
-  }, [authModal.isOpen, disconnectModal.isOpen, manageServerModal.isOpen]);
+  }, [searchParams, router]);
 
   // Determine action status based on server status field
   const getActionStatusForServer = useCallback(
@@ -163,338 +80,32 @@ export default function MCPPageContent() {
     []
   );
 
-  // Handler callbacks
-  const handleDisconnect = useCallback(
-    (serverId: number) => {
-      const server = mcpServers.find((s) => s.id === serverId);
-      if (server) {
-        setActiveServer(server);
-        disconnectModal.toggle(true);
-      }
-    },
-    [mcpServers, disconnectModal]
-  );
-
-  const handleConfirmDisconnect = useCallback(async () => {
-    if (!activeServer) return;
-
-    setIsDisconnecting(true);
-    try {
-      await updateMCPServerStatus(
-        activeServer.id,
-        MCPServerStatus.DISCONNECTED
-      );
-
-      toast.success(t("mcpPage.toasts.serverDisconnected"));
-
-      await mutateMcpServers();
-      disconnectModal.toggle(false);
-      setActiveServer(null);
-    } catch (error) {
-      console.error("Error disconnecting server:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("mcpPage.toasts.disconnectFailed")
-      );
-    } finally {
-      setIsDisconnecting(false);
-    }
-  }, [activeServer, mutateMcpServers, disconnectModal, t]);
-
-  const handleConfirmDisconnectAndDelete = useCallback(async () => {
-    if (!activeServer) return;
-
-    setIsDisconnecting(true);
-    try {
-      await deleteMCPServer(activeServer.id);
-
-      toast.success(t("mcpPage.toasts.serverDeleted"));
-
-      await mutateMcpServers();
-      disconnectModal.toggle(false);
-      setActiveServer(null);
-    } catch (error) {
-      console.error("Error deleting server:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("mcpPage.toasts.deleteFailed")
-      );
-    } finally {
-      setIsDisconnecting(false);
-    }
-  }, [activeServer, mutateMcpServers, disconnectModal, t]);
-
-  const openManageServerModal = useCallback(
-    (serverId: number) => {
-      const server = mcpServers.find((s) => s.id === serverId);
-      if (server) {
-        setActiveServer(server);
-        manageServerModal.toggle(true);
-      }
-    },
-    [mcpServers, manageServerModal]
-  );
-
-  const handleManage = useCallback(
-    (serverId: number) => {
-      openManageServerModal(serverId);
-    },
-    [openManageServerModal]
-  );
-
-  const handleEdit = useCallback(
-    (serverId: number) => {
-      openManageServerModal(serverId);
-    },
-    [openManageServerModal]
-  );
-
-  const handleDelete = useCallback(
-    async (serverId: number) => {
-      try {
-        await deleteMCPServer(serverId);
-
-        toast.success(t("mcpPage.toasts.serverDeleted"));
-
-        await mutateMcpServers();
-      } catch (error) {
-        console.error("Error deleting server:", error);
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t("mcpPage.toasts.deleteFailed")
-        );
-      }
-    },
-    [mutateMcpServers, t]
-  );
-
-  const handleAuthenticate = useCallback(
-    (serverId: number) => {
-      const server = mcpServers.find((s) => s.id === serverId);
-      if (server) {
-        setActiveServer(server);
-        authModal.toggle(true);
-      }
-    },
-    [mcpServers, authModal]
-  );
-
   const triggerFetchToolsInPlace = useCallback(
     async (serverId: number) => {
-      if (fetchingToolsServerIds.includes(serverId)) {
-        return;
-      }
-
       try {
-        // Expand tools list immediately so the user sees the skeleton
-        setServerToExpand(serverId);
-
         await updateMCPServerStatus(serverId, MCPServerStatus.FETCHING_TOOLS);
         await mutateMcpServers();
 
-        await refreshMCPServerTools(serverId);
+        const tools = await refreshMCPServerTools(serverId);
+        await mutate(SWR_KEYS.adminMcpServerToolSnapshots(serverId), tools, {
+          revalidate: false,
+        });
 
         toast.success(t("mcpPage.toasts.toolsFetched"));
 
         await mutateMcpServers();
       } catch (error) {
-        console.error("Failed to fetch tools:", error);
-        toast.error(
-          t("mcpPage.toasts.fetchToolsFailed", {
-            error:
-              error instanceof Error
-                ? error.message
-                : t("mcpPage.errors.unknown"),
-          })
-        );
-        await mutateMcpServers();
+        // The setup form owns the error and must remain open for correction.
+        await mutateMcpServers().catch(() => undefined);
+        throw error;
       }
     },
-    [fetchingToolsServerIds, mutateMcpServers, setServerToExpand, t]
-  );
-
-  const handleReconnect = useCallback(
-    async (serverId: number) => {
-      try {
-        await updateMCPServerStatus(serverId, MCPServerStatus.CONNECTED);
-
-        toast.success(t("mcpPage.toasts.serverReconnected"));
-
-        await mutateMcpServers();
-      } catch (error) {
-        console.error("Error reconnecting server:", error);
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t("mcpPage.toasts.reconnectFailed")
-        );
-      }
-    },
-    [mutateMcpServers, t]
-  );
-
-  const handleToolToggle = useCallback(
-    async (
-      serverId: number,
-      toolId: string,
-      enabled: boolean,
-      mutateServerTools: KeyedMutator<ToolSnapshot[]>
-    ) => {
-      try {
-        // Optimistically update the UI
-        await mutateServerTools(
-          async (currentTools) => {
-            if (!currentTools) return currentTools;
-            return currentTools.map((tool) =>
-              tool.id.toString() === toolId ? { ...tool, enabled } : tool
-            );
-          },
-          { revalidate: false }
-        );
-
-        await updateToolStatus(parseInt(toolId), enabled);
-
-        // Revalidate to get fresh data from server
-        await mutateServerTools();
-
-        toast.success(
-          enabled
-            ? t("mcpPage.toasts.toolEnabled")
-            : t("mcpPage.toasts.toolDisabled")
-        );
-      } catch (error) {
-        console.error("Error toggling tool:", error);
-
-        // Revert on error by revalidating
-        await mutateServerTools();
-
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t("mcpPage.toasts.toolUpdateFailed")
-        );
-      }
-    },
-    [t]
-  );
-
-  const handleRefreshTools = useCallback(
-    async (
-      serverId: number,
-      mutateServerTools: KeyedMutator<ToolSnapshot[]>
-    ) => {
-      try {
-        // Refresh tools for this specific server (discovers from MCP and syncs to DB)
-        await refreshMCPServerTools(serverId);
-
-        // Update the local cache with fresh data
-        await mutateServerTools();
-
-        // Also refresh the servers list to update tool counts
-        await mutateMcpServers();
-
-        toast.success(t("mcpPage.toasts.toolsRefreshed"));
-      } catch (error) {
-        console.error("Error refreshing tools:", error);
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t("mcpPage.toasts.refreshToolsFailed")
-        );
-      }
-    },
-    [mutateMcpServers, t]
-  );
-
-  const handleUpdateToolsStatus = useCallback(
-    async (
-      serverId: number,
-      toolIds: number[],
-      enabled: boolean,
-      mutateServerTools: KeyedMutator<ToolSnapshot[]>
-    ) => {
-      try {
-        if (toolIds.length === 0) {
-          toast.info(t("mcpPage.toasts.noToolsToDisable"));
-          return;
-        }
-
-        // Optimistically update - disable all tools in the UI
-        await mutateServerTools(
-          async (currentTools) => {
-            if (!currentTools) return currentTools;
-            return currentTools.map((tool) =>
-              toolIds.includes(tool.id) ? { ...tool, enabled } : tool
-            );
-          },
-          { revalidate: false }
-        );
-
-        const result = await updateToolsStatus(toolIds, enabled);
-
-        // Revalidate to get fresh data from server
-        await mutateServerTools();
-
-        toast.success(
-          enabled
-            ? t("mcpPage.toasts.toolsEnabled", { count: result.updated_count })
-            : t("mcpPage.toasts.toolsDisabled", { count: result.updated_count })
-        );
-      } catch (error) {
-        console.error(
-          `Error ${enabled ? "enabling" : "disabling"} all tools:`,
-          error
-        );
-
-        // Revert on error by revalidating
-        await mutateServerTools();
-
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : enabled
-              ? t("mcpPage.toasts.enableAllFailed")
-              : t("mcpPage.toasts.disableAllFailed")
-        );
-      }
-    },
-    [t]
-  );
-
-  const onServerCreated = useCallback(
-    (server: MCPServer) => {
-      setActiveServer(server);
-      authModal.toggle(true);
-    },
-    [authModal]
+    [mutateMcpServers, mutate, t]
   );
 
   const handleAddServer = useCallback(() => {
-    setActiveServer(null);
     manageServerModal.toggle(true);
   }, [manageServerModal]);
-
-  const handleRenameServer = useCallback(
-    async (serverId: number, newName: string) => {
-      try {
-        await updateMCPServer(serverId, { name: newName });
-        toast.success(t("mcpPage.toasts.serverRenamed"));
-        await mutateMcpServers();
-      } catch (error) {
-        console.error("Error renaming server:", error);
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t("mcpPage.toasts.renameFailed")
-        );
-        throw error; // Re-throw so ButtonRenaming can handle it
-      }
-    },
-    [mutateMcpServers, t]
-  );
 
   // Filter servers based on search query
   const filteredServers = useMemo(() => {
@@ -511,15 +122,6 @@ export default function MCPPageContent() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Shared overlay that persists across modal transitions */}
-      {showSharedOverlay && (
-        <div
-          className="fixed inset-0 z-modal-overlay bg-mask-03 backdrop-blur-03 pointer-events-none data-[state=open]:animate-in data-[state=open]:fade-in-0"
-          data-state="open"
-          aria-hidden="true"
-        />
-      )}
-
       <div className="shrink-0 mb-4">
         <AdminListHeader
           hasItems={isLoading || mcpServers.length > 0}
@@ -532,7 +134,7 @@ export default function MCPPageContent() {
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="flex flex-col gap-4 w-full pb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 items-start gap-4 w-full pb-4">
           {isLoading ? (
             <>
               <ActionCardSkeleton />
@@ -545,24 +147,14 @@ export default function MCPPageContent() {
               return (
                 <MCPActionCard
                   key={server.id}
-                  serverId={server.id}
-                  server={server}
                   title={server.name}
                   description={server.description || server.server_url}
                   logo={getActionIcon(server.server_url, server.name)}
                   status={status}
                   toolCount={server.tool_count}
-                  initialExpanded={server.id === serverToExpand}
-                  onDisconnect={() => handleDisconnect(server.id)}
-                  onManage={() => handleManage(server.id)}
-                  onEdit={() => handleEdit(server.id)}
-                  onDelete={() => handleDelete(server.id)}
-                  onAuthenticate={() => handleAuthenticate(server.id)}
-                  onReconnect={() => handleReconnect(server.id)}
-                  onRename={handleRenameServer}
-                  onToolToggle={handleToolToggle}
-                  onRefreshTools={handleRefreshTools}
-                  onUpdateToolsStatus={handleUpdateToolsStatus}
+                  onOpen={() =>
+                    router.push(`${ADMIN_ROUTES.MCP_ACTIONS.path}/${server.id}`)
+                  }
                 />
               );
             })
@@ -570,42 +162,18 @@ export default function MCPPageContent() {
         </div>
       </div>
 
-      <authModal.Provider>
-        <MCPAuthenticationModal
-          mcpServer={activeServer}
-          skipOverlay
-          onTriggerFetchTools={triggerFetchToolsInPlace}
-          mutateMcpServers={mutateMcpServers}
-        />
-      </authModal.Provider>
-
       <manageServerModal.Provider>
-        <AddMCPServerModal
-          skipOverlay
-          activeServer={activeServer}
-          setActiveServer={setActiveServer}
-          disconnectModal={disconnectModal}
-          manageServerModal={manageServerModal}
-          onServerCreated={onServerCreated}
-          handleAuthenticate={handleAuthenticate}
+        <MCPServerSetupModal
+          server={null}
+          onCompleted={(server) =>
+            router.push(`${ADMIN_ROUTES.MCP_ACTIONS.path}/${server.id}`)
+          }
+          onTriggerFetchTools={triggerFetchToolsInPlace}
           mutateMcpServers={async () => {
             await mutateMcpServers();
           }}
         />
       </manageServerModal.Provider>
-
-      <DisconnectEntityModal
-        isOpen={disconnectModal.isOpen}
-        onClose={() => {
-          disconnectModal.toggle(false);
-          setActiveServer(null);
-        }}
-        name={activeServer?.name ?? null}
-        onConfirmDisconnect={handleConfirmDisconnect}
-        onConfirmDisconnectAndDelete={handleConfirmDisconnectAndDelete}
-        isDisconnecting={isDisconnecting}
-        skipOverlay
-      />
     </div>
   );
 }

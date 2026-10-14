@@ -214,7 +214,8 @@ async def _start_oauth_from_well_known_metadata(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "OAuth auto-discovery could not find protected resource metadata at "
-            "the MCP server's well-known URI.",
+            "the MCP server's well-known URI. Check the URL or enter OAuth endpoints manually.",
+            extra={"oauth_error": "discovery_failed"},
         )
 
     async with mcp_oauth_challenge_httpx_client_factory(
@@ -370,12 +371,14 @@ async def _start_auto_discovery_oauth_flow_once(
     except TimeoutError as error:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "Timed out during MCP OAuth discovery.",
+            "Timed out during MCP OAuth discovery. Check the server URL and try again.",
+            extra={"oauth_error": "connection_failed"},
         ) from error
 
     raise OnyxError(
         OnyxErrorCode.INVALID_INPUT,
-        "OAuth auto-discovery did not produce an authorization redirect.",
+        "OAuth auto-discovery did not produce an authorization redirect. Check the provider settings.",
+        extra={"oauth_error": "discovery_failed"},
     )
 
 

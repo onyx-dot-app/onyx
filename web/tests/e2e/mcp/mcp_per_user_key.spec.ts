@@ -167,7 +167,7 @@ test.describe("MCP per-user API key auth (multi-field template)", () => {
 
     await adminMcp.connectAndWaitForUpsert();
 
-    await adminMcp.expectServerCard(uiServerName);
+    await adminMcp.expectServerDetail(uiServerName);
     await adminMcp.refreshTools();
   });
 

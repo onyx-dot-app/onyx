@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "認証して {serverName} に接続",
-        "label": "認証"
+        "ariaLabel": "{serverName}の認証を設定",
+        "label": "認証を設定"
       },
       "deleteButton": {
         "ariaLabel": "{serverName} サーバーを削除",
@@ -130,14 +130,13 @@
       "authStatus": {
         "apiTokenDescription": "API token を設定済み",
         "connectedDescription": "接続済み",
-        "oauthDescription": "{owner} に OAuth で接続済み",
         "title": "認証済み・接続済み"
       },
       "cancelButton": {
         "label": "キャンセル"
       },
       "description": {
-        "placeholder": "MCP サーバーの詳細",
+        "placeholder": "このサーバーでチームは何ができますか？",
         "suffix": "任意",
         "title": "説明"
       },
@@ -145,21 +144,20 @@
         "tooltip": "サーバーを切断"
       },
       "editConfigsButton": {
-        "label": "設定を編集"
+        "label": "接続設定"
       },
       "manageHeader": {
         "description": "MCP サーバーの設定を更新し、認証を管理します。",
         "title": "MCP サーバーを管理"
       },
       "name": {
-        "placeholder": "MCP サーバーの名前を入力",
+        "placeholder": "例：Linear",
         "required": "サーバー名は必須です",
         "title": "サーバー名"
       },
       "serverUrl": {
         "invalid": "有効な URL を入力してください",
         "required": "サーバー URL は必須です",
-        "subDescription": "信頼できるサーバーにのみ接続してください。この接続で実行される操作と、ツールを最新の状態に保つ責任はお客様にあります。",
         "title": "MCP サーバー URL"
       },
       "submitButton": {
@@ -173,6 +171,33 @@
         "serverCreated": "MCP サーバーを作成しました",
         "serverUpdated": "MCP サーバーを更新しました",
         "updateFailed": "MCP サーバーの更新に失敗しました"
+      },
+      "access": {
+        "title": "アクセス制御",
+        "description": "このMCPを使用できるユーザーを選択します。",
+        "public": {
+          "label": "公開",
+          "description": "組織内の誰でもこのMCPを使用できます"
+        },
+        "groups": {
+          "label": "ユーザーグループ",
+          "description": "選択したユーザーグループはこのMCPを使用できます。",
+          "placeholder": "ユーザーグループを追加",
+          "required": "ユーザーグループを1つ以上選択してください。"
+        },
+        "scoped": {
+          "description": "管理しているグループを1つ以上選択してください。"
+        },
+        "retainedUsers": "{count, plural, other {#人のユーザーとも直接共有されています。}}",
+        "planNote": "グループアクセスにはBusinessプランが必要です。"
+      },
+      "craft": {
+        "title": "Craft で利用可能",
+        "description": "ユーザーが Craft でこの MCP サーバーにアクセスできるようにします。"
+      },
+      "defaultChat": {
+        "title": "Onyx のデフォルトチャットで利用可能",
+        "description": "オフの場合、チャットで使用するには、このサーバーをカスタムエージェントに追加する必要があります。"
       }
     },
     "addOpenApiModal": {
@@ -279,54 +304,47 @@
       "additionalAuthParams": {
         "label": "追加の認証パラメーター (JSON)"
       },
-      "advanced": {
-        "description": "自動検出の代わりに、認可エンドポイントとトークンエンドポイントを明示的に指定して、既知の OAuth プロバイダーを設定します。",
-        "title": "詳細設定"
-      },
       "apiKey": {
         "required": "API token は必須です"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "共有キー (管理者)"
+          "label": "共有トークン"
         },
         "perUser": {
-          "label": "個別キー (ユーザーごと)"
+          "label": "個人用トークン"
         }
       },
       "authPerformer": {
-        "required": "認証の実行者は必須です"
+        "required": "個人用または共有の認証情報を選択してください。"
       },
       "authType": {
         "apiToken": {
-          "description": "ユーザーごとの個別 API キー、または組織全体の共有 API キーを使用します。",
           "label": "API キー"
         },
         "label": "認証方法",
         "none": {
-          "description": "推奨しません",
-          "label": "なし"
+          "label": "認証なし"
         },
         "oauth": {
-          "description": "各ユーザーが自分の資格情報で OAuth 認証を行う必要があります。",
           "label": "OAuth"
         },
         "placeholder": "方法を選択",
         "ptOauth": {
-          "description": "{appName} の認証に使用したユーザーの OAuth アクセストークンを転送します。",
           "label": "OAuth パススルー"
         },
         "required": "認証タイプは必須です"
       },
       "authorizationEndpoint": {
         "label": "認可エンドポイント",
-        "required": "既知のプロバイダーモードでは、認可エンドポイントは必須です"
+        "required": "プロバイダーの認可エンドポイントを入力してください。"
       },
       "cancelButton": {
         "label": "キャンセル"
       },
       "clientId": {
-        "label": "クライアント ID"
+        "label": "クライアント ID",
+        "required": "OAuthクライアントIDを入力してください。"
       },
       "clientSecret": {
         "label": "クライアントシークレット"
@@ -335,25 +353,30 @@
         "additionalParamsInvalid": "追加の認証パラメーターの JSON が無効です",
         "additionalParamsInvalidWithReason": "追加の認証パラメーターの JSON が無効です: {reason}",
         "additionalParamsNotObject": "追加の認証パラメーターは JSON オブジェクトである必要があります",
-        "oauthInitFailed": "OAuth の開始に失敗しました: {detail}",
         "saveAuthFailed": "認証設定の保存に失敗しました",
-        "saveConfigFailed": "サーバー設定の保存に失敗しました"
+        "saveConfigFailed": "サーバー設定の保存に失敗しました",
+        "saveStage": "接続設定を保存できませんでした",
+        "oauthStage": "サインインを開始できませんでした",
+        "discoveryStage": "サーバーのツールを読み込めませんでした",
+        "loadStage": "接続設定を読み込めませんでした",
+        "clientRegistrationFailed": "クライアントの自動登録に失敗しました。独自のOAuthクライアントを使用するか、プロバイダーの設定要件を確認してください。",
+        "discoveryFailed": "OAuthサインイン設定が見つかりませんでした。サーバーURLを確認するか、プロバイダーのエンドポイントを入力してください。",
+        "connectionFailed": "OAuthサーバーに接続できませんでした。サーバーURLを確認して再試行してください。",
+        "oauthFailed": "OAuthサインインを開始できませんでした。クライアント設定を確認して再試行してください。"
       },
       "header": {
-        "defaultTitle": "MCP サーバーを認証",
-        "description": "接続を認証すると、MCP サーバーを使用できます。",
-        "title": "*{name}* を認証"
-      },
-      "knownProvider": {
-        "hint": "既知のプロバイダーモードでは、エンドポイントの設定が必要です。Google の参考エンドポイント: 認可 {authorizationEndpoint}、トークン {tokenEndpoint}。"
+        "defaultTitle": "認証を設定",
+        "description": "MCPサーバーの認証を設定",
+        "title": "*{name}*を設定"
       },
       "noAuthNotice": {
-        "description": "この接続では認証を使用しません。このサーバーが信頼できることを確認してください。この接続で実行される操作の責任はお客様にあります。",
-        "title": "この MCP サーバーでは認証を使用しません"
+        "description": "ユーザーはサインインせずにこのサーバーを使用できます。設定済みのカスタムヘッダーは引き続き送信されます。",
+        "title": "認証不要"
       },
       "oauthInfo": {
-        "discovery": "クライアント ID とシークレットは任意です。自動検出では、{appName} はサポートされている場合に Client ID Metadata Document (CIMD) を使用し、対応していない場合は Dynamic Client Registration (DCR) を使用します。",
-        "manualRegistration": "サーバーがどちらの方法にも対応していない場合は、先に {appName} インスタンスをサーバーの提供元に登録してください。アクションに必要なスコープを {appName} に付与してください。"
+        "discovery": "各ユーザーは自分のアカウントでサインインします。",
+        "manualRegistration": "このリダイレクトURIをプロバイダーに登録してください。",
+        "title": "OAuth設定"
       },
       "passThroughNotice": {
         "description": "{appName} はユーザーの OAuth アクセストークンを Authorization ヘッダーとしてサーバーに直接転送します。サーバーが同じプロバイダーでの認証に対応していることを確認してください。",
@@ -361,14 +384,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "MCP SDK のチャレンジ/検出フローを使用します (既定)。",
-          "label": "自動検出"
+          "description": "サーバーが公開しているサインイン設定を読み取ります。",
+          "label": "サインインエンドポイントを自動検索"
         },
         "knownProvider": {
-          "description": "設定済みの認可/トークンエンドポイントを使用します。",
-          "label": "既知のプロバイダー"
+          "description": "サインインURLとトークンURLを自分で入力します。",
+          "label": "エンドポイントを手動入力"
         },
-        "label": "プロバイダーモード",
+        "label": "OAuthエンドポイント",
         "placeholder": "モードを選択"
       },
       "redirectUri": {
@@ -379,20 +402,55 @@
         "label": "スコープの上書き (カンマ区切り)"
       },
       "sharedApiKey": {
-        "description": "個人の API キーは使用しないでください。このキーを組織の全員と共有しても問題ないことを確認してください。",
+        "description": "このキーは設定のテストと、アクセス権を持つ全員の接続に使用します。個人用ではなく、ワークスペース用のキーを使用してください。",
         "label": "API キー",
         "placeholder": "組織の共有 API キー"
       },
       "submitButton": {
-        "label": "接続",
-        "pendingLabel": "接続中..."
+        "label": "変更を保存",
+        "pendingLabel": "保存中…"
       },
       "tokenEndpoint": {
         "label": "トークンエンドポイント",
-        "required": "既知のプロバイダーモードでは、トークンエンドポイントは必須です"
+        "required": "プロバイダーのトークンエンドポイントを入力してください。"
       },
       "transport": {
-        "required": "トランスポートは必須です"
+        "required": "トランスポートは必須です",
+        "label": "接続トランスポート",
+        "description": "サーバーが従来のSSEを必要としない限り、Streamable HTTPを使用してください。この設定はサーバーから自動検出されません。",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE（従来方式）"
+      },
+      "advancedSettings": {
+        "title": "詳細設定"
+      },
+      "apiTokenInfo": {
+        "title": "APIキー設定",
+        "description": "各ユーザーが個人用トークンで接続するか、全員が共有トークンを使用するかを選択します。"
+      },
+      "oauthSetup": {
+        "label": "OAuth設定",
+        "automatic": {
+          "label": "自動で設定",
+          "description": "サーバーが公開する設定を使って、{appName}にOAuthクライアントを登録させます。"
+        },
+        "ownClient": {
+          "label": "独自のOAuthクライアントを使用",
+          "description": "プロバイダーのクライアントIDを入力してください。シークレットは必要な場合にのみ追加してください。"
+        }
+      },
+      "discovery": {
+        "checking": "自動設定を確認しています…",
+        "supported": "自動設定を利用できます",
+        "requiresClient": "このサーバーはクライアントの自動登録への対応を明示していません。独自のOAuthクライアントを設定することをお勧めします。自動登録を試すこともできます。",
+        "missing": "サーバーURLを確認するか、プロバイダーのサインインおよびトークンのエンドポイントを入力してください。",
+        "unreachable": "サーバーが利用できないか、検出リクエストをブロックしている可能性があります。",
+        "retry": "再確認",
+        "manual": "OAuth設定を手動入力",
+        "useOwnClient": "独自のOAuthクライアントを使用",
+        "unreachableTitle": "自動設定を利用できるか確認できませんでした",
+        "missingTitle": "OAuthエンドポイントが見つかりませんでした",
+        "requiresClientTitle": "自動設定を利用できない可能性があります"
       }
     },
     "mcpCard": {
@@ -415,6 +473,20 @@
       "refreshToolsButton": {
         "ariaLabel": "ツールを更新",
         "tooltip": "ツールを更新"
+      },
+      "setupIncomplete": {
+        "label": "設定が完了していません。",
+        "actionHint": "設定が完了していません。クリックして設定を完了してください。"
+      },
+      "status": {
+        "ready": "準備完了 · {count, plural, one {# 個のツール} other {# 個のツール}}",
+        "incomplete": "設定未完了",
+        "loading": "ツールを読み込み中",
+        "disconnected": "切断済み"
+      },
+      "authenticationButton": {
+        "tooltip": "認証を設定",
+        "ariaLabel": "{serverName} の認証を設定"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +565,7 @@
         "toolUpdateFailed": "ツールの更新に失敗しました",
         "toolsDisabled": "{count, plural, one {# 個のツールを無効にしました} other {# 個のツールを無効にしました}}",
         "toolsEnabled": "{count, plural, one {# 個のツールを有効にしました} other {# 個のツールを有効にしました}}",
-        "toolsFetched": "接続してツールを取得しました",
+        "toolsFetched": "ツールを読み込みました",
         "toolsRefreshed": "ツールを更新しました"
       }
     },
@@ -633,10 +705,8 @@
         "placeholder": "{field} を入力"
       },
       "credentials": {
-        "perUserDescription": "次の資格情報は組織内で共有されません。",
-        "perUserTitle": "自分のアカウント専用",
-        "sharedDescription": "これらの値は組織内のすべてのユーザーに使用されます。",
-        "sharedTitle": "組織で共有する値"
+        "perUserDescription": "自分の認証情報を使ってこのMCPをテストし、ツールを読み込みます。認証情報は自分のアカウントにのみ保存されます。",
+        "sharedDescription": "これらの値は組織内のすべてのユーザーに使用されます。"
       },
       "headers": {
         "addButton": {
@@ -646,8 +716,8 @@
           "message": "少なくとも 1 つのヘッダーの値に {apiKey} プレースホルダーを含めてください。"
         },
         "keyTitle": "ヘッダー名",
-        "label": "認証ヘッダー",
-        "perUserDescription": "各ユーザーが個別の資格情報を入力できるように、ヘッダーの形式を設定します。<mono>{apiKey}</mono> や <mono>{userEmail}</mono> などのプレースホルダーを使用してください。ユーザーには、プレースホルダーの値の入力を求めます (user_email を除く)。",
+        "label": "カスタムヘッダー",
+        "perUserDescription": "各ユーザーのAPIキーには<mono>{apiKey}</mono>を使用します。<mono>{userEmail}</mono>にはユーザーのメールアドレスが自動で入ります。他のプレースホルダーはユーザーに値の入力を求めます。",
         "sharedDescription": "組織の共有資格情報とともに送信するヘッダーの形式を設定します。少なくとも 1 つのヘッダーの値に <mono>{apiKey}</mono> などのプレースホルダーを使用してください。組織の共有キーに置き換えられます。",
         "valueTitle": "ヘッダーの値"
       }
@@ -809,6 +879,42 @@
         "ariaLabel": "ツールを検索",
         "placeholder": "ツールを検索…"
       }
+    },
+    "mcpSetup": {
+      "serverDetails": "サーバーの詳細",
+      "authentication": "認証",
+      "continue": "認証を設定",
+      "back": "サーバー設定"
+    },
+    "mcpTools": {
+      "title": "ツール",
+      "description": "利用可能なツールを選択し、権限を設定します。",
+      "enabledTab": "利用可能なツール",
+      "policiesTab": "Craft の権限",
+      "enabledDescription": "ユーザーが Onyx で使用できるツールを選択します。",
+      "policiesDescription": "各ツールの使用前に Craft が承認を求める条件を選択します。",
+      "back": "認証",
+      "refresh": "ツールを更新",
+      "loadError": "ツールを読み込めませんでした",
+      "saveError": "ツールの設定を保存できませんでした",
+      "refreshError": "ツールを更新できませんでした",
+      "search": "ツールを検索"
+    },
+    "mcpDetail": {
+      "back": "MCPサーバー",
+      "configuration": "サーバー設定",
+      "editConfiguration": "サーバー設定を編集",
+      "authentication": "認証",
+      "editAuthentication": "認証を編集",
+      "availability": "利用可能な場所",
+      "edit": "編集",
+      "loadError": "MCPサーバーを読み込めませんでした",
+      "notFound": "MCPサーバーが見つかりません",
+      "unavailable": "このサーバーは削除されたか、アクセス権がない可能性があります。",
+      "retry": "再試行",
+      "restrictedAccess": "{groups, plural, one {# グループ} other {# グループ}} · {users, plural, one {# ユーザー} other {# ユーザー}}",
+      "authenticationIncomplete": "認証が設定されていません。",
+      "availabilitySaved": "利用設定を更新しました"
     }
   },
   "admin": {
@@ -12638,7 +12744,7 @@
             "tabLabel": "アプリ · {count}"
           },
           "mcp": {
-            "blurb": "管理者が Craft 向けに公開したサーバーです。必要なアプリが「アプリ」に見つからない場合や、サーバー独自の MCP ツールを使いたい場合に利用してください。",
+            "blurb": "管理者がCraftで利用できるようにしたサーバーです。個人の認証情報が必要なサーバーでは、ツールを使う前に自分のアカウントを接続してください。",
             "empty": "Craft 向けに公開された MCP サーバーはありません。",
             "emptyTitle": "MCP サーバーはまだありません",
             "tabLabel": "MCP サーバー · {count}"

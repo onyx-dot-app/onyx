@@ -66,6 +66,9 @@ interface InteractiveStatelessProps
    */
   type?: ButtonType;
 
+  /** ID of the form owned by a submit or reset button. */
+  form?: string;
+
   /**
    * URL to navigate to when clicked. Passed through Slot to the child.
    */

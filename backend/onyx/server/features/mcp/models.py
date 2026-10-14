@@ -417,6 +417,9 @@ class MCPToolUpdateRequest(BaseModel):
 
 
 class MCPServerSimpleCreateRequest(BaseModel):
+    available_in_craft: bool = Field(
+        default=False, description="Whether the Craft agent may use this server"
+    )
     name: str = Field(..., description="Name of the MCP server")
     description: Optional[str] = Field(
         None, description="Description of the MCP server"
@@ -507,6 +510,17 @@ class MCPOAuthConnectResponse(BaseModel):
     oauth_url: str = Field(..., description="OAuth URL to redirect user to")
     state: str = Field(..., description="OAuth state parameter")
     pending_tool: dict = Field(..., description="Pending tool configuration")
+
+
+class MCPOAuthDiscoveryRequest(BaseModel):
+    server_id: int
+
+
+class MCPOAuthDiscoveryResponse(BaseModel):
+    status: Literal["metadata_found", "metadata_missing", "unreachable"]
+    supports_automatic_registration: bool | None = None
+    authorization_endpoint: str | None = None
+    token_endpoint: str | None = None
 
 
 class MCPUserOAuthConnectRequest(BaseModel):

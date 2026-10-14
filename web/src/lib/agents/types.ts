@@ -166,3 +166,9 @@ export interface PaginatedAgentsResponse {
   items: Agent[];
   total_items: number;
 }
+
+export interface DefaultAssistantConfiguration {
+  tool_ids: number[];
+  system_prompt: string | null;
+  default_system_prompt: string;
+}

@@ -8,6 +8,7 @@ registration, and token request — is checked.
 """
 
 import httpx
+from fastapi.concurrency import run_in_threadpool
 
 from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import get_security_settings
@@ -41,7 +42,7 @@ class _SSRFGuardAsyncTransport(httpx.AsyncHTTPTransport):
     targets are validated too."""
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        validate_mcp_outbound_url(str(request.url))
+        await run_in_threadpool(validate_mcp_outbound_url, str(request.url))
         return await super().handle_async_request(request)
 
 

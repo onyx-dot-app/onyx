@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from onyx.auth.permissions import has_global_permission
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
@@ -80,10 +81,11 @@ def get_craft_enabled_mcp_servers(
 def get_mcp_servers_for_persona(
     persona_id: int,
     db_session: Session,
-    user: User,  # noqa: ARG001
+    user: User,
 ) -> list[MCPServer]:
-    """Servers already on a persona's tools. No attach ACL — chat users of the
-    persona must see/auth these. ``user`` is for callers enforcing persona visibility.
+    """Attached servers. Default Chat also checks server access.
+
+    Custom agents retain their attached-server access for all agent users.
     """
     # Get the persona and its tools
     persona = db_session.query(Persona).filter(Persona.id == persona_id).first()
@@ -100,16 +102,15 @@ def get_mcp_servers_for_persona(
         return []
 
     # Fetch the MCP servers
-    mcp_servers = (
-        db_session.query(MCPServer).filter(MCPServer.id.in_(mcp_server_ids)).all()
-    )
-
-    return list(mcp_servers)
+    stmt = select(MCPServer).where(MCPServer.id.in_(mcp_server_ids))
+    if persona_id == DEFAULT_PERSONA_ID:
+        stmt = _add_mcp_server_access_filter(stmt, user)
+    return list(db_session.scalars(stmt).all())
 
 
 def _add_mcp_server_access_filter(stmt: Select, user: User) -> Select:
     """Servers the user may add to an agent (public / direct / group). Admins bypass.
-    Does not control chat use of agent-attached servers.
+    Default Chat also uses these grants; custom-agent attachments do not.
     """
     if has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
         return stmt
@@ -225,6 +226,7 @@ def create_mcp_server__no_commit(
     oauth_additional_auth_params: dict[str, str] | None = None,
     admin_connection_config_id: int | None = None,
     is_public: bool = True,
+    available_in_craft: bool = False,
 ) -> MCPServer:
     """Create a new MCP server"""
     new_server = MCPServer(
@@ -242,6 +244,7 @@ def create_mcp_server__no_commit(
         oauth_additional_auth_params=oauth_additional_auth_params,
         admin_connection_config_id=admin_connection_config_id,
         is_public=is_public,
+        available_in_craft=available_in_craft,
     )
     db_session.add(new_server)
     db_session.flush()  # Get the ID without committing
@@ -494,6 +497,17 @@ def upsert_user_connection_config(
             user_email=user_email,
             db_session=db_session,
         )
+
+
+def clear_mcp_admin_connection_config__no_commit(
+    server: MCPServer, db_session: Session
+) -> None:
+    """Remove credentials for the old endpoint from both ORM references."""
+    config_id = server.admin_connection_config_id
+    server.admin_connection_config = None
+    server.admin_connection_config_id = None
+    if config_id is not None:
+        delete_connection_config(config_id, db_session)
 
 
 def delete_connection_config(config_id: int, db_session: Session) -> None:

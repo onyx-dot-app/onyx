@@ -414,3 +414,11 @@ See `backend/AGENTS.md` for authoritative commands and required env.
   `_merge_tool_calls` collapses N calls to `SearchTool`/`WebSearchTool`/`OpenURLTool`
   into one before execution and before it enters history, so the model later sees
   the merged, expanded arguments rather than what it originally emitted.
+
+
+### Default Chat MCP availability
+
+For the default persona, `tool_constructor.py` checks both server availability in
+Chat and the user's MCP server access before resolving credentials. This prevents
+a group-restricted server from becoming available to all users through default
+Chat. Custom agents retain their existing attached-tool access behavior.

@@ -152,9 +152,15 @@ Every row is one setting, traced from its UI control through storage to where
 | User preferences (free text) | User, `ChatPreferencesSettings` "Personal Preferences" field | `User.user_preferences` | `UserMemoryContext.user_preferences` → `USER_PREFERENCES_PROMPT` |
 | Memories | Written automatically by `MemoryTool`; read toggle is user-controlled | `Memory` table | `UserMemoryContext.memories` → `USER_MEMORIES_PROMPT` (only if `user.use_memories`, §4.3) |
 | Default agent system prompt | Admin, `/admin/chat-preferences` "System Prompt" modal | `Persona.system_prompt` for the default persona | `prompt_utils.py:get_default_base_system_prompt` → base of `build_system_prompt` |
-| Default agent tool set | Admin, `/admin/chat-preferences` tool toggles | `Persona.tools` (default persona) | Gates which per-tool guidance sections `build_system_prompt` appends |
+| Default agent tool set | Admin, `/admin/chat-preferences` tool toggles or MCP server availability | `Persona.tools` (default persona) | Gates which per-tool guidance sections `build_system_prompt` appends |
 | `auto_detect_search_filters` | Admin, "Auto-detect filters" toggle | `Settings.auto_detect_search_filters` (KV) | Not a prompt section: read directly in `process_message.py` and `server/features/search/api.py` to decide whether a turn runs filter auto-detection at all |
 | Reminder text (persona task prompt) | **Not settable on this page.** Owned by [[agents-personas]] (`Persona.task_prompt`), edited per-agent | `Persona.task_prompt` | `prompt_utils.py:build_reminder_message`, placed last by [[context-assembly]] §4.5 |
+
+The MCP server page and Chat Preferences share `useDefaultAssistantConfiguration`
+in `web/src/lib/agents/hooks.ts`. Both use the existing default-assistant API
+and SWR cache. Server toggles add or remove that server's tool IDs while preserving
+other selections. A selected subset counts as on. No server-level availability
+column stores a second value. These settings require `FULL_ADMIN_PANEL_ACCESS`.
 
 The last row is a deliberate non-finding: the admin default-assistant modal only
 exposes `system_prompt` and `tool_ids` (`DefaultAssistantUpdateRequest`,

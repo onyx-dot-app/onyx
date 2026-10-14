@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.types import Tool as MCPLibTool
@@ -25,7 +26,7 @@ from onyx.auth.permissions import (
 )
 from onyx.auth.scoped_permissions import assert_within_scope, get_scoped_groups
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
     EndpointPolicy,
     GatedAppKind,
@@ -44,6 +45,7 @@ from onyx.db.gated_app import (
 )
 from onyx.db.mcp import (
     affected_user_ids_for_mcp_server,
+    clear_mcp_admin_connection_config__no_commit,
     create_connection_config,
     create_mcp_server__no_commit,
     delete_all_user_connection_configs_for_server_no_commit,
@@ -97,6 +99,8 @@ from onyx.server.features.mcp.models import (
     MCPAuthTemplate,
     MCPConnectionData,
     MCPOAuthCallbackResponse,
+    MCPOAuthDiscoveryRequest,
+    MCPOAuthDiscoveryResponse,
     MCPOAuthKeys,
     MCPServer,
     MCPServerCreateResponse,
@@ -118,6 +122,10 @@ from onyx.server.features.mcp.oauth import (
     MCPReauthenticationRequired,
     complete_mcp_oauth_authorization,
     make_oauth_provider,
+)
+from onyx.server.features.mcp.oauth_discovery import (
+    discover_oauth_capabilities,
+    oauth_setup_error,
 )
 from onyx.server.features.mcp.oauth_flow import (
     OAuthAlreadyAuthenticated,
@@ -617,6 +625,30 @@ def test_mcp_server_credentials(
         return False, f"Connection failed: {str(e)}"
 
 
+@admin_router.post("/oauth/discover")
+async def discover_admin_oauth(
+    request: MCPOAuthDiscoveryRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
+) -> MCPOAuthDiscoveryResponse:
+    server_url = await run_in_threadpool(
+        _get_authorized_discovery_url, request.server_id, user
+    )
+    return await discover_oauth_capabilities(server_url)
+
+
+def _get_authorized_discovery_url(server_id: int, user: User) -> str:
+    # Close the server lookup session before waiting for remote metadata.
+    with get_session_with_current_tenant() as db:
+        try:
+            server = get_mcp_server_by_id(server_id, db)
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
+        _ensure_mcp_server_owner_or_admin(server, user)
+        return server.server_url
+
+
 @admin_router.post("/oauth/connect", response_model=MCPUserOAuthConnectResponse)
 async def connect_admin_oauth(
     request: MCPUserOAuthConnectRequest,
@@ -864,10 +896,7 @@ async def _connect_oauth(
     except Exception as e:
         saved_e = log_exception_group(e) if isinstance(e, ExceptionGroup) else e
         logger.error("OAuth initialization failed: %s", saved_e)
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Failed to initialize OAuth client: {str(saved_e)}",
-        ) from e
+        raise oauth_setup_error(e) from e
 
     match oauth_result:
         case OAuthAuthorizationRedirect(url=oauth_url):
@@ -1947,9 +1976,7 @@ def _upsert_mcp_server(
             )
 
         if server_url_changed and mcp_server.admin_connection_config_id:
-            previous_admin_config_id = mcp_server.admin_connection_config_id
-            mcp_server.admin_connection_config_id = None
-            delete_connection_config(previous_admin_config_id, db_session)
+            clear_mcp_admin_connection_config__no_commit(mcp_server, db_session)
             if (
                 request.auth_type == MCPAuthenticationType.OAUTH
                 and request.oauth_provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY
@@ -2513,6 +2540,7 @@ def create_mcp_server_simple(
         auth_type=None,  # To be configured later
         transport=None,  # To be configured later
         auth_performer=None,  # To be configured later
+        available_in_craft=request.available_in_craft,
         db_session=db_session,
     )
 
@@ -2574,6 +2602,14 @@ def update_mcp_server_simple(
 
     _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
 
+    url_changed = (
+        request.server_url is not None and request.server_url != mcp_server.server_url
+    )
+    reload_user_ids: set[UUID] = set()
+    if url_changed:
+        reload_user_ids.update(_invalidate_mcp_user_credentials(mcp_server, db_session))
+        clear_mcp_admin_connection_config__no_commit(mcp_server, db_session)
+
     # Update only provided fields
     updated_server = update_mcp_server__no_commit(
         server_id=server_id,
@@ -2582,6 +2618,14 @@ def update_mcp_server_simple(
         description=request.description,
         server_url=request.server_url,
         available_in_craft=request.available_in_craft,
+        status=(
+            MCPServerStatus.AWAITING_AUTH
+            if mcp_server.auth_type
+            not in (None, MCPAuthenticationType.NONE, MCPAuthenticationType.PT_OAUTH)
+            else MCPServerStatus.CREATED
+        )
+        if url_changed
+        else None,
     )
 
     acl_changing = any(
@@ -2591,11 +2635,10 @@ def update_mcp_server_simple(
     # Only an ACL change can drop a user's access; snapshot the pre-change
     # recipients in that case so they're reloaded to lose the server (the
     # post-update query wouldn't include them).
-    reload_user_ids: set[UUID] = (
-        affected_user_ids_for_mcp_server(updated_server, db_session)
-        if acl_changing
-        else set()
-    )
+    if acl_changing:
+        reload_user_ids.update(
+            affected_user_ids_for_mcp_server(updated_server, db_session)
+        )
 
     if acl_changing:
         _apply_mcp_server_access(

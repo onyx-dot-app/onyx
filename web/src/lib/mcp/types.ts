@@ -65,6 +65,7 @@ export interface MCPServersResponse {
 }
 
 export interface MCPServerCreateRequest {
+  available_in_craft?: boolean;
   name: string;
   description?: string;
   server_url: string;
@@ -130,3 +131,10 @@ export type MCPServersFormValues = Record<
   `mcp_server_${number}`,
   MCPServerFormValues | undefined
 >;
+
+export interface MCPOAuthDiscovery {
+  status: "metadata_found" | "metadata_missing" | "unreachable";
+  supports_automatic_registration: boolean | null;
+  authorization_endpoint: string | null;
+  token_endpoint: string | null;
+}

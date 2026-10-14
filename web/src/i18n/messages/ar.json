@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "المصادقة والاتصال بـ {serverName}",
-        "label": "مصادقة"
+        "ariaLabel": "إعداد المصادقة لـ {serverName}",
+        "label": "إعداد المصادقة"
       },
       "deleteButton": {
         "ariaLabel": "حذف الخادم {serverName}",
@@ -130,14 +130,13 @@
       "authStatus": {
         "apiTokenDescription": "تم تهيئة رمز API",
         "connectedDescription": "متصل",
-        "oauthDescription": "OAuth متصل بـ {owner}",
         "title": "تمت المصادقة والاتصال"
       },
       "cancelButton": {
         "label": "إلغاء"
       },
       "description": {
-        "placeholder": "مزيد من التفاصيل عن خادم MCP",
+        "placeholder": "ما الذي يمكن لفريقك فعله باستخدام هذا الخادم؟",
         "suffix": "اختياري",
         "title": "الوصف"
       },
@@ -145,21 +144,20 @@
         "tooltip": "قطع الاتصال بالخادم"
       },
       "editConfigsButton": {
-        "label": "تعديل الإعدادات"
+        "label": "إعدادات الاتصال"
       },
       "manageHeader": {
         "description": "حدّث إعدادات خادم MCP وأدر المصادقة.",
         "title": "إدارة خادم MCP"
       },
       "name": {
-        "placeholder": "سمِّ خادم MCP الخاص بك",
+        "placeholder": "مثل Linear",
         "required": "اسم الخادم مطلوب",
         "title": "اسم الخادم"
       },
       "serverUrl": {
         "invalid": "يجب أن يكون عنوان URL صالحًا",
         "required": "عنوان URL للخادم مطلوب",
-        "subDescription": "لا تتصل إلا بالخوادم التي تثق بها. أنت مسؤول عن الإجراءات المنفذة عبر هذا الاتصال وعن تحديث أدواتك.",
         "title": "عنوان URL لخادم MCP"
       },
       "submitButton": {
@@ -173,6 +171,33 @@
         "serverCreated": "تم إنشاء خادم MCP بنجاح",
         "serverUpdated": "تم تحديث خادم MCP بنجاح",
         "updateFailed": "فشل تحديث خادم MCP"
+      },
+      "access": {
+        "title": "التحكم في الوصول",
+        "description": "اختر من يمكنه استخدام MCP هذا.",
+        "public": {
+          "label": "عام",
+          "description": "يمكن لأي شخص في مؤسستك استخدام MCP هذا"
+        },
+        "groups": {
+          "label": "مجموعات المستخدمين",
+          "description": "يمكن لمجموعات المستخدمين المحددة استخدام MCP هذا.",
+          "placeholder": "إضافة مجموعات مستخدمين",
+          "required": "حدد مجموعة مستخدمين واحدة على الأقل."
+        },
+        "scoped": {
+          "description": "اختر مجموعة واحدة على الأقل تديرها."
+        },
+        "retainedUsers": "{count, plural, one {تمت مشاركته مباشرةً أيضًا مع مستخدم واحد.} other {تمت مشاركته مباشرةً أيضًا مع # من المستخدمين.}}",
+        "planNote": "يتطلب الوصول عبر المجموعات خطة Business."
+      },
+      "craft": {
+        "title": "متاح في Craft",
+        "description": "السماح للمستخدمين بالوصول إلى خادم MCP هذا في Craft."
+      },
+      "defaultChat": {
+        "title": "متاح في دردشة Onyx الافتراضية",
+        "description": "عند إيقافه، يجب على المستخدمين إضافة هذا الخادم إلى وكيل مخصص لاستخدامه في الدردشة."
       }
     },
     "addOpenApiModal": {
@@ -279,54 +304,47 @@
       "additionalAuthParams": {
         "label": "معاملات مصادقة إضافية (JSON)"
       },
-      "advanced": {
-        "description": "هيّئ موفر OAuth معروفًا بنقاط نهاية تفويض ورموز صريحة بدلًا من الاكتشاف التلقائي.",
-        "title": "متقدم"
-      },
       "apiKey": {
         "required": "رمز API مطلوب"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "مفتاح مشترك (مسؤول)"
+          "label": "رمز مشترك"
         },
         "perUser": {
-          "label": "مفتاح فردي (لكل مستخدم)"
+          "label": "رمز شخصي"
         }
       },
       "authPerformer": {
-        "required": "منفّذ المصادقة مطلوب"
+        "required": "اختر بيانات اعتماد شخصية أو مشتركة."
       },
       "authType": {
         "apiToken": {
-          "description": "استخدم مفتاح API فرديًا لكل مستخدم أو مفتاح API مشتركًا على مستوى المؤسسة.",
           "label": "مفتاح API"
         },
         "label": "طريقة المصادقة",
         "none": {
-          "description": "غير موصى به",
-          "label": "بدون"
+          "label": "بلا مصادقة"
         },
         "oauth": {
-          "description": "يحتاج كل مستخدم إلى المصادقة عبر OAuth ببيانات اعتماده الخاصة.",
           "label": "OAuth"
         },
         "placeholder": "اختر طريقة",
         "ptOauth": {
-          "description": "تمرير رمز وصول OAuth الخاص بالمستخدم المستخدم لمصادقة {appName}.",
           "label": "تمرير OAuth المباشر"
         },
         "required": "نوع المصادقة مطلوب"
       },
       "authorizationEndpoint": {
         "label": "نقطة نهاية التفويض",
-        "required": "نقطة نهاية التفويض مطلوبة في وضع الموفر المعروف"
+        "required": "أدخل نقطة نهاية التفويض من المزوّد."
       },
       "cancelButton": {
         "label": "إلغاء"
       },
       "clientId": {
-        "label": "معرّف العميل"
+        "label": "معرّف العميل",
+        "required": "أدخل معرّف عميل OAuth الخاص بك."
       },
       "clientSecret": {
         "label": "سر العميل"
@@ -335,25 +353,30 @@
         "additionalParamsInvalid": "JSON معاملات المصادقة الإضافية غير صالح",
         "additionalParamsInvalidWithReason": "JSON معاملات المصادقة الإضافية غير صالح: {reason}",
         "additionalParamsNotObject": "يجب أن تكون معاملات المصادقة الإضافية كائن JSON",
-        "oauthInitFailed": "فشل بدء OAuth: {detail}",
         "saveAuthFailed": "فشل حفظ إعدادات المصادقة",
-        "saveConfigFailed": "فشل حفظ إعدادات الخادم"
+        "saveConfigFailed": "فشل حفظ إعدادات الخادم",
+        "saveStage": "تعذّر حفظ إعدادات الاتصال",
+        "oauthStage": "تعذّر بدء تسجيل الدخول",
+        "discoveryStage": "تعذّر تحميل أدوات الخادم",
+        "loadStage": "تعذّر تحميل إعدادات الاتصال",
+        "clientRegistrationFailed": "فشل تسجيل العميل تلقائيًا. استخدم عميل OAuth خاصًا بك أو تحقق من متطلبات الإعداد لدى المزوّد.",
+        "discoveryFailed": "لم نعثر على إعدادات تسجيل الدخول باستخدام OAuth. تحقق من عنوان URL للخادم أو أدخل نقاط النهاية من المزوّد.",
+        "connectionFailed": "تعذّر الوصول إلى خادم OAuth. تحقق من عنوان URL للخادم وحاول مجددًا.",
+        "oauthFailed": "تعذّر بدء تسجيل الدخول باستخدام OAuth. تحقق من إعدادات العميل وحاول مجددًا."
       },
       "header": {
-        "defaultTitle": "مصادقة خادم MCP",
-        "description": "صادق على اتصالك لبدء استخدام خادم MCP.",
-        "title": "مصادقة *{name}*"
-      },
-      "knownProvider": {
-        "hint": "يتطلب وضع الموفر المعروف تهيئة نقاط النهاية. نقاط نهاية Google المرجعية: التفويض {authorizationEndpoint} والرمز {tokenEndpoint}."
+        "defaultTitle": "إعداد المصادقة",
+        "description": "إعداد مصادقة خادم MCP",
+        "title": "إعداد *{name}*"
       },
       "noAuthNotice": {
-        "description": "لن تُستخدم أي مصادقة لهذا الاتصال. تأكد من ثقتك بهذا الخادم. أنت مسؤول عن الإجراءات المنفذة عبر هذا الاتصال.",
-        "title": "لا توجد مصادقة لخادم MCP هذا"
+        "description": "يمكن للمستخدمين استخدام هذا الخادم دون تسجيل الدخول. يستمر إرسال الترويسات المخصصة المعدّة.",
+        "title": "لا تلزم المصادقة"
       },
       "oauthInfo": {
-        "discovery": "معرّف العميل والسر اختياريان. أثناء الاكتشاف التلقائي، يستخدم {appName} مستند بيانات معرّف العميل (CIMD) عند دعمه ويعود إلى التسجيل الديناميكي للعميل (DCR).",
-        "manualRegistration": "إذا كان خادمك لا يدعم أيًا من الطريقتين، سجّل نسخة {appName} الخاصة بك لدى موفر الخادم أولًا. امنح {appName} النطاقات اللازمة لإجراءاتك."
+        "discovery": "يسجّل كل مستخدم الدخول بحسابه الخاص.",
+        "manualRegistration": "سجّل عنوان URI لإعادة التوجيه هذا لدى المزوّد.",
+        "title": "إعداد OAuth"
       },
       "passThroughNotice": {
         "description": "سيمرر {appName} رمز وصول OAuth الخاص بالمستخدم مباشرة إلى الخادم كترويسة Authorization. تأكد من أن الخادم يدعم المصادقة عبر نفس الموفر.",
@@ -361,14 +384,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "استخدم تدفق التحدي/الاكتشاف الخاص بـ MCP SDK (الافتراضي).",
-          "label": "اكتشاف تلقائي"
+          "description": "قراءة إعدادات تسجيل الدخول التي ينشرها الخادم.",
+          "label": "العثور على نقاط نهاية تسجيل الدخول تلقائيًا"
         },
         "knownProvider": {
-          "description": "استخدم نقاط نهاية التفويض/الرموز المهيأة.",
-          "label": "موفر معروف"
+          "description": "أدخل عناوين URL لتسجيل الدخول والرمز بنفسك.",
+          "label": "إدخال نقاط النهاية يدويًا"
         },
-        "label": "وضع الموفر",
+        "label": "نقاط نهاية OAuth",
         "placeholder": "اختر وضعًا"
       },
       "redirectUri": {
@@ -379,20 +402,55 @@
         "label": "تجاوز النطاقات (مفصولة بفواصل)"
       },
       "sharedApiKey": {
-        "description": "لا تستخدم مفتاح API الشخصي. تأكد من أن هذا المفتاح مناسب للمشاركة مع الجميع في مؤسستك.",
+        "description": "يُستخدم هذا المفتاح لاختبار الإعداد وربط جميع من لديهم حق الوصول. استخدم مفتاح مساحة العمل، وليس مفتاحًا شخصيًا.",
         "label": "مفتاح API",
         "placeholder": "مفتاح API مشترك لمؤسستك"
       },
       "submitButton": {
-        "label": "اتصال",
-        "pendingLabel": "جارٍ الاتصال..."
+        "label": "حفظ التغييرات",
+        "pendingLabel": "جارٍ الحفظ…"
       },
       "tokenEndpoint": {
         "label": "نقطة نهاية الرمز",
-        "required": "نقطة نهاية الرمز مطلوبة في وضع الموفر المعروف"
+        "required": "أدخل نقطة نهاية الرمز من المزوّد."
       },
       "transport": {
-        "required": "وسيلة النقل مطلوبة"
+        "required": "وسيلة النقل مطلوبة",
+        "label": "طريقة نقل الاتصال",
+        "description": "استخدم Streamable HTTP ما لم يتطلب الخادم SSE القديم. لا يُكتشف هذا الإعداد تلقائيًا من الخادم.",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE (قديم)"
+      },
+      "advancedSettings": {
+        "title": "إعدادات متقدمة"
+      },
+      "apiTokenInfo": {
+        "title": "إعداد مفتاح API",
+        "description": "اختر ما إذا كان كل مستخدم يتصل برمز شخصي أو يستخدم الجميع رمزًا مشتركًا."
+      },
+      "oauthSetup": {
+        "label": "إعداد OAuth",
+        "automatic": {
+          "label": "الإعداد تلقائيًا",
+          "description": "اسمح لـ {appName} بتسجيل عميل OAuth باستخدام الإعدادات التي ينشرها الخادم."
+        },
+        "ownClient": {
+          "label": "استخدام عميل OAuth خاص بك",
+          "description": "أدخل معرّف عميل من المزوّد. أضف سرًا فقط إذا كان مطلوبًا."
+        }
+      },
+      "discovery": {
+        "checking": "جارٍ التحقق من الإعداد التلقائي…",
+        "supported": "الإعداد التلقائي متاح",
+        "requiresClient": "لا يعلن هذا الخادم دعم تسجيل العملاء تلقائيًا. نوصي بإعداد عميل OAuth خاص بك. لا يزال بإمكانك محاولة التسجيل التلقائي.",
+        "missing": "تحقق من عنوان URL للخادم أو أدخل نقاط نهاية تسجيل الدخول والرمز من المزوّد.",
+        "unreachable": "قد يكون الخادم غير متاح أو يحظر طلبات الاكتشاف.",
+        "retry": "التحقق مجددًا",
+        "manual": "إدخال إعدادات OAuth يدويًا",
+        "useOwnClient": "استخدام عميل OAuth خاص بك",
+        "unreachableTitle": "تعذّر تحديد ما إذا كان الإعداد التلقائي متاحًا",
+        "missingTitle": "تعذّر العثور على نقاط نهاية OAuth",
+        "requiresClientTitle": "قد لا يكون الإعداد التلقائي متاحًا"
       }
     },
     "mcpCard": {
@@ -415,6 +473,20 @@
       "refreshToolsButton": {
         "ariaLabel": "تحديث الأدوات",
         "tooltip": "تحديث الأدوات"
+      },
+      "setupIncomplete": {
+        "label": "الإعداد غير مكتمل.",
+        "actionHint": "الإعداد غير مكتمل. انقر لإكمال الإعداد."
+      },
+      "status": {
+        "ready": "جاهز · {count, plural, one {أداة واحدة} other {# أدوات}}",
+        "incomplete": "الإعداد غير مكتمل",
+        "loading": "جارٍ تحميل الأدوات",
+        "disconnected": "غير متصل"
+      },
+      "authenticationButton": {
+        "tooltip": "إعداد المصادقة",
+        "ariaLabel": "إعداد المصادقة لـ {serverName}"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +565,7 @@
         "toolUpdateFailed": "فشل تحديث الأداة",
         "toolsDisabled": "{count, plural, one {تم تعطيل أداة واحدة بنجاح} other {تم تعطيل # أدوات بنجاح}}",
         "toolsEnabled": "{count, plural, one {تم تفعيل أداة واحدة بنجاح} other {تم تفعيل # أدوات بنجاح}}",
-        "toolsFetched": "تم الاتصال وجلب الأدوات بنجاح",
+        "toolsFetched": "تم تحميل الأدوات",
         "toolsRefreshed": "تم تحديث الأدوات بنجاح"
       }
     },
@@ -633,10 +705,8 @@
         "placeholder": "أدخل {field}"
       },
       "credentials": {
-        "perUserDescription": "لن تتم مشاركة بيانات الاعتماد التالية مع مؤسستك.",
-        "perUserTitle": "لحسابك الخاص فقط",
-        "sharedDescription": "تُستخدم هذه القيم لكل مستخدم في مؤسستك.",
-        "sharedTitle": "قيم المؤسسة المشتركة"
+        "perUserDescription": "استخدم بيانات اعتمادك لاختبار MCP هذا وتحميل أدواته. تُحفظ في حسابك فقط.",
+        "sharedDescription": "تُستخدم هذه القيم لكل مستخدم في مؤسستك."
       },
       "headers": {
         "addButton": {
@@ -646,8 +716,8 @@
           "message": "يجب أن تتضمن قيمة ترويسة واحدة على الأقل العنصر النائب {apiKey}."
         },
         "keyTitle": "اسم الترويسة",
-        "label": "ترويسات المصادقة",
-        "perUserDescription": "نسّق الترويسات ليملأ كل مستخدم بيانات اعتماده الفردية. استخدم عناصر نائبة مثل <mono>{apiKey}</mono> أو <mono>{userEmail}</mono>. سيُطلب من المستخدمين تقديم قيم للعناصر النائبة (باستثناء user_email).",
+        "label": "ترويسات مخصصة",
+        "perUserDescription": "استخدم <mono>{apiKey}</mono> لمفتاح API لكل مستخدم. يستخدم <mono>{userEmail}</mono> بريده الإلكتروني تلقائيًا. تطلب العناصر النائبة الأخرى من المستخدمين إدخال قيمة.",
         "sharedDescription": "نسّق الترويسات المرسلة مع بيانات الاعتماد المشتركة لمؤسستك. استخدم عناصر نائبة مثل <mono>{apiKey}</mono> في قيمة ترويسة واحدة على الأقل، وستُستبدل بمفتاح مؤسستك المشترك.",
         "valueTitle": "قيمة الترويسة"
       }
@@ -809,6 +879,42 @@
         "ariaLabel": "البحث في الأدوات",
         "placeholder": "البحث في الأدوات…"
       }
+    },
+    "mcpSetup": {
+      "serverDetails": "تفاصيل الخادم",
+      "authentication": "المصادقة",
+      "continue": "تهيئة المصادقة",
+      "back": "تهيئة الخادم"
+    },
+    "mcpTools": {
+      "title": "الأدوات",
+      "description": "اختر الأدوات المتاحة وحدد أذوناتها.",
+      "enabledTab": "الأدوات المتاحة",
+      "policiesTab": "أذونات Craft",
+      "enabledDescription": "اختر الأدوات التي يمكن للمستخدمين استخدامها في Onyx.",
+      "policiesDescription": "اختر متى يطلب Craft الموافقة قبل استخدام كل أداة.",
+      "back": "المصادقة",
+      "refresh": "تحديث الأدوات",
+      "loadError": "تعذر تحميل الأدوات",
+      "saveError": "تعذر حفظ إعدادات الأدوات",
+      "refreshError": "تعذر تحديث الأدوات",
+      "search": "البحث عن أدوات"
+    },
+    "mcpDetail": {
+      "back": "خوادم MCP",
+      "configuration": "إعدادات الخادم",
+      "editConfiguration": "تعديل إعدادات الخادم",
+      "authentication": "المصادقة",
+      "editAuthentication": "تعديل المصادقة",
+      "availability": "التوفر",
+      "edit": "تعديل",
+      "loadError": "تعذر تحميل خادم MCP",
+      "notFound": "لم يتم العثور على خادم MCP",
+      "unavailable": "ربما تم حذف هذا الخادم، أو قد لا تملك صلاحية الوصول إليه.",
+      "retry": "إعادة المحاولة",
+      "restrictedAccess": "{groups, plural, one {# مجموعة} other {# مجموعات}} · {users, plural, one {# مستخدم} other {# مستخدمين}}",
+      "authenticationIncomplete": "لم يتم إعداد المصادقة.",
+      "availabilitySaved": "تم تحديث التوفر"
     }
   },
   "admin": {
@@ -12638,7 +12744,7 @@
             "tabLabel": "التطبيقات · {count}"
           },
           "mcp": {
-            "blurb": "خوادم أتاحها مسؤول لـ Craft. استخدمها عندما لا يكون التطبيق الذي تحتاجه مدرجًا ضمن التطبيقات، أو عندما تريد تحديدًا أدوات MCP الخاصة بخادم ما.",
+            "blurb": "خوادم أتاحها مسؤول لاستخدامها في Craft. إذا كان الخادم يتطلب بيانات اعتماد شخصية، فاربط حسابك الخاص قبل استخدام أدواته.",
             "empty": "لم تتم إتاحة أي خوادم MCP لـ Craft.",
             "emptyTitle": "لا توجد خوادم MCP بعد",
             "tabLabel": "خوادم MCP · {count}"

@@ -1,9 +1,8 @@
 /**
  * Page Object Model for the admin "MCP Actions" page (/admin/mcp-actions).
  *
- * Drives the Add-Server modal and the auth-configuration modal (OAuth / API Key
- * shared / API Key per-user). Used by the UI "create-flow" tests we deliberately
- * keep — most other setup is done via the API client instead.
+ * Drives creation, authentication, and the server detail page. Most test setup
+ * uses the API client; creation tests exercise these user-facing controls.
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
@@ -12,7 +11,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 export class AdminMcpServersPage {
   readonly page: Page;
 
-  // Add-server modal
+  // Server details page
   readonly addServerButton: Locator;
   readonly nameInput: Locator;
   readonly descriptionInput: Locator;
@@ -20,14 +19,14 @@ export class AdminMcpServersPage {
   readonly submitButton: Locator;
   readonly accessControlSelector: Locator;
 
-  // Auth modal
-  readonly authMethodSelect: Locator;
+  // Authentication page
+  readonly oauthMethodTab: Locator;
   readonly apiTokenInput: Locator;
   readonly oauthClientIdInput: Locator;
   readonly oauthClientSecretInput: Locator;
   readonly connectButton: Locator;
 
-  // Server card + tools
+  // Server detail tools
   readonly refreshToolsButton: Locator;
 
   constructor(page: Page) {
@@ -38,13 +37,15 @@ export class AdminMcpServersPage {
     this.nameInput = page.locator("input#name");
     this.descriptionInput = page.locator("textarea#description");
     this.serverUrlInput = page.locator("input#server_url");
-    this.submitButton = page.getByRole("button", { name: "Add Server" });
-    // BooleanFormField aria-label from "Make this MCP server Public?"
-    this.accessControlSelector = page.getByRole("checkbox", {
-      name: /make-this mcp server public/i,
+    this.submitButton = page.getByRole("button", {
+      name: "Configure authentication",
+      exact: true,
+    });
+    this.accessControlSelector = page.getByRole("combobox", {
+      name: "Access control",
     });
 
-    this.authMethodSelect = page.getByTestId("mcp-auth-method-select");
+    this.oauthMethodTab = page.getByRole("tab", { name: "OAuth", exact: true });
     this.apiTokenInput = page.locator('input[name="api_token"]');
     this.oauthClientIdInput = page.locator('input[name="oauth_client_id"]');
     this.oauthClientSecretInput = page.locator(
@@ -67,7 +68,7 @@ export class AdminMcpServersPage {
   }
 
   // ---------------------------------------------------------------------------
-  // Add-server modal
+  // Server details page
   // ---------------------------------------------------------------------------
 
   async openAddServerModal(): Promise<void> {
@@ -97,53 +98,60 @@ export class AdminMcpServersPage {
     }
   }
 
-  /** A global holder gets a Public toggle defaulting to on, which disables the
-   *  picker — untick it (the checkbox is 1x1, so click the label). A scoped
-   *  manager never sees the toggle; is_public is forced off for them. */
+  /** Scoped managers see only the group option; global holders can select it. */
   async restrictToGroup(group: string): Promise<void> {
-    const publicLabel = this.page
-      .getByText("Make this MCP Server Public?", { exact: false })
-      .first();
-    if (await publicLabel.isVisible().catch(() => false)) {
-      await publicLabel.click();
-    }
-    const search = this.page.getByTestId("groups-search-input");
-    await expect(search).toBeVisible({ timeout: 10_000 });
-    await search.click();
-    await this.page.getByText(group, { exact: true }).first().click();
+    await this.accessControlSelector.click();
+    await this.page.getByRole("option", { name: /^User groups/ }).click();
+    const search = this.page.getByPlaceholder("Add user groups");
+    await expect(search).toBeVisible();
+    await expect(search).toBeEnabled();
+    await search.fill(group);
+    await this.page
+      .getByRole("option", { name: new RegExp(`^${group}`) })
+      .click();
   }
 
   /**
-   * Submit the add-server modal, returning the created (bare) server id. The
-   * auth-configuration modal opens automatically afterwards.
+   * Save server details and continue to authentication in the same modal.
+   * Returns the created server ID.
    */
   async submitAddServer(): Promise<number> {
     const responsePromise = this.page.waitForResponse(
       (resp) =>
         new URL(resp.url()).pathname === "/api/admin/mcp/server" &&
-        resp.request().method() === "POST" &&
-        resp.ok()
+        resp.request().method() === "POST"
     );
     await this.submitButton.click();
     const response = await responsePromise;
+    expect(response.ok(), await response.text()).toBeTruthy();
     const created = (await response.json()) as { id?: number };
     expect(created.id).toBeTruthy();
-    await expect(this.authMethodSelect).toBeVisible();
+    await expect(this.oauthMethodTab).toBeVisible();
     return Number(created.id);
   }
 
   // ---------------------------------------------------------------------------
-  // Auth modal
+  // Authentication page
   // ---------------------------------------------------------------------------
 
+  async backToServerDetails(): Promise<void> {
+    await this.page
+      .getByRole("button", { name: "Server configuration", exact: true })
+      .click();
+    await expect(this.nameInput).toBeVisible();
+  }
+
+  async continueToAuthentication(): Promise<void> {
+    await this.submitButton.click();
+    await expect(this.oauthMethodTab).toBeVisible();
+  }
+
   async selectAuthMethod(method: "OAuth" | "API Key"): Promise<void> {
-    await this.authMethodSelect.click();
-    await this.page.getByRole("option", { name: method }).click();
+    await this.page.getByRole("tab", { name: method, exact: true }).click();
   }
 
   async selectApiKeyTab(which: "admin" | "per-user"): Promise<void> {
-    const pattern =
-      which === "admin" ? /Shared Key.*Admin/i : /Individual Key.*Per User/i;
+    const pattern = which === "admin" ? /Shared token/i : /Personal token/i;
     const tab = this.page.getByRole("tab", { name: pattern });
     await expect(tab).toBeVisible();
     await tab.click();
@@ -159,6 +167,10 @@ export class AdminMcpServersPage {
     clientId: string,
     clientSecret: string
   ): Promise<void> {
+    await this.page
+      .getByRole("tab", { name: "Use your own OAuth client" })
+      .click();
+    await expect(this.oauthClientIdInput).toBeVisible();
     await this.oauthClientIdInput.fill(clientId);
     await this.oauthClientSecretInput.fill(clientSecret);
   }
@@ -199,6 +211,7 @@ export class AdminMcpServersPage {
   }
 
   async expectFirstHeaderPrefilled(): Promise<void> {
+    await this.expandCustomHeaders();
     await expect(this.headerGroup.getByLabel("Key 1")).toHaveValue(
       "Authorization"
     );
@@ -208,6 +221,7 @@ export class AdminMcpServersPage {
   }
 
   async addHeaderRow(): Promise<void> {
+    await this.expandCustomHeaders();
     await this.headerGroup
       .getByRole("button", { name: /Add Header Name and Header Value pair/i })
       .click();
@@ -218,11 +232,33 @@ export class AdminMcpServersPage {
     name: string,
     value: string
   ): Promise<void> {
+    await this.expandCustomHeaders();
     const nameInput = this.headerGroup.getByLabel(`Key ${index}`);
     const valueInput = this.headerGroup.getByLabel(`Value ${index}`);
     await expect(nameInput).toBeVisible();
     await nameInput.fill(name);
     await valueInput.fill(value);
+  }
+
+  private async expandAdvancedSettings(): Promise<void> {
+    const expand = this.page.getByRole("button", {
+      name: "Expand Advanced settings",
+      exact: true,
+    });
+    if (await expand.isVisible()) {
+      await expand.click();
+    }
+    await expect(
+      this.page.getByRole("button", {
+        name: "Fold Advanced settings",
+        exact: true,
+      })
+    ).toBeVisible();
+  }
+
+  private async expandCustomHeaders(): Promise<void> {
+    await this.expandAdvancedSettings();
+    await expect(this.headerGroup).toBeVisible();
   }
 
   async fillOwnCredentials(credentials: {
@@ -244,13 +280,17 @@ export class AdminMcpServersPage {
   }
 
   // ---------------------------------------------------------------------------
-  // Server card + tool toggles
+  // Server detail + tool toggles
   // ---------------------------------------------------------------------------
 
-  async expectServerCard(serverName: string): Promise<void> {
+  async expectServerDetail(serverName: string): Promise<void> {
+    await expect(this.page).toHaveURL(/\/admin\/mcp-actions\/\d+(?:\?.*)?$/);
+    await expect(this.page.getByRole("dialog")).not.toBeVisible();
     await expect(
-      this.page.getByText(serverName, { exact: false }).first()
+      this.page.getByText(serverName, { exact: true }).first()
     ).toBeVisible();
+    await this.page.getByRole("tab", { name: "Tools", exact: true }).click();
+    await expect(this.refreshToolsButton).toBeEnabled();
   }
 
   async refreshTools(): Promise<void> {
@@ -259,25 +299,33 @@ export class AdminMcpServersPage {
     await expect(this.page.getByText("No tools available")).not.toBeVisible();
   }
 
-  cardToolToggle(toolName: string): Locator {
-    return this.page.getByLabel(`tool-toggle-${toolName}`);
+  toolToggle(toolName: string): Locator {
+    return this.page.getByRole("switch", {
+      name: `tool-toggle-${toolName}`,
+      exact: true,
+    });
   }
 
-  /**
-   * Set every visible instance of a card tool toggle to the desired state.
-   * (The same tool can render more than once on the page.)
-   */
-  async setCardToolEnabled(toolName: string, enabled: boolean): Promise<void> {
-    const toggles = this.cardToolToggle(toolName);
-    await expect(toggles.first()).toBeVisible();
-    const count = await toggles.count();
+  async setToolEnabled(toolName: string, enabled: boolean): Promise<void> {
+    const toggle = this.toolToggle(toolName);
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toBeEnabled();
     const desired = enabled ? "true" : "false";
-    for (let i = 0; i < count; i++) {
-      const toggle = toggles.nth(i);
-      if ((await toggle.getAttribute("aria-checked")) !== desired) {
-        await toggle.click();
-        await expect(toggle).toHaveAttribute("aria-checked", desired);
-      }
-    }
+    if ((await toggle.getAttribute("aria-checked")) === desired) return;
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", desired);
+    const responsePromise = this.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/admin/tool/status" &&
+        response.request().method() === "PATCH"
+    );
+    const save = this.page.getByRole("button", {
+      name: "Save Changes",
+      exact: true,
+    });
+    await save.click();
+    expect((await responsePromise).ok()).toBeTruthy();
+    await expect(save).toBeDisabled();
+    await expect(this.refreshToolsButton).toBeEnabled();
   }
 }

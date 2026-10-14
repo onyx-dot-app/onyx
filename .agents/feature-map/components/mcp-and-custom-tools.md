@@ -31,13 +31,139 @@ how an admin creates the `Tool` row and its associated `MCPServer` /
 An admin who wants Onyx to call an outside system has two paths, both under
 Admin > Actions.
 
-**MCP server.** The admin enters a server URL, picks a transport, and picks an
-auth mode (none, a shared API key, or OAuth). Onyx connects, lists the
+**MCP server.** The admin enters a name and server URL, sets access, then
+configures authentication. OAuth uses individual accounts; API tokens can be
+individual or shared. Servers can also use no authentication or OAuth
+pass-through. Onyx connects, lists the
 server's tools, and shows them as one row per tool. The admin can restrict the
 server to specific users or groups, or leave it public. If the server needs a
 per-user credential (a personal API key, or a personal OAuth login), each user
 who wants to use it connects it themselves from the chat's MCP dropdown,
 separately from the admin's setup.
+
+The MCP overview uses two columns on wider screens and one on small screens.
+Clicking a server card opens `/admin/mcp-actions/[serverId]`. Cards have no
+configuration shortcuts and do not expand tool lists. The status dot aligns with
+the server icon. Each card has one status footer: Ready with a tool count, Setup
+incomplete, Loading tools, or Disconnected. These describe saved states, not live
+health checks.
+
+`web/src/sections/actions/MCPServerDetailPage.tsx` has three filled tabs:
+Server configuration, Authentication, and Tools. All forms are inline. Tab changes
+retain drafts, and route navigation asks before discarding any unsaved edits.
+The `tab` query parameter links directly to each section. Saving server details
+stays on that tab. Authentication saves configuration, then runs the existing
+connection and tool-loading flow before opening Tools. Availability switches
+save immediately beneath server configuration. Delete has a separate confirmation.
+Changing the endpoint asks before discarding an authentication draft.
+
+New servers use two pages of `MCPServerSetupModal`: Server configuration and
+Authentication. Configure authentication saves server details before advancing.
+The dialog and animated body stay mounted between steps. Completion opens the
+server detail page. OAuth return also opens the detail page.
+Closing through Cancel, the close icon, Escape, or the backdrop asks for
+confirmation when a form has unsaved edits. Wizard navigation retains drafts.
+Successful saves reset the draft baseline even if a later connection test fails.
+Automatic discovery recommendations do not count as edits.
+
+Saving a different server URL clears shared and personal credentials, including
+OAuth registration, and resets connection status. Authentication then starts from
+the new saved server response and repeats discovery. Old credentials and masked
+values are not carried to the new endpoint. Existing tool rows remain intact.
+
+The first form has an Access Control selector: Public or User groups.
+User groups uses the shared searchable group picker. Selected groups appear as
+removable pills below the dropdown. The selected-group area scrolls when full.
+Existing non-public servers open in
+User groups mode, including servers without explicit grants. Existing direct user
+grants remain visible as a retained-user count.
+Switching to Public clears explicit grants. Restricted access requires
+Business and the enterprise backend. Scoped managers must select at least one
+managed group. These grants control attaching tools to agents; they do not change
+access to custom agents that already use those tools. Default Chat still checks
+server access before showing tools or resolving credentials.
+`web/src/sections/actions/modals/MCPServerDetailsPage.tsx` owns the Access Control
+selector and its group validation.
+
+The detail page has an Available in default Onyx Chat switch. It uses the same
+`Persona__Tool` selections as Admin > Chat Preferences. There is no separate
+server flag or schema migration. The page reads
+`GET /admin/default-assistant/configuration` and saves through
+`PATCH /admin/default-assistant` with `tool_ids`. These endpoints require
+`FULL_ADMIN_PANEL_ACCESS`. Other action managers cannot change this switch.
+Enabling selects this server's tools; disabling removes them. Both operations
+preserve selections from other servers and built-in tools. A selected subset
+shows the server as available. Changes in either surface appear in the other.
+Tool discovery does not select new tools automatically. Custom agent attachments
+remain unchanged.
+
+When deployment settings enable Craft, an Available in Craft switch follows
+the default Chat switch. New servers default to enabled. Existing servers retain their
+saved setting. Availability switches save immediately on the detail page.
+This uses `available_in_craft` and does not change access grants.
+The simple create API accepts this flag atomically; omitted values still default
+to false for other API callers.
+
+The inline `web/src/sections/actions/MCPServerToolsEditor.tsx` has Available tools
+and, when Craft is available, Craft permissions tabs. Enablement and approval policies are drafts until Save changes. Refresh is
+disabled while drafts exist. Each completed save batch becomes the new baseline,
+so retrying a partial failure does not repeat successful writes. Tool toggles
+retain per-tool permission checks. Craft policies use raw tool names and retain
+overrides for disabled tools. The shared `web/src/sections/actions/PolicyEditor.tsx`
+also serves Craft's existing policy modal.
+
+The authentication form uses tabs for OAuth, API Key, and No authentication,
+plus pass-through as the first tab when enabled. Each tab starts with the same introduction layout.
+OAuth setup and API-key scope use the same filled tabs as the authentication methods.
+The form separates shared authentication configuration from personal test credentials.
+Plain help text between the personal API key label and input explains testing and account ownership;
+there is no separate test-connection heading or icon.
+Save changes on the authentication page verifies access and loads tools. OAuth uses the administrator's sign-in;
+personal API tokens use the administrator's supplied credentials. Both save a personal
+connection for the administrator, not a separate test-only credential. Other users
+connect their own accounts. Shared API keys instead connect everyone with server access.
+OAuth discovery appears only in the automatic-setup tab, with visible retry and
+recovery buttons. The own-client tab contains fields without repeating discovery notices.
+The modal body animates content-height changes and respects reduced-motion preferences.
+OAuth first offers automatic setup or a supplied OAuth client in tabs. A read-only capability check runs when setup opens. It reads public resource
+and authorization metadata without credentials, client registration, or database
+writes. HTTP discovery is asynchronous. The server lookup and permission check
+run in a worker thread; their database session closes before HTTP discovery.
+Outbound SSRF settings and DNS checks also run outside the event loop.
+The request and response schemas live in `server/features/mcp/models.py`. Confirmed lack of registration support initially selects the supplied-client path.
+Users can still select automatic setup and try connecting; that tab shows discovery guidance. Missing metadata offers retry and manual
+endpoints; network failures remain unknown rather than implying no support. Automatic setup
+tries client registration when supported and then asks the user to sign in.
+Choosing a supplied client reveals the required client ID, optional secret, and
+callback URL. Endpoint discovery stays automatic by default; manual endpoint
+settings are a separate choice below those fields. Switching to automatic setup
+clears supplied credentials and manual endpoints when saved. Existing client
+credentials open in supplied-client mode and remain unchanged unless edited;
+the backend does not expose how a saved client was registered.
+`backend/onyx/server/features/mcp/oauth_discovery.py` owns capability checks and
+safe OAuth error classification. Blocked discovery requests return the same safe
+unreachable state as connection failures. Upstream response bodies never become OAuth
+setup errors. The API supplies an `oauth_error` reason for registration,
+discovery, connection, or general OAuth failures; the form shows localized
+messages and setup recovery actions.
+Advanced settings hold transport and custom headers. The header editor appears directly
+when advanced settings expand, without a second disclosure or repeated introduction. Required credential values
+remain visible outside the header editor. Modal headers retain their icons and
+the body uses the standard two-tone background. Connection failures remain
+inside the form so the admin can correct settings and retry. Saving configuration,
+signing in, and loading tools are separate stages.
+
+The form reads fresh settings on each opening and keeps edits separate from
+cache refreshes. Authentication saves use that loaded server snapshot, so stale
+card metadata cannot overwrite a newer name, URL, or description.
+Discovery recommendations wait for the current check and preserve explicit setup choices. `web/src/sections/actions/modals/mcpAuthForm.ts` owns initial values, header placeholders, and
+request construction. `MCPOAuthFields.tsx`, `MCPApiTokenFields.tsx`, and
+`MCPAdvancedFields.tsx` own their respective form sections. Shared API-key headers must
+retain the `{api_key}` placeholder before saving. Changing authentication settings
+clears errors from the previous attempt. Credential change flags compare against the last successful
+save, including retries after failed sign-in. Unchanged masked credentials remain
+unchanged in storage. An existing OAuth grant proceeds directly to tool discovery
+without another browser redirect.
 
 **OpenAPI (custom) action.** The admin pastes an OpenAPI 3.x schema and,
 optionally, static headers. Every operation in the schema (identified by its
@@ -65,6 +191,7 @@ inline, not a broken turn.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
+| POST | `/admin/mcp/oauth/discover` | `discover_admin_oauth` | Read-only public metadata probe for a manageable server. Returns metadata status, automatic registration support, and discovered endpoints. |
 | POST | `/admin/mcp/servers/create` | `upsert_mcp_server` (calls `_upsert_mcp_server`) | Create, or edit when the body has `existing_server_id`. An edit can rotate admin credentials, OAuth client, transport, and access list. A new server defaults `is_public=True`. |
 | POST | `/admin/mcp/servers/update` | `update_mcp_server_with_tools` | Changes only name, description, and the selected tool set (`_sync_tools_for_server`). It does not touch credentials, transport, or access. |
 | POST | `/admin/mcp/server` | `create_mcp_server_simple` | Legacy/simple create path. |
@@ -235,8 +362,12 @@ Tool (openapi_schema set) --tool_constructor.py--> build_custom_tools_from_...
 `MCPTransport` has three values (`db/enums.py`): `SSE` (legacy, still
 supported), `STREAMABLE_HTTP` (current default), and `STDIO` (planned, not
 supported yet). Do not remove `STDIO`: the column is a non-native enum, so a
-stored `STDIO` row would fail to load and break the server list. The admin picks the transport explicitly in the create
-form; there is no auto-negotiation. `create_mcp_server_simple` defaults to
+stored `STDIO` row would fail to load and break the server list. The authentication
+form preserves the saved transport and exposes an advanced override. When no
+transport is configured, the URL supplies a default: an SSE endpoint selects SSE;
+other URLs select Streamable HTTP. This is a URL heuristic, not protocol
+negotiation. `create_mcp_server_simple` leaves transport unset until authentication
+setup. The alternate upsert-create path defaults to
 `MCPTransport.STREAMABLE_HTTP` when the request omits it
 (`mcp/api.py:_upsert_mcp_server`, the `else` branch). The chosen transport
 matters at two points: `MCPTool.run` picks the `sse_client` or
@@ -262,12 +393,17 @@ effective credential:
   `get_user_connection_config`. **One user's connection cannot be used by
   another user in this mode**; each user must connect separately, and an
   unconnected user gets the auth-error path in §4.5.
-- `API_TOKEN` or `OAUTH` with `auth_performer == ADMIN`: uses
+- `API_TOKEN` with `auth_performer == ADMIN`: uses
   `mcp_server.admin_connection_config`, the single shared row with
   `user_email=""`. **Every user who can attach this server shares the same
-  credential.** This is a deliberate admin choice (a service-account API key
-  or a shared OAuth app), made explicitly at server-configuration time, not a
+  credential.** This is a deliberate admin choice (a service-account API key),
+  made explicitly at server-configuration time, not a
   default.
+- New or edited OAuth configurations require `PER_USER`
+  (`models.py:MCPToolCreateRequest.validate_auth_configuration`). The credential
+  resolver can read legacy admin-scoped OAuth records, but setup cannot create
+  shared OAuth connections. An admin's OAuth client registration is shared
+  configuration; their OAuth grant is personal.
 - `NONE`: no credential; only header templates/substitutions (if any) apply.
 
 So: **MCP credentials are per server by default when the admin sets
@@ -277,6 +413,12 @@ choice at server-creation time is what decides this, and it is visible on the
 `MCPServer` row, not implicit.
 
 ### 4.4 The MCP OAuth flow
+
+Automatic discovery finds OAuth settings after the admin selects OAuth. It
+does not detect the authentication method. Client setup can use supplied
+credentials, a Client ID Metadata Document (CIMD), or Dynamic Client
+Registration (DCR), as supported by the provider. Tool discovery follows
+authentication; it is separate from OAuth discovery.
 
 1. **Connect.** The frontend calls `POST /mcp/oauth/connect` (user) or
    `/admin/mcp/oauth/connect` (admin, `is_admin=True`), both routed through
@@ -493,7 +635,14 @@ code or exception surfaces as the raw response body or propagates up to
 
 ### Tests
 
+Storybook covers setup, saved settings, access control, discovery, validation,
+and failure states. See `web/src/sections/actions/modals/MCPModalStories.md`
+for the state inventory and preview links. Fixtures intercept requests locally.
+
 ```bash
+# Frontend setup, retry, credential scope, and OAuth service regressions
+cd web && bun run test --runInBand src/sections/actions/modals/MCPAuthenticationPage.test.tsx src/sections/actions/modals/MCPServerDetailsPage.test.tsx src/sections/actions/MCPPageContent.test.tsx src/lib/mcp/svc.test.ts
+
 # Playwright e2e: MCP server creation, OAuth connect, per-user API key, group access
 cd web && bun run playwright tests/e2e/mcp/mcp_oauth_flow.spec.ts
 cd web && bun run playwright tests/e2e/mcp/mcp_per_user_key.spec.ts

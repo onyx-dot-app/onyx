@@ -64,8 +64,8 @@
   "actions": {
     "actionButtons": {
       "authenticateButton": {
-        "ariaLabel": "验证身份并连接到 {serverName}",
-        "label": "验证身份"
+        "ariaLabel": "为 {serverName} 设置身份验证",
+        "label": "设置身份验证"
       },
       "deleteButton": {
         "ariaLabel": "删除 {serverName} 服务器",
@@ -130,14 +130,13 @@
       "authStatus": {
         "apiTokenDescription": "已配置 API token",
         "connectedDescription": "已连接",
-        "oauthDescription": "已通过 OAuth 连接到 {owner}",
         "title": "已验证身份并连接"
       },
       "cancelButton": {
         "label": "取消"
       },
       "description": {
-        "placeholder": "关于该 MCP 服务器的更多详情",
+        "placeholder": "您的团队可以使用此服务器做什么？",
         "suffix": "可选",
         "title": "描述"
       },
@@ -145,21 +144,20 @@
         "tooltip": "断开服务器连接"
       },
       "editConfigsButton": {
-        "label": "编辑配置"
+        "label": "连接设置"
       },
       "manageHeader": {
         "description": "更新 MCP 服务器配置并管理身份验证。",
         "title": "管理 MCP 服务器"
       },
       "name": {
-        "placeholder": "为 MCP 服务器命名",
+        "placeholder": "例如 Linear",
         "required": "必须填写服务器名称",
         "title": "服务器名称"
       },
       "serverUrl": {
         "invalid": "必须是有效的 URL",
         "required": "必须填写服务器 URL",
-        "subDescription": "只连接您信任的服务器。您需要对通过此连接执行的操作负责，并负责及时更新工具。",
         "title": "MCP 服务器 URL"
       },
       "submitButton": {
@@ -173,6 +171,33 @@
         "serverCreated": "MCP 服务器创建成功",
         "serverUpdated": "MCP 服务器更新成功",
         "updateFailed": "更新 MCP 服务器失败"
+      },
+      "access": {
+        "title": "访问控制",
+        "description": "选择谁可以使用此 MCP。",
+        "public": {
+          "label": "公开",
+          "description": "组织内的任何人都可以使用此 MCP"
+        },
+        "groups": {
+          "label": "用户组",
+          "description": "选定的用户组可以使用此 MCP。",
+          "placeholder": "添加用户组",
+          "required": "请选择至少一个用户组。"
+        },
+        "scoped": {
+          "description": "请选择至少一个您管理的用户组。"
+        },
+        "retainedUsers": "{count, plural, other {还直接共享给了 # 位用户。}}",
+        "planNote": "用户组访问需要 Business 套餐。"
+      },
+      "craft": {
+        "title": "在 Craft 中可用",
+        "description": "允许用户在 Craft 中访问此 MCP 服务器。"
+      },
+      "defaultChat": {
+        "title": "在默认 Onyx 聊天中可用",
+        "description": "关闭后，用户需要将此服务器添加到自定义智能体才能在聊天中使用。"
       }
     },
     "addOpenApiModal": {
@@ -279,54 +304,47 @@
       "additionalAuthParams": {
         "label": "附加身份验证参数（JSON）"
       },
-      "advanced": {
-        "description": "配置已知的 OAuth 提供方，明确指定授权端点和 token 端点，不使用自动发现。",
-        "title": "高级"
-      },
       "apiKey": {
         "required": "必须填写 API token"
       },
       "apiKeyTabs": {
         "admin": {
-          "label": "共享密钥（管理员）"
+          "label": "共享令牌"
         },
         "perUser": {
-          "label": "独立密钥（每位用户）"
+          "label": "个人令牌"
         }
       },
       "authPerformer": {
-        "required": "必须指定身份验证执行者"
+        "required": "选择个人凭据或共享凭据。"
       },
       "authType": {
         "apiToken": {
-          "description": "使用每位用户的独立 API 密钥，或组织范围的共享 API 密钥。",
           "label": "API 密钥"
         },
         "label": "身份验证方式",
         "none": {
-          "description": "不推荐",
-          "label": "无"
+          "label": "无需身份验证"
         },
         "oauth": {
-          "description": "每位用户需要使用各自的凭据通过 OAuth 验证身份。",
           "label": "OAuth"
         },
         "placeholder": "选择方式",
         "ptOauth": {
-          "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。",
           "label": "OAuth 透传"
         },
         "required": "必须选择身份验证类型"
       },
       "authorizationEndpoint": {
         "label": "授权端点",
-        "required": "在已知提供方模式下必须填写授权端点"
+        "required": "请输入提供商提供的授权端点。"
       },
       "cancelButton": {
         "label": "取消"
       },
       "clientId": {
-        "label": "客户端 ID"
+        "label": "客户端 ID",
+        "required": "请输入您的 OAuth 客户端 ID。"
       },
       "clientSecret": {
         "label": "客户端密钥"
@@ -335,25 +353,30 @@
         "additionalParamsInvalid": "附加身份验证参数的 JSON 无效",
         "additionalParamsInvalidWithReason": "附加身份验证参数的 JSON 无效：{reason}",
         "additionalParamsNotObject": "附加身份验证参数必须是 JSON 对象",
-        "oauthInitFailed": "发起 OAuth 失败：{detail}",
         "saveAuthFailed": "保存身份验证配置失败",
-        "saveConfigFailed": "保存服务器配置失败"
+        "saveConfigFailed": "保存服务器配置失败",
+        "saveStage": "无法保存连接设置",
+        "oauthStage": "无法开始登录",
+        "discoveryStage": "无法加载服务器工具",
+        "loadStage": "无法加载连接设置",
+        "clientRegistrationFailed": "自动注册客户端失败。请使用自己的 OAuth 客户端，或检查提供商的设置要求。",
+        "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
+        "connectionFailed": "无法连接 OAuth 服务器。请检查服务器 URL 后重试。",
+        "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。"
       },
       "header": {
-        "defaultTitle": "验证 MCP 服务器身份",
-        "description": "验证连接身份后即可开始使用 MCP 服务器。",
-        "title": "验证 *{name}* 的身份"
-      },
-      "knownProvider": {
-        "hint": "已知提供方模式需要配置端点。Google 参考端点：授权端点 {authorizationEndpoint}，token 端点 {tokenEndpoint}。"
+        "defaultTitle": "配置身份验证",
+        "description": "配置 MCP 服务器身份验证",
+        "title": "配置 *{name}*"
       },
       "noAuthNotice": {
-        "description": "此连接不使用任何身份验证。请确保您信任该服务器。您需要对通过此连接执行的操作负责。",
-        "title": "此 MCP 服务器不使用身份验证"
+        "description": "用户无需登录即可使用此服务器。已配置的自定义请求头仍会发送。",
+        "title": "无需身份验证"
       },
       "oauthInfo": {
-        "discovery": "客户端 ID 和密钥为可选项。在自动发现过程中，{appName} 会在服务器支持时使用客户端 ID 元数据文档（CIMD），否则回退到动态客户端注册（DCR）。",
-        "manualRegistration": "如果您的服务器两种方式都不支持，请先在服务器提供方处注册您的 {appName} 实例。为 {appName} 授予操作所需的权限范围。"
+        "discovery": "每位用户使用自己的账号登录。",
+        "manualRegistration": "在提供商处注册此重定向 URI。",
+        "title": "OAuth 配置"
       },
       "passThroughNotice": {
         "description": "{appName} 会将用户的 OAuth 访问 token 作为 Authorization 请求头直接转发给服务器。请确保该服务器支持使用同一提供方进行身份验证。",
@@ -361,14 +384,14 @@
       },
       "providerMode": {
         "autoDiscovery": {
-          "description": "使用 MCP SDK 的质询/发现流程（默认）。",
-          "label": "自动发现"
+          "description": "读取服务器公布的登录设置。",
+          "label": "自动查找登录端点"
         },
         "knownProvider": {
-          "description": "使用已配置的授权端点/token 端点。",
-          "label": "已知提供方"
+          "description": "自行输入登录 URL 和令牌 URL。",
+          "label": "手动输入端点"
         },
-        "label": "提供方模式",
+        "label": "OAuth 端点",
         "placeholder": "选择模式"
       },
       "redirectUri": {
@@ -379,20 +402,55 @@
         "label": "权限范围覆盖（以逗号分隔）"
       },
       "sharedApiKey": {
-        "description": "请勿使用您的个人 API 密钥。请确保此密钥适合与组织中的所有人共享。",
+        "description": "此密钥用于测试设置，并为所有有权访问的人建立连接。请使用工作区密钥，而非个人密钥。",
         "label": "API 密钥",
         "placeholder": "组织共享的 API 密钥"
       },
       "submitButton": {
-        "label": "连接",
-        "pendingLabel": "正在连接..."
+        "label": "保存更改",
+        "pendingLabel": "正在保存…"
       },
       "tokenEndpoint": {
         "label": "Token 端点",
-        "required": "在已知提供方模式下必须填写 token 端点"
+        "required": "请输入提供商提供的令牌端点。"
       },
       "transport": {
-        "required": "必须选择传输方式"
+        "required": "必须选择传输方式",
+        "label": "连接传输方式",
+        "description": "除非服务器要求使用旧版 SSE，否则请使用 Streamable HTTP。此设置不会从服务器自动检测。",
+        "httpLabel": "Streamable HTTP",
+        "sseLabel": "SSE（旧版）"
+      },
+      "advancedSettings": {
+        "title": "高级设置"
+      },
+      "apiTokenInfo": {
+        "title": "API 密钥配置",
+        "description": "选择让每位用户使用个人令牌连接，还是让所有人使用共享令牌。"
+      },
+      "oauthSetup": {
+        "label": "OAuth 设置",
+        "automatic": {
+          "label": "自动设置",
+          "description": "让 {appName} 使用服务器公布的设置注册 OAuth 客户端。"
+        },
+        "ownClient": {
+          "label": "使用自己的 OAuth 客户端",
+          "description": "输入提供商提供的客户端 ID。仅在需要时添加密钥。"
+        }
+      },
+      "discovery": {
+        "checking": "正在检查自动设置…",
+        "supported": "可以使用自动设置",
+        "requiresClient": "此服务器未声明支持自动注册客户端。建议您设置自己的 OAuth 客户端。您仍可尝试自动注册。",
+        "missing": "请检查服务器 URL，或输入提供商提供的登录端点和令牌端点。",
+        "unreachable": "服务器可能不可用，或阻止了发现请求。",
+        "retry": "重新检查",
+        "manual": "手动输入 OAuth 设置",
+        "useOwnClient": "使用自己的 OAuth 客户端",
+        "unreachableTitle": "无法确定是否可以使用自动设置",
+        "missingTitle": "未找到 OAuth 端点",
+        "requiresClientTitle": "可能无法使用自动设置"
       }
     },
     "mcpCard": {
@@ -415,6 +473,20 @@
       "refreshToolsButton": {
         "ariaLabel": "刷新工具",
         "tooltip": "刷新工具"
+      },
+      "setupIncomplete": {
+        "label": "设置未完成。",
+        "actionHint": "设置未完成。点击完成设置。"
+      },
+      "status": {
+        "ready": "就绪 · {count, plural, one {# 个工具} other {# 个工具}}",
+        "incomplete": "设置未完成",
+        "loading": "正在加载工具",
+        "disconnected": "已断开连接"
+      },
+      "authenticationButton": {
+        "tooltip": "配置身份验证",
+        "ariaLabel": "配置 {serverName} 的身份验证"
       }
     },
     "mcpOauthCallback": {
@@ -493,7 +565,7 @@
         "toolUpdateFailed": "更新工具失败",
         "toolsDisabled": "{count, plural, one {已成功禁用 # 个工具} other {已成功禁用 # 个工具}}",
         "toolsEnabled": "{count, plural, one {已成功启用 # 个工具} other {已成功启用 # 个工具}}",
-        "toolsFetched": "已成功连接并获取工具",
+        "toolsFetched": "工具已加载",
         "toolsRefreshed": "工具刷新成功"
       }
     },
@@ -633,10 +705,8 @@
         "placeholder": "输入 {field}"
       },
       "credentials": {
-        "perUserDescription": "以下凭据不会与您的组织共享。",
-        "perUserTitle": "仅用于您自己的账户",
-        "sharedDescription": "这些值将用于您组织中的每位用户。",
-        "sharedTitle": "组织共享的值"
+        "perUserDescription": "使用您的凭据测试此 MCP 并加载其工具。凭据仅保存到您的账号。",
+        "sharedDescription": "这些值将用于您组织中的每位用户。"
       },
       "headers": {
         "addButton": {
@@ -646,8 +716,8 @@
           "message": "至少要有一个请求头的值包含 {apiKey} 占位符。"
         },
         "keyTitle": "请求头名称",
-        "label": "身份验证请求头",
-        "perUserDescription": "设置请求头格式，供每位用户填写各自的凭据。使用 <mono>{apiKey}</mono> 或 <mono>{userEmail}</mono> 这类占位符。系统会提示用户为占位符提供值（user_email 除外）。",
+        "label": "自定义请求头",
+        "perUserDescription": "使用 <mono>{apiKey}</mono> 表示每位用户的 API 密钥。<mono>{userEmail}</mono> 会自动使用其电子邮箱。其他占位符会要求用户输入值。",
         "sharedDescription": "设置随组织共享凭据一起发送的请求头格式。至少在一个请求头的值中使用 <mono>{apiKey}</mono> 这类占位符；它会被替换为您组织的共享密钥。",
         "valueTitle": "请求头的值"
       }
@@ -809,6 +879,42 @@
         "ariaLabel": "搜索工具",
         "placeholder": "搜索工具…"
       }
+    },
+    "mcpSetup": {
+      "serverDetails": "服务器详情",
+      "authentication": "身份验证",
+      "continue": "配置身份验证",
+      "back": "服务器配置"
+    },
+    "mcpTools": {
+      "title": "工具",
+      "description": "选择可用工具并设置其权限。",
+      "enabledTab": "可用工具",
+      "policiesTab": "Craft 权限",
+      "enabledDescription": "选择用户可以在 Onyx 中使用的工具。",
+      "policiesDescription": "选择 Craft 在使用各项工具前何时请求批准。",
+      "back": "身份验证",
+      "refresh": "刷新工具",
+      "loadError": "无法加载工具",
+      "saveError": "无法保存工具设置",
+      "refreshError": "无法刷新工具",
+      "search": "搜索工具"
+    },
+    "mcpDetail": {
+      "back": "MCP 服务器",
+      "configuration": "服务器配置",
+      "editConfiguration": "编辑服务器配置",
+      "authentication": "身份验证",
+      "editAuthentication": "编辑身份验证",
+      "availability": "可用范围",
+      "edit": "编辑",
+      "loadError": "无法加载 MCP 服务器",
+      "notFound": "未找到 MCP 服务器",
+      "unavailable": "此服务器可能已被删除，或者您没有访问权限。",
+      "retry": "重试",
+      "restrictedAccess": "{groups, plural, one {# 个群组} other {# 个群组}} · {users, plural, one {# 位用户} other {# 位用户}}",
+      "authenticationIncomplete": "尚未配置身份验证。",
+      "availabilitySaved": "可用范围已更新"
     }
   },
   "admin": {
@@ -12638,7 +12744,7 @@
             "tabLabel": "应用 · {count}"
           },
           "mcp": {
-            "blurb": "管理员向 Craft 开放的服务器。当您需要的应用未在“应用”中列出，或您特别需要某个服务器自己的 MCP 工具时使用。",
+            "blurb": "管理员已向 Craft 开放的服务器。如果服务器需要个人凭据，请先连接自己的账号，再使用其工具。",
             "empty": "尚未向 Craft 开放任何 MCP 服务器。",
             "emptyTitle": "暂无 MCP 服务器",
             "tabLabel": "MCP 服务器 · {count}"

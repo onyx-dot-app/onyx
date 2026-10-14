@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
-from onyx.db.mcp import get_mcp_server_by_id
+from onyx.db.mcp import get_mcp_server_by_id, user_can_access_mcp_server
 from onyx.db.models import User
 from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
@@ -461,6 +462,12 @@ def _construct_tools_impl(
                 continue
 
             mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
+
+            if (
+                configuration.persona_id == DEFAULT_PERSONA_ID
+                and not user_can_access_mcp_server(user, mcp_server.id, db_session)
+            ):
+                continue
 
             try:
                 mcp_credentials = resolve_mcp_credentials(mcp_server, user, db_session)

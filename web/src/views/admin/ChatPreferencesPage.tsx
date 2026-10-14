@@ -17,9 +17,8 @@ import React, {
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Formik, Form } from "formik";
-import useSWR, { mutate } from "swr";
+import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import { Collapsible } from "@opal/components";
@@ -89,13 +88,9 @@ import { MCPServer } from "@/lib/mcp/types";
 import type { IconProps } from "@opal/types";
 import { Tier } from "@/lib/tiers/types";
 
-const route = ADMIN_ROUTES.CHAT_PREFERENCES;
+import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 
-interface DefaultAgentConfiguration {
-  tool_ids: number[];
-  system_prompt: string | null;
-  default_system_prompt: string;
-}
+const route = ADMIN_ROUTES.CHAT_PREFERENCES;
 
 interface MCPServerCardTool {
   id: number;
@@ -918,68 +913,24 @@ export default function ChatPreferencesPage() {
   }));
 
   // Default agent configuration (system prompt)
-  const { data: defaultAgentConfig, mutate: mutateDefaultAgent } =
-    useSWR<DefaultAgentConfiguration>(
-      SWR_KEYS.defaultAssistantConfig,
-      errorHandlingFetcher
-    );
-
+  const {
+    data: defaultAgentConfig,
+    mutate: mutateDefaultAgent,
+    updateTools,
+  } = useDefaultAssistantConfiguration();
   const enabledToolIds = defaultAgentConfig?.tool_ids ?? [];
-
-  const isToolEnabled = useCallback(
-    (toolDbId: number) => enabledToolIds.includes(toolDbId),
-    [enabledToolIds]
-  );
-
-  const saveToolIds = useCallback(
-    async (newToolIds: number[]) => {
-      // Optimistic update so subsequent toggles read fresh state
-      const optimisticData = defaultAgentConfig
-        ? { ...defaultAgentConfig, tool_ids: newToolIds }
-        : undefined;
-      try {
-        await mutateDefaultAgent(
-          async () => {
-            const response = await fetch("/api/admin/default-assistant", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ tool_ids: newToolIds }),
-            });
-            if (!response.ok) {
-              const errorMsg = (await response.json()).detail;
-              throw new Error(errorMsg);
-            }
-            return optimisticData;
-          },
-          { optimisticData, revalidate: true }
-        );
-        toast.success(t("toasts.toolsUpdated"));
-      } catch {
-        toast.error(t("toasts.toolsUpdateFailed"));
-      }
-    },
-    [defaultAgentConfig, mutateDefaultAgent, t]
-  );
-
-  const toggleTool = useCallback(
-    (toolDbId: number, enabled: boolean) => {
-      const newToolIds = enabled
-        ? [...enabledToolIds, toolDbId]
-        : enabledToolIds.filter((id) => id !== toolDbId);
-      void saveToolIds(newToolIds);
-    },
-    [enabledToolIds, saveToolIds]
-  );
-
-  const toggleTools = useCallback(
-    (toolDbIds: number[], enabled: boolean) => {
-      const idsSet = new Set(toolDbIds);
-      const withoutIds = enabledToolIds.filter((id) => !idsSet.has(id));
-      const newToolIds = enabled ? [...withoutIds, ...toolDbIds] : withoutIds;
-      void saveToolIds(newToolIds);
-    },
-    [enabledToolIds, saveToolIds]
-  );
+  const isToolEnabled = (toolDbId: number) => enabledToolIds.includes(toolDbId);
+  const toggleTools = async (toolDbIds: number[], enabled: boolean) => {
+    try {
+      await updateTools(toolDbIds, enabled);
+      toast.success(t("toasts.toolsUpdated"));
+    } catch {
+      toast.error(t("toasts.toolsUpdateFailed"));
+    }
+  };
+  const toggleTool = (toolDbId: number, enabled: boolean) => {
+    void toggleTools([toolDbId], enabled);
+  };
 
   // System prompt modal state
   const [systemPromptModalOpen, setSystemPromptModalOpen] = useState(false);
