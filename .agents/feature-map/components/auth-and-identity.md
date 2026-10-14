@@ -140,6 +140,10 @@ env-credential Google login router next to the provider rows. `oauth_refresher.p
 provider row. The removed `AUTH_TYPE=google_oauth|oidc|saml` is not read:
 `verify_auth_setting` (`auth/users.py`) only warns on stale values.
 
+`server/security/store.py:get_security_settings` keeps environment fallback for pre-tenant authentication and failed reads.
+Authorization callers can set `allow_fallback=False` to require tenant context and a successful settings read.
+Both modes share the tenant cache; failed reads never populate it.
+
 ---
 
 ## 3. Data model

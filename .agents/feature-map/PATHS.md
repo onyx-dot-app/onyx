@@ -163,7 +163,7 @@ so verify the callers rather than a single component.
 | `backend/onyx/server/features/build/` | craft-sessions |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
-| `backend/onyx/sandbox_proxy/` | craft-webapp-proxy |
+| `backend/onyx/sandbox_proxy/` | craft-external-apps |
 | `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
 | `backend/onyx/onyxbot/discord/` | discord-bot |
 | `docs/craft/` | the matching `craft-*` component |
