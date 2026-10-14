@@ -43,6 +43,7 @@ template:
     labels:
       app.kubernetes.io/component: sandbox
       app.kubernetes.io/managed-by: onyx
+      onyx.app/net-admin-lockdown: {{ $netAdminLockdown | quote }}
       admission.datadoghq.com/enabled: "false"
   spec:
     {{- with $sandboxPod.runtimeClassName }}

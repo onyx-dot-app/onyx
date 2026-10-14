@@ -1,7 +1,7 @@
 {{- if eq (include "onyx.craftEnabled" .) "true" }}
 {{- $sandboxNs := (index (.Values.configMap | default (dict)) "SANDBOX_NAMESPACE") | default "onyx-sandboxes" }}
 {{- $proxyNs := (index (.Values.configMap | default (dict)) "SANDBOX_PROXY_NAMESPACE") | default $.Release.Namespace }}
-# CNI-layer egress allow-list for Craft sandbox pods: proxy + DNS only, default-deny. Declarative
+# CNI-layer proxy allow-list for all Craft sandbox pods. Declarative
 # backstop to the default in-pod iptables, or primary control when netAdminLockdown=false.
 # Only enforced where the CNI honors NetworkPolicy, inert otherwise. DNS is allowed only
 # for firewall bootstrap; without iptables, hostAliases supply proxy resolution instead.
@@ -38,7 +38,24 @@ spec:
         - protocol: TCP
           port: {{ include "onyx.sandboxProxyPort" $ }}
     {{- end }}
-    {{- if eq (include "onyx.sandboxNetAdminLockdown" .) "true" }}
+---
+# Keep bootstrap DNS separate so Helm upgrades cannot expose firewall-free pods.
+# Older pods have no lockdown label and always used iptables.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "onyx.resourceName" (list . "sandbox-bootstrap-dns") }}
+  namespace: {{ $sandboxNs }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sandbox
+    matchExpressions:
+      - key: onyx.app/net-admin-lockdown
+        operator: NotIn
+        values: ["false"]
+  policyTypes: [Egress]
+  egress:
     # kube-dns (firewall bootstrap only).
     - to:
         - namespaceSelector:
@@ -62,6 +79,5 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    {{- end }}
     {{- end }}
 {{- end }}

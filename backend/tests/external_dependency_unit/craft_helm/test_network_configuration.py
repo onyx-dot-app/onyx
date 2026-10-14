@@ -9,11 +9,12 @@ import yaml
 from tests.external_dependency_unit.craft_helm.rendering import render_chart
 
 
-def test_without_iptables_network_policy_allows_only_proxy() -> None:
+@pytest.mark.parametrize("lockdown", [True, False])
+def test_without_iptables_network_policy_allows_only_proxy(lockdown: bool) -> None:
     result = render_chart(
         [
             "--set",
-            "sandboxPod.netAdminLockdown=false",
+            f"sandboxPod.netAdminLockdown={str(lockdown).lower()}",
             "--set",
             "craft.dnsExtraCIDRs[0]=169.254.20.10/32",
             "--set",
@@ -37,6 +38,27 @@ def test_without_iptables_network_policy_allows_only_proxy() -> None:
     }
     assert rules[1]["to"] == [{"ipBlock": {"cidr": "10.0.5.6/32"}}]
     assert all(rule["ports"] == [{"protocol": "TCP", "port": 8080}] for rule in rules)
+
+    # DNS policy selection stays fixed across upgrades in either direction.
+    dns_policy = next(
+        resource
+        for resource in resources
+        if resource["kind"] == "NetworkPolicy"
+        and resource["metadata"]["name"].endswith("sandbox-bootstrap-dns")
+    )
+    assert dns_policy["spec"]["podSelector"] == {
+        "matchLabels": {"app.kubernetes.io/component": "sandbox"},
+        "matchExpressions": [
+            {
+                "key": "onyx.app/net-admin-lockdown",
+                "operator": "NotIn",
+                "values": ["false"],
+            }
+        ],
+    }
+    assert dns_policy["spec"]["egress"][1]["to"] == [
+        {"ipBlock": {"cidr": "169.254.20.10/32"}}
+    ]
 
 
 @pytest.mark.parametrize("value", ["false", "true", "invalid"])

@@ -128,6 +128,7 @@ release-20261005.0 in its default configuration, firewall bootstrap fails with
 enforcement with lockdown disabled. Other firewall backends or runtime settings
 need separate validation.
 These settings apply to newly created sandbox pods after a Helm upgrade.
+The image prepuller uses the same RuntimeClass to follow its scheduling constraints.
 
 For clusters that prohibit `NET_ADMIN`, set `sandboxPod.netAdminLockdown: false`
 only when the cluster enforces equivalent network restrictions from pod creation.
@@ -136,9 +137,10 @@ verification. CA installation still runs as root. This setting alone does not
 make the pod compatible with policies that prohibit root init containers.
 Use a sandbox image built with this option; older images still run iptables.
 
-In this mode, the chart's sandbox NetworkPolicy allows only the proxy endpoint.
-It omits direct DNS rules, including `craft.dnsExtraCIDRs`; the backend supplies
-the proxy address through pod `hostAliases`. Proxy environment variables, CA
+In this mode, the chart's policies allow only the proxy endpoint. A separate DNS
+policy excludes pods created with lockdown disabled, including after Helm upgrades.
+This also applies to `craft.dnsExtraCIDRs`. The backend supplies the proxy address
+through pod `hostAliases`. Proxy environment variables, CA
 trust, destination checks, and approval handling remain active.
 
 The operator must use a CNI that enforces NetworkPolicy before workload startup.

@@ -586,6 +586,10 @@ def test_runtime_and_firewall_settings_survive_pod_creation(
         ]
     )
     assert configured_pod.spec.runtime_class_name == (runtime_class or None)
+    assert (
+        configured_pod.metadata.labels["onyx.app/net-admin-lockdown"]
+        == str(lockdown).lower()
+    )
     bootstrap = _init_container(configured_pod, "sandbox-init")
     assert bootstrap.command == ["/workspace/firewall-init.sh"]
     assert bootstrap.security_context.capabilities.drop == ["ALL"]

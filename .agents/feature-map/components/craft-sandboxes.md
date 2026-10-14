@@ -275,7 +275,9 @@ raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
 
 The diagram shows the default firewall-enabled configuration. With
 `sandboxPod.netAdminLockdown: false`, CA bootstrap remains, but `NET_ADMIN`
-and iptables setup are omitted. See §5 for the required cluster controls.
+and iptables setup are omitted. A per-pod lockdown label keeps these pods excluded
+from bootstrap DNS access across Helm upgrades. The image prepuller uses the same
+RuntimeClass as sandbox pods. See §5 for the required cluster controls.
 
 **The pod spec comes from a Helm-rendered `core/v1` `PodTemplate` object**, not
 from Python. `KubernetesSandboxManager._create_sandbox_pod`
@@ -537,7 +539,7 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    address family stays blocked, including IPv4 compatibility egress on EKS.
    Helm `sandboxPod.netAdminLockdown: false` removes `NET_ADMIN` and skips
    firewall setup and verification. CA bootstrap still runs as root. The chart
-   then omits DNS egress rules and relies on cluster enforcement of proxy-only
+   excludes these pods from bootstrap DNS access and relies on cluster enforcement of proxy-only
    egress. Operators must enforce policy before workload startup and address
    node-traffic exceptions and broader additive policies. The chart cannot
    verify those controls. Docker cannot disable firewall bootstrap.
