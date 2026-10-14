@@ -47,6 +47,7 @@ export default function PairChecksCard({
       inProgressCount={0}
       expectedCount={0}
       stateCounts={stateCounts}
+      defaultCollapsed
       onRerun={() => {
         rerun(credentialId, connectorId).catch(() =>
           toast.error(t("rerunFailed.toast"))

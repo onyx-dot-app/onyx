@@ -2,16 +2,28 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card } from "@opal/components";
+import { mutate } from "swr";
+import { Button, Card, Modal } from "@opal/components";
 import { Content, ContentAction, Section, toast } from "@opal/layouts";
-import { SvgUserEdit } from "@opal/icons";
+import { SvgEdit, SvgUserEdit } from "@opal/icons";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
+import { TypedFile } from "@/lib/connectors/fileTypes";
+import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import {
   useCredentialCheckReports,
   useCredentialSetup,
 } from "@/lib/credentials/hooks";
-import type { SimilarCredential } from "@/lib/credentials/types";
+import type {
+  CredentialFormValues,
+  SimilarCredential,
+} from "@/lib/credentials/types";
+import {
+  updateCredential,
+  updateCredentialWithPrivateKey,
+} from "@/lib/credentials/svc";
+import { getCredentialFileType } from "@/lib/credentials/utils";
+import EditCredential from "@/lib/credentials/components/EditCredential";
 import {
   getSourceDisplayName,
   getSourceMetadata,
@@ -37,11 +49,47 @@ export default function AuthenticationAccountSection({
   const format = useFormatter();
   const source = ccPair.connector.source;
   const sourceName = getSourceDisplayName(source) ?? source;
-  const { credentials, remove, saveSharing } = useCredentialSetup(source);
+  const tCredentials = useTranslations("admin.credentials");
+  const { credentials, remove, saveSharing, refresh } =
+    useCredentialSetup(source);
   const checkReports = useCredentialCheckReports(source);
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const toggleDetails = () => setDetailsOpen((open) => !open);
+
+  // Writes the new values onto the saved account, so every connector using it gets them.
+  async function updateCredentials(
+    values: CredentialFormValues,
+    onSuccess: () => void
+  ) {
+    const privateKey = Object.values(values).find(
+      (value): value is TypedFile => value instanceof TypedFile
+    );
+    const fields: CredentialFormValues = {
+      ...Object.fromEntries(
+        Object.entries(values).filter(
+          ([key]) => getCredentialFileType(key) === null
+        )
+      ),
+      name: values.name,
+    };
+    const response = privateKey
+      ? await updateCredentialWithPrivateKey(
+          ccPair.credential.id,
+          fields,
+          privateKey
+        )
+      : await updateCredential(ccPair.credential.id, fields);
+    if (!response.ok) {
+      toast.error(tCredentials("update.error.toast"));
+      return;
+    }
+    toast.success(tCredentials("update.success.toast"));
+    refresh();
+    await mutate(buildCCPairInfoUrl(ccPair.id));
+    onSuccess();
+  }
 
   const credential: SimilarCredential | null =
     credentials?.find((saved) => saved.id === ccPair.credential.id) ?? null;
@@ -62,6 +110,27 @@ export default function AuthenticationAccountSection({
 
   return (
     <Section alignItems="stretch" gap={3} height="fit">
+      {updating && (
+        <Modal open onOpenChange={setUpdating}>
+          <Modal.Content>
+            <Modal.Header
+              icon={SvgEdit}
+              title={tCredentials("modal.editTitle")}
+              onClose={() => setUpdating(false)}
+            />
+            <Modal.Body alignItems="stretch">
+              <EditCredential
+                credential={ccPair.credential}
+                sourceType={source}
+                onClose={() => setUpdating(false)}
+                onUpdate={(_, values, onSuccess) =>
+                  updateCredentials(values, onSuccess)
+                }
+              />
+            </Modal.Body>
+          </Modal.Content>
+        </Modal>
+      )}
       <Content title={t("title")} sizePreset="main-content" variant="section" />
       {credential !== null && isEditableSource(source) ? (
         <AuthenticationAccountCard
@@ -84,6 +153,9 @@ export default function AuthenticationAccountSection({
           onRerunChecks={() => checkReports.rerun(credential.id)}
           groupsLocked={!businessTier}
           onSaveAccount={(update) => saveSharing(credential.id, update)}
+          onUpdateCredentials={
+            onEdit === null ? undefined : () => setUpdating(true)
+          }
         />
       ) : (
         <Card border="solid" rounding={4} padding={2}>

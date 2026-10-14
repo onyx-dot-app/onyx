@@ -21,6 +21,7 @@ import {
   SvgCheckSquare,
   SvgChevronDown,
   SvgChevronUp,
+  SvgEdit,
   SvgLinkedDots,
   SvgPlay,
   SvgTrash,
@@ -118,6 +119,8 @@ interface AuthenticationAccountCardProps {
   onSaveAccount: (
     update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
   ) => Promise<{ admin_public: boolean; groups?: number[] }>;
+  /** Shows the action that changes the saved values in place. */
+  onUpdateCredentials?: () => void;
 }
 /**
  * One saved account in the Authentication Account section. The whole card
@@ -141,6 +144,7 @@ export default function AuthenticationAccountCard({
   onRerunChecks,
   groupsLocked,
   onSaveAccount,
+  onUpdateCredentials,
 }: AuthenticationAccountCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const tCredentials = useTranslations("admin.credentials.delete");
@@ -402,6 +406,15 @@ export default function AuthenticationAccountCard({
                         width="fit"
                         height="fit"
                       >
+                        {onUpdateCredentials && (
+                          <Button
+                            prominence="tertiary"
+                            icon={SvgEdit}
+                            aria-label={t("updateButton.label")}
+                            tooltip={t("updateButton.tooltip")}
+                            onClick={onUpdateCredentials}
+                          />
+                        )}
                         <Button
                           variant="danger"
                           prominence="tertiary"

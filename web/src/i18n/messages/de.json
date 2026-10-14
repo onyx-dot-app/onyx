@@ -2261,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "Neu indizieren",
           "tooltip": {
             "indexing": "Eine Neuindizierung ist nicht möglich, während bereits eine Indizierung läuft",
             "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung",
@@ -2270,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pausieren"
+            "label": "Indizierung pausieren",
+            "description": "Alle laufenden und künftigen Indexläufe und Synchronisationen abbrechen."
           },
           "resume": {
-            "label": "Fortsetzen"
+            "label": "Indizierung fortsetzen",
+            "description": "Geplante Indexläufe und Synchronisationen wieder zulassen."
           },
           "tooltip": {
             "updating": "Statusaktualisierung läuft"
           }
         },
         "trigger": {
-          "label": "Verwalten"
+          "label": "Index verwalten"
+        },
+        "updateIndex": {
+          "label": "Index aktualisieren",
+          "description": "Änderungen seit dem letzten erfolgreichen Indexlauf abrufen und indizieren."
+        },
+        "fullReindex": {
+          "label": "Vollständig neu indizieren",
+          "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang Stunden oder Tage dauern."
         }
       },
       "permissionSyncStatus": {
@@ -2312,22 +2321,6 @@
         },
         "additionalDetails": "Dieser Konnektor wurde zuvor als ungültig markiert. Bitte prüfen Sie, ob Ihre Konfiguration korrekt ist, bevor Sie ihn wieder aktivieren. Möchten Sie wirklich fortfahren?",
         "entityType": "Ungültiger Konnektor"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "Dadurch werden alle Dokumente aus der Quelle vollständig neu indiziert.",
-          "note": "<strong>HINWEIS:</strong> Je nach Anzahl der in der Quelle gespeicherten Dokumente kann dies lange dauern."
-        },
-        "fullReindexButton": {
-          "label": "Vollständige Neuindizierung ausführen"
-        },
-        "title": "Indizierung ausführen",
-        "update": {
-          "description": "Dadurch werden alle Dokumente abgerufen und indiziert, die sich seit dem letzten erfolgreichen Indizierungslauf geändert haben und/oder hinzugekommen sind."
-        },
-        "updateButton": {
-          "label": "Aktualisierung ausführen"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2493,12 +2486,6 @@
         "lastIndexed": {
           "value": "Zuletzt indiziert {when}"
         },
-        "lastSynced": {
-          "value": "Zuletzt synchronisiert {when}"
-        },
-        "permissionSyncing": {
-          "label": "Berechtigungssynchronisierung"
-        },
         "title": "Indexierungsstatus",
         "documents": {
           "label": "Aktuell / Gesamt",
@@ -2531,13 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "Vollständige Neuindizierung erfolgreich gestartet",
-        "completeReindexStarting": "Vollständige Neuindizierung wird gestartet...",
         "deletionScheduleFailed": "Das Löschen des Konnektors konnte nicht geplant werden - {message}",
-        "indexingProcessStartFailed": "Der Indizierungsprozess konnte nicht gestartet werden",
         "indexingStartFailed": "Die Indizierung konnte nicht gestartet werden",
         "indexingStartUnexpectedError": "Beim Starten der Indizierung ist ein unerwarteter Fehler aufgetreten",
         "indexingUpdateStarted": "Indizierungsaktualisierung erfolgreich gestartet",
-        "indexingUpdateStarting": "Indizierungsaktualisierung wird gestartet...",
         "nameUpdateFailed": "Der Konnektorname konnte nicht aktualisiert werden",
         "nameUpdated": "Konnektorname erfolgreich aktualisiert",
         "noUnresolvedErrors": "Keine nicht behobenen Fehler für einen erneuten Versuch.",
@@ -2758,6 +2742,10 @@
           "deleteButton": {
             "label": "Konto löschen",
             "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Connectors sie verwenden."
+          },
+          "updateButton": {
+            "label": "Anmeldedaten aktualisieren",
+            "tooltip": "Ändert die gespeicherten Werte für jeden Connector, der dieses Konto nutzt."
           },
           "usedBy": {
             "label": "Verwendet von {count, plural, one {# Connector} other {# Connectors}}"
@@ -3522,6 +3510,34 @@
         "fileRequired": "Bitte wählen Sie eine Datei für {field} aus",
         "invalidEmail": "Bitte geben Sie für {field} eine gültige E-Mail-Adresse ein",
         "required": "Bitte geben Sie {field} ein"
+      },
+      "edit": {
+        "name": {
+          "label": "Name (optional):"
+        },
+        "permissions": {
+          "note": "Stellen Sie sicher, dass Sie auf Anmeldedaten mit den richtigen Berechtigungen aktualisieren!"
+        },
+        "resetButton": {
+          "label": "Änderungen zurücksetzen"
+        },
+        "updateButton": {
+          "label": "Aktualisieren"
+        },
+        "updateError": {
+          "toast": "Fehler beim Aktualisieren der Anmeldedaten"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "Problem beim Aktualisieren der Anmeldedaten"
+        },
+        "success": {
+          "toast": "Anmeldedaten aktualisiert"
+        }
+      },
+      "modal": {
+        "editTitle": "Anmeldedaten bearbeiten"
       }
     },
     "customAnalytics": {

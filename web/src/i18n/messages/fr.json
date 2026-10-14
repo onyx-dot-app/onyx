@@ -2261,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "Réindexer",
           "tooltip": {
             "indexing": "Impossible de réindexer pendant qu'une indexation est déjà en cours",
             "invalid": "Corrigez la configuration du connecteur avant de réindexer",
@@ -2270,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Mettre en pause"
+            "label": "Suspendre l'indexation",
+            "description": "Annuler toutes les indexations et synchronisations en cours et à venir."
           },
           "resume": {
-            "label": "Reprendre"
+            "label": "Reprendre l'indexation",
+            "description": "Autoriser de nouveau les indexations et synchronisations planifiées."
           },
           "tooltip": {
             "updating": "Mise à jour du statut en cours"
           }
         },
         "trigger": {
-          "label": "Gérer"
+          "label": "Gérer l'index"
+        },
+        "updateIndex": {
+          "label": "Mettre à jour l'index",
+          "description": "Récupérer les changements et indexer les documents depuis la dernière indexation réussie."
+        },
+        "fullReindex": {
+          "label": "Réindexation complète",
+          "description": "Réindexer tous les documents de la source. Cela peut prendre des heures ou des jours selon le volume."
         }
       },
       "permissionSyncStatus": {
@@ -2312,22 +2321,6 @@
         },
         "additionalDetails": "Ce connecteur a été marqué comme non valide précédemment. Vérifiez que votre configuration est correcte avant de le réactiver. Voulez-vous vraiment continuer ?",
         "entityType": "le connecteur non valide"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "Cela entraînera une réindexation complète de tous les documents de la source.",
-          "note": "<strong>REMARQUE :</strong> selon le nombre de documents stockés dans la source, cela peut prendre beaucoup de temps."
-        },
-        "fullReindexButton": {
-          "label": "Lancer une réindexation complète"
-        },
-        "title": "Lancer l'indexation",
-        "update": {
-          "description": "Cela récupérera et indexera tous les documents qui ont changé et/ou qui ont été ajoutés depuis la dernière indexation réussie."
-        },
-        "updateButton": {
-          "label": "Lancer la mise à jour"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2493,12 +2486,6 @@
         "lastIndexed": {
           "value": "Dernière indexation {when}"
         },
-        "lastSynced": {
-          "value": "Dernière synchronisation {when}"
-        },
-        "permissionSyncing": {
-          "label": "Synchronisation des autorisations"
-        },
         "title": "État de l'indexation",
         "documents": {
           "label": "Récents / Total",
@@ -2531,13 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",
-        "completeReindexStarting": "Démarrage de la réindexation complète...",
         "deletionScheduleFailed": "Échec de la planification de la suppression du connecteur - {message}",
-        "indexingProcessStartFailed": "Échec du démarrage du processus d'indexation",
         "indexingStartFailed": "Échec du démarrage de l'indexation",
         "indexingStartUnexpectedError": "Une erreur inattendue est survenue lors du démarrage de l'indexation",
         "indexingUpdateStarted": "Mise à jour de l'indexation démarrée avec succès",
-        "indexingUpdateStarting": "Démarrage de la mise à jour de l'indexation...",
         "nameUpdateFailed": "Échec de la mise à jour du nom du connecteur",
         "nameUpdated": "Nom du connecteur mis à jour avec succès",
         "noUnresolvedErrors": "Aucune erreur non résolue à réessayer.",
@@ -2758,6 +2742,10 @@
           "deleteButton": {
             "label": "Supprimer le compte",
             "inUseTooltip": "Impossible de supprimer cet identifiant, car d’autres connecteurs l’utilisent."
+          },
+          "updateButton": {
+            "label": "Mettre à jour les identifiants",
+            "tooltip": "Modifie les valeurs enregistrées pour chaque connecteur qui utilise ce compte."
           },
           "usedBy": {
             "label": "Utilisé par {count, plural, one {# connecteur} other {# connecteurs}}"
@@ -3522,6 +3510,34 @@
         "fileRequired": "Veuillez sélectionner un fichier pour {field}",
         "invalidEmail": "Veuillez saisir une adresse e-mail valide dans {field}",
         "required": "Veuillez renseigner le champ {field}"
+      },
+      "edit": {
+        "name": {
+          "label": "Nom (facultatif) :"
+        },
+        "permissions": {
+          "note": "Assurez-vous de passer à un identifiant disposant des autorisations appropriées !"
+        },
+        "resetButton": {
+          "label": "Réinitialiser les modifications"
+        },
+        "updateButton": {
+          "label": "Mettre à jour"
+        },
+        "updateError": {
+          "toast": "Erreur lors de la mise à jour de l'identifiant"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "Problème lors de la mise à jour de l'identifiant"
+        },
+        "success": {
+          "toast": "Identifiant mis à jour"
+        }
+      },
+      "modal": {
+        "editTitle": "Modifier l'identifiant"
       }
     },
     "customAnalytics": {

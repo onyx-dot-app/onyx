@@ -2,6 +2,8 @@ import type {
   Credential,
   CredentialBase,
   CredentialCheckReport,
+  CredentialFieldValues,
+  CredentialFormValues,
   CredentialRequest,
   CredentialSharing,
   CredentialWithPrivateKey,
@@ -149,6 +151,49 @@ export function linkCredential(
       ),
     }
   );
+}
+
+/** The stored fields a form submits, without blanks, so an untouched secret keeps its value. */
+function changedFields(values: CredentialFormValues): CredentialFieldValues {
+  return Object.fromEntries(
+    Object.entries(values).filter(
+      ([key, value]) => key !== CREDENTIAL_NAME && value !== ""
+    )
+  );
+}
+
+export function updateCredential(
+  credentialId: number,
+  values: CredentialFormValues
+): Promise<Response> {
+  return fetch(`/api/manage/admin/credential/${credentialId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: values.name,
+      credential_json: changedFields(values),
+    }),
+  });
+}
+
+export function updateCredentialWithPrivateKey(
+  credentialId: number,
+  values: CredentialFormValues,
+  privateKey: TypedFile
+): Promise<Response> {
+  const formData = new FormData();
+  formData.append(CREDENTIAL_NAME, values.name);
+  formData.append(CREDENTIAL_JSON, JSON.stringify(changedFields(values)));
+  formData.append(CREDENTIAL_UPLOADED_FILE, privateKey.file);
+  formData.append(CREDENTIAL_FIELD_KEY, privateKey.fieldKey);
+  formData.append(
+    CREDENTIAL_TYPE_DEFINITION_KEY,
+    privateKey.typeDefinition.category
+  );
+  return fetch(`/api/manage/admin/credential/private-key/${credentialId}`, {
+    method: "PUT",
+    body: formData,
+  });
 }
 
 /**

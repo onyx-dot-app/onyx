@@ -57,7 +57,6 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import IndexAttemptErrorsModal from "@/views/admin/connectors/ConnectorDetailPage/IndexAttemptErrorsModal";
 import { IndexAttemptsTable } from "@/views/admin/connectors/ConnectorDetailPage/IndexAttemptsTable";
 import PendingBackfills from "@/views/admin/connectors/ConnectorDetailPage/PendingBackfills";
-import { useReIndexModal } from "@/views/admin/connectors/ConnectorDetailPage/ReIndexModal";
 import { SyncAttemptsTabs } from "@/views/admin/connectors/ConnectorDetailPage/SyncAttemptsTabs";
 import StatusCard from "@/views/admin/connectors/ConnectorDetailPage/StatusCard";
 import PairChecksCard from "@/views/admin/connectors/ConnectorDetailPage/PairChecksCard";
@@ -117,11 +116,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
     disableUrlSync: true,
   });
 
-  const { showReIndexModal, ReIndexModal } = useReIndexModal(
-    ccPair?.connector?.id ?? null,
-    ccPair?.credential?.id ?? null,
-    ccPairId
-  );
   const {
     handleStatusChange,
     isUpdating: isStatusUpdating,
@@ -280,25 +274,25 @@ function Main({ ccPairId }: { ccPairId: number }) {
         ? t("manageMenu.reIndex.tooltip.invalid")
         : undefined;
   const manageItems: DropdownMenuItem[] = [
-    ...(canOpenEditForm
-      ? [
-          {
-            kind: "action" as const,
-            id: "edit",
-            icon: SvgEdit,
-            title: editT("editButton.label"),
-            onSelect: openEditForm,
-          },
-        ]
-      : []),
     {
       kind: "action",
-      id: "re-index",
+      id: "update-index",
       icon: SvgRefreshCw,
-      title: t("manageMenu.reIndex.label"),
+      title: t("manageMenu.updateIndex.label"),
+      description: t("manageMenu.updateIndex.description"),
       tooltip: reIndexBlocked,
       disabled: reIndexBlocked !== undefined,
-      onSelect: showReIndexModal,
+      onSelect: () => void triggerReIndex(false),
+    },
+    {
+      kind: "action",
+      id: "full-reindex",
+      icon: SvgRefreshCw,
+      title: t("manageMenu.fullReindex.label"),
+      description: t("manageMenu.fullReindex.description"),
+      tooltip: reIndexBlocked,
+      disabled: reIndexBlocked !== undefined,
+      onSelect: () => void triggerReIndex(true),
     },
     ...(!isDeleting
       ? [
@@ -309,6 +303,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
             title: paused
               ? t("manageMenu.toggleStatus.resume.label")
               : t("manageMenu.toggleStatus.pause.label"),
+            description: paused
+              ? t("manageMenu.toggleStatus.resume.description")
+              : t("manageMenu.toggleStatus.pause.description"),
             tooltip: isStatusUpdating
               ? t("manageMenu.toggleStatus.tooltip.updating")
               : undefined,
@@ -371,7 +368,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
   return (
     <SettingsLayouts.Root width="sm">
-      {ReIndexModal}
       {ConfirmModal}
       {showDeleteConnectorConfirmModal && (
         <ConfirmEntityModal
@@ -405,6 +401,18 @@ function Main({ ccPairId }: { ccPairId: number }) {
         actions={
           canOperate
             ? [
+                ...(canOpenEditForm
+                  ? [
+                      <Button
+                        key="edit"
+                        prominence="secondary"
+                        icon={SvgEdit}
+                        onClick={openEditForm}
+                      >
+                        {editT("editButton.label")}
+                      </Button>,
+                    ]
+                  : []),
                 <Dropdown key="manage">
                   <Dropdown.Trigger asChild>
                     <Button

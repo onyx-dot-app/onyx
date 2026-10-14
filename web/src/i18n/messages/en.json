@@ -2261,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "Re-Index",
           "tooltip": {
             "indexing": "Cannot re-index while indexing is already in progress",
             "invalid": "Fix the connector configuration before re-indexing",
@@ -2270,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pause"
+            "label": "Pause Indexing",
+            "description": "Cancel all in-progress and future indexing runs and syncs."
           },
           "resume": {
-            "label": "Resume"
+            "label": "Resume Indexing",
+            "description": "Allow scheduled indexing runs and syncs again."
           },
           "tooltip": {
             "updating": "Status update in progress"
           }
         },
         "trigger": {
-          "label": "Manage"
+          "label": "Manage Index"
+        },
+        "updateIndex": {
+          "label": "Update Index",
+          "description": "Pull updates and index docs since the last successful indexing run."
+        },
+        "fullReindex": {
+          "label": "Full Re-index",
+          "description": "Re-index all docs from the source. This may take hours or days depending on corpus size."
         }
       },
       "permissionSyncStatus": {
@@ -2312,22 +2321,6 @@
         },
         "additionalDetails": "This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?",
         "entityType": "Invalid Connector"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "This will cause a complete re-indexing of all documents from the source.",
-          "note": "<strong>NOTE:</strong> depending on the number of documents stored in the source, this may take a long time."
-        },
-        "fullReindexButton": {
-          "label": "Run Complete Re-Indexing"
-        },
-        "title": "Run Indexing",
-        "update": {
-          "description": "This will pull in and index all documents that have changed and/or have been added since the last successful indexing run."
-        },
-        "updateButton": {
-          "label": "Run Update"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2493,12 +2486,6 @@
         "lastIndexed": {
           "value": "Last indexed {when}"
         },
-        "lastSynced": {
-          "value": "Last synced {when}"
-        },
-        "permissionSyncing": {
-          "label": "Permission Syncing"
-        },
         "title": "Indexing Status",
         "documents": {
           "label": "Recent / Total",
@@ -2531,13 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "Complete re-indexing started successfully",
-        "completeReindexStarting": "Starting complete re-indexing...",
         "deletionScheduleFailed": "Failed to schedule deletion of connector - {message}",
-        "indexingProcessStartFailed": "Failed to start indexing process",
         "indexingStartFailed": "Failed to start indexing",
         "indexingStartUnexpectedError": "An unexpected error occurred while trying to start indexing",
         "indexingUpdateStarted": "Indexing update started successfully",
-        "indexingUpdateStarting": "Starting indexing update...",
         "nameUpdateFailed": "Failed to update connector name",
         "nameUpdated": "Connector name updated successfully",
         "noUnresolvedErrors": "No unresolved errors to retry.",
@@ -2758,6 +2742,10 @@
           "deleteButton": {
             "label": "Delete Account",
             "inUseTooltip": "Cannot delete this credential because there are other connectors that are using it."
+          },
+          "updateButton": {
+            "label": "Update Credentials",
+            "tooltip": "Changes the saved values for every connector that uses this account."
           },
           "usedBy": {
             "label": "Used by {count, plural, one {# connector} other {# connectors}}"
@@ -3522,6 +3510,34 @@
         "fileRequired": "Please select a {field} file",
         "invalidEmail": "Please enter a valid {field}",
         "required": "Please enter your {field}"
+      },
+      "edit": {
+        "name": {
+          "label": "Name (optional):"
+        },
+        "permissions": {
+          "note": "Ensure that you update to a credential with the proper permissions!"
+        },
+        "resetButton": {
+          "label": "Reset Changes"
+        },
+        "updateButton": {
+          "label": "Update"
+        },
+        "updateError": {
+          "toast": "Error updating credential"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "Issue updating credential"
+        },
+        "success": {
+          "toast": "Updated credential"
+        }
+      },
+      "modal": {
+        "editTitle": "Edit Credential"
       }
     },
     "customAnalytics": {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
 import {
@@ -52,6 +53,7 @@ export default function SharingSettingsSection({
   onEdit,
 }: SharingSettingsSectionProps) {
   const t = useTranslations("admin.connector.sharing");
+  const [open, setOpen] = useState(false);
   const tSettings = useTranslations("admin.connectorsList.settings");
   const tGroups = useTranslations("admin.connector.groupRestriction");
   const format = useFormatter();
@@ -139,8 +141,11 @@ export default function SharingSettingsSection({
           { type: "unit" }
         )
       )}
-      defaultOpen={false}
+      open={open}
+      onOpenChange={setOpen}
+      // The edit action shows with the content it edits.
       rightChildren={
+        open &&
         onEdit !== null && (
           <TextButton font="secondary-action" onClick={onEdit}>
             {t("editButton.label")}

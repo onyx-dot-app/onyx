@@ -2261,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "إعادة الفهرسة",
           "tooltip": {
             "indexing": "لا يمكن إعادة الفهرسة أثناء وجود فهرسة قيد التنفيذ",
             "invalid": "أصلح إعدادات الموصل قبل إعادة الفهرسة",
@@ -2270,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "إيقاف مؤقت"
+            "label": "إيقاف الفهرسة مؤقتًا",
+            "description": "إلغاء كل عمليات الفهرسة والمزامنة الجارية والمستقبلية."
           },
           "resume": {
-            "label": "استئناف"
+            "label": "استئناف الفهرسة",
+            "description": "السماح بعمليات الفهرسة والمزامنة المجدولة مجددًا."
           },
           "tooltip": {
             "updating": "تحديث الحالة قيد التنفيذ"
           }
         },
         "trigger": {
-          "label": "إدارة"
+          "label": "إدارة الفهرسة"
+        },
+        "updateIndex": {
+          "label": "تحديث الفهرس",
+          "description": "جلب التحديثات وفهرسة المستندات منذ آخر عملية فهرسة ناجحة."
+        },
+        "fullReindex": {
+          "label": "إعادة فهرسة كاملة",
+          "description": "إعادة فهرسة كل المستندات من المصدر. قد يستغرق ذلك ساعات أو أيامًا حسب حجم المحتوى."
         }
       },
       "permissionSyncStatus": {
@@ -2312,22 +2321,6 @@
         },
         "additionalDetails": "سبق تعليم هذا الموصل كغير صالح. يرجى التحقق من صحة إعداداتك قبل إعادة التفعيل. هل أنت متأكد من رغبتك في المتابعة؟",
         "entityType": "موصل غير صالح"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "سيؤدي هذا إلى إعادة فهرسة كاملة لجميع المستندات من المصدر.",
-          "note": "<strong>ملاحظة:</strong> بحسب عدد المستندات المخزنة في المصدر، قد يستغرق هذا وقتًا طويلًا."
-        },
-        "fullReindexButton": {
-          "label": "تشغيل إعادة فهرسة كاملة"
-        },
-        "title": "تشغيل الفهرسة",
-        "update": {
-          "description": "سيجلب هذا ويفهرس جميع المستندات التي تغيرت أو أُضيفت منذ آخر عملية فهرسة ناجحة."
-        },
-        "updateButton": {
-          "label": "تشغيل التحديث"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2493,12 +2486,6 @@
         "lastIndexed": {
           "value": "آخر فهرسة {when}"
         },
-        "lastSynced": {
-          "value": "آخر مزامنة {when}"
-        },
-        "permissionSyncing": {
-          "label": "مزامنة الأذونات"
-        },
         "title": "حالة الفهرسة",
         "documents": {
           "label": "الأخيرة / الإجمالي",
@@ -2531,13 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "بدأت إعادة الفهرسة الكاملة بنجاح",
-        "completeReindexStarting": "جارٍ بدء إعادة الفهرسة الكاملة...",
         "deletionScheduleFailed": "فشلت جدولة حذف الموصل - {message}",
-        "indexingProcessStartFailed": "فشل بدء عملية الفهرسة",
         "indexingStartFailed": "فشل بدء الفهرسة",
         "indexingStartUnexpectedError": "حدث خطأ غير متوقع أثناء محاولة بدء الفهرسة",
         "indexingUpdateStarted": "بدأ تحديث الفهرسة بنجاح",
-        "indexingUpdateStarting": "جارٍ بدء تحديث الفهرسة...",
         "nameUpdateFailed": "فشل تحديث اسم الموصل",
         "nameUpdated": "تم تحديث اسم الموصل بنجاح",
         "noUnresolvedErrors": "لا توجد أخطاء غير محلولة لإعادة المحاولة.",
@@ -2758,6 +2742,10 @@
           "deleteButton": {
             "label": "حذف الحساب",
             "inUseTooltip": "لا يمكن حذف بيانات الاعتماد هذه لأن هناك موصلات أخرى تستخدمها."
+          },
+          "updateButton": {
+            "label": "تحديث بيانات الاعتماد",
+            "tooltip": "يغيّر القيم المحفوظة لكل موصل يستخدم هذا الحساب."
           },
           "usedBy": {
             "label": "مستخدم في {count, plural, zero {# موصلات} one {موصل واحد} two {موصلين} few {# موصلات} many {# موصلًا} other {# موصل}}"
@@ -3522,6 +3510,34 @@
         "fileRequired": "يُرجى اختيار ملف {field}",
         "invalidEmail": "يُرجى إدخال بريد إلكتروني صالح في {field}",
         "required": "يُرجى إدخال {field}"
+      },
+      "edit": {
+        "name": {
+          "label": "الاسم (اختياري):"
+        },
+        "permissions": {
+          "note": "تأكد من التحديث إلى بيانات اعتماد ذات الأذونات المناسبة!"
+        },
+        "resetButton": {
+          "label": "إعادة تعيين التغييرات"
+        },
+        "updateButton": {
+          "label": "تحديث"
+        },
+        "updateError": {
+          "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "مشكلة في تحديث بيانات الاعتماد"
+        },
+        "success": {
+          "toast": "تم تحديث بيانات الاعتماد"
+        }
+      },
+      "modal": {
+        "editTitle": "تعديل بيانات الاعتماد"
       }
     },
     "customAnalytics": {

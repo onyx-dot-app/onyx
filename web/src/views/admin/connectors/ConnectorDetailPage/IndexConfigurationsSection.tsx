@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Card, Collapsible, TextButton } from "@opal/components";
@@ -82,6 +83,7 @@ export default function IndexConfigurationsSection({
   onRefresh,
 }: IndexConfigurationsSectionProps) {
   const t = useTranslations("admin.connector.configuration");
+  const [open, setOpen] = useState(false);
   const source = ccPair.connector.source;
   const config: ConfigEntries =
     ccPair.connector.connector_specific_config ?? {};
@@ -96,9 +98,11 @@ export default function IndexConfigurationsSection({
         source: getSourceDisplayName(source) ?? "",
         count,
       })}
-      // A file connector's section is its file manager, so it starts open.
-      defaultOpen={manageFiles}
+      open={open}
+      onOpenChange={setOpen}
+      // The edit action shows with the content it edits.
       rightChildren={
+        open &&
         onEdit !== null && (
           <TextButton font="secondary-action" onClick={onEdit}>
             {t("editButton.label")}

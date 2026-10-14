@@ -10,10 +10,8 @@ import type {
   CCPairFullInfo,
   PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
-import { isPermSynced } from "@/lib/connectors/accessType";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { PermissionSyncStatusBadge } from "@/views/admin/connectors/ConnectorDetailPage/PermissionSyncStatusBadge";
 import { ccPairStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 
 interface StatBlockProps {
@@ -44,7 +42,7 @@ export interface StatusCardProps {
   ccPair: CCPairFullInfo;
 }
 
-/** The pair at a glance: status, latest and total documents, last run, and sync state when synced. */
+/** The pair at a glance: status, latest and total documents, and its last run. */
 export default function StatusCard({ ccPair }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
@@ -74,9 +72,6 @@ export default function StatusCard({ ccPair }: StatusCardProps) {
         })
       : null;
   const recent = latestIndexAttempt?.total_docs_indexed ?? 0;
-  const lastSynced =
-    ccPair.last_permission_sync_attempt_finished ??
-    ccPair.last_full_permission_sync;
 
   return (
     <Card
@@ -135,22 +130,6 @@ export default function StatusCard({ ccPair }: StatusCardProps) {
             {t("documentsIndexed.label")}
           </Text>
         </StatBlock>
-        {isPermSynced(ccPair.access_type) && (
-          <StatBlock>
-            <PermissionSyncStatusBadge
-              status={ccPair.last_permission_sync_attempt_status}
-              errorMsg={ccPair.last_permission_sync_attempt_error_message}
-            />
-            <Text font="secondary-body" color="text-03">
-              {t("permissionSyncing.label")}
-            </Text>
-            <Text font="secondary-body" color="text-03">
-              {t("lastSynced.value", {
-                when: timeAgo(lastSynced, locale) ?? "-",
-              })}
-            </Text>
-          </StatBlock>
-        )}
       </Section>
     </Card>
   );

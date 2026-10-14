@@ -2261,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "再インデックス",
           "tooltip": {
             "indexing": "インデックス作成の実行中は再インデックスできません",
             "invalid": "再インデックスの前にコネクターの設定を修正してください",
@@ -2270,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "一時停止"
+            "label": "インデックスを一時停止",
+            "description": "進行中および今後のインデックス実行と同期をすべて取り消します。"
           },
           "resume": {
-            "label": "再開"
+            "label": "インデックスを再開",
+            "description": "スケジュールされたインデックス実行と同期を再び許可します。"
           },
           "tooltip": {
             "updating": "ステータスを更新しています"
           }
         },
         "trigger": {
-          "label": "管理"
+          "label": "インデックスを管理"
+        },
+        "updateIndex": {
+          "label": "インデックスを更新",
+          "description": "前回成功したインデックス実行以降の更新を取得してインデックスします。"
+        },
+        "fullReindex": {
+          "label": "完全な再インデックス",
+          "description": "ソースの全ドキュメントを再インデックスします。規模によっては数時間から数日かかります。"
         }
       },
       "permissionSyncStatus": {
@@ -2312,22 +2321,6 @@
         },
         "additionalDetails": "このコネクターは以前、無効としてマークされました。再有効化する前に、設定が正しいことを確認してください。続行してもよろしいですか？",
         "entityType": "無効なコネクター"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "ソースのすべてのドキュメントが完全に再インデックスされます。",
-          "note": "<strong>注意：</strong> ソースに保存されているドキュメントの数によっては、長い時間がかかる場合があります。"
-        },
-        "fullReindexButton": {
-          "label": "完全な再インデックスを実行"
-        },
-        "title": "インデックス作成の実行",
-        "update": {
-          "description": "前回成功したインデックス作成以降に変更または追加されたすべてのドキュメントを取得し、インデックスに登録します。"
-        },
-        "updateButton": {
-          "label": "更新を実行"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2493,12 +2486,6 @@
         "lastIndexed": {
           "value": "最終インデックス作成 {when}"
         },
-        "lastSynced": {
-          "value": "最終同期 {when}"
-        },
-        "permissionSyncing": {
-          "label": "権限の同期"
-        },
         "title": "インデックス状況",
         "documents": {
           "label": "直近 / 合計",
@@ -2531,13 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "完全な再インデックス作成を開始しました",
-        "completeReindexStarting": "完全な再インデックス作成を開始しています...",
         "deletionScheduleFailed": "コネクターの削除をスケジュールできませんでした - {message}",
-        "indexingProcessStartFailed": "インデックス作成の処理を開始できませんでした",
         "indexingStartFailed": "インデックス作成を開始できませんでした",
         "indexingStartUnexpectedError": "インデックス作成の開始中に予期しないエラーが発生しました",
         "indexingUpdateStarted": "インデックスの更新を開始しました",
-        "indexingUpdateStarting": "インデックスの更新を開始しています...",
         "nameUpdateFailed": "コネクター名を更新できませんでした",
         "nameUpdated": "コネクター名を更新しました",
         "noUnresolvedErrors": "再試行する未解決のエラーはありません。",
@@ -2758,6 +2742,10 @@
           "deleteButton": {
             "label": "アカウントを削除",
             "inUseTooltip": "他のコネクタがこの認証情報を使用しているため、削除できません。"
+          },
+          "updateButton": {
+            "label": "認証情報を更新",
+            "tooltip": "このアカウントを使うすべてのコネクタの保存値を変更します。"
           },
           "usedBy": {
             "label": "{count, plural, other {# 個のコネクタ}}で使用中"
@@ -3522,6 +3510,34 @@
         "fileRequired": "{field}のファイルを選択してください",
         "invalidEmail": "{field}に有効なメールアドレスを入力してください",
         "required": "{field}を入力してください"
+      },
+      "edit": {
+        "name": {
+          "label": "名前 (任意):"
+        },
+        "permissions": {
+          "note": "適切な権限を持つ認証情報に更新してください!"
+        },
+        "resetButton": {
+          "label": "変更をリセット"
+        },
+        "updateButton": {
+          "label": "更新"
+        },
+        "updateError": {
+          "toast": "認証情報の更新中にエラーが発生しました"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "認証情報の更新に問題があります"
+        },
+        "success": {
+          "toast": "認証情報を更新しました"
+        }
+      },
+      "modal": {
+        "editTitle": "認証情報を編集"
       }
     },
     "customAnalytics": {

@@ -2261,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "Reindexar",
           "tooltip": {
             "indexing": "Não é possível reindexar enquanto uma indexação está em andamento",
             "invalid": "Corrija a configuração do conector antes de reindexar",
@@ -2270,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pausar"
+            "label": "Pausar indexação",
+            "description": "Cancelar todas as indexações e sincronizações em andamento e futuras."
           },
           "resume": {
-            "label": "Retomar"
+            "label": "Retomar indexação",
+            "description": "Permitir novamente as indexações e sincronizações agendadas."
           },
           "tooltip": {
             "updating": "Atualização de status em andamento"
           }
         },
         "trigger": {
-          "label": "Gerenciar"
+          "label": "Gerenciar índice"
+        },
+        "updateIndex": {
+          "label": "Atualizar índice",
+          "description": "Buscar alterações e indexar os documentos desde a última indexação bem-sucedida."
+        },
+        "fullReindex": {
+          "label": "Reindexar tudo",
+          "description": "Reindexar todos os documentos da fonte. Pode levar horas ou dias dependendo do tamanho."
         }
       },
       "permissionSyncStatus": {
@@ -2312,22 +2321,6 @@
         },
         "additionalDetails": "Este conector foi marcado como inválido anteriormente. Confirme que sua configuração está correta antes de reativar. Tem certeza de que deseja continuar?",
         "entityType": "Conector inválido"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "Isso vai causar uma reindexação completa de todos os documentos da origem.",
-          "note": "<strong>OBSERVAÇÃO:</strong> dependendo do número de documentos armazenados na origem, isso pode demorar muito."
-        },
-        "fullReindexButton": {
-          "label": "Executar reindexação completa"
-        },
-        "title": "Executar indexação",
-        "update": {
-          "description": "Isso vai buscar e indexar todos os documentos que mudaram e/ou foram adicionados desde a última indexação bem-sucedida."
-        },
-        "updateButton": {
-          "label": "Executar atualização"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2493,12 +2486,6 @@
         "lastIndexed": {
           "value": "Última indexação {when}"
         },
-        "lastSynced": {
-          "value": "Última sincronização {when}"
-        },
-        "permissionSyncing": {
-          "label": "Sincronização de permissões"
-        },
         "title": "Status da indexação",
         "documents": {
           "label": "Recentes / Total",
@@ -2531,13 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "Reindexação completa iniciada com sucesso",
-        "completeReindexStarting": "Iniciando a reindexação completa...",
         "deletionScheduleFailed": "Falha ao agendar a exclusão do conector - {message}",
-        "indexingProcessStartFailed": "Falha ao iniciar o processo de indexação",
         "indexingStartFailed": "Falha ao iniciar a indexação",
         "indexingStartUnexpectedError": "Ocorreu um erro inesperado ao tentar iniciar a indexação",
         "indexingUpdateStarted": "Atualização da indexação iniciada com sucesso",
-        "indexingUpdateStarting": "Iniciando a atualização da indexação...",
         "nameUpdateFailed": "Falha ao atualizar o nome do conector",
         "nameUpdated": "Nome do conector atualizado com sucesso",
         "noUnresolvedErrors": "Nenhum erro não resolvido para tentar novamente.",
@@ -2758,6 +2742,10 @@
           "deleteButton": {
             "label": "Excluir conta",
             "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a."
+          },
+          "updateButton": {
+            "label": "Atualizar credenciais",
+            "tooltip": "Altera os valores salvos para cada conector que usa esta conta."
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
@@ -3522,6 +3510,34 @@
         "fileRequired": "Selecione um arquivo para {field}",
         "invalidEmail": "Informe um e-mail válido em {field}",
         "required": "Preencha o campo {field}"
+      },
+      "edit": {
+        "name": {
+          "label": "Nome (opcional):"
+        },
+        "permissions": {
+          "note": "Certifique-se de atualizar para uma credencial com as permissões adequadas!"
+        },
+        "resetButton": {
+          "label": "Redefinir alterações"
+        },
+        "updateButton": {
+          "label": "Atualizar"
+        },
+        "updateError": {
+          "toast": "Erro ao atualizar a credencial"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "Problema ao atualizar a credencial"
+        },
+        "success": {
+          "toast": "Credencial atualizada"
+        }
+      },
+      "modal": {
+        "editTitle": "Editar credencial"
       }
     },
     "customAnalytics": {

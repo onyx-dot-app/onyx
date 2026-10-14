@@ -2261,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "重新索引",
           "tooltip": {
             "indexing": "索引正在进行中，无法重新索引",
             "invalid": "重新索引前请先修复连接器配置",
@@ -2270,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "暂停"
+            "label": "暂停索引",
+            "description": "取消所有进行中和未来的索引运行与同步。"
           },
           "resume": {
-            "label": "恢复"
+            "label": "恢复索引",
+            "description": "重新允许计划的索引运行与同步。"
           },
           "tooltip": {
             "updating": "状态更新进行中"
           }
         },
         "trigger": {
-          "label": "管理"
+          "label": "管理索引"
+        },
+        "updateIndex": {
+          "label": "更新索引",
+          "description": "拉取自上次成功索引以来的更新并建立索引。"
+        },
+        "fullReindex": {
+          "label": "完全重新索引",
+          "description": "重新索引来源中的所有文档。视语料规模可能需要数小时或数天。"
         }
       },
       "permissionSyncStatus": {
@@ -2312,22 +2321,6 @@
         },
         "additionalDetails": "此连接器之前被标记为无效。重新启用前，请确认配置正确。确定要继续吗？",
         "entityType": "无效连接器"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "这将对来源中的所有文档执行完整重新索引。",
-          "note": "<strong>注意：</strong>根据来源中存储的文档数量，这可能需要很长时间。"
-        },
-        "fullReindexButton": {
-          "label": "运行完整重新索引"
-        },
-        "title": "运行索引",
-        "update": {
-          "description": "这将拉取并索引自上次成功索引运行以来发生更改和/或新增的所有文档。"
-        },
-        "updateButton": {
-          "label": "运行更新"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2493,12 +2486,6 @@
         "lastIndexed": {
           "value": "上次索引 {when}"
         },
-        "lastSynced": {
-          "value": "上次同步 {when}"
-        },
-        "permissionSyncing": {
-          "label": "权限同步"
-        },
         "title": "索引状态",
         "documents": {
           "label": "最近 / 总计",
@@ -2531,13 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "已成功启动完全重新索引",
-        "completeReindexStarting": "正在启动完全重新索引…",
         "deletionScheduleFailed": "安排删除连接器失败 - {message}",
-        "indexingProcessStartFailed": "启动索引进程失败",
         "indexingStartFailed": "启动索引失败",
         "indexingStartUnexpectedError": "尝试启动索引时发生意外错误",
         "indexingUpdateStarted": "已成功启动索引更新",
-        "indexingUpdateStarting": "正在启动索引更新…",
         "nameUpdateFailed": "更新连接器名称失败",
         "nameUpdated": "已成功更新连接器名称",
         "noUnresolvedErrors": "没有可重试的未解决错误。",
@@ -2758,6 +2742,10 @@
           "deleteButton": {
             "label": "删除账户",
             "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。"
+          },
+          "updateButton": {
+            "label": "更新凭据",
+            "tooltip": "更改使用此帐户的所有连接器的已保存值。"
           },
           "usedBy": {
             "label": "{count, plural, other {# 个连接器}}正在使用"
@@ -3522,6 +3510,34 @@
         "fileRequired": "请选择{field}文件",
         "invalidEmail": "请在{field}中输入有效的邮箱地址",
         "required": "请输入{field}"
+      },
+      "edit": {
+        "name": {
+          "label": "名称(可选):"
+        },
+        "permissions": {
+          "note": "请确保更新为具有适当权限的凭据!"
+        },
+        "resetButton": {
+          "label": "重置更改"
+        },
+        "updateButton": {
+          "label": "更新"
+        },
+        "updateError": {
+          "toast": "更新凭据时出错"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "更新凭据时出现问题"
+        },
+        "success": {
+          "toast": "已更新凭据"
+        }
+      },
+      "modal": {
+        "editTitle": "编辑凭据"
       }
     },
     "customAnalytics": {
