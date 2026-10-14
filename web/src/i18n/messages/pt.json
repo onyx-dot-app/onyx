@@ -5698,26 +5698,27 @@
           "title": "Não foi possível carregar a atualização do acesso por conector"
         }
       },
-      "embeddingRetry": {
-        "title": "Novas tentativas de embedding",
-        "description": "Quando uma chamada de embedding falha durante a indexação, o Onyx espera e tenta novamente. Cada espera é o dobro da anterior, até o máximo. As alterações se aplicam ao próximo lote de indexação.",
-        "scale": {
-          "title": "Espera antes da primeira tentativa",
-          "description": "A espera antes da primeira nova tentativa."
+      "embeddingRateLimit": {
+        "title": "Limite de requisições de embedding",
+        "description": "Limita quantas requisições de embedding a indexação envia em uma janela de tempo, entre todos os workers de indexação. No limite, a indexação espera e tenta novamente com esperas cada vez maiores, então os workers pegam menos trabalho novo. Consultas de pesquisa não têm limite.",
+        "requests": {
+          "title": "Requisições por janela",
+          "description": "Deixe vazio para não ter limite.",
+          "placeholder": "Sem limite"
         },
-        "max": {
-          "title": "Espera máxima entre tentativas",
-          "description": "Nenhuma espera é maior que este valor."
+        "period": {
+          "title": "Duração da janela",
+          "description": "Por exemplo, 60 para um limite por minuto.",
+          "suffix": "(segundos)"
         },
-        "suffix": "(segundos)",
         "restoreDefault": "Restaurar padrão",
         "validation": {
-          "range": "Insira um número maior que 0 e no máximo {max}.",
-          "maxBelowScale": "A espera máxima não pode ser menor que a primeira espera."
+          "requests": "Insira um número inteiro de 1 a {max, number}, ou deixe o campo vazio para não ter limite.",
+          "period": "Insira um número inteiro de segundos de 1 a {max, number}."
         },
         "toasts": {
-          "saved": "Configurações de novas tentativas salvas.",
-          "failed": "Não foi possível salvar as configurações de novas tentativas."
+          "saved": "Limite salvo.",
+          "failed": "Não foi possível salvar o limite."
         }
       }
     },

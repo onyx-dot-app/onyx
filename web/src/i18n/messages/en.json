@@ -5698,26 +5698,27 @@
           "title": "Could not load the connector access update"
         }
       },
-      "embeddingRetry": {
-        "title": "Embedding retries",
-        "description": "When an embedding call fails during indexing, Onyx waits and tries again. Each wait is double the previous wait, up to the maximum. Changes apply to the next indexing batch.",
-        "scale": {
-          "title": "First retry wait",
-          "description": "The wait before the first retry."
+      "embeddingRateLimit": {
+        "title": "Embedding rate limit",
+        "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again with longer waits each time, so workers take less new work. Search queries are not limited.",
+        "requests": {
+          "title": "Requests per window",
+          "description": "Leave empty for no limit.",
+          "placeholder": "No limit"
         },
-        "max": {
-          "title": "Maximum retry wait",
-          "description": "No wait is longer than this value."
+        "period": {
+          "title": "Window length",
+          "description": "For example, 60 for a limit per minute.",
+          "suffix": "(seconds)"
         },
-        "suffix": "(seconds)",
         "restoreDefault": "Restore default",
         "validation": {
-          "range": "Enter a number greater than 0 and not more than {max}.",
-          "maxBelowScale": "The maximum wait cannot be less than the first wait."
+          "requests": "Enter a whole number from 1 to {max, number}, or leave the field empty for no limit.",
+          "period": "Enter a whole number of seconds from 1 to {max, number}."
         },
         "toasts": {
-          "saved": "Retry settings saved.",
-          "failed": "Could not save the retry settings."
+          "saved": "Rate limit saved.",
+          "failed": "Could not save the rate limit."
         }
       }
     },

@@ -11,9 +11,11 @@ from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
+from onyx.natural_language_processing.embedding_rate_limit import EmbeddingRateLimiter
 from onyx.natural_language_processing.search_nlp_models import (
     CloudEmbedding,
     EmbeddingModel,
+    EmbeddingRequestPolicy,
     EmbeddingRetryBackoff,
     clean_model_name,
 )
@@ -482,11 +484,8 @@ def _embedding_for_text(text: str) -> list[float]:
 
 
 @pytest.fixture(autouse=True)
-def _default_passage_retry_backoff() -> Iterator[None]:
-    with patch(
-        f"{_SEARCH_NLP_MODULE}._load_passage_retry_backoff",
-        return_value=EmbeddingRetryBackoff(scale_seconds=1, max_seconds=1),
-    ):
+def _no_embedding_rate_limit() -> Iterator[None]:
+    with patch(f"{_SEARCH_NLP_MODULE}.load_embedding_rate_limiter", return_value=None):
         yield
 
 
@@ -503,7 +502,7 @@ def _fake_model_server_call(
     embed_request: EmbedRequest,
     tenant_id: str | None = None,  # noqa: ARG001
     request_id: str | None = None,  # noqa: ARG001
-    retry_backoff: EmbeddingRetryBackoff | None = None,  # noqa: ARG001
+    policy: EmbeddingRequestPolicy | None = None,  # noqa: ARG001
 ) -> EmbedResponse:
     return EmbedResponse(
         embeddings=[_embedding_for_text(t) for t in embed_request.texts]
@@ -780,15 +779,14 @@ async def test_batch_encode_async_caller_multi_batch() -> None:
     assert spy_asyncio_run.call_count == 0
 
 
-def test_passage_model_server_retry_uses_settings_backoff() -> None:
-    """A rate-limited passage embed retries with the backoff from the settings."""
+def test_passage_model_server_requests_wait_for_the_rate_limit() -> None:
+    """Every passage request to the model server, retries included, takes a
+    slot from the rate limiter and passes it the stop check."""
+    callback = MagicMock()
+    callback.should_stop.return_value = False
     model = _make_local_embedding_model()
-    settings_backoff = EmbeddingRetryBackoff(scale_seconds=7, max_seconds=90)
-    used_backoffs: list[EmbeddingRetryBackoff] = []
-
-    def record_wait(backoff: EmbeddingRetryBackoff) -> Any:
-        used_backoffs.append(backoff)
-        return wait_none()
+    model.callback = callback
+    limiter = MagicMock(spec=EmbeddingRateLimiter)
 
     rate_limited = MagicMock(status_code=429, text="slow down")
     ok = MagicMock(status_code=200)
@@ -796,10 +794,9 @@ def test_passage_model_server_retry_uses_settings_backoff() -> None:
 
     with (
         patch(
-            f"{_SEARCH_NLP_MODULE}._load_passage_retry_backoff",
-            return_value=settings_backoff,
+            f"{_SEARCH_NLP_MODULE}.load_embedding_rate_limiter", return_value=limiter
         ),
-        patch.object(EmbeddingRetryBackoff, "wait", record_wait),
+        patch.object(EmbeddingRetryBackoff, "wait", lambda _self: wait_none()),
         patch(
             f"{_SEARCH_NLP_MODULE}.requests.post", side_effect=[rate_limited, ok]
         ) as post,
@@ -808,4 +805,19 @@ def test_passage_model_server_retry_uses_settings_backoff() -> None:
 
     assert result == [[1.0]]
     assert post.call_count == 2
-    assert used_backoffs and all(b == settings_backoff for b in used_backoffs)
+    assert limiter.acquire.call_count == 2
+    limiter.acquire.assert_called_with(callback.should_stop)
+
+
+def test_query_embeddings_never_wait_for_the_rate_limit() -> None:
+    model = _make_local_embedding_model()
+    ok = MagicMock(status_code=200)
+    ok.json.return_value = {"embeddings": [[1.0]]}
+
+    with (
+        patch(f"{_SEARCH_NLP_MODULE}.load_embedding_rate_limiter") as load_limiter,
+        patch(f"{_SEARCH_NLP_MODULE}.requests.post", return_value=ok),
+    ):
+        model.encode(texts=["text_0"], text_type=EmbedTextType.QUERY)
+
+    load_limiter.assert_not_called()

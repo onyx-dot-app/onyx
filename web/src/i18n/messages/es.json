@@ -5698,26 +5698,27 @@
           "title": "No se pudo cargar la actualización del acceso por conector"
         }
       },
-      "embeddingRetry": {
-        "title": "Reintentos de embeddings",
-        "description": "Cuando falla una llamada de embedding durante la indexación, Onyx espera y vuelve a intentarlo. Cada espera es el doble de la anterior, hasta el máximo. Los cambios se aplican al siguiente lote de indexación.",
-        "scale": {
-          "title": "Espera antes del primer reintento",
-          "description": "La espera antes del primer reintento."
+      "embeddingRateLimit": {
+        "title": "Límite de solicitudes de embeddings",
+        "description": "Limita cuántas solicitudes de embedding envía la indexación en una ventana de tiempo, entre todos los workers de indexación. Al llegar al límite, la indexación espera y vuelve a intentarlo con esperas cada vez más largas, así los workers toman menos trabajo nuevo. Las consultas de búsqueda no tienen límite.",
+        "requests": {
+          "title": "Solicitudes por ventana",
+          "description": "Déjalo vacío para no tener límite.",
+          "placeholder": "Sin límite"
         },
-        "max": {
-          "title": "Espera máxima entre reintentos",
-          "description": "Ninguna espera es mayor que este valor."
+        "period": {
+          "title": "Duración de la ventana",
+          "description": "Por ejemplo, 60 para un límite por minuto.",
+          "suffix": "(segundos)"
         },
-        "suffix": "(segundos)",
         "restoreDefault": "Restaurar valor predeterminado",
         "validation": {
-          "range": "Introduce un número mayor que 0 y no mayor que {max}.",
-          "maxBelowScale": "La espera máxima no puede ser menor que la primera espera."
+          "requests": "Introduce un número entero de 1 a {max, number}, o deja el campo vacío para no tener límite.",
+          "period": "Introduce un número entero de segundos de 1 a {max, number}."
         },
         "toasts": {
-          "saved": "Configuración de reintentos guardada.",
-          "failed": "No se pudo guardar la configuración de reintentos."
+          "saved": "Límite guardado.",
+          "failed": "No se pudo guardar el límite."
         }
       }
     },

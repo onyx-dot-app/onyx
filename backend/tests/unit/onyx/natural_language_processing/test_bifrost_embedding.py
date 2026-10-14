@@ -2,14 +2,16 @@
 
 import json
 from collections.abc import Callable, Iterator
+from dataclasses import replace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 from tenacity import wait_none
 
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
+from onyx.natural_language_processing.embedding_rate_limit import EmbeddingRateLimiter
 from onyx.natural_language_processing.exceptions import (
     EmbeddingRequestFailedError,
     EmbeddingRequestRejectedError,
@@ -17,6 +19,7 @@ from onyx.natural_language_processing.exceptions import (
 from onyx.natural_language_processing.search_nlp_models import (
     AuthenticationError,
     CloudEmbedding,
+    EmbeddingRequestPolicy,
     EmbeddingRetryBackoff,
 )
 from onyx.natural_language_processing.utils import (
@@ -281,7 +284,7 @@ async def test_an_exhausted_request_is_not_replayed_by_the_outer_retry() -> None
 
     gateway = _FakeGateway(respond=always_fail_b)
     async with _bifrost(gateway, "https://bifrost.example") as embedding:
-        embedding.retry_tries = 3
+        embedding.policy = replace(embedding.policy, retry_tries=3)
         with pytest.raises(EmbeddingRequestFailedError, match="HTTP 503: unavailable"):
             await embedding.embed(
                 texts=["a", "b", "c"],
@@ -364,3 +367,36 @@ def test_only_bifrost_strips_the_provider_prefix_for_the_tokenizer(
         tokenizer = _try_initialize_tokenizer("openai/tokenizer-test", provider)
 
     assert isinstance(tokenizer, TiktokenTokenizer) is uses_tiktoken
+
+
+@pytest.mark.asyncio
+async def test_each_gemini_request_takes_a_rate_limit_slot() -> None:
+    """Gemini models get one input per request, so the limit counts inputs,
+    and a retried request takes a second slot."""
+    attempts: dict[str, int] = {}
+
+    def limit_first_try_of_b(payload: dict[str, Any]) -> httpx.Response | None:
+        # Gemini Embedding 2 inputs carry an instruction prefix.
+        text = payload["input"][0]
+        attempts[text] = attempts.get(text, 0) + 1
+        if text.endswith(": b") and attempts[text] == 1:
+            return httpx.Response(429, json={"error": {"message": "slow down"}})
+        return None
+
+    limiter = MagicMock(spec=EmbeddingRateLimiter)
+    limiter.acquire_async = AsyncMock()
+    gateway = _FakeGateway(respond=limit_first_try_of_b)
+    async with _bifrost(gateway, "https://bifrost.example") as embedding:
+        embedding.policy = EmbeddingRequestPolicy(
+            retry_backoff=embedding.policy.retry_backoff,
+            retry_tries=3,
+            rate_limiter=limiter,
+        )
+        await embedding.embed(
+            texts=["a", "b", "c"],
+            text_type=EmbedTextType.PASSAGE,
+            model_name="gemini/gemini-embedding-2",
+        )
+
+    assert len(gateway.requests) == 4
+    assert limiter.acquire_async.await_count == 4

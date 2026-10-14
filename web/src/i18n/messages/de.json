@@ -5698,26 +5698,27 @@
           "title": "Die Aktualisierung des Konnektorzugriffs konnte nicht geladen werden"
         }
       },
-      "embeddingRetry": {
-        "title": "Embedding-Wiederholungen",
-        "description": "Wenn ein Embedding-Aufruf während der Indexierung fehlschlägt, wartet Onyx und versucht es erneut. Jede Wartezeit ist doppelt so lang wie die vorherige, bis zum Maximum. Änderungen gelten ab dem nächsten Indexierungs-Batch.",
-        "scale": {
-          "title": "Wartezeit vor der ersten Wiederholung",
-          "description": "Die Wartezeit vor der ersten Wiederholung."
+      "embeddingRateLimit": {
+        "title": "Embedding-Ratenlimit",
+        "description": "Begrenzt, wie viele Embedding-Anfragen die Indexierung in einem Zeitfenster sendet, über alle Indexierungs-Worker hinweg. Beim Erreichen des Limits wartet die Indexierung und versucht es mit jedes Mal längeren Wartezeiten erneut, sodass Worker weniger neue Arbeit annehmen. Suchanfragen sind nicht begrenzt.",
+        "requests": {
+          "title": "Anfragen pro Zeitfenster",
+          "description": "Leer lassen für kein Limit.",
+          "placeholder": "Kein Limit"
         },
-        "max": {
-          "title": "Maximale Wartezeit",
-          "description": "Keine Wartezeit ist länger als dieser Wert."
+        "period": {
+          "title": "Länge des Zeitfensters",
+          "description": "Zum Beispiel 60 für ein Limit pro Minute.",
+          "suffix": "(Sekunden)"
         },
-        "suffix": "(Sekunden)",
         "restoreDefault": "Standard wiederherstellen",
         "validation": {
-          "range": "Geben Sie eine Zahl größer als 0 und höchstens {max} ein.",
-          "maxBelowScale": "Die maximale Wartezeit darf nicht kürzer als die erste Wartezeit sein."
+          "requests": "Geben Sie eine ganze Zahl von 1 bis {max, number} ein, oder lassen Sie das Feld für kein Limit leer.",
+          "period": "Geben Sie eine ganze Zahl von Sekunden von 1 bis {max, number} ein."
         },
         "toasts": {
-          "saved": "Wiederholungseinstellungen gespeichert.",
-          "failed": "Die Wiederholungseinstellungen konnten nicht gespeichert werden."
+          "saved": "Limit gespeichert.",
+          "failed": "Das Limit konnte nicht gespeichert werden."
         }
       }
     },

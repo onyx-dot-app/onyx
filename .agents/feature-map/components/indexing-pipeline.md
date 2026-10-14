@@ -337,10 +337,14 @@ enrichment (`_partition_documents_blocked_by_llm_spend_limit`).
 `MAX_CHUNKS_PER_DOC_BATCH` (1000) and each sub-batch is embedded in one call to
 `EmbeddingModel.encode` (`natural_language_processing/search_nlp_models.py`), which
 reaches the model server over HTTP at `INDEXING_MODEL_SERVER_HOST`/`_PORT`, or the
-cloud provider directly. Failed passage calls retry with exponential backoff. The
-admin sets the first wait and the maximum wait on the Index Settings page
-(`embedding_retry_backoff_*_seconds` in workspace `Settings`). `encode` reads them
-once per call, so a change applies to the next batch. Titles
+cloud provider directly. Failed passage calls retry with exponential backoff.
+The admin can set a global rate limit on passage requests on the Index Settings
+page (`embedding_rate_limit_*` in workspace `Settings`). Every outgoing request,
+retries included, takes a slot in a per-tenant sliding window in Redis
+(`embedding_rate_limit.py`). When the window is full the worker thread blocks
+with exponential backoff (up to 30 minutes) instead of failing, so it takes no
+new Celery task. `encode` reads the limit once per call, so a change applies to
+the next batch. Query embeddings are never limited. Titles
 get no separate embedding: the title reaches the vector only through the chunk's
 `title_prefix`.
 Each successfully embedded sub-batch is immediately pickled to disk via

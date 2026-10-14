@@ -1951,11 +1951,12 @@ MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 
-# Exponential backoff between retries of indexing embedding calls (model server
-# and cloud providers): waits of scale, 2*scale, 4*scale, ... seconds, capped at max.
-DEFAULT_EMBEDDING_RETRY_BACKOFF_SCALE_SECONDS = 5.0
-DEFAULT_EMBEDDING_RETRY_BACKOFF_MAX_SECONDS = 60.0
-MAX_EMBEDDING_RETRY_BACKOFF_SECONDS = 600.0
+# Global limit on indexing embedding requests (see embedding_rate_limit.py).
+# The window is stored in Redis, one entry per request, so the request count
+# is capped. Gemini Embedding 2 on Vertex allows 60,000 requests per minute.
+DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 60
+MAX_EMBEDDING_RATE_LIMIT_REQUESTS = 100_000
+MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 24 * 60 * 60
 
 # Number of pre-provisioned tenants to maintain
 TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))

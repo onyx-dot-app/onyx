@@ -5698,26 +5698,27 @@
           "title": "Impossible de charger la mise à jour de l’accès par connecteur"
         }
       },
-      "embeddingRetry": {
-        "title": "Nouvelles tentatives d'embedding",
-        "description": "Lorsqu'un appel d'embedding échoue pendant l'indexation, Onyx attend puis réessaie. Chaque attente est le double de la précédente, jusqu'au maximum. Les modifications s'appliquent au prochain lot d'indexation.",
-        "scale": {
-          "title": "Attente avant la première tentative",
-          "description": "L'attente avant la première nouvelle tentative."
+      "embeddingRateLimit": {
+        "title": "Limite de requêtes d'embedding",
+        "description": "Limite le nombre de requêtes d'embedding envoyées par l'indexation dans une fenêtre de temps, pour tous les workers d'indexation. À la limite, l'indexation attend puis réessaie avec des attentes de plus en plus longues, et les workers prennent moins de nouveau travail. Les requêtes de recherche ne sont pas limitées.",
+        "requests": {
+          "title": "Requêtes par fenêtre",
+          "description": "Laissez vide pour ne pas fixer de limite.",
+          "placeholder": "Aucune limite"
         },
-        "max": {
-          "title": "Attente maximale entre tentatives",
-          "description": "Aucune attente ne dépasse cette valeur."
+        "period": {
+          "title": "Durée de la fenêtre",
+          "description": "Par exemple, 60 pour une limite par minute.",
+          "suffix": "(secondes)"
         },
-        "suffix": "(secondes)",
         "restoreDefault": "Restaurer la valeur par défaut",
         "validation": {
-          "range": "Saisissez un nombre supérieur à 0 et inférieur ou égal à {max}.",
-          "maxBelowScale": "L'attente maximale ne peut pas être inférieure à la première attente."
+          "requests": "Saisissez un nombre entier de 1 à {max, number}, ou laissez le champ vide pour ne pas fixer de limite.",
+          "period": "Saisissez un nombre entier de secondes de 1 à {max, number}."
         },
         "toasts": {
-          "saved": "Paramètres de nouvelle tentative enregistrés.",
-          "failed": "Impossible d'enregistrer les paramètres de nouvelle tentative."
+          "saved": "Limite enregistrée.",
+          "failed": "Impossible d'enregistrer la limite."
         }
       }
     },

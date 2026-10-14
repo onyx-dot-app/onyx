@@ -5698,26 +5698,27 @@
           "title": "无法加载连接器访问更新"
         }
       },
-      "embeddingRetry": {
-        "title": "嵌入重试",
-        "description": "索引期间嵌入调用失败时，Onyx 会等待后重试。每次等待时间是上一次的两倍，直到达到最大值。更改将从下一个索引批次开始生效。",
-        "scale": {
-          "title": "首次重试等待时间",
-          "description": "第一次重试前的等待时间。"
+      "embeddingRateLimit": {
+        "title": "嵌入请求速率限制",
+        "description": "限制索引在一个时间窗口内发送的嵌入请求数量，覆盖所有索引工作进程。达到限制时，索引会等待后重试，且每次等待时间更长，因此工作进程会少接新任务。搜索查询不受限制。",
+        "requests": {
+          "title": "每个窗口的请求数",
+          "description": "留空表示不限制。",
+          "placeholder": "不限制"
         },
-        "max": {
-          "title": "最大重试等待时间",
-          "description": "等待时间不会超过此值。"
+        "period": {
+          "title": "窗口长度",
+          "description": "例如，每分钟限制填 60。",
+          "suffix": "（秒）"
         },
-        "suffix": "（秒）",
         "restoreDefault": "恢复默认值",
         "validation": {
-          "range": "请输入大于 0 且不超过 {max} 的数字。",
-          "maxBelowScale": "最大等待时间不能小于首次等待时间。"
+          "requests": "请输入 1 到 {max, number} 之间的整数，或留空表示不限制。",
+          "period": "请输入 1 到 {max, number} 之间的整数秒数。"
         },
         "toasts": {
-          "saved": "重试设置已保存。",
-          "failed": "无法保存重试设置。"
+          "saved": "速率限制已保存。",
+          "failed": "无法保存速率限制。"
         }
       }
     },
