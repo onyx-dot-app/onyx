@@ -2372,6 +2372,15 @@
           "ariaLabel": "시간별 인덱싱된 문서",
           "tooltip": "{count, plural, one {문서 #개} other {문서 #개}}",
           "loadError": "차트를 불러올 수 없습니다."
+        },
+        "hold": {
+          "checks_running": "인덱싱 전 검사 실행 중",
+          "checks_failed_to_run": "보류됨: 검사를 실행하지 못함",
+          "required_checks_failed": "보류됨: 필수 검사 실패",
+          "start": "인덱싱 시작",
+          "released": "인덱싱이 시작됨",
+          "releaseFailed": "인덱싱을 시작할 수 없음",
+          "viewChecks": "커넥터 검사 보기"
         }
       },
       "toasts": {
@@ -2388,7 +2397,9 @@
         "refreshFrequencyUpdateFailed": "커넥터 새로 고침 주기를 업데이트하지 못했습니다",
         "refreshFrequencyUpdated": "커넥터 새로 고침 주기를 업데이트했습니다",
         "targetedReindexFailed": "대상 지정 재인덱싱에 실패했습니다: {message}",
-        "targetedReindexSubmitted": "{count, plural, one {문서 #개} other {문서 #개}}에 대해 대상 지정 재인덱싱을 요청했습니다. 문서의 재인덱싱이 끝나면 목록에서 오류가 사라집니다."
+        "targetedReindexSubmitted": "{count, plural, one {문서 #개} other {문서 #개}}에 대해 대상 지정 재인덱싱을 요청했습니다. 문서의 재인덱싱이 끝나면 목록에서 오류가 사라집니다.",
+        "checkFrequencyUpdated": "커넥터 검사 주기가 업데이트되었습니다",
+        "checkFrequencyUpdateFailed": "커넥터 검사 주기를 업데이트하지 못했습니다"
       },
       "backButton": {
         "label": "모든 커넥터"
@@ -2422,14 +2433,32 @@
             "channel": "{count, plural, other {채널}}",
             "mailbox": "{count, plural, other {메일함}}"
           },
-          "docs": "{count, plural, other {문서 #개}}",
+          "counts": {
+            "folder": "{count, plural, other {# 폴더}}",
+            "source": "{count, plural, other {# 소스}}",
+            "stub": "{count, plural, other {# 노드}}",
+            "shared_drive": "{count, plural, other {# 공유 드라이브}}",
+            "my_drive": "{count, plural, other {# 내 드라이브}}",
+            "space": "{count, plural, other {# 스페이스}}",
+            "page": "{count, plural, other {# 페이지}}",
+            "project": "{count, plural, other {# 프로젝트}}",
+            "database": "{count, plural, other {# 데이터베이스}}",
+            "workspace": "{count, plural, other {# 워크스페이스}}",
+            "site": "{count, plural, other {# 사이트}}",
+            "drive": "{count, plural, other {# 문서 라이브러리}}",
+            "channel": "{count, plural, other {# 채널}}",
+            "mailbox": "{count, plural, other {# 메일함}}"
+          },
           "notIndexed": "인덱싱되지 않음",
           "other": "기타 문서",
           "loadError": "문서 분류를 불러올 수 없습니다.",
           "open": "소스에서 열기",
           "empty": "아직 인덱싱된 문서가 없습니다.",
-          "unavailable": "첫 번째 실행이 성공한 후에 사용할 수 있습니다."
-        }
+          "unavailable": "첫 번째 실행이 성공한 후에 사용할 수 있습니다.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, other {개 문서}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "공유 설정",
@@ -2454,7 +2483,8 @@
       },
       "schedule": {
         "refresh": "**{every}**마다 새로 고침",
-        "prune": "**{every}**마다 정리"
+        "prune": "**{every}**마다 정리",
+        "checks": "**{every}**마다 검사 실행"
       },
       "runs": {
         "kinds": {
@@ -2462,7 +2492,9 @@
           "all": "모든 유형",
           "indexing": "문서 인덱스",
           "doc_permission_sync": "권한 동기화",
-          "group_sync": "그룹 멤버십 동기화"
+          "group_sync": "그룹 멤버십 동기화",
+          "pruning": "문서 정리",
+          "checks": "커넥터 검사"
         },
         "detail": {
           "queued": "대기 중",
@@ -2473,15 +2505,19 @@
         "actions": {
           "stages": "단계별 지표 보기",
           "cancel": "취소",
-          "logs": "로그 보기"
+          "logs": "로그 보기",
+          "checks": "검사 결과 보기"
         },
         "warnings": {
-          "tooltip": "{count, plural, other {문서 #개 실패}}"
+          "tooltip": "{count, plural, other {문서 #개 실패}}",
+          "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}"
         },
         "figures": {
           "indexed": "인덱싱됨",
           "synced": "동기화됨",
-          "memberships": "멤버십"
+          "memberships": "멤버십",
+          "removed": "개 제거됨",
+          "checks": "개 검사 실행됨"
         },
         "counts": {
           "newDocs": "{count, plural, other {새 문서 #개}}",
@@ -2491,10 +2527,13 @@
           "groups": "{count, plural, other {그룹 #개}}",
           "running": "{count, plural, other {실행 #개 진행 중}}",
           "succeeded": "{count, plural, other {실행 #개 성공}}",
-          "failed": "{count, plural, other {실행 #개 실패}}"
+          "failed": "{count, plural, other {실행 #개 실패}}",
+          "passedChecks": "{count, plural, one {검사 #개 통과} other {검사 #개 통과}}",
+          "failedChecks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}",
+          "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
         },
         "search": {
-          "placeholder": "실행 오류 검색..."
+          "placeholder": "인덱싱 실행 검색..."
         },
         "window": {
           "label": "기간",
@@ -2524,11 +2563,18 @@
         "errorModal": {
           "indexing": "인덱스 실행 오류",
           "doc_permission_sync": "문서 권한 동기화 오류",
-          "group_sync": "그룹 멤버십 동기화 오류"
+          "group_sync": "그룹 멤버십 동기화 오류",
+          "pruning": "문서 정리 오류",
+          "checks": "커넥터 검사 오류"
         },
         "toasts": {
           "canceled": "실행을 취소하는 중입니다.",
           "cancelFailed": "실행을 취소하지 못했습니다. 다시 시도하세요."
+        },
+        "checkResults": {
+          "title": "커넥터 검사",
+          "close": "닫기",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2574,19 +2620,38 @@
             "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨",
             "errors": "오류와 함께 그룹 멤버십 동기화됨",
             "resolved": "그룹 멤버십 동기화 오류 해결됨"
+          },
+          "pruning": {
+            "failed": "정리 실패",
+            "running": "오류와 함께 정리 진행 중",
+            "stopped": "오류와 함께 정리 중지됨",
+            "errors": "오류와 함께 정리 완료됨",
+            "resolved": "정리 오류 해결됨"
+          },
+          "checks": {
+            "failed": "커넥터 검사 실패",
+            "running": "오류와 함께 커넥터 검사 진행 중",
+            "stopped": "오류와 함께 커넥터 검사 중지됨",
+            "errors": "오류와 함께 커넥터 검사 완료됨",
+            "resolved": "커넥터 검사 오류 해결됨"
           }
         },
         "description": {
           "indexing": "{count, plural, other {문서 #개 인덱싱됨}}. 실행 시간 {minutes, plural, other {#분}}.",
           "doc_permission_sync": "{count, plural, other {문서 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
-          "group_sync": "{count, plural, other {멤버십 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}."
+          "group_sync": "{count, plural, other {멤버십 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
+          "pruning": "{count, plural, one {문서 #개 제거됨} other {문서 #개 제거됨}}. 정리 실행 시간 {minutes, plural, one {#분} other {#분}}.",
+          "checks": "{count, plural, one {검사 #개 실행됨} other {검사 #개 실행됨}}. 검사 실행 시간 {minutes, plural, one {#분} other {#분}}.",
+          "checksFailed": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}."
         },
         "tags": {
           "stackTrace": "스택 트레이스",
           "indexing": "{count, plural, other {문서 #개 실패}}",
           "doc_permission_sync": "{count, plural, other {문서 #개 동기화 실패}}",
           "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
-          "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}"
+          "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}",
+          "pruning": "{count, plural, one {문서 #개 실패} other {문서 #개 실패}}",
+          "checks": "{count, plural, one {검사 #개 실패} other {검사 #개 실패}}"
         },
         "more": "더 보기",
         "empty": {
@@ -2623,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "단계 세부 정보",
-        "calls": "호출 수",
+        "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
         "uneven": {
@@ -3100,6 +3165,10 @@
         "units": {
           "hours": "시간",
           "minutes": "분"
+        },
+        "checkFrequency": {
+          "title": "검사 실행 주기",
+          "description": "연결의 기능과 상태를 확인합니다."
         }
       },
       "settings": {
@@ -7978,7 +8047,12 @@
         "paused": "일시 중지됨",
         "scheduled": "예약됨",
         "synced": "동기화됨",
-        "syncing": "동기화 중"
+        "syncing": "동기화 중",
+        "pruning": "정리 중",
+        "pruned": "정리됨",
+        "checking": "검사 중",
+        "passed": "통과",
+        "failedToRun": "실행 실패"
       }
     },
     "systemInfo": {

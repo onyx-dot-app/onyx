@@ -8,13 +8,17 @@ import {
   SvgAlertTriangle,
   SvgCheckAll,
   SvgCheckCircle,
-  SvgFileText,
+  SvgFiles,
   SvgTextLines,
+  SvgUser,
+  SvgUsers,
   SvgXCircle,
+  SvgXOctagon,
 } from "@opal/icons";
 import type { CardColor, IconFunctionComponent } from "@opal/types";
-import type { CCPairRun } from "@/lib/connectors/types";
+import type { CCPairRun, CCPairRunKind } from "@/lib/connectors/types";
 import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
+import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import {
@@ -24,6 +28,7 @@ import {
   runErrorMessage,
   runMinutes,
   runMoved,
+  runTrace,
   runWarnings,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
@@ -47,6 +52,15 @@ const GROUP_STYLE: Record<
     stroke: "stroke-status-success-05",
   },
 };
+
+/** What each kind's failed items are: documents, users, groups or checks. */
+const WARNING_ICONS = {
+  indexing: SvgFiles,
+  doc_permission_sync: SvgUser,
+  group_sync: SvgUsers,
+  pruning: SvgFiles,
+  checks: SvgXOctagon,
+} satisfies Record<CCPairRunKind, IconFunctionComponent>;
 
 /** The title's state key: how the run stands in its group. */
 function cardState(
@@ -97,17 +111,21 @@ export default function ActivityCard({
   const KindIcon = RUN_KIND_ICONS[run.kind];
   const minutes = runMinutes(run);
   const warnings = runWarnings(run);
-  const trace = run.attempt.full_exception_trace;
+  const trace = runTrace(run);
   // The list holds open document errors, so only an index attempt with some lists its documents.
   const openDocs =
     run.kind === "indexing" ? run.attempt.open_doc_error_count : 0;
   const listsDocs = openDocs > 0;
   const resolvable = canResolve && listsDocs;
+  // A failed check run lists what failed instead of a stack trace.
+  const listsChecks = run.kind === "checks" && warnings > 0;
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
   if (group === "failures") {
-    description = runErrorMessage(run);
+    description =
+      runErrorMessage(run) ??
+      (listsChecks ? t("description.checksFailed", { count: warnings }) : null);
   } else if (minutes !== null) {
     description = t(`description.${run.kind}`, {
       count: runMoved(run),
@@ -180,7 +198,7 @@ export default function ActivityCard({
             </Section>
           </Section>
         </Section>
-        {(trace !== null || warnings > 0) && (
+        {(trace !== null || warnings > 0 || listsChecks) && (
           <Section
             flexDirection="row"
             justifyContent="between"
@@ -214,7 +232,7 @@ export default function ActivityCard({
               {listsDocs ? (
                 <Popover>
                   <Popover.Trigger asChild>
-                    <Button icon={SvgFileText} prominence="tertiary" size="xs">
+                    <Button icon={SvgFiles} prominence="tertiary" size="xs">
                       {docsLabel}
                     </Button>
                   </Popover.Trigger>
@@ -226,9 +244,26 @@ export default function ActivityCard({
                     resolving={resolving}
                   />
                 </Popover>
+              ) : run.kind === "checks" && listsChecks ? (
+                <Popover>
+                  <Popover.Trigger asChild>
+                    <Button
+                      icon={WARNING_ICONS.checks}
+                      prominence="tertiary"
+                      size="xs"
+                    >
+                      {docsLabel}
+                    </Button>
+                  </Popover.Trigger>
+                  <CheckRunPopoverContent run={run.attempt} beside />
+                </Popover>
               ) : (
                 warnings > 0 && (
-                  <Tag icon={SvgFileText} title={docsLabel} color="gray" />
+                  <Tag
+                    icon={WARNING_ICONS[run.kind]}
+                    title={docsLabel}
+                    color="gray"
+                  />
                 )
               )}
             </Section>

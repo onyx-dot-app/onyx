@@ -2372,6 +2372,15 @@
           "ariaLabel": "Documents indexed over time",
           "tooltip": "{count, plural, one {# document} other {# documents}}",
           "loadError": "The chart could not load."
+        },
+        "hold": {
+          "checks_running": "Running pre-index checks",
+          "checks_failed_to_run": "Held: the checks failed to run",
+          "required_checks_failed": "Held: required checks failed",
+          "start": "Start Indexing",
+          "released": "Indexing started",
+          "releaseFailed": "Couldn't start indexing",
+          "viewChecks": "View connector checks"
         }
       },
       "toasts": {
@@ -2388,7 +2397,9 @@
         "refreshFrequencyUpdateFailed": "Failed to update connector refresh frequency",
         "refreshFrequencyUpdated": "Connector refresh frequency updated successfully",
         "targetedReindexFailed": "Targeted reindex failed: {message}",
-        "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing."
+        "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing.",
+        "checkFrequencyUpdated": "Connector check frequency updated successfully",
+        "checkFrequencyUpdateFailed": "Failed to update connector check frequency"
       },
       "backButton": {
         "label": "All Connectors"
@@ -2422,14 +2433,32 @@
             "channel": "{count, plural, one {Channel} other {Channels}}",
             "mailbox": "{count, plural, one {Mailbox} other {Mailboxes}}"
           },
-          "docs": "{count, plural, one {# doc} other {# docs}}",
+          "counts": {
+            "folder": "{count, plural, one {# folder} other {# folders}}",
+            "source": "{count, plural, one {# source} other {# sources}}",
+            "stub": "{count, plural, one {# node} other {# nodes}}",
+            "shared_drive": "{count, plural, one {# shared drive} other {# shared drives}}",
+            "my_drive": "{count, plural, one {# My Drive} other {# My Drives}}",
+            "space": "{count, plural, one {# space} other {# spaces}}",
+            "page": "{count, plural, one {# page} other {# pages}}",
+            "project": "{count, plural, one {# project} other {# projects}}",
+            "database": "{count, plural, one {# database} other {# databases}}",
+            "workspace": "{count, plural, one {# workspace} other {# workspaces}}",
+            "site": "{count, plural, one {# site} other {# sites}}",
+            "drive": "{count, plural, one {# document library} other {# document libraries}}",
+            "channel": "{count, plural, one {# channel} other {# channels}}",
+            "mailbox": "{count, plural, one {# mailbox} other {# mailboxes}}"
+          },
           "notIndexed": "Not indexed",
           "other": "Other documents",
           "loadError": "Couldn't load the document breakdown.",
           "open": "Open in the source",
           "empty": "No documents indexed yet.",
-          "unavailable": "Available after the first successful run."
-        }
+          "unavailable": "Available after the first successful run.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {doc} other {docs}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "Sharing Settings",
@@ -2454,7 +2483,8 @@
       },
       "schedule": {
         "refresh": "Refresh every **{every}**",
-        "prune": "Prune every **{every}**"
+        "prune": "Prune every **{every}**",
+        "checks": "Run checks every **{every}**"
       },
       "runs": {
         "kinds": {
@@ -2462,7 +2492,9 @@
           "all": "All Types",
           "indexing": "Document Index",
           "doc_permission_sync": "Permissions Sync",
-          "group_sync": "Group Membership Sync"
+          "group_sync": "Group Membership Sync",
+          "pruning": "Document Pruning",
+          "checks": "Connector Checks"
         },
         "detail": {
           "queued": "Queued",
@@ -2473,15 +2505,19 @@
         "actions": {
           "stages": "View Stage Metrics",
           "cancel": "Cancel",
-          "logs": "View Logs"
+          "logs": "View Logs",
+          "checks": "View Check Results"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# document failed} other {# documents failed}}"
+          "tooltip": "{count, plural, one {# document failed} other {# documents failed}}",
+          "checks": "{count, plural, one {# check failed} other {# checks failed}}"
         },
         "figures": {
           "indexed": "indexed",
           "synced": "synced",
-          "memberships": "memberships"
+          "memberships": "memberships",
+          "removed": "removed",
+          "checks": "checks run"
         },
         "counts": {
           "newDocs": "{count, plural, one {# new document} other {# new documents}}",
@@ -2491,10 +2527,13 @@
           "groups": "{count, plural, one {# group} other {# groups}}",
           "running": "{count, plural, one {# run in progress} other {# runs in progress}}",
           "succeeded": "{count, plural, one {# run succeeded} other {# runs succeeded}}",
-          "failed": "{count, plural, one {# run failed} other {# runs failed}}"
+          "failed": "{count, plural, one {# run failed} other {# runs failed}}",
+          "passedChecks": "{count, plural, one {# check passed} other {# checks passed}}",
+          "failedChecks": "{count, plural, one {# check failed} other {# checks failed}}",
+          "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}"
         },
         "search": {
-          "placeholder": "Search run errors..."
+          "placeholder": "Search indexing runs..."
         },
         "window": {
           "label": "Time range",
@@ -2524,11 +2563,18 @@
         "errorModal": {
           "indexing": "Index Run Error",
           "doc_permission_sync": "Document Permission Sync Error",
-          "group_sync": "Group Membership Sync Error"
+          "group_sync": "Group Membership Sync Error",
+          "pruning": "Document Pruning Error",
+          "checks": "Connector Checks Error"
         },
         "toasts": {
           "canceled": "The run is being canceled.",
           "cancelFailed": "Couldn't cancel the run. Try again."
+        },
+        "checkResults": {
+          "title": "Connector Checks",
+          "close": "Close",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2574,19 +2620,38 @@
             "stopped": "Group membership sync stopped with errors",
             "errors": "Group membership synced with errors",
             "resolved": "Group membership sync errors resolved"
+          },
+          "pruning": {
+            "failed": "Pruning failed",
+            "running": "Pruning in progress with errors",
+            "stopped": "Pruning stopped with errors",
+            "errors": "Pruning completed with errors",
+            "resolved": "Pruning errors resolved"
+          },
+          "checks": {
+            "failed": "Connector checks failed",
+            "running": "Connector checks running with errors",
+            "stopped": "Connector checks stopped with errors",
+            "errors": "Connector checks completed with errors",
+            "resolved": "Connector check errors resolved"
           }
         },
         "description": {
           "indexing": "{count, plural, one {# doc indexed} other {# docs indexed}}. Index run time {minutes, plural, one {# minute} other {# minutes}}.",
           "doc_permission_sync": "{count, plural, one {# doc synced} other {# docs synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
-          "group_sync": "{count, plural, one {# membership synced} other {# memberships synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}."
+          "group_sync": "{count, plural, one {# membership synced} other {# memberships synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "pruning": "{count, plural, one {# doc removed} other {# docs removed}}. Pruning run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "checks": "{count, plural, one {# check run} other {# checks run}}. Check run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "checksFailed": "{count, plural, one {# check failed} other {# checks failed}}."
         },
         "tags": {
           "stackTrace": "Stack Trace",
           "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
           "doc_permission_sync": "{count, plural, one {# doc failed to sync} other {# docs failed to sync}}",
           "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
-          "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}"
+          "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}",
+          "pruning": "{count, plural, one {# doc failed} other {# docs failed}}",
+          "checks": "{count, plural, one {# check failed} other {# checks failed}}"
         },
         "more": "Show more",
         "empty": {
@@ -2623,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "Stage Details",
-        "calls": "Calls",
+        "calls": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",
         "uneven": {
@@ -3100,6 +3165,10 @@
         "units": {
           "hours": "hours",
           "minutes": "minutes"
+        },
+        "checkFrequency": {
+          "title": "Run Checks Every",
+          "description": "Check connection for capabilities and health."
         }
       },
       "settings": {
@@ -7978,7 +8047,12 @@
         "paused": "Paused",
         "scheduled": "Scheduled",
         "synced": "Synced",
-        "syncing": "Syncing"
+        "syncing": "Syncing",
+        "pruning": "Pruning",
+        "pruned": "Pruned",
+        "checking": "Checking",
+        "passed": "Passed",
+        "failedToRun": "Failed to run"
       }
     },
     "systemInfo": {

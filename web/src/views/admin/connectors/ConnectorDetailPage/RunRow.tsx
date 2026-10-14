@@ -5,28 +5,49 @@ import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
-  SvgFileText,
-  SvgMinusCircle,
-  SvgPlusCircle,
-  SvgRefreshCw,
-  SvgTextLines,
-  SvgUserCheck,
+  SvgCheckCircle,
+  SvgFileMinus,
+  SvgFilePlus,
+  SvgFileRefresh,
+  SvgFiles,
+  SvgListCheck,
+  SvgScissors,
+  SvgUser,
+  SvgUserShield,
   SvgUsers,
   SvgXCircle,
+  SvgXOctagon,
 } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import type { CCPairRun, CCPairRunKind } from "@/lib/connectors/types";
+import type {
+  CCPairRun,
+  CCPairRunKind,
+  CheckRunSnapshot,
+} from "@/lib/connectors/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import { attemptStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import CheckRunPopoverContent, {
+  CheckRunTrigger,
+} from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
 
 export const RUN_KIND_ICONS = {
-  indexing: SvgFileText,
-  doc_permission_sync: SvgUserCheck,
+  indexing: SvgFiles,
+  doc_permission_sync: SvgUserShield,
   group_sync: SvgUsers,
+  pruning: SvgScissors,
+  checks: SvgListCheck,
 } satisfies Record<CCPairRunKind, IconFunctionComponent>;
+
+/** How many of a check run's checks ended in `status`. */
+export function checkCount(
+  run: CheckRunSnapshot,
+  status: CheckRunSnapshot["check_results"][number]["status"]
+): number {
+  return run.check_results.filter((result) => result.status === status).length;
+}
 
 /** How run times print: a full date and time, as `useFormatter().dateTime` takes it. */
 export const RUN_TIME_FORMAT = {
@@ -45,12 +66,25 @@ export function runErrorMessage(run: CCPairRun): string | null {
     : run.attempt.error_message;
 }
 
-/** A run's error text: its trace, else its error message, or `null` when it has neither. */
-export function runErrorText(run: CCPairRun): string | null {
-  return run.attempt.full_exception_trace ?? runErrorMessage(run);
+/** The run's stack trace. Prunes and check runs keep none. */
+export function runTrace(run: CCPairRun): string | null {
+  switch (run.kind) {
+    case "indexing":
+    case "doc_permission_sync":
+    case "group_sync":
+      return run.attempt.full_exception_trace;
+    case "pruning":
+    case "checks":
+      return null;
+  }
 }
 
-/** The documents a run could not handle: indexing errors, or docs a sync could not read. */
+/** A run's error text: its trace, else its error message, or `null` when it has neither. */
+export function runErrorText(run: CCPairRun): string | null {
+  return runTrace(run) ?? runErrorMessage(run);
+}
+
+/** What a run could not handle: indexing errors, docs a sync could not read, or checks that failed. */
 export function runWarnings(run: CCPairRun): number {
   switch (run.kind) {
     case "indexing":
@@ -58,11 +92,14 @@ export function runWarnings(run: CCPairRun): number {
     case "doc_permission_sync":
       return run.attempt.docs_with_permission_errors;
     case "group_sync":
+    case "pruning":
       return 0;
+    case "checks":
+      return checkCount(run.attempt, "failed");
   }
 }
 
-/** What the run moved: documents for indexing and doc syncs, memberships for group syncs. */
+/** What the run moved: documents indexed, synced or removed, memberships, or checks run. */
 export function runMoved(run: CCPairRun): number {
   switch (run.kind) {
     case "indexing":
@@ -71,13 +108,27 @@ export function runMoved(run: CCPairRun): number {
       return run.attempt.total_docs_synced;
     case "group_sync":
       return run.attempt.total_group_memberships_synced;
+    case "pruning":
+      return run.attempt.docs_removed;
+    case "checks":
+      return run.attempt.check_results.length;
   }
 }
 
 export function isActive(run: CCPairRun): boolean {
-  return (
-    run.attempt.status === "in_progress" || run.attempt.status === "not_started"
-  );
+  switch (run.kind) {
+    case "indexing":
+    case "doc_permission_sync":
+    case "group_sync":
+      return (
+        run.attempt.status === "in_progress" ||
+        run.attempt.status === "not_started"
+      );
+    case "pruning":
+      return run.attempt.status === "in_progress";
+    case "checks":
+      return run.attempt.status === "running";
+  }
 }
 
 /** When the run finished, or `null` while it has not. */
@@ -162,10 +213,52 @@ function CountsRow({ children }: CountsRowProps) {
 interface RunFiguresProps {
   run: CCPairRun;
 }
-/** What the run moved: documents for indexing and doc syncs, memberships for group syncs. */
+/** What the run moved, with its breakdown: new and updated documents, users and groups, or checks by outcome. */
 function RunFigures({ run }: RunFiguresProps) {
   const t = useTranslations("admin.connector.runs");
   switch (run.kind) {
+    case "pruning":
+      return (
+        <Figure value={run.attempt.docs_removed} label={t("figures.removed")} />
+      );
+    case "checks": {
+      const attempt = run.attempt;
+      const failed = checkCount(attempt, "failed");
+      const skipped = checkCount(attempt, "skipped");
+      return (
+        <>
+          <Figure
+            value={attempt.check_results.length}
+            label={t("figures.checks")}
+          />
+          {attempt.check_results.length > 0 && (
+            <CountsRow>
+              <Count
+                icon={SvgCheckCircle}
+                value={checkCount(attempt, "passed")}
+                tooltip={t("counts.passedChecks", {
+                  count: checkCount(attempt, "passed"),
+                })}
+              />
+              {failed > 0 && (
+                <Count
+                  icon={SvgXOctagon}
+                  value={failed}
+                  tooltip={t("counts.failedChecks", { count: failed })}
+                />
+              )}
+              {skipped > 0 && (
+                <Count
+                  icon={SvgXCircle}
+                  value={skipped}
+                  tooltip={t("counts.skippedChecks", { count: skipped })}
+                />
+              )}
+            </CountsRow>
+          )}
+        </>
+      );
+    }
     case "indexing": {
       const attempt = run.attempt;
       return (
@@ -176,14 +269,14 @@ function RunFigures({ run }: RunFiguresProps) {
           />
           <CountsRow>
             <Count
-              icon={SvgPlusCircle}
+              icon={SvgFilePlus}
               value={attempt.new_docs_indexed}
               tooltip={t("counts.newDocs", {
                 count: attempt.new_docs_indexed,
               })}
             />
             <Count
-              icon={SvgRefreshCw}
+              icon={SvgFileRefresh}
               value={Math.max(
                 0,
                 attempt.total_docs_indexed - attempt.new_docs_indexed
@@ -192,7 +285,7 @@ function RunFigures({ run }: RunFiguresProps) {
             />
             {attempt.docs_removed_from_index > 0 && (
               <Count
-                icon={SvgMinusCircle}
+                icon={SvgFileMinus}
                 value={attempt.docs_removed_from_index}
                 tooltip={t("counts.removedDocs", {
                   count: attempt.docs_removed_from_index,
@@ -220,7 +313,7 @@ function RunFigures({ run }: RunFiguresProps) {
           />
           <CountsRow>
             <Count
-              icon={SvgUserCheck}
+              icon={SvgUser}
               value={attempt.total_users_processed}
               tooltip={t("counts.users", {
                 count: attempt.total_users_processed,
@@ -258,7 +351,7 @@ export default function RunRow({
   const t = useTranslations("admin.connector.runs");
   const tBadges = useTranslations("admin.status.badges");
   const format = useFormatter();
-  const tag = attemptStatusTag(run.attempt.status, run.kind !== "indexing");
+  const tag = runStatusTag(run);
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
   const stamp = (value: string) =>
@@ -341,11 +434,18 @@ export default function RunRow({
                   color={tag.color}
                 />
                 {run.kind === "indexing" && <StageDetailsTrigger />}
+                {run.kind === "checks" &&
+                  run.attempt.check_results.length > 0 && <CheckRunTrigger />}
                 {warnings > 0 && (
                   <Tag
                     icon={SvgAlertTriangle}
                     title={format.number(warnings)}
-                    tooltip={t("warnings.tooltip", { count: warnings })}
+                    tooltip={t(
+                      run.kind === "checks"
+                        ? "warnings.checks"
+                        : "warnings.tooltip",
+                      { count: warnings }
+                    )}
                     color="amber"
                   />
                 )}
@@ -386,7 +486,7 @@ export default function RunRow({
               )}
               {hasLogs && (
                 <Button
-                  icon={SvgTextLines}
+                  icon={SvgAlertTriangle}
                   prominence="tertiary"
                   size="sm"
                   tooltip={t("actions.logs")}
@@ -400,6 +500,9 @@ export default function RunRow({
       </Popover.Anchor>
       {run.kind === "indexing" && (
         <StageDetailsPopoverContent indexAttemptId={run.attempt.id} />
+      )}
+      {run.kind === "checks" && run.attempt.check_results.length > 0 && (
+        <CheckRunPopoverContent run={run.attempt} />
       )}
     </Popover>
   );

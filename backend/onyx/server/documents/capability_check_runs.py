@@ -196,6 +196,7 @@ def start_capability_check_run(
             credential_id=credential_id,
             connector_id=connector_id,
             run_id=run_id,
+            error_message=str(e),
         )
         db_session.commit()
         raise CapabilityRunEnqueueError(str(e)) from e

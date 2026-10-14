@@ -16,7 +16,8 @@ import type {
 import type { ValidStatuses } from "@/lib/types";
 
 const POLL_MS = 30_000;
-const BARS_HEIGHT = 64;
+const BARS_HEIGHT = 48;
+const AXIS_HEIGHT = 16;
 
 // Labels sit on local hours divisible by this. At 24 they fall on midnight and show the date.
 const TICK_HOURS: Record<CCPairThroughputWindow, number> = {
@@ -25,8 +26,9 @@ const TICK_HOURS: Record<CCPairThroughputWindow, number> = {
   "7d": 24,
 };
 
-const RUN_MARK_CLASS: Record<ValidStatuses, string> = {
-  success: "bg-theme-blue-02",
+// The status strip's cell color for a slice a run of that status covered.
+const RUN_CELL_CLASS: Record<ValidStatuses, string> = {
+  success: "bg-action-selection-02",
   in_progress: "bg-theme-blue-05",
   not_started: "bg-theme-blue-05",
   completed_with_errors: "bg-status-warning-05",
@@ -53,6 +55,49 @@ function axisTicks(start: number, end: number, hours: number): number[] {
     }
   }
   return ticks;
+}
+
+interface Run {
+  start: number;
+  end: number;
+  status: ValidStatuses;
+}
+
+// A slice several runs covered shows the one that needs attention most.
+const STATUS_SEVERITY: Record<ValidStatuses, number> = {
+  failed: 5,
+  invalid: 5,
+  completed_with_errors: 4,
+  in_progress: 3,
+  not_started: 3,
+  success: 2,
+  canceled: 1,
+  interrupted: 1,
+};
+
+/** The status of the run that covered the slice, the most severe when several did. */
+function sliceStatus(
+  runs: Run[],
+  sliceStart: number,
+  sliceEnd: number
+): ValidStatuses | null {
+  let shown: Run | null = null;
+  for (const run of runs) {
+    // An instant run (one that failed at once) covers the slice it began in.
+    if (
+      run.start >= sliceEnd ||
+      Math.max(run.end, run.start + 1) <= sliceStart
+    ) {
+      continue;
+    }
+    if (
+      shown === null ||
+      STATUS_SEVERITY[run.status] > STATUS_SEVERITY[shown.status]
+    ) {
+      shown = run;
+    }
+  }
+  return shown?.status ?? null;
 }
 
 interface SliceTooltipProps {
@@ -90,7 +135,7 @@ export interface ThroughputChartProps {
   range: CCPairThroughputWindow;
 }
 
-/** Documents indexed in each slice of the window, with a mark per index run colored by its status. */
+/** Documents indexed in each slice of the window, over a strip that colors each slice by the run that covered it. */
 export default function ThroughputChart({
   ccPairId,
   range,
@@ -115,16 +160,23 @@ export default function ThroughputChart({
     docs,
   }));
   const tickHours = TICK_HOURS[range];
+  // A run still going covers up to the window's end.
+  const runs: Run[] = data.runs.map((run) => ({
+    start: Date.parse(run.started),
+    end: run.ended === null ? end : Date.parse(run.ended),
+    status: run.status,
+  }));
 
   return (
-    // The SVG never flips for right-to-left text, so the marks must not either.
+    // The SVG never flips for right-to-left text, so the strip must not either.
     <Section alignItems="stretch" gap={0.5} height="fit" dir="ltr">
+      {/* raw-ok: the chart is an SVG image, Section has no img role */}
       <div role="img" aria-label={t("ariaLabel")} className="w-full">
-        <ResponsiveContainer width="100%" height={BARS_HEIGHT}>
+        <ResponsiveContainer width="100%" height={BARS_HEIGHT + AXIS_HEIGHT}>
           <BarChart
             data={slices}
             margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
-            barCategoryGap={1}
+            barCategoryGap={1.5}
           >
             <XAxis
               dataKey="at"
@@ -144,10 +196,15 @@ export default function ThroughputChart({
                       hourCycle: "h23",
                     })
               }
-              tick={{ fontSize: 10, fill: "var(--text-03)" }}
-              axisLine={false}
-              tickLine={false}
-              height={16}
+              tick={{
+                fontSize: 10,
+                fontFamily: "var(--font-dm-mono)",
+                fill: "var(--text-03)",
+              }}
+              axisLine={{ stroke: "var(--border-01)" }}
+              tickLine={{ stroke: "var(--border-01)" }}
+              tickSize={2}
+              height={AXIS_HEIGHT}
             />
             <Tooltip
               cursor={{ fill: "var(--background-tint-02)" }}
@@ -162,20 +219,24 @@ export default function ThroughputChart({
           </BarChart>
         </ResponsiveContainer>
       </div>
-      {/* One mark per run, placed where it started. */}
-      <div className="relative h-2.5 w-full" aria-hidden>
-        {data.runs.map((run, index) => (
-          <div
-            key={`${run.started}-${index}`}
-            className={cn(
-              "absolute top-0 h-full w-px",
-              RUN_MARK_CLASS[run.status]
-            )}
-            style={{
-              left: `${((Date.parse(run.started) - start) / (end - start)) * 100}%`,
-            }}
-          />
-        ))}
+      {/* raw-ok: the cells need a 1.5px gap, below Section's smallest spacing step */}
+      <div className="flex h-2.5 w-full gap-[1.5px] px-[0.75px]" aria-hidden>
+        {slices.map((slice) => {
+          const status = sliceStatus(
+            runs,
+            slice.at - sliceMs / 2,
+            slice.at + sliceMs / 2
+          );
+          return (
+            <div
+              key={slice.at}
+              className={cn(
+                "h-full min-w-px flex-1 rounded-[2px]",
+                status === null ? undefined : RUN_CELL_CLASS[status]
+              )}
+            />
+          );
+        })}
       </div>
     </Section>
   );

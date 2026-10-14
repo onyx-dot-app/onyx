@@ -148,7 +148,9 @@ def create_connector(
         refresh_freq=connector_data.refresh_freq,
         indexing_start=connector_data.indexing_start,
         prune_freq=connector_data.prune_freq,
+        check_freq=connector_data.check_freq,
     )
+    connector.validate_check_freq()
     db_session.add(connector)
     db_session.commit()
 
@@ -181,9 +183,22 @@ def update_connector(
         if connector_data.prune_freq is not None
         else DEFAULT_PRUNING_FREQ
     )
+    # Omitted keeps the schedule (Terraform's upsert never sends it), an explicit null clears it.
+    if "check_freq" in connector_data.model_fields_set:
+        connector.check_freq = connector_data.check_freq
+        connector.validate_check_freq()
 
     db_session.commit()
     return connector
+
+
+def set_connector_check_frequency(
+    db_session: Session, connector: Connector, seconds: int | None
+) -> None:
+    """Schedules the connector's checks every ``seconds``, or None for on request only. Commits."""
+    connector.check_freq = seconds
+    connector.validate_check_freq()
+    db_session.commit()
 
 
 def delete_connector(

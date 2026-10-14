@@ -176,6 +176,9 @@ CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
 # code path once we have already decided the process needs to die.
 CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS = 10  # seconds
 
+# The indexing beat runs every 15 s, so a late kick of its check has no value.
+CHECK_FOR_INDEXING_EXPIRES_SECONDS = 60
+
 # soft timeout for the lock taken by the indexing connector run
 # allows the lock to eventually expire if the managing code around it dies
 # if we can get callbacks as object bytes download, we could lower this a lot.
@@ -717,9 +720,11 @@ class OnyxCeleryTask:
     RUN_CAPABILITY_CHECKS = "run_capability_checks"
     RUN_DRAFT_CAPABILITY_CHECKS = "run_draft_capability_checks"
     CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
+    CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS = "check_for_scheduled_capability_checks"
 
     # Draft credentials of connector forms that were never submitted
     CLEANUP_STALE_DRAFT_CREDENTIALS = "cleanup_stale_draft_credentials"
+    CLEANUP_OLD_CAPABILITY_CHECK_RUNS = "cleanup_old_capability_check_runs"
 
     # Files uploaded for a connector edit that no applied plan claimed
     CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP = "check_for_staged_connector_file_cleanup"

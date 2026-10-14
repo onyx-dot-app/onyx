@@ -40,6 +40,7 @@ function syncCCPairFixture() {
       connector_specific_config: {},
       refresh_freq: 600,
       prune_freq: null,
+      check_freq: null,
       indexing_start: null,
       access_type: "sync",
       credential_ids: [54321],
@@ -77,6 +78,8 @@ function syncCCPairFixture() {
     last_permission_sync_attempt_finished: null,
     last_permission_sync_attempt_error_message: null,
     pending_backfills: [],
+    has_named_checks: false,
+    indexing_hold: null,
   };
 }
 

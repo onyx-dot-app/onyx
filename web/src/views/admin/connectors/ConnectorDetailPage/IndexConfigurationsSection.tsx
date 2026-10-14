@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useMemo } from "react";
-import { useTranslations } from "next-intl";
-import { Card, Collapsible, TextButton } from "@opal/components";
+import { Fragment, useMemo, useState } from "react";
+import { useFormatter, useTranslations } from "next-intl";
+import { Button, Card, Collapsible, Divider } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { SvgEditBig } from "@opal/icons";
+import { markdown } from "@opal/utils";
+import type { RichStr } from "@opal/types";
 import { useConnectorConfiguration } from "@/lib/connectors/connectors";
 import { isEditableSource } from "@/lib/connectors/edit/editable";
 import type { CCPairFullInfo, ConfigEntries } from "@/lib/connectors/types";
@@ -15,31 +17,107 @@ import {
   storedCheckResults,
 } from "@/lib/connectors/checks/findings";
 import { useCredentialCheckReports } from "@/lib/credentials/hooks";
-import { getSourceDisplayName } from "@/lib/connectors/utils";
+import {
+  credentialBoundFieldNames,
+  getSourceDisplayName,
+} from "@/lib/connectors/utils";
 import {
   buildConfigEntries,
   ConfigDisplay,
+  type ConfigRow,
 } from "@/views/admin/connectors/ConnectorDetailPage/ConfigDisplay";
-import HierarchyBreakdown from "@/views/admin/connectors/ConnectorDetailPage/HierarchyBreakdown";
+import { useHierarchyBreakdown } from "@/lib/connectors/hooks";
+import HierarchyBreakdown, {
+  breakdownGroups,
+} from "@/views/admin/connectors/ConnectorDetailPage/HierarchyBreakdown";
 import InlineFileManagement from "@/views/admin/connectors/ConnectorDetailPage/InlineFileManagement";
 
-interface LabeledConfigDisplayProps {
+/** Markdown-escapes a value so a URL with underscores stays literal. */
+function escapeMarkdown(value: string): string {
+  return value.replace(/([\\`*_[\]])/g, "\\$1");
+}
+
+/** The account's realm in bold: a URL shows its host in bold and keeps its path. */
+function realmMarkdown(value: string): string {
+  try {
+    const url = new URL(value);
+    const path = url.pathname.replace(/\/$/, "");
+    return `**${escapeMarkdown(url.host)}**${escapeMarkdown(path)}`;
+  } catch {
+    return `**${escapeMarkdown(value)}**`;
+  }
+}
+
+interface ConfigGroupsProps {
+  rows: ConfigRow[];
+  ccPair: CCPairFullInfo;
+  /** The breakdown has rows, a note, or a loader to show. */
+  showBreakdown: boolean;
+  showEmptyBreakdown: boolean;
+}
+
+/** The settings bound to the account, then the breakdown, then the other settings, with a divider between the parts. */
+function ConfigGroups({
+  rows,
+  ccPair,
+  showBreakdown,
+  showEmptyBreakdown,
+}: ConfigGroupsProps) {
+  const bound = new Set(credentialBoundFieldNames(ccPair.connector.source));
+  const { data } = useHierarchyBreakdown(ccPair.id);
+  // The breakdown lists these settings' values, so their rows go.
+  const covered = new Set(data?.config_fields ?? []);
+  const boundRows = rows.filter((row) => bound.has(row.key));
+  const restRows = rows.filter(
+    (row) => !bound.has(row.key) && !covered.has(row.key)
+  );
+  const parts: React.ReactNode[] = [];
+  if (boundRows.length > 0) {
+    parts.push(<ConfigDisplay key="bound" rows={boundRows} />);
+  }
+  if (showBreakdown) {
+    parts.push(
+      <HierarchyBreakdown
+        key="breakdown"
+        ccPairId={ccPair.id}
+        showEmpty={showEmptyBreakdown}
+      />
+    );
+  }
+  if (restRows.length > 0) {
+    parts.push(<ConfigDisplay key="rest" rows={restRows} />);
+  }
+  return (
+    <Section gap={4} alignItems="stretch" height="fit">
+      {parts.map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 && (
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
+          )}
+          {part}
+        </Fragment>
+      ))}
+    </Section>
+  );
+}
+
+interface LabeledConfigGroupsProps extends Omit<ConfigGroupsProps, "rows"> {
   source: ConfigurableSources;
   config: ConfigEntries;
-  credentialId: number;
-  connectorId: number;
 }
 
 /** Rows by the form's translated labels, listing-backed values (channel ids) by their found names. */
-function LabeledConfigDisplay({
+function LabeledConfigGroups({
   source,
   config,
-  credentialId,
-  connectorId,
-}: LabeledConfigDisplayProps) {
+  ccPair,
+  ...rest
+}: LabeledConfigGroupsProps) {
   const configuration = useConnectorConfiguration(source);
   const { reportFor } = useCredentialCheckReports(source);
-  const entries = useMemo(() => {
+  const credentialId = ccPair.credential.id;
+  const connectorId = ccPair.connector.id;
+  const rows = useMemo(() => {
     const checks = storedCheckResults(reportFor, { credentialId, connectorId });
     // SAFETY: labelling replaces string list entries with string labels, so
     // every value keeps the stored JSON shape.
@@ -58,13 +136,15 @@ function LabeledConfigDisplay({
         typeof field.label === "function" ? field.label(null) : field.label,
       ])
     );
-    return Object.fromEntries(
-      Object.entries(buildConfigEntries(labeled, source)).map(
-        ([key, value]) => [labels.get(key) ?? key, value]
-      )
+    return Object.entries(buildConfigEntries(labeled, source)).map(
+      ([key, value]): ConfigRow => ({
+        key,
+        label: labels.get(key) ?? key,
+        value,
+      })
     );
   }, [configuration, config, credentialId, connectorId, reportFor, source]);
-  return <ConfigDisplay configEntries={entries} />;
+  return <ConfigGroups rows={rows} ccPair={ccPair} {...rest} />;
 }
 
 export interface IndexConfigurationsSectionProps {
@@ -84,6 +164,7 @@ export default function IndexConfigurationsSection({
   onRefresh,
 }: IndexConfigurationsSectionProps) {
   const t = useTranslations("admin.connector.configuration");
+  const format = useFormatter();
   const [open, setOpen] = useState(false);
   const source = ccPair.connector.source;
   const config: ConfigEntries =
@@ -93,40 +174,77 @@ export default function IndexConfigurationsSection({
   // A connector saved with no settings (e.g. Notion indexing everything)
   // still has a breakdown, so the section stays.
   const breakdownOnly = count === 0 && !manageFiles;
+  const { data: breakdown, error: breakdownError } = useHierarchyBreakdown(
+    ccPair.id
+  );
+  const groups = breakdown ? breakdownGroups(breakdown) : [];
+  const showBreakdown =
+    breakdownOnly ||
+    breakdownError !== undefined ||
+    breakdown === undefined ||
+    (breakdown !== null &&
+      (groups.length > 0 || breakdown.other_doc_count > 0));
+
+  // The account's realm (its site or host) names the connector. The source does when there is none.
+  const realm = credentialBoundFieldNames(source)
+    .map((name) => config[name])
+    .find((value) => typeof value === "string" && value !== "");
+  const realmText =
+    typeof realm === "string"
+      ? realmMarkdown(realm)
+      : escapeMarkdown(getSourceDisplayName(source) ?? "");
+  const description: RichStr = markdown(
+    groups.length > 0
+      ? t("summary", {
+          realm: realmText,
+          counts: format.list(
+            groups.map(([nodeType, groupEntries]) =>
+              t(`breakdown.counts.${nodeType}`, { count: groupEntries.length })
+            ),
+            { type: "conjunction" }
+          ),
+        })
+      : t("description", { source: realmText, count })
+  );
+
+  const rows: ConfigRow[] = Object.entries(entries).map(([key, value]) => ({
+    key,
+    label: key,
+    value,
+  }));
+  const groupProps = {
+    ccPair,
+    showBreakdown,
+    showEmptyBreakdown: breakdownOnly,
+  };
 
   return (
     <Collapsible
       title={t("title")}
-      description={t("description", {
-        source: getSourceDisplayName(source) ?? "",
-        count,
-      })}
+      description={description}
       open={open}
       onOpenChange={setOpen}
       // The edit action shows with the content it edits.
       rightChildren={
         open &&
         onEdit !== null && (
-          <TextButton font="secondary-action" onClick={onEdit}>
+          <Button prominence="secondary" icon={SvgEditBig} onClick={onEdit}>
             {t("editButton.label")}
-          </TextButton>
+          </Button>
         )
       }
     >
       <Card border="solid" rounding={4} padding={4}>
         <Section gap={4} alignItems="stretch" height="fit">
-          {count > 0 &&
-            (isEditableSource(source) ? (
-              <LabeledConfigDisplay
-                source={source}
-                config={config}
-                credentialId={ccPair.credential.id}
-                connectorId={ccPair.connector.id}
-              />
-            ) : (
-              <ConfigDisplay configEntries={entries} />
-            ))}
-          <HierarchyBreakdown ccPairId={ccPair.id} showEmpty={breakdownOnly} />
+          {isEditableSource(source) ? (
+            <LabeledConfigGroups
+              source={source}
+              config={config}
+              {...groupProps}
+            />
+          ) : (
+            <ConfigGroups rows={rows} {...groupProps} />
+          )}
           {manageFiles && (
             <InlineFileManagement
               connectorId={ccPair.connector.id}

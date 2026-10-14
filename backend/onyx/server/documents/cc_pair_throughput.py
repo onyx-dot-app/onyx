@@ -8,6 +8,16 @@ from datetime import datetime
 from onyx.db.models import IndexAttempt
 
 
+def run_ended_at(attempt: IndexAttempt, started: datetime) -> datetime | None:
+    """When a finished run ended, or None while it still runs. A run from
+    before time_finished existed ends at its last heartbeat check, and is
+    instant when it never reached one."""
+    if not attempt.is_finished():
+        return None
+    ended = attempt.time_finished or attempt.last_heartbeat_time
+    return started if ended is None else max(ended, started)
+
+
 def docs_indexed_per_slice(
     attempts: list[IndexAttempt],
     window_start: datetime,
@@ -24,15 +34,7 @@ def docs_indexed_per_slice(
         if attempt.time_started is None or docs == 0:
             continue
         run_start = attempt.time_started
-        # A run from before time_finished existed ends at its last heartbeat
-        # check, and is instant when it never reached one.
-        ended = attempt.time_finished or attempt.last_heartbeat_time
-        if not attempt.is_finished():
-            run_end = window_end
-        elif ended is None:
-            run_end = run_start
-        else:
-            run_end = max(ended, run_start)
+        run_end = run_ended_at(attempt, run_start) or window_end
         if run_end < window_start or run_start >= window_end:
             continue
         if run_end == run_start:

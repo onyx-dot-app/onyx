@@ -26,12 +26,16 @@ interface FrequencyFieldProps {
   max: number;
   decimalPlaces?: number;
   suffix: string;
+  /** Marks the field optional in its label. */
+  optional?: boolean;
   disabled: boolean;
   /** Resolves to whether the server stored the value. Never rejects. */
   onSave: (value: number) => Promise<boolean>;
+  /** Saves a blank field as no schedule. Without it a blank field restores the value. */
+  onClear?: () => Promise<boolean>;
 }
 
-/** One schedule frequency. It saves when the field loses focus. A blank or out of range value is dropped. */
+/** One schedule frequency. It saves when the field loses focus. An out of range value is dropped, a blank one too unless the field can clear. */
 function FrequencyField({
   id,
   title,
@@ -41,8 +45,10 @@ function FrequencyField({
   max,
   decimalPlaces,
   suffix,
+  optional = false,
   disabled,
   onSave,
+  onClear,
 }: FrequencyFieldProps) {
   const [draft, setDraft] = useState<number | null>(value);
   // Read on blur, which fires in the same event as the input's last change.
@@ -55,13 +61,16 @@ function FrequencyField({
 
   async function commit() {
     const next = draftRef.current;
-    // The input restores a blank field itself.
-    if (next === null) return;
+    if (next === value) return;
+    if (next === null) {
+      // A field that cannot clear restores a blank field itself.
+      if (onClear !== undefined && !(await onClear())) change(value);
+      return;
+    }
     if (next < min || next > max) {
       change(value);
       return;
     }
-    if (next === value) return;
     if (!(await onSave(next))) change(value);
   }
 
@@ -70,6 +79,7 @@ function FrequencyField({
       withLabel={id}
       title={title}
       description={description}
+      suffix={optional ? "optional" : undefined}
       disabled={disabled}
       fillInput
       center
@@ -85,7 +95,7 @@ function FrequencyField({
           decimalPlaces={decimalPlaces}
           suffix={suffix}
           disabled={disabled}
-          allowEmpty={false}
+          allowEmpty={onClear !== undefined}
         />
       </Section>
     </InputHorizontal>
@@ -108,11 +118,14 @@ export default function ScheduleSection({
   const tToasts = useTranslations("admin.connector.toasts");
   const tDuration = useTranslations("admin.connector.advancedConfig.duration");
   const format = useFormatter();
-  const { refresh_freq, prune_freq, indexing_start } = ccPair.connector;
+  const { refresh_freq, prune_freq, check_freq, indexing_start } =
+    ccPair.connector;
   const refreshMinutes =
     refresh_freq === null ? null : Math.round(refresh_freq / 60);
   const pruneHours =
     prune_freq === null ? null : Number((prune_freq / 3600).toFixed(3));
+  const checkHours =
+    check_freq === null ? null : Number((check_freq / 3600).toFixed(3));
 
   // Whole hours read as hours, whole days as days.
   function minutesLabel(minutes: number): string {
@@ -130,18 +143,25 @@ export default function ScheduleSection({
       : tDuration("hours", { count: whole });
   }
 
+  // null clears the schedule, which only the check frequency allows.
   async function save(
-    name: "refresh_frequency" | "pruning_frequency",
-    seconds: number,
-    successKey: "refreshFrequencyUpdated" | "pruningFrequencyUpdated",
-    failureKey: "refreshFrequencyUpdateFailed" | "pruningFrequencyUpdateFailed"
+    name: "refresh_frequency" | "pruning_frequency" | "check_frequency",
+    seconds: number | null,
+    successKey:
+      | "refreshFrequencyUpdated"
+      | "pruningFrequencyUpdated"
+      | "checkFrequencyUpdated",
+    failureKey:
+      | "refreshFrequencyUpdateFailed"
+      | "pruningFrequencyUpdateFailed"
+      | "checkFrequencyUpdateFailed"
   ): Promise<boolean> {
     let stored = false;
     try {
       const response = await updateConnectorCredentialPairProperty(
         ccPair.id,
         name,
-        String(Math.round(seconds))
+        seconds === null ? "" : String(Math.round(seconds))
       );
       stored = response.ok;
     } catch {
@@ -164,6 +184,9 @@ export default function ScheduleSection({
       pruneHours === null
         ? null
         : t("prune", { every: hoursLabel(pruneHours) }),
+      checkHours === null
+        ? null
+        : t("checks", { every: hoursLabel(checkHours) }),
     ].filter((part) => part !== null),
     { type: "unit" }
   );
@@ -213,6 +236,37 @@ export default function ScheduleSection({
               )
             }
           />
+          {/* Only a source with checks of its own can schedule them. Blank until set: they run only on request by default. */}
+          {ccPair.has_named_checks && (
+            <FrequencyField
+              id="checkFreq"
+              title={tFields("checkFrequency.title")}
+              description={tFields("checkFrequency.description")}
+              value={checkHours}
+              min={MIN_PRUNE_FREQ_HOURS}
+              max={MAX_PRUNE_FREQ_HOURS}
+              decimalPlaces={3}
+              suffix={tFields("units.hours")}
+              optional
+              disabled={!editable}
+              onClear={() =>
+                save(
+                  "check_frequency",
+                  null,
+                  "checkFrequencyUpdated",
+                  "checkFrequencyUpdateFailed"
+                )
+              }
+              onSave={(hours) =>
+                save(
+                  "check_frequency",
+                  hours * 3600,
+                  "checkFrequencyUpdated",
+                  "checkFrequencyUpdateFailed"
+                )
+              }
+            />
+          )}
           <InputHorizontal
             title={tFields("indexingStart.title")}
             description={tFields("indexingStart.description")}

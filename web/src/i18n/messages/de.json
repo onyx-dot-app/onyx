@@ -2372,6 +2372,15 @@
           "ariaLabel": "Indizierte Dokumente im Zeitverlauf",
           "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
           "loadError": "Das Diagramm konnte nicht geladen werden."
+        },
+        "hold": {
+          "checks_running": "Vorab-Prüfungen laufen",
+          "checks_failed_to_run": "Angehalten: Prüfungen konnten nicht ausgeführt werden",
+          "required_checks_failed": "Angehalten: erforderliche Prüfungen fehlgeschlagen",
+          "start": "Indexierung starten",
+          "released": "Indexierung gestartet",
+          "releaseFailed": "Indexierung konnte nicht gestartet werden",
+          "viewChecks": "Connector-Prüfungen anzeigen"
         }
       },
       "toasts": {
@@ -2388,7 +2397,9 @@
         "refreshFrequencyUpdateFailed": "Das Aktualisierungsintervall des Konnektors konnte nicht aktualisiert werden",
         "refreshFrequencyUpdated": "Aktualisierungsintervall des Konnektors erfolgreich aktualisiert",
         "targetedReindexFailed": "Die gezielte Neuindizierung ist fehlgeschlagen: {message}",
-        "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind."
+        "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind.",
+        "checkFrequencyUpdated": "Prüfintervall des Connectors erfolgreich aktualisiert",
+        "checkFrequencyUpdateFailed": "Prüfintervall des Connectors konnte nicht aktualisiert werden"
       },
       "backButton": {
         "label": "Alle Konnektoren"
@@ -2422,14 +2433,32 @@
             "channel": "{count, plural, one {Kanal} other {Kanäle}}",
             "mailbox": "{count, plural, one {Postfach} other {Postfächer}}"
           },
-          "docs": "{count, plural, one {# Dokument} other {# Dokumente}}",
+          "counts": {
+            "folder": "{count, plural, one {# Ordner} other {# Ordner}}",
+            "source": "{count, plural, one {# Quelle} other {# Quellen}}",
+            "stub": "{count, plural, one {# Knoten} other {# Knoten}}",
+            "shared_drive": "{count, plural, one {# Geteilte Ablage} other {# Geteilte Ablagen}}",
+            "my_drive": "{count, plural, one {# Meine Ablage} other {# Meine Ablagen}}",
+            "space": "{count, plural, one {# Bereich} other {# Bereiche}}",
+            "page": "{count, plural, one {# Seite} other {# Seiten}}",
+            "project": "{count, plural, one {# Projekt} other {# Projekte}}",
+            "database": "{count, plural, one {# Datenbank} other {# Datenbanken}}",
+            "workspace": "{count, plural, one {# Arbeitsbereich} other {# Arbeitsbereiche}}",
+            "site": "{count, plural, one {# Website} other {# Websites}}",
+            "drive": "{count, plural, one {# Dokumentbibliothek} other {# Dokumentbibliotheken}}",
+            "channel": "{count, plural, one {# Kanal} other {# Kanäle}}",
+            "mailbox": "{count, plural, one {# Postfach} other {# Postfächer}}"
+          },
           "notIndexed": "Nicht indexiert",
           "other": "Weitere Dokumente",
           "loadError": "Die Dokumentaufschlüsselung konnte nicht geladen werden.",
           "open": "In der Quelle öffnen",
           "empty": "Noch keine Dokumente indexiert.",
-          "unavailable": "Verfügbar nach dem ersten erfolgreichen Lauf."
-        }
+          "unavailable": "Verfügbar nach dem ersten erfolgreichen Lauf.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {Dokument} other {Dokumente}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "Freigabeeinstellungen",
@@ -2454,7 +2483,8 @@
       },
       "schedule": {
         "refresh": "Aktualisierung alle **{every}**",
-        "prune": "Bereinigung alle **{every}**"
+        "prune": "Bereinigung alle **{every}**",
+        "checks": "Prüfungen alle **{every}**"
       },
       "runs": {
         "kinds": {
@@ -2462,7 +2492,9 @@
           "all": "Alle Arten",
           "indexing": "Dokumentindex",
           "doc_permission_sync": "Berechtigungssync",
-          "group_sync": "Gruppenmitgliedschaftssync"
+          "group_sync": "Gruppenmitgliedschaftssync",
+          "pruning": "Dokumentbereinigung",
+          "checks": "Connector-Prüfungen"
         },
         "detail": {
           "queued": "In Warteschlange",
@@ -2473,15 +2505,19 @@
         "actions": {
           "stages": "Phasenmetriken anzeigen",
           "cancel": "Abbrechen",
-          "logs": "Logs anzeigen"
+          "logs": "Logs anzeigen",
+          "checks": "Prüfergebnisse anzeigen"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}"
+          "tooltip": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
+          "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}"
         },
         "figures": {
           "indexed": "indiziert",
           "synced": "synchronisiert",
-          "memberships": "Mitgliedschaften"
+          "memberships": "Mitgliedschaften",
+          "removed": "entfernt",
+          "checks": "Prüfungen ausgeführt"
         },
         "counts": {
           "newDocs": "{count, plural, one {# neues Dokument} other {# neue Dokumente}}",
@@ -2491,10 +2527,13 @@
           "groups": "{count, plural, one {# Gruppe} other {# Gruppen}}",
           "running": "{count, plural, one {# Lauf aktiv} other {# Läufe aktiv}}",
           "succeeded": "{count, plural, one {# Lauf erfolgreich} other {# Läufe erfolgreich}}",
-          "failed": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}"
+          "failed": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}",
+          "passedChecks": "{count, plural, one {# Prüfung bestanden} other {# Prüfungen bestanden}}",
+          "failedChecks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}",
+          "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
         },
         "search": {
-          "placeholder": "Fehler in Läufen suchen..."
+          "placeholder": "Indexläufe durchsuchen..."
         },
         "window": {
           "label": "Zeitraum",
@@ -2524,11 +2563,18 @@
         "errorModal": {
           "indexing": "Fehler beim Indexlauf",
           "doc_permission_sync": "Fehler beim Dokumentberechtigungssync",
-          "group_sync": "Fehler beim Gruppenmitgliedschaftssync"
+          "group_sync": "Fehler beim Gruppenmitgliedschaftssync",
+          "pruning": "Fehler bei der Dokumentbereinigung",
+          "checks": "Fehler bei den Connector-Prüfungen"
         },
         "toasts": {
           "canceled": "Der Lauf wird abgebrochen.",
           "cancelFailed": "Der Lauf konnte nicht abgebrochen werden. Versuchen Sie es erneut."
+        },
+        "checkResults": {
+          "title": "Connector-Prüfungen",
+          "close": "Schließen",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2574,19 +2620,38 @@
             "stopped": "Gruppenmitgliedschaftssynchronisierung mit Fehlern abgebrochen",
             "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert",
             "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben"
+          },
+          "pruning": {
+            "failed": "Bereinigung fehlgeschlagen",
+            "running": "Bereinigung läuft mit Fehlern",
+            "stopped": "Bereinigung mit Fehlern gestoppt",
+            "errors": "Bereinigung mit Fehlern abgeschlossen",
+            "resolved": "Bereinigungsfehler behoben"
+          },
+          "checks": {
+            "failed": "Connector-Prüfungen fehlgeschlagen",
+            "running": "Connector-Prüfungen laufen mit Fehlern",
+            "stopped": "Connector-Prüfungen mit Fehlern gestoppt",
+            "errors": "Connector-Prüfungen mit Fehlern abgeschlossen",
+            "resolved": "Fehler der Connector-Prüfungen behoben"
           }
         },
         "description": {
           "indexing": "{count, plural, one {# Dokument indexiert} other {# Dokumente indexiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
           "doc_permission_sync": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
-          "group_sync": "{count, plural, one {# Mitgliedschaft synchronisiert} other {# Mitgliedschaften synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}."
+          "group_sync": "{count, plural, one {# Mitgliedschaft synchronisiert} other {# Mitgliedschaften synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
+          "pruning": "{count, plural, one {# Dokument entfernt} other {# Dokumente entfernt}}. Laufzeit der Bereinigung {minutes, plural, one {# Minute} other {# Minuten}}.",
+          "checks": "{count, plural, one {# Prüfung ausgeführt} other {# Prüfungen ausgeführt}}. Laufzeit der Prüfung {minutes, plural, one {# Minute} other {# Minuten}}.",
+          "checksFailed": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}."
         },
         "tags": {
           "stackTrace": "Stacktrace",
           "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
           "doc_permission_sync": "{count, plural, one {# Dokument nicht synchronisiert} other {# Dokumente nicht synchronisiert}}",
           "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
-          "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}"
+          "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}",
+          "pruning": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
+          "checks": "{count, plural, one {# Prüfung fehlgeschlagen} other {# Prüfungen fehlgeschlagen}}"
         },
         "more": "Mehr anzeigen",
         "empty": {
@@ -2623,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "Phasendetails",
-        "calls": "Aufrufe",
+        "calls": "Batches",
         "averageTime": "Durchschnittszeit",
         "maxTime": "Maximalzeit",
         "uneven": {
@@ -3100,6 +3165,10 @@
         "units": {
           "hours": "Stunden",
           "minutes": "Minuten"
+        },
+        "checkFrequency": {
+          "title": "Prüfungen ausführen alle",
+          "description": "Prüft die Verbindung auf Funktionen und Zustand."
         }
       },
       "settings": {
@@ -7978,7 +8047,12 @@
         "paused": "Pausiert",
         "scheduled": "Geplant",
         "synced": "Synchronisiert",
-        "syncing": "Wird synchronisiert"
+        "syncing": "Wird synchronisiert",
+        "pruning": "Bereinigt",
+        "pruned": "Bereinigt",
+        "checking": "Wird geprüft",
+        "passed": "Bestanden",
+        "failedToRun": "Nicht ausgeführt"
       }
     },
     "systemInfo": {

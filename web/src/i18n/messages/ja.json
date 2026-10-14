@@ -2372,6 +2372,15 @@
           "ariaLabel": "時間ごとのインデックス済みドキュメント",
           "tooltip": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}",
           "loadError": "グラフを読み込めませんでした。"
+        },
+        "hold": {
+          "checks_running": "インデックス前チェックを実行中",
+          "checks_failed_to_run": "保留中: チェックを実行できませんでした",
+          "required_checks_failed": "保留中: 必須チェックが失敗しました",
+          "start": "インデックス作成を開始",
+          "released": "インデックス作成を開始しました",
+          "releaseFailed": "インデックス作成を開始できませんでした",
+          "viewChecks": "コネクタのチェックを表示"
         }
       },
       "toasts": {
@@ -2388,7 +2397,9 @@
         "refreshFrequencyUpdateFailed": "コネクターの更新頻度を変更できませんでした",
         "refreshFrequencyUpdated": "コネクターの更新頻度を変更しました",
         "targetedReindexFailed": "対象を指定した再インデックス作成に失敗しました: {message}",
-        "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。"
+        "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。",
+        "checkFrequencyUpdated": "コネクタのチェック頻度を更新しました",
+        "checkFrequencyUpdateFailed": "コネクタのチェック頻度を更新できませんでした"
       },
       "backButton": {
         "label": "すべてのコネクタ"
@@ -2422,14 +2433,32 @@
             "channel": "{count, plural, other {チャンネル}}",
             "mailbox": "{count, plural, other {メールボックス}}"
           },
-          "docs": "{count, plural, other {# 件のドキュメント}}",
+          "counts": {
+            "folder": "{count, plural, other {# フォルダ}}",
+            "source": "{count, plural, other {# ソース}}",
+            "stub": "{count, plural, other {# ノード}}",
+            "shared_drive": "{count, plural, other {# 共有ドライブ}}",
+            "my_drive": "{count, plural, other {# マイドライブ}}",
+            "space": "{count, plural, other {# スペース}}",
+            "page": "{count, plural, other {# ページ}}",
+            "project": "{count, plural, other {# プロジェクト}}",
+            "database": "{count, plural, other {# データベース}}",
+            "workspace": "{count, plural, other {# ワークスペース}}",
+            "site": "{count, plural, other {# サイト}}",
+            "drive": "{count, plural, other {# ドキュメントライブラリ}}",
+            "channel": "{count, plural, other {# チャンネル}}",
+            "mailbox": "{count, plural, other {# メールボックス}}"
+          },
           "notIndexed": "未インデックス",
           "other": "その他のドキュメント",
           "loadError": "ドキュメントの内訳を読み込めませんでした。",
           "open": "ソースで開く",
           "empty": "まだインデックスされたドキュメントはありません。",
-          "unavailable": "最初の実行が成功した後に利用できます。"
-        }
+          "unavailable": "最初の実行が成功した後に利用できます。",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, other {件のドキュメント}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "共有設定",
@@ -2454,7 +2483,8 @@
       },
       "schedule": {
         "refresh": "**{every}**ごとに更新",
-        "prune": "**{every}**ごとに整理"
+        "prune": "**{every}**ごとに整理",
+        "checks": "**{every}**ごとにチェックを実行"
       },
       "runs": {
         "kinds": {
@@ -2462,7 +2492,9 @@
           "all": "すべての種類",
           "indexing": "ドキュメントインデックス",
           "doc_permission_sync": "権限の同期",
-          "group_sync": "グループメンバーシップの同期"
+          "group_sync": "グループメンバーシップの同期",
+          "pruning": "ドキュメントのプルーニング",
+          "checks": "コネクタチェック"
         },
         "detail": {
           "queued": "待機中",
@@ -2473,15 +2505,19 @@
         "actions": {
           "stages": "ステージの指標を表示",
           "cancel": "キャンセル",
-          "logs": "ログを表示"
+          "logs": "ログを表示",
+          "checks": "チェック結果を表示"
         },
         "warnings": {
-          "tooltip": "{count, plural, other {# 件のドキュメントが失敗}}"
+          "tooltip": "{count, plural, other {# 件のドキュメントが失敗}}",
+          "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
         },
         "figures": {
           "indexed": "件インデックス済み",
           "synced": "件同期済み",
-          "memberships": "件のメンバーシップ"
+          "memberships": "件のメンバーシップ",
+          "removed": "件削除",
+          "checks": "件のチェックを実行"
         },
         "counts": {
           "newDocs": "{count, plural, other {# 件の新しいドキュメント}}",
@@ -2491,10 +2527,13 @@
           "groups": "{count, plural, other {# 件のグループ}}",
           "running": "{count, plural, other {# 件の実行が進行中}}",
           "succeeded": "{count, plural, other {# 件の実行が成功}}",
-          "failed": "{count, plural, other {# 件の実行が失敗}}"
+          "failed": "{count, plural, other {# 件の実行が失敗}}",
+          "passedChecks": "{count, plural, one {# 件のチェックが成功} other {# 件のチェックが成功}}",
+          "failedChecks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}",
+          "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"
         },
         "search": {
-          "placeholder": "実行エラーを検索..."
+          "placeholder": "インデックス実行を検索..."
         },
         "window": {
           "label": "期間",
@@ -2524,11 +2563,18 @@
         "errorModal": {
           "indexing": "インデックス実行のエラー",
           "doc_permission_sync": "ドキュメント権限の同期エラー",
-          "group_sync": "グループメンバーシップの同期エラー"
+          "group_sync": "グループメンバーシップの同期エラー",
+          "pruning": "ドキュメントのプルーニングエラー",
+          "checks": "コネクタチェックのエラー"
         },
         "toasts": {
           "canceled": "実行をキャンセルしています。",
           "cancelFailed": "実行をキャンセルできませんでした。もう一度お試しください。"
+        },
+        "checkResults": {
+          "title": "コネクタチェック",
+          "close": "閉じる",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2574,19 +2620,38 @@
             "stopped": "エラーを伴いグループメンバーシップの同期が停止しました",
             "errors": "エラーを伴いグループメンバーシップが同期されました",
             "resolved": "グループメンバーシップ同期のエラーが解決されました"
+          },
+          "pruning": {
+            "failed": "プルーニングに失敗しました",
+            "running": "エラーを伴うプルーニングを実行中",
+            "stopped": "プルーニングがエラーで停止しました",
+            "errors": "プルーニングがエラーを伴って完了しました",
+            "resolved": "プルーニングのエラーが解決されました"
+          },
+          "checks": {
+            "failed": "コネクタチェックに失敗しました",
+            "running": "エラーを伴うコネクタチェックを実行中",
+            "stopped": "コネクタチェックがエラーで停止しました",
+            "errors": "コネクタチェックがエラーを伴って完了しました",
+            "resolved": "コネクタチェックのエラーが解決されました"
           }
         },
         "description": {
           "indexing": "{count, plural, other {# 件のドキュメントをインデックス化}}。実行時間 {minutes, plural, other {# 分}}。",
           "doc_permission_sync": "{count, plural, other {# 件のドキュメントを同期}}。実行時間 {minutes, plural, other {# 分}}。",
-          "group_sync": "{count, plural, other {# 件のメンバーシップを同期}}。実行時間 {minutes, plural, other {# 分}}。"
+          "group_sync": "{count, plural, other {# 件のメンバーシップを同期}}。実行時間 {minutes, plural, other {# 分}}。",
+          "pruning": "{count, plural, one {# 件のドキュメントを削除} other {# 件のドキュメントを削除}}。プルーニングの実行時間 {minutes, plural, one {# 分} other {# 分}}。",
+          "checks": "{count, plural, one {# 件のチェックを実行} other {# 件のチェックを実行}}。チェックの実行時間 {minutes, plural, one {# 分} other {# 分}}。",
+          "checksFailed": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}。"
         },
         "tags": {
           "stackTrace": "スタックトレース",
           "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
           "doc_permission_sync": "{count, plural, other {# 件のドキュメントの同期に失敗}}",
           "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
-          "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}"
+          "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}",
+          "pruning": "{count, plural, one {# 件のドキュメントが失敗} other {# 件のドキュメントが失敗}}",
+          "checks": "{count, plural, one {# 件のチェックが失敗} other {# 件のチェックが失敗}}"
         },
         "more": "さらに表示",
         "empty": {
@@ -2623,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "ステージ詳細",
-        "calls": "呼び出し回数",
+        "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
         "uneven": {
@@ -3100,6 +3165,10 @@
         "units": {
           "hours": "時間",
           "minutes": "分"
+        },
+        "checkFrequency": {
+          "title": "チェックの実行間隔",
+          "description": "接続の機能と状態を確認します。"
         }
       },
       "settings": {
@@ -7978,7 +8047,12 @@
         "paused": "一時停止中",
         "scheduled": "予定済み",
         "synced": "同期済み",
-        "syncing": "同期中"
+        "syncing": "同期中",
+        "pruning": "プルーニング中",
+        "pruned": "プルーニング済み",
+        "checking": "チェック中",
+        "passed": "成功",
+        "failedToRun": "実行できませんでした"
       }
     },
     "systemInfo": {

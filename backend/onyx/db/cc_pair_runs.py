@@ -1,6 +1,7 @@
 """Queries behind a pair's run history. Each kind of run (index attempts,
-document permission syncs, group syncs) is windowed and searched the same way,
-and one union pages every kind newest first, so no page loads the runs before it."""
+document permission syncs, group syncs, prunes, connector checks) is windowed
+and searched the same way, and one union pages every kind newest first, so no
+page loads the runs before it."""
 
 from collections.abc import Callable
 from datetime import datetime
@@ -9,6 +10,8 @@ from typing import TypeVar
 from sqlalchemy import (
     ColumnElement,
     Select,
+    Text,
+    cast,
     exists,
     false,
     func,
@@ -21,26 +24,31 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import (
+    CapabilityCheckRunStatus,
     CCPairRunErrors,
     CCPairRunKind,
     CCPairRunStatusGroup,
     IndexingStatus,
     IndexModelStatus,
     PermissionSyncStatus,
+    SyncStatus,
+    SyncType,
 )
 from onyx.db.models import (
+    CapabilityCheckRun,
     DocPermissionSyncAttempt,
     ExternalGroupPermissionSyncAttempt,
     IndexAttempt,
     IndexAttemptError,
     SearchSettings,
+    SyncRecord,
 )
 from onyx.db.permission_sync_attempt import (
     relevant_external_group_sync_attempts_filter,
 )
 
-# Keyed by value, so every PermissionSyncStatus value must also be an
-# IndexingStatus value.
+# Keyed by value, so a value two status enums share must group the same way.
+# PermissionSyncStatus and SyncStatus values are all IndexingStatus values.
 _STATUS_GROUPS: dict[str, CCPairRunStatusGroup] = {
     IndexingStatus.NOT_STARTED.value: CCPairRunStatusGroup.RUNNING,
     IndexingStatus.IN_PROGRESS.value: CCPairRunStatusGroup.RUNNING,
@@ -49,11 +57,25 @@ _STATUS_GROUPS: dict[str, CCPairRunStatusGroup] = {
     IndexingStatus.FAILED.value: CCPairRunStatusGroup.FAILED,
     IndexingStatus.CANCELED.value: CCPairRunStatusGroup.CANCELED,
     IndexingStatus.INTERRUPTED.value: CCPairRunStatusGroup.CANCELED,
+    CapabilityCheckRunStatus.RUNNING.value: CCPairRunStatusGroup.RUNNING,
+    CapabilityCheckRunStatus.PASSED.value: CCPairRunStatusGroup.SUCCEEDED,
+    CapabilityCheckRunStatus.FAILED_TO_RUN.value: CCPairRunStatusGroup.FAILED,
 }
 
-_StatusT = TypeVar("_StatusT", IndexingStatus, PermissionSyncStatus)
+_StatusT = TypeVar(
+    "_StatusT",
+    IndexingStatus,
+    PermissionSyncStatus,
+    SyncStatus,
+    CapabilityCheckRunStatus,
+)
 _RunT = TypeVar(
-    "_RunT", IndexAttempt, DocPermissionSyncAttempt, ExternalGroupPermissionSyncAttempt
+    "_RunT",
+    IndexAttempt,
+    DocPermissionSyncAttempt,
+    ExternalGroupPermissionSyncAttempt,
+    SyncRecord,
+    CapabilityCheckRun,
 )
 
 
@@ -173,6 +195,61 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
     )
 
 
+def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
+    stmt = select(SyncRecord).where(
+        SyncRecord.entity_id == run_filter.cc_pair_id,
+        SyncRecord.sync_type == SyncType.PRUNING,
+    )
+    # A prune records no per-document errors, so it either fails or succeeds.
+    if run_filter.errors is not None:
+        stmt = stmt.where(false())
+    return _narrowed(
+        stmt,
+        run_filter,
+        SyncRecord.sync_start_time,
+        lambda query: SyncRecord.error_message.icontains(query, autoescape=True),
+        SyncRecord.sync_status,
+        SyncStatus,
+        with_status_filter,
+    )
+
+
+def _report_text(path: str) -> ColumnElement[str]:
+    """The values at a JSON path of a run's report, as one text to search."""
+    return cast(func.jsonb_path_query_array(CapabilityCheckRun.report, path), Text)
+
+
+def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
+    """The pair's connector-scoped check runs. A check that fails is not a
+    document error, so the errors filter leaves the kind out."""
+    stmt = select(CapabilityCheckRun).where(
+        CapabilityCheckRun.credential_id == run_filter.credential_id,
+        CapabilityCheckRun.connector_id == run_filter.connector_id,
+    )
+    if run_filter.errors is not None:
+        stmt = stmt.where(false())
+    return _narrowed(
+        stmt,
+        run_filter,
+        CapabilityCheckRun.time_created,
+        # A completed run keeps its check messages in the report, not in
+        # error_message. Only the check names and messages are searched: the
+        # findings may be hidden from the response, so they stay out of it.
+        lambda query: or_(
+            CapabilityCheckRun.error_message.icontains(query, autoescape=True),
+            _report_text("$.check_results[*].display_name").icontains(
+                query, autoescape=True
+            ),
+            _report_text("$.check_results[*].message").icontains(
+                query, autoescape=True
+            ),
+        ),
+        CapabilityCheckRun.status,
+        CapabilityCheckRunStatus,
+        with_status_filter,
+    )
+
+
 def _keyed(stmt: Select, kind: CCPairRunKind) -> Select:
     match kind:
         case CCPairRunKind.INDEXING:
@@ -183,6 +260,11 @@ def _keyed(stmt: Select, kind: CCPairRunKind) -> Select:
         case CCPairRunKind.GROUP_SYNC:
             run_id = ExternalGroupPermissionSyncAttempt.id
             time_created = ExternalGroupPermissionSyncAttempt.time_created
+        case CCPairRunKind.PRUNING:
+            run_id, time_created = SyncRecord.id, SyncRecord.sync_start_time
+        case CCPairRunKind.CHECKS:
+            run_id = CapabilityCheckRun.id
+            time_created = CapabilityCheckRun.time_created
     return stmt.with_only_columns(
         literal(kind.value).label("kind"),
         run_id.label("id"),
@@ -200,6 +282,10 @@ def _runs_of_kind(
             return _doc_permission_sync_runs(run_filter, with_status_filter)
         case CCPairRunKind.GROUP_SYNC:
             return _group_sync_runs(run_filter, with_status_filter)
+        case CCPairRunKind.PRUNING:
+            return _prune_runs(run_filter, with_status_filter)
+        case CCPairRunKind.CHECKS:
+            return _check_runs(run_filter, with_status_filter)
 
 
 def _rows_by_id(
@@ -245,10 +331,16 @@ def get_cc_pair_run_page(
     group_syncs = _rows_by_id(
         db_session, ExternalGroupPermissionSyncAttempt, ids_of(CCPairRunKind.GROUP_SYNC)
     )
+    prune_runs = _rows_by_id(db_session, SyncRecord, ids_of(CCPairRunKind.PRUNING))
+    check_runs = _rows_by_id(
+        db_session, CapabilityCheckRun, ids_of(CCPairRunKind.CHECKS)
+    )
     loaded = {
         CCPairRunKind.INDEXING: index_attempts.keys(),
         CCPairRunKind.DOC_PERMISSION_SYNC: doc_permission_syncs.keys(),
         CCPairRunKind.GROUP_SYNC: group_syncs.keys(),
+        CCPairRunKind.PRUNING: prune_runs.keys(),
+        CCPairRunKind.CHECKS: check_runs.keys(),
     }
     return CCPairRunPage(
         # A deletion between the id query and the row loads leaves an id with no row.
@@ -256,7 +348,23 @@ def get_cc_pair_run_page(
         index_attempts=index_attempts,
         doc_permission_syncs=doc_permission_syncs,
         group_syncs=group_syncs,
+        prune_runs=prune_runs,
+        check_runs=check_runs,
     )
+
+
+def _status_column(kind: CCPairRunKind) -> InstrumentedAttribute:
+    match kind:
+        case CCPairRunKind.INDEXING:
+            return IndexAttempt.status
+        case CCPairRunKind.DOC_PERMISSION_SYNC:
+            return DocPermissionSyncAttempt.status
+        case CCPairRunKind.GROUP_SYNC:
+            return ExternalGroupPermissionSyncAttempt.status
+        case CCPairRunKind.PRUNING:
+            return SyncRecord.sync_status
+        case CCPairRunKind.CHECKS:
+            return CapabilityCheckRun.status
 
 
 def count_cc_pair_runs_by_status_group(
@@ -266,7 +374,11 @@ def count_cc_pair_runs_by_status_group(
     counts hold still while one is applied."""
     counts = dict.fromkeys(CCPairRunStatusGroup, 0)
     for kind in kinds:
-        runs = _runs_of_kind(kind, run_filter, False).subquery()
+        runs = (
+            _runs_of_kind(kind, run_filter, False)
+            .with_only_columns(_status_column(kind).label("status"))
+            .subquery()
+        )
         for status, count in db_session.execute(
             select(runs.c.status, func.count()).group_by(runs.c.status)
         ).all():

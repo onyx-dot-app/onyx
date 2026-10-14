@@ -15,13 +15,22 @@ from pydantic import (
 
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings_setting import (
+    hide_findings_if_disabled,
+)
 from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
+from onyx.connectors.capability_checks.models import (
+    CapabilityCheckResult,
+    CredentialCapabilityReport,
+)
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
 from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckRunStatus,
+    CapabilityCheckTrigger,
     CCPairRunKind,
     CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
@@ -29,6 +38,7 @@ from onyx.db.enums import (
     HierarchyNodeType,
     PermissionSyncStatus,
     ProcessingMode,
+    SyncStatus,
 )
 from onyx.db.index_attempt_metrics_models import (
     STAGE_SCOPE,
@@ -36,6 +46,7 @@ from onyx.db.index_attempt_metrics_models import (
     StageScope,
 )
 from onyx.db.models import (
+    CapabilityCheckRun,
     Connector,
     ConnectorCredentialPair,
     Credential,
@@ -44,6 +55,7 @@ from onyx.db.models import (
     IndexAttempt,
     IndexAttemptStageMetric,
     IndexingStatus,
+    SyncRecord,
     TaskStatus,
 )
 from onyx.db.models import Document as DbDocument
@@ -98,6 +110,8 @@ class ConnectorBase(BaseModel):
     # In seconds, None for one time index with no refresh
     refresh_freq: int | None = None
     prune_freq: int | None = None
+    # In seconds, None runs the connector checks only on request
+    check_freq: int | None = None
     indexing_start: datetime | None = None
 
 
@@ -106,7 +120,11 @@ class ConnectorUpdateRequest(ConnectorBase):
     groups: list[int] = Field(default_factory=list)
 
     def to_connector_base(self) -> ConnectorBase:
-        return ConnectorBase(**self.model_dump(exclude={"access_type", "groups"}))
+        # Only the request's own fields, so an omitted check_freq stays omitted
+        # (update_connector keeps the stored schedule) instead of becoming null.
+        return ConnectorBase(
+            **self.model_dump(exclude_unset=True, exclude={"access_type", "groups"})
+        )
 
 
 class ConnectorSnapshot(ConnectorBase):
@@ -128,6 +146,7 @@ class ConnectorSnapshot(ConnectorBase):
             connector_specific_config=connector.connector_specific_config,
             refresh_freq=connector.refresh_freq,
             prune_freq=connector.prune_freq,
+            check_freq=connector.check_freq,
             credential_ids=(
                 credential_ids
                 or [association.credential.id for association in connector.credentials]
@@ -531,8 +550,87 @@ class CCPairGroupSyncRun(BaseModel):
     attempt: ExternalGroupSyncAttemptSnapshot
 
 
+class PruneRunSnapshot(BaseModel):
+    """One prune of the pair, from its pruning sync record."""
+
+    id: int
+    status: SyncStatus
+    docs_removed: int
+    error_message: str | None
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_sync_record(cls, record: SyncRecord) -> "PruneRunSnapshot":
+        return cls(
+            id=record.id,
+            status=record.sync_status,
+            docs_removed=record.num_docs_synced,
+            error_message=record.error_message,
+            time_created=record.sync_start_time.isoformat(),
+            time_started=record.sync_start_time.isoformat(),
+            time_finished=(
+                record.sync_end_time.isoformat() if record.sync_end_time else None
+            ),
+        )
+
+
+class CheckRunSnapshot(BaseModel):
+    """One run of the pair's connector checks and what it found."""
+
+    id: int
+    status: CapabilityCheckRunStatus
+    trigger: CapabilityCheckTrigger
+    # Empty until the run completes, and for a run that broke.
+    check_results: list[CapabilityCheckResult]
+    # Why a run broke.
+    error_message: str | None
+    time_created: str
+    time_started: str | None
+    time_finished: str | None
+
+    @classmethod
+    def from_check_run(cls, run: CapabilityCheckRun) -> "CheckRunSnapshot":
+        results: list[CapabilityCheckResult] = []
+        if run.report is not None:
+            results = CredentialCapabilityReport.model_validate(
+                run.report
+            ).check_results
+        # The history keeps the findings, the response honors the workspace switch.
+        hide_findings_if_disabled(results)
+        return cls(
+            id=run.id,
+            status=run.status,
+            trigger=run.trigger,
+            check_results=results,
+            error_message=run.error_message,
+            time_created=run.time_created.isoformat(),
+            time_started=run.time_created.isoformat(),
+            time_finished=(
+                run.time_finished.isoformat() if run.time_finished else None
+            ),
+        )
+
+
+class CCPairPruneRun(BaseModel):
+    kind: Literal[CCPairRunKind.PRUNING] = CCPairRunKind.PRUNING
+    time_created: datetime
+    attempt: PruneRunSnapshot
+
+
+class CCPairChecksRun(BaseModel):
+    kind: Literal[CCPairRunKind.CHECKS] = CCPairRunKind.CHECKS
+    time_created: datetime
+    attempt: CheckRunSnapshot
+
+
 CCPairRun = Annotated[
-    CCPairIndexRun | CCPairDocPermissionSyncRun | CCPairGroupSyncRun,
+    CCPairIndexRun
+    | CCPairDocPermissionSyncRun
+    | CCPairGroupSyncRun
+    | CCPairPruneRun
+    | CCPairChecksRun,
     Field(discriminator="kind"),
 ]
 
@@ -569,14 +667,16 @@ class CCPairThroughputWindow(str, Enum):
 
 class CCPairThroughputRun(BaseModel):
     started: datetime
+    # None while the run is still going.
+    ended: datetime | None
     status: IndexingStatus
 
 
 class CCPairThroughputResponse(BaseModel):
     """A rough estimate of the documents indexed in each equal slice of the
     window, oldest first (each run's total spread evenly over its span, since
-    nothing records when a document landed), and the runs that began in it. A
-    run that began earlier adds documents but is not listed."""
+    nothing records when a document landed), and the runs that overlap it,
+    oldest first."""
 
     window_start: datetime
     window_end: datetime
@@ -631,6 +731,8 @@ class CCPairHierarchyBreakdown(BaseModel):
     # The rows can overlap (a listed page inside a listed space), so the row
     # counts plus this count can be more than the cc-pair's total.
     other_doc_count: int
+    # Config fields whose values the rows list, so the page shows no row for them.
+    config_fields: list[str]
 
 
 class CCPairFullInfo(BaseModel):
@@ -672,6 +774,9 @@ class CCPairFullInfo(BaseModel):
     # True if this connector's class implements `Resolver.reindex`. The FE
     # uses this to route Resolve-All to targeted reindex vs full reindex.
     supports_targeted_reindex: bool
+    # The source names checks of its own, so check runs can be scheduled and
+    # listed. A source without them only records the blocking validation.
+    has_named_checks: bool
 
     # Written at create time on the association route but not returned until now,
     # so a client could never refresh or import them.
@@ -742,6 +847,7 @@ class CCPairFullInfo(BaseModel):
         last_permission_sync_attempt_finished: datetime | None = None,
         last_permission_sync_attempt_error_message: str | None = None,
         supports_targeted_reindex: bool = False,
+        has_named_checks: bool = False,
         indexing_hold: IndexingHold | None = None,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
@@ -807,6 +913,7 @@ class CCPairFullInfo(BaseModel):
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
             supports_targeted_reindex=supports_targeted_reindex,
+            has_named_checks=has_named_checks,
             groups=groups or [],
             auto_sync_options=cc_pair_model.auto_sync_options,
             processing_mode=cc_pair_model.processing_mode,

@@ -116,6 +116,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
   const [busy, setBusy] = useState(false);
   const [showDeleteConnectorConfirmModal, setShowDeleteConnectorConfirmModal] =
     useState(false);
+  // Counts the status card's asks to open the checks card.
+  const [checksExpandRequest, setChecksExpandRequest] = useState(0);
   const isSchedulingConnectorDeletionRef = useRef(false);
 
   const refresh = useCallback(() => {
@@ -475,11 +477,16 @@ function Main({ ccPairId }: { ccPairId: number }) {
               <PendingBackfills backfills={ccPair.pending_backfills} />
             )}
 
-            <StatusCard ccPair={ccPair} />
+            <StatusCard
+              ccPair={ccPair}
+              canOperate={canOperate}
+              onViewChecks={() => setChecksExpandRequest((n) => n + 1)}
+            />
             <PairChecksCard
               source={source}
               credentialId={ccPair.credential.id}
               connectorId={ccPair.connector.id}
+              expandRequest={checksExpandRequest}
             />
             <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
             <IndexConfigurationsSection

@@ -31,6 +31,7 @@ function githubPair(
       connector_specific_config: config,
       refresh_freq: 1800,
       prune_freq: 86400,
+      check_freq: null,
       // The API sends a naive UTC string.
       indexing_start: null,
       access_type: "public",
@@ -70,6 +71,8 @@ function githubPair(
     last_permission_sync_attempt_error_message: null,
     supports_targeted_reindex: false,
     pending_backfills: [],
+    has_named_checks: false,
+    indexing_hold: null,
     ...overrides,
   };
 }

@@ -8,6 +8,7 @@ import type {
   ValidStatuses,
 } from "@/lib/types";
 import type { Connector } from "@/lib/connectors/types/connector";
+import type { CapabilityCheckResult } from "@/lib/connectors/checks/types";
 import type { Credential } from "@/lib/credentials/types";
 
 export enum ConnectorCredentialPairStatus {
@@ -66,6 +67,34 @@ export interface CCPairFullInfo {
 
   // Backfills that applied edits requested, until an attempt of each succeeds.
   pending_backfills: PendingBackfillSnapshot[];
+
+  // The source names checks of its own, which can run on a schedule.
+  has_named_checks: boolean;
+  // Why the first index attempt waits, or null once it can start.
+  indexing_hold: IndexingHold | null;
+}
+
+/** Mirrors `IndexingHoldReason` in `backend/onyx/connectors/capability_checks/indexing_hold_models.py`. */
+export type IndexingHoldReason =
+  | "checks_running"
+  | "checks_failed_to_run"
+  | "required_checks_failed";
+
+/** A required check that failed. Mirrors `HeldCheck`. */
+export interface HeldCheck {
+  check_id: string;
+  capability: string;
+  display_name: string;
+  message: string;
+  remediation: string | null;
+  docs_link: string | null;
+}
+
+/** Mirrors `IndexingHold`. */
+export interface IndexingHold {
+  reason: IndexingHoldReason;
+  failed_checks: HeldCheck[];
+  index_attempt_id: number | null;
 }
 
 /** Mirrors `CCPairDataAccess` in `backend/ee/onyx/server/documents/models.py`. */
@@ -143,8 +172,44 @@ export interface ExternalGroupSyncAttemptSnapshot {
   time_finished: string | null;
 }
 
-/** Mirrors `CCPairRunKind` in `backend/onyx/server/documents/models.py`. */
-export type CCPairRunKind = "indexing" | "doc_permission_sync" | "group_sync";
+/** Mirrors `CCPairRunKind` in `backend/onyx/db/enums.py`. */
+export type CCPairRunKind =
+  | "indexing"
+  | "doc_permission_sync"
+  | "group_sync"
+  | "pruning"
+  | "checks";
+
+/** Mirrors `SyncStatus`: how a prune stands. */
+export type PruneRunStatus = "in_progress" | "success" | "failed" | "canceled";
+
+/** Mirrors `CapabilityCheckRunStatus`. `failed` means a required check failed. */
+export type CheckRunStatus = "running" | "passed" | "failed" | "failed_to_run";
+
+/** One prune of the pair. Mirrors `PruneRunSnapshot` in `backend/onyx/server/documents/models.py`. */
+export interface PruneRunSnapshot {
+  id: number;
+  status: PruneRunStatus;
+  docs_removed: number;
+  error_message: string | null;
+  time_created: string;
+  time_started: string | null;
+  time_finished: string | null;
+}
+
+/** One run of the pair's connector checks. Mirrors `CheckRunSnapshot`. */
+export interface CheckRunSnapshot {
+  id: number;
+  status: CheckRunStatus;
+  trigger: string;
+  /** Empty until the run completes, and for a run that broke. */
+  check_results: CapabilityCheckResult[];
+  /** Why a run broke. */
+  error_message: string | null;
+  time_created: string;
+  time_started: string | null;
+  time_finished: string | null;
+}
 
 /** Mirrors `CCPairRunStatusGroup`: how the run list buckets every kind's statuses. */
 export type CCPairRunStatusGroup =
@@ -186,6 +251,8 @@ export interface CCPairHierarchyBreakdown {
   nodes_by_type: Partial<Record<HierarchyNodeType, HierarchyBreakdownEntry[]>>;
   /** Documents in no listed node's subtree. Rows can overlap (a page inside a listed space), so rows plus this can exceed the pair's total. */
   other_doc_count: number;
+  /** Config fields whose values the rows list, so the page shows no row for them. */
+  config_fields: string[];
 }
 
 /** Mirrors `CCPairRunErrors`: runs with open document errors, or with all of them resolved. */
@@ -203,7 +270,9 @@ export type CCPairRun =
       kind: "group_sync";
       time_created: string;
       attempt: ExternalGroupSyncAttemptSnapshot;
-    };
+    }
+  | { kind: "pruning"; time_created: string; attempt: PruneRunSnapshot }
+  | { kind: "checks"; time_created: string; attempt: CheckRunSnapshot };
 
 /** Mirrors `CCPairRunsResponse`. `status_counts` ignores the status filter. */
 export interface CCPairRunsResponse {
@@ -293,5 +362,6 @@ export interface CCPairThroughputResponse {
   window_start: string;
   window_end: string;
   docs_indexed: number[];
-  runs: { started: string; status: ValidStatuses }[];
+  /** `ended` is null while the run is still going. */
+  runs: { started: string; ended: string | null; status: ValidStatuses }[];
 }

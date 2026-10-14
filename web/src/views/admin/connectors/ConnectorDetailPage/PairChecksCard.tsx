@@ -21,6 +21,8 @@ export interface PairChecksCardProps {
   source: ValidSources;
   credentialId: number;
   connectorId: number;
+  /** Each increment opens the card and scrolls it into view. */
+  expandRequest?: number;
 }
 
 /** The pair's stored checks: its own report, else the credential's. Nothing shows until one exists. */
@@ -28,6 +30,7 @@ export default function PairChecksCard({
   source,
   credentialId,
   connectorId,
+  expandRequest = 0,
 }: PairChecksCardProps) {
   const t = useTranslations("admin.connectorsList.add.account");
   const { reportFor, rerun } = useCredentialCheckReports(source);
@@ -48,6 +51,7 @@ export default function PairChecksCard({
       expectedCount={0}
       stateCounts={stateCounts}
       defaultCollapsed
+      expandRequest={expandRequest}
       onRerun={() => {
         rerun(credentialId, connectorId).catch(() =>
           toast.error(t("rerunFailed.toast"))
