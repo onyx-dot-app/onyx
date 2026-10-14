@@ -347,7 +347,8 @@ class _NoRedirectSession(requests.Session):
         return iter(())
 
 
-def _pinned_get(
+def _pinned_request(
+    method: str,
     url: str,
     validated_ip: str,
     hostname: str,
@@ -356,7 +357,7 @@ def _pinned_get(
     timeout: float | tuple[float, float],
     **kwargs: Any,
 ) -> requests.Response:
-    """GET the already-validated IP directly, presenting ``hostname`` for the
+    """Send to the already-validated IP directly, presenting ``hostname`` for the
     Host header and (on https) SNI + certificate verification."""
     parsed = urlparse(url)
     ip_literal = f"[{validated_ip}]" if ":" in validated_ip else validated_ip
@@ -371,7 +372,8 @@ def _pinned_get(
     with _NoRedirectSession() as session:
         if parsed.scheme == "https":
             session.mount("https://", _PinnedHostAdapter(hostname))
-        return session.get(
+        return session.request(
+            method,
             request_url,
             headers=request_headers,
             timeout=timeout,
@@ -418,10 +420,11 @@ def _make_ssrf_safe_request(
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
     https_only: bool = False,
+    method: str = "GET",
     **kwargs: Any,
 ) -> requests.Response:
     """
-    Make a single GET request with SSRF protection (no redirect following).
+    Make a single request with SSRF protection (no redirect following).
 
     Returns the response which may be a redirect (3xx status).
 
@@ -460,14 +463,47 @@ def _make_ssrf_safe_request(
             block_loopback=block_loopback,
             block_link_local=block_link_local,
         )
-        return _pinned_get(
-            url, validated_ip, hostname, port, headers, timeout, **kwargs
+        return _pinned_request(
+            method, url, validated_ip, hostname, port, headers, timeout, **kwargs
         )
 
     # Validate and resolve the URL to get a safe IP
     validated_ip, original_hostname, port = _validate_and_resolve_url(url)
-    return _pinned_get(
-        url, validated_ip, original_hostname, port, headers, timeout, **kwargs
+    return _pinned_request(
+        method,
+        url,
+        validated_ip,
+        original_hostname,
+        port,
+        headers,
+        timeout,
+        **kwargs,
+    )
+
+
+def ssrf_safe_request(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    timeout: float | tuple[float, float] = 15,
+    allow_private_network: bool = False,
+    block_loopback_and_link_local: bool = True,
+    block_link_local_only: bool = False,
+    **kwargs: Any,
+) -> requests.Response:
+    """Send one request of any method with SSRF protection and DNS pinning.
+    Redirects are not followed: a 3xx comes back to the caller as is, so
+    request bodies and auth headers never go to an unvalidated host."""
+    return _make_ssrf_safe_request(
+        url,
+        headers,
+        timeout,
+        allow_private_network=allow_private_network,
+        block_loopback_and_link_local=block_loopback_and_link_local,
+        block_link_local_only=block_link_local_only,
+        method=method,
+        **kwargs,
     )
 
 

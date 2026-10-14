@@ -5,7 +5,6 @@ import uuid
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
-import requests
 from pydantic import JsonValue, TypeAdapter
 from requests import JSONDecodeError
 
@@ -21,6 +20,8 @@ from onyx.server.query_and_chat.streaming_models import (
     CustomToolStart,
     Packet,
 )
+from onyx.server.security.models import OutboundSSRFParams, SSRFProtectionLevel
+from onyx.server.security.store import get_security_settings
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     CHAT_SESSION_ID_PLACEHOLDER,
@@ -41,10 +42,48 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
 )
 from onyx.utils.headers import HeaderItemDict, header_list_to_header_dict
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, ssrf_safe_request, validate_outbound_http_url
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
+# (connect, read) seconds
+CUSTOM_TOOL_REQUEST_TIMEOUT: tuple[float, float] = (10, 120)
+
+
+def custom_tool_ssrf_params() -> OutboundSSRFParams:
+    """Cloud blocks every internal target. Self-hosted allows private hosts;
+    loopback only at DISABLED. Cloud metadata is blocked at every level."""
+    if MULTI_TENANT:
+        return OutboundSSRFParams(
+            allow_private_network=False,
+            block_loopback_and_link_local=True,
+            block_link_local_only=False,
+        )
+    if get_security_settings().ssrf_protection_level == SSRFProtectionLevel.DISABLED:
+        return OutboundSSRFParams(
+            allow_private_network=True,
+            block_loopback_and_link_local=False,
+            block_link_local_only=True,
+        )
+    return OutboundSSRFParams(
+        allow_private_network=True,
+        block_loopback_and_link_local=True,
+        block_link_local_only=False,
+    )
+
+
+def validate_custom_tool_url(url: str, *, resolve_dns: bool = True) -> None:
+    """Raises ``SSRFException`` or ``ValueError`` for a blocked destination."""
+    params = custom_tool_ssrf_params()
+    validate_outbound_http_url(
+        url,
+        allow_private_network=params.allow_private_network,
+        block_loopback_and_link_local=params.block_loopback_and_link_local,
+        block_link_local_only=params.block_link_local_only,
+        resolve_dns=resolve_dns,
+    )
 
 
 # override_kwargs is not supported for custom tools
@@ -192,9 +231,38 @@ class CustomTool(Tool[None]):
         url = self._method_spec.build_url(self._base_url, path_params, query_params)
         method = self._method_spec.method
 
-        response = requests.request(
-            method, url, json=request_body, headers=self.headers
-        )
+        params = custom_tool_ssrf_params()
+        try:
+            response = ssrf_safe_request(
+                method,
+                url,
+                json=request_body,
+                headers=self.headers,
+                timeout=CUSTOM_TOOL_REQUEST_TIMEOUT,
+                allow_private_network=params.allow_private_network,
+                block_loopback_and_link_local=params.block_loopback_and_link_local,
+                block_link_local_only=params.block_link_local_only,
+            )
+        except (SSRFException, ValueError) as e:
+            raise ToolCallException(
+                message=f"{self._name} request blocked: {e}",
+                llm_facing_message=(
+                    f"The {self._name} tool could not run because its destination "
+                    "is not allowed."
+                ),
+            ) from e
+        if response.is_redirect:
+            raise ToolCallException(
+                message=(
+                    f"{self._name} got HTTP {response.status_code} redirect to "
+                    f"'{response.headers.get('Location')}'; redirects are not followed"
+                ),
+                llm_facing_message=(
+                    f"The {self._name} tool failed because the server sent a "
+                    "redirect. An admin must set the action's server URL to the "
+                    "final location."
+                ),
+            )
         content_type = response.headers.get("Content-Type", "")
 
         # Detect HTTP errors — only 401/403 are flagged as auth errors
