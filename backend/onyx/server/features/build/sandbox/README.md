@@ -354,6 +354,8 @@ The proxy rejects invalid CIDRs at startup.
 HTTP requests and CONNECT tunnels use the same destination policy: only public addresses outside these ranges are allowed.
 The exact `ONYX_SERVER_URL` host and port form an internal destination exception.
 Craft-enabled MCP servers also permit their exact scheme, host, and port for users with access.
+The tenant’s SSRF Protection setting still applies to every resolved address.
+Raw TCP forwarding is disabled; CONNECT does not bypass HTTP path, credential, or action checks.
 The proxy must have a network route and network-policy access to these servers.
 Standard NAT64 addresses with embedded private IPv4 destinations are also blocked.
 

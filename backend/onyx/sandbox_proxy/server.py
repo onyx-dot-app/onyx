@@ -187,6 +187,8 @@ def _build_mitm_master() -> DumpMaster:
             confdir=_MITM_CONFDIR,
             mode=["regular"],
             ssl_insecure=False,
+            # Every forwarded request must pass the HTTP policy and credential hooks.
+            rawtcp=False,
             ssl_verify_upstream_trusted_ca=SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
         ),
         with_termlog=False,

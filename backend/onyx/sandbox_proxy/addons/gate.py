@@ -69,7 +69,10 @@ from onyx.server.features.build.configs import (
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.db import action_approval
+from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -1160,9 +1163,16 @@ class GateAddon:
                 sandbox, scheme, host, port
             ):
                 return None
-            return resolve_destination(
-                self._destination_policy, host, port, allow_internal=True
-            )
+            token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
+            try:
+                params = outbound_ssrf_params(
+                    get_security_settings().ssrf_protection_level
+                )
+                return resolve_destination(
+                    self._destination_policy, host, port, mcp_ssrf_params=params
+                )
+            finally:
+                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         except Exception:
             logger.exception("mcp_destination_error host=%s port=%s", host, port)
             return None

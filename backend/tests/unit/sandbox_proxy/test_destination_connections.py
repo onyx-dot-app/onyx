@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import socket
+import ssl
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -21,6 +22,7 @@ from onyx.sandbox_proxy.destination_policy import (
     UpstreamEventLoop,
     parse_destination_policy,
 )
+from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from tests.unit.sandbox_proxy.conftest import (
@@ -39,7 +41,7 @@ _HOST: str = "upstream.test"
 
 @asynccontextmanager
 async def _upstream(
-    address: str, port: int = 0
+    address: str, port: int = 0, ssl_context: ssl.SSLContext | None = None
 ) -> AsyncIterator[tuple[int, list[bytes]]]:
     requests: list[bytes] = []
 
@@ -47,7 +49,11 @@ async def _upstream(
         index: int = len(requests)
         requests.append(b"")  # Count accepted connections, including empty requests.
         try:
-            requests[index] = await reader.readuntil(b"\r\n\r\n")
+            try:
+                requests[index] = await reader.readuntil(b"\r\n\r\n")
+            except asyncio.IncompleteReadError as exc:
+                requests[index] = exc.partial
+                return
             writer.write(
                 b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok"
             )
@@ -56,7 +62,9 @@ async def _upstream(
             writer.close()
             await writer.wait_closed()
 
-    upstream: asyncio.Server = await asyncio.start_server(serve, address, port)
+    upstream: asyncio.Server = await asyncio.start_server(
+        serve, address, port, ssl=ssl_context
+    )
     try:
         yield upstream.sockets[0].getsockname()[1], requests
     finally:
@@ -73,21 +81,25 @@ async def _proxy(
     barrier: "_ConnectionBarrier | None" = None,
     addresses: "_ConnectionAddresses | None" = None,
     mcp_resolver: MCPServerResolver | None = None,
+    evaluator: RequestEvaluator | None = None,
+    dispatcher: CredentialInjectionDispatcher | None = None,
+    connection_strategy: str = "eager",
 ) -> AsyncIterator[int]:
     monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_HOST", address)
     monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_PORT", 0)
     monkeypatch.setattr(server, "_MITM_CONFDIR", str(tmp_path / f"mitm-{api_port}"))
     master: DumpMaster = server._build_mitm_master()
+    master.options.update(connection_strategy=connection_strategy)
     if addresses is not None:
         master.addons.add(addresses)
     master.addons.add(
         GateAddon(
             mcp_resolver=mcp_resolver,
             identity=StubResolver(sandbox=make_resolved_sandbox()),
-            request_evaluator=NoMatchedRequest(),
+            request_evaluator=evaluator or NoMatchedRequest(),
             cache_factory=unused_cache,
             proxy_instance_id="connection-test",
-            credential_dispatcher=CredentialInjectionDispatcher([]),
+            credential_dispatcher=dispatcher or CredentialInjectionDispatcher([]),
             destination_policy=parse_destination_policy(f"http://{_HOST}:{api_port}"),
         )
     )
@@ -294,6 +306,7 @@ def test_concurrent_connections_keep_their_own_pins(
 
 
 @pytest.mark.parametrize("address", ["127.0.0.1", "::1"])
+@pytest.mark.usefixtures("mcp_ssrf_settings")
 def test_private_http_mcp_uses_pinned_addresses(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, address: str
 ) -> None:
@@ -327,3 +340,187 @@ def test_private_http_mcp_uses_pinned_addresses(
 
     with asyncio.Runner(loop_factory=UpstreamEventLoop) as runner:
         runner.run(exercise())
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "::1"])
+@pytest.mark.parametrize("connection_strategy", ["eager", "lazy"])
+@pytest.mark.parametrize("tls_payload", [False, True])
+@pytest.mark.usefixtures("mcp_ssrf_settings")
+def test_private_connect_never_forwards_raw_tcp(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    address: str,
+    connection_strategy: str,
+    tls_payload: bool,
+) -> None:
+    from tests.unit.sandbox_proxy.test_destination_tls import _tls_context
+
+    context, ca = _tls_context(tmp_path, _HOST)
+    monkeypatch.setattr(server, "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", str(ca))
+
+    async def exercise() -> None:
+        async with _upstream(address, ssl_context=context if tls_payload else None) as (
+            port,
+            requests,
+        ):
+            resolver = MCPServerResolver()
+            monkeypatch.setattr(
+                resolver,
+                "_load_targets",
+                lambda _tenant: (
+                    CraftMCPTarget(
+                        server_id=1,
+                        scheme="https",
+                        host=_HOST,
+                        port=port,
+                        path_prefix="/mcp",
+                    ),
+                ),
+            )
+            monkeypatch.setattr(
+                resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+            )
+            _dns(monkeypatch, lambda _port: (address,), lambda _port: ())
+            async with _proxy(
+                monkeypatch,
+                tmp_path,
+                address,
+                1,
+                mcp_resolver=resolver,
+                connection_strategy=connection_strategy,
+            ) as proxy_port:
+                reader, writer = await asyncio.open_connection(address, proxy_port)
+                try:
+                    writer.write(
+                        f"CONNECT {_HOST}:{port} HTTP/1.1\r\nHost: {_HOST}:{port}\r\n\r\n".encode()
+                    )
+                    await writer.drain()
+                    response = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 10)
+                    assert response.startswith(b"HTTP/1.1 200")
+                    if tls_payload:
+                        client_context = ssl.create_default_context(
+                            cafile=str(tmp_path / "mitm-1" / "mitmproxy-ca-cert.pem")
+                        )
+                        await asyncio.wait_for(
+                            writer.start_tls(client_context, server_hostname=_HOST), 10
+                        )
+                    writer.write(b"SSH-2.0-policy-bypass\r\n\r\n")
+                    await writer.drain()
+                    response = await asyncio.wait_for(reader.read(), 10)
+                    assert b"200 OK" not in response
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+            assert not any(requests), "Non-HTTP payload reached the private upstream"
+
+    asyncio.run(exercise(), loop_factory=UpstreamEventLoop)
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "::1"])
+@pytest.mark.parametrize("case", ["plumbing", "outside_path", "denied_tool"])
+@pytest.mark.usefixtures("mcp_ssrf_settings")
+def test_private_mcp_http_enforces_path_credentials_and_policy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, address: str, case: str
+) -> None:
+    import json
+    from unittest.mock import MagicMock
+
+    from onyx.db.enums import (
+        EndpointPolicy,
+        MCPAuthenticationPerformer,
+        MCPAuthenticationType,
+    )
+    from onyx.db.models import MCPServer, User
+    from onyx.sandbox_proxy import request_evaluator
+    from onyx.sandbox_proxy.resolvers import mcp_server
+    from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
+
+    async def exercise() -> None:
+        async with _upstream(address) as (port, requests):
+            stored = MCPServer(
+                id=1,
+                name="Private MCP",
+                server_url=f"http://{_HOST}:{port}/mcp",
+                available_in_craft=True,
+                auth_type=MCPAuthenticationType.API_TOKEN,
+                auth_performer=MCPAuthenticationPerformer.ADMIN,
+            )
+            user = User(id=make_resolved_sandbox().user_id)
+            for module in (request_evaluator, mcp_server):
+                monkeypatch.setattr(module, "get_session_with_tenant", MagicMock())
+                monkeypatch.setattr(
+                    module, "get_craft_enabled_mcp_servers", lambda *_args: [stored]
+                )
+                monkeypatch.setattr(module, "fetch_user_by_id", lambda *_args: user)
+            monkeypatch.setattr(
+                request_evaluator,
+                "get_action_policies",
+                lambda *_args: {"delete_records": EndpointPolicy.DENY},
+            )
+            monkeypatch.setattr(
+                mcp_server, "get_mcp_server_by_id", lambda *_args: stored
+            )
+            monkeypatch.setattr(
+                mcp_server, "user_can_access_mcp_server", lambda *_args: True
+            )
+            credentials = MagicMock(
+                return_value=ResolvedMCPCredentials(
+                    connection_config_id=1,
+                    connection_data={
+                        "headers": {"Authorization": "Bearer real-test-token"}
+                    },
+                    user_oauth_token=None,
+                    auth_type=MCPAuthenticationType.API_TOKEN,
+                )
+            )
+            monkeypatch.setattr(mcp_server, "resolve_mcp_credentials", credentials)
+            resolver = MCPServerResolver()
+            _dns(monkeypatch, lambda _port: (address,), lambda _port: ())
+            async with _proxy(
+                monkeypatch,
+                tmp_path,
+                address,
+                1,
+                mcp_resolver=resolver,
+                evaluator=request_evaluator.McpRequestEvaluator(),
+                dispatcher=CredentialInjectionDispatcher([resolver]),
+            ) as proxy_port:
+                reader, writer = await asyncio.open_connection(address, proxy_port)
+                path = "/admin" if case == "outside_path" else "/mcp"
+                body = json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call"
+                        if case == "denied_tool"
+                        else "initialize",
+                        "params": {"name": "delete_records"},
+                    }
+                ).encode()
+                try:
+                    writer.write(
+                        f"POST http://{_HOST}:{port}{path} HTTP/1.1\r\nHost: {_HOST}:{port}\r\nContent-Type: application/json\r\nAuthorization: Bearer placeholder\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode()
+                        + body
+                    )
+                    await writer.drain()
+                    response = await asyncio.wait_for(reader.read(), 10)
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+            if case == "plumbing":
+                assert response.startswith(b"HTTP/1.1 200")
+                assert len(requests) == 1
+                assert b"Authorization: Bearer real-test-token" in requests[0]
+                assert b"placeholder" not in requests[0]
+                credentials.assert_called_once()
+            else:
+                assert response.startswith(b"HTTP/1.1 403")
+                assert (
+                    b"credential_error" in response
+                    if case == "outside_path"
+                    else b"policy_denied" in response
+                )
+                assert not any(requests)
+                credentials.assert_not_called()
+
+    asyncio.run(exercise(), loop_factory=UpstreamEventLoop)

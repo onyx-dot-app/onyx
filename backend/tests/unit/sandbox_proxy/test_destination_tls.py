@@ -159,6 +159,7 @@ async def _read_response(reader: asyncio.StreamReader) -> bytes:
 @pytest.mark.parametrize("mcp_destination", [False, True])
 @pytest.mark.parametrize("certificate_host", [_HOST, "wrong.test"])
 @pytest.mark.parametrize("loopback", ["127.0.0.1", "::1"])
+@pytest.mark.usefixtures("mcp_ssrf_settings")
 def test_pinned_tls_preserves_hostname_verification_and_injection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

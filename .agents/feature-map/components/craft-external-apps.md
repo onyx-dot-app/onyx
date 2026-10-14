@@ -104,7 +104,8 @@ Internal destinations remain blocked for HTTP and CONNECT. The exact
 `ONYX_SERVER_URL` host and port remain an internal destination exception.
 Craft-enabled MCP servers also permit their exact scheme, host, and port for
 users with access in the sandbox tenant. The resolver caches access for 30 seconds.
-Lookup failures deny access. Path, credential, and action checks still apply.
+Lookup failures deny access. The tenant’s SSRF Protection setting applies to the addresses used for the connection.
+Raw TCP forwarding is disabled. Path, credential, and action checks still apply.
 Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
 Use listeners and Services in that address family: IPv4 remains the default;
 IPv6 listeners support IPv6-only deployments. Switching an IPv4-primary
@@ -192,7 +193,10 @@ sandbox process (opencode / a tool call)
      CONNECT checks HTTPS; requests check their scheme. Upstream sockets check TLS
      or the accepted CONNECT origin before allowing internal MCP addresses.
      GateAddon._resolve_mcp_destination resolves identity and MCP access, then
-     resolves the approved origin with allow_internal=True.
+     resolves the approved origin under the sandbox tenant’s current SSRF settings.
+     It validates resolved addresses and embedded IPv4 with the shared URL validator.
+     Only these validated addresses are pinned.
+     Raw TCP forwarding is disabled, so CONNECT payloads must pass HTTP checks.
      http_connect and request check destinations before processing traffic.
      server_connect resolves and validates all answers again, then pins the
      upstream TCP connection to those addresses through UpstreamEventLoop.

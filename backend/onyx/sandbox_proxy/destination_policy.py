@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urlsplit
 
 from onyx.sandbox_proxy.models import DestinationPolicyConfig, IPNetwork
+from onyx.server.security.models import OutboundSSRFParams
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 if TYPE_CHECKING:
     from socket import _RetAddress
@@ -71,11 +73,11 @@ def resolve_destination(
     host: str,
     port: int,
     *,
-    allow_internal: bool = False,
+    mcp_ssrf_params: OutboundSSRFParams | None = None,
 ) -> tuple[str, ...] | None:
     """Return validated addresses in DNS order, or None if any is blocked.
 
-    Set allow_internal only after authorizing the exact origin for the sandbox.
+    Supply MCP SSRF settings only after authorizing the exact origin.
     """
     host = host.strip().lower()
     if not host or not 1 <= port <= 65535:
@@ -103,6 +105,23 @@ def resolve_destination(
     if not addresses:
         return None
     is_api: bool = host == config.api_host and port == config.api_port
+    if mcp_ssrf_params is not None:
+        # Validate the same answers that will be pinned, including embedded IPv4.
+        for target in (host, *(str(_embedded_address(ip)) for ip in addresses)):
+            authority = f"[{target}]" if ":" in target else target
+            try:
+                validate_outbound_http_url(
+                    f"https://{authority}:{port}",
+                    allow_private_network=mcp_ssrf_params.allow_private_network,
+                    block_loopback_and_link_local=mcp_ssrf_params.block_loopback_and_link_local,
+                    block_link_local_only=mcp_ssrf_params.block_link_local_only,
+                    resolve_dns=False,
+                )
+            except (SSRFException, ValueError):
+                return None
+    allow_internal = (
+        mcp_ssrf_params is not None and mcp_ssrf_params.allow_private_network
+    )
     if not (is_api or allow_internal) and any(
         is_internal(config, address) for address in addresses
     ):

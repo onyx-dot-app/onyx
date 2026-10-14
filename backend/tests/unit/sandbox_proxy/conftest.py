@@ -259,3 +259,15 @@ class NoMatchedRequest(RequestEvaluator):
 
 def unused_cache(_tenant_id: str) -> CacheBackend:
     raise AssertionError("Off-catalog requests do not use the approval cache")
+
+
+@pytest.fixture
+def mcp_ssrf_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Allow test loopback servers through the real SSRF address checks."""
+    from onyx.server.security.models import SSRFProtectionLevel
+
+    settings = MagicMock(ssrf_protection_level=SSRFProtectionLevel.DISABLED)
+    monkeypatch.setattr(
+        "onyx.sandbox_proxy.addons.gate.get_security_settings", lambda: settings
+    )
+    return settings
