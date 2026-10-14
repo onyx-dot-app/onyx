@@ -3094,15 +3094,6 @@
       },
       "optionsListInput": {
         "placeholder": "リストから {label} を選択するか入力"
-      },
-      "atlassian": {
-        "siteUrl": {
-          "label": "サイト URL"
-        },
-        "scopedToken": {
-          "label": "スコープ付きの API トークンです",
-          "description": "スコープ付きトークンは Atlassian の API ゲートウェイを経由します。従来のトークンではオフのままにしてください。"
-        }
       }
     },
     "costOverrides": {

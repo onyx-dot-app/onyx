@@ -3094,15 +3094,6 @@
       },
       "optionsListInput": {
         "placeholder": "从列表中选择{label}或输入"
-      },
-      "atlassian": {
-        "siteUrl": {
-          "label": "站点 URL"
-        },
-        "scopedToken": {
-          "label": "这是带作用域的 API 令牌",
-          "description": "带作用域的令牌需要通过 Atlassian 的 API 网关路由。经典令牌请保持关闭。"
-        }
       }
     },
     "costOverrides": {

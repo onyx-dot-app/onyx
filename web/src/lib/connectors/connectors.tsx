@@ -174,15 +174,6 @@ export function useConnectorConfiguration(
 ): ConnectionConfiguration {
   const t = useTranslations("admin.connectorsList.oneDrive");
   const linearText = useTranslations("admin.connectorsList.linear");
-  const atlassianText = useTranslations("admin.connectorsList.atlassian");
-
-  if (connector === "confluence" || connector === "jira") {
-    return withAtlassianText(connectorConfigs[connector], {
-      siteUrlLabel: atlassianText("siteUrl.label"),
-      scopedTokenLabel: atlassianText("scopedToken.label"),
-      scopedTokenDescription: atlassianText("scopedToken.description"),
-    });
-  }
 
   if (connector === "linear") {
     return buildLinearConfiguration({
@@ -258,45 +249,6 @@ const zoomWebinarIdsOption: ListOption = {
     "meeting IDs, webinar history has no 15-month limit.",
 };
 
-/** The translated copy Confluence and Jira share. */
-interface AtlassianConfigurationText {
-  siteUrlLabel: string;
-  scopedTokenLabel: string;
-  scopedTokenDescription: string;
-}
-
-const ATLASSIAN_TRANSLATION_KEYS: AtlassianConfigurationText = {
-  siteUrlLabel: "siteUrl.label",
-  scopedTokenLabel: "scopedToken.label",
-  scopedTokenDescription: "scopedToken.description",
-};
-
-/** Swaps the shared Atlassian fields' message keys for their translations. */
-function withAtlassianText(
-  config: ConnectionConfiguration,
-  text: AtlassianConfigurationText
-): ConnectionConfiguration {
-  return {
-    ...config,
-    values: config.values.map((field) => {
-      if (field.type === "checkbox" && field.name === "scoped_token") {
-        return {
-          ...field,
-          label: text.scopedTokenLabel,
-          description: text.scopedTokenDescription,
-        };
-      }
-      if (
-        field.type === "text" &&
-        (field.name === "wiki_base" || field.name === "jira_base_url")
-      ) {
-        return { ...field, label: text.siteUrlLabel };
-      }
-      return field;
-    }),
-  };
-}
-
 /**
  * Whether an Atlassian API token (Confluence, Jira) has scopes. It sits below
  * the site URL in both connectors.
@@ -304,9 +256,9 @@ function withAtlassianText(
 const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
   type: "checkbox",
   query: "Using scoped token?",
-  // Message keys; `useConnectorConfiguration` swaps in the translations.
-  label: ATLASSIAN_TRANSLATION_KEYS.scopedTokenLabel,
-  description: ATLASSIAN_TRANSLATION_KEYS.scopedTokenDescription,
+  label: "This is an API token with scopes",
+  description:
+    "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens.",
   name: "scoped_token",
   optional: true,
   default: false,
@@ -877,7 +829,7 @@ export const connectorConfigs: Record<
       {
         type: "text",
         query: "Enter the wiki base URL:",
-        label: ATLASSIAN_TRANSLATION_KEYS.siteUrlLabel,
+        label: "Site URL",
         name: "wiki_base",
         optional: false,
         initial: (currentCredential) => {
@@ -978,7 +930,7 @@ export const connectorConfigs: Record<
       {
         type: "text",
         query: "Enter the Jira base URL:",
-        label: ATLASSIAN_TRANSLATION_KEYS.siteUrlLabel,
+        label: "Site URL",
         name: "jira_base_url",
         optional: false,
         placeholder: "https://your-domain.atlassian.net",

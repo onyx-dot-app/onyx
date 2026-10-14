@@ -3094,15 +3094,6 @@
       },
       "optionsListInput": {
         "placeholder": "Pick {label} from the list, or type one"
-      },
-      "atlassian": {
-        "siteUrl": {
-          "label": "Site URL"
-        },
-        "scopedToken": {
-          "label": "This is an API token with scopes",
-          "description": "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens."
-        }
       }
     },
     "costOverrides": {

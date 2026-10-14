@@ -3094,15 +3094,6 @@
       },
       "optionsListInput": {
         "placeholder": "Choisissez {label} dans la liste ou saisissez-en"
-      },
-      "atlassian": {
-        "siteUrl": {
-          "label": "URL du site"
-        },
-        "scopedToken": {
-          "label": "Il s’agit d’un jeton d’API avec des portées",
-          "description": "Les jetons avec portées passent par la passerelle d’API d’Atlassian. Laissez désactivé pour les jetons classiques."
-        }
       }
     },
     "costOverrides": {
