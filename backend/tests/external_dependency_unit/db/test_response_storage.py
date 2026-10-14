@@ -7,6 +7,7 @@ from queue import Queue
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import BaseModel
 from sqlalchemy import delete, event, func, inspect, select, update
 from sqlalchemy.orm import Session
 
@@ -25,17 +26,28 @@ from onyx.agents.execution_records import (
     RunStatus,
 )
 from onyx.agents.models import (
+    AgentState,
+    ExecutionCheckpoint,
+    RunAction,
+    RunProgress,
     RunState,
     StepRecord,
     ToolExecutionRecord,
     messages_from_steps,
 )
-from onyx.agents.tools import ToolProgress
+from onyx.agents.tools import InputMode, PendingToolInput, ToolProgress
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
+from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
-from onyx.chat.models import ChatResponseSnapshot, MessageRendering, ResponseRecord
+from onyx.chat.models import (
+    ChatResponseSnapshot,
+    CheckpointBinding,
+    MessageRendering,
+    ResponseRecord,
+)
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.response import response_record
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -73,9 +85,11 @@ from onyx.db.chat_subagents import (
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, Tool
 from onyx.db.models import ToolCall as StoredToolCall
+from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationOptions,
     ImageContentPart,
     ImageUrlDetail,
     Message,
@@ -101,13 +115,18 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
 )
 from onyx.tools.models import (
+    CustomToolCallSummary,
+    CustomToolUserFileSnapshot,
+    FileReadResult,
     GeneratedImage,
+    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryOperation,
     MemoryUpdated,
     PythonExecutionDelta,
     PythonExecutionFile,
     ToolCallInfo,
+    ToolExecutionError,
 )
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
@@ -336,6 +355,161 @@ def test_thinking_preserves_signed_content_and_final_display_text(
     assert steps[1].message.content == [final, TextContent(text="Raw answer")]
 
 
+@pytest.mark.parametrize(
+    "details",
+    [
+        None,
+        LlmPythonExecutionResult(
+            stdout="hello", stderr="", exit_code=0, timed_out=False, generated_files=[]
+        ),
+        LlmBashExecutionResult(stdout="hello", stderr="", exit_code=0, timed_out=False),
+        MemoryUpdated(
+            memory_text="Prefers tea", operation=MemoryOperation.ADD, memory_id=12
+        ),
+        FileReadResult(
+            file_name="notes.txt",
+            file_id="notes",
+            start_char=0,
+            end_char=5,
+            total_chars=5,
+        ),
+        CodingAgentCallResult(answer="Done"),
+        ResearchAgentCallResult(intermediate_report="Report", citation_mapping={}),
+        FinalImageGenerationResponse(
+            generated_images=[
+                GeneratedImage(
+                    file_id="image", url="/api/chat/file/image", revised_prompt="Tree"
+                )
+            ]
+        ),
+        CustomToolCallSummary(
+            tool_name="custom",
+            response_type="csv",
+            tool_result=CustomToolUserFileSnapshot(file_ids=["csv-file"]),
+        ),
+        CustomToolCallSummary(
+            tool_name="custom",
+            response_type="json",
+            tool_result={"file_ids": ["not-a-file-reference"], "other": 1},
+        ),
+        ToolExecutionError(message="Tool failed"),
+        SearchDocsResponse(
+            queries=["query"], search_docs=[], citation_mapping={}, displayed_docs=[]
+        ),
+    ],
+)
+def test_tool_result_details_round_trip_without_legacy_output(
+    db_session: Session, conversation: ChatSession, details: BaseModel | None
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    result = ToolResultMessage(
+        tool_call_id="call",
+        tool_name="lookup",
+        content="Model output",
+        details=details,
+        is_error=isinstance(details, ToolExecutionError),
+    )
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="call", name="lookup", arguments={})]
+            ),
+            result,
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    _save(db_session, response, record)
+    db_session.expire_all()
+
+    restored = read_response_steps(response)[0].tools["call"].result
+    assert restored is not None
+    assert restored.content == result.content
+    assert restored.is_error == result.is_error
+    assert type(restored.details) is type(details)
+    assert restored.details == details
+    tool = db_session.scalar(
+        select(StoredToolCall).where(
+            StoredToolCall.parent_chat_message_id == response.id
+        )
+    )
+    assert tool is not None
+    assert tool.legacy_response == ""
+    assert tool.tool_call_response == result.content
+    assert tool.generated_images is None
+
+
+def test_suspended_search_result_restores_after_database_round_trip(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation, text="Search then ask")
+    assert response.parent_message is not None
+    instruction = UserMessage(
+        id=f"chat:{response.parent_message.id}", content=response.parent_message.message
+    )
+    snapshot = RunState(
+        run_id=str(uuid4()),
+        agent_id=str(conversation.id),
+        status=RunStatus.SUSPENDED,
+        input_messages=[instruction],
+        steps=[
+            StepRecord(
+                message=AssistantMessage(
+                    id="generation",
+                    content=[
+                        ToolCall(id="search", name="search", arguments={}),
+                        ToolCall(id="ask", name="ask", arguments={}),
+                    ],
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "search": ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE,
+                        result=ToolResultMessage(
+                            content="Found",
+                            tool_call_id="search",
+                            tool_name="search",
+                            details=SearchDocsResponse(
+                                queries=["query"],
+                                search_docs=[],
+                                citation_mapping={},
+                                displayed_docs=[],
+                            ),
+                        ),
+                    )
+                },
+            )
+        ],
+        progress=RunProgress(
+            step_limit=3,
+            action=RunAction.TOOLS,
+            options=GenerationOptions(),
+            previous_options=GenerationOptions(),
+            finalized_tools=1,
+            pending_tool_calls={
+                "ask": PendingToolInput(
+                    request_id="ask-user", prompt="Continue?", mode=InputMode.EXECUTE
+                )
+            },
+        ),
+    )
+    context = AgentState(messages=[instruction])
+    record = response_record(snapshot)
+    binding = CheckpointBinding(tenant_id="public", branch_id=str(response.id))
+    checkpoint = serialize_checkpoint(
+        ExecutionCheckpoint(agent_state=context, run_state=snapshot), record, binding
+    )
+    save_response_record__no_commit(db_session, response.id, record)
+    db_session.flush()
+    db_session.expire_all()
+    saved = read_response__no_commit(db_session, snapshot.run_id)
+    assert saved is not None
+    restored = deserialize_checkpoint(checkpoint, saved.response, context, binding)
+    assert restored.run_state.model_dump() == snapshot.model_dump()
+
+
 def test_response_tools_flush_together_and_keep_result_links(
     db_session: Session, conversation: ChatSession
 ) -> None:
@@ -373,7 +547,9 @@ def test_response_tools_flush_together_and_keep_result_links(
         assert flushes == 1
         assert len({tool.id for tool in tools.values()}) == len(calls)
         db_session.expire_all()
-        assert read_response_steps(response) == steps
+        assert [step.model_dump() for step in read_response_steps(response)] == [
+            step.model_dump() for step in steps
+        ]
         for call in calls:
             linked = [
                 row.tool_call_id
@@ -419,7 +595,9 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
     second_id, second_tool_id = second_row.id, second_row.tool_call_id
     suspended = read_chat_execution(response)
     assert suspended is not None and suspended.response is not None
-    assert suspended.response.steps == record.steps
+    assert [step.model_dump() for step in suspended.response.steps] == [
+        step.model_dump() for step in record.steps
+    ]
     assert suspended.response.steps[0].tools["first"].result is None
 
     step.tools["first"] = ToolExecutionRecord(
@@ -443,7 +621,9 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
     db_session.expire(response)
     restored = read_chat_execution(response)
     assert restored is not None and restored.response is not None
-    assert restored.response.steps == record.steps
+    assert [step.model_dump() for step in restored.response.steps] == [
+        step.model_dump() for step in record.steps
+    ]
     assert [message.text for message in restored.response.messages] == [
         "",
         "First result",
@@ -1066,7 +1246,9 @@ def test_response_reservation_preserves_model_order_and_active_branch(
     assert question.latest_child_message_id == ids[-1]
 
 
-@pytest.mark.parametrize("tool_kind", ["python", "coding", "image", "memory", "search"])
+@pytest.mark.parametrize(
+    "tool_kind", ["python", "coding", "image", "memory", "search", "search_empty"]
+)
 def test_completed_tool_display_matches_reload_without_duplicate_streamed_output(
     db_session: Session, conversation: ChatSession, tool_record: Tool, tool_kind: str
 ) -> None:
@@ -1109,7 +1291,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         )
         progress = ToolProgress(details=result.details)
         implementation = ImageGenerationTool.__name__
-    elif tool_kind == "search":
+    elif tool_kind in {"search", "search_empty"}:
         call = ToolCall(
             id="call", name=SearchTool.NAME, arguments={"queries": ["forecast"]}
         )
@@ -1132,6 +1314,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
                 sources=[DocumentSource.GOOGLE_DRIVE.value],
                 search_docs=[document],
                 citation_mapping={1: document.document_id},
+                displayed_docs=[] if tool_kind == "search_empty" else None,
             ),
         )
         progress = ToolProgress(details=result.details)
@@ -1253,6 +1436,8 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         )
         == 1
     )
+    db_session.delete(tool)
+    db_session.commit()
     saved = translate_assistant_message_to_packets(row, db_session)
     if tool_kind == "python":
         live_stdout = "".join(
@@ -1297,7 +1482,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
                     "shape": "square",
                 }
             ]
-    elif tool_kind == "search":
+    elif tool_kind in {"search", "search_empty"}:
         for packets in (live, saved):
             documents = [
                 document
@@ -1308,13 +1493,17 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
             assert [
                 (document.document_id, document.link, document.blurb)
                 for document in documents
-            ] == [
-                (
-                    "forecast-document",
-                    "https://example.com/forecast",
-                    "Revenue is rising.",
-                )
-            ]
+            ] == (
+                []
+                if tool_kind == "search_empty"
+                else [
+                    (
+                        "forecast-document",
+                        "https://example.com/forecast",
+                        "Revenue is rising.",
+                    )
+                ]
+            )
             assert [
                 query
                 for packet in packets
@@ -1685,7 +1874,14 @@ def test_response_storage_sanitizes_postgres_text_without_mutating_input(
             ]
         ),
         ToolResultMessage(
-            tool_call_id="search", tool_name="search", content=original_text
+            tool_call_id="search",
+            tool_name="search",
+            content=original_text,
+            details=CustomToolCallSummary(
+                tool_name="search",
+                response_type="json",
+                tool_result={"text": original_text},
+            ),
         ),
         AssistantMessage(content=[TextContent(text=original_text)]),
     ]
@@ -1701,6 +1897,10 @@ def test_response_storage_sanitizes_postgres_text_without_mutating_input(
     first = replay[0]
     assert isinstance(first, AssistantMessage)
     assert first.tool_calls[0].arguments == {"query": "beforeafter"}
+    result = replay[1]
+    assert isinstance(result, ToolResultMessage)
+    assert isinstance(result.details, CustomToolCallSummary)
+    assert result.details.tool_result == {"text": "beforeafter"}
     assert record == original
 
 
