@@ -1,12 +1,15 @@
 "use client";
 
+import { useMemo } from "react";
+import { type SourceMetadata } from "@/lib/connectors/types/source";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
-import type { SourceMetadata } from "@/lib/search/types";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
+import { cn } from "@opal/utils";
 
 export interface ConnectorSourceCardProps {
   sourceMetadata: SourceMetadata;
@@ -30,6 +33,17 @@ export default function ConnectorSourceCard({
   const t = useTranslations("admin.addConnector");
   const router = useRouter();
   const navigate = () => router.push(navigationUrl);
+  const SourceIcon = sourceMetadata.icon;
+  // The catalog shows its logos a step larger than `main-ui` content does:
+  // 20px instead of 16px. The size is fixed here, so the 16px that Content
+  // asks for is ignored; the negative margin keeps the 16px footprint, so
+  // the title does not move.
+  const icon: IconFunctionComponent = useMemo(() => {
+    function CatalogSourceIcon({ className }: IconProps) {
+      return <SourceIcon size={20} className={cn(className, "-m-0.5")} />;
+    }
+    return CatalogSourceIcon;
+  }, [SourceIcon]);
 
   return (
     <SelectCard
@@ -44,14 +58,17 @@ export default function ConnectorSourceCard({
       onClick={navigate}
     >
       <ContentAction
-        icon={sourceMetadata.icon}
+        icon={icon}
         title={sourceMetadata.displayName}
         description={description}
-        // One line keeps the cards even; a cut description shows in a tooltip.
+        // One line keeps the cards even; a cut title or description shows in
+        // a tooltip.
+        titleMaxLines={1}
         descriptionMaxLines={1}
         sizePreset="main-ui"
         variant="section"
         padding={2}
+        gapping={0}
         rightChildren={
           <Button
             icon={SvgPlusCircle}

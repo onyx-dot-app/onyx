@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  getSourceDisplayName,
+  getSourceMetadata,
+} from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
@@ -17,7 +21,6 @@ import {
   shouldRedirectToOAuth,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
 import {
   EE_ENABLED,

@@ -1,12 +1,13 @@
 import { connectorConfigs } from "@/lib/connectors/connectors";
-import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 import {
+  getSourceDocLink,
+  getSourceMetadata,
   createConnectorInitialValues,
   createConnectorValidationSchema,
 } from "@/lib/connectors/utils";
+import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
 import { getCredentialFileType } from "@/lib/credentials/utils";
 import { FileTypeCategory, OneDriveScope } from "@/lib/connectors/types";
-import { getSourceDocLink, getSourceMetadata } from "@/lib/sources";
 import {
   ValidSources,
   validAutoSyncSources,

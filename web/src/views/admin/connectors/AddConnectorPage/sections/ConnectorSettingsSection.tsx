@@ -1,4 +1,5 @@
 import { useTranslations } from "next-intl";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
 import { Card, Collapsible } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -6,7 +7,6 @@ import DocumentAccessField from "@/views/admin/connectors/AddConnectorPage/compo
 import ManageAccessField from "@/views/admin/connectors/AddConnectorPage/components/ManageAccessField";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import type { CredentialValues } from "@/lib/credentials/types";
-import { getSourceDisplayName } from "@/lib/sources";
 
 interface ConnectorSettingsSectionProps {
   connector: ConfigurableSources;
