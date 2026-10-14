@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "将已生成 embedding 的文本块写入文档索引。",
             "label": "向量数据库写入"
+          },
+          "embeddingRateLimitWait": {
+            "label": "嵌入速率限制等待",
+            "description": "嵌入请求因索引设置中的嵌入速率限制而等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "提供商限流等待",
+            "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
           }
         }
       },
@@ -5661,6 +5669,29 @@
         "loadError": {
           "description": "请重新加载页面后重试。",
           "title": "无法加载连接器访问更新"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "嵌入请求速率限制",
+        "description": "限制索引在一个时间窗口内发送的嵌入请求数量，覆盖所有索引工作进程。达到限制时，索引会等待后重试而不是失败，因此工作进程会少接新任务。只有等待时间过长时，批次才会失败。搜索查询不受限制。",
+        "requests": {
+          "title": "每个窗口的请求数",
+          "description": "留空表示不限制。",
+          "placeholder": "不限制"
+        },
+        "period": {
+          "title": "窗口长度",
+          "description": "例如，每分钟限制填 60。",
+          "suffix": "（秒）"
+        },
+        "restoreDefault": "恢复默认值",
+        "validation": {
+          "requests": "请输入 1 到 {max, number} 之间的整数，或留空表示不限制。",
+          "period": "请输入 1 到 {max, number} 之间的整数秒数。"
+        },
+        "toasts": {
+          "saved": "速率限制已保存。",
+          "failed": "无法保存速率限制。"
         }
       }
     },

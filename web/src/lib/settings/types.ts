@@ -49,6 +49,10 @@ export interface Settings {
   image_extraction_and_analysis_enabled?: boolean;
   image_analysis_max_size_mb?: number | null;
 
+  // Global limit on indexing embedding requests; null means no limit
+  embedding_rate_limit_requests?: number | null;
+  embedding_rate_limit_period_seconds?: number;
+
   // User Knowledge settings
   user_knowledge_enabled?: boolean;
   user_file_max_upload_size_mb?: number | null;

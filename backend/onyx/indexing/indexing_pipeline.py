@@ -353,6 +353,8 @@ def embed_and_stream(
                 ...
     """
     with ChunkBatchStore() as store:
+        wait_totals = embedder.embedding_model.wait_totals
+        rate_limit_wait_start, provider_throttle_wait_start = wait_totals.snapshot()
         embed_start = time.monotonic()
         result = _embed_chunks_to_store(
             chunks=chunks,
@@ -375,6 +377,22 @@ def embed_and_stream(
         safe_record_single_event_if_set(
             IndexAttemptStage.EMBEDDING, attempt_id, embed_duration_ms
         )
+        rate_limit_wait_end, provider_throttle_wait_end = wait_totals.snapshot()
+        # Wait stages are recorded only for batches that waited.
+        for stage, waited_seconds in (
+            (
+                IndexAttemptStage.EMBEDDING_RATE_LIMIT_WAIT,
+                rate_limit_wait_end - rate_limit_wait_start,
+            ),
+            (
+                IndexAttemptStage.EMBEDDING_PROVIDER_THROTTLE_WAIT,
+                provider_throttle_wait_end - provider_throttle_wait_start,
+            ),
+        ):
+            if waited_seconds > 0:
+                safe_record_single_event_if_set(
+                    stage, attempt_id, int(waited_seconds * 1000)
+                )
         yield result, store
 
 

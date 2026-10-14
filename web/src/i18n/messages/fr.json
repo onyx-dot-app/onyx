@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "Écrit les segments et leurs embeddings dans l'index des documents.",
             "label": "Écriture DB vectorielle"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Attente de la limite d'embedding",
+            "description": "Temps d'attente des requêtes d'embedding pour la limite définie dans les paramètres d'index. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Attente de limitation du fournisseur",
+            "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
           }
         }
       },
@@ -5661,6 +5669,29 @@
         "loadError": {
           "description": "Rechargez la page pour réessayer.",
           "title": "Impossible de charger la mise à jour de l’accès par connecteur"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "Limite de requêtes d'embedding",
+        "description": "Limite le nombre de requêtes d'embedding envoyées par l'indexation dans une fenêtre de temps, pour tous les workers d'indexation. À la limite, l'indexation attend puis réessaie au lieu d'échouer, et les workers prennent moins de nouveau travail. Un lot échoue seulement s'il attend trop longtemps. Les requêtes de recherche ne sont pas limitées.",
+        "requests": {
+          "title": "Requêtes par fenêtre",
+          "description": "Laissez vide pour ne pas fixer de limite.",
+          "placeholder": "Aucune limite"
+        },
+        "period": {
+          "title": "Durée de la fenêtre",
+          "description": "Par exemple, 60 pour une limite par minute.",
+          "suffix": "(secondes)"
+        },
+        "restoreDefault": "Restaurer la valeur par défaut",
+        "validation": {
+          "requests": "Saisissez un nombre entier de 1 à {max, number}, ou laissez le champ vide pour ne pas fixer de limite.",
+          "period": "Saisissez un nombre entier de secondes de 1 à {max, number}."
+        },
+        "toasts": {
+          "saved": "Limite enregistrée.",
+          "failed": "Impossible d'enregistrer la limite."
         }
       }
     },

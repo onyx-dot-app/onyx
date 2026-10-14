@@ -3,10 +3,13 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from onyx.configs.app_configs import (
+    DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
     DEFAULT_PRUNING_FREQ,
     DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB,
     DISABLE_VECTOR_DB,
     MAX_ALLOWED_UPLOAD_SIZE_MB,
+    MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+    MAX_EMBEDDING_RATE_LIMIT_REQUESTS,
 )
 from onyx.configs.constants import QueryHistoryType
 from onyx.server.features.notifications.models import NotificationResponse
@@ -80,6 +83,17 @@ class Settings(BaseModel):
     # Image processing settings
     image_extraction_and_analysis_enabled: bool | None = True
     image_analysis_max_size_mb: int | None = 20
+
+    # Global limit on indexing embedding requests: at most this many in any
+    # window of `embedding_rate_limit_period_seconds`. None means no limit.
+    embedding_rate_limit_requests: int | None = Field(
+        default=None, gt=0, le=MAX_EMBEDDING_RATE_LIMIT_REQUESTS
+    )
+    embedding_rate_limit_period_seconds: int = Field(
+        default=DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+        gt=0,
+        le=MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS,
+    )
 
     # User Knowledge settings
     user_knowledge_enabled: bool | None = True

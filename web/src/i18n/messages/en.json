@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "Writes the embedded chunks into the document index.",
             "label": "Vector DB write"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Embedding rate limit wait",
+            "description": "Time embedding requests waited for the embedding rate limit set on Index Settings. Part of Embedding, summed over embedding threads."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Embedding provider throttle wait",
+            "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
           }
         }
       },
@@ -5661,6 +5669,29 @@
         "loadError": {
           "description": "Reload the page to try again.",
           "title": "Could not load the connector access update"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "Embedding rate limit",
+        "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again instead of failing, so workers take less new work. A batch fails only if it waits too long. Search queries are not limited.",
+        "requests": {
+          "title": "Requests per window",
+          "description": "Leave empty for no limit.",
+          "placeholder": "No limit"
+        },
+        "period": {
+          "title": "Window length",
+          "description": "For example, 60 for a limit per minute.",
+          "suffix": "(seconds)"
+        },
+        "restoreDefault": "Restore default",
+        "validation": {
+          "requests": "Enter a whole number from 1 to {max, number}, or leave the field empty for no limit.",
+          "period": "Enter a whole number of seconds from 1 to {max, number}."
+        },
+        "toasts": {
+          "saved": "Rate limit saved.",
+          "failed": "Could not save the rate limit."
         }
       }
     },

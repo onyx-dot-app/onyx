@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "Grava os chunks com embeddings no índice de documentos.",
             "label": "Gravação no banco vetorial"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Espera pelo limite de embedding",
+            "description": "Tempo que as requisições de embedding esperaram pelo limite definido nas Configurações de índice. Parte de Embedding, somado entre as threads de embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Espera por limitação do provedor",
+            "description": "Tempo que as requisições de embedding esperaram depois que o provedor de embedding as limitou. Parte de Embedding, somado entre as threads de embedding."
           }
         }
       },
@@ -5661,6 +5669,29 @@
         "loadError": {
           "description": "Recarregue a página para tentar novamente.",
           "title": "Não foi possível carregar a atualização do acesso por conector"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "Limite de requisições de embedding",
+        "description": "Limita quantas requisições de embedding a indexação envia em uma janela de tempo, entre todos os workers de indexação. No limite, a indexação espera e tenta novamente em vez de falhar, então os workers pegam menos trabalho novo. Um lote só falha se esperar demais. Consultas de pesquisa não têm limite.",
+        "requests": {
+          "title": "Requisições por janela",
+          "description": "Deixe vazio para não ter limite.",
+          "placeholder": "Sem limite"
+        },
+        "period": {
+          "title": "Duração da janela",
+          "description": "Por exemplo, 60 para um limite por minuto.",
+          "suffix": "(segundos)"
+        },
+        "restoreDefault": "Restaurar padrão",
+        "validation": {
+          "requests": "Insira um número inteiro de 1 a {max, number}, ou deixe o campo vazio para não ter limite.",
+          "period": "Insira um número inteiro de segundos de 1 a {max, number}."
+        },
+        "toasts": {
+          "saved": "Limite salvo.",
+          "failed": "Não foi possível salvar o limite."
         }
       }
     },

@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "embedding된 청크를 문서 인덱스에 기록합니다.",
             "label": "벡터 DB 쓰기"
+          },
+          "embeddingRateLimitWait": {
+            "label": "임베딩 요청 한도 대기",
+            "description": "인덱스 설정에서 지정한 임베딩 요청 한도 때문에 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "제공자 제한 대기",
+            "description": "임베딩 제공자가 요청을 제한한 후 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
           }
         }
       },
@@ -5661,6 +5669,29 @@
         "loadError": {
           "description": "페이지를 새로 고쳐 다시 시도하세요.",
           "title": "커넥터 액세스 업데이트를 불러올 수 없습니다"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "임베딩 요청 한도",
+        "description": "인덱싱이 일정 시간 동안 보내는 임베딩 요청 수를 모든 인덱싱 워커에 걸쳐 제한합니다. 한도에 도달하면 인덱싱은 실패하지 않고 대기한 후 다시 시도하므로 워커는 새 작업을 덜 가져갑니다. 배치는 너무 오래 기다린 경우에만 실패합니다. 검색 쿼리는 제한되지 않습니다.",
+        "requests": {
+          "title": "시간 범위당 요청 수",
+          "description": "비워 두면 한도가 없습니다.",
+          "placeholder": "한도 없음"
+        },
+        "period": {
+          "title": "시간 범위 길이",
+          "description": "예: 분당 한도는 60.",
+          "suffix": "(초)"
+        },
+        "restoreDefault": "기본값 복원",
+        "validation": {
+          "requests": "1부터 {max, number}까지의 정수를 입력하거나, 한도를 없애려면 비워 두세요.",
+          "period": "1부터 {max, number}까지의 정수 초를 입력하세요."
+        },
+        "toasts": {
+          "saved": "요청 한도를 저장했습니다.",
+          "failed": "요청 한도를 저장하지 못했습니다."
         }
       }
     },
