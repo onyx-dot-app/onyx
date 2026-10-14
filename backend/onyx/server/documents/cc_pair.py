@@ -61,7 +61,7 @@ from onyx.db.enums import (
     PermissionSyncStatus,
 )
 from onyx.db.index_attempt import (
-    cancel_queued_index_attempt__no_commit,
+    cancel_waiting_index_attempt__no_commit,
     count_index_attempt_errors_for_cc_pair,
     count_index_attempts_for_cc_pair,
     get_error_counts_for_index_attempts,
@@ -341,13 +341,15 @@ def get_cc_pair_runs(
 def _cancel_index_attempt(
     db_session: Session, attempt: IndexAttempt, reason: str
 ) -> None:
-    """Cancels an active attempt and commits. A queued one ends in the database
-    before its task is revoked, so a revoked task never leaves it queued. A
-    running one gets a request, which its task reads."""
-    if cancel_queued_index_attempt__no_commit(db_session, attempt.id, reason):
-        db_session.commit()
-    else:
-        IndexingCoordination.request_cancellation(db_session, attempt.id)
+    """Cancels an active attempt the way a pause does. A first attempt that
+    waits for the capability checks has no task to see a cancel request, so it
+    ends now and stays undispatched. Any other gets the request its task reads,
+    and its task is revoked. The caller commits."""
+    if attempt.celery_task_id is None and cancel_waiting_index_attempt__no_commit(
+        db_session, attempt.id, reason
+    ):
+        return
+    IndexingCoordination.request_cancellation(db_session, attempt.id)
     if attempt.celery_task_id:
         client_app.control.revoke(attempt.celery_task_id)
 

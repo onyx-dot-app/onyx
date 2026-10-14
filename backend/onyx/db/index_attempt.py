@@ -1394,28 +1394,6 @@ def cancel_waiting_index_attempt__no_commit(
     return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
 
 
-def cancel_queued_index_attempt__no_commit(
-    db_session: Session, index_attempt_id: int, reason: str
-) -> bool:
-    """Ends a NOT_STARTED attempt as CANCELED before any task runs it, so
-    nothing waits on a task that was revoked. The cancel request stays set for
-    a task that starts in the meantime. Leaves ``time_started`` unset. False
-    when the attempt has already started or ended. The caller commits."""
-    result = db_session.execute(
-        update(IndexAttempt)
-        .where(
-            IndexAttempt.id == index_attempt_id,
-            IndexAttempt.status == IndexingStatus.NOT_STARTED,
-        )
-        .values(
-            status=IndexingStatus.CANCELED,
-            error_msg=reason,
-            cancellation_requested=True,
-        )
-    )
-    return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
-
-
 def get_active_index_attempts_without_task(db_session: Session) -> list[IndexAttempt]:
     """Active full-run attempts with no Celery task id."""
     return list(

@@ -363,7 +363,7 @@ def test_cancel_ends_a_waiting_attempt_in_place(db_session: Session) -> None:
     assert attempt.time_started is None
 
 
-def test_cancel_ends_and_revokes_a_queued_attempt_with_a_task(
+def test_cancel_requests_cancellation_of_a_queued_attempt_and_revokes_its_task(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     admin = create_test_user(db_session, "runs_admin", is_admin=True)
@@ -381,8 +381,9 @@ def test_cancel_ends_and_revokes_a_queued_attempt_with_a_task(
 
     cancel_index_attempt(index_attempt_id=attempt.id, user=admin, db_session=db_session)
 
+    # The task owns the status, as on a pause: it reads the request when it runs.
     db_session.refresh(attempt)
-    assert attempt.status == IndexingStatus.CANCELED
+    assert attempt.status == IndexingStatus.NOT_STARTED
     assert attempt.cancellation_requested is True
     revoke.assert_called_once_with("task-2")
 
