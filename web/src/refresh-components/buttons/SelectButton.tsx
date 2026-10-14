@@ -167,7 +167,7 @@ export default function SelectButton({
       {/* Hidden element for measuring the natural width of the content */}
       <div
         ref={measureRef}
-        className="flex items-center w-auto h-fit absolute -left-39996 opacity-0 pointer-events-none"
+        className="flex items-center w-auto h-fit absolute -start-39996 opacity-0 pointer-events-none"
       >
         {content}
       </div>

@@ -7,6 +7,9 @@ import { useCurrentUser } from "@/lib/users/hooks";
 import { User } from "@/lib/types";
 
 jest.mock("posthog-js/react", () => ({ usePostHog: () => undefined }));
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: jest.fn() }),
+}));
 jest.mock("@/lib/settings/hooks", () => ({ useSettings: () => ({}) }));
 jest.mock("@/lib/users/hooks", () => ({ useCurrentUser: jest.fn() }));
 jest.mock("@/lib/auth/hooks", () => ({

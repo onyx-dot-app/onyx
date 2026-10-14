@@ -1,37 +1,37 @@
 "use client";
 
 import { ChangeEvent, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { ContentAction, PageLoader, toast } from "@opal/layouts";
-import {
-  Button,
-  Card,
-  InputTypeIn,
-  MessageCard,
-  OpenButton,
-  Text,
-} from "@opal/components";
+import { ContentAction, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
+import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgCheck, SvgEdit, SvgPlus, SvgTrash, SvgX } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import ModelSelector from "@/sections/model-selector/ModelSelector";
-import { getProvider } from "@/lib/languageModels";
-import { LLMOption } from "@/lib/languageModels/options";
-import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { SimpleModelSelector } from "@/lib/languageModels/components";
+import { getProvider } from "@/lib/languageModels/utils";
+import {
+  filterModelConfigurations,
+  findLlmOptionById,
+} from "@/lib/languageModels/options";
+import { useAdminLanguageModels } from "@/lib/languageModels/hooks";
+import { useSettings } from "@/lib/settings/hooks";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
-  CostOverride,
   deleteCostOverride,
   refreshCostOverrides,
   upsertCostOverride,
   useCostOverrides,
 } from "@/lib/languageModels/costOverrides";
+import type { CostOverride } from "@/lib/languageModels/types";
 
-const RATE_UNIT_LABEL = "USD per 1M tokens";
-const ALL_PROVIDERS_LABEL = "All providers";
-
-function getProviderDisplayName(provider: string): string {
-  return provider ? getProvider(provider).companyName : ALL_PROVIDERS_LABEL;
+/** `allProvidersLabel` is passed in: this module cannot call translation hooks. */
+function getProviderDisplayName(
+  provider: string,
+  allProvidersLabel: string
+): string {
+  return provider ? getProvider(provider).companyName : allProvidersLabel;
 }
 
 // Accepts integers/decimals only; "" is allowed mid-edit, validated on submit.
@@ -42,8 +42,8 @@ function parseRate(raw: string): number | null {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-function formatRate(value: number): string {
-  return `$${value.toLocaleString("en-US", {
+function formatRate(value: number, locale: string): string {
+  return `$${value.toLocaleString(locale, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 20,
   })}`;
@@ -58,8 +58,10 @@ interface OverrideFormProps {
 }
 
 function OverrideForm({ existing, onDone }: OverrideFormProps) {
+  const t = useTranslations("admin.costOverrides");
   const { mutate } = useSWRConfig();
-  const { llmProviders } = useAdminLLMProviders();
+  const { llmProviders, modelPaging } = useAdminLanguageModels();
+  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const [model, setModel] = useState(existing?.model ?? "");
   const [provider, setProvider] = useState(existing?.provider ?? "");
   const [inputRate, setInputRate] = useState(
@@ -87,7 +89,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
   const parsedCache = parseRate(cacheRate);
   const cacheValid = cacheRate.trim() === "" || parsedCache !== null;
   const modelLabel = model
-    ? `${getProviderDisplayName(provider)} · ${model}`
+    ? `${getProviderDisplayName(provider, t("allProviders.label"))} · ${model}`
     : "";
   const canSubmit =
     model.trim() !== "" &&
@@ -108,19 +110,19 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
         cache_read_cost_per_mtok: parsedCache,
       });
       await refreshCostOverrides(mutate);
-      toast.success(`Saved rate for ${model.trim()}.`);
+      toast.success(t("toasts.saved", { model: model.trim() }));
       onDone();
     } catch (e) {
       console.error("Failed to save cost override", e);
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to save override: ${message}`);
+      const message = e instanceof Error ? e.message : t("toasts.unknownError");
+      toast.error(t("toasts.saveFailed", { message }));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <GeneralLayouts.Section
         gap={3}
         height="fit"
@@ -129,24 +131,28 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
       >
         <div className="flex flex-col gap-1">
           <Text font="secondary-action" color="text-03">
-            Model
+            {t("form.model.label")}
           </Text>
           {isEdit ? (
             <InputTypeIn value={modelLabel} variant="readOnly" />
           ) : (
-            <ModelSelector
+            <SimpleModelSelector
+              nullable
+              providers={filterModelConfigurations(llmProviders ?? [], {
+                visibleOnly: false,
+              })}
               value={modelConfigId}
-              providerOptions={llmProviders ?? []}
-              includeHiddenModels
-              onChange={(opt: LLMOption) => {
-                setModel(opt.modelName);
-                setProvider(opt.provider);
-                setModelConfigId(opt.modelConfigurationId ?? null);
+              grouped={!hideProviderGrouping}
+              modelPaging={modelPaging}
+              onChange={(modelConfigurationId) => {
+                const opt = findLlmOptionById(
+                  llmProviders,
+                  modelConfigurationId
+                );
+                setModel(opt?.modelName ?? "");
+                setProvider(opt?.provider ?? "");
+                setModelConfigId(modelConfigurationId);
               }}
-              renderTrigger={() => (
-                <OpenButton>{modelLabel || "Select a model"}</OpenButton>
-              )}
-              side="bottom"
             />
           )}
         </div>
@@ -154,7 +160,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
         <div className="grid grid-cols-2 gap-2">
           <div className="flex flex-col gap-1">
             <Text font="secondary-action" color="text-03">
-              {`Input rate (${RATE_UNIT_LABEL})`}
+              {t("form.inputRate.label")}
             </Text>
             <InputTypeIn
               value={inputRate}
@@ -168,7 +174,7 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
           </div>
           <div className="flex flex-col gap-1">
             <Text font="secondary-action" color="text-03">
-              {`Output rate (${RATE_UNIT_LABEL})`}
+              {t("form.outputRate.label")}
             </Text>
             <InputTypeIn
               value={outputRate}
@@ -184,13 +190,13 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
 
         <div className="flex flex-col gap-1">
           <Text font="secondary-action" color="text-03">
-            {`Cache-read rate (${RATE_UNIT_LABEL}, optional)`}
+            {t("form.cacheRate.label")}
           </Text>
           <InputTypeIn
             value={cacheRate}
             prefixText="$"
             inputMode="decimal"
-            placeholder="defaults to input rate"
+            placeholder={t("form.cacheRate.placeholder")}
             onChange={(e: ChangeEvent<HTMLInputElement>) =>
               setCacheRate(e.target.value)
             }
@@ -199,14 +205,14 @@ function OverrideForm({ existing, onDone }: OverrideFormProps) {
 
         <div className="flex flex-row gap-2 justify-end">
           <Button prominence="tertiary" onClick={onDone} disabled={submitting}>
-            Cancel
+            {t("form.cancelButton.label")}
           </Button>
           <Button
             icon={SvgCheck}
             onClick={handleSubmit}
             disabled={!canSubmit || submitting}
           >
-            {isEdit ? "Save" : "Add override"}
+            {isEdit ? t("form.saveButton.label") : t("form.addButton.label")}
           </Button>
         </div>
       </GeneralLayouts.Section>
@@ -221,21 +227,26 @@ interface OverrideRowProps {
 }
 
 function OverrideRow({ override }: OverrideRowProps) {
+  const t = useTranslations("admin.costOverrides");
+  const locale = useLocale();
   const { mutate } = useSWRConfig();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const providerDisplayName = getProviderDisplayName(override.provider);
+  const providerDisplayName = getProviderDisplayName(
+    override.provider,
+    t("allProviders.label")
+  );
 
   async function handleDelete() {
     setDeleting(true);
     try {
       await deleteCostOverride(override.model, override.provider);
       await refreshCostOverrides(mutate);
-      toast.success(`Removed override for ${override.model}.`);
+      toast.success(t("toasts.removed", { model: override.model }));
     } catch (e) {
       console.error("Failed to remove cost override", e);
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to remove override: ${message}`);
+      const message = e instanceof Error ? e.message : t("toasts.unknownError");
+      toast.error(t("toasts.removeFailed", { message }));
       setDeleting(false);
     }
   }
@@ -248,24 +259,38 @@ function OverrideRow({ override }: OverrideRowProps) {
 
   return (
     <Hoverable.Root group="OverrideRow">
-      <Card border="solid" rounding="lg" padding={2}>
+      <Card border="solid" rounding={4} padding={2}>
         <div className="flex flex-row items-center justify-between gap-2 p-2">
           <div className="flex flex-col gap-0.5 min-w-0">
-            <Text font="main-ui-action" color="text-04" nowrap>
+            <Text
+              font="main-ui-action"
+              color="text-04"
+              wordWrap="whitespace-nowrap"
+            >
               {override.model}
             </Text>
             <Text font="secondary-body" color="text-03">
-              {`${providerDisplayName} · In ${formatRate(
-                override.input_cost_per_mtok
-              )} · Out ${formatRate(override.output_cost_per_mtok)}${
-                override.cache_read_cost_per_mtok != null
-                  ? ` · Cache ${formatRate(override.cache_read_cost_per_mtok)}`
-                  : ""
-              } · ${RATE_UNIT_LABEL}`}
+              {override.cache_read_cost_per_mtok != null
+                ? t("row.ratesWithCache", {
+                    provider: providerDisplayName,
+                    input: formatRate(override.input_cost_per_mtok, locale),
+                    output: formatRate(override.output_cost_per_mtok, locale),
+                    cache: formatRate(
+                      override.cache_read_cost_per_mtok,
+                      locale
+                    ),
+                  })
+                : t("row.rates", {
+                    provider: providerDisplayName,
+                    input: formatRate(override.input_cost_per_mtok, locale),
+                    output: formatRate(override.output_cost_per_mtok, locale),
+                  })}
             </Text>
             {override.updated_at && (
               <Text font="secondary-body" color="text-02">
-                {`Updated ${new Date(override.updated_at).toLocaleString()}`}
+                {t("row.updated", {
+                  time: new Date(override.updated_at).toLocaleString(locale),
+                })}
               </Text>
             )}
           </div>
@@ -274,7 +299,10 @@ function OverrideRow({ override }: OverrideRowProps) {
             <Button
               icon={SvgEdit}
               prominence="tertiary"
-              aria-label={`Edit ${providerDisplayName} override for ${override.model}`}
+              aria-label={t("row.editButton.ariaLabel", {
+                provider: providerDisplayName,
+                model: override.model,
+              })}
               disabled={deleting}
               onClick={() => setEditing(true)}
             />
@@ -282,7 +310,10 @@ function OverrideRow({ override }: OverrideRowProps) {
               <Button
                 icon={SvgTrash}
                 prominence="tertiary"
-                aria-label={`Delete ${providerDisplayName} override for ${override.model}`}
+                aria-label={t("row.deleteButton.ariaLabel", {
+                  provider: providerDisplayName,
+                  model: override.model,
+                })}
                 disabled={deleting}
                 onClick={handleDelete}
               />
@@ -297,6 +328,7 @@ function OverrideRow({ override }: OverrideRowProps) {
 // Section embedded on the Language Models page.
 
 export default function CostOverridesPanel() {
+  const t = useTranslations("admin.costOverrides");
   const { costOverrides, isLoading, error } = useCostOverrides();
   const [adding, setAdding] = useState(false);
 
@@ -308,10 +340,8 @@ export default function CostOverridesPanel() {
       justifyContent="start"
     >
       <ContentAction
-        title="Cost Overrides"
-        description={markdown(
-          `Set negotiated per-model rates in **${RATE_UNIT_LABEL}**. These override the built-in price book for usage cost calculations.`
-        )}
+        title={t("panel.title")}
+        description={markdown(t("panel.description"))}
         sizePreset="main-content"
         variant="section"
         rightChildren={
@@ -321,7 +351,7 @@ export default function CostOverridesPanel() {
             disabled={adding}
             onClick={() => setAdding(true)}
           >
-            Add override
+            {t("panel.addButton.label")}
           </Button>
         }
       />
@@ -332,7 +362,7 @@ export default function CostOverridesPanel() {
         <MessageCard
           variant="error"
           icon={SvgX}
-          title="Failed to load cost overrides."
+          title={t("panel.error.title")}
         />
       ) : isLoading ? (
         <PageLoader />
@@ -349,8 +379,8 @@ export default function CostOverridesPanel() {
         !adding && (
           <MessageCard
             variant="info"
-            title="No cost overrides set."
-            description={`Add one to apply a negotiated rate (${RATE_UNIT_LABEL}) for a model.`}
+            title={t("empty.title")}
+            description={t("empty.description")}
           />
         )
       )}

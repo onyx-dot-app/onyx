@@ -28,9 +28,7 @@ const CONNECTOR_ROWS = [
  * `isPending` goes false, and stubbing above that layer can't tell an outage from a `true` answer.
  */
 type SettingsOutcome =
-  | { kind: "ok"; vectorDb: boolean }
-  | { kind: "pending" }
-  | { kind: "error" };
+  { kind: "ok"; vectorDb: boolean } | { kind: "pending" } | { kind: "error" };
 
 function mockApi(settings: SettingsOutcome, federated: unknown[] = []): void {
   apiFetchMock.mockImplementation((path: string) => {

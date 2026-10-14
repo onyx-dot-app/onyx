@@ -1,6 +1,7 @@
 "use client";
 
 import { TextFormField } from "@/components/Field";
+import { useTranslations } from "next-intl";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { createSlackBot, updateSlackBot } from "./new/lib";
@@ -24,6 +25,8 @@ export const SlackTokensForm = ({
   router: any;
   onValuesChange?: (values: any) => void;
 }) => {
+  const t = useTranslations("admin.slackBots");
+
   useEffect(() => {
     if (onValuesChange) {
       onValuesChange(initialValues);
@@ -59,8 +62,8 @@ export const SlackTokensForm = ({
           const botId = isUpdate ? existingSlackBotId : responseJson.id;
           toast.success(
             isUpdate
-              ? "Successfully updated Slack Bot!"
-              : "Successfully created Slack Bot!"
+              ? t("tokensForm.updated.toast")
+              : t("tokensForm.created.toast")
           );
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
         } else {
@@ -68,14 +71,14 @@ export const SlackTokensForm = ({
           let errorMsg = responseJson.detail || responseJson.message;
 
           if (errorMsg.includes("Invalid bot token:")) {
-            errorMsg = "Slack Bot Token is invalid";
+            errorMsg = t("tokensForm.invalidBotToken.message");
           } else if (errorMsg.includes("Invalid app token:")) {
-            errorMsg = "Slack App Token is invalid";
+            errorMsg = t("tokensForm.invalidAppToken.message");
           }
           toast.error(
             isUpdate
-              ? `Error updating Slack Bot - ${errorMsg}`
-              : `Error creating Slack Bot - ${errorMsg}`
+              ? t("tokensForm.updateError.toast", { error: errorMsg })
+              : t("tokensForm.createError.toast", { error: errorMsg })
           );
         }
       }}
@@ -87,7 +90,7 @@ export const SlackTokensForm = ({
             <div className="">
               <TextFormField
                 name="name"
-                label="Name This Slack Bot:"
+                label={t("tokensForm.name.label")}
                 type="text"
               />
             </div>
@@ -96,33 +99,35 @@ export const SlackTokensForm = ({
           {!isUpdate && (
             <div className="mt-4">
               <Divider />
-              Please refer to our{" "}
-              <a
-                className="text-blue-500 hover:underline"
-                href={`${DOCS_ADMINS_PATH}/getting_started/slack_bot_setup`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                guide
-              </a>{" "}
-              if you are not sure how to get these tokens!
+              {t.rich("tokensForm.docsPrompt.text", {
+                link: (chunks) => (
+                  <a
+                    className="text-blue-500 hover:underline"
+                    href={`${DOCS_ADMINS_PATH}/getting_started/slack_bot_setup`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
             </div>
           )}
           <TextFormField
             name="bot_token"
-            label="Slack Bot Token"
+            label={t("tokensForm.botToken.label")}
             type="password"
           />
           <TextFormField
             name="app_token"
-            label="Slack App Token"
+            label={t("tokensForm.appToken.label")}
             type="password"
           />
           <TextFormField
             name="user_token"
-            label="Slack User Token (Optional)"
+            label={t("tokensForm.userToken.label")}
             type="password"
-            subtext="Optional: User OAuth token for enhanced private channel access"
+            subtext={t("tokensForm.userToken.subtext")}
           />
           <div className="flex justify-end w-full mt-4">
             <Button
@@ -134,7 +139,9 @@ export const SlackTokensForm = ({
               }
               type="submit"
             >
-              {isUpdate ? "Update" : "Create"}
+              {isUpdate
+                ? t("tokensForm.updateButton.label")
+                : t("tokensForm.createButton.label")}
             </Button>
           </div>
         </Form>

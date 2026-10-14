@@ -52,6 +52,7 @@ from onyx.db.index_attempt import (
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.redis.redis_connector import RedisConnector
 from onyx.server.metrics.connector_health_metrics import on_index_attempt_status_change
+from onyx.utils.fleet_telemetry import EXIT_FLUSH_SECONDS, stop_telemetry
 from onyx.utils.logger import setup_logger
 from onyx.utils.os_reaper import reap_children_before_exit
 from onyx.utils.variable_functionality import global_version
@@ -273,8 +274,10 @@ def _docfetching_task(
         cc_pair_id,
         search_settings_id,
     )
-    # os._exit bypasses the drain in _initializer's finally, so reap here.
+    # os._exit bypasses the drain and telemetry flush in _initializer's finally,
+    # so do both here. The flush wait is bounded.
     reap_children_before_exit()
+    stop_telemetry(flush_timeout=EXIT_FLUSH_SECONDS)
     os._exit(0)  # ensure process exits cleanly
 
 
@@ -356,7 +359,7 @@ def docfetching_proxy_task(
     2) upserts documents to postgres (index_doc_batch_prepare)
     3) chunks each document (optionally adds context for contextual rag)
     4) embeds chunks (embed_chunks_with_failure_handling) via a call to the model server
-    5) write chunks to vespa (write_chunks_to_vector_db_with_backoff)
+    5) write chunks to the document index (write_chunks_to_vector_db_with_backoff)
     6) update document and indexing metadata in postgres
     7) pulls all document IDs from the source and compares those IDs to locally stored documents and deletes
     all locally stored IDs missing from the most recently pulled document ID list
@@ -705,6 +708,17 @@ def docfetching_proxy_task(
             result.exception_str = str(e)
         else:
             result.exception_str = traceback.format_exc()
+        # Stop the spawned process: no watchdog follows this one, and this thread
+        # takes the next task at once. A no-op when the process already exited.
+        try:
+            job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+        except Exception:
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - exception while terminating subprocess "
+                    "after a watchdog exception"
+                )
+            )
 
     # handle exit and reporting
     elapsed = time.monotonic() - start
@@ -755,7 +769,7 @@ def docfetching_proxy_task(
     if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
         try:
             with get_session_with_current_tenant() as db_session:
-                logger.exception(
+                logger.error(
                     "Marking attempt %s as canceled due to termination signal",
                     index_attempt_id,
                 )

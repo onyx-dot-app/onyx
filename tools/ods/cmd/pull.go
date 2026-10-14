@@ -27,7 +27,9 @@ Examples:
   ods pull --tag edge`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			runComposePull(opts)
+			if err := runComposePull(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -36,11 +38,14 @@ Examples:
 	return cmd
 }
 
-func runComposePull(opts *PullOptions) {
+func runComposePull(opts *PullOptions) error {
 	args := baseArgs("")
 	args = append(args, "pull")
 
 	log.Info("Pulling images...")
-	execDockerCompose(args, envForTag(opts.Tag))
+	if err := execDockerCompose(args, envForTag(opts.Tag)); err != nil {
+		return err
+	}
 	log.Info("Images pulled successfully")
+	return nil
 }

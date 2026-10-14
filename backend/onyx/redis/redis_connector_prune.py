@@ -27,6 +27,9 @@ class RedisConnectorPrunePayload(BaseModel):
     submitted: datetime
     started: datetime | None
     celery_task_id: str | None
+    # The pair's prune_requested_at when this prune was dispatched. Its
+    # success clears that request only.
+    prune_requested_at: datetime | None = None
 
 
 class RedisConnectorPrune:
@@ -224,12 +227,12 @@ class RedisConnectorPrune:
             # Priority on sync's triggered by new indexing should be medium
             result = celery_app.send_task(
                 OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
-                kwargs=dict(
-                    document_id=doc_id,
-                    connector_id=cc_pair.connector_id,
-                    credential_id=cc_pair.credential_id,
-                    tenant_id=self.tenant_id,
-                ),
+                kwargs={
+                    "document_id": doc_id,
+                    "connector_id": cc_pair.connector_id,
+                    "credential_id": cc_pair.credential_id,
+                    "tenant_id": self.tenant_id,
+                },
                 queue=OnyxCeleryQueues.CONNECTOR_DELETION,
                 task_id=custom_task_id,
                 priority=OnyxCeleryPriority.MEDIUM,

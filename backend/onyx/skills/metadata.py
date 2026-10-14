@@ -9,7 +9,8 @@ from typing import Any, Final
 import yaml
 from pydantic import ValidationError
 from yaml.constructor import ConstructorError
-from yaml.nodes import MappingNode
+from yaml.events import AliasEvent
+from yaml.nodes import MappingNode, Node
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -20,8 +21,20 @@ _FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
     re.DOTALL,
 )
 
+_MAX_FRONTMATTER_CHARS: Final[int] = 64 * 1024
+
 
 class _UniqueKeySafeLoader(yaml.SafeLoader):
+    def compose_node(self, parent: Node | None, index: int) -> Node | None:
+        if self.check_event(AliasEvent):
+            raise ConstructorError(
+                None,
+                None,
+                "YAML aliases are not allowed in SKILL.md frontmatter",
+                self.get_mark(),
+            )
+        return super().compose_node(parent, index)
+
     def construct_mapping(
         self,
         node: MappingNode,
@@ -72,6 +85,11 @@ def split_skill_md(raw: bytes) -> tuple[str, str]:
 def parse_skill_md_frontmatter(raw: bytes) -> tuple[dict[Any, Any], str]:
     """Parse frontmatter without applying the current metadata schema."""
     frontmatter_yaml, instructions_markdown = split_skill_md(raw)
+    if len(frontmatter_yaml) > _MAX_FRONTMATTER_CHARS:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md frontmatter is too large",
+        )
 
     try:
         loader = _UniqueKeySafeLoader(frontmatter_yaml)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgUnplug } from "@opal/icons";
 import { markdown } from "@opal/utils";
@@ -20,6 +21,7 @@ export function TracingDisconnectModal({
   target,
   onDisconnected,
 }: TracingDisconnectModalProps) {
+  const t = useTranslations("admin.tracing");
   const onClose = useModalClose();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -27,11 +29,11 @@ export function TracingDisconnectModal({
     setIsSubmitting(true);
     try {
       await disconnectTracingProvider(target.providerType, target.config);
-      toast.success(`${target.label} disconnected`);
+      toast.success(t("toasts.disconnected", { label: target.label }));
       onClose?.();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Unexpected error occurred."
+        error instanceof Error ? error.message : t("toasts.unexpectedError")
       );
     } finally {
       // Refresh regardless; swallow refresh errors so they can't misreport the
@@ -44,23 +46,21 @@ export function TracingDisconnectModal({
   return (
     <ConfirmationModalLayout
       icon={SvgUnplug}
-      title={`Disconnect ${target.label}`}
-      description="Stop sending LLM call traces to this provider."
+      title={t("disconnectModal.title", { label: target.label })}
+      description={t("disconnectModal.description")}
       submit={
         <Button
           variant="danger"
           onClick={() => void handleDisconnect()}
           disabled={isSubmitting}
         >
-          Disconnect
+          {t("disconnectModal.submit.label")}
         </Button>
       }
     >
       <Section alignItems="start" gap={2}>
         <Text color="text-03">
-          {markdown(
-            `LLM call traces will no longer be sent to **${target.label}**. Traces already sent are unaffected.`
-          )}
+          {markdown(t("disconnectModal.body", { label: target.label }))}
         </Text>
       </Section>
     </ConfirmationModalLayout>

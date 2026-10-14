@@ -4,15 +4,55 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+# Client-facing text for a failed streaming session. Providers must not put
+# upstream error details in `TranscriptResult.error`.
+STREAM_FAILED_ERROR = "Streaming transcription failed"
+
+
+def normalize_provider_type(value: str) -> str:
+    """Canonical provider_type used for dispatch, persistence and lookups."""
+    return value.strip().lower()
+
 
 class TranscriptResult(BaseModel):
     """Result from streaming transcription."""
 
-    text: str
+    text: str = ""
     """The accumulated transcript text."""
 
     is_vad_end: bool = False
     """True if VAD detected end of speech (silence). Use for auto-send."""
+
+    error: str | None = None
+    """Sanitized provider error, if the streaming session failed."""
+
+
+class VoiceSessionPolicy(BaseModel):
+    """Limits a provider imposes on every transcription session.
+
+    Providers with an account-level concurrency quota return one from
+    ``session_policy()``. The voice routes and Redis admission apply it without
+    knowing which provider supplied it.
+    """
+
+    scope: str
+    """Key namespace shared by every row of this provider family."""
+
+    max_session_seconds: float
+    """Hard cap for one session, including provider setup and teardown."""
+
+    teardown_seconds: float
+    """Reserved out of the cap so provider close cannot outlive the session."""
+
+    tenant_concurrency_limit: int
+    user_concurrency_limit: int
+    limit_message: str
+    timeout_message: str
+
+    @property
+    def handler_seconds(self) -> float:
+        """Budget the route gives the transcription handler itself."""
+        return self.max_session_seconds - self.teardown_seconds
 
 
 class StreamingTranscriberProtocol(Protocol):
@@ -144,6 +184,18 @@ class VoiceProviderInterface(ABC):
     def supports_streaming_tts(self) -> bool:
         """Returns True if this provider supports real-time streaming TTS."""
         return False
+
+    def allows_streaming_stt_fallback(self) -> bool:
+        """Returns True when native streaming STT failures may fall back to REST."""
+        return True
+
+    def session_policy(self) -> VoiceSessionPolicy | None:
+        """Session admission and duration limits, or None when unconstrained."""
+        return None
+
+    def supports_target_uri(self) -> bool:
+        """Returns True when the provider accepts a custom api_base / target URI."""
+        return True
 
     async def create_streaming_transcriber(
         self, audio_format: str = "webm"

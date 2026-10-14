@@ -5,19 +5,13 @@ Tests the basic CRUD operations for document permission sync attempts,
 including creation, status updates, progress tracking, and querying.
 """
 
-from datetime import datetime, timezone
-
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import InputType
 from onyx.db.enums import (
-    AccessType,
-    ConnectorCredentialPairStatus,
     PermissionSyncStatus,
 )
-from onyx.db.models import Connector, ConnectorCredentialPair, Credential
 from onyx.db.permission_sync_attempt import (
     complete_doc_permission_sync_attempt,
     create_doc_permission_sync_attempt,
@@ -26,54 +20,15 @@ from onyx.db.permission_sync_attempt import (
     mark_doc_permission_sync_attempt_failed,
     mark_doc_permission_sync_attempt_in_progress,
 )
-from tests.external_dependency_unit.conftest import create_test_user
-
-
-def _create_test_connector_credential_pair(
-    db_session: Session, source: DocumentSource = DocumentSource.GOOGLE_DRIVE
-) -> ConnectorCredentialPair:
-    """Create a test connector credential pair for testing."""
-    user = create_test_user(db_session, "test_user")
-
-    connector = Connector(
-        name=f"Test {source.value} Connector",
-        source=source,
-        input_type=InputType.LOAD_STATE,
-        connector_specific_config={},
-        refresh_freq=None,
-        prune_freq=None,
-        indexing_start=datetime.now(timezone.utc),
-    )
-    db_session.add(connector)
-    db_session.flush()
-
-    credential = Credential(
-        credential_json={},
-        user_id=user.id,
-        admin_public=True,
-    )
-    db_session.add(credential)
-    db_session.flush()
-    # Expire the credential so it reloads from DB with SensitiveValue wrapper
-    db_session.expire(credential)
-
-    cc_pair = ConnectorCredentialPair(
-        connector_id=connector.id,
-        credential_id=credential.id,
-        name="Test CC Pair",
-        status=ConnectorCredentialPairStatus.ACTIVE,
-        access_type=AccessType.PUBLIC,
-    )
-    db_session.add(cc_pair)
-    db_session.commit()
-
-    return cc_pair
+from tests.external_dependency_unit.permission_sync.conftest import (
+    create_test_connector_credential_pair,
+)
 
 
 class TestDocPermissionSyncAttempt:
     def test_create_doc_permission_sync_attempt(self, db_session: Session) -> None:
         """Test creating a new doc permission sync attempt."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
 
         attempt_id = create_doc_permission_sync_attempt(
             connector_credential_pair_id=cc_pair.id,
@@ -96,7 +51,7 @@ class TestDocPermissionSyncAttempt:
 
     def test_get_doc_permission_sync_attempt(self, db_session: Session) -> None:
         """Test retrieving a doc permission sync attempt by ID."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
 
         # Test basic retrieval
@@ -120,7 +75,7 @@ class TestDocPermissionSyncAttempt:
         self, db_session: Session
     ) -> None:
         """Test marking a doc permission sync attempt as in progress."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
 
         # Mark as in progress
@@ -138,7 +93,7 @@ class TestDocPermissionSyncAttempt:
 
     def test_mark_doc_permission_sync_attempt_failed(self, db_session: Session) -> None:
         """Test marking a doc permission sync attempt as failed."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
 
         # Mark as failed with error message (should work even without starting)
@@ -166,7 +121,7 @@ class TestDocPermissionSyncAttempt:
         through the failure helper so the connector-detail UI can
         surface the full Python stack instead of just a single-line
         summary."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
 
         error_msg = "Sync process crashed unexpectedly"
@@ -189,11 +144,41 @@ class TestDocPermissionSyncAttempt:
         assert attempt.error_message == error_msg
         assert attempt.full_exception_trace == full_trace
 
+    def test_mark_doc_permission_sync_attempt_failed_assigns_progress(
+        self, db_session: Session
+    ) -> None:
+        """Progress counters assign rather than accumulate, so a failure raised
+        after ``complete_doc_permission_sync_attempt`` already committed (e.g. the
+        Redis write that follows it) cannot count the same documents twice."""
+        cc_pair = create_test_connector_credential_pair(db_session)
+        attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
+        mark_doc_permission_sync_attempt_in_progress(attempt_id, db_session)
+        complete_doc_permission_sync_attempt(
+            db_session=db_session,
+            attempt_id=attempt_id,
+            total_docs_synced=5,
+            docs_with_permission_errors=1,
+        )
+
+        mark_doc_permission_sync_attempt_failed(
+            attempt_id,
+            db_session,
+            error_message="fence write failed after completion",
+            total_docs_synced=5,
+            docs_with_permission_errors=1,
+        )
+
+        attempt = get_doc_permission_sync_attempt(db_session, attempt_id)
+        assert attempt is not None
+        assert attempt.status == PermissionSyncStatus.FAILED
+        assert attempt.total_docs_synced == 5
+        assert attempt.docs_with_permission_errors == 1
+
     def test_get_recent_doc_permission_sync_attempts_for_cc_pair(
         self, db_session: Session
     ) -> None:
         """Test retrieving recent doc permission sync attempts for a connector credential pair."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
 
         # Create multiple attempts
         attempt_ids = []
@@ -221,7 +206,7 @@ class TestDocPermissionSyncAttempt:
             assert attempt.connector_credential_pair_id == cc_pair.id
 
         # Test with different cc_pair (should return empty)
-        other_cc_pair = _create_test_connector_credential_pair(
+        other_cc_pair = create_test_connector_credential_pair(
             db_session, source=DocumentSource.SLACK
         )
         other_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
@@ -233,7 +218,7 @@ class TestDocPermissionSyncAttempt:
 
     def test_status_enum_methods(self, db_session: Session) -> None:
         """Test the status enum helper methods."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
 
         # Test NOT_STARTED status
@@ -291,7 +276,7 @@ class TestDocPermissionSyncAttempt:
         self, db_session: Session
     ) -> None:
         """Test completing a doc permission sync attempt without errors."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
 
         # Mark as in progress first
@@ -314,7 +299,7 @@ class TestDocPermissionSyncAttempt:
         self, db_session: Session
     ) -> None:
         """Test completing a doc permission sync attempt with errors."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
 
         # Mark as in progress first
@@ -337,7 +322,7 @@ class TestDocPermissionSyncAttempt:
         self, db_session: Session
     ) -> None:
         """Test that complete can be called multiple times if needed (accumulates correctly)."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
+        cc_pair = create_test_connector_credential_pair(db_session)
         attempt_id = create_doc_permission_sync_attempt(cc_pair.id, db_session)
 
         # Mark as in progress

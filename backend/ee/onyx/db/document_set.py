@@ -15,6 +15,7 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
 )
+from onyx.db.user_group import assert_not_shared_with_default_group
 
 
 def make_doc_set_private(
@@ -23,6 +24,8 @@ def make_doc_set_private(
     group_ids: list[int] | None,
     db_session: Session,
 ) -> None:
+    assert_not_shared_with_default_group(db_session, group_ids or [])
+
     db_session.query(DocumentSet__User).filter(
         DocumentSet__User.document_set_id == document_set_id
     ).delete(synchronize_session="fetch")

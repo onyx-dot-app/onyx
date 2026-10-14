@@ -1,10 +1,9 @@
-// A source's leading glyph: the site favicon for linked/web docs (public URL — plain expo-image,
-// NOT BearerImage), falling back to a generic file glyph. No per-connector logo set yet (9a scope).
 import { Image } from "expo-image";
 import { useState } from "react";
 
 import { faviconUrl } from "@/chat/citations";
 import { SearchDoc } from "@/chat/contracts/documents";
+import { ConnectorSourceIcon } from "@/components/chat/ConnectorSourceIcon";
 import { Icon } from "@/components/ui/icon";
 import SvgFileText from "@/icons/file-text";
 
@@ -14,9 +13,13 @@ interface SourceIconProps {
 }
 
 export function SourceIcon({ doc, size = 18 }: SourceIconProps) {
-  const uri = faviconUrl(doc.link);
   const [failed, setFailed] = useState(false);
 
+  if (!doc.is_internet) {
+    return <ConnectorSourceIcon source={doc.source_type} size={size} />;
+  }
+
+  const uri = faviconUrl(doc.link);
   if (!uri || failed) {
     return <Icon as={SvgFileText} size={size} className="text-text-03" />;
   }

@@ -112,6 +112,20 @@ TEAMS_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("TEAMS_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
 )
 
+# In seconds, default is 5 minutes
+TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+#####
+# Outlook
+#####
+# Polls keep readers current as mail changes, so the sync only repairs what
+# a poll missed and catches deletions.
+OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("OUTLOOK_PERMISSION_DOC_SYNC_FREQUENCY") or 24 * 60 * 60
+)
+
 #####
 # SharePoint
 #####
@@ -123,6 +137,55 @@ SHAREPOINT_PERMISSION_DOC_SYNC_FREQUENCY = int(
 # In seconds, default is 5 minutes
 SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY = int(
     os.environ.get("SHAREPOINT_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+# In seconds, default is 30 minutes
+ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY_S = int(
+    os.environ.get("ONEDRIVE_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
+)
+
+# In seconds, default is 5 minutes
+ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY_S = int(
+    os.environ.get("ONEDRIVE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+#####
+# Linear
+#####
+
+# In seconds, default is 5 minutes
+LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+# In seconds, default is 1 hour: how long an issue moved between teams keeps
+# its old readers. A sync is one call per 250 issues against the 1,500 calls
+# per hour the indexing polls share.
+LINEAR_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("LINEAR_PERMISSION_DOC_SYNC_FREQUENCY") or 60 * 60
+)
+
+#####
+# Zoom
+#####
+# In seconds, default is 5 minutes
+ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+# In seconds, default is 6 hours: a sync lists every host's whole recording
+# history, about 170 calls per host, and reads the share settings of every
+# recording, one call each.
+ZOOM_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("ZOOM_PERMISSION_DOC_SYNC_FREQUENCY") or 6 * 60 * 60
+)
+
+#####
+# HubSpot
+#####
+
+# In seconds, default is 1 hour: a sync pages every record (100 per call) and
+# asks for the viewers of 20 records per call, about 1,500 calls per 24,000 records.
+HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY") or 60 * 60
 )
 
 
@@ -159,11 +222,6 @@ MARKETING_POSTHOG_API_KEY = os.environ.get("MARKETING_POSTHOG_API_KEY")
 HUBSPOT_TRACKING_URL = os.environ.get("HUBSPOT_TRACKING_URL")
 
 GATED_TENANTS_KEY = "gated_tenants"
-
-# License enforcement - when True, blocks API access for gated/expired licenses
-LICENSE_ENFORCEMENT_ENABLED = (
-    os.environ.get("LICENSE_ENFORCEMENT_ENABLED", "true").lower() == "true"
-)
 
 # Cloud data plane URL - self-hosted instances call this to reach cloud proxy endpoints
 # Used when MULTI_TENANT=false (self-hosted mode)

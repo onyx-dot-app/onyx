@@ -34,7 +34,7 @@ test.describe("Web Search Provider Configuration", () => {
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
 
       // Enter API key - clear first in case modal opened with masked credentials
-      // Note: PasswordInputTypeIn uses type="text" with custom ∗ masking per design guidelines
+      // Note: InputPasswordTypeIn uses type="text" with custom ∗ masking per design guidelines
       const apiKeyInput = modalDialog.getByLabel(/api key/i);
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
       await apiKeyInput.clear();
@@ -192,7 +192,7 @@ test.describe("Web Search Provider Configuration", () => {
       await expect(modalDialog).toBeVisible({ timeout: 10000 });
 
       // Verify the API key input shows masked value
-      // PasswordInputTypeIn displays stored values with ∗ (ASTERISK OPERATOR) per design guidelines
+      // InputPasswordTypeIn displays stored values with ∗ (ASTERISK OPERATOR) per design guidelines
       const apiKeyInput = modalDialog.getByLabel(/api key/i);
       await apiKeyInput.waitFor({ state: "visible", timeout: 5000 });
       await expect(apiKeyInput).toHaveValue("∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗");
@@ -291,7 +291,7 @@ test.describe("Web Search Provider Configuration", () => {
       await searchEngineIdInput.fill("invalid-search-engine-id");
 
       // Do NOT change the API key - keep the masked value
-      // PasswordInputTypeIn displays stored values with ∗ (ASTERISK OPERATOR) per design guidelines
+      // InputPasswordTypeIn displays stored values with ∗ (ASTERISK OPERATOR) per design guidelines
       const apiKeyInput = modalDialog.getByLabel(/api key/i);
       await expect(apiKeyInput).toHaveValue("∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗∗");
 

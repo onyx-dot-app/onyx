@@ -203,6 +203,7 @@ class RedisConnectorPermissionSync:
                 permissions.external_access.num_entries
                 > permissions.external_access.MAX_NUM_ENTRIES
             ):
+                num_errors += 1
                 if task_logger:
                     num_users = len(permissions.external_access.external_user_emails)
                     num_groups = len(

@@ -1,13 +1,49 @@
-"""Hardened OIDC client for multi-IdP SSO. Two guarantees on top of the
-stock client: the email claim is trusted only when the IdP marks it
-verified, and the discovery document's issuer must own the configured
-discovery URL, so one provider's tokens cannot be replayed against another
-provider's callback (OIDC mix-up defense)."""
+"""Hardened OIDC client for multi-IdP SSO, plus the logging of token-exchange
+failures. Two guarantees on top of the stock client: the email claim is
+trusted only when the IdP marks it verified, and the discovery document's
+issuer must own the configured discovery URL, so one provider's tokens cannot
+be replayed against another provider's callback (OIDC mix-up defense)."""
 
 from urllib.parse import unquote, urlsplit
 
+import httpx
 from httpx_oauth.clients.openid import BASE_SCOPES, OpenID
 from httpx_oauth.exceptions import GetIdEmailError
+from httpx_oauth.oauth2 import GetAccessTokenError
+
+from onyx.utils.logger import format_error_for_logging, setup_logger
+
+logger = setup_logger()
+
+_TOKEN_ERROR_SNIPPET_CHARS = 1000
+# RFC 6749 token error fields. Anything else in the body (or a non-JSON body)
+# can reflect request material or carry PII, so it is never logged verbatim.
+_OAUTH_ERROR_FIELDS = ("error", "error_description", "error_uri")
+
+
+def _error_body_summary(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except Exception:
+        return f"unparseable body ({len(response.content)} bytes)"
+    if not isinstance(payload, dict):
+        return f"non-object JSON body ({len(response.content)} bytes)"
+    fields = {k: payload[k] for k in _OAUTH_ERROR_FIELDS if k in payload}
+    if not fields:
+        return f"no RFC 6749 error fields (keys={sorted(payload)[:10]})"
+    return repr(fields)
+
+
+def log_token_exchange_failure(error: GetAccessTokenError) -> None:
+    """The IdP names the rejection (invalid_grant, invalid_client, ...) only in
+    the token response body, which must stay out of the client-facing error.
+    A malformed non-error response is the token payload itself, so only an
+    error body is summarized."""
+    detail = format_error_for_logging(error)
+    if error.response is not None and error.response.is_error:
+        summary = _error_body_summary(error.response)[:_TOKEN_ERROR_SNIPPET_CHARS]
+        detail = f"{detail} response={summary}"
+    logger.warning("Token exchange with the IdP failed: %s", detail)
 
 
 class OpenIDConfigurationIssuerMismatch(ValueError):

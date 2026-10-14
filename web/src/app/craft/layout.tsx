@@ -3,6 +3,7 @@ import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
 import { requireAuth } from "@/lib/auth/svcSS";
 import { fetchSettingsSS } from "@/lib/settings/svcSS";
+import CraftUpgradePage from "@/app/craft/components/CraftUpgradePage";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -12,7 +13,8 @@ export interface LayoutProps {
  * Build Layout - Minimal wrapper that handles authentication and feature flag check
  *
  * Child routes (/craft and /craft/v1) handle their own UI structure.
- * Redirects to /app if Onyx Craft is disabled via feature flag.
+ * Shows the upgrade page when Craft is on but the tier is too low, and
+ * redirects to /app if Onyx Craft is otherwise disabled.
  */
 export default async function Layout({ children }: LayoutProps) {
   noStore();
@@ -28,7 +30,10 @@ export default async function Layout({ children }: LayoutProps) {
   // Only explicit true enables the feature; false or undefined = disabled
   const settings = await fetchSettingsSS();
   if (settings?.settings?.onyx_craft_enabled !== true) {
-    redirect("/app" as Route);
+    if (settings?.settings?.onyx_craft_requires_upgrade === true) {
+      return <CraftUpgradePage />;
+    }
+    redirect("/app");
   }
 
   return <>{children}</>;

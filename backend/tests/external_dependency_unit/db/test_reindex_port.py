@@ -54,7 +54,6 @@ from onyx.db.document import (
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
@@ -101,6 +100,7 @@ from onyx.db.port_orphan_candidate import (
 )
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.db.swap_index import _port_swap_ready
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch import port_copy
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
@@ -326,6 +326,22 @@ def cc_pair_and_future(
         cleanup_cc_pair_and_future(db_session, pair, future_id)
 
 
+@pytest.fixture
+def cc_pair_and_port_future(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[tuple[ConnectorCredentialPair, int], None, None]:
+    """Like cc_pair_and_future, but with use_port_flow set on the FUTURE.
+    run_port_attempt checks its target at startup and cancels itself when the
+    attempt's settings are not the current port target."""
+    pair = make_cc_pair(db_session)
+    future_id = make_future_search_settings(db_session, use_port_flow=True).id
+    try:
+        yield pair, future_id
+    finally:
+        cleanup_cc_pair_and_future(db_session, pair, future_id)
+
+
 def test_use_port_flow_default_and_round_trip(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -347,7 +363,6 @@ def test_use_port_flow_default_and_round_trip(
             passage_prefix="",
             provider_type=None,
             multipass_indexing=False,
-            embedding_precision=EmbeddingPrecision.FLOAT,
             index_name=f"test_port_flow_{uuid4().hex[:8]}",
             enable_contextual_rag=False,
         )
@@ -682,11 +697,14 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
             strategy,
             embedder,
             present_tokenizer=MagicMock(),
+            tenant_state=TenantState(tenant_id="public", multitenant=False),
         )
 
     assert written == 3
     assert aborted is False
-    present_client.iter_chunks_for_doc_ids.assert_called_once_with(["d1", "d2"])
+    present_client.iter_chunks_for_doc_ids.assert_called_once_with(
+        ["d1", "d2"], tenant_state=TenantState(tenant_id="public", multitenant=False)
+    )
     # re-embed once per page, with that page's chunks + prebuilt strategy/embedder
     assert mock_reembed.call_count == 2
     assert mock_reembed.call_args_list[0].args == (["c1", "c2"], strategy, embedder)
@@ -699,11 +717,11 @@ def test_copy_present_chunks_to_future_orchestration() -> None:
 
 
 def test_run_port_attempt_happy_path(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """Ports every doc in INDEX_BATCH_SIZE batches: copier called once per batch,
     cursor advanced to the last id, docs_ported == total, status SUCCESS."""
-    cc_pair, future_id = cc_pair_and_future
+    cc_pair, future_id = cc_pair_and_port_future
     doc_ids = _seed_cc_pair_documents(db_session, cc_pair, INDEX_BATCH_SIZE + 4)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
 
@@ -733,12 +751,12 @@ def test_run_port_attempt_happy_path(
 
 
 def test_run_port_attempt_batch_retry_then_failed(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """A batch that keeps failing is retried _PORT_BATCH_MAX_RETRIES times, then
     the attempt is FAILED with the cursor un-advanced (a fresh attempt resumes
     from the prior good batch -- here, the start)."""
-    cc_pair, future_id = cc_pair_and_future
+    cc_pair, future_id = cc_pair_and_port_future
     _seed_cc_pair_documents(db_session, cc_pair, 3)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
 
@@ -762,11 +780,11 @@ def test_run_port_attempt_batch_retry_then_failed(
 
 
 def test_run_port_attempt_resumes_from_cursor(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """A resume is a fresh NOT_STARTED attempt seeded with the prior cursor (how
     check_for_port reschedules a FAILED port): it scans only ids past that cursor."""
-    cc_pair, future_id = cc_pair_and_future
+    cc_pair, future_id = cc_pair_and_port_future
     doc_ids = _seed_cc_pair_documents(db_session, cc_pair, 5)
     # cursor at the 2nd doc, so only the 3 docs after it remain to port
     attempt_id = create_port_attempt(
@@ -790,13 +808,13 @@ def test_run_port_attempt_resumes_from_cursor(
 
 
 def test_run_port_attempt_stops_when_canceled(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """An external terminal mark (operator CANCEL / stall-FAIL) landing mid-batch stops
     the task at the batch boundary: commit_port_cursor refuses to write the cursor onto
     the now-terminal attempt (its guard) and signals the caller to stop, so no progress
     is recorded on the dead row."""
-    cc_pair, future_id = cc_pair_and_future
+    cc_pair, future_id = cc_pair_and_port_future
     _seed_cc_pair_documents(db_session, cc_pair, INDEX_BATCH_SIZE + 4)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
 
@@ -888,12 +906,12 @@ def test_cancel_active_port_attempts_terminalizes_not_started(
 
 
 def test_run_port_attempt_exits_when_cc_pair_deleting(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """A cc_pair flipped to DELETING stops the port at the boundary before any
     copy: the task acks by canceling itself (last-writer) so the waiting deletion
     can proceed; its CASCADE removes the attempt row later."""
-    cc_pair, future_id = cc_pair_and_future
+    cc_pair, future_id = cc_pair_and_port_future
     _seed_cc_pair_documents(db_session, cc_pair, 3)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
     cc_pair.status = ConnectorCredentialPairStatus.DELETING
@@ -911,12 +929,12 @@ def test_run_port_attempt_exits_when_cc_pair_deleting(
 
 
 def test_run_port_attempt_soft_time_limit_yields(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """Hitting the self-enforced soft time limit yields (no copy) and marks the
     attempt FAILED, so check_for_port resumes it from the cursor next tick rather
     than leaving it IN_PROGRESS to idle out a full stall window."""
-    cc_pair, future_id = cc_pair_and_future
+    cc_pair, future_id = cc_pair_and_port_future
     _seed_cc_pair_documents(db_session, cc_pair, 3)
     attempt_id = create_port_attempt(db_session, cc_pair.id, future_id).id
 
@@ -1638,7 +1656,7 @@ def test_port_target_settings_id() -> None:
 def test_delete_port_written_chunks_query() -> None:
     """Filters written_by_port + doc-ids; adds the tenant term only in multitenant mode
     (single-tenant has no tenant_id field, so it would match zero docs)."""
-    from onyx.document_index.interfaces_new import TenantState
+    from onyx.document_index.interfaces import TenantState
     from onyx.document_index.opensearch.schema import (
         DOCUMENT_ID_FIELD_NAME,
         TENANT_ID_FIELD_NAME,
@@ -1790,10 +1808,10 @@ def test_cleanup_stale_port_orphan_candidates(
 
 
 def test_run_port_attempt_sweeps_orphan_candidates(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """run_port_attempt copies the batch, then sweeps + clears the candidates and SUCCEEDs."""
-    cc_pair, future_id = cc_pair_and_future
+    cc_pair, future_id = cc_pair_and_port_future
     _seed_cc_pair_documents(db_session, cc_pair, 3, unique=True)
     record_port_orphan_candidates(
         db_session, future_id, cc_pair.id, ["orphan-1", "orphan-2"]
@@ -1830,10 +1848,10 @@ def test_run_port_attempt_sweeps_orphan_candidates(
 
 
 def test_run_port_attempt_failed_sweep_marks_failed(
-    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+    db_session: Session, cc_pair_and_port_future: tuple[ConnectorCredentialPair, int]
 ) -> None:
     """A failing sweep FAILs the attempt with the cursor at the final doc, so a resume re-copies nothing."""
-    cc_pair, future_id = cc_pair_and_future
+    cc_pair, future_id = cc_pair_and_port_future
     doc_ids = _seed_cc_pair_documents(db_session, cc_pair, 3, unique=True)
     record_port_orphan_candidates(db_session, future_id, cc_pair.id, ["port-orphan-x"])
     db_session.commit()

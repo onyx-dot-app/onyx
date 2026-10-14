@@ -2,20 +2,16 @@ from ee.onyx.configs.app_configs import CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC
 from ee.onyx.external_permissions.confluence.constants import (
     ALL_CONF_EMAILS_GROUP_NAME,
     REQUEST_PAGINATION_LIMIT,
-    SPACE_PERMISSION_OPERATION_READ,
-    SPACE_PERMISSION_SUBJECT_TYPE_GROUP,
-    SPACE_PERMISSION_SUBJECT_TYPE_USER,
-    SPACE_PERMISSION_TARGET_TYPE_SPACE,
-    VIEWSPACE_PERMISSION_TYPE,
 )
 from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.confluence.onyx_confluence import (
-    ConfluenceRestSpacePermissionsNotAvailableError,
-    OnyxConfluence,
-    get_user_email_from_userkey__server,
-    get_user_email_from_username__server,
+from onyx.connectors.confluence.source_operations import (
+    SPACE_PERMISSION_OPERATION_READ,
+    SPACE_PERMISSION_TARGET_TYPE_SPACE,
+    ConfluenceSourceOperations,
+    ConfluenceSpacePermissionsVariant,
+    read_dc_space_subjects,
 )
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.utils.logger import setup_logger
@@ -52,7 +48,7 @@ def _has_anonymous_read_permission(anonymous_permissions: list[dict]) -> bool:
 
 
 def _resolve_anonymous_access(
-    confluence_client: OnyxConfluence, space_key: str
+    source_operations: ConfluenceSourceOperations, space_key: str
 ) -> tuple[bool, set[str]]:
     """Decide is_public + extra group_names contributed by anonymous access.
 
@@ -63,10 +59,8 @@ def _resolve_anonymous_access(
     users still see the content but external/anon users don't.
     """
     try:
-        anonymous_permissions = (
-            confluence_client.get_anonymous_space_permissions_server_rest(
-                space_key=space_key,
-            )
+        anonymous_permissions = source_operations.get_anonymous_space_permissions(
+            space_key=space_key
         )
     except InsufficientPermissionsError:
         # CONFSERVER-99908: HTTP 500 from the anonymous endpoint means the
@@ -96,94 +90,29 @@ def _resolve_anonymous_access(
     return False, {ALL_CONF_EMAILS_GROUP_NAME}
 
 
-def _get_server_space_permissions_rest(
-    confluence_client: OnyxConfluence, space_key: str
+def _get_server_space_permissions(
+    source_operations: ConfluenceSourceOperations, space_key: str
 ) -> ExternalAccess:
-    """Confluence DC 9.1+ REST-API path for space permissions.
+    """Space permissions of Confluence Data Center, through the DC 9.1+ REST
+    API where it exists, else the legacy JSON-RPC API.
 
-    Differences from the JSON-RPC shape (CONFSERVER-78176, CONFSERVER-100505):
-      - flat list of {operation, subject, spaceKey, spaceId} entries.
-      - groups expose subject.name directly.
-      - users expose subject.userKey only -- email must be resolved
-        separately via /rest/api/user?key={userKey}.
-      - anonymous access is its own endpoint, not an inline row.
+    The JSON-RPC path is fragile on modern Confluence (Secure Administrator
+    Sessions / WebSudo intercepts admin JSON-RPC calls -- see the
+    get_all_space_permissions_server docstring). Wherever the REST API
+    is available we prefer it.
+
+    Differences of the REST shape (CONFSERVER-78176, CONFSERVER-100505):
+    users expose only a userKey, so their email needs a lookup by userKey,
+    and anonymous access is its own endpoint, not an inline row.
     """
-    raw_permissions = confluence_client.get_all_space_permissions_server_rest(
-        space_key=space_key
-    )
-
-    user_keys: set[str] = set()
-    group_names: set[str] = set()
-    for permission in raw_permissions:
-        operation = permission.get("operation") or {}
-        if operation.get("targetType") != SPACE_PERMISSION_TARGET_TYPE_SPACE:
-            continue
-        if operation.get("operationKey") != SPACE_PERMISSION_OPERATION_READ:
-            continue
-
-        subject = permission.get("subject") or {}
-        subject_type = subject.get("type")
-        if subject_type == SPACE_PERMISSION_SUBJECT_TYPE_USER:
-            if user_key := subject.get("userKey"):
-                user_keys.add(user_key)
-        elif subject_type == SPACE_PERMISSION_SUBJECT_TYPE_GROUP:
-            if name := subject.get("name"):
-                group_names.add(name)
-
-    is_public, extra_groups = _resolve_anonymous_access(confluence_client, space_key)
-    group_names.update(extra_groups)
-
-    user_emails: set[str] = set()
-    for user_key in user_keys:
-        email = get_user_email_from_userkey__server(confluence_client, user_key)
-        if email:
-            user_emails.add(email)
-            continue
-        logger.warning("Email for userKey %s not found in Confluence", user_key)
-
-    if not user_emails and not group_names and not is_public:
-        logger.warning(
-            "No user emails or group names found in Confluence space "
-            "permissions (REST path)\nSpace key: %s\nSpace permissions: %s",
-            space_key,
-            raw_permissions,
+    subjects = read_dc_space_subjects(source_operations, space_key)
+    group_names = set(subjects.groups)
+    if subjects.api == ConfluenceSpacePermissionsVariant.DC_REST:
+        is_public, extra_groups = _resolve_anonymous_access(
+            source_operations, space_key
         )
-
-    return ExternalAccess(
-        external_user_emails=user_emails,
-        external_user_group_ids=group_names,
-        is_public=is_public,
-    )
-
-
-def _get_server_space_permissions_jsonrpc(
-    confluence_client: OnyxConfluence, space_key: str
-) -> ExternalAccess:
-    """Legacy JSON-RPC path; kept for Confluence DC < 9.1.0.
-
-    See get_all_space_permissions_server in onyx_confluence.py for the
-    failure-mode notes and WebSudo escape hatch.
-    """
-    space_permissions = confluence_client.get_all_space_permissions_server(
-        space_key=space_key
-    )
-
-    viewspace_permissions = []
-    for permission_category in space_permissions:
-        if permission_category.get("type") == VIEWSPACE_PERMISSION_TYPE:
-            viewspace_permissions.extend(
-                permission_category.get("spacePermissions", [])
-            )
-
-    is_public = False
-    user_names = set()
-    group_names = set()
-    for permission in viewspace_permissions:
-        if user_name := permission.get("userName"):
-            user_names.add(user_name)
-        if group_name := permission.get("groupName"):
-            group_names.add(group_name)
-
+        group_names.update(extra_groups)
+    else:
         # It seems that if anonymous access is turned on for the site and space,
         # then the space is publicly accessible.
         # For confluence server, we make a group that contains all users
@@ -192,28 +121,30 @@ def _get_server_space_permissions_jsonrpc(
         # if they set the env variable CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC to True so
         # that we can support confluence server deployments that want anonymous access
         # to be public (we cant test this because its paywalled)
-        if user_name is None and group_name is None:
-            # Defaults to False
-            if CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC:
-                is_public = True
-            else:
-                group_names.add(ALL_CONF_EMAILS_GROUP_NAME)
+        is_public = (
+            subjects.has_anonymous_entry and CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC
+        )
+        if subjects.has_anonymous_entry and not CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC:
+            group_names.add(ALL_CONF_EMAILS_GROUP_NAME)
 
-    user_emails = set()
-    for user_name in user_names:
-        user_email = get_user_email_from_username__server(confluence_client, user_name)
-        if user_email:
-            user_emails.add(user_email)
-        else:
-            logger.warning("Email for user %s not found in Confluence", user_name)
-
-    if not user_emails and not group_names:
+    email_variant = subjects.user_email_variant()
+    user_emails: set[str] = set()
+    for user in subjects.users:
+        email = source_operations.get_user_email(variant=email_variant, user=user)
+        if email:
+            user_emails.add(email)
+            continue
         logger.warning(
-            "No user emails or group names found in Confluence space permissions"
-            "\nSpace key: %s"
-            "\nSpace permissions: %s",
+            "Email for %s %s not found in Confluence", email_variant.value, user
+        )
+
+    if not user_emails and not group_names and not is_public:
+        logger.warning(
+            "No user emails or group names found in Confluence space "
+            "permissions (%s)\nSpace key: %s\nSpace permissions: %s",
+            subjects.api.value,
             space_key,
-            space_permissions,
+            subjects.raw_permissions,
         )
 
     return ExternalAccess(
@@ -223,39 +154,12 @@ def _get_server_space_permissions_jsonrpc(
     )
 
 
-def _get_server_space_permissions(
-    confluence_client: OnyxConfluence, space_key: str
-) -> ExternalAccess:
-    """Dispatch between the DC 9.1+ REST path and the legacy JSON-RPC path.
-
-    The JSON-RPC path is fragile on modern Confluence (Secure Administrator
-    Sessions / WebSudo intercepts admin JSON-RPC calls -- see the
-    get_all_space_permissions_server docstring). Wherever the REST API
-    is available we prefer it.
-    """
-    if confluence_client.supports_rest_space_permissions():
-        try:
-            return _get_server_space_permissions_rest(confluence_client, space_key)
-        except ConfluenceRestSpacePermissionsNotAvailableError as e:
-            # server-information lied / custom build / plugin disabled; fall back.
-            logger.info(
-                "Confluence reports a version that should support REST "
-                "space-permissions, but the endpoint is unavailable for "
-                "space %s (%s); falling back to JSON-RPC.",
-                space_key,
-                e,
-            )
-
-    return _get_server_space_permissions_jsonrpc(confluence_client, space_key)
-
-
 def _get_cloud_space_permissions(
-    confluence_client: OnyxConfluence, space_key: str
+    source_operations: ConfluenceSourceOperations, space_key: str
 ) -> ExternalAccess:
-    space_permissions_result = confluence_client.get_space(
-        space_key=space_key, expand="permissions"
+    space_permissions = source_operations.get_space_permissions(
+        variant=ConfluenceSpacePermissionsVariant.CLOUD, space_key=space_key
     )
-    space_permissions = space_permissions_result.get("permissions", [])
 
     user_emails = set()
     group_names = set()
@@ -285,15 +189,15 @@ def _get_cloud_space_permissions(
 
 
 def get_space_permission(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
     space_key: str,
     is_cloud: bool,
     add_prefix: bool = False,
 ) -> ExternalAccess:
     if is_cloud:
-        space_permissions = _get_cloud_space_permissions(confluence_client, space_key)
+        space_permissions = _get_cloud_space_permissions(source_operations, space_key)
     else:
-        space_permissions = _get_server_space_permissions(confluence_client, space_key)
+        space_permissions = _get_server_space_permissions(source_operations, space_key)
 
     if (
         not space_permissions.is_public
@@ -325,7 +229,7 @@ def get_space_permission(
 
 
 def get_all_space_permissions(
-    confluence_client: OnyxConfluence,
+    source_operations: ConfluenceSourceOperations,
     is_cloud: bool,
     add_prefix: bool = False,
 ) -> dict[str, ExternalAccess]:
@@ -339,9 +243,7 @@ def get_all_space_permissions(
     # Gets all the spaces in the Confluence instance
     all_space_keys = [
         key
-        for space in confluence_client.retrieve_confluence_spaces(
-            limit=REQUEST_PAGINATION_LIMIT,
-        )
+        for space in source_operations.list_spaces(limit=REQUEST_PAGINATION_LIMIT)
         if (key := space.get("key"))
     ]
 
@@ -350,7 +252,7 @@ def get_all_space_permissions(
     space_permissions_by_space_key: dict[str, ExternalAccess] = {}
     for space_key in all_space_keys:
         space_permissions = get_space_permission(
-            confluence_client, space_key, is_cloud, add_prefix
+            source_operations, space_key, is_cloud, add_prefix
         )
 
         # Stores the permissions for each space

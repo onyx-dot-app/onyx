@@ -326,7 +326,7 @@ def fetch_assistant_unique_users_total(
     )
 
     result = db_session.execute(query).scalar()
-    return result if result else 0
+    return result or 0
 
 
 def user_can_view_assistant_stats(

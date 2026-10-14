@@ -27,13 +27,16 @@
  */
 
 import { useMemo, useState } from "react";
-import { FilterButton, LineItemButton } from "@opal/components";
+import { useTranslations } from "next-intl";
+import {
+  Dropdown,
+  FilterButton,
+  type DropdownItem,
+  type DropdownOption,
+} from "@opal/components";
 import { SvgActions, SvgUser } from "@opal/icons";
-import { Popover, PopoverMenu } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import useFilter from "@/hooks/useFilter";
-import useMcpServers from "@/hooks/useMcpServers";
-import { useAvailableTools } from "@/hooks/useAvailableTools";
+import { useAdminMcpServers } from "@/lib/mcp/hooks";
+import { useAvailableTools } from "@/lib/tools/hooks";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
 import type { MinimalAgent } from "@/lib/agents/types";
@@ -41,7 +44,7 @@ import {
   OPEN_URL_TOOL_ID,
   OPEN_URL_TOOL_NAME,
   SYSTEM_TOOL_ICONS,
-} from "@/app/app/components/tools/constants";
+} from "@/lib/tools/constants";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,8 +96,9 @@ interface UseAgentsFiltersReturn<T extends MinimalAgent> {
 export function useAgentsFilters<T extends MinimalAgent>(
   agents: T[]
 ): UseAgentsFiltersReturn<T> {
+  const t = useTranslations("agents");
   const { user } = useUser();
-  const { mcpData } = useMcpServers();
+  const { mcpData } = useAdminMcpServers();
   const { tools: allTools } = useAvailableTools();
   const { data: usersData } = useUsers({ includeApiKeys: false });
 
@@ -141,8 +145,6 @@ export function useAgentsFilters<T extends MinimalAgent>(
 
     return creators;
   }, [usersData, user]);
-
-  const creatorFilter = useFilter(uniqueCreators, (c) => c.email);
 
   // -- Actions filter data ---------------------------------------------------
 
@@ -206,8 +208,6 @@ export function useAgentsFilters<T extends MinimalAgent>(
     return [...systemItems, ...mcpItems, ...otherItems];
   }, [allTools, mcpServerNames]);
 
-  const actionsFilter = useFilter(uniqueActions, (a) => a.name);
-
   // -- Derived selection sets ------------------------------------------------
 
   const { selectedMcpServerIds, selectedToolIds } = useMemo(() => {
@@ -226,24 +226,30 @@ export function useAgentsFilters<T extends MinimalAgent>(
   // -- Filter button labels --------------------------------------------------
 
   const creatorFilterButtonText = useMemo(() => {
-    if (selectedCreatorIds.size === 0) return "Everyone";
+    if (selectedCreatorIds.size === 0) return t("filters.creator.all.label");
     if (selectedCreatorIds.size === 1) {
       const selectedId = Array.from(selectedCreatorIds)[0];
       const creator = uniqueCreators.find((c) => c.id === selectedId);
-      return creator ? `By ${creator.email}` : "Everyone";
+      return creator
+        ? t("filters.creator.single.label", { email: creator.email })
+        : t("filters.creator.all.label");
     }
-    return `${selectedCreatorIds.size} people`;
-  }, [selectedCreatorIds, uniqueCreators]);
+    return t("filters.creator.multiple.label", {
+      count: selectedCreatorIds.size,
+    });
+  }, [selectedCreatorIds, uniqueCreators, t]);
 
   const actionsFilterButtonText = useMemo(() => {
-    if (selectedActionKeys.size === 0) return "All Actions";
+    if (selectedActionKeys.size === 0) return t("filters.actions.all.label");
     if (selectedActionKeys.size === 1) {
       const key = Array.from(selectedActionKeys)[0];
       const item = uniqueActions.find((a) => actionFilterKey(a) === key);
-      return item?.name ?? "All Actions";
+      return item?.name ?? t("filters.actions.all.label");
     }
-    return `${selectedActionKeys.size} selected`;
-  }, [selectedActionKeys, uniqueActions]);
+    return t("filters.actions.multiple.label", {
+      count: selectedActionKeys.size,
+    });
+  }, [selectedActionKeys, uniqueActions, t]);
 
   // -- Filtered agents -------------------------------------------------------
 
@@ -279,11 +285,56 @@ export function useAgentsFilters<T extends MinimalAgent>(
 
   // -- filterBar node --------------------------------------------------------
 
+  const toggleIn =
+    (setSelected: React.Dispatch<React.SetStateAction<Set<string>>>) =>
+    (key: string) =>
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+  const toggleCreator = toggleIn(setSelectedCreatorIds);
+  const toggleAction = toggleIn(setSelectedActionKeys);
+
+  // Rows for the pickers. The list's own search filters them; system tools
+  // sit in a group of their own, above the rest.
+  const creatorItems: DropdownItem[] = uniqueCreators.map((creator) => ({
+    kind: "option",
+    value: creator.id,
+    icon: SvgUser,
+    title: creator.email,
+    description:
+      user != null && creator.id === user.id
+        ? t("filters.creator.me.description")
+        : undefined,
+  }));
+  const actionOption = (action: ActionFilterItem): DropdownOption => ({
+    kind: "option",
+    value: actionFilterKey(action),
+    icon:
+      action.type === "tool" && action.systemIcon
+        ? action.systemIcon
+        : SvgActions,
+    title: action.name,
+  });
+  const systemActions = uniqueActions.filter(isSystemTool);
+  const otherActions = uniqueActions.filter((a) => !isSystemTool(a));
+  const actionItems: DropdownItem[] = [];
+  if (systemActions.length > 0 && otherActions.length > 0) {
+    actionItems.push(
+      { kind: "group", items: systemActions.map(actionOption) },
+      { kind: "group", items: otherActions.map(actionOption) }
+    );
+  } else {
+    actionItems.push(...uniqueActions.map(actionOption));
+  }
+
   const filterBar = (
     <>
       {/* Created By filter */}
-      <Popover>
-        <Popover.Trigger asChild>
+      <Dropdown>
+        <Dropdown.Trigger asChild>
           <FilterButton
             icon={SvgUser}
             active={selectedCreatorIds.size > 0}
@@ -291,54 +342,19 @@ export function useAgentsFilters<T extends MinimalAgent>(
           >
             {creatorFilterButtonText}
           </FilterButton>
-        </Popover.Trigger>
-        <Popover.Content align="start">
-          <PopoverMenu>
-            {[
-              <InputTypeIn
-                key="created-by"
-                placeholder="Created by..."
-                variant="internal"
-                searchIcon
-                value={creatorFilter.query}
-                onChange={(e) => creatorFilter.setQuery(e.target.value)}
-              />,
-              ...creatorFilter.filtered.map((creator) => {
-                const isSelected = selectedCreatorIds.has(creator.id);
-                const isCurrentUser = user != null && creator.id === user.id;
-
-                return (
-                  <LineItemButton
-                    key={creator.id}
-                    sizePreset="main-ui"
-                    rounding="sm"
-                    selectVariant="select-heavy"
-                    icon={SvgUser}
-                    title={creator.email}
-                    description={isCurrentUser ? "Me" : undefined}
-                    state={isSelected ? "selected" : "empty"}
-                    onClick={() => {
-                      setSelectedCreatorIds((prev) => {
-                        const newSet = new Set(prev);
-                        if (newSet.has(creator.id)) {
-                          newSet.delete(creator.id);
-                        } else {
-                          newSet.add(creator.id);
-                        }
-                        return newSet;
-                      });
-                    }}
-                  />
-                );
-              }),
-            ]}
-          </PopoverMenu>
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={creatorFilterButtonText}
+          search={{ placeholder: t("filters.creator.search.placeholder") }}
+          values={selectedCreatorIds}
+          onSelect={(option) => toggleCreator(option.value)}
+          items={creatorItems}
+        />
+      </Dropdown>
 
       {/* Actions filter */}
-      <Popover>
-        <Popover.Trigger asChild>
+      <Dropdown>
+        <Dropdown.Trigger asChild>
           <FilterButton
             icon={SvgActions}
             active={selectedActionKeys.size > 0}
@@ -346,62 +362,15 @@ export function useAgentsFilters<T extends MinimalAgent>(
           >
             {actionsFilterButtonText}
           </FilterButton>
-        </Popover.Trigger>
-        <Popover.Content align="start">
-          <PopoverMenu>
-            {[
-              <InputTypeIn
-                key="actions"
-                placeholder="Filter actions..."
-                variant="internal"
-                searchIcon
-                value={actionsFilter.query}
-                onChange={(e) => actionsFilter.setQuery(e.target.value)}
-              />,
-              ...actionsFilter.filtered.flatMap((action, index) => {
-                const key = actionFilterKey(action);
-                const isSelected = selectedActionKeys.has(key);
-                const icon =
-                  action.type === "tool" && action.systemIcon
-                    ? action.systemIcon
-                    : SvgActions;
-
-                // Separator between system tools and the rest
-                const nextAction = actionsFilter.filtered[index + 1];
-                const needsSeparator =
-                  isSystemTool(action) &&
-                  nextAction &&
-                  !isSystemTool(nextAction);
-
-                const lineItem = (
-                  <LineItemButton
-                    key={key}
-                    sizePreset="main-ui"
-                    rounding="sm"
-                    selectVariant="select-heavy"
-                    icon={icon}
-                    title={action.name}
-                    state={isSelected ? "selected" : "empty"}
-                    onClick={() => {
-                      setSelectedActionKeys((prev) => {
-                        const newSet = new Set(prev);
-                        if (newSet.has(key)) {
-                          newSet.delete(key);
-                        } else {
-                          newSet.add(key);
-                        }
-                        return newSet;
-                      });
-                    }}
-                  />
-                );
-
-                return needsSeparator ? [lineItem, null] : [lineItem];
-              }),
-            ]}
-          </PopoverMenu>
-        </Popover.Content>
-      </Popover>
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={actionsFilterButtonText}
+          search={{ placeholder: t("filters.actions.search.placeholder") }}
+          values={selectedActionKeys}
+          onSelect={(option) => toggleAction(option.value)}
+          items={actionItems}
+        />
+      </Dropdown>
     </>
   );
 

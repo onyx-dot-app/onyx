@@ -1,25 +1,36 @@
 "use client";
 
 import React, { useState, useCallback, useMemo, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { Popover, OpenButton } from "@opal/components";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
+import { GLOBAL_DEFAULT_LLM_OPTION } from "@/lib/languageModels/options";
+import { useSettings } from "@/lib/settings/hooks";
 import {
-  GLOBAL_DEFAULT_LLM_OPTION,
-  LLMOption,
-  ModelOptionProvider,
-} from "@/lib/languageModels/options";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+  useLanguageModels,
+  useLanguageModelsForAgent,
+} from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
   useModelDetailManagers,
 } from "@/sections/model-selector/ModelSelectorContent";
+import type {
+  LLMOption,
+  ModelOptionProvider,
+  ModelPaging,
+} from "@/lib/languageModels/types";
 
 export interface ModelSelectorProps {
   /** The currently selected model, identified by model_configuration_id. */
   value: number | null;
   onChange: (option: LLMOption) => void;
+  /** Limits the built-in provider list to models available to this agent. */
+  agentId?: number;
   providerOptions?: ModelOptionProvider[];
+  /** Pages in the models a host-supplied `providerOptions` list left out.
+   *  Ignored when the selector fetches its own list, which pages itself. */
+  modelPaging?: ModelPaging;
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
 
@@ -55,7 +66,9 @@ export interface ModelSelectorProps {
 export default function ModelSelector({
   value,
   onChange,
+  agentId,
   providerOptions,
+  modelPaging: modelPagingProp,
   includeHiddenModels = false,
   requiresImageInput,
   renderTrigger,
@@ -65,9 +78,27 @@ export default function ModelSelector({
   includeGlobalDefault = false,
   side = "top",
 }: ModelSelectorProps) {
-  const { llmProviders: currentAgentProviderOptions, defaultText } =
-    useCurrentAgentLLMProviders();
-  const llmProviders = providerOptions ?? currentAgentProviderOptions;
+  const t = useTranslations("chat.modelSelector");
+  // Unscoped by default. Callers must supply agentId or providerOptions when
+  // the host has an agent context.
+  // The list stays defined even before it arrives, so the child never sees
+  // undefined and never falls through to its own agent-scoped list.
+  const {
+    llmProviders: fetchedProviderOptions,
+    defaultText,
+    isLoading: providersLoading,
+    modelPaging: fetchedModelPaging,
+  } = useLanguageModelsForAgent(agentId);
+  const {
+    llmProviders: globalProviderOptions,
+    defaultText: globalDefaultText,
+  } = useLanguageModels();
+  const {
+    model_routing_enabled: modelRoutingEnabled,
+    model_routing_model_configuration_id: routingModelId,
+  } = useSettings();
+  const llmProviders = providerOptions ?? fetchedProviderOptions ?? [];
+  const isLoading = providerOptions === undefined && providersLoading;
   const [open, setOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +134,24 @@ export default function ModelSelector({
   }, [defaultText, llmProviders]);
 
   const effectiveOption = currentOption ?? defaultModelOption;
-  const currentDisplayName = effectiveOption?.displayName ?? "Select Model";
+  const isAutoSelected: boolean =
+    (modelRoutingEnabled ?? false) &&
+    routingModelId != null &&
+    value === routingModelId;
+  const currentDisplayName: string = isAutoSelected
+    ? t("autoItem.label")
+    : (effectiveOption?.displayName ?? t("trigger.noSelection.label"));
+  const globalDefaultDisplayName = useMemo(() => {
+    if (!globalDefaultText || !globalProviderOptions) return null;
+    const provider = globalProviderOptions.find(
+      (option) => option.id === globalDefaultText.provider_id
+    );
+    return (
+      provider?.model_configurations.find(
+        (model) => model.name === globalDefaultText.model_name
+      )?.effectiveDisplayName ?? null
+    );
+  }, [globalDefaultText, globalProviderOptions]);
 
   const isSelected = useCallback(
     (option: LLMOption) => {
@@ -150,14 +198,20 @@ export default function ModelSelector({
       <Popover.Content side={side} align="end" width="xl" sticky="partial">
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
-          providerOptions={providerOptions}
+          providerOptions={llmProviders}
+          modelPaging={
+            providerOptions === undefined ? fetchedModelPaging : modelPagingProp
+          }
+          isLoading={isLoading}
           includeHiddenModels={includeHiddenModels}
           requiresImageInput={requiresImageInput}
           onSelect={handleSelect}
           isSelected={isSelected}
           includeGlobalDefault={includeGlobalDefault}
+          globalDefaultDisplayName={globalDefaultDisplayName}
           scrollContainerRef={scrollContainerRef}
           modelDetail={modelDetail}
+          onDetailSelect={onChange}
         />
       </Popover.Content>
     </Popover>

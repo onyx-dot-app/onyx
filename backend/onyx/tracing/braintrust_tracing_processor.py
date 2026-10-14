@@ -20,11 +20,11 @@ from .framework.traces import Trace
 
 
 def _span_type(span: Span[Any]) -> braintrust.SpanTypeAttribute:
-    if span.span_data.type in ["agent"]:
+    if span.span_data.type == "agent":
         return braintrust.SpanTypeAttribute.TASK
-    elif span.span_data.type in ["function"]:
+    elif span.span_data.type == "function":
         return braintrust.SpanTypeAttribute.TOOL
-    elif span.span_data.type in ["generation"]:
+    elif span.span_data.type == "generation":
         return braintrust.SpanTypeAttribute.LLM
     else:
         return braintrust.SpanTypeAttribute.TASK
@@ -191,6 +191,7 @@ class BraintrustTracingProcessor(TracingProcessor):
             output_tokens = int(completion_tokens or 0)
             input_cents, output_cents = compute_cost_cents(
                 model=model_name,
+                served_model=span.span_data.routed_model,
                 provider=provider,
                 prompt_tokens=input_tokens,
                 completion_tokens=output_tokens,
@@ -207,6 +208,8 @@ class BraintrustTracingProcessor(TracingProcessor):
             "model": span.span_data.model,
             "model_config": span.span_data.model_config,
         }
+        if span.span_data.routed_model:
+            metadata["routed_model"] = span.span_data.routed_model
 
         # Include reasoning in metadata if present
         if span.span_data.reasoning:
@@ -252,12 +255,12 @@ class BraintrustTracingProcessor(TracingProcessor):
             span_name = _generation_span_name(span)
         else:
             span_name = _span_name(span)
-        span_kwargs: Dict[str, Any] = dict(
-            id=span.span_id,
-            name=span_name,
-            type=_span_type(span),
-            start_time=_timestamp_from_maybe_iso(span.started_at),
-        )
+        span_kwargs: Dict[str, Any] = {
+            "id": span.span_id,
+            "name": span_name,
+            "type": _span_type(span),
+            "start_time": _timestamp_from_maybe_iso(span.started_at),
+        }
         if trace_metadata:
             span_kwargs["metadata"] = trace_metadata
         created_span: Any = parent.start_span(**span_kwargs)

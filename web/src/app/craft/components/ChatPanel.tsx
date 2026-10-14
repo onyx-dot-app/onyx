@@ -1,17 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import { memo, useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
-  useSession,
+  useChatSession,
   useSessionId,
   useHasSession,
   useIsRunning,
   useIsInterrupting,
   useWasInterrupted,
-  useOutputPanelOpen,
-  useToggleOutputPanel,
   useBuildSessionStore,
   useIsPreProvisioning,
   useIsPreProvisioningFailed,
@@ -19,13 +18,18 @@ import {
   useQueuedMessages,
   useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
-import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
+import { useCraftStreaming } from "@/providers/CraftStreamingProvider";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
-import { BuildMessageAttachment } from "@/app/craft/types/streamingTypes";
+import {
+  BuildMessageAttachment,
+  type OutputCard,
+} from "@/app/craft/types/streamingTypes";
+import { useOutputCards } from "@/lib/build/hooks";
 import {
   BuildFile,
   UploadFileStatus,
   useUploadFilesContext,
+  UploadFilesProvider,
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
@@ -36,7 +40,7 @@ import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import {
   BuildLlmSelection,
   hasSupportedCraftProvider,
@@ -53,19 +57,24 @@ import LiveApprovalsRegion from "@/app/craft/components/approvals/LiveApprovalsR
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
-import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
-import { Button as OpalButton, Tooltip } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
-import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import {
+  motion,
+  AnimatePresence,
+  LayoutGroup,
+  useReducedMotion,
+} from "motion/react";
 
 interface BuildChatPanelProps {
   /** Session ID from URL - used to prevent welcome flash while loading */
   existingSessionId?: string | null;
+  headerControlWidth?: number;
+  animateLayout?: boolean;
 }
 
 function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
@@ -91,13 +100,41 @@ function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
  * - Input bar at bottom
  * - Header with output panel toggle
  */
-export default function BuildChatPanel({
+function ChatPanelContent({
   existingSessionId,
+  headerControlWidth = 76,
+  animateLayout = true,
 }: BuildChatPanelProps) {
+  const t = useTranslations("craft.chatPanel");
   const router = useRouter();
-  const outputPanelOpen = useOutputPanelOpen();
-  const session = useSession();
+  const session = useChatSession();
   const sessionId = useSessionId();
+  const outputSessionId = sessionId ?? existingSessionId ?? null;
+  const { cards: outputCards, markViewed } = useOutputCards(outputSessionId);
+  const openOutput = useCallback(
+    (card: OutputCard) => {
+      if (!outputSessionId || card.deleted) return;
+      const store = useBuildSessionStore.getState();
+      if (card.kind === "app")
+        store.openBrowserTab(outputSessionId, outputSessionId);
+      else store.openFilePreview(outputSessionId, card.path, card.name);
+      void markViewed(card);
+    },
+    [outputSessionId, markViewed]
+  );
+  const openOutputFile = useCallback(
+    (path: string, name: string) => {
+      if (!outputSessionId) return;
+      useBuildSessionStore
+        .getState()
+        .openFilePreview(outputSessionId, path, name);
+      const card = outputCards.find(
+        (output) => output.kind === "file" && output.path === path
+      );
+      if (card) void markViewed(card);
+    },
+    [outputSessionId, outputCards, markViewed]
+  );
   const scheduledSessionId = sessionId ?? existingSessionId ?? null;
   // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
   const scheduledRunSessionId =
@@ -107,18 +144,24 @@ export default function BuildChatPanel({
   const scheduledRunInFlight =
     isScheduledRunContextInFlight(scheduledRunContext);
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
+  const scheduledRunId = scheduledRunContext?.run_id;
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
   const displayIsRunning = isRunning || scheduledRunInFlight;
-  const hasInterruptibleTurn = session?.status === "running";
+  const isRestoring: boolean =
+    session?.status === "creating" &&
+    !session.activeTurnLocalOwner &&
+    !session.activeTurnId;
+  const hasInterruptibleTurn =
+    (session?.status === "running" || session?.status === "creating") &&
+    (session.activeTurnId !== null || session.activeTurnLocalOwner);
   const wasInterrupted = useWasInterrupted();
   const { setLeftSidebarFolded, leftSidebarFolded, videoBackgroundEnabled } =
     useBuildContext();
   const { isMobile } = useScreenSize();
-  const toggleOutputPanel = useToggleOutputPanel();
   const onWakeIntent = useWakeOnIntent();
 
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders, defaultText, defaultCraft } = useLanguageModels();
   // Sessions can outlive the org's supported providers — gate sends until one
   // exists (the model picker stays enabled so admins can connect from it).
   const hasProvider = hasSupportedCraftProvider(llmProviders);
@@ -143,8 +186,19 @@ export default function BuildChatPanel({
     () =>
       (sessionId ? modelBySession[sessionId] : undefined) ??
       sessionModel ??
-      getPreferredLlmSelection(user?.id, llmProviders),
-    [sessionId, modelBySession, sessionModel, user?.id, llmProviders]
+      getPreferredLlmSelection(user?.id, llmProviders, [
+        defaultCraft,
+        defaultText,
+      ]),
+    [
+      sessionId,
+      modelBySession,
+      sessionModel,
+      user?.id,
+      llmProviders,
+      defaultCraft,
+      defaultText,
+    ]
   );
 
   const contextUsage = useMemo(() => {
@@ -171,15 +225,15 @@ export default function BuildChatPanel({
   const isViewingSubagent = viewedSubagentSessionId !== null;
   const reduceMotion = useReducedMotion();
 
-  const updateSessionData = useBuildSessionStore(
-    (state) => state.updateSessionData
-  );
-
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
     (state) => state.consumePreProvisionedSession
   );
   const createSession = useBuildSessionStore((state) => state.createSession);
+  const loadSession = useBuildSessionStore((state) => state.loadSession);
+  const retryTurnSettlement = useBuildSessionStore(
+    (state) => state.retryTurnSettlement
+  );
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
   );
@@ -190,22 +244,37 @@ export default function BuildChatPanel({
     streamMessage,
     interruptStreaming,
     streamScheduledRunEvents,
-    streamTurnEvents,
-  } = useBuildStreaming();
+    retryQueuedMessage,
+  } = useCraftStreaming();
   const isInterrupting = useIsInterrupting();
-  const queuedMessages = useQueuedMessages();
+  const sessionQueue = useQueuedMessages();
+  const queuedMessages = useMemo(
+    () => sessionQueue.filter((message) => message.phase !== "starting"),
+    [sessionQueue]
+  );
+  const queuedSendError =
+    !isRunning && !session?.activeTurnId && sessionQueue[0]?.phase === "failed"
+      ? session?.error
+      : null;
+  const settlementError =
+    session?.turnSettlement?.phase === "failed"
+      ? (session.turnSettlement.error ?? t("settlementError.description"))
+      : null;
+  const submissionBlocked =
+    (!!existingSessionId &&
+      !session?.isLoaded &&
+      !session?.activeTurnId &&
+      !session?.activeTurnLocalOwner) ||
+    session?.loadError != null ||
+    session?.turnSettlement?.phase === "failed" ||
+    sessionQueue[0]?.phase === "failed";
+  const recoverableError =
+    settlementError ?? queuedSendError ?? session?.loadError;
   const enqueueMessage = useBuildSessionStore((state) => state.enqueueMessage);
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
   );
-  const attachedTurnRef = useRef<{
-    turnId: string;
-    controller: AbortController;
-  } | null>(null);
-  const attachCleanupTimerRef = useRef<{
-    turnId: string;
-    timer: ReturnType<typeof setTimeout>;
-  } | null>(null);
+  const activeTurnId = session?.activeTurnId ?? null;
   const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -217,121 +286,39 @@ export default function BuildChatPanel({
   const sandboxNotReady = isPreProvisioning || isPreProvisioningFailed;
   const {
     currentMessageFiles,
+    getCurrentMessageFiles,
     hasUploadingFiles,
     setActiveSession,
     uploadFiles,
   } = useUploadFilesContext();
 
-  // Ref to access current file state in async callbacks
-  const currentFilesRef = useRef(currentMessageFiles);
-  useEffect(() => {
-    currentFilesRef.current = currentMessageFiles;
-  }, [currentMessageFiles]);
-
-  /**
-   * Keep the upload context in sync with the active session.
-   * The context handles all session change logic internally (fetching attachments,
-   * clearing files, auto-uploading pending files).
-   */
+  // URL sessions identify drafts; provisional sessions provide upload destinations.
   useEffect(() => {
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
-    setActiveSession(activeSession);
+    setActiveSession(activeSession, { draftId: existingSessionId ?? null });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
-  const maybeAutoOpenPanelForPreview = useBuildSessionStore(
-    (s) => s.maybeAutoOpenPanelForPreview
-  );
-
-  // Auto-open the panel the first time webappUrl becomes non-null this session.
-  const prevWebappUrlRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    const prev = prevWebappUrlRef.current;
-    const current = session?.webappUrl ?? null;
-    if (prev === null && current !== null && sessionId) {
-      maybeAutoOpenPanelForPreview(sessionId);
-    }
-    prevWebappUrlRef.current = current;
-  }, [session?.webappUrl, sessionId, maybeAutoOpenPanelForPreview]);
-
-  useEffect(() => {
-    if (!scheduledSessionId || !shouldStreamScheduledRun) return;
+    if (!scheduledSessionId || !scheduledRunId || !shouldStreamScheduledRun)
+      return;
 
     const controller = new AbortController();
-    void streamScheduledRunEvents(scheduledSessionId, controller.signal, () => {
-      void mutateScheduledRunContext();
-    });
+    void streamScheduledRunEvents(
+      scheduledSessionId,
+      scheduledRunId,
+      controller.signal,
+      () => {
+        void mutateScheduledRunContext();
+      }
+    );
 
     return () => controller.abort();
   }, [
     scheduledSessionId,
+    scheduledRunId,
     shouldStreamScheduledRun,
     streamScheduledRunEvents,
     mutateScheduledRunContext,
-  ]);
-
-  const activeTurnId = session?.activeTurnId ?? null;
-  const activeTurnLocalOwner = session?.activeTurnLocalOwner ?? false;
-  useEffect(() => {
-    const pendingCleanup = attachCleanupTimerRef.current;
-    if (pendingCleanup?.turnId === activeTurnId) {
-      clearTimeout(pendingCleanup.timer);
-      attachCleanupTimerRef.current = null;
-    }
-
-    if (
-      !scheduledSessionId ||
-      !activeTurnId ||
-      activeTurnLocalOwner ||
-      scheduledRunInFlight
-    ) {
-      return;
-    }
-
-    const scheduleCleanup = (attachment: {
-      turnId: string;
-      controller: AbortController;
-    }) => {
-      attachCleanupTimerRef.current = {
-        turnId: attachment.turnId,
-        timer: setTimeout(() => {
-          attachment.controller.abort();
-          if (attachedTurnRef.current === attachment) {
-            attachedTurnRef.current = null;
-          }
-          if (attachCleanupTimerRef.current?.turnId === attachment.turnId) {
-            attachCleanupTimerRef.current = null;
-          }
-        }, 0),
-      };
-    };
-
-    const existingAttachment = attachedTurnRef.current;
-    if (existingAttachment?.turnId === activeTurnId) {
-      return () => scheduleCleanup(existingAttachment);
-    }
-
-    existingAttachment?.controller.abort();
-    const controller = new AbortController();
-    const attachment = { turnId: activeTurnId, controller };
-    attachedTurnRef.current = attachment;
-    void streamTurnEvents(
-      scheduledSessionId,
-      activeTurnId,
-      controller.signal,
-      () => {
-        if (attachedTurnRef.current === attachment) {
-          attachedTurnRef.current = null;
-        }
-      }
-    );
-
-    return () => scheduleCleanup(attachment);
-  }, [
-    scheduledSessionId,
-    activeTurnId,
-    activeTurnLocalOwner,
-    scheduledRunInFlight,
-    streamTurnEvents,
   ]);
 
   useEffect(() => {
@@ -343,13 +330,19 @@ export default function BuildChatPanel({
     ) {
       return;
     }
-    updateSessionData(scheduledSessionId, { status: "active" });
+    const store = useBuildSessionStore.getState();
+    const current = store.sessions.get(scheduledSessionId);
+    if (current)
+      void store.beginTurnSettlement(
+        scheduledSessionId,
+        { kind: "scheduled", runId: scheduledRunContext.run_id },
+        current.turnGeneration
+      );
   }, [
     scheduledSessionId,
     scheduledRunContext,
     scheduledRunInFlight,
     activeTurnId,
-    updateSessionData,
   ]);
 
   // Ref to access InputBar methods
@@ -358,7 +351,6 @@ export default function BuildChatPanel({
   // Scroll detection for auto-scroll "magnet"
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const [showScrollButton, setShowScrollButton] = useState(false);
   const prevScrollTopRef = useRef(0);
 
   // Check if user is at bottom of scroll container
@@ -393,11 +385,9 @@ export default function BuildChatPanel({
     if (scrolledUp) {
       // User scrolled up - release auto-scroll magnet
       setIsAtBottom(wasAtBottom);
-      setShowScrollButton(!wasAtBottom);
     } else if (wasAtBottom) {
       // We're at bottom - ensure button stays hidden (handles content growth)
       setIsAtBottom(true);
-      setShowScrollButton(false);
     }
     // If scrollTop increased but we're still at bottom, it's content growth - do nothing
 
@@ -411,30 +401,20 @@ export default function BuildChatPanel({
 
     // Use requestAnimationFrame to ensure we scroll after any layout changes
     requestAnimationFrame(() => {
-      if (!container) return;
-
-      // Scroll to a value larger than scrollHeight - browsers will clamp to max
-      // This ensures we always reach the absolute bottom
-      const targetScroll = container.scrollHeight + 1000; // Add buffer to ensure we go all the way
-      container.scrollTo({ top: targetScroll, behavior: "smooth" });
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: reduceMotion ? "instant" : "smooth",
+      });
 
       // Update state immediately
       setIsAtBottom(true);
-      setShowScrollButton(false);
-
-      // Update prevScrollTopRef after scroll completes
-      setTimeout(() => {
-        if (container) {
-          prevScrollTopRef.current = container.scrollTop;
-        }
-      }, 600); // Smooth scroll animation duration
     });
-  }, []);
+  }, [reduceMotion]);
 
   // Reset scroll state when session changes
   useEffect(() => {
     setIsAtBottom(true);
-    setShowScrollButton(false);
+    prevScrollTopRef.current = 0;
   }, [sessionId]);
 
   const sendMessage = useCallback(
@@ -443,8 +423,9 @@ export default function BuildChatPanel({
       attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
+      if (submissionBlocked) return;
       if (scheduledRunInFlight) {
-        toast.error("Please wait for the scheduled run to finish.");
+        toast.error(t("toast.scheduledRunWait"));
         return;
       }
 
@@ -456,7 +437,7 @@ export default function BuildChatPanel({
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
         if (isRunning) {
-          toast.error("Please wait for the current operation to complete.");
+          toast.error(t("toast.operationWait"));
           return;
         }
 
@@ -469,7 +450,12 @@ export default function BuildChatPanel({
           attachments,
         });
         // Stream the response
-        await streamMessage(sessionId, message, chosen, attachments);
+        await streamMessage(
+          sessionId,
+          message,
+          modelOverride ?? modelBySession[sessionId] ?? null,
+          attachments
+        );
       } else {
         // New session flow - ALWAYS use pre-provisioned session
         const newSessionId = await consumePreProvisionedSession();
@@ -477,7 +463,7 @@ export default function BuildChatPanel({
         if (!newSessionId) {
           // This should not happen if UI properly disables input until ready
           console.error("[ChatPanel] No pre-provisioned session available");
-          toast.error("Please wait for sandbox to initialize");
+          toast.error(t("toast.sandboxWait"));
           return;
         }
 
@@ -500,8 +486,8 @@ export default function BuildChatPanel({
 
           await new Promise<void>((resolve) => {
             const checkUploads = () => {
-              // Check current state via ref (updates with each render)
-              const stillUploading = currentFilesRef.current.some(
+              // Read accepted uploads without waiting for a React render.
+              const stillUploading = getCurrentMessageFiles().some(
                 (f) => f.status === UploadFileStatus.UPLOADING
               );
               if (!stillUploading || waited >= maxWaitMs) {
@@ -559,6 +545,7 @@ export default function BuildChatPanel({
       sessionId,
       isRunning,
       scheduledRunInFlight,
+      submissionBlocked,
       appendMessageToCurrent,
       streamMessage,
       consumePreProvisionedSession,
@@ -566,7 +553,10 @@ export default function BuildChatPanel({
       nameBuildSession,
       router,
       hasUploadingFiles,
+      getCurrentMessageFiles,
       selectedModel,
+      modelBySession,
+      t,
     ]
   );
 
@@ -585,65 +575,36 @@ export default function BuildChatPanel({
 
   const handleQueueMessage = useCallback(
     (text: string, files: BuildFile[]) => {
-      if (sessionId) {
-        enqueueMessage(sessionId, text, toMessageAttachments(files));
-      }
+      return (
+        !!sessionId &&
+        enqueueMessage(
+          sessionId,
+          text,
+          toMessageAttachments(files),
+          modelBySession[sessionId] ?? null
+        )
+      );
     },
-    [sessionId, enqueueMessage]
+    [sessionId, enqueueMessage, modelBySession]
   );
 
   const handleRemoveQueuedMessage = useCallback(
     (index: number) => {
-      if (sessionId) removeQueuedMessage(sessionId, index);
+      const message = queuedMessages[index];
+      if (sessionId && message) removeQueuedMessage(sessionId, message.id);
     },
-    [sessionId, removeQueuedMessage]
+    [sessionId, queuedMessages, removeQueuedMessage]
   );
 
-  // Auto-send the next queued message FIFO after a run cleanly succeeds (each
-  // send re-arms this for the message after). Only fire on a clean completion
-  // and when the send is actually eligible — otherwise we'd dequeue a message
-  // that a failed run never sends, silently dropping it. The sessionId guard
-  // avoids mistaking a session switch for a run completion.
-  const sessionStatus = session?.status;
-  const sessionError = session?.error;
-  const prevIsRunningRef = useRef(isRunning);
-  const prevSessionIdRef = useRef(sessionId);
-  useEffect(() => {
-    const wasRunning = prevIsRunningRef.current;
-    const prevSessionId = prevSessionIdRef.current;
-    prevIsRunningRef.current = isRunning;
-    prevSessionIdRef.current = sessionId;
-
-    const runSucceeded =
-      wasRunning &&
-      !isRunning &&
-      sessionId === prevSessionId &&
-      sessionStatus === "active" &&
-      !sessionError;
-    if (runSucceeded && sessionId && queuedMessages.length > 0) {
-      const next = queuedMessages[0];
-      if (next) {
-        removeQueuedMessage(sessionId, 0);
-        void sendMessage(next.text, next.attachments);
-      }
-    }
-  }, [
-    isRunning,
-    sessionId,
-    sessionStatus,
-    sessionError,
-    queuedMessages,
-    sendMessage,
-    removeQueuedMessage,
-  ]);
-
   return (
-    <div className="h-full w-full">
+    <LayoutGroup id="craft-chat">
       {/* Content wrapper - shrinks when output panel opens. Wrapped in a
           dropzone so files can be dropped anywhere in the chat area. */}
+      {/* noPaste: the input bar already uploads pasted files itself. */}
       <Dropzone
         noClick
         noKeyboard
+        noPaste
         onDrop={(accepted) => {
           if (accepted.length > 0) uploadFiles(accepted);
         }}
@@ -651,19 +612,23 @@ export default function BuildChatPanel({
         {({ getRootProps }) => (
           <div
             {...getRootProps()}
-            className={cn(
-              "flex flex-col h-full transition-all duration-300 ease-in-out outline-hidden",
-              outputPanelOpen ? "w-1/2 pl-4" : "w-full"
-            )}
+            className="flex flex-col h-full w-full outline-hidden"
           >
             {/* Chat header */}
-            <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
+            <div
+              className={cn(
+                "flex flex-row items-center justify-between gap-2 ps-4 py-3 h-[52px] relative overflow-visible",
+                animateLayout &&
+                  "transition-[padding-inline-end] duration-180 ease-out motion-reduce:transition-none"
+              )}
+              style={{ paddingInlineEnd: headerControlWidth || 16 }}
+            >
               <div className="flex min-w-0 flex-row items-center gap-2 max-w-[75%]">
                 {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
                 {isMobile && leftSidebarFolded && (
-                  <OpalButton
+                  <Button
                     icon={SvgSidebar}
-                    aria-label="Open Sidebar"
+                    aria-label={t("openSidebar.ariaLabel")}
                     onClick={() => setLeftSidebarFolded(false)}
                     prominence="tertiary"
                     size="sm"
@@ -675,33 +640,10 @@ export default function BuildChatPanel({
                   context={scheduledRunContext ?? null}
                 />
               </div>
-              {/* Right cluster: sandbox status sits left of the panel toggle. The
-              toggle stays pinned to the right edge, so the status chip's width
-              changes grow leftward into empty space without shifting anything. */}
-              <div className="flex flex-row items-center gap-2 shrink-0">
-                <SandboxStatusIndicator />
-                <SandboxAsleepNotice />
-                {/* Output panel toggle — same icon for open and close */}
-                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                <IconButton
-                  icon={SvgSidebar}
-                  onClick={toggleOutputPanel}
-                  tooltip={
-                    outputPanelOpen ? "Close output panel" : "Open output panel"
-                  }
-                  tertiary
-                  className={cn(
-                    "border rounded-full p-2.5!",
-                    outputPanelOpen
-                      ? "bg-background-tint-02!"
-                      : "bg-background-tint-00!"
-                  )}
-                  iconClassName="stroke-text-04! h-5! w-5!"
-                />
-              </div>
+              <SandboxStatusIndicator />
               {/* Soft fade border at bottom */}
               {!videoBackgroundEnabled && (
-                <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+                <div className="absolute bottom-0 start-0 end-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
               )}
             </div>
 
@@ -709,8 +651,10 @@ export default function BuildChatPanel({
             agent and a subagent (keyed by the viewed agent). */}
             <div
               ref={scrollContainerRef}
+              data-testid="craft-chat-scroll"
               onScroll={handleScroll}
-              className="flex flex-col flex-1 min-h-0 overflow-auto"
+              className="flex flex-col flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-color:var(--border-02)_transparent] supports-[selector(::-webkit-scrollbar)]:[scrollbar-color:auto] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border-02 [&::-webkit-scrollbar-thumb:hover]:bg-border-03"
+              style={{ scrollbarWidth: "auto" }}
             >
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -719,7 +663,7 @@ export default function BuildChatPanel({
                   animate={{ opacity: 1, y: 0 }}
                   exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
                   transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex flex-col flex-1"
+                  className="flex flex-col flex-1 shrink-0"
                 >
                   {isViewingSubagent && viewedSubagentSessionId ? (
                     <SubagentView subagentSessionId={viewedSubagentSessionId} />
@@ -735,7 +679,18 @@ export default function BuildChatPanel({
                       attachmentRefreshKey={session?.webappNeedsRefresh}
                       messages={session?.messages ?? []}
                       streamItems={session?.streamItems ?? []}
+                      outputCards={outputCards}
+                      onOutputOpen={openOutput}
+                      onFileOpen={openOutputFile}
+                      onTurnOutputsOpen={(turnIndex) =>
+                        useBuildSessionStore
+                          .getState()
+                          .openOutputsTab(outputSessionId, turnIndex)
+                      }
                       isStreaming={displayIsRunning}
+                      isFinalizing={
+                        session?.turnSettlement?.phase === "reconciling"
+                      }
                       autoScrollEnabled={isAtBottom}
                       scrollContainerRef={scrollContainerRef}
                       trailingAssistantSlot={
@@ -743,7 +698,7 @@ export default function BuildChatPanel({
                           {wasInterrupted && !displayIsRunning && (
                             <div className="flex items-center gap-2 text-sm text-text-03">
                               <SvgStopCircle className="size-4 shrink-0 stroke-text-03" />
-                              <span>Response stopped</span>
+                              <span>{t("responseStopped.label")}</span>
                             </div>
                           )}
                           <LiveApprovalsRegion
@@ -755,103 +710,151 @@ export default function BuildChatPanel({
                   )}
                 </motion.div>
               </AnimatePresence>
-            </div>
 
-            {/* Input bar at bottom when session exists. */}
-            {(hasSession || existingSessionId) && (
-              <div className="px-4 pb-8 pt-4 relative">
-                {/* Soft fade border at top */}
-                {!videoBackgroundEnabled && (
-                  <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
-                )}
+              {/* Keep the composer inside the scroll viewport so its scrollbar spans the full height. */}
+              {(hasSession || existingSessionId) && (
                 <div
-                  className="max-w-[720px] mx-auto"
-                  onFocusCapture={onWakeIntent}
-                  onKeyDownCapture={onWakeIntent}
+                  data-testid="craft-chat-composer"
+                  className={cn(
+                    "sticky bottom-0 z-10 shrink-0 px-4 pb-8 pt-4",
+                    !videoBackgroundEnabled && "bg-background-neutral-01"
+                  )}
                 >
-                  {/* Scroll to bottom button - shown when user has scrolled away */}
-                  {showScrollButton && (
-                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
-                      <Tooltip tooltip="Scroll to bottom" delayDuration={200}>
-                        <button
+                  {/* Soft fade border at top */}
+                  {!videoBackgroundEnabled && (
+                    <div className="absolute top-0 start-0 end-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                  )}
+                  <div
+                    className="max-w-[720px] mx-auto"
+                    onFocusCapture={onWakeIntent}
+                    onKeyDownCapture={onWakeIntent}
+                  >
+                    {/* Scroll to bottom button - shown when user has scrolled away */}
+                    {!isAtBottom && (
+                      <div className="absolute -top-12 start-1/2 -translate-x-1/2 z-10">
+                        <Button
+                          icon={SvgChevronDown}
+                          size="md"
+                          prominence="secondary"
+                          tooltip={t("scrollToBottom.label")}
+                          aria-label={t("scrollToBottom.label")}
                           onClick={scrollToBottom}
-                          className={cn(
-                            "flex items-center justify-center",
-                            "w-8 h-8 rounded-full",
-                            "bg-background-neutral-inverted-00 border border-border-01",
-                            "shadow-box-01 hover:shadow-box-02",
-                            "transition-all duration-200",
-                            "hover:bg-background-tint-inverted-01"
+                        />
+                      </div>
+                    )}
+                    {recoverableError && scheduledSessionId && (
+                      <div className="pb-2" role="alert">
+                        <MessageCard
+                          variant="error"
+                          title={t(
+                            settlementError
+                              ? "settlementError.title"
+                              : queuedSendError
+                                ? "queuedSendError.title"
+                                : "loadError.title"
                           )}
-                          aria-label="Scroll to bottom"
-                        >
-                          <SvgChevronDown
-                            size={20}
-                            className="stroke-background-neutral-00"
-                          />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  )}
-                  {sessionId && session?.skillsStale && (
-                    <div className="pb-2">
-                      <SkillsStaleNotice
-                        sessionId={sessionId}
-                        turnActive={isRunning}
-                      />
-                    </div>
-                  )}
-                  {/* The selected model is sent with each message, so a
+                          description={recoverableError}
+                          rightChildren={
+                            <Button
+                              onClick={() => {
+                                if (settlementError)
+                                  void retryTurnSettlement(scheduledSessionId);
+                                else if (queuedSendError)
+                                  void retryQueuedMessage(scheduledSessionId);
+                                else
+                                  void loadSession(scheduledSessionId, {
+                                    force: true,
+                                  });
+                              }}
+                            >
+                              {t("loadError.retry")}
+                            </Button>
+                          }
+                        />
+                      </div>
+                    )}
+                    {sessionId && session?.skillsStale && (
+                      <div className="pb-2">
+                        <SkillsStaleNotice
+                          sessionId={sessionId}
+                          turnActive={isRunning}
+                        />
+                      </div>
+                    )}
+                    {/* The selected model is sent with each message, so a
                   switch applies from the next turn. Subagent transcripts
                   cannot send, so they get no picker. */}
-                  {session?.isLoaded && !isViewingSubagent && (
-                    <div className="flex justify-end pb-2">
-                      <ModelPickerButton
-                        selection={selectedModel}
-                        onChange={(model) => {
-                          if (sessionId) {
-                            setModelBySession((m) => ({
-                              ...m,
-                              [sessionId]: model,
-                            }));
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                  {/* The composer stays in view for subagents (layout consistency)
+                    {session?.isLoaded && !isViewingSubagent && (
+                      <div className="flex justify-end pb-2">
+                        <ModelPickerButton
+                          selection={selectedModel}
+                          onChange={(model) => {
+                            if (sessionId) {
+                              setModelBySession((m) => ({
+                                ...m,
+                                [sessionId]: model,
+                              }));
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                    {/* The composer stays in view for subagents (layout consistency)
                   but is disabled — replying to subagents is not supported. */}
-                  <CraftInputBar
-                    ref={inputBarRef}
-                    onSubmit={handleSubmit}
-                    isRunning={displayIsRunning}
-                    isInterrupting={isInterrupting}
-                    onInterrupt={
-                      hasInterruptibleTurn && !scheduledRunInFlight
-                        ? handleInterrupt
-                        : undefined
-                    }
-                    disabled={
-                      isViewingSubagent || scheduledRunInFlight || !hasProvider
-                    }
-                    placeholder={
-                      isViewingSubagent
-                        ? "Switch to the main agent to send a message"
-                        : scheduledRunInFlight
-                          ? "Scheduled run in progress..."
-                          : "Continue the conversation..."
-                    }
-                    queuedMessages={queuedMessages}
-                    onQueueMessage={handleQueueMessage}
-                    onRemoveQueuedMessage={handleRemoveQueuedMessage}
-                    contextUsage={contextUsage}
-                  />
+                    <motion.div
+                      layoutId="craft-composer"
+                      transition={{
+                        duration: reduceMotion ? 0 : 0.25,
+                        ease: "easeOut",
+                      }}
+                    >
+                      <CraftInputBar
+                        ref={inputBarRef}
+                        onSubmit={handleSubmit}
+                        isRunning={displayIsRunning}
+                        isInterrupting={isInterrupting}
+                        onInterrupt={
+                          hasInterruptibleTurn && !scheduledRunInFlight
+                            ? handleInterrupt
+                            : undefined
+                        }
+                        disabled={
+                          isViewingSubagent ||
+                          isRestoring ||
+                          submissionBlocked ||
+                          scheduledRunInFlight ||
+                          !hasProvider
+                        }
+                        placeholder={
+                          isViewingSubagent
+                            ? t("input.subagentPlaceholder")
+                            : scheduledRunInFlight
+                              ? t("input.scheduledRunPlaceholder")
+                              : t("input.continuePlaceholder")
+                        }
+                        queuedMessages={queuedMessages}
+                        onQueueMessage={handleQueueMessage}
+                        onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                        contextUsage={contextUsage}
+                      />
+                    </motion.div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </Dropzone>
-    </div>
+    </LayoutGroup>
   );
 }
+
+function BuildChatPanel(props: BuildChatPanelProps) {
+  return (
+    <UploadFilesProvider>
+      <ChatPanelContent {...props} />
+    </UploadFilesProvider>
+  );
+}
+
+export default memo(BuildChatPanel);

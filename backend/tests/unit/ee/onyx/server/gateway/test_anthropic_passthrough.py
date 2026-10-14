@@ -140,7 +140,6 @@ def test_build_upstream_request_preserves_unknown_top_level_fields() -> None:
             "messages": [{"role": "user", "content": "hi"}],
             "max_tokens": 100,
             "output_config": {"effort": "high"},
-            "container": {"id": "container_123"},
             "future_field": {"anything": True},
         }
     )
@@ -148,8 +147,57 @@ def test_build_upstream_request_preserves_unknown_top_level_fields() -> None:
     body = _build_upstream_request(request, "claude-sonnet-4-6", "user-1", True)
 
     assert body["output_config"] == {"effort": "high"}
-    assert body["container"] == {"id": "container_123"}
     assert body["future_field"] == {"anything": True}
+
+
+@pytest.mark.parametrize(
+    "container", ["container_123", {"id": "container_123"}, {"skills": [{"id": "s1"}]}]
+)
+def test_build_upstream_request_rejects_container(container: Any) -> None:
+    request = AnthropicMessagesRequest.model_validate(
+        {
+            "model": "1/test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 100,
+            "container": container,
+        }
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        _build_upstream_request(request, "claude-sonnet-4-6", "user-1", True)
+
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        {"type": "document", "source": {"type": "file", "file_id": "file_123"}},
+        {"type": "image", "file_id": "file_123"},
+        {
+            "type": "tool_result",
+            "tool_use_id": "tool_123",
+            "content": [
+                {"type": "image", "source": {"type": "file", "file_id": "file_123"}}
+            ],
+        },
+    ],
+)
+def test_build_upstream_request_rejects_org_scoped_file_references(
+    block: dict[str, Any],
+) -> None:
+    request = AnthropicMessagesRequest.model_validate(
+        {
+            "model": "1/test",
+            "messages": [{"role": "user", "content": [block]}],
+            "max_tokens": 100,
+        }
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        _build_upstream_request(request, "claude-sonnet-4-6", "user-1", True)
+
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
 def test_build_upstream_request_rejects_mcp_servers() -> None:

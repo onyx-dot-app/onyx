@@ -55,7 +55,7 @@ def sync_user_library_to_active_sandboxes(
             return
 
         files = build_user_library_fileset(user_id, db_session)
-        sandbox_files = {sandbox_id: files for sandbox_id in sandbox_map}
+        sandbox_files = dict.fromkeys(sandbox_map, files)
         result = get_sandbox_manager().push_to_sandboxes(
             mount_path=USER_LIBRARY_MOUNT_PATH,
             sandbox_files=sandbox_files,

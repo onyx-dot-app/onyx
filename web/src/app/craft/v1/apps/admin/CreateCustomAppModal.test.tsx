@@ -253,10 +253,14 @@ describe("CreateCustomAppModal", () => {
 
     const appModal = screen.getByRole("dialog", { name: /Edit Acme CRM/ });
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
-    expect(appModal).not.toContainElement(
+    // The list portals into the modal: outside it, the modal would block
+    // clicks on it.
+    expect(appModal).toContainElement(
       screen.getByPlaceholderText("Search editable skills...")
     );
-    fireEvent.click(screen.getAllByRole("button", { name: /acme-lookup/ })[0]!);
+    fireEvent.click(
+      screen.getAllByRole("option", { name: /^acme-lookup/ })[0]!
+    );
     expect(
       screen.getByText(
         "App-associated skills must be available to everyone. This change is applied when you save the app."
@@ -264,12 +268,13 @@ describe("CreateCustomAppModal", () => {
     ).toBeInTheDocument();
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
 
+    // The promotion page is a view of the picker, so its rows are options.
     fireEvent.click(
-      screen.getByRole("button", { name: "Make organization-wide" })
+      screen.getByRole("option", { name: "Make organization-wide" })
     );
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
-    const sameNamedSkills = screen.getAllByRole("button", {
-      name: "Associate acme-lookup",
+    const sameNamedSkills = screen.getAllByRole("option", {
+      name: /^acme-lookup/,
     });
     expect(sameNamedSkills).toHaveLength(2);
     const disabledSameNamedSkill = sameNamedSkills.find(
@@ -278,15 +283,15 @@ describe("CreateCustomAppModal", () => {
     expect(disabledSameNamedSkill).toHaveTextContent(
       "A skill named “acme-lookup” is already associated."
     );
-    const invalidSkill = screen.getByRole("button", {
-      name: "Associate broken-skill",
+    const invalidSkill = screen.getByRole("option", {
+      name: /^broken-skill/,
     });
     expect(invalidSkill).toHaveAttribute("aria-disabled", "true");
     expect(invalidSkill).toHaveTextContent(
       "Invalid skill — fix it before associating."
     );
-    const otherAppAssociation = screen.getByRole("button", {
-      name: "Associate other-app-skill",
+    const otherAppAssociation = screen.getByRole("option", {
+      name: /^other-app-skill/,
     });
     expect(otherAppAssociation).toHaveAttribute("aria-disabled", "true");
     expect(otherAppAssociation).toHaveTextContent(
@@ -316,7 +321,7 @@ describe("CreateCustomAppModal", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
     fireEvent.click(
-      screen.getByRole("button", { name: /^Start from scratch/ })
+      screen.getByRole("menuitem", { name: /^Start from scratch/ })
     );
 
     expect(mockRouterPush).not.toHaveBeenCalled();
@@ -411,7 +416,7 @@ describe("CreateCustomAppModal", () => {
       target: { value: "Edited Acme CRM" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
 
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
     expect(screen.getByText("Upload skill")).toBeInTheDocument();
@@ -425,7 +430,7 @@ describe("CreateCustomAppModal", () => {
   it("preserves a selected upload when accidental close is canceled", () => {
     renderExistingApp();
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -454,7 +459,7 @@ describe("CreateCustomAppModal", () => {
       target: { value: "Unsaved Acme CRM" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
@@ -493,7 +498,7 @@ describe("CreateCustomAppModal", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Upload a skill/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Upload a skill/ }));
     fireEvent.click(screen.getByRole("button", { name: "Select bundle" }));
     fireEvent.click(screen.getByRole("button", { name: "Review skill" }));
 
@@ -553,10 +558,11 @@ describe("CreateCustomAppModal", () => {
     const { rerender } = render(<CreateCustomAppModal {...props} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Associate existing" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Associate pending-skill" })
-    );
-    expect(screen.getByText("pending-skill")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: /^pending-skill/ }));
+    // The associated row, not the option on its way out.
+    expect(
+      screen.getByRole("button", { name: "Unlink pending-skill" })
+    ).toBeInTheDocument();
 
     rerender(
       <CreateCustomAppModal

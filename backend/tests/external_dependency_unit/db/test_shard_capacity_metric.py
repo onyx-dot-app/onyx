@@ -122,7 +122,7 @@ def test_an_unreachable_shard_does_not_suppress_the_others(
 
     monkeypatch.setattr(shard_capacity, "count_tenant_schemas_on_shard", _count)
 
-    assert sorted(shard_registry.get_shard_specs())[0] == DEFAULT_SHARD
+    assert min(shard_registry.get_shard_specs()) == DEFAULT_SHARD
     counts = _counts(ShardCapacityCollector())
 
     assert counts == {SECOND_SHARD: 7}

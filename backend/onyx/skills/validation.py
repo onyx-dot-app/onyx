@@ -44,7 +44,7 @@ def _is_missing_file_error(exc: Exception) -> bool:
     if isinstance(exc, FileRecordNotFoundError):
         return True
 
-    response = getattr(exc, "response", None)
+    response = getattr(exc, "response", None)  # ods: ignore[getattr]
     if isinstance(response, dict):
         error = response.get("Error")
         if isinstance(error, dict) and str(error.get("Code")) in {
@@ -54,7 +54,7 @@ def _is_missing_file_error(exc: Exception) -> bool:
             "NotFound",
         }:
             return True
-    return getattr(exc, "code", None) == 404
+    return getattr(exc, "code", None) == 404  # ods: ignore[getattr]
 
 
 def validate_stored_custom_skill(

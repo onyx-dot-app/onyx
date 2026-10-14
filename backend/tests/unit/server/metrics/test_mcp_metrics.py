@@ -5,10 +5,12 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from onyx.db.enums import MCPAuthenticationType
+from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
+from onyx.db.models import MCPServer
 from onyx.mcp_server.api import create_mcp_fastapi_app
 from onyx.mcp_server.auth import OnyxTokenVerifier
 from onyx.mcp_server.tools import search
+from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 from onyx.server.metrics import mcp_client, metrics_auth
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.metrics.mcp_server import MCPAuthResult, MCPServerToolName
@@ -19,11 +21,16 @@ from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 def _mcp_tool(
     auth_type: MCPAuthenticationType = MCPAuthenticationType.NONE,
 ) -> MCPTool:
-    server = MagicMock()
-    server.name = "Customer MCP"
-    server.server_url = "https://mcp.example"
-    server.auth_type = auth_type
-    server.transport = None
+    server = MCPServer(
+        id=1,
+        name="Customer MCP",
+        server_url="https://mcp.example",
+        auth_type=auth_type,
+        transport=None,
+        oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_authorization_endpoint=None,
+        oauth_token_endpoint=None,
+    )
     return MCPTool(
         tool_id=1,
         emitter=MagicMock(),
@@ -59,6 +66,25 @@ def test_client_records_missing_credentials_as_auth_error() -> None:
     ) as record:
         tool.run(Placement(turn_index=0))
 
+    record.assert_called_once()
+    assert record.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
+
+
+def test_client_records_reauthentication_required_as_auth_error() -> None:
+    tool = _mcp_tool()
+    with (
+        patch(
+            "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
+            side_effect=MCPReauthenticationRequired(),
+        ),
+        patch(
+            "onyx.tools.tool_implementations.mcp.mcp_tool."
+            "record_mcp_client_tool_outcome"
+        ) as record,
+    ):
+        response = tool.run(Placement(turn_index=0))
+
+    assert "Please use the MCP dropdown" in response.llm_facing_response
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
 

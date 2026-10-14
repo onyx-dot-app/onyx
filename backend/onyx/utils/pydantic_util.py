@@ -13,7 +13,7 @@ def shallow_model_dump(model_instance: BaseModel) -> dict[str, Any]:
     deep copies. Use with model_construct() to avoid unnecessary memory
     duplication when building subclass instances."""
     return {
-        field_name: getattr(model_instance, field_name)
+        field_name: getattr(model_instance, field_name)  # ods: ignore[getattr]
         for field_name in model_instance.__class__.model_fields
     }
 

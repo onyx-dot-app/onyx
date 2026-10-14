@@ -6,6 +6,10 @@ import {
   workerUserCredentials,
 } from "@tests/e2e/constants";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import {
+  putMockLlmDefaultScript,
+  waitForMockLlmServer,
+} from "@tests/e2e/utils/mockLlm";
 
 const PREFLIGHT_TIMEOUT_MS = 60_000;
 const PREFLIGHT_POLL_INTERVAL_MS = 2_000;
@@ -295,9 +299,11 @@ async function globalSetup(config: FullConfig) {
     await setDisplayName(baseURL, storageStatePath, "worker");
   }
 
-  // ── Ensure a public LLM provider exists ───────────────────────────
+  // ── Register the mock LLM script and make its provider the default ─
   // Many tests depend on a default LLM being configured (file uploads,
   // assistant creation, etc.).  Re-use the admin session we just saved.
+  await waitForMockLlmServer();
+  await putMockLlmDefaultScript();
   const adminCtx = await request.newContext({
     baseURL,
     storageState: "admin_auth.json",

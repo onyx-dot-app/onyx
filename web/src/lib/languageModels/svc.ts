@@ -6,11 +6,13 @@
  * Endpoints:
  * - /api/admin/llm/test/default - Test the default LLM provider connection
  * - /api/admin/llm/default - Set the default LLM model
+ * - /api/admin/llm/default-craft - Set or clear Craft's default model
  * - /api/admin/llm/provider/{id} - Delete an LLM provider
  * - /api/admin/llm/{provider}/available-models - Fetch available models for a provider
  */
 
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
   LLMProviderName,
   type ModelConfiguration,
@@ -32,6 +34,8 @@ import {
   type NebiusTokenfactoryModelResponse,
   type PortkeyFetchParams,
   type PortkeyModelResponse,
+  type VercelAIGatewayFetchParams,
+  type VercelAIGatewayModelResponse,
 } from "@/lib/languageModels/types";
 
 /**
@@ -75,6 +79,45 @@ export async function setDefaultLlmModel(
 }
 
 /**
+ * Set Craft's default model, distinct from the workspace's default chat model.
+ * @throws Error with the detail message from the API on failure
+ */
+export async function setDefaultCraftModel(
+  providerId: number,
+  modelName: string
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-craft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: modelName,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Clear Craft's default model. Craft then falls back to the workspace's
+ * default chat model.
+ * @throws Error with the detail message from the API on failure
+ */
+export async function deleteDefaultCraftModel(): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-craft", {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
  * Delete an LLM provider.
  * @param providerId - The provider ID to delete
  * @param force - Force delete even if this is the default provider
@@ -109,6 +152,7 @@ export const AGGREGATOR_PROVIDERS = new Set([
   "litellm_proxy",
   "bifrost",
   "openai_compatible",
+  "vercel_ai_gateway",
   "vertex_ai",
 ]);
 
@@ -149,7 +193,7 @@ export const fetchBedrockModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -204,7 +248,7 @@ export const fetchOllamaModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -263,7 +307,7 @@ export const fetchOpenRouterModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -282,6 +326,7 @@ export const fetchOpenRouterModels = async (
       max_input_tokens: modelData.max_input_tokens,
       supports_image_input: modelData.supports_image_input,
       supports_reasoning: false,
+      is_router: modelData.is_router,
       effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
@@ -323,7 +368,7 @@ export const fetchLMStudioModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -382,7 +427,7 @@ export const fetchBifrostModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -444,7 +489,7 @@ export const fetchOpenAICompatibleModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -504,7 +549,7 @@ export const fetchLiteLLMProxyModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch {
         // ignore JSON parsing errors
@@ -613,6 +658,13 @@ export const fetchModels = async (
         provider_id: formValues.id,
         signal,
       });
+    case LLMProviderName.VERCEL_AI_GATEWAY:
+      return fetchVercelAIGatewayModels({
+        api_base: formValues.api_base,
+        api_key: formValues.api_key,
+        provider_id: formValues.id,
+        signal,
+      });
     default:
       return { models: [], error: `Unknown provider: ${providerName}` };
   }
@@ -651,7 +703,7 @@ export const fetchNebiusTokenfactoryModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -674,6 +726,63 @@ export const fetchNebiusTokenfactoryModels = async (
       country_code: modelData.country_code,
       requests_per_minute: modelData.requests_per_minute,
       supported_features: modelData.supported_features,
+      effectiveDisplayName: modelData.display_name || modelData.name,
+    }));
+
+    return { models };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { models: [], error: errorMessage };
+  }
+};
+
+/**
+ * Fetches models from the Vercel AI Gateway catalog. The catalog is public, so
+ * this works before an API key is entered.
+ */
+export const fetchVercelAIGatewayModels = async (
+  params: VercelAIGatewayFetchParams
+): Promise<{ models: ModelConfiguration[]; error?: string }> => {
+  try {
+    const response = await fetch(
+      "/api/admin/llm/vercel-ai-gateway/available-models",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          api_base: params.api_base,
+          api_key: params.api_key,
+          provider_id: params.provider_id,
+        }),
+        signal: params.signal,
+      }
+    );
+
+    if (!response.ok) {
+      let errorMessage = "Failed to fetch models";
+      try {
+        const errorData: ErrorResponseBody = await response.json();
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch (jsonError) {
+        console.warn(
+          "Failed to parse Vercel AI Gateway model fetch error response",
+          jsonError
+        );
+      }
+      return { models: [], error: errorMessage };
+    }
+
+    const data: VercelAIGatewayModelResponse[] = await response.json();
+    const models: ModelConfiguration[] = data.map((modelData) => ({
+      name: modelData.name,
+      display_name: modelData.display_name,
+      is_visible: true,
+      max_input_tokens: modelData.max_input_tokens,
+      supports_image_input: modelData.supports_image_input,
+      supports_reasoning: modelData.supports_reasoning,
       effectiveDisplayName: modelData.display_name || modelData.name,
     }));
 
@@ -711,7 +820,7 @@ export const fetchPortkeyModels = async (
     if (!response.ok) {
       let errorMessage = "Failed to fetch models";
       try {
-        const errorData = await response.json();
+        const errorData: ErrorResponseBody = await response.json();
         errorMessage = errorData.detail || errorData.message || errorMessage;
       } catch (jsonError) {
         console.warn(
@@ -740,3 +849,22 @@ export const fetchPortkeyModels = async (
     return { models: [], error: errorMessage };
   }
 };
+
+export async function updateModelRouting(update: {
+  model_routing_enabled?: boolean;
+  model_routing_model_configuration_id?: number | null;
+}): Promise<void> {
+  const response: Response = await fetch("/api/admin/llm/model-routing", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  });
+  if (!response.ok) {
+    const errorData: ErrorResponseBody = await response
+      .json()
+      .catch(() => ({}));
+    throw new Error(
+      errorData.detail || errorData.message || "Failed to update model routing"
+    );
+  }
+}

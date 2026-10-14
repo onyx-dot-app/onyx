@@ -35,7 +35,7 @@ def generate_random_shape() -> int:
     center_fill = random.choice(center_squares)
     remaining_squares = [i for i in range(16) if not (center_fill & (1 << i))]
     random.shuffle(remaining_squares)
-    for i in range(10 - bin(center_fill).count("1")):
+    for i in range(10 - center_fill.bit_count()):
         center_fill |= 1 << remaining_squares[i]
     return center_fill
 

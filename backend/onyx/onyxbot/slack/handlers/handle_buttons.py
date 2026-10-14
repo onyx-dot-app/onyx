@@ -79,9 +79,7 @@ def _build_citation_list(chat_message_detail: ChatMessageDetail) -> list[Citatio
     if citation_dict is None:
         return []
     else:
-        top_documents = (
-            chat_message_detail.context_docs if chat_message_detail.context_docs else []
-        )
+        top_documents = chat_message_detail.context_docs or []
         citation_list = _convert_document_ids_to_citation_info(
             citation_dict, top_documents
         )

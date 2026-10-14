@@ -1,12 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  InputTypeIn,
-  LineItemButton,
-  Popover,
-  PopoverMenu,
-  SelectButton,
-  Text,
-} from "@opal/components";
+import React, { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Dropdown, SelectButton } from "@opal/components";
 import { SvgOnyxOctagon } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { usePersonaMessages, usePersonaUniqueUsers } from "@/lib/usage/hooks";
@@ -16,7 +10,7 @@ import {
   chartSeries,
   resolveChartState,
 } from "@/sections/usage/AnalyticsChart";
-import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import { InputDateRangePickerValue } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
 
 interface PersonaPickerProps {
@@ -30,85 +24,46 @@ function PersonaPicker({
   selectedAgent,
   onSelect,
 }: PersonaPickerProps) {
+  const t = useTranslations("admin.analytics");
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-
-  const matches = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (query === "") return agents;
-    return agents.filter((agent) => agent.name.toLowerCase().includes(query));
-  }, [agents, search]);
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (!nextOpen) setSearch("");
-      }}
-    >
-      <Popover.Trigger asChild>
+    <Dropdown open={open} onOpenChange={setOpen}>
+      <Dropdown.Trigger asChild>
         <SelectButton
           icon={SvgOnyxOctagon}
           state="empty"
           variant="select-input"
         >
-          {selectedAgent?.name ?? "Select an agent to display"}
+          {selectedAgent?.name ?? t("agentPicker.placeholder")}
         </SelectButton>
-      </Popover.Trigger>
-      <Popover.Content align="start">
-        <PopoverMenu>
-          {[
-            <InputTypeIn
-              key="agent-search"
-              placeholder="Search agents..."
-              variant="internal"
-              searchIcon
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />,
-            ...matches.map((agent) => (
-              <Popover.Close asChild key={agent.id}>
-                <LineItemButton
-                  sizePreset="main-ui"
-                  rounding="sm"
-                  selectVariant="select-heavy"
-                  icon={SvgOnyxOctagon}
-                  title={agent.name}
-                  state={selectedAgent?.id === agent.id ? "selected" : "empty"}
-                  onClick={() => onSelect(agent.id)}
-                />
-              </Popover.Close>
-            )),
-            ...(matches.length === 0
-              ? [
-                  <Section
-                    key="no-matches"
-                    flexDirection="row"
-                    justifyContent="center"
-                    alignItems="center"
-                    padding={0.5}
-                    width="full"
-                    height="fit"
-                  >
-                    <Text font="secondary-body" color="text-03">
-                      No agents match that search
-                    </Text>
-                  </Section>,
-                ]
-              : []),
-          ]}
-        </PopoverMenu>
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={t("agentPicker.placeholder")}
+        search={{ placeholder: t("agentPicker.search.placeholder") }}
+        noMatchText={t("agentPicker.empty.label")}
+        value={selectedAgent ? String(selectedAgent.id) : ""}
+        onSelect={(option) => {
+          const agent = agents.find((a) => String(a.id) === option.value);
+          if (agent) onSelect(agent.id);
+        }}
+        items={agents.map((agent) => ({
+          kind: "option",
+          value: String(agent.id),
+          icon: SvgOnyxOctagon,
+          title: agent.name,
+        }))}
+      />
+    </Dropdown>
   );
 }
 
 interface PersonaMessagesChartProps {
-  timeRange: DateRangePickerValue;
+  timeRange: InputDateRangePickerValue;
 }
 
 export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
+  const t = useTranslations("admin.analytics");
   const [selectedPersonaId, setSelectedPersonaId] = useState<
     number | undefined
   >(undefined);
@@ -150,12 +105,12 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
 
   const series = [
     chartSeries(
-      "Messages",
+      t("agentChart.series.messages.label"),
       personaMessagesData,
       (entry) => entry.total_messages
     ),
     chartSeries(
-      "Unique Users",
+      t("agentChart.series.uniqueUsers.label"),
       personaUniqueUsersData,
       (entry) => entry.unique_users
     ),
@@ -163,14 +118,14 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
 
   return (
     <AnalyticsChart
-      title="Agent Analytics"
-      description="Messages and unique users per day for the selected agent"
+      title={t("agentChart.title")}
+      description={t("agentChart.description")}
       timeRange={timeRange}
       state={
         // The picker is only usable once the agent list resolves, so its
         // loading and error states outrank the "pick an agent" prompt.
         selectedPersonaId === undefined && !agentsLoading && !agentsError
-          ? { status: "empty", message: "Select an agent to view analytics." }
+          ? { status: "empty", message: t("agentChart.selectPrompt") }
           : resolveChartState({
               isLoading:
                 agentsLoading ||
@@ -178,9 +133,8 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
                 isPersonaUniqueUsersLoading,
               error:
                 agentsError || personaMessagesError || personaUniqueUsersError,
-              errorMessage: "Failed to fetch agent data.",
-              emptyMessage:
-                "No data found for the selected agent in this time range.",
+              errorMessage: t("agentChart.error"),
+              emptyMessage: t("agentChart.empty"),
               series,
             })
       }

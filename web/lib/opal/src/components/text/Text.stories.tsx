@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Text } from "@opal/components";
 import type { TextFont, TextColor } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { markdown, richNodes } from "@opal/utils";
 
 const meta: Meta<typeof Text> = {
   title: "opal/components/Text",
@@ -43,9 +43,82 @@ export const AsParagraph: Story = {
 export const Nowrap: Story = {
   render: () => (
     <div className="w-48 border border-border-02 rounded-sm p-2">
-      <Text font="main-ui-body" color="text-05" nowrap>
+      <Text font="main-ui-body" color="text-05" wordWrap="whitespace-nowrap">
         This text will not wrap even though the container is narrow
       </Text>
+    </div>
+  ),
+};
+
+// ---------------------------------------------------------------------------
+// Wrapping
+// ---------------------------------------------------------------------------
+
+// A long token with no whitespace in it, which is the case ordinary wrapping
+// cannot handle: there is nowhere to break, so it overflows instead.
+const UNBROKEN = "supercalifragilisticexpialidocious".repeat(3);
+
+/** Every `wordWrap` value against the same unbreakable string, in one narrow box. */
+export const Wrapping: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4">
+      {(
+        [
+          "wrap-normal",
+          "whitespace-nowrap",
+          "wrap-break-word",
+          "wrap-anywhere",
+          "break-all",
+          "break-keep",
+        ] as const
+      ).map((mode) => (
+        <div key={mode} className="flex flex-col gap-1">
+          <Text font="secondary-mono" color="text-03">
+            {mode}
+          </Text>
+          <div className="w-48 border border-border-02 rounded-sm p-2">
+            <Text font="main-ui-body" color="text-05" wordWrap={mode}>
+              {UNBROKEN}
+            </Text>
+          </div>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+// ---------------------------------------------------------------------------
+// Alignment
+// ---------------------------------------------------------------------------
+
+/**
+ * `textPosition` needs a block box to align within, so it is only offered when
+ * `as` is a block tag — `<Text textPosition="text-center">` on the default
+ * inline `span` does not compile.
+ */
+export const Alignment: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4">
+      {(["text-start", "text-center", "text-end", "text-justify"] as const).map(
+        (position) => (
+          <div key={position} className="flex flex-col gap-1">
+            <Text font="secondary-mono" color="text-03">
+              {position}
+            </Text>
+            <div className="w-96 border border-border-02 rounded-sm p-2">
+              <Text
+                as="p"
+                font="main-ui-body"
+                color="text-05"
+                textPosition={position}
+              >
+                The quick brown fox jumps over the lazy dog, and then keeps
+                going for long enough to occupy more than a single line.
+              </Text>
+            </div>
+          </div>
+        )
+      )}
     </div>
   ),
 };
@@ -258,6 +331,29 @@ export const PlainStringNotParsed: Story = {
 };
 
 // ---------------------------------------------------------------------------
+// Inline React nodes via RichNodes
+// ---------------------------------------------------------------------------
+
+export const RichNodesInlineComponent: Story = {
+  render: () => (
+    <Text font="main-ui-body" color="text-04">
+      {richNodes(
+        <>
+          Click{" "}
+          <button
+            className="underline underline-offset-2"
+            onClick={() => alert("clicked")}
+          >
+            here
+          </button>{" "}
+          to request a new email.
+        </>
+      )}
+    </Text>
+  ),
+};
+
+// ---------------------------------------------------------------------------
 // Tag Variants
 // ---------------------------------------------------------------------------
 
@@ -273,7 +369,7 @@ export const TagVariants: Story = {
       <Text font="heading-h2" color="text-05" as="h2">
         Heading (h2): semantic heading
       </Text>
-      <ul className="list-disc pl-6">
+      <ul className="list-disc ps-6">
         <Text font="main-ui-body" color="text-05" as="li">
           List item (li): inside a list
         </Text>

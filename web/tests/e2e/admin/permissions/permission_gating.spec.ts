@@ -1,8 +1,10 @@
 import { test, expect } from "./fixtures";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Permission } from "@/lib/types";
 import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
+import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -108,7 +110,7 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
       // Phase 1: Without MANAGE_AGENTS — /admin/agents should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/agents");
+      await page.goto(ADMIN_ROUTES.AGENTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
@@ -121,10 +123,10 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/agents");
+      await page.goto(ADMIN_ROUTES.AGENTS.path);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/agents");
+      expect(page.url()).toContain(ADMIN_ROUTES.AGENTS.path);
       await expect(page.getByRole("link", { name: "New Agent" })).toBeVisible({
         timeout: 10000,
       });
@@ -148,7 +150,7 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/agents");
+      await page.goto(ADMIN_ROUTES.AGENTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
@@ -163,7 +165,7 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
 });
 
 test.describe("Permission gating — MANAGE_LLMS", () => {
-  test("Admin panel and /admin/configuration/llm are gated behind MANAGE_LLMS", async ({
+  test("Admin panel and /admin/language-models are gated behind MANAGE_LLMS", async ({
     page,
     adminClient,
     testUserContext,
@@ -187,14 +189,14 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
     );
 
     try {
-      // Phase 1: Without MANAGE_LLMS — /admin/configuration/llm should redirect to /app
+      // Phase 1: Without MANAGE_LLMS — the page should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/configuration/llm");
+      await page.goto(ADMIN_ROUTES.LLM_MODELS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      // Phase 2: Grant MANAGE_LLMS — /admin/configuration/llm should be accessible
+      // Phase 2: Grant MANAGE_LLMS — the page should be accessible
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await adminClient.setUserGroupPermissions(groupId, [
@@ -203,10 +205,10 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/configuration/llm");
+      await page.goto(ADMIN_ROUTES.LLM_MODELS.path);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/configuration/language-models");
+      expect(page.url()).toContain(ADMIN_ROUTES.LLM_MODELS.path);
       await expect(
         page.getByLabel("admin-page-title").getByText("Language Models")
       ).toBeVisible({
@@ -230,7 +232,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/configuration/llm");
+      await page.goto(ADMIN_ROUTES.LLM_MODELS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
@@ -246,7 +248,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 });
 
 test.describe("Permission gating — MANAGE_CONNECTORS", () => {
-  test("Admin panel and /admin/indexing/status are gated behind MANAGE_CONNECTORS", async ({
+  test("Admin panel and /admin/indexing-status are gated behind MANAGE_CONNECTORS", async ({
     page,
     adminClient,
     testUserContext,
@@ -265,19 +267,19 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
     const ccPairId = await adminClient.createFileConnector(connectorName);
 
     try {
-      // Phase 1: Without MANAGE_CONNECTORS — /admin/indexing/status should redirect to /app
+      // Phase 1: Without MANAGE_CONNECTORS — /admin/indexing-status should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/indexing/status");
+      await page.goto(ADMIN_ROUTES.INDEXING_STATUS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      // Also verify /admin/add-connector redirects
-      await page.goto("/admin/add-connector");
+      // Also verify /admin/connectors redirects
+      await page.goto(ADMIN_ROUTES.CONNECTORS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      // Phase 2: Grant MANAGE_CONNECTORS — /admin/indexing/status should be accessible
+      // Phase 2: Grant MANAGE_CONNECTORS — /admin/indexing-status should be accessible
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await adminClient.setUserGroupPermissions(groupId, [
@@ -286,45 +288,57 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/indexing/status");
+      await page.goto(ADMIN_ROUTES.INDEXING_STATUS.path);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/indexing/status");
+      expect(page.url()).toContain(ADMIN_ROUTES.INDEXING_STATUS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Existing Connectors")
+        page.getByLabel("admin-page-title").getByText("Indexing Status")
       ).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole("table")).toBeVisible();
 
-      // Also verify /admin/add-connector is accessible
-      await page.goto("/admin/add-connector");
+      // Also verify /admin/connectors is accessible
+      await page.goto(ADMIN_ROUTES.CONNECTORS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/admin/add-connector");
+      expect(page.url()).toContain(ADMIN_ROUTES.CONNECTORS.path);
       await expect(
-        page.getByLabel("admin-page-title").getByText("Add Connector")
+        page.getByLabel("admin-page-title").getByText("Connectors")
       ).toBeVisible({ timeout: 10000 });
 
-      // Access type and groups live on the wizard's second step, so reaching
-      // /admin/add-connector says nothing about them. `web` has no credential
-      // template, so the wizard skips straight there.
+      // Access type and groups live on the connector setup page, so reaching
+      // /admin/connectors says nothing about them. `web` has no credential
+      // template, so its page shows the configuration straight away.
+      const setupPage = new ConnectorSetupPage(page, "web");
       await page.goto("/admin/connectors/web");
       await page.waitForLoadState("networkidle");
-      await expect(page.getByText("Document Access")).toBeVisible({
-        timeout: 10000,
-      });
+      await expect(setupPage.accessTypeSelect).toBeVisible({ timeout: 10000 });
 
       // a global holder defaults to public, which has no groups to scope
       // must be the picker, not "assigned to group X" — the old code auto-assigned
-      await page.getByText("Public", { exact: true }).first().click();
-      await page.getByText("Private", { exact: true }).first().click();
-      await expect(
-        page.getByText("Assign group access for this Connector")
-      ).toBeVisible({ timeout: 10000 });
+      await expect(setupPage.accessTypeSelect).toHaveValue(
+        "Everyone in Your Organization"
+      );
+      await setupPage.pickAccessType("Specific Groups");
+      await expect(setupPage.groupAccessPrompt).toBeVisible({ timeout: 10000 });
 
       // Drive's credential form used to render an empty fragment for non-admins
       // — a blank modal, no error, no network call.
       await page.goto("/admin/connectors/google-drive");
       await page.waitForLoadState("networkidle");
-      await page.getByRole("button", { name: "Create New" }).click();
+      // The new-account card starts open when there is no saved account, so
+      // it is clicked only while folded. The sign-in is on the OAuth tab.
+      const newAccountCard = page.getByRole("button", {
+        name: "New Google Drive Account",
+      });
+      await expect(async () => {
+        if ((await newAccountCard.getAttribute("aria-expanded")) !== "true") {
+          await newAccountCard.click();
+        }
+        await expect(newAccountCard).toHaveAttribute("aria-expanded", "true", {
+          timeout: 1_000,
+        });
+      }).toPass({ timeout: 10000 });
+      await page.getByRole("tab", { name: "OAuth", exact: true }).click();
       await expect(
         page.getByText("Authenticate with Google Drive")
       ).toBeVisible({ timeout: 10000 });
@@ -336,7 +350,7 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/indexing/status");
+      await page.goto(ADMIN_ROUTES.INDEXING_STATUS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
@@ -390,12 +404,12 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
       // Phase 1: Without MANAGE_DOCUMENT_SETS — /admin/documents/sets should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/documents/sets");
+      await page.goto(ADMIN_ROUTES.DOCUMENT_SETS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
       // Also verify /admin/documents/sets/new redirects
-      await page.goto("/admin/documents/sets/new");
+      await page.goto(`${ADMIN_ROUTES.DOCUMENT_SETS.path}/new`);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
@@ -408,20 +422,20 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/documents/sets");
+      await page.goto(ADMIN_ROUTES.DOCUMENT_SETS.path);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/documents/sets");
+      expect(page.url()).toContain(ADMIN_ROUTES.DOCUMENT_SETS.path);
       await expect(
         page.getByLabel("admin-page-title").getByText("Document Sets")
       ).toBeVisible({ timeout: 10000 });
       await expect(page.getByText("New Document Set")).toBeVisible();
 
       // Navigate to creation page to verify implied READ_CONNECTORS
-      await page.goto("/admin/documents/sets/new");
+      await page.goto(`${ADMIN_ROUTES.DOCUMENT_SETS.path}/new`);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/documents/sets/new");
+      expect(page.url()).toContain(`${ADMIN_ROUTES.DOCUMENT_SETS.path}/new`);
       await expect(
         page.getByLabel("admin-page-title").getByText("New Document Set")
       ).toBeVisible({ timeout: 10000 });
@@ -485,7 +499,7 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/documents/sets");
+      await page.goto(ADMIN_ROUTES.DOCUMENT_SETS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
@@ -502,7 +516,7 @@ test.describe("Permission gating — MANAGE_DOCUMENT_SETS", () => {
 });
 
 test.describe("Permission gating — MANAGE_ACTIONS", () => {
-  test("Admin panel /admin/actions/mcp and /admin/actions/open-api are gated behind MANAGE_ACTIONS", async ({
+  test("Admin panel /admin/mcp-actions and /admin/openapi-actions are gated behind MANAGE_ACTIONS", async ({
     page,
     adminClient,
     testUserContext,
@@ -527,11 +541,11 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
       // Phase 1: Without MANAGE_ACTIONS — both pages should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/actions/open-api");
+      await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      await page.goto("/admin/actions/mcp");
+      await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
@@ -546,9 +560,9 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
       await apiLogin(page, email, password);
 
       // Verify OpenAPI Actions page and created tool visibility
-      await page.goto("/admin/actions/open-api");
+      await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/admin/actions/open-api");
+      expect(page.url()).toContain(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
       await expect(
         page.getByLabel("admin-page-title").getByText("OpenAPI Actions")
       ).toBeVisible({ timeout: 10000 });
@@ -557,9 +571,9 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
       ).toBeVisible({ timeout: 10000 });
 
       // Verify MCP Actions page and created server visibility
-      await page.goto("/admin/actions/mcp");
+      await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/admin/actions/mcp");
+      expect(page.url()).toContain(ADMIN_ROUTES.MCP_ACTIONS.path);
       await expect(
         page.getByLabel("admin-page-title").getByText("MCP Actions")
       ).toBeVisible({ timeout: 10000 });
@@ -598,11 +612,11 @@ test.describe("Permission gating — MANAGE_ACTIONS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/actions/open-api");
+      await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      await page.goto("/admin/actions/mcp");
+      await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
@@ -644,7 +658,7 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
       // Phase 1: Without MANAGE_SERVICE_ACCOUNT_API_KEYS — /admin/service-accounts should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/service-accounts");
+      await page.goto(ADMIN_ROUTES.API_KEYS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
@@ -657,10 +671,10 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/service-accounts");
+      await page.goto(ADMIN_ROUTES.API_KEYS.path);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/service-accounts");
+      expect(page.url()).toContain(ADMIN_ROUTES.API_KEYS.path);
       await expect(
         page
           .getByLabel("admin-page-title")
@@ -703,7 +717,7 @@ test.describe("Permission gating — MANAGE_SERVICE_ACCOUNT_API_KEYS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/service-accounts");
+      await page.goto(ADMIN_ROUTES.API_KEYS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
@@ -741,11 +755,11 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
       // Phase 1: Without MANAGE_BOTS — both pages should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/bots");
+      await page.goto(ADMIN_ROUTES.SLACK_BOTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      await page.goto("/admin/discord-bot");
+      await page.goto(ADMIN_ROUTES.DISCORD_BOTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
@@ -760,9 +774,9 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
       await apiLogin(page, email, password);
 
       // Verify Slack Integration page
-      await page.goto("/admin/bots");
+      await page.goto(ADMIN_ROUTES.SLACK_BOTS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/admin/bots");
+      expect(page.url()).toContain(ADMIN_ROUTES.SLACK_BOTS.path);
       await expect(
         page.getByLabel("admin-page-title").getByText("Slack Integration")
       ).toBeVisible({ timeout: 10000 });
@@ -772,9 +786,9 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
       ).toBeVisible();
 
       // Verify Discord Integration page
-      await page.goto("/admin/discord-bot");
+      await page.goto(ADMIN_ROUTES.DISCORD_BOTS.path);
       await page.waitForLoadState("networkidle");
-      expect(page.url()).toContain("/admin/discord-bot");
+      expect(page.url()).toContain(ADMIN_ROUTES.DISCORD_BOTS.path);
       await expect(
         page.getByLabel("admin-page-title").getByText("Discord Integration")
       ).toBeVisible({ timeout: 10000 });
@@ -787,11 +801,11 @@ test.describe("Permission gating — MANAGE_BOTS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/bots");
+      await page.goto(ADMIN_ROUTES.SLACK_BOTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      await page.goto("/admin/discord-bot");
+      await page.goto(ADMIN_ROUTES.DISCORD_BOTS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
@@ -830,7 +844,7 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
       // Phase 1: Without READ_QUERY_HISTORY — /admin/performance/query-history should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/performance/query-history");
+      await page.goto(ADMIN_ROUTES.QUERY_HISTORY.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
@@ -843,10 +857,10 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/performance/query-history");
+      await page.goto(ADMIN_ROUTES.QUERY_HISTORY.path);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/performance/query-history");
+      expect(page.url()).toContain(ADMIN_ROUTES.QUERY_HISTORY.path);
       await expect(
         page.getByLabel("admin-page-title").getByText("Query History")
       ).toBeVisible({ timeout: 10000 });
@@ -861,7 +875,7 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/performance/query-history");
+      await page.goto(ADMIN_ROUTES.QUERY_HISTORY.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {
@@ -876,8 +890,9 @@ test.describe("Permission gating — READ_QUERY_HISTORY", () => {
 });
 
 test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
-  test("Access Tokens section and New Access Token button are gated behind CREATE_USER_API_KEYS", async ({
+  test("The Basic group grants Access Tokens by default and an admin can switch it off", async ({
     page,
+    browser,
     adminClient,
     testUserContext,
   }) => {
@@ -889,30 +904,16 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       "Permission registry unavailable (CE environment)"
     );
 
-    const { groupId, email, password } = testUserContext;
+    const { email, password } = testUserContext;
+    const basicGroup = (await adminClient.getUserGroups()).find(
+      (g) => g.is_default && g.name === "Basic"
+    );
+    expect(basicGroup).toBeDefined();
+    const basicGroupId = basicGroup!.id;
     let createdPatId: number | undefined;
 
     try {
-      // Phase 1: Without permission and no tokens — section should be hidden entirely
-      await page.context().clearCookies();
-      await apiLogin(page, email, password);
-      await page.goto("/app/settings/accounts-access");
-      await page.waitForLoadState("networkidle");
-
-      await expect(
-        page.getByText("Access Tokens", { exact: true })
-      ).not.toBeVisible();
-      await expect(
-        page.getByRole("button", { name: "New Access Token" })
-      ).not.toBeVisible();
-
-      // Phase 2: Grant CREATE_USER_API_KEYS — section visible, button enabled
-      await page.context().clearCookies();
-      await loginAs(page, "admin");
-      await adminClient.setUserGroupPermissions(groupId, [
-        Permission.CREATE_USER_API_KEYS,
-      ]);
-
+      // Phase 1: Basic grants it by default, so the section shows and the button is enabled
       await page.context().clearCookies();
       await apiLogin(page, email, password);
       await page.goto("/app/settings/accounts-access");
@@ -928,7 +929,7 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       await expect(newTokenButton).toBeVisible({ timeout: 10000 });
       await expect(newTokenButton).toBeEnabled();
 
-      // Create a PAT via API so Phase 3 can test "token exists but no permission"
+      // Create a PAT via API so Phase 2 can test "token exists but no permission"
       const createResponse = await page.request.post("/api/user/pats", {
         data: {
           name: `E2E PAT ${Date.now()}`,
@@ -939,10 +940,10 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
       const patData = await createResponse.json();
       createdPatId = patData.id;
 
-      // Phase 3: Revoke permission — section stays (token exists) but button disabled
+      // Phase 2: Switch it off on Basic. The section stays (a token exists) but the button is disabled
       await page.context().clearCookies();
       await loginAs(page, "admin");
-      await adminClient.setUserGroupPermissions(groupId, []);
+      await adminClient.setUserGroupPermissions(basicGroupId, []);
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
@@ -955,9 +956,39 @@ test.describe("Permission gating — CREATE_USER_API_KEYS", () => {
 
       await expect(newTokenButton).toBeVisible({ timeout: 10000 });
       await expect(newTokenButton).toBeDisabled();
+
+      // Phase 3: Switch it back on and the button is enabled again
+      await page.context().clearCookies();
+      await loginAs(page, "admin");
+      await adminClient.setUserGroupPermissions(basicGroupId, [
+        Permission.CREATE_USER_API_KEYS,
+      ]);
+
+      await page.context().clearCookies();
+      await apiLogin(page, email, password);
+      await page.goto("/app/settings/accounts-access");
+      await page.waitForLoadState("networkidle");
+
+      await expect(newTokenButton).toBeVisible({ timeout: 10000 });
+      await expect(newTokenButton).toBeEnabled();
     } finally {
+      // Basic is shared with every other spec, so restore it from a context
+      // that outlives this test's page if the test timed out.
       await cleanup(async () => {
-        // Delete the PAT (only requires BASIC_ACCESS)
+        const restoreContext = await browser.newContext({
+          storageState: "admin_auth.json",
+        });
+        try {
+          await new OnyxApiClient(
+            restoreContext.request
+          ).setUserGroupPermissions(basicGroupId, [
+            Permission.CREATE_USER_API_KEYS,
+          ]);
+        } finally {
+          await restoreContext.close();
+        }
+      });
+      await cleanup(async () => {
         if (createdPatId !== undefined) {
           await page.context().clearCookies();
           await apiLogin(page, email, password);
@@ -1011,12 +1042,12 @@ test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
       // Phase 1: Without MANAGE_USER_GROUPS — /admin/groups should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/groups");
+      await page.goto(ADMIN_ROUTES.GROUPS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
       // Also verify /admin/groups/create redirects
-      await page.goto("/admin/groups/create");
+      await page.goto(`${ADMIN_ROUTES.GROUPS.path}/create`);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
@@ -1031,10 +1062,10 @@ test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
       await apiLogin(page, email, password);
 
       // Verify groups list page
-      await page.goto("/admin/groups");
+      await page.goto(ADMIN_ROUTES.GROUPS.path);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/groups");
+      expect(page.url()).toContain(ADMIN_ROUTES.GROUPS.path);
       await expect(page.getByTestId("groups-page-heading")).toBeVisible({
         timeout: 10000,
       });
@@ -1044,10 +1075,10 @@ test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
       await expect(page.getByText(extraGroupName)).toBeVisible();
 
       // Navigate to create page to verify implied permissions
-      await page.goto("/admin/groups/create");
+      await page.goto(`${ADMIN_ROUTES.GROUPS.path}/create`);
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/groups/create");
+      expect(page.url()).toContain(`${ADMIN_ROUTES.GROUPS.path}/create`);
       await expect(
         page.getByLabel("admin-page-title").getByText("Create Group")
       ).toBeVisible({ timeout: 10000 });
@@ -1083,7 +1114,7 @@ test.describe("Permission gating — MANAGE_USER_GROUPS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/groups");
+      await page.goto(ADMIN_ROUTES.GROUPS.path);
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {

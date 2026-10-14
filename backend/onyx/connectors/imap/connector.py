@@ -3,6 +3,7 @@ import email
 import imaplib
 import os
 import re
+import ssl
 from datetime import datetime, timezone
 from email.message import Message
 from email.utils import parseaddr
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.imap.config import DEFAULT_IMAP_PORT_NUMBER
 from onyx.connectors.imap.models import EmailHeaders
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -33,7 +35,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-_DEFAULT_IMAP_PORT_NUMBER = int(os.environ.get("IMAP_PORT", 993))
 _IMAP_OKAY_STATUS = "OK"
 _PAGE_SIZE = 100
 _USERNAME_KEY = "imap_username"
@@ -72,7 +73,7 @@ class ImapConnector(
     def __init__(
         self,
         host: str,
-        port: int = _DEFAULT_IMAP_PORT_NUMBER,
+        port: int = DEFAULT_IMAP_PORT_NUMBER,
         mailboxes: list[str] | None = None,
     ) -> None:
         self._host = host
@@ -120,7 +121,13 @@ class ImapConnector(
         username = get_or_raise(_USERNAME_KEY)
         password = get_or_raise(_PASSWORD_KEY)
 
-        mail_client = imaplib.IMAP4_SSL(host=self._host, port=self._port)
+        # imaplib defaults to an unverified context; pass an explicit one so the
+        # certificate and hostname are checked before credentials are sent.
+        mail_client = imaplib.IMAP4_SSL(
+            host=self._host,
+            port=self._port,
+            ssl_context=ssl.create_default_context(),
+        )
         status, _data = mail_client.login(user=username, password=password)
 
         if status != _IMAP_OKAY_STATUS:

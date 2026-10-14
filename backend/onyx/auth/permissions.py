@@ -10,7 +10,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from fastapi import Depends, Request
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, computed_field, field_validator
 
 from onyx.db.enums import AccountType, Permission, PermissionAuthority
 from onyx.db.models import User
@@ -98,6 +98,12 @@ NON_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
     | Permission.IMPLIED
 )
 
+# The only grants an admin may switch on or off for the seeded Basic group, which
+# holds the whole org. Everything else on a default group stays fixed by migrations.
+DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS: frozenset[Permission] = frozenset(
+    {Permission.CREATE_USER_API_KEYS}
+)
+
 # Permissions auto-granted to all users in Community Edition.
 # In CE there is no group-permission UI, so these capabilities must be
 # available without explicit grants.  In EE they are controlled normally
@@ -137,6 +143,12 @@ class PermissionRegistryEntry(BaseModel):
     description: str
     permissions: list[Permission]
     group: int
+
+    @computed_field
+    @property
+    def default_group_toggleable(self) -> bool:
+        """Whether the row is offered on the Basic group's page."""
+        return all(p in DEFAULT_GROUP_TOGGLEABLE_PERMISSIONS for p in self.permissions)
 
     @field_validator("permissions")
     @classmethod
@@ -338,7 +350,7 @@ def require_permission(
     base_user = current_chat_accessible_user if allow_anonymous else current_user
 
     async def dependency(request: Request, user: User = Depends(base_user)) -> User:
-        token_scopes: list[Permission] | None = getattr(
+        token_scopes: list[Permission] | None = getattr(  # ods: ignore[getattr]
             request.state, "token_scopes", None
         )
         authority = has_permission(user, required)
@@ -362,4 +374,6 @@ def require_permission(
     dependency._is_require_permission = True  # ty: ignore[unresolved-attribute]
     # Lets tests pin a route's permission level without closure introspection.
     dependency._required_permission = required  # ty: ignore[unresolved-attribute]
+    dependency._allow_scope = allow_scope  # ty: ignore[unresolved-attribute]
+    dependency._allow_anonymous = allow_anonymous  # ty: ignore[unresolved-attribute]
     return dependency

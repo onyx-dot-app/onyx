@@ -10,6 +10,7 @@ import { Formik } from "formik";
 import * as Yup from "yup";
 import { InputVertical } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
+import { useTranslations } from "next-intl";
 
 export interface FeedbackModalProps {
   feedbackType: FeedbackType;
@@ -24,6 +25,7 @@ export default function FeedbackModal({
   feedbackType,
   messageId,
 }: FeedbackModalProps) {
+  const t = useTranslations("chat.modals.feedback");
   const modal = useModal();
   const { handleFeedbackChange } = useFeedbackController();
 
@@ -60,7 +62,7 @@ export default function FeedbackModal({
         <Modal.Content width="sm">
           <Modal.Header
             icon={feedbackType === "like" ? SvgThumbsUp : SvgThumbsDown}
-            title="Feedback"
+            title={t("header.title")}
             onClose={() => modal.toggle(false)}
           />
           <Formik
@@ -78,12 +80,16 @@ export default function FeedbackModal({
                 <Modal.Body>
                   <InputVertical
                     withLabel="additional_feedback"
-                    title="Provide Additional Details"
+                    title={t("additionalDetails.label")}
                     suffix={feedbackType === "like" ? "optional" : undefined}
                   >
                     <InputTextAreaField
                       name="additional_feedback"
-                      placeholder={`What did you ${feedbackType} about this response?`}
+                      placeholder={
+                        feedbackType === "like"
+                          ? t("additionalDetails.likePlaceholder")
+                          : t("additionalDetails.dislikePlaceholder")
+                      }
                     />
                   </InputVertical>
                 </Modal.Body>
@@ -94,7 +100,7 @@ export default function FeedbackModal({
                     onClick={() => modal.toggle(false)}
                     type="button"
                   >
-                    Cancel
+                    {t("cancelButton.label")}
                   </Button>
                   <Button
                     disabled={
@@ -103,7 +109,9 @@ export default function FeedbackModal({
                     }
                     onClick={() => formikHandleSubmit()}
                   >
-                    {isSubmitting ? "Submitting..." : "Submit"}
+                    {isSubmitting
+                      ? t("submitButton.loadingLabel")
+                      : t("submitButton.label")}
                   </Button>
                 </Modal.Footer>
               </>

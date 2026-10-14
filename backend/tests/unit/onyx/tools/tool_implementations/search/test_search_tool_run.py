@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.search.models import BaseFilters
+from onyx.context.search.models import BaseFilters, UserAccessFilters
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import SearchToolFilterDelta
 from onyx.tools.models import ChatMinimalTextMessage, SearchToolOverrideKwargs
@@ -55,7 +57,10 @@ def _run(
     )
     with (
         patch(f"{MODULE}.get_session_with_current_tenant") as mock_session_ctx,
-        patch(f"{MODULE}.build_access_filters_for_user", return_value=[]),
+        patch(
+            f"{MODULE}.build_access_filters_for_user",
+            return_value=UserAccessFilters(access_control_list=[], cc_pair_access=None),
+        ),
         patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
         patch(f"{MODULE}.EmbeddingModel"),
         patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
@@ -344,3 +349,69 @@ def test_auto_detect_disabled_keeps_user_selected_filters() -> None:
     for applied in filters:
         assert applied is not None
         assert applied.source_type == restriction
+
+
+def test_custom_agent_project_search_keeps_source_scope_and_both_file_filters() -> None:
+    tool: SearchTool = _make_tool(
+        BaseFilters(source_type=[DocumentSource.GITHUB]), auto_detect_filters=False
+    )
+    tool.project_id_filter = 42
+    tool.persona_id_filter = 7
+
+    search: MagicMock = _run(
+        tool, connected_sources=[DocumentSource.GITHUB, DocumentSource.GOOGLE_DRIVE]
+    )
+
+    assert search.call_count > 0
+    for call in search.call_args_list:
+        assert call.kwargs["project_id_filter"] == 42
+        assert call.kwargs["persona_id_filter"] == 7
+        assert call.kwargs[
+            "chunk_search_request"
+        ].user_selected_filters.source_type == [DocumentSource.GITHUB]
+
+
+@pytest.mark.parametrize("project_id", [None, 99])
+@pytest.mark.parametrize(
+    "selected_sources, expected_sources",
+    [
+        (None, [DocumentSource.GITHUB, DocumentSource.USER_FILE]),
+        ([DocumentSource.GITHUB], [DocumentSource.GITHUB]),
+        (
+            [DocumentSource.GITHUB, DocumentSource.USER_FILE],
+            [DocumentSource.GITHUB, DocumentSource.USER_FILE],
+        ),
+    ],
+)
+def test_inferred_scope_retains_context_files_within_explicit_selection(
+    project_id: int | None,
+    selected_sources: list[DocumentSource] | None,
+    expected_sources: list[DocumentSource],
+) -> None:
+    tool: SearchTool = _make_tool(BaseFilters(source_type=selected_sources))
+    tool.project_id_filter = project_id
+    tool.persona_id_filter = 42
+    decision: list[DocumentSource] = [DocumentSource.GITHUB]
+    search: MagicMock = _run(
+        tool,
+        decision=decision,
+        connected_sources=[
+            DocumentSource.GITHUB,
+            DocumentSource.USER_FILE,
+            DocumentSource.SLACK,
+        ],
+    )
+    assert search.call_args_list
+    for call in search.call_args_list:
+        assert call.kwargs["project_id_filter"] == project_id
+        assert call.kwargs["persona_id_filter"] == 42
+        assert (
+            call.kwargs["chunk_search_request"].user_selected_filters.source_type
+            == expected_sources
+        )
+    expected_values: list[str] = [source.value for source in expected_sources]
+    assert _emitted_filter_sources(tool) == [expected_values]
+    assert tool._search_cycles[-1].searched_sources == expected_values
+    assert decision == [DocumentSource.GITHUB]
+    assert tool.user_selected_filters is not None
+    assert tool.user_selected_filters.source_type == selected_sources

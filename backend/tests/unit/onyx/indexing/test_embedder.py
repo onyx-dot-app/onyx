@@ -1,13 +1,82 @@
 from collections.abc import Generator
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from google.auth.credentials import Credentials
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document, TextSection
+from onyx.db.models import CloudEmbeddingProvider, SearchSettings
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding, DocAwareChunk, IndexChunk
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
+
+
+def test_saved_workload_identity_embeds_indexing_chunks_and_titles() -> None:
+    settings = SearchSettings(
+        model_name="gemini-embedding-2",
+        normalize=False,
+        query_prefix=None,
+        passage_prefix=None,
+        provider_type=EmbeddingProvider.GOOGLE,
+        reduced_dimension=2,
+        cloud_provider=CloudEmbeddingProvider(
+            provider_type=EmbeddingProvider.GOOGLE,
+            api_key=None,
+            vertex_config={
+                "auth_method": "workload_identity",
+                "project_id": "vertex-project",
+                "location": "global",
+            },
+        ),
+    )
+    document = Document(
+        id="test_doc",
+        source=DocumentSource.FILE,
+        semantic_identifier="Launch project",
+        title="Launch project",
+        sections=[TextSection(text="The project is Emerald Heron.", link="")],
+        metadata={},
+    )
+    chunk = DocAwareChunk(
+        chunk_id=0,
+        blurb="The project is Emerald Heron.",
+        content="The project is Emerald Heron.",
+        source_links={0: ""},
+        section_continuation=False,
+        source_document=document,
+        title_prefix="",
+        metadata_suffix_semantic="",
+        metadata_suffix_keyword="",
+        mini_chunk_texts=None,
+        large_chunk_reference_ids=[],
+        large_chunk_id=None,
+        image_file_id=None,
+        chunk_context="",
+        doc_summary="",
+        contextual_rag_reserved_tokens=0,
+    )
+    response = MagicMock()
+    response.embeddings = [MagicMock(values=[0.1, 0.2])]
+    client = MagicMock()
+    client.aio.models.embed_content = AsyncMock(return_value=response)
+    client.aio.aclose = AsyncMock()
+    with (
+        patch(
+            "google.auth.default",
+            return_value=(MagicMock(spec=Credentials), "cluster-project"),
+        ),
+        patch("google.genai.Client", return_value=client) as genai,
+        patch("onyx.natural_language_processing.search_nlp_models.get_tokenizer"),
+    ):
+        embedder = DefaultIndexingEmbedder.from_db_search_settings(settings)
+        result = embedder.embed_chunks([chunk])
+
+    assert result[0].embeddings.full_embedding == [0.1, 0.2]
+    # Only the chunk text is embedded; titles get no separate embedding.
+    assert client.aio.models.embed_content.call_count == 1
+    assert genai.call_args.kwargs["project"] == "vertex-project"
+    assert genai.call_args.kwargs["location"] == "global"
 
 
 @pytest.fixture
@@ -35,7 +104,6 @@ def test_default_indexing_embedder_embed_chunks(
     # Mock the encode method of the embedding model
     mock_embedding_model.return_value.encode.side_effect = [
         [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],  # Main chunk embeddings
-        [[7.0, 8.0, 9.0]],  # Title embedding
     ]
 
     # Create test input
@@ -81,8 +149,6 @@ def test_default_indexing_embedder_embed_chunks(
         full_embedding=[1.0, 2.0, 3.0],
         mini_chunk_embeddings=[],
     )
-    assert result[0].title_embedding == [7.0, 8.0, 9.0]
-
     # Verify the embedding model was called exactly as follows
     mock_embedding_model.return_value.encode.assert_any_call(
         texts=[f"Title: {doc_summary}Test chunk{chunk_context}"],
@@ -91,10 +157,5 @@ def test_default_indexing_embedder_embed_chunks(
         tenant_id=None,
         request_id=None,
     )
-    # Same for title only embedding call
-    mock_embedding_model.return_value.encode.assert_any_call(
-        ["Test Document"],
-        text_type=EmbedTextType.PASSAGE,
-        tenant_id=None,
-        request_id=None,
-    )
+    # Titles get no separate embedding call.
+    assert mock_embedding_model.return_value.encode.call_count == 1

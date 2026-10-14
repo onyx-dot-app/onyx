@@ -11,7 +11,6 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.users import (
@@ -31,11 +30,6 @@ def _user(
             email=email,
             prior_emails=prior_emails if prior_emails is not None else [],
             account_type=account_type,
-            role=(
-                UserRole.EXT_PERM_USER
-                if account_type == AccountType.EXT_PERM_USER
-                else UserRole.BASIC
-            ),
             oauth_accounts=[],
         ),
     )

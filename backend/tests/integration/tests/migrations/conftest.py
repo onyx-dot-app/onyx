@@ -31,8 +31,8 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 # Migration tests only need Postgres (provided by the workflow) and the
 # pytest-alembic fixtures below — they must NOT pre-migrate the schema
 # (would break pytest-alembic's test_upgrade) and must NOT start the
-# FastAPI app (its lifespan calls setup_onyx() which requires Vespa, and
-# the database-tests workflow doesn't start Vespa).
+# FastAPI app (its lifespan calls setup_onyx() which requires OpenSearch,
+# and the database-tests workflow doesn't start OpenSearch).
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -1,24 +1,26 @@
-import { Button, Text } from "@opal/components";
+"use client";
 
-import { TextFormField, TypedFileUploadFormField } from "@/components/Field";
+import { Button, Text } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { TextFormField } from "@/components/Field";
+import { CredentialFileField } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { Form, Formik, FormikHelpers } from "formik";
 import { toast } from "@opal/layouts";
-import {
-  Credential,
-  getDisplayNameForCredentialKey,
-} from "@/lib/connectors/credentials";
+import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
+import type { Credential } from "@/lib/credentials/types";
 import {
   createEditingValidationSchema,
   createInitialValues,
+  getCredentialFileType,
+  getCredentialSpec,
   getEditableCredentialFields,
 } from "@/lib/credentials/utils";
-import { isTypedFileField } from "@/lib/connectors/fileTypes";
 import { SvgCheckSquare, SvgTrash } from "@opal/icons";
 import type {
   CredentialFieldValues,
   CredentialFormValues,
 } from "@/lib/credentials/types";
-import type { ValidSources } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 
 export interface EditCredentialProps {
   credential: Credential<CredentialFieldValues>;
@@ -37,6 +39,22 @@ export default function EditCredential({
   onClose,
   onUpdate,
 }: EditCredentialProps) {
+  const t = useTranslations("admin");
+  const fieldCopy = useCredentialFieldCopy(sourceType);
+  const spec = getCredentialSpec(sourceType);
+
+  // The spec says which fields are secret. A stored key it does not list
+  // keeps the old guess from its name.
+  function isSecretField(key: string): boolean {
+    const field = spec?.fields[key];
+    if (field) return field.kind === "secret";
+    const lower = key.toLowerCase();
+    return (
+      lower.includes("token") ||
+      lower.includes("password") ||
+      lower.includes("secret")
+    );
+  }
   const editableCredentialFields = getEditableCredentialFields(
     credential,
     sourceType
@@ -58,7 +76,7 @@ export default function EditCredential({
       await onUpdate(credential, values, onClose);
     } catch (error) {
       console.error("Error updating credential:", error);
-      toast.error("Error updating credential");
+      toast.error(t("credentials.edit.updateError.toast"));
     } finally {
       formikHelpers.setSubmitting(false);
     }
@@ -66,9 +84,7 @@ export default function EditCredential({
 
   return (
     <div className="flex w-full flex-col gap-y-6">
-      <Text as="p">
-        Ensure that you update to a credential with the proper permissions!
-      </Text>
+      <Text as="p">{t("credentials.edit.permissions.note")}</Text>
 
       <Formik
         initialValues={initialValues}
@@ -81,15 +97,17 @@ export default function EditCredential({
               includeRevert
               name="name"
               placeholder={credential.name || ""}
-              label="Name (optional):"
+              label={t("credentials.edit.name.label")}
             />
 
             {Object.entries(editableCredentialFields).map(([key, value]) =>
-              isTypedFileField(key) ? (
-                <TypedFileUploadFormField
+              getCredentialFileType(key) !== null ? (
+                <CredentialFileField
                   key={key}
                   name={key}
-                  label={getDisplayNameForCredentialKey(key)}
+                  fieldKey={key}
+                  label={fieldCopy(key).title}
+                  description={fieldCopy(key).description}
                 />
               ) : (
                 <TextFormField
@@ -97,28 +115,22 @@ export default function EditCredential({
                   key={key}
                   name={key}
                   placeholder={value == null ? undefined : String(value)}
-                  label={getDisplayNameForCredentialKey(key)}
-                  type={
-                    key.toLowerCase().includes("token") ||
-                    key.toLowerCase().includes("password") ||
-                    key.toLowerCase().includes("secret")
-                      ? "password"
-                      : "text"
-                  }
+                  label={fieldCopy(key).title}
+                  type={isSecretField(key) ? "password" : "text"}
                   disabled={key === "authentication_method"}
                 />
               )
             )}
             <div className="flex justify-between w-full">
               <Button onClick={() => resetForm()} icon={SvgTrash}>
-                Reset Changes
+                {t("credentials.edit.resetButton.label")}
               </Button>
               <Button
                 disabled={isSubmitting}
                 type="submit"
                 icon={SvgCheckSquare}
               >
-                Update
+                {t("credentials.edit.updateButton.label")}
               </Button>
             </div>
           </Form>

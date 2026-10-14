@@ -2,6 +2,7 @@ import { mutate } from "swr";
 import { User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { CustomRefreshTokenResponse } from "@/lib/users/types";
+import { clearOutputThumbnailCache } from "@/app/craft/services/outputThumbnailCache";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -14,7 +15,7 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!response.ok) {
     return null;
   }
-  const user = await response.json();
+  const user: User = await response.json();
   return user;
 }
 
@@ -24,6 +25,16 @@ export async function logout(): Promise<Response> {
     credentials: "include",
   });
   if (response.ok) {
+    clearOutputThumbnailCache();
+    try {
+      const storage = window.sessionStorage;
+      for (let index = storage.length - 1; index >= 0; index--) {
+        const key = storage.key(index);
+        if (key?.startsWith("onyx:craft:")) storage.removeItem(key);
+      }
+    } catch {
+      // Disabled browser storage must not prevent logout.
+    }
     // Drop the cached /api/me so any subsequent useCurrentUser read does not
     // hand callers the just-signed-out user from the SWR dedup window.
     await mutate(SWR_KEYS.me, null, { revalidate: false });

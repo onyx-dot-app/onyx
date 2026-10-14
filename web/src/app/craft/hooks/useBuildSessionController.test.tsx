@@ -13,7 +13,7 @@ jest.mock("@/app/craft/hooks/usePreProvisionPolling", () => ({
   usePreProvisionPolling: jest.fn(),
 }));
 jest.mock("@/lib/languageModels/hooks", () => ({
-  useLLMProviders: () => ({ llmProviders: [] }),
+  useLanguageModels: () => ({ llmProviders: [] }),
 }));
 jest.mock("@/app/craft/onboarding/constants", () => ({
   hasSupportedCraftProvider: () => true,
@@ -25,6 +25,10 @@ const SESSION_ID = "55fa40e0-777e-4fd3-9a0d-cf05dfb616dc";
 describe("useBuildSessionController", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(api.fetchOutputInventory).mockResolvedValue({
+      files: [],
+      complete: true,
+    });
     useBuildSessionStore.setState({
       sessions: new Map(),
       currentSessionId: null,
@@ -41,7 +45,122 @@ describe("useBuildSessionController", () => {
     useBuildSessionStore.getState().setCurrentSession(SESSION_ID);
   });
 
-  it("marks skills stale from reads without clearing confirmed stale state", async () => {
+  it("retries a failed restore only after leaving and revisiting the session", async () => {
+    const store = () => useBuildSessionStore.getState();
+    store().updateSessionData(SESSION_ID, {
+      status: "idle",
+      sandbox: { id: "failed-sandbox", status: "failed" } as never,
+    });
+    store().createSession("another-session", { isLoaded: true });
+    const loadSession = jest.fn(async (sessionId: string) => {
+      store().setCurrentSession(sessionId);
+    });
+    const originalLoad = store().loadSession;
+    useBuildSessionStore.setState({ loadSession });
+    try {
+      const { result, rerender } = renderHook(
+        ({ sessionId }: { sessionId: string }) =>
+          useBuildSessionController({ existingSessionId: sessionId }),
+        { initialProps: { sessionId: SESSION_ID } }
+      );
+      expect(result.current.isLoading).toBe(false);
+      expect(loadSession).not.toHaveBeenCalled();
+
+      rerender({ sessionId: "another-session" });
+      rerender({ sessionId: SESSION_ID });
+      await waitFor(() => expect(loadSession).toHaveBeenCalledTimes(1));
+      expect(loadSession).toHaveBeenCalledWith(SESSION_ID);
+    } finally {
+      useBuildSessionStore.setState({ loadSession: originalLoad });
+    }
+  });
+
+  it("retries a failed session after visiting New build", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      sandbox: { id: "failed-sandbox", status: "failed" } as never,
+    });
+    const originalLoad = useBuildSessionStore.getState().loadSession;
+    const loadSession = jest.fn(async (sessionId: string) => {
+      useBuildSessionStore.getState().setCurrentSession(sessionId);
+    });
+    useBuildSessionStore.setState({ loadSession });
+    try {
+      const { rerender } = renderHook<
+        ReturnType<typeof useBuildSessionController>,
+        { sessionId: string | null }
+      >(
+        ({ sessionId }: { sessionId: string | null }) =>
+          useBuildSessionController({ existingSessionId: sessionId }),
+        { initialProps: { sessionId: SESSION_ID } }
+      );
+      expect(loadSession).not.toHaveBeenCalled();
+      rerender({ sessionId: null });
+      rerender({ sessionId: SESSION_ID });
+      await waitFor(() => expect(loadSession).toHaveBeenCalledWith(SESSION_ID));
+      expect(loadSession).toHaveBeenCalledTimes(1);
+    } finally {
+      useBuildSessionStore.setState({ loadSession: originalLoad });
+    }
+  });
+
+  it("refreshes cached file revisions on entry without opening new outputs", async () => {
+    const store = () => useBuildSessionStore.getState();
+    store().updateSessionData(SESSION_ID, {
+      status: "active",
+      outputInventory: {
+        "outputs/deck.pptx": {
+          path: "outputs/deck.pptx",
+          revision: "old",
+          size: 100,
+        },
+      },
+    });
+    jest.mocked(api.fetchOutputInventory).mockResolvedValue({
+      complete: true,
+      files: [
+        { path: "outputs/deck.pptx", revision: "updated", size: 100 },
+        { path: "outputs/other.pdf", revision: "new", size: 100 },
+      ],
+    });
+
+    renderHook(() =>
+      useBuildSessionController({ existingSessionId: SESSION_ID })
+    );
+    await waitFor(() => {
+      expect(store().sessions.get(SESSION_ID)).toMatchObject({
+        outputInventory: {
+          "outputs/deck.pptx": {
+            path: "outputs/deck.pptx",
+            revision: "updated",
+            size: 100,
+          },
+          "outputs/other.pdf": {
+            path: "outputs/other.pdf",
+            revision: "new",
+            size: 100,
+          },
+        },
+        panelTabs: [],
+        outputPanelMode: "closed",
+        filesNeedsRefresh: 1,
+      });
+    });
+  });
+
+  it("does not absorb live outputs on entry or focus during a running turn", async () => {
+    useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
+      status: "running",
+      activeTurnId: "live-turn",
+      outputInventory: {},
+    });
+    renderHook(() =>
+      useBuildSessionController({ existingSessionId: SESSION_ID })
+    );
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(api.fetchOutputInventory).not.toHaveBeenCalled();
+  });
+
+  it("clears the notice when the server confirms the runtime is current", async () => {
     jest.mocked(api.fetchSession).mockResolvedValue({
       skills_stale: true,
     } as never);
@@ -70,7 +189,7 @@ describe("useBuildSessionController", () => {
     await act(async () => Promise.resolve());
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("does not restore stale state after an intervening reload", async () => {
@@ -130,5 +249,41 @@ describe("useBuildSessionController", () => {
     expect(
       useBuildSessionStore.getState().sessions.get(SESSION_ID)?.skillsStale
     ).toBe(true);
+  });
+
+  it("ignores a late validity response after the first message claims the sandbox", async () => {
+    const store = () => useBuildSessionStore.getState();
+    store().setCurrentSession(null);
+    useBuildSessionStore.setState({
+      preProvisioning: { status: "ready", sessionId: SESSION_ID },
+      controllerState: {
+        lastTriggeredForUrl: "new-build",
+        loadedSessionId: null,
+      },
+    });
+    let resolveCheck:
+      | ((
+          value: Awaited<ReturnType<typeof api.checkPreProvisionedSession>>
+        ) => void)
+      | undefined;
+    jest.mocked(api.checkPreProvisionedSession).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCheck = resolve;
+      })
+    );
+    renderHook(() => useBuildSessionController({ existingSessionId: null }));
+
+    act(() => window.dispatchEvent(new Event("focus")));
+    expect(api.checkPreProvisionedSession).toHaveBeenCalledWith(SESSION_ID);
+    await act(async () => {
+      await store().consumePreProvisionedSession();
+      resolveCheck?.({ valid: false, session_id: SESSION_ID });
+    });
+
+    expect(store().preProvisioning).toEqual({
+      status: "starting",
+      sessionId: SESSION_ID,
+    });
+    expect(api.createSession).not.toHaveBeenCalled();
   });
 });

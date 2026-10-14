@@ -3,11 +3,11 @@ import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
 
 /**
- * Visual-regression coverage for the web connector setup wizard
- * (`/admin/connectors/web?step=1`).
+ * Visual-regression coverage for the web connector setup page
+ * (`/admin/connectors/web`).
  *
  * The admin-pages sweep (`admin_pages.spec.ts`) only visits pages linked from
- * the sidebar, so per-connector wizard pages are not covered by it. This page
+ * the sidebar, so per-connector setup pages are not covered by it. This page
  * renders the shared `RenderField`/`TextFormField` machinery used by every
  * connector's setup form, so a regression here (e.g. the Base URL input
  * rendering at the wrong height) affects all connectors.
@@ -17,7 +17,7 @@ import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPag
  * the project's `storageState`.
  */
 for (const theme of THEMES) {
-  test(`web connector setup wizard – ${theme} mode`, async ({ page }) => {
+  test(`web connector setup page – ${theme} mode`, async ({ page }) => {
     await setThemeBeforeNavigation(page, theme);
 
     const setupPage = new ConnectorSetupPage(page, "web");
@@ -26,6 +26,6 @@ for (const theme of THEMES) {
     await expect(setupPage.textField("base_url")).toBeVisible();
     await page.waitForLoadState("networkidle");
 
-    await setupPage.expectScreenshot(`admin-${theme}-connectors--web--step-1`);
+    await setupPage.expectScreenshot(`admin-${theme}-connectors--web`);
   });
 }

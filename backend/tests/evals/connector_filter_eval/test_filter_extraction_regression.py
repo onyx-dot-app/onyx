@@ -12,7 +12,7 @@ expected vs got. LLM output varies between runs, so each case gets a retry
 (CONNECTOR_FILTER_EVAL_ATTEMPTS, default 2) and passes if any attempt returns
 the expected scope. The CI job is intentionally NON-blocking
 (continue-on-error in the workflow): a red run is a signal to read, not a
-merge gate — some cases document behaviors the prompt does not handle yet.
+merge gate.
 
 Scoring normalizes a scope that covers every connected source to "unscoped" —
 filtering to all sources retrieves exactly what no filter does, so the two

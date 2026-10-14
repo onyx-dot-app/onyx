@@ -52,7 +52,7 @@ const getSessionMock = getChatSession as unknown as Mock<
   (id: string) => Promise<unknown>
 >;
 const stopSessionMock = stopChatSession as unknown as Mock<
-  (id: string) => Promise<void>
+  (id: string, streamId?: number) => Promise<void>
 >;
 const renameSessionMock = renameChatSession as unknown as Mock<
   (id: string) => Promise<void>
@@ -313,6 +313,11 @@ describe("useChatController", () => {
         allowedToolIds: [1, 3],
         forcedToolId: 3,
         internalSearchFilters: { source_type: ["web"] },
+        llmOverride: {
+          model_configuration_id: 7,
+          model_provider: "OpenAI Prod",
+          model_version: "gpt-5",
+        },
       });
     });
 
@@ -323,11 +328,17 @@ describe("useChatController", () => {
       allowed_tool_ids: number[] | null;
       forced_tool_id: number | null;
       internal_search_filters: { source_type: string[] | null } | null;
+      llm_override: { model_configuration_id: number } | null;
     };
     expect(body.deep_research).toBe(true);
     expect(body.allowed_tool_ids).toEqual([1, 3]);
     expect(body.forced_tool_id).toBe(3);
     expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
+    expect(body.llm_override).toEqual({
+      model_configuration_id: 7,
+      model_provider: "OpenAI Prod",
+      model_version: "gpt-5",
+    });
   });
 
   it("defaults the tool fields when no toolOptions are passed (backwards compatible)", async () => {
@@ -348,11 +359,14 @@ describe("useChatController", () => {
       allowed_tool_ids: number[] | null;
       forced_tool_id: number | null;
       internal_search_filters: unknown;
+      llm_override: unknown;
     };
     expect(body.deep_research).toBe(false);
     expect(body.allowed_tool_ids).toBeNull();
     expect(body.forced_tool_id).toBeNull();
     expect(body.internal_search_filters).toBeNull();
+    // Null, not omitted: the backend then runs the agent's own default model.
+    expect(body.llm_override).toBeNull();
   });
 
   it("creates a session on the first message of a new chat", async () => {
@@ -556,11 +570,12 @@ describe("useChatController", () => {
     expect(router.replace).not.toHaveBeenCalled();
   });
 
-  it("stop aborts the stream and stops the backend run", async () => {
+  it("stop aborts the stream and stops the backend stream by ID", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     stopSessionMock.mockResolvedValue();
     streamMock.mockImplementation((_body, signal) =>
       (async function* () {
+        yield idInfo;
         yield startPacket("Hello");
         while (!signal.aborted) {
           await new Promise((resolve) => setTimeout(resolve, 5));
@@ -578,7 +593,7 @@ describe("useChatController", () => {
     act(() => result.current.stop());
 
     await waitFor(() => expect(result.current.chatState).toBe("input"));
-    expect(stopSessionMock).toHaveBeenCalledWith("s1");
+    expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
   });
 
   it("hydrates an opened session from the backend snapshot", async () => {

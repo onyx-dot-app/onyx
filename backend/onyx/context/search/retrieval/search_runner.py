@@ -12,7 +12,7 @@ from onyx.context.search.models import (
     InferenceSection,
 )
 from onyx.context.search.utils import get_query_embedding, inference_section_from_chunks
-from onyx.document_index.interfaces_new import DocumentIndex, DocumentSectionRequest
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.federated_connectors.federated_retrieval import (
     FederatedRetrievalInfo,
     get_federated_retrieval_functions,
@@ -115,10 +115,10 @@ def search_chunks(
             document_set_names=query_request.filters.document_set,
         )
 
-    federated_sources = set(
+    federated_sources = {
         federated_retrieval_info.source.to_non_federated_source()
         for federated_retrieval_info in federated_retrieval_infos
-    )
+    }
     run_queries: list[tuple[Callable, tuple]] = [
         (federated_retrieval_info.retrieval_function, (query_request,))
         for federated_retrieval_info in federated_retrieval_infos
@@ -133,9 +133,7 @@ def search_chunks(
     if normal_search_enabled:
         if query_request.hybrid_alpha is not None and query_request.hybrid_alpha == 0.0:
             # Hybrid alpha explicitly set to keyword only —> do pure keyword
-            # search without computing an embedding. This branch is currently
-            # only set by OpenSearch-aware producers; Vespa would raise
-            # NotImplementedError on `keyword_retrieval`.
+            # search without computing an embedding.
             run_queries.append(
                 (
                     lambda: _keyword_search(query_request, document_index),
@@ -169,7 +167,7 @@ def inference_sections_from_ids(
     document_index: DocumentIndex,
 ) -> list[InferenceSection]:
     # Currently only fetches whole docs
-    doc_ids_set = set(doc_id for doc_id, _ in doc_identifiers)
+    doc_ids_set = {doc_id for doc_id, _ in doc_identifiers}
 
     chunk_requests: list[DocumentSectionRequest] = [
         DocumentSectionRequest(document_id=doc_id) for doc_id in doc_ids_set

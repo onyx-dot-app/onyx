@@ -157,7 +157,9 @@ class BuildStreamingState:
             "content": {"type": "text", "text": full_text},
             "sessionUpdate": "agent_message",
         }
-        chunk_routing_meta = routing_meta or self._last_chunk_routing_meta
+        chunk_routing_meta = dict(self._last_chunk_routing_meta or {})
+        if routing_meta:
+            chunk_routing_meta.update(routing_meta)
         if chunk_routing_meta:
             result["_meta"] = dict(chunk_routing_meta)
         self.message_chunks.clear()
@@ -183,7 +185,9 @@ class BuildStreamingState:
             "content": {"type": "text", "text": full_text},
             "sessionUpdate": "agent_thought",
         }
-        chunk_routing_meta = routing_meta or self._last_chunk_routing_meta
+        chunk_routing_meta = dict(self._last_chunk_routing_meta or {})
+        if routing_meta:
+            chunk_routing_meta.update(routing_meta)
         if chunk_routing_meta:
             result["_meta"] = dict(chunk_routing_meta)
         self.thought_chunks.clear()
@@ -198,7 +202,7 @@ class BuildStreamingState:
 
         We finalize when the packet type changes from message/thought chunks
         to something else (or to a different chunk type), and when routing
-        changes between parent and subagent chunks.
+        changes between parts or parent and subagent chunks.
         """
         if self._last_chunk_type is None:
             return False
@@ -233,10 +237,10 @@ def _extract_text_from_content(content: Any) -> str:
     if content is None:
         return ""
     if hasattr(content, "type") and content.type == "text":
-        return getattr(content, "text", "") or ""
+        return getattr(content, "text", "") or ""  # ods: ignore[getattr]
     if isinstance(content, list):
         texts = [
-            getattr(block, "text", "") or ""
+            getattr(block, "text", "") or ""  # ods: ignore[getattr]
             for block in content
             if hasattr(block, "type") and block.type == "text"
         ]
@@ -319,10 +323,15 @@ def merge_events_with_announces(
         )
         try:
             for evt in event_iter:
+                if stop.is_set():
+                    break
                 output.put(evt)
         except Exception as e:
             output.put(e)
         finally:
+            # Close on this thread: it owns the generator, and close() runs the
+            # subscription teardown (bus unsubscribe, client close).
+            event_iter.close()
             output.put(done_sentinel)
 
     def drive_announces() -> None:
@@ -437,13 +446,16 @@ def _save_pending_chunks(
 
 
 def _routing_meta_from_event(sandbox_event: Any) -> dict[str, Any] | None:
-    field_meta = getattr(sandbox_event, "field_meta", None)
+    field_meta = getattr(sandbox_event, "field_meta", None)  # ods: ignore[getattr]
     if not isinstance(field_meta, dict):
         return None
 
     routing_meta: dict[str, Any] = {}
     session_id = field_meta.get("sessionId")
     parent_session_id = field_meta.get("parentSessionId")
+    part_id = field_meta.get("partId")
+    if isinstance(part_id, str) and part_id:
+        routing_meta["partId"] = part_id
     if isinstance(session_id, str) and session_id:
         routing_meta["sessionId"] = session_id
     if isinstance(parent_session_id, str) and parent_session_id:
@@ -669,7 +681,9 @@ def persist_sandbox_event(
 
     # Flush any pending chunks if the event type changed.
     event_type = _get_event_type(sandbox_event)
-    event_routing_meta = _routing_meta_from_event(sandbox_event) or routing_meta
+    merged_routing_meta = dict(routing_meta or {})
+    merged_routing_meta.update(_routing_meta_from_event(sandbox_event) or {})
+    event_routing_meta = merged_routing_meta or None
     if state.should_finalize_chunks(event_type, event_routing_meta):
         _save_pending_chunks(db_session, session_id, state)
 

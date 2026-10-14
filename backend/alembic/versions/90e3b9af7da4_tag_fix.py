@@ -14,14 +14,44 @@ from typing import cast
 from typing import Generator
 
 from alembic import op
+import httpx
 import sqlalchemy as sa
 
-from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.db.search_settings import SearchSettings
 from shared_configs.configs import MULTI_TENANT
-from onyx.document_index.vespa.shared_utils.utils import get_vespa_http_client
 
 logger = logging.getLogger("alembic.runtime.migration")
+
+# Onyx no longer uses Vespa. These helpers were inlined from the removed Vespa
+# document index module so this migration stays importable.
+_VESPA_APP_CONTAINER_URL = os.environ.get("VESPA_CLOUD_URL") or (
+    f"http://{os.environ.get('VESPA_HOST') or 'localhost'}"
+    f":{os.environ.get('VESPA_PORT') or '8081'}"
+)
+DOCUMENT_ID_ENDPOINT = (
+    f"{_VESPA_APP_CONTAINER_URL}/document/v1/default/{{index_name}}/docid"
+)
+
+
+# Managed Vespa (Vespa Cloud) used mutual TLS. Self-hosted Vespa served a
+# self-signed certificate.
+_MANAGED_VESPA = os.environ.get("MANAGED_VESPA", "").lower() == "true"
+_VESPA_CLOUD_CERT_PATH = os.environ.get("VESPA_CLOUD_CERT_PATH")
+_VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
+_VESPA_REQUEST_TIMEOUT = int(os.environ.get("VESPA_REQUEST_TIMEOUT") or "15")
+
+
+def get_vespa_http_client() -> httpx.Client:
+    return httpx.Client(
+        cert=(
+            cast(tuple[str, str], (_VESPA_CLOUD_CERT_PATH, _VESPA_CLOUD_KEY_PATH))
+            if _MANAGED_VESPA
+            else None
+        ),
+        verify=_MANAGED_VESPA,
+        timeout=_VESPA_REQUEST_TIMEOUT,
+        http2=True,
+    )
 
 
 # revision identifiers, used by Alembic.

@@ -1,8 +1,9 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -10,7 +11,7 @@ import { Button, Card, Tabs, Text } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { SvgArrowLeft, SvgPlus, SvgSettings } from "@opal/icons";
-import { MCPServer, MCPServersResponse } from "@/lib/tools/interfaces";
+import { MCPServer, MCPServersResponse } from "@/lib/mcp/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,
@@ -31,6 +32,7 @@ import { compareByName } from "@/lib/skills/picker";
 import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/interfaces";
 import {
   externalAppToIntegration,
+  type IntegrationLabels,
   mcpServerToIntegration,
 } from "@/views/admin/ExternalAppsPage/integrations";
 import IntegrationCard from "@/views/admin/ExternalAppsPage/IntegrationCard";
@@ -42,54 +44,43 @@ interface ModalState {
 
 // Apps and MCP servers are configured and governed differently, so each kind
 // gets its own tab — mirroring the member-facing Apps page.
-const KIND_COPY: Record<
-  ConnectableKind,
-  { label: string; blurb: string; emptyTitle: string; empty: string }
-> = {
-  app: {
-    label: "Apps",
-    blurb:
-      "Configured once for the whole organization. Edit an app to set shared credentials, action policies, and associated skills.",
-    emptyTitle: "No apps yet",
-    empty: "Add an app to make it available to everyone in your organization.",
-  },
-  mcp: {
-    label: "MCP servers",
-    blurb:
-      "Enable a server to let members with access to it use its tools in Craft. Edit it to set each tool's approval policy. Server connections and access are managed in Actions.",
-    emptyTitle: "No MCP servers yet",
-    empty:
-      "Connect a server in Actions, then enable it here for your organization.",
-  },
-};
+interface KindCopy {
+  label: string;
+  labelWithCount: (count: number) => string;
+  blurb: string;
+  emptyTitle: string;
+  empty: string;
+}
 
 // Admin external-apps management; members connect their own accounts on the
 // Apps page. One list governs everything granted to the Craft agent — external
 // apps and MCP servers — and the "Add app" catalog is the single entry point
 // for granting more.
 export default function ExternalAppsPage() {
+  const t = useTranslations("admin.externalApps");
+  const adminRouteTitle = useAdminRouteTitle();
   const [catalogOpen, setCatalogOpen] = useState(false);
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={ADMIN_ROUTES.CRAFT_APPS.icon}
-        title={ADMIN_ROUTES.CRAFT_APPS.title}
-        description="Set up the apps your organization's Craft agent can use. Each member connects their own account on Craft's Apps page."
-        rightChildren={
-          <div className="flex items-center gap-2">
+        title={adminRouteTitle(ADMIN_ROUTES.CRAFT_APPS)}
+        description={t("page.description")}
+        actions={[
+          <div key="primary" className="flex items-center gap-2">
             <Button
               href="/craft/v1/apps"
               prominence="secondary"
               icon={SvgArrowLeft}
             >
-              Back to Craft
+              {t("page.backToCraftButton.label")}
             </Button>
             <Button icon={SvgPlus} onClick={() => setCatalogOpen(true)}>
-              Add app
+              {t("page.addAppButton.label")}
             </Button>
-          </div>
-        }
+          </div>,
+        ]}
       />
       <SettingsLayouts.Body>
         <AppsAdminContent
@@ -110,6 +101,7 @@ function AppsAdminContent({
   catalogOpen,
   onCatalogOpenChange,
 }: AppsAdminContentProps) {
+  const t = useTranslations("admin.externalApps");
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: descriptors } = useSWR<BuiltInExternalAppDescriptor[]>(
@@ -181,9 +173,26 @@ function AppsAdminContent({
     setModalState(null);
     if (deepLinkedAppId) {
       setDismissedDeepLink(deepLinkedAppId);
-      router.replace("/admin/craft/apps" as Route);
+      router.replace("/admin/craft/apps");
     }
   }
+
+  const integrationLabels = useMemo<IntegrationLabels>(
+    () => ({
+      providedByOnyx: t("facts.providedByOnyx"),
+      noCredentials: t("facts.noCredentials"),
+      orgCredentialsSet: t("facts.orgCredentialsSet"),
+      perUserCredentials: t("facts.perUserCredentials"),
+      noCustomSkills: t("facts.noCustomSkills"),
+      invalidSkill: t("warnings.invalidSkill"),
+      providerUnavailable: t("warnings.providerUnavailable"),
+      upstreamPatternCount: (count) => t("facts.upstreamPatterns", { count }),
+      actionCount: (count) => t("facts.actions", { count }),
+      customSkillCount: (count) => t("facts.customSkills", { count }),
+      toolCount: (count) => t("facts.tools", { count }),
+    }),
+    [t]
+  );
 
   // Both kinds govern through the same row; only where the data comes from —
   // and which edit dialog opens — differs.
@@ -191,30 +200,63 @@ function AppsAdminContent({
     () => ({
       app: (apps ?? [])
         .map((app) =>
-          externalAppToIntegration(app, descriptorByAppType.get(app.app_type), {
-            onEdit: (descriptor) =>
-              setModalState({ descriptor, existingApp: app }),
-            onEditCustom: (customApp) =>
-              setCustomModal({ existingApp: customApp }),
-            onChange: async () => {
-              await mutateApps();
+          externalAppToIntegration(
+            app,
+            descriptorByAppType.get(app.app_type),
+            {
+              onEdit: (descriptor) =>
+                setModalState({ descriptor, existingApp: app }),
+              onEditCustom: (customApp) =>
+                setCustomModal({ existingApp: customApp }),
+              onChange: async () => {
+                await mutateApps();
+              },
             },
-          })
+            integrationLabels
+          )
         )
         .sort(compareByName),
       mcp: (mcpData?.mcp_servers ?? [])
         .map((server) =>
-          mcpServerToIntegration(server, {
-            onEdit: () => setEditServer(server),
-            onChange: async () => {
-              await mutateMcp();
+          mcpServerToIntegration(
+            server,
+            {
+              onEdit: () => setEditServer(server),
+              onChange: async () => {
+                await mutateMcp();
+              },
             },
-          })
+            integrationLabels
+          )
         )
         .sort(compareByName),
     }),
-    [apps, mcpData, descriptorByAppType, mutateApps, mutateMcp]
+    [
+      apps,
+      mcpData,
+      descriptorByAppType,
+      mutateApps,
+      mutateMcp,
+      integrationLabels,
+    ]
   );
+
+  const kindCopy: Record<ConnectableKind, KindCopy> = {
+    app: {
+      label: t("apps.tab.label"),
+      labelWithCount: (count) => t("apps.tab.labelWithCount", { count }),
+      blurb: t("apps.panel.blurb"),
+      emptyTitle: t("apps.empty.title"),
+      empty: t("apps.empty.description"),
+    },
+    mcp: {
+      label: t("mcpServers.tab.label"),
+      labelWithCount: (count) => t("mcpServers.tab.labelWithCount", { count }),
+      blurb: t("mcpServers.panel.blurb"),
+      emptyTitle: t("mcpServers.empty.title"),
+      empty: t("mcpServers.empty.description"),
+    },
+  };
 
   // Per-kind pieces the shared panel can't own: data readiness (the app
   // fetches gate the whole page; MCP resolves on its own) and actions.
@@ -230,7 +272,7 @@ function AppsAdminContent({
       ready: true,
       emptyAction: (
         <Button icon={SvgPlus} onClick={() => onCatalogOpenChange(true)}>
-          Add app
+          {t("apps.empty.addButton.label")}
         </Button>
       ),
     },
@@ -239,15 +281,15 @@ function AppsAdminContent({
       blurbAction: (
         <Button
           prominence="tertiary"
-          href="/admin/actions/mcp"
+          href={ADMIN_ROUTES.MCP_ACTIONS.path}
           icon={SvgSettings}
         >
-          Manage in Actions
+          {t("mcpServers.manageInActionsButton.label")}
         </Button>
       ),
       emptyAction: (
-        <Button href="/admin/actions/mcp" icon={SvgSettings}>
-          Open Actions
+        <Button href={ADMIN_ROUTES.MCP_ACTIONS.path} icon={SvgSettings}>
+          {t("mcpServers.empty.openActionsButton.label")}
         </Button>
       ),
     },
@@ -268,8 +310,8 @@ function AppsAdminContent({
             <Tabs.Trigger key={kind} value={kind}>
               {/* No count until the kind's data resolves — "· 0" would lie. */}
               {panels[kind].ready
-                ? `${KIND_COPY[kind].label} · ${byKind[kind].length}`
-                : KIND_COPY[kind].label}
+                ? kindCopy[kind].labelWithCount(byKind[kind].length)
+                : kindCopy[kind].label}
             </Tabs.Trigger>
           ))}
         </Tabs.List>
@@ -277,7 +319,7 @@ function AppsAdminContent({
           <Tabs.Content key={kind} value={kind}>
             {panels[kind].ready ? (
               <IntegrationPanel
-                kind={kind}
+                copy={kindCopy[kind]}
                 integrations={byKind[kind]}
                 blurbAction={panels[kind].blurbAction}
                 emptyAction={panels[kind].emptyAction}
@@ -343,15 +385,16 @@ function AppsAdminContent({
 }
 
 function LoadingCard() {
+  const t = useTranslations("admin.externalApps");
   return (
-    <Card background="none" border="dashed" rounding="lg">
-      <Text font="main-content-body">Loading…</Text>
+    <Card color="transparent" border="dashed" rounding={4}>
+      <Text font="main-content-body">{t("loading.label")}</Text>
     </Card>
   );
 }
 
 interface IntegrationPanelProps {
-  kind: ConnectableKind;
+  copy: KindCopy;
   integrations: ConfiguredIntegration[];
   /** Kind-appropriate affordance beside the blurb (e.g. MCP's Actions link). */
   blurbAction?: React.ReactNode;
@@ -360,13 +403,11 @@ interface IntegrationPanelProps {
 }
 
 function IntegrationPanel({
-  kind,
+  copy,
   integrations,
   blurbAction,
   emptyAction,
 }: IntegrationPanelProps) {
-  const copy = KIND_COPY[kind];
-
   if (integrations.length === 0) {
     return (
       <div className="flex flex-col items-center gap-4 pt-2">

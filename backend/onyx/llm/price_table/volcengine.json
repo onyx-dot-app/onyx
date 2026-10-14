@@ -1,0 +1,649 @@
+{
+  "aliases": {},
+  "models": {
+    "deepseek-v4-flash-ga-260731": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.01484,
+        "input": 0.4453,
+        "output": 1.3359
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4 Flash 0731",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-07-31",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "deepseek-v4-pro-ga-260813": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.04453,
+        "input": 1.3359,
+        "output": 4.00771
+      },
+      "family": "deepseek-thinking",
+      "limit": {
+        "context": 1000000,
+        "output": 384000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "DeepSeek V4 Pro 0813",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-12",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-1-6-251015": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.02375,
+        "input": 0.11875,
+        "output": 1.18747,
+        "tiers": [
+          {
+            "cache_read": 0.02375,
+            "input": 0.17812,
+            "output": 2.37494,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.02375,
+            "input": 0.35624,
+            "output": 3.56241,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 1.6",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-10-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-1-6-flash-250828": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.00445,
+        "input": 0.02227,
+        "output": 0.22265,
+        "tiers": [
+          {
+            "cache_read": 0.00445,
+            "input": 0.04453,
+            "output": 0.4453,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.00445,
+            "input": 0.08906,
+            "output": 0.8906,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 1.6 Flash",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-08-28",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-1-6-vision-250815": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.02375,
+        "input": 0.11875,
+        "output": 1.18747,
+        "tiers": [
+          {
+            "cache_read": 0.02375,
+            "input": 0.17812,
+            "output": 2.37494,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.02375,
+            "input": 0.35624,
+            "output": 3.56241,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 32000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 1.6 Vision",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-08-15",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-1-8-251228": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.02375,
+        "input": 0.11875,
+        "output": 1.18747,
+        "tiers": [
+          {
+            "cache_read": 0.02375,
+            "input": 0.17812,
+            "output": 2.37494,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.02375,
+            "input": 0.35624,
+            "output": 3.56241,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 64000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 1.8",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2025-12-28",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-2-0-code-preview-260215": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.095,
+        "input": 0.47499,
+        "output": 2.37494,
+        "tiers": [
+          {
+            "cache_read": 0.1425,
+            "input": 0.71248,
+            "output": 3.56241,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.28499,
+            "input": 1.42496,
+            "output": 7.12482,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 262144,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 2.0 Code",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-2-0-lite-260428": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.01781,
+        "input": 0.08906,
+        "output": 0.53436,
+        "tiers": [
+          {
+            "cache_read": 0.02672,
+            "input": 0.13359,
+            "output": 0.80154,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.05344,
+            "input": 0.26718,
+            "output": 1.60308,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 2.0 Lite",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-2-0-mini-260428": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.00594,
+        "input": 0.02969,
+        "output": 0.29687,
+        "tiers": [
+          {
+            "cache_read": 0.01187,
+            "input": 0.05937,
+            "output": 0.59374,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.02375,
+            "input": 0.11875,
+            "output": 1.18747,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 2.0 Mini",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-2-0-pro-260215": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.095,
+        "input": 0.47499,
+        "output": 2.37494,
+        "tiers": [
+          {
+            "cache_read": 0.1425,
+            "input": 0.71248,
+            "output": 3.56241,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          },
+          {
+            "cache_read": 0.28499,
+            "input": 1.42496,
+            "output": 7.12482,
+            "tier": {
+              "size": 128000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 2.0 Pro",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-02-14",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-2-1-pro-260628": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.17812,
+        "input": 0.8906,
+        "output": 4.45301
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 2.1 Pro",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-2-1-turbo-260628": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.08906,
+        "input": 0.4453,
+        "output": 2.22651
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed 2.1 Turbo",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-character-260628": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.02375,
+        "input": 0.11875,
+        "output": 0.29687,
+        "tiers": [
+          {
+            "cache_read": 0.02375,
+            "input": 0.17812,
+            "output": 0.8906,
+            "tier": {
+              "size": 32000,
+              "type": "context"
+            }
+          }
+        ]
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed Character",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "doubao-seed-evolving": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.17812,
+        "input": 0.8906,
+        "output": 4.45301
+      },
+      "family": "seed",
+      "limit": {
+        "context": 256000,
+        "output": 256000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Seed Evolving",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-06-23",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5-2-260617": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.29687,
+        "input": 1.18747,
+        "output": 4.15615
+      },
+      "family": "glm",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.2",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-06-13",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
+    "glm-5-3-flash-260828": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.03414,
+        "input": 0.11875,
+        "output": 0.41563
+      },
+      "family": "glm-flash",
+      "limit": {
+        "context": 1000000,
+        "output": 131072
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "video",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "GLM-5.3-Flash",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-08-26",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    }
+  },
+  "models_dev_providers": [
+    "volcengine"
+  ]
+}

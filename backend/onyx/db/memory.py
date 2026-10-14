@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.login_claims_capture import get_idp_profile
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
+from onyx.db.enums import SupportedLanguage
 from onyx.db.models import Memory, User
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 MAX_MEMORIES_PER_USER = 10
 
@@ -23,15 +27,8 @@ class UserInfo(BaseModel):
     # `{{user.<key>}}` placeholder key (e.g. department/job_title/city/email),
     # for author-controlled placeholder substitution in agent prompts.
     placeholder_values: dict[str, str] = Field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return {
-            "name": self.name,
-            "role": self.role,
-            "email": self.email,
-            "organization_profile": self.organization_profile,
-            "placeholder_values": self.placeholder_values,
-        }
+    # UI language. Drives the reply-language hint in the system prompt.
+    language: SupportedLanguage | None = None
 
 
 class UserMemoryContext(BaseModel):
@@ -68,6 +65,18 @@ class UserMemoryContext(BaseModel):
         return result
 
 
+def supported_language_or_none(code: str | None) -> SupportedLanguage | None:
+    """The column is written through the enum, so any other value is stale or
+    corrupt data. It is logged and dropped rather than allowed to break chat."""
+    if not code:
+        return None
+    try:
+        return SupportedLanguage(code)
+    except ValueError:
+        logger.warning("Unknown user language %r, omitting the language hint", code)
+        return None
+
+
 def get_memories(user: User, db_session: Session) -> UserMemoryContext:
     # `{{user.<key>}}` placeholder values: IdP directory profile plus basic
     # identity. Identity keys use setdefault so a directory field never gets
@@ -87,6 +96,7 @@ def get_memories(user: User, db_session: Session) -> UserMemoryContext:
         email=user.email,
         organization_profile=profile_views.fields,
         placeholder_values=placeholder_values,
+        language=supported_language_or_none(user.language),
     )
 
     user_preferences = None

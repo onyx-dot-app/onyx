@@ -1,5 +1,4 @@
-"""Universal per-user usage recorder — buffers priced generation spans and
-drains them to the per-user usage rollup off the LLM hot path."""
+"""Buffers priced generation spans and drains them to user or system rollups."""
 
 from __future__ import annotations
 
@@ -13,10 +12,16 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import IncognitoRecordMode
+from onyx.db.enums import IncognitoRecordMode, SystemUsageAttribution
+from onyx.db.llm_usage import LLMUsageRecord
+from onyx.db.system_usage import record_system_usage
 from onyx.db.user_usage import USER_USAGE_BUCKET_SECONDS, record_user_usage
 from onyx.llm.cost import compute_cost_cents
-from onyx.tracing.flows import IMAGE_FLOWS
+from onyx.tracing.flows import (
+    IMAGE_FLOWS,
+    SYSTEM_TEXT_GENERATION_FLOWS,
+    LLMFlow,
+)
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
@@ -49,8 +54,10 @@ class _UsageRecord:
     request contextvars are still valid (the drain thread has none)."""
 
     tenant_id: str
-    user_id: str
+    user_id: str | None
+    system_attribution: SystemUsageAttribution | None
     model: str
+    routed_model: str | None
     flow: str
     provider: str | None
     incognito: bool
@@ -60,6 +67,10 @@ class _UsageRecord:
     cache_creation_tokens: int
     image_count: int
     window_start: datetime
+    # Per-call token tuples (input, output, cache_read, cache_write, images)
+    # kept through aggregation: tiered prices must apply per call — a summed
+    # prompt could clear a long-context threshold no single call crossed.
+    cost_parts: tuple[tuple[int, int, int, int, int], ...] = ()
 
 
 def _usage_field(usage: dict[str, Any], *names: str) -> int:
@@ -70,6 +81,16 @@ def _usage_field(usage: dict[str, Any], *names: str) -> int:
         if value is not None:
             return int(value)
     return 0
+
+
+def _system_attribution(flow: str) -> SystemUsageAttribution:
+    try:
+        llm_flow = LLMFlow(flow)
+    except ValueError:
+        return SystemUsageAttribution.UNATTRIBUTED
+    if llm_flow in SYSTEM_TEXT_GENERATION_FLOWS:
+        return SystemUsageAttribution.ATTRIBUTED
+    return SystemUsageAttribution.UNATTRIBUTED
 
 
 class UserUsageTracingProcessor(TracingProcessor):
@@ -118,10 +139,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             return None
 
         user_id = get_current_user_id()
-        if user_id is None:
-            # No user id → skip (undercount, never wrong-user). The
-            # optional_user dependency sets this for any authenticated request,
-            # so it is absent only for work started outside one (e.g. Celery).
+        if user_id is None and not data.usage:
             return None
 
         model = data.model
@@ -147,7 +165,9 @@ class UserUsageTracingProcessor(TracingProcessor):
         return _UsageRecord(
             tenant_id=get_current_tenant_id(),
             user_id=user_id,
+            system_attribution=(_system_attribution(flow) if user_id is None else None),
             model=model,
+            routed_model=data.routed_model,
             flow=flow,
             provider=provider,
             incognito=incognito_mode is not None,
@@ -209,21 +229,41 @@ class UserUsageTracingProcessor(TracingProcessor):
     @staticmethod
     def _aggregate_batch(batch: list[_UsageRecord]) -> list[_UsageRecord]:
         aggregated: dict[
-            tuple[str, str, str, str, str | None, bool, datetime], _UsageRecord
+            tuple[
+                str,
+                str | None,
+                SystemUsageAttribution | None,
+                str,
+                str | None,
+                str,
+                str | None,
+                bool,
+                datetime,
+            ],
+            _UsageRecord,
         ] = {}
         for record in batch:
             key = (
                 record.tenant_id,
                 record.user_id,
+                record.system_attribution,
                 record.model,
+                record.routed_model,
                 record.flow,
                 record.provider,
                 record.incognito,
                 record.window_start,
             )
+            part = (
+                record.input_tokens,
+                record.output_tokens,
+                record.cache_read_tokens,
+                record.cache_creation_tokens,
+                record.image_count,
+            )
             current = aggregated.get(key)
             if current is None:
-                aggregated[key] = record
+                aggregated[key] = replace(record, cost_parts=(part,))
                 continue
             aggregated[key] = replace(
                 current,
@@ -234,6 +274,7 @@ class UserUsageTracingProcessor(TracingProcessor):
                     current.cache_creation_tokens + record.cache_creation_tokens
                 ),
                 image_count=current.image_count + record.image_count,
+                cost_parts=current.cost_parts + (part,),
             )
         return list(aggregated.values())
 
@@ -249,20 +290,32 @@ class UserUsageTracingProcessor(TracingProcessor):
 
     @staticmethod
     def _write_record(db_session: Session, record: _UsageRecord) -> None:
-        input_cost, output_cost = compute_cost_cents(
-            model=record.model,
-            provider=record.provider,
-            prompt_tokens=record.input_tokens,
-            completion_tokens=record.output_tokens,
-            cache_read_tokens=record.cache_read_tokens,
-            cache_creation_tokens=record.cache_creation_tokens,
-            flow=record.flow,
-            image_count=record.image_count,
-            db_session=db_session,
+        parts = record.cost_parts or (
+            (
+                record.input_tokens,
+                record.output_tokens,
+                record.cache_read_tokens,
+                record.cache_creation_tokens,
+                record.image_count,
+            ),
         )
-        record_user_usage(
-            db_session,
-            user_id=record.user_id,
+        input_cost = output_cost = 0.0
+        for p_in, p_out, p_read, p_write, p_images in parts:
+            part_in, part_out = compute_cost_cents(
+                model=record.model,
+                served_model=record.routed_model,
+                provider=record.provider,
+                prompt_tokens=p_in,
+                completion_tokens=p_out,
+                cache_read_tokens=p_read,
+                cache_creation_tokens=p_write,
+                flow=record.flow,
+                image_count=p_images,
+                db_session=db_session,
+            )
+            input_cost += part_in
+            output_cost += part_out
+        usage = LLMUsageRecord(
             model=record.model,
             flow=record.flow,
             provider=record.provider,
@@ -272,7 +325,22 @@ class UserUsageTracingProcessor(TracingProcessor):
             cache_creation_tokens=record.cache_creation_tokens,
             cost_cents=input_cost + output_cost,
             window_start=record.window_start,
-            incognito=record.incognito,
+        )
+        if record.user_id is not None:
+            record_user_usage(
+                db_session=db_session,
+                user_id=record.user_id,
+                usage=usage,
+                incognito=record.incognito,
+            )
+            return
+
+        if record.system_attribution is None:
+            raise ValueError("Non-user usage requires system attribution")
+        record_system_usage(
+            db_session=db_session,
+            attribution=record.system_attribution,
+            usage=usage,
         )
 
     # --- TracingProcessor interface (non-generation events are no-ops) ---

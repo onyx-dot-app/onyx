@@ -96,7 +96,7 @@
   @apply relative w-full;
 }
 .opal-modal-header-close {
-  @apply absolute top-0 right-0;
+  @apply absolute top-0 end-0;
 }
 .opal-modal-close-focus {
   @apply outline-hidden;

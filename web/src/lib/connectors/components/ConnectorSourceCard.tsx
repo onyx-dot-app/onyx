@@ -1,0 +1,91 @@
+"use client";
+
+import { useMemo } from "react";
+import { type SourceMetadata } from "@/lib/connectors/types/source";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Button, SelectCard } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
+import { SvgPlusCircle } from "@opal/icons";
+import type { IconFunctionComponent, IconProps } from "@opal/types";
+import { cn } from "@opal/utils";
+
+export interface ConnectorSourceCardProps {
+  sourceMetadata: SourceMetadata;
+  /** Translated one-line summary of what the source indexes, shown under its name. */
+  description: string;
+  /** Where the card and its add button lead: the setup wizard, or an
+   * existing federated connector's edit page. */
+  navigationUrl: Route;
+}
+
+/**
+ * One source in the connector catalog: the card counterpart to the
+ * "Add Provider" cards on the Language Models page. The whole card is the
+ * target; the add button repeats it for discoverability.
+ */
+export default function ConnectorSourceCard({
+  sourceMetadata,
+  description,
+  navigationUrl,
+}: ConnectorSourceCardProps) {
+  const t = useTranslations("admin.addConnector");
+  const router = useRouter();
+  const navigate = () => router.push(navigationUrl);
+  const SourceIcon = sourceMetadata.icon;
+  // The catalog shows its logos a step larger than `main-ui` content does:
+  // 20px instead of 16px. The size is fixed here, so the 16px that Content
+  // asks for is ignored; the negative margin keeps the 16px footprint, so
+  // the title does not move.
+  const icon: IconFunctionComponent = useMemo(() => {
+    function CatalogSourceIcon({ className }: IconProps) {
+      return <SourceIcon size={20} className={cn(className, "-m-0.5")} />;
+    }
+    return CatalogSourceIcon;
+  }, [SourceIcon]);
+
+  return (
+    <SelectCard
+      state="empty"
+      padding={2}
+      rounding={4}
+      // Lets the catalog find the first card to focus from the search field.
+      data-source-card=""
+      // The add button inside is labelled "Connect <name>", so an exact
+      // match on the bare name reaches the card alone.
+      aria-label={sourceMetadata.displayName}
+      onClick={navigate}
+    >
+      <ContentAction
+        icon={icon}
+        title={sourceMetadata.displayName}
+        description={description}
+        // One line keeps the cards even; a cut title or description shows in
+        // a tooltip.
+        titleMaxLines={1}
+        descriptionMaxLines={1}
+        sizePreset="main-ui"
+        variant="section"
+        padding={2}
+        gapping={0}
+        rightChildren={
+          <Button
+            icon={SvgPlusCircle}
+            prominence="tertiary"
+            // The card is the tab stop; the button repeats its action for
+            // pointer users only.
+            tabIndex={-1}
+            aria-label={t("sourceCard.connectButton.ariaLabel", {
+              source: sourceMetadata.displayName,
+            })}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate();
+            }}
+          />
+        }
+      />
+    </SelectCard>
+  );
+}

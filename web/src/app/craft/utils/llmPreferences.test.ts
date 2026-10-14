@@ -118,4 +118,19 @@ describe("getPreferredLlmSelection", () => {
     ]);
     expect(result?.modelName).toBe("claude-opus-5");
   });
+
+  it("tries configured defaults in order, falling through unavailable ones", () => {
+    const providers = [
+      provider(
+        "anthropic",
+        [model("claude-opus-5", { craft: true }), model("claude-haiku-4-5")],
+        3
+      ),
+    ];
+    const result = getPreferredLlmSelection(undefined, providers, [
+      { provider_id: 99, model_name: "does-not-exist" },
+      { provider_id: 3, model_name: "claude-haiku-4-5" },
+    ]);
+    expect(result?.modelName).toBe("claude-haiku-4-5");
+  });
 });

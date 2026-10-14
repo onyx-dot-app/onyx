@@ -11,13 +11,14 @@ A zero-width collapsible wrapper that expands when its ancestor `.interactive` e
 
 ## Props
 
-| Prop | Type | Description |
-|------|------|-------------|
+| Prop       | Type        | Description                |
+| ---------- | ----------- | -------------------------- |
 | `children` | `ReactNode` | Content that folds/unfolds |
 
 ## CSS triggers
 
 The foldable expands when any of these conditions are met on an ancestor `.interactive`:
+
 - `:hover` pseudo-class
 - `data-interaction="hover"`
 - `data-interaction="active"`

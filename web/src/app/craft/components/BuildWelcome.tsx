@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { motion, useReducedMotion } from "motion/react";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
 import Text from "@/refresh-components/texts/Text";
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 import CraftInputBar, {
   CraftInputBarHandle,
 } from "@/app/craft/components/CraftInputBar";
@@ -37,6 +39,8 @@ export default function BuildWelcome({
   isRunning,
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
+  const t = useTranslations("craft.welcome");
+  const reduceMotion: boolean | null = useReducedMotion();
   const inputBarRef = useRef<CraftInputBarHandle>(null);
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
@@ -58,12 +62,12 @@ export default function BuildWelcome({
     // centers vertically at the same position: wordmark pinned above it, the
     // supporting content below.
     <div
-      className="h-full grid px-4"
+      className="h-full min-w-0 grid grid-cols-1 px-4"
       style={{ gridTemplateRows: "1fr auto 1fr" }}
     >
       <div className="row-start-1 min-h-0 w-full flex flex-col items-center justify-end">
         <div className="w-full max-w-(--app-page-main-content-width)">
-          <div className="flex flex-row items-center justify-between gap-4 pb-6">
+          <div className="flex flex-row flex-wrap items-center justify-between gap-4 pb-6">
             {/* The wordmark's baseline sits ~79% down its box, so nudge it
                 down (~0.21 × size) to share craft's baseline. */}
             <button
@@ -71,7 +75,11 @@ export default function BuildWelcome({
               className="flex flex-row items-baseline gap-2 select-none"
               onClick={handleWordmarkClick}
             >
-              <Logo onyxBranded size={28} className="translate-y-[6px]" />
+              <FoldableLogo
+                onyxBranded
+                size={28}
+                className="translate-y-[6px]"
+              />
               <Text
                 text05
                 style={{
@@ -97,18 +105,22 @@ export default function BuildWelcome({
       </div>
 
       <div className="row-start-2 w-full flex flex-col items-center">
-        <div className="w-full max-w-(--app-page-main-content-width)">
+        <motion.div
+          layoutId="craft-composer"
+          transition={{ duration: reduceMotion ? 0 : 0.25, ease: "easeOut" }}
+          className="w-full max-w-(--app-page-main-content-width)"
+        >
           <CraftInputBar
             ref={inputBarRef}
             onSubmit={(message, files) =>
               onSubmit(message, files, selectedModel)
             }
             isRunning={isRunning}
-            placeholder="Analyze my data and create a dashboard..."
+            placeholder={t("input.placeholder")}
             sandboxInitializing={sandboxInitializing}
             disabled={!hasAnyProvider}
           />
-        </div>
+        </motion.div>
       </div>
 
       <div className="row-start-3 min-h-0 w-full flex flex-col items-center">

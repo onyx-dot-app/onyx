@@ -7,6 +7,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from onyx.db.enums import SandboxStatus
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
+)
 from onyx.server.gateway.models import GatewayModelDescriptor
 
 FileSet: TypeAlias = dict[str, bytes]
@@ -65,20 +68,6 @@ class SnapshotResult(BaseModel):
 
     storage_path: str
     size_bytes: int
-
-
-class FilesystemEntry(BaseModel):
-    """Represents a file or directory entry in the sandbox filesystem.
-
-    Used for directory listing operations. This is the canonical model used
-    by both sandbox managers and the API layer.
-    """
-
-    name: str
-    path: str
-    is_directory: bool
-    size: int | None = None  # File size in bytes (None for directories)
-    mime_type: str | None = None  # MIME type (None for directories)
 
 
 class DirectoryListing(BaseModel):

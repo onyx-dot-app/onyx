@@ -150,10 +150,10 @@ class _ServeMixin:
 
     def _init_serve_state(self) -> None:
         """Idempotent, thread-safe init for serve-transport state."""
-        if getattr(self, "_serve_state_initialized", False):
+        if getattr(self, "_serve_state_initialized", False):  # ods: ignore[getattr]
             return
         with _ServeMixin._serve_state_init_lock:
-            if getattr(self, "_serve_state_initialized", False):
+            if getattr(self, "_serve_state_initialized", False):  # ods: ignore[getattr]
                 return
             # opencode-serve scopes /event by ``?directory=``, so one bus per session dir.
             self._event_buses: dict[tuple[UUID, str], PodEventBus] = {}
@@ -657,33 +657,56 @@ class _ServeMixin:
         finally:
             client.close()
 
-    def abort_opencode_session(
-        self,
-        sandbox_id: UUID,
-        session_id: UUID,
-        opencode_session_id: str,
-    ) -> None:
-        """Best-effort abort of the in-flight opencode prompt. Lock-agnostic
-        by design: any API process may stop running work (abort is
-        idempotent); only *starting* work is serialized by the prompt slot."""
+    @contextlib.contextmanager
+    def prepare_opencode_abort(
+        self, sandbox_id: UUID, session_id: UUID, opencode_session_id: str
+    ) -> Generator[Callable[[], None] | None, None, None]:
+        """Prepare transport before a caller locks admission for the abort."""
         session_path = self._session_directory(session_id)
         try:
             client = self._build_serve_client(
-                sandbox_id,
-                session_path,
-                with_event_bus=False,
+                sandbox_id, session_path, with_event_bus=False
             )
-            try:
-                client.abort(opencode_session_id, directory=session_path)
-            finally:
-                client.close()
         except Exception:
             logger.warning(
-                "[SANDBOX-SERVE] abort failed for sandbox=%s session=%s",
+                "[SANDBOX-SERVE] abort preparation failed for sandbox=%s session=%s",
                 sandbox_id,
                 session_id,
                 exc_info=True,
             )
+            yield None
+            return
+
+        def abort() -> None:
+            try:
+                client.abort(opencode_session_id, directory=session_path)
+            except Exception:
+                logger.warning(
+                    "[SANDBOX-SERVE] abort failed for sandbox=%s session=%s",
+                    sandbox_id,
+                    session_id,
+                    exc_info=True,
+                )
+
+        try:
+            yield abort
+        finally:
+            try:
+                client.close()
+            except Exception:
+                logger.warning(
+                    "[SANDBOX-SERVE] abort client close failed", exc_info=True
+                )
+
+    def abort_opencode_session(
+        self, sandbox_id: UUID, session_id: UUID, opencode_session_id: str
+    ) -> None:
+        """Best-effort abort for callers that already own the prompt lifecycle."""
+        with self.prepare_opencode_abort(
+            sandbox_id, session_id, opencode_session_id
+        ) as abort:
+            if abort is not None:
+                abort()
 
     def delete_opencode_session(
         self,
@@ -810,7 +833,7 @@ class _ServeMixin:
         its session store per-directory, so the hydrate REST call needs it.
         """
         bus = self._get_or_create_event_bus(sandbox_id, directory)
-        state = _TurnState(session_id=opencode_session_id)
+        state = _TurnState(session_id=opencode_session_id, emit_part_snapshots=True)
         client = self._build_serve_client(sandbox_id, directory)
 
         def fetch_message(mid: str) -> dict[str, Any] | None:
@@ -878,7 +901,10 @@ class _ServeMixin:
                         isinstance(
                             sandbox_event, (AgentMessageChunk, AgentThoughtChunk)
                         )
-                        and getattr(sandbox_event.content, "type", None) == "text"
+                        and getattr(  # ods: ignore[getattr]
+                            sandbox_event.content, "type", None
+                        )
+                        == "text"
                     ):
                         pending_text_event = sandbox_event
                         pending_text_started_at = time.monotonic()
@@ -907,25 +933,34 @@ def _merge_text_chunk(
 ) -> SandboxEvent | None:
     if type(pending) is not type(incoming):
         return None
-    if not isinstance(pending, (AgentMessageChunk, AgentThoughtChunk)):
+    if not isinstance(
+        pending, (AgentMessageChunk, AgentThoughtChunk)
+    ) or not isinstance(incoming, (AgentMessageChunk, AgentThoughtChunk)):
+        return None
+
+    if pending.field_meta != incoming.field_meta:
+        return None
+    if pending.field_meta and "snapshotText" in pending.field_meta:
         return None
 
     pending_content = pending.content
     incoming_content = incoming.content
     if (
-        getattr(pending_content, "type", None) != "text"
-        or getattr(incoming_content, "type", None) != "text"
+        getattr(pending_content, "type", None) != "text"  # ods: ignore[getattr]
+        or getattr(incoming_content, "type", None) != "text"  # ods: ignore[getattr]
     ):
         return None
 
-    pending_text = getattr(pending_content, "text", None)
-    incoming_text = getattr(incoming_content, "text", None)
+    pending_text = getattr(pending_content, "text", None)  # ods: ignore[getattr]
+    incoming_text = getattr(incoming_content, "text", None)  # ods: ignore[getattr]
     if not isinstance(pending_text, str) or not isinstance(incoming_text, str):
         return None
 
-    if getattr(pending_content, "field_meta", None) != getattr(
+    if getattr(pending_content, "field_meta", None) != getattr(  # ods: ignore[getattr]
         incoming_content, "field_meta", None
-    ) or getattr(pending_content, "annotations", None) != getattr(
+    ) or getattr(  # ods: ignore[getattr]
+        pending_content, "annotations", None
+    ) != getattr(  # ods: ignore[getattr]
         incoming_content, "annotations", None
     ):
         return None

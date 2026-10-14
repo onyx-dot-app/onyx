@@ -14,8 +14,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FederatedConnectorSource
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     get_connector_credential_pair_from_id_for_user,
-    user_owns_groupless_cc_pair,
 )
 from onyx.db.document_set import (
     filter_document_set_ids_by_user_access,
@@ -25,7 +25,7 @@ from onyx.db.document_set import (
     update_document_set,
     user_owns_groupless_document_set,
 )
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, ConnectorManageRole
 from onyx.db.models import (
     DocumentSet,
     DocumentSet__UserGroup,
@@ -65,6 +65,15 @@ def _managed_group(db_session: Session, user: User) -> UserGroup:
     return group
 
 
+def _cc_pair_editable(db_session: Session, cc_pair_id: int, user: User) -> bool:
+    return (
+        get_connector_credential_pair_from_id_for_user(
+            cc_pair_id, db_session, user, CCPairAccessLevel.EDIT
+        )
+        is not None
+    )
+
+
 def test_connector_creator_keeps_groupless_pair(
     db_session: Session, manager: User
 ) -> None:
@@ -74,14 +83,17 @@ def test_connector_creator_keeps_groupless_pair(
     cc_pair.creator_id = manager.id
     db_session.add(
         UserGroup__ConnectorCredentialPair(
-            user_group_id=group.id, cc_pair_id=cc_pair.id, is_current=True
+            user_group_id=group.id,
+            cc_pair_id=cc_pair.id,
+            role=ConnectorManageRole.EDITOR,
+            is_current=True,
         )
     )
     db_session.commit()
 
     assert (
         get_connector_credential_pair_from_id_for_user(
-            cc_pair.id, db_session, manager, get_editable=True
+            cc_pair.id, db_session, manager, CCPairAccessLevel.EDIT
         )
         is not None
     )
@@ -94,15 +106,15 @@ def test_connector_creator_keeps_groupless_pair(
 
     assert (
         get_connector_credential_pair_from_id_for_user(
-            cc_pair.id, db_session, manager, get_editable=True
+            cc_pair.id, db_session, manager, CCPairAccessLevel.EDIT
         )
         is not None
     )
 
-    # the read path stays as-is; the detail route falls back to the editable fetch
+    # the read path stays as-is; the detail route falls back to the operate fetch
     assert (
         get_connector_credential_pair_from_id_for_user(
-            cc_pair.id, db_session, manager, get_editable=False
+            cc_pair.id, db_session, manager, CCPairAccessLevel.READ
         )
         is None
     ), "groupless pair leaked into the read path"
@@ -155,15 +167,19 @@ def test_delete_predicates_track_the_group_link(
     db_session.add(doc_set)
     db_session.commit()
 
-    assert user_owns_groupless_cc_pair(cc_pair, db_session, manager)
+    assert _cc_pair_editable(db_session, cc_pair.id, manager)
     assert user_owns_groupless_document_set(doc_set, manager)
-    assert not user_owns_groupless_cc_pair(cc_pair, db_session, other)
+    assert not _cc_pair_editable(db_session, cc_pair.id, other)
     assert not user_owns_groupless_document_set(doc_set, other)
 
-    # attaching a group makes both shared, so both fall back to admin-only
+    # attaching a group makes both shared, so the creator fallback stops for both;
+    # the pair stays editable only through the group's EDITOR row
     db_session.add(
         UserGroup__ConnectorCredentialPair(
-            user_group_id=group.id, cc_pair_id=cc_pair.id, is_current=True
+            user_group_id=group.id,
+            cc_pair_id=cc_pair.id,
+            role=ConnectorManageRole.EDITOR,
+            is_current=True,
         )
     )
     db_session.add(
@@ -172,7 +188,8 @@ def test_delete_predicates_track_the_group_link(
     db_session.commit()
     db_session.refresh(doc_set)
 
-    assert not user_owns_groupless_cc_pair(cc_pair, db_session, manager)
+    assert _cc_pair_editable(db_session, cc_pair.id, manager)
+    assert not _cc_pair_editable(db_session, cc_pair.id, other)
     assert not user_owns_groupless_document_set(doc_set, manager)
 
     # a stale junction row is not a share — the cc_pair predicate must ignore it
@@ -180,7 +197,8 @@ def test_delete_predicates_track_the_group_link(
         cc_pair_id=cc_pair.id
     ).update({"is_current": False})
     db_session.commit()
-    assert user_owns_groupless_cc_pair(cc_pair, db_session, manager)
+    assert _cc_pair_editable(db_session, cc_pair.id, manager)
+    assert not _cc_pair_editable(db_session, cc_pair.id, other)
 
 
 def test_connector_fallback_is_creator_only(db_session: Session, manager: User) -> None:
@@ -195,13 +213,13 @@ def test_connector_fallback_is_creator_only(db_session: Session, manager: User) 
     cc_pair.creator_id = manager.id
     db_session.commit()
 
-    for editable in (True, False):
+    for access_level in CCPairAccessLevel:
         assert (
             get_connector_credential_pair_from_id_for_user(
-                cc_pair.id, db_session, other, get_editable=editable
+                cc_pair.id, db_session, other, access_level
             )
             is None
-        ), f"leaked to a non-creator with get_editable={editable}"
+        ), f"leaked to a non-creator with {access_level=}"
 
 
 def test_document_set_creator_keeps_groupless_set(

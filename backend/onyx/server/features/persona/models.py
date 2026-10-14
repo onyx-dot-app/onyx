@@ -182,10 +182,13 @@ class PersonaUpsertRequest(BaseModel):
     display_priority: int | None = None
     # Accept string UUIDs from frontend
     user_file_ids: list[str] | None = None
-    # Hierarchy nodes (folders, spaces, channels) attached for scoped search
-    hierarchy_node_ids: list[int] = Field(default_factory=list)
-    # Individual documents attached for scoped search
-    document_ids: list[str] = Field(default_factory=list)
+    # Hierarchy nodes (folders, spaces, channels) attached for scoped search.
+    # None leaves the stored attachments alone; [] clears them. Without this a
+    # client updating any other field had to read both lists back and resend
+    # them, which reverts an attachment added in between.
+    hierarchy_node_ids: list[int] | None = None
+    # Individual documents attached for scoped search; same None semantics
+    document_ids: list[str] | None = None
 
     # prompt fields
     system_prompt: str

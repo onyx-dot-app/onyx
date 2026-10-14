@@ -103,7 +103,7 @@ test.describe("Anonymous chat access @exclusive", () => {
 
     // Regression: /api/settings used to 403 for the anonymous user, so the FE
     // silently fell back to defaults (disable_default_assistant=false) and the
-    // "Always Start with an Agent" admin setting never took effect. It must now
+    // "Disable Default Chat" admin setting never took effect. It must now
     // be readable as the anonymous user and reflect the admin's value.
     const settings = await page.request.get("/api/settings");
     expect(settings.ok()).toBe(true);

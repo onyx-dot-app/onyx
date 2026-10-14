@@ -69,5 +69,7 @@ def pytest_collection_modifyitems(
 @pytest.fixture(scope="session")
 def test_secrets(request: pytest.FixtureRequest) -> RedactedDict[TestSecret, str]:
     """Resolve only the secrets declared by collected tests, in one batch."""
-    needed: set[TestSecret] = getattr(request.config, _NEEDED_SECRETS_KEY, set())
+    needed: set[TestSecret] = getattr(  # ods: ignore[getattr]
+        request.config, _NEEDED_SECRETS_KEY, set()
+    )
     return RedactedDict(get_secrets(sorted(needed, key=lambda s: s.value)))

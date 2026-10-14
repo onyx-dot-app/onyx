@@ -1,11 +1,10 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import type { SizeVariants } from "@opal/types";
+/** A body row's height in rem: `2.75` is 44px, `2.25` is 36px. */
+type TableSize = 2.25 | 2.75;
 
-type TableSize = Extract<SizeVariants, "md" | "lg">;
-
-const TableSizeContext = createContext<TableSize>("lg");
+const TableSizeContext = createContext<TableSize>(2.75);
 
 interface TableSizeProviderProps {
   size: TableSize;

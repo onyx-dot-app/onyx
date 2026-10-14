@@ -1,5 +1,5 @@
 import json
-import mimetypes
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from onyx.db.chat import (
 )
 from onyx.db.models import ChatMessage, ToolCall
 from onyx.db.tools import create_tool_call_no_commit
+from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
 from onyx.natural_language_processing.utils import BaseTokenizer, get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
@@ -37,7 +38,7 @@ def _extract_referenced_file_descriptors(
                 gen_file.file_link.rsplit("/", 1)[-1] if gen_file.file_link else ""
             )
             if file_id and file_id in message_text:
-                mime_type, _ = mimetypes.guess_type(gen_file.filename)
+                mime_type = guess_mime_type(gen_file.filename)
                 descriptors.append(
                     FileDescriptor(
                         id=file_id,
@@ -177,6 +178,7 @@ def save_chat_turn(
     emitted_citations: set[int] | None = None,
     pre_answer_processing_time: float | None = None,
     persist_content: bool = True,
+    request_params: dict[str, Any] | None = None,
 ) -> None:
     """
     Save a chat turn by populating the assistant_message and creating related entities.
@@ -222,6 +224,8 @@ def save_chat_turn(
         all_search_docs = {}
         emitted_citations = set()
     assistant_message.is_clarification = is_clarification
+    # Attribution, not content, so incognito keeps it.
+    assistant_message.request_params = request_params
 
     # Use pre-answer processing time (captured when MESSAGE_START was emitted)
     if pre_answer_processing_time is not None:
@@ -343,9 +347,7 @@ def save_chat_turn(
     )
 
     # 7. Build citations mapping - use the mapping we already built in step 4
-    assistant_message.citations = (
-        citation_number_to_search_doc_id if citation_number_to_search_doc_id else None
-    )
+    assistant_message.citations = citation_number_to_search_doc_id or None
 
     # 8. Attach code interpreter generated files that the assistant actually
     # referenced in its response, so they are available via load_all_chat_files

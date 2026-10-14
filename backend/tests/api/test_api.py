@@ -1,4 +1,3 @@
-import os
 from collections.abc import Generator
 from typing import Any
 
@@ -15,9 +14,6 @@ logger = setup_logger()
 
 @pytest.fixture(scope="function")
 def client() -> Generator[TestClient, Any, None]:
-    # Set environment variables
-    os.environ["ENABLE_PAID_ENTERPRISE_EDITION_FEATURES"] = "True"
-
     # Initialize TestClient with the FastAPI app
     app: FastAPI = fetch_versioned_implementation(
         module="onyx.main", attribute="get_application"
@@ -152,7 +148,7 @@ def test_versions_endpoint(client: TestClient) -> None:
     # Verify migration has expected values
     assert migration["onyx"] == "airgapped-intfloat-nomic-migration"
     assert migration["relational_db"] == "postgres:15.2-alpine"
-    assert migration["index"] == "vespaengine/vespa:8.277.17"
+    assert migration["index"] == "opensearchproject/opensearch:3.6.0"
     assert migration["nginx"] == "nginx:1.25.5-alpine"
 
     # Verify versions are different between stable and dev

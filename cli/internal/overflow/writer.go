@@ -17,15 +17,15 @@ import (
 // writing to stdout after Limit bytes. When Limit == 0, it writes directly
 // to stdout. In Quiet mode, it buffers in memory and prints once at the end.
 type Writer struct {
+	buf        strings.Builder // used only in quiet mode
+	Out        io.Writer       // defaults to os.Stdout
+	ErrOut     io.Writer       // defaults to os.Stderr
+	tmpFile    *os.File        // used only in truncation mode (Limit > 0)
 	Limit      int
-	Quiet      bool
-	Out        io.Writer // defaults to os.Stdout
-	ErrOut     io.Writer // defaults to os.Stderr
 	written    int
 	totalBytes int
+	Quiet      bool
 	truncated  bool
-	buf        strings.Builder // used only in quiet mode
-	tmpFile    *os.File        // used only in truncation mode (Limit > 0)
 }
 
 func (w *Writer) out() io.Writer {

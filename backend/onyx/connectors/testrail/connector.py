@@ -26,6 +26,10 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
+from onyx.connectors.testrail.config import (
+    DEFAULT_MAX_PAGES,
+    DEFAULT_SKIP_DOC_ABSOLUTE_CHARS,
+)
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_markdown_image_references
@@ -93,12 +97,14 @@ class TestRailConnector(LoadConnector, PollConnector):
             else 250
         )
         self.max_pages = (
-            int(max_pages) if max_pages and str(max_pages).strip() else 10000
+            int(max_pages)
+            if max_pages and str(max_pages).strip()
+            else DEFAULT_MAX_PAGES
         )
         self.skip_doc_absolute_chars = (
             int(skip_doc_absolute_chars)
             if skip_doc_absolute_chars and str(skip_doc_absolute_chars).strip()
-            else 200000
+            else DEFAULT_SKIP_DOC_ABSOLUTE_CHARS
         )
 
         # Cache for field labels and value mappings - will be populated on first use
@@ -161,7 +167,11 @@ class TestRailConnector(LoadConnector, PollConnector):
             )
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if getattr(e, "response", None) else None
+            status = (
+                e.response.status_code
+                if getattr(e, "response", None)  # ods: ignore[getattr]
+                else None
+            )
             if status == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired TestRail credentials (HTTP 401)."

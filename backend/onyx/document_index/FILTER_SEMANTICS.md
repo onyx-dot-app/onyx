@@ -1,8 +1,7 @@
 # Vector DB Filter Semantics
 
-How `IndexFilters` fields combine into the final query filter. Describes the active
-**OpenSearch** backend. The deprecated **Vespa** backend differs in one respect:
-`project_id_filter` there remains *additive* (see "project_id_filter" notes below).
+How `IndexFilters` fields combine into the final query filter in the
+**OpenSearch** document index.
 
 ## Filter categories
 
@@ -36,9 +35,7 @@ Two ways to constrain time, both AND-ed into the query:
 (either bound may be open) on the document's creation / last-update time,
 AND-ed together when both are set. Use them to express a query's
 created-vs-updated intent. The persona `search_start_date` floor is folded into
-`updated_at_range.start` in the search pipeline. The deprecated Vespa backend
-enforces only `updated_at_range` (it has no `created_at` field, so
-`created_at_range` widens rather than narrows there).
+`updated_at_range.start` in the search pipeline.
 
 For wire compatibility, `BaseFilters` still accepts the deprecated
 `time_cutoff` request field and folds it into `updated_at_range.start` at
@@ -87,8 +84,7 @@ Each of these can start a knowledge scope on its own:
   user files overflowed the LLM context window.
 - **`project_id_filter`** is a **primary** trigger. A chat inside a project is scoped to
   that project, so `project_id_filter` alone restricts the search to the project's files —
-  project chats do not search team knowledge. (Deprecated Vespa backend: `project_id_filter`
-  is still *additive* there and only widens an existing scope.)
+  project chats do not search team knowledge.
 
 ### No explicit knowledge attached
 
@@ -125,14 +121,14 @@ When an explicit knowledge restriction is in effect **and** `project_id_filter` 
 -- Document sets + project files overflowed
 AND (
     document_sets contains "Engineering"
-    OR user_project contains 7
+    OR user_projects contains 7
 )
 
 -- Persona user files + project files (won't happen in practice;
 -- custom personas ignore project files per the precedence rule)
 AND (
     personas contains 42
-    OR user_project contains 7
+    OR user_projects contains 7
 )
 ```
 
@@ -144,21 +140,21 @@ The search is restricted to the project's files.
 -- Restricted to project files
 NOT hidden
 AND (acl contains ...)
-AND (user_project contains 7)
+AND (user_projects contains 7)
 ```
 
 ## Field reference
 
-| Filter field | Vespa field | Vespa type | Purpose |
+| Filter field | OpenSearch field | OpenSearch type | Purpose |
 |---|---|---|---|
-| `document_set` | `document_sets` | `weightedset<string>` | Connector doc sets attached to assistant |
-| `attached_document_ids` | `document_id` | `string` | Documents explicitly attached (OpenSearch only) |
-| `hierarchy_node_ids` | `ancestor_hierarchy_node_ids` | `array<int>` | Folder/space nodes (OpenSearch only) |
-| `persona_id_filter` | `personas` | `array<int>` | Persona tag for overflowing user files (**primary** trigger) |
-| `project_id_filter` | `user_project` | `array<int>` | Project tag for overflowing project files (**primary** trigger; restricts to project files — OpenSearch. Vespa keeps it additive, see notes) |
-| `access_control_list` | `access_control_list` | `weightedset<string>` | ACL entries for the requesting user |
-| `source_type` | `source_type` | `string` | Connector source type (e.g. `web`, `jira`) |
-| `tags` | `metadata_list` | `array<string>` | Document metadata tags |
-| `created_at_range` | `created_at` | `long` | Window on document creation time; see [Time filtering](#time-filtering) (OpenSearch only) |
-| `updated_at_range` | `doc_updated_at` | `long` | Window on document update time; see [Time filtering](#time-filtering) |
-| `tenant_id` | `tenant_id` | `string` | Tenant isolation (multi-tenant) |
+| `document_set` | `document_sets` | `keyword` | Connector doc sets attached to assistant |
+| `attached_document_ids` | `document_id` | `keyword` | Documents explicitly attached |
+| `hierarchy_node_ids` | `ancestor_hierarchy_node_ids` | `integer` | Folder/space nodes |
+| `persona_id_filter` | `personas` | `integer` | Persona tag for overflowing user files (**primary** trigger) |
+| `project_id_filter` | `user_projects` | `integer` | Project tag for overflowing project files (**primary** trigger; restricts to project files) |
+| `access_control_list` | `access_control_list`, `public` | `keyword`, `boolean` | ACL entries for the requesting user |
+| `source_type` | `source_type` | `keyword` | Connector source type (e.g. `web`, `jira`) |
+| `tags` | `metadata_list` | `keyword` | Document metadata tags |
+| `created_at_range` | `created_at` | `date` | Window on document creation time; see [Time filtering](#time-filtering) |
+| `updated_at_range` | `last_updated` | `date` | Window on document update time; see [Time filtering](#time-filtering) |
+| `tenant_id` | `tenant_id` | `keyword` | Tenant isolation (multi-tenant) |

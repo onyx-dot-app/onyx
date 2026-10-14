@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgMoon } from "@opal/icons";
 import {
@@ -13,6 +14,7 @@ import { Modal } from "@opal/components";
 // Waking is always user-initiated — never automatic — so we don't keep pods
 // alive forever and defeat idle reaping.
 export default function SandboxAsleepNotice() {
+  const t = useTranslations("craft.sandboxAsleep");
   const sessionId = useSessionId();
   const session = useSession();
   const loadSession = useBuildSessionStore((state) => state.loadSession);
@@ -41,8 +43,8 @@ export default function SandboxAsleepNotice() {
       <Modal.Content width="sm" preventAccidentalClose={false}>
         <Modal.Header
           icon={SvgMoon}
-          title="Your sandbox fell asleep"
-          description="It went to sleep after a period of inactivity — your work is saved. Wake it to keep going."
+          title={t("modal.title")}
+          description={t("modal.description")}
         />
         <Modal.Footer justifyContent="center">
           <Button
@@ -50,10 +52,10 @@ export default function SandboxAsleepNotice() {
             prominence="tertiary"
             onClick={() => setDismissed(true)}
           >
-            Dismiss
+            {t("dismiss.button")}
           </Button>
           <Button variant="default" prominence="primary" onClick={handleWake}>
-            Wake sandbox
+            {t("wake.button")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

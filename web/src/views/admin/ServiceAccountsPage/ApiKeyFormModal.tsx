@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { Form, Formik } from "formik";
+import * as Yup from "yup";
 import {
   createApiKey,
   updateApiKey,
@@ -10,15 +13,15 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
-import { FormikField } from "@/refresh-components/form/FormikField";
 import { InputVertical, toast } from "@opal/layouts";
-import { SvgCheck, SvgKey, SvgLogOut, SvgUsers } from "@opal/icons";
+import { SvgKey, SvgLogOut, SvgUsers } from "@opal/icons";
 import useGroups from "@/hooks/useGroups";
-import { Popover } from "@opal/components";
+import { Dropdown } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
+import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 
 interface ApiKeyFormModalProps {
   onClose: () => void;
@@ -31,6 +34,8 @@ export default function ApiKeyFormModal({
   onCreateApiKey,
   apiKey,
 }: ApiKeyFormModalProps) {
+  const t = useTranslations("admin.serviceAccounts");
+  const { appName } = useSettings();
   const isUpdate = apiKey !== undefined;
   // A key's access is whatever groups it lands in, so Admin/Basic must be offered too.
   const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
@@ -54,24 +59,29 @@ export default function ApiKeyFormModal({
       <Modal.Content width="sm" height="lg" ref={contentRef}>
         <Modal.Header
           icon={SvgKey}
-          title={isUpdate ? "Update Service Account" : "Create Service Account"}
+          title={
+            isUpdate ? t("formModal.title.update") : t("formModal.title.create")
+          }
           description={
-            isUpdate
-              ? undefined
-              : "Use service account API key to programmatically access Onyx API with user-level permissions. You can modify the account details later."
+            isUpdate ? undefined : t("formModal.description", { appName })
           }
           onClose={onClose}
         />
         <Formik
           initialValues={{
-            name: apiKey?.api_key_name || "",
-            group_ids: apiKey?.groups.map((g) => g.id) || ([] as number[]),
+            service_account_name: apiKey?.api_key_name || "",
+            group_ids: apiKey?.groups.map((g) => g.id) ?? [],
           }}
+          validationSchema={Yup.object().shape({
+            service_account_name: Yup.string()
+              .trim()
+              .required(t("formModal.name.required")),
+          })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
             const payload = {
-              name: values.name || undefined,
+              name: values.service_account_name || undefined,
               group_ids: values.group_ids,
             };
 
@@ -85,8 +95,8 @@ export default function ApiKeyFormModal({
               if (response.ok) {
                 toast.success(
                   isUpdate
-                    ? "Successfully updated service account!"
-                    : "Successfully created service account!"
+                    ? t("formModal.toasts.updated")
+                    : t("formModal.toasts.created")
                 );
                 if (!isUpdate) {
                   onCreateApiKey(await response.json());
@@ -97,20 +107,22 @@ export default function ApiKeyFormModal({
                 const errorMsg = responseJson.detail || responseJson.message;
                 toast.error(
                   isUpdate
-                    ? `Error updating service account - ${errorMsg}`
-                    : `Error creating service account - ${errorMsg}`
+                    ? t("formModal.toasts.updateFailed", { detail: errorMsg })
+                    : t("formModal.toasts.createFailed", { detail: errorMsg })
                 );
               }
             } catch (e) {
               toast.error(
-                e instanceof Error ? e.message : "An unexpected error occurred."
+                e instanceof Error
+                  ? e.message
+                  : t("formModal.toasts.unexpectedError")
               );
             } finally {
               formikHelpers.setSubmitting(false);
             }
           }}
         >
-          {({ isSubmitting, values, setFieldValue }) => {
+          {({ isSubmitting, values, setFieldValue, isValid, dirty }) => {
             const memberGroupIds = new Set(values.group_ids);
             const joinedGroups = (allGroups ?? []).filter((g) =>
               memberGroupIds.has(g.id)
@@ -129,20 +141,25 @@ export default function ApiKeyFormModal({
             return (
               <Form className="w-full overflow-visible">
                 <Modal.Body>
-                  <InputVertical withLabel="name" title="Name">
-                    <FormikField<string>
-                      name="name"
-                      render={(field) => (
-                        <InputTypeIn
-                          {...field}
-                          placeholder="Enter a name"
-                          clearButton
-                        />
-                      )}
+                  <InputVertical
+                    withLabel="service_account_name"
+                    title={t("formModal.name.title")}
+                  >
+                    {/* The field key doubles as the input's DOM name and id,
+                        and name="name" reads as a contact-name field to
+                        browser autofill (Safari suggests contacts). */}
+                    <InputTypeInField
+                      name="service_account_name"
+                      autoComplete="off"
+                      placeholder={t("formModal.name.placeholder")}
+                      clearButton
                     />
                   </InputVertical>
 
-                  <InputVertical withLabel="group_ids" title="Groups">
+                  <InputVertical
+                    withLabel="group_ids"
+                    title={t("formModal.groups.title")}
+                  >
                     <Section
                       gap={2}
                       padding={1}
@@ -155,79 +172,113 @@ export default function ApiKeyFormModal({
                       justifyContent="start"
                       className="bg-background-tint-02 rounded-08"
                     >
-                      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-                        <Popover.Trigger asChild>
-                          <div>
-                            <InputTypeIn
-                              data-testid="groups-search-input"
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              placeholder="Search groups..."
-                              searchIcon
-                            />
-                          </div>
-                        </Popover.Trigger>
-                        <Popover.Content
-                          width="trigger"
-                          align="start"
-                          container={contentEl}
-                        >
-                          {groupsLoading ? (
-                            <LineItem skeleton description="Loading groups...">
-                              Loading...
-                            </LineItem>
-                          ) : dropdownGroups.length === 0 ? (
-                            <LineItem
-                              skeleton
-                              description="Try a different search term."
-                            >
-                              No groups found
-                            </LineItem>
-                          ) : (
-                            <ShadowDiv
-                              shadowHeight="0.75rem"
-                              className={cn(
-                                "flex flex-col gap-1 max-h-[15rem] rounded-08"
-                              )}
-                            >
-                              {dropdownGroups.map((group) => {
-                                const isMember = memberGroupIds.has(group.id);
-                                return (
-                                  <LineItem
-                                    key={group.id}
-                                    icon={isMember ? SvgCheck : SvgUsers}
-                                    description={`${group.users.length} ${
-                                      group.users.length === 1
-                                        ? "user"
-                                        : "users"
-                                    }`}
-                                    selected={isMember}
-                                    emphasized={isMember}
-                                    onClick={() => toggleGroup(group.id)}
-                                  >
-                                    {group.name}
-                                  </LineItem>
-                                );
-                              })}
-                            </ShadowDiv>
-                          )}
-                        </Popover.Content>
-                      </Popover>
+                      <Dropdown
+                        open={popoverOpen}
+                        onOpenChange={setPopoverOpen}
+                        container={contentEl}
+                      >
+                        <Dropdown.Trigger asChild typeIn behavior="open">
+                          <InputTypeIn
+                            data-testid="groups-search-input"
+                            value={searchTerm}
+                            onChange={(e) => {
+                              setSearchTerm(e.target.value);
+                              // Typing opens the list, as a type-in does.
+                              setPopoverOpen(true);
+                            }}
+                            placeholder={t(
+                              "formModal.groups.search.placeholder"
+                            )}
+                            searchIcon
+                            aria-label={t(
+                              "formModal.groups.search.placeholder"
+                            )}
+                          />
+                        </Dropdown.Trigger>
+                        <Dropdown.Data
+                          label={t("formModal.groups.search.placeholder")}
+                          query={searchTerm}
+                          values={new Set(Array.from(memberGroupIds, String))}
+                          onSelect={(option) =>
+                            toggleGroup(Number(option.value))
+                          }
+                          items={
+                            groupsLoading
+                              ? [
+                                  {
+                                    kind: "custom",
+                                    id: "loading",
+                                    disabled: true,
+                                    pinned: true,
+                                    render: ({ props }) => (
+                                      <div {...props}>
+                                        <LineItem
+                                          skeleton
+                                          description={t(
+                                            "formModal.groups.loading.description"
+                                          )}
+                                        >
+                                          {t("formModal.groups.loading.title")}
+                                        </LineItem>
+                                      </div>
+                                    ),
+                                  },
+                                ]
+                              : dropdownGroups.length === 0
+                                ? [
+                                    {
+                                      kind: "custom",
+                                      id: "no-results",
+                                      disabled: true,
+                                      pinned: true,
+                                      render: ({ props }) => (
+                                        <div {...props}>
+                                          <LineItem
+                                            skeleton
+                                            description={t(
+                                              "formModal.groups.noResults.description"
+                                            )}
+                                          >
+                                            {t(
+                                              "formModal.groups.noResults.title"
+                                            )}
+                                          </LineItem>
+                                        </div>
+                                      ),
+                                    },
+                                  ]
+                                : (allGroups ?? []).map((group) => ({
+                                    kind: "option",
+                                    value: String(group.id),
+                                    icon: SvgUsers,
+                                    title: group.name,
+                                    description: t(
+                                      "formModal.groups.memberCount",
+                                      {
+                                        count: group.users.length,
+                                      }
+                                    ),
+                                  }))
+                          }
+                        />
+                      </Dropdown>
 
                       <ShadowDiv
                         className={cn(
                           "max-h-[11rem] flex flex-col gap-1 rounded-08"
                         )}
-                        shadowHeight="0.75rem"
+                        shadowHeight={3}
                       >
                         {joinedGroups.length === 0 ? (
                           <LineItem
                             icon={SvgUsers}
                             skeleton
                             interactive={false}
-                            description="No groups assigned to this service account."
+                            description={t(
+                              "formModal.groups.empty.description"
+                            )}
                           >
-                            No groups
+                            {t("formModal.groups.empty.title")}
                           </LineItem>
                         ) : (
                           joinedGroups.map((group) => (
@@ -237,9 +288,9 @@ export default function ApiKeyFormModal({
                             >
                               <LineItem
                                 icon={SvgUsers}
-                                description={`${group.users.length} ${
-                                  group.users.length === 1 ? "user" : "users"
-                                }`}
+                                description={t("formModal.groups.memberCount", {
+                                  count: group.users.length,
+                                })}
                                 rightChildren={
                                   <SvgLogOut height={16} width={16} />
                                 }
@@ -261,13 +312,15 @@ export default function ApiKeyFormModal({
                     type="button"
                     onClick={onClose}
                   >
-                    Cancel
+                    {t("formModal.cancelButton.label")}
                   </Button>
                   <Button
-                    disabled={isSubmitting || !values.name.trim()}
+                    disabled={isSubmitting || !isValid || !dirty}
                     type="submit"
                   >
-                    {isUpdate ? "Update" : "Create Account"}
+                    {isUpdate
+                      ? t("formModal.submitButton.update")
+                      : t("formModal.submitButton.create")}
                   </Button>
                 </Modal.Footer>
               </Form>

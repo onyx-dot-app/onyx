@@ -1,23 +1,17 @@
-from collections.abc import Generator
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from office365.runtime.client_request import ClientRequestException
 
+from ee.onyx.db.external_perm import ExternalUserGroup
+from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
+    ResolvedEntraGroup,
+)
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
-    AD_GROUP_ENUMERATION_THRESHOLD,
-    AZURE_AD_GROUP_PRINCIPAL_TYPE,
-    SHAREPOINT_GROUP_PRINCIPAL_TYPE,
     DocumentGroupsResult,
     GroupsResult,
-    _enumerate_ad_groups_paginated,
     _get_azuread_groups,
-    _get_sharepoint_list_item_id,
-    _has_only_limited_access,
+    _get_nested_azuread_groups,
     _is_public_item,
-    _iter_graph_collection,
-    _normalize_email,
     _resolve_document_groups,
     get_external_access_from_sharepoint,
     get_hierarchy_node_external_access_from_sharepoint,
@@ -25,44 +19,41 @@ from ee.onyx.external_permissions.sharepoint.permission_utils import (
 )
 from onyx.access.models import ExternalAccess
 from onyx.background.indexing.checkpointing_utils import check_checkpoint_size
-from onyx.connectors.sharepoint.connector import (
-    DriveItemData,
-    SharepointConnectorCheckpoint,
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
+from onyx.connectors.microsoft_utils.entra import EntraGroup
+from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
+from onyx.connectors.microsoft_utils.models import (
+    SharepointPrincipal,
+    SharepointRoleAssignment,
+    SharepointSecurable,
+    SharepointSecurableKind,
 )
+from onyx.connectors.microsoft_utils.sharepoint_principals import (
+    SharepointPrincipalType,
+    has_only_limited_access,
+)
+from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
 from onyx.connectors.sharepoint.connector_utils import (
     SharepointGroup,
     SharepointPermissionCache,
+    get_sharepoint_external_access,
+    get_sharepoint_hierarchy_node_external_access,
 )
 from onyx.db.enums import HierarchyNodeType
+from tests.unit.onyx.connectors.microsoft_utils.fake_sharepoint_reader import (
+    FakeSharepointReader,
+)
 
 MODULE = "ee.onyx.external_permissions.sharepoint.permission_utils"
-GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _fake_token() -> str:
-    return "fake-token"
-
-
-def _make_graph_page(
-    items: list[dict[str, Any]],
-    next_link: str | None = None,
-) -> dict[str, Any]:
-    page: dict[str, Any] = {"value": items}
-    if next_link:
-        page["@odata.nextLink"] = next_link
-    return page
+SITE_URL = "https://contoso.sharepoint.com/sites/eng"
+PUBLIC_LOGIN = "c:0-.f|rolemanager|spo-grid-all-users/tenant-id"
 
 
 def _make_ad_group(name: str, login_name: str | None = None) -> SharepointGroup:
     return SharepointGroup(
         name=name,
         login_name=login_name or name,
-        principal_type=AZURE_AD_GROUP_PRINCIPAL_TYPE,
+        principal_type=SharepointPrincipalType.ENTRA_GROUP,
     )
 
 
@@ -70,34 +61,46 @@ def _make_sharepoint_group(name: str) -> SharepointGroup:
     return SharepointGroup(
         name=name,
         login_name=name,
-        principal_type=SHAREPOINT_GROUP_PRINCIPAL_TYPE,
+        principal_type=SharepointPrincipalType.SHAREPOINT_GROUP,
     )
 
 
-@patch(f"{MODULE}.sleep_and_retry")
-def test_sharepoint_ids_avoid_list_item_lookup(mock_sleep_and_retry: MagicMock) -> None:
-    drive_item = DriveItemData.from_graph_json(
+def _assignment(
+    principal_type: int,
+    title: str,
+    role_type_kinds: list[int] | None = None,
+    user_principal_name: str | None = None,
+) -> SharepointRoleAssignment:
+    return SharepointRoleAssignment(
+        member=SharepointPrincipal(
+            principal_type=principal_type,
+            login_name=title,
+            title=title,
+            user_principal_name=user_principal_name,
+        ),
+        role_type_kinds=role_type_kinds or [2],
+    )
+
+
+def _drive_item(item_id: str = "item-123") -> DriveItemData:
+    return DriveItemData.from_graph_json(
         {
-            "id": "drive-item-id",
+            "id": item_id,
             "name": "document.pdf",
-            "webUrl": "https://tenant.sharepoint.com/document.pdf",
+            "webUrl": f"{SITE_URL}/document.pdf",
             "parentReference": {"driveId": "drive-id"},
-            "sharepointIds": {"listItemId": "42"},
         }
-    ).to_sdk_driveitem(MagicMock())
-
-    assert _get_sharepoint_list_item_id(drive_item) == "42"
-    mock_sleep_and_retry.assert_not_called()
+    )
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_document_group_expansion_is_cached(mock_get_group: MagicMock) -> None:
     group = _make_ad_group("Engineering", "engineering-id")
-    mock_get_group.return_value = (set(), {"alice@contoso.com"})
+    mock_get_group.return_value = set()
     cache = SharepointPermissionCache()
 
-    first = _resolve_document_groups(MagicMock(), MagicMock(), {group}, cache)
-    second = _resolve_document_groups(MagicMock(), MagicMock(), {group}, cache)
+    first = _resolve_document_groups(MagicMock(), SITE_URL, {group}, cache)
+    second = _resolve_document_groups(MagicMock(), SITE_URL, {group}, cache)
 
     assert first == second
     assert first.group_ids == {"Engineering"}
@@ -109,13 +112,15 @@ def test_sharepoint_group_cache_is_scoped_to_site(
     mock_get_group: MagicMock,
 ) -> None:
     group = _make_sharepoint_group("Site Members")
-    first_context = MagicMock(base_url="https://tenant.sharepoint.com/sites/first")
-    second_context = MagicMock(base_url="https://tenant.sharepoint.com/sites/second")
     mock_get_group.return_value = (set(), set())
     cache = SharepointPermissionCache()
 
-    _resolve_document_groups(first_context, MagicMock(), {group}, cache)
-    _resolve_document_groups(second_context, MagicMock(), {group}, cache)
+    _resolve_document_groups(
+        MagicMock(), "https://tenant.sharepoint.com/sites/first", {group}, cache
+    )
+    _resolve_document_groups(
+        MagicMock(), "https://tenant.sharepoint.com/sites/second", {group}, cache
+    )
 
     assert mock_get_group.call_count == 2
     assert len(cache.group_expansions) == 2
@@ -123,44 +128,60 @@ def test_sharepoint_group_cache_is_scoped_to_site(
 
 @patch(f"{MODULE}._get_sharepoint_groups")
 def test_sharepoint_group_404_is_not_cached(mock_get_group: MagicMock) -> None:
-    response = MagicMock(status_code=404, headers={}, content=b"")
-    mock_get_group.side_effect = ClientRequestException(response=response)
+    mock_get_group.side_effect = MicrosoftGraphError(404, "itemNotFound", "gone")
     group = _make_sharepoint_group("Missing Group")
     cache = SharepointPermissionCache()
 
-    with pytest.raises(ClientRequestException):
-        _resolve_document_groups(MagicMock(), MagicMock(), {group}, cache)
+    with pytest.raises(MicrosoftGraphError):
+        _resolve_document_groups(MagicMock(), SITE_URL, {group}, cache)
 
     assert cache.group_expansions == {}
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+def test_deleted_entra_group_expands_to_nothing() -> None:
+    group_id = "11111111-1111-1111-1111-111111111111"
+    reader = FakeSharepointReader(
+        nested_entra_groups={
+            group_id: MicrosoftGraphError(404, "Request_ResourceNotFound", "")
+        }
+    )
+    cache = SharepointPermissionCache()
+
+    result = _resolve_document_groups(
+        reader, SITE_URL, {_make_ad_group("Removed", group_id)}, cache
+    )
+
+    assert result.group_ids == {"Removed"}
+    assert next(iter(cache.group_expansions.values())).nested_groups == set()
+
+
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_ad_group_claims_token_and_guid_share_cache(
     mock_get_group: MagicMock,
 ) -> None:
     group_id = "11111111-1111-1111-1111-111111111111"
     claims_group = _make_ad_group("Engineering Members", f"c:0t.c|tenant|{group_id}")
     guid_group = _make_ad_group("Engineering Owners", group_id)
-    mock_get_group.return_value = (set(), set())
+    mock_get_group.return_value = set()
     cache = SharepointPermissionCache()
 
     result = _resolve_document_groups(
-        MagicMock(), MagicMock(), {claims_group, guid_group}, cache
+        MagicMock(), SITE_URL, {claims_group, guid_group}, cache
     )
 
     mock_get_group.assert_called_once()
     assert result.group_ids == {"Engineering Members", "Engineering Owners"}
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_document_group_cache_survives_checkpoint(
     mock_get_group: MagicMock,
 ) -> None:
     group = _make_ad_group("Engineering", "engineering-id")
     nested_group = _make_ad_group("Platform", "platform-id")
-    mock_get_group.side_effect = [({nested_group}, set()), (set(), set())]
+    mock_get_group.side_effect = [{nested_group}, set()]
     cache = SharepointPermissionCache()
-    _resolve_document_groups(MagicMock(), MagicMock(), {group}, cache)
+    _resolve_document_groups(MagicMock(), SITE_URL, {group}, cache)
 
     checkpoint = SharepointConnectorCheckpoint(
         has_more=True,
@@ -172,7 +193,7 @@ def test_document_group_cache_survives_checkpoint(
     )
     _resolve_document_groups(
         MagicMock(),
-        MagicMock(),
+        SITE_URL,
         {group},
         restored.permission_cache,
     )
@@ -184,36 +205,30 @@ def test_document_group_cache_survives_checkpoint(
     assert mock_get_group.call_count == 2
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_nested_public_group_uses_cached_parent_expansion(
     mock_get_group: MagicMock,
 ) -> None:
     parent = _make_ad_group("Site Members", "site-members-id")
-    public = _make_ad_group(
-        "Everyone",
-        "c:0-.f|rolemanager|spo-grid-all-users/tenant-id",
-    )
-    mock_get_group.return_value = ({public}, set())
+    public = _make_ad_group("Everyone", PUBLIC_LOGIN)
+    mock_get_group.return_value = {public}
     cache = SharepointPermissionCache()
 
-    first = _resolve_document_groups(MagicMock(), MagicMock(), {parent}, cache)
-    second = _resolve_document_groups(MagicMock(), MagicMock(), {parent}, cache)
+    first = _resolve_document_groups(MagicMock(), SITE_URL, {parent}, cache)
+    second = _resolve_document_groups(MagicMock(), SITE_URL, {parent}, cache)
 
     assert first.found_public_group
     assert second.found_public_group
     mock_get_group.assert_called_once()
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_direct_public_group_skips_expansion(mock_get_group: MagicMock) -> None:
-    public = _make_ad_group(
-        "Everyone",
-        "c:0-.f|rolemanager|spo-grid-all-users/tenant-id",
-    )
+    public = _make_ad_group("Everyone", PUBLIC_LOGIN)
 
     result = _resolve_document_groups(
         MagicMock(),
-        MagicMock(),
+        SITE_URL,
         {public},
         SharepointPermissionCache(),
     )
@@ -222,18 +237,15 @@ def test_direct_public_group_skips_expansion(mock_get_group: MagicMock) -> None:
     mock_get_group.assert_not_called()
 
 
-@patch(f"{MODULE}._get_azuread_groups")
+@patch(f"{MODULE}._get_nested_azuread_groups")
 def test_document_group_cycles_are_resolved_once(mock_get_group: MagicMock) -> None:
     first_group = _make_ad_group("First", "first-id")
     second_group = _make_ad_group("Second", "second-id")
-    mock_get_group.side_effect = [
-        ({second_group}, set()),
-        ({first_group}, set()),
-    ]
+    mock_get_group.side_effect = [{second_group}, {first_group}]
 
     result = _resolve_document_groups(
         MagicMock(),
-        MagicMock(),
+        SITE_URL,
         {first_group},
         SharepointPermissionCache(),
     )
@@ -243,358 +255,182 @@ def test_document_group_cycles_are_resolved_once(mock_get_group: MagicMock) -> N
     assert mock_get_group.call_count == 2
 
 
-# ---------------------------------------------------------------------------
-# _normalize_email
-# ---------------------------------------------------------------------------
-
-
-def test_normalize_email_strips_onmicrosoft() -> None:
-    assert _normalize_email("user@contoso.onmicrosoft.com") == "user@contoso.com"
-
-
-def test_normalize_email_noop_for_normal_domain() -> None:
-    assert _normalize_email("user@contoso.com") == "user@contoso.com"
-
-
-# ---------------------------------------------------------------------------
-# _iter_graph_collection
-# ---------------------------------------------------------------------------
-
-
-@patch(f"{MODULE}._graph_api_get")
-def test_iter_graph_collection_single_page(mock_get: MagicMock) -> None:
-    mock_get.return_value = _make_graph_page([{"id": "1"}, {"id": "2"}])
-
-    items = list(_iter_graph_collection("https://graph/items", _fake_token))
-    assert items == [{"id": "1"}, {"id": "2"}]
-    mock_get.assert_called_once()
-
-
-@patch(f"{MODULE}._graph_api_get")
-def test_iter_graph_collection_multi_page(mock_get: MagicMock) -> None:
-    mock_get.side_effect = [
-        _make_graph_page([{"id": "1"}], next_link="https://graph/items?page=2"),
-        _make_graph_page([{"id": "2"}]),
-    ]
-
-    items = list(_iter_graph_collection("https://graph/items", _fake_token))
-    assert items == [{"id": "1"}, {"id": "2"}]
-    assert mock_get.call_count == 2
-
-
-@patch(f"{MODULE}._graph_api_get")
-def test_iter_graph_collection_empty(mock_get: MagicMock) -> None:
-    mock_get.return_value = _make_graph_page([])
-    assert list(_iter_graph_collection("https://graph/items", _fake_token)) == []
-
-
-# ---------------------------------------------------------------------------
-# _enumerate_ad_groups_paginated
-# ---------------------------------------------------------------------------
-
-
-def _mock_graph_get_for_enumeration(
-    groups: list[dict[str, Any]],
-    members_by_group: dict[str, list[dict[str, Any]]],
-) -> Generator[dict[str, Any], None, None]:
-    """Return a side_effect function for _graph_api_get that serves
-    groups on the /groups URL and members on /groups/{id}/members URLs."""
-
-    def side_effect(
-        url: str,
-        get_access_token: Any,  # noqa: ARG001
-        params: dict[str, str] | None = None,  # noqa: ARG001
-    ) -> dict[str, Any]:
-        if "/members" in url:
-            group_id = url.split("/groups/")[1].split("/members")[0]
-            return _make_graph_page(members_by_group.get(group_id, []))
-        return _make_graph_page(groups)
-
-    return side_effect  # ty: ignore[invalid-return-type]
-
-
-@patch(f"{MODULE}._graph_api_get")
-def test_enumerate_ad_groups_yields_groups(mock_get: MagicMock) -> None:
-    groups = [
-        {"id": "g1", "displayName": "Engineering"},
-        {"id": "g2", "displayName": "Marketing"},
-    ]
-    members = {
-        "g1": [{"userPrincipalName": "alice@contoso.com"}],
-        "g2": [{"mail": "bob@contoso.onmicrosoft.com"}],
-    }
-    mock_get.side_effect = _mock_graph_get_for_enumeration(groups, members)
-
-    results = list(
-        _enumerate_ad_groups_paginated(
-            _fake_token, already_resolved=set(), graph_api_base=GRAPH_API_BASE
-        )
+@patch(f"{MODULE}.expand_entra_group")
+def test_azuread_groups_wrap_shared_expansion(mock_expand: MagicMock) -> None:
+    """Shared Entra results come back as SharePoint principals for the cache."""
+    mock_expand.return_value = (
+        {ResolvedEntraGroup(id="g2", name="Nested_g2")},
+        {"alice@contoso.com"},
     )
 
-    assert len(results) == 2
-    eng = next(r for r in results if r.id == "Engineering_g1")
-    assert eng.user_emails == ["alice@contoso.com"]
-    mkt = next(r for r in results if r.id == "Marketing_g2")
-    assert mkt.user_emails == ["bob@contoso.com"]
+    groups, user_emails = _get_azuread_groups(MagicMock(), "g1")
+
+    assert groups == {_make_ad_group("Nested_g2", login_name="g2")}
+    assert user_emails == {"alice@contoso.com"}
 
 
-@patch(f"{MODULE}._graph_api_get")
-def test_enumerate_ad_groups_skips_already_resolved(mock_get: MagicMock) -> None:
-    groups = [{"id": "g1", "displayName": "Engineering"}]
-    mock_get.side_effect = _mock_graph_get_for_enumeration(groups, {})
-
-    results = list(
-        _enumerate_ad_groups_paginated(
-            _fake_token,
-            already_resolved={"Engineering_g1"},
-            graph_api_base=GRAPH_API_BASE,
-        )
-    )
-    assert results == []
-
-
-@patch(f"{MODULE}._graph_api_get")
-def test_enumerate_ad_groups_circuit_breaker(mock_get: MagicMock) -> None:
-    """Enumeration stops after AD_GROUP_ENUMERATION_THRESHOLD groups."""
-    over_limit = AD_GROUP_ENUMERATION_THRESHOLD + 5
-    groups = [{"id": f"g{i}", "displayName": f"Group{i}"} for i in range(over_limit)]
-    mock_get.side_effect = _mock_graph_get_for_enumeration(groups, {})
-
-    results = list(
-        _enumerate_ad_groups_paginated(
-            _fake_token, already_resolved=set(), graph_api_base=GRAPH_API_BASE
-        )
-    )
-    assert len(results) <= AD_GROUP_ENUMERATION_THRESHOLD
-
-
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
-def test_azuread_group_owners_are_not_treated_as_members(
-    _mock_sleep: MagicMock,
-) -> None:
-    member = MagicMock()
-    member.to_json.return_value = {
-        "userPrincipalName": "member@contoso.com",
-        "mail": "member@contoso.com",
-    }
-    owner = MagicMock()
-    owner.to_json.return_value = {
-        "userPrincipalName": "owner@contoso.com",
-        "mail": "owner@contoso.com",
-    }
-    members = MagicMock()
-    members.current_page = [member]
-
-    group = MagicMock()
-
-    def get_all(*, page_loaded: Any) -> MagicMock:
-        page_loaded(members)
-        return members
-
-    group.members.get_all.side_effect = get_all
-    group.owners.get_all.return_value = [owner]
-    graph_client = MagicMock()
-    graph_client.groups.__getitem__.return_value = group
-
-    _, user_emails = _get_azuread_groups(
-        graph_client,
-        "11111111-1111-1111-1111-111111111111",
+def test_document_readers_list_nested_groups_without_members() -> None:
+    """A document's readers need only nested groups, so its members are never
+    listed."""
+    group_id = "11111111-1111-1111-1111-111111111111"
+    nested_id = "22222222-2222-2222-2222-222222222222"
+    reader = FakeSharepointReader(
+        nested_entra_groups={group_id: [EntraGroup(id=nested_id, displayName="Nested")]}
     )
 
-    assert user_emails == {"member@contoso.com"}
-    group.owners.get_all.assert_not_called()
+    groups = _get_nested_azuread_groups(reader, group_id)
+
+    assert groups == {_make_ad_group(f"Nested_{nested_id}", login_name=nested_id)}
+    assert "list_entra_group_members" not in reader.operations()
 
 
-@pytest.mark.parametrize(
-    ("role_type_kind", "localized_name"),
-    [
-        (1, "Beschränkter Zugriff"),
-        (9, "Nur Web – beschränkter Zugriff"),
-    ],
-)
-def test_limited_access_detection_uses_numeric_role_type(
-    role_type_kind: int,
-    localized_name: str,
-) -> None:
-    binding = MagicMock()
-    binding.role_type_kind = role_type_kind
-    binding.name = localized_name
-
-    assert _has_only_limited_access([binding])
+@pytest.mark.parametrize("role_type_kind", [1, 9])
+def test_limited_access_detection_uses_numeric_role_type(role_type_kind: int) -> None:
+    assert has_only_limited_access(
+        SharepointRoleAssignment(member=None, role_type_kinds=[role_type_kind])
+    )
 
 
 def test_limited_access_detection_rejects_mixed_roles() -> None:
-    limited_access = MagicMock()
-    limited_access.role_type_kind = 1
-    read_access = MagicMock()
-    read_access.role_type_kind = 2
-
-    assert not _has_only_limited_access([limited_access, read_access])
-
-
-# ---------------------------------------------------------------------------
-# get_sharepoint_external_groups
-# ---------------------------------------------------------------------------
-
-
-def _stub_role_assignment_resolution(
-    groups_to_emails: dict[str, set[str]],
-) -> tuple[MagicMock, MagicMock]:
-    """Return (mock_sleep_and_retry, mock_recursive) pre-configured to
-    simulate role-assignment group resolution."""
-    mock_sleep = MagicMock()
-    mock_recursive = MagicMock(
-        return_value=GroupsResult(
-            groups_to_emails=groups_to_emails,
-            found_public_group=False,
-        )
+    assert not has_only_limited_access(
+        SharepointRoleAssignment(member=None, role_type_kinds=[1, 2])
     )
-    return mock_sleep, mock_recursive
+
+
+def test_assignment_without_bindings_grants_access() -> None:
+    assert not has_only_limited_access(
+        SharepointRoleAssignment(member=None, role_type_kinds=[])
+    )
 
 
 @patch(f"{MODULE}._get_groups_and_members_recursively")
-@patch(f"{MODULE}.sleep_and_retry")
-def test_default_skips_ad_enumeration(
-    mock_sleep: MagicMock,  # noqa: ARG001
-    mock_recursive: MagicMock,
-) -> None:
+def test_default_skips_ad_enumeration(mock_recursive: MagicMock) -> None:
     mock_recursive.return_value = GroupsResult(
         groups_to_emails={"SiteGroup_abc": {"alice@contoso.com"}},
         found_public_group=False,
     )
+    reader = FakeSharepointReader()
 
-    results = get_sharepoint_external_groups(
-        client_context=MagicMock(),
-        graph_client=MagicMock(),
-        graph_api_base=GRAPH_API_BASE,
-    )
+    results = get_sharepoint_external_groups(reader, SITE_URL)
 
     assert len(results) == 1
     assert results[0].id == "SiteGroup_abc"
     assert results[0].user_emails == ["alice@contoso.com"]
+    assert "list_entra_groups" not in reader.operations()
 
 
 @pytest.mark.parametrize(
-    ("node_type", "drive_name", "folder_url"),
+    ("node_type", "list_id", "folder_server_relative_path", "expected"),
     [
-        (HierarchyNodeType.SITE, None, None),
-        (HierarchyNodeType.DRIVE, "Shared Documents", None),
+        (
+            HierarchyNodeType.SITE,
+            None,
+            None,
+            SharepointSecurable(kind=SharepointSecurableKind.SITE),
+        ),
+        (
+            HierarchyNodeType.DRIVE,
+            "list-id",
+            None,
+            SharepointSecurable(
+                kind=SharepointSecurableKind.LIBRARY, list_id="list-id"
+            ),
+        ),
         (
             HierarchyNodeType.FOLDER,
             None,
-            "https://contoso.sharepoint.com/sites/eng/Shared%20Documents/API",
+            "/sites/eng/Shared Documents/API",
+            SharepointSecurable(
+                kind=SharepointSecurableKind.FOLDER, folder_unique_id="folder-guid"
+            ),
         ),
     ],
 )
-@patch(f"{MODULE}._get_external_access_from_securable_object")
-def test_hierarchy_node_access_uses_securable_object(
-    mock_get_access: MagicMock,
+def test_hierarchy_node_access_reads_the_node_assignments(
     node_type: HierarchyNodeType,
-    drive_name: str | None,
-    folder_url: str | None,
+    list_id: str | None,
+    folder_server_relative_path: str | None,
+    expected: SharepointSecurable,
 ) -> None:
-    expected_access = ExternalAccess.empty()
-    mock_get_access.return_value = expected_access
-    ctx = MagicMock()
-    graph_client = MagicMock()
+    reader = FakeSharepointReader(
+        folder_ids={"/sites/eng/Shared Documents/API": "folder-guid"}
+    )
 
     result = get_hierarchy_node_external_access_from_sharepoint(
-        ctx,
-        graph_client,
+        reader,
+        SITE_URL,
         node_type,
-        drive_name,
-        folder_url,
+        list_id,
+        folder_server_relative_path,
     )
 
-    assert result is expected_access
-    securable_object = mock_get_access.call_args.args[2]
-    if node_type == HierarchyNodeType.SITE:
-        assert securable_object is ctx.web
-    elif node_type == HierarchyNodeType.DRIVE:
-        ctx.web.lists.get_by_title.assert_called_once_with("Documents")
-    else:
-        ctx.web.get_folder_by_server_relative_url.assert_called_once_with(
-            "/sites/eng/Shared%20Documents/API"
+    assert result == ExternalAccess(
+        external_user_emails=set(), external_user_group_ids=set(), is_public=False
+    )
+    assert reader.calls[-1].securable == expected
+    assert reader.calls[-1].site_url == SITE_URL
+
+
+def test_drive_hierarchy_without_list_id_fails_before_any_read() -> None:
+    reader = FakeSharepointReader()
+
+    with pytest.raises(ValueError, match="requires a list ID"):
+        get_sharepoint_hierarchy_node_external_access(
+            reader,
+            SITE_URL,
+            SharepointPermissionCache(),
+            HierarchyNodeType.DRIVE,
+            list_id=None,
         )
-    assert mock_get_access.call_args.kwargs == {"add_prefix": True}
+
+    assert reader.calls == []
 
 
+def test_sharepoint_group_ids_are_scoped_to_their_site() -> None:
+    first_site = "https://contoso.sharepoint.com/sites/first"
+    second_site = "https://contoso.sharepoint.com/sites/second"
+    reader = FakeSharepointReader(
+        role_assignments={
+            site: [
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Project Members")
+            ]
+            for site in (first_site, second_site)
+        }
+    )
+
+    first_groups = get_sharepoint_external_groups(reader, first_site)
+    second_groups = get_sharepoint_external_groups(reader, second_site)
+
+    assert first_groups[0].id == f"{first_site}::Project Members"
+    assert second_groups[0].id == f"{second_site}::Project Members"
+
+
+def test_group_sync_skips_users_and_limited_access() -> None:
+    reader = FakeSharepointReader(
+        role_assignments={
+            SITE_URL: [
+                _assignment(
+                    SharepointPrincipalType.USER,
+                    "Ada",
+                    user_principal_name="ada@contoso.com",
+                ),
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Guests", [1]),
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Members"),
+            ]
+        }
+    )
+
+    groups = get_sharepoint_external_groups(reader, SITE_URL)
+
+    assert [group.id for group in groups] == [f"{SITE_URL}::Members"]
+
+
+@patch(f"{MODULE}.enumerate_entra_groups")
 @patch(f"{MODULE}._get_groups_and_members_recursively")
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
-def test_sharepoint_group_ids_are_scoped_to_their_site(
-    _mock_sleep: MagicMock,
-    mock_recursive: MagicMock,
-) -> None:
-    def resolve_groups(
-        client_context: MagicMock,
-        _graph_client: MagicMock,
-        groups: set[Any],
-        is_group_sync: bool = False,
-    ) -> GroupsResult:
-        assert is_group_sync
-        group_name = next(iter(groups)).name
-        email = (
-            "alice@contoso.com"
-            if client_context.base_url.endswith("/first")
-            else "bob@contoso.com"
-        )
-        return GroupsResult(
-            groups_to_emails={group_name: {email}},
-            found_public_group=False,
-        )
-
-    mock_recursive.side_effect = resolve_groups
-
-    def make_site_context(site_url: str) -> MagicMock:
-        member = MagicMock()
-        member.principal_type = SHAREPOINT_GROUP_PRINCIPAL_TYPE
-        member.title = "Project Members"
-        member.login_name = "Project Members"
-        assignment = MagicMock()
-        assignment.role_definition_bindings = None
-        assignment.member = member
-        assignments = MagicMock()
-        assignments.current_page = [assignment]
-
-        def get_all(*, page_size: int, page_loaded: Any) -> MagicMock:
-            assert page_size > 0
-            page_loaded(assignments)
-            return assignments
-
-        client_context = MagicMock()
-        client_context.base_url = site_url
-        client_context.web.role_assignments.expand.return_value.get_all.side_effect = (
-            get_all
-        )
-        return client_context
-
-    first_site = make_site_context("https://contoso.sharepoint.com/sites/first")
-    second_site = make_site_context("https://contoso.sharepoint.com/sites/second")
-
-    first_groups = get_sharepoint_external_groups(
-        client_context=first_site,
-        graph_client=MagicMock(),
-        graph_api_base=GRAPH_API_BASE,
-    )
-    second_groups = get_sharepoint_external_groups(
-        client_context=second_site,
-        graph_client=MagicMock(),
-        graph_api_base=GRAPH_API_BASE,
-    )
-
-    assert first_groups[0].id != second_groups[0].id
-
-
-@patch(f"{MODULE}._enumerate_ad_groups_paginated")
-@patch(f"{MODULE}._get_groups_and_members_recursively")
-@patch(f"{MODULE}.sleep_and_retry")
 def test_enumerate_all_includes_ad_groups(
-    mock_sleep: MagicMock,  # noqa: ARG001
     mock_recursive: MagicMock,
     mock_enum: MagicMock,
 ) -> None:
-    from ee.onyx.db.external_perm import ExternalUserGroup
-
     mock_recursive.return_value = GroupsResult(
         groups_to_emails={"SiteGroup_abc": {"alice@contoso.com"}},
         found_public_group=False,
@@ -604,210 +440,92 @@ def test_enumerate_all_includes_ad_groups(
     ]
 
     results = get_sharepoint_external_groups(
-        client_context=MagicMock(),
-        graph_client=MagicMock(),
-        get_access_token=_fake_token,
-        enumerate_all_ad_groups=True,
-        graph_api_base=GRAPH_API_BASE,
+        FakeSharepointReader(), SITE_URL, enumerate_all_ad_groups=True
     )
 
-    assert len(results) == 2
-    ids = {r.id for r in results}
-    assert ids == {"SiteGroup_abc", "ADGroup_xyz"}
+    assert {r.id for r in results} == {"SiteGroup_abc", "ADGroup_xyz"}
     mock_enum.assert_called_once()
 
 
-@patch(f"{MODULE}._enumerate_ad_groups_paginated")
-@patch(f"{MODULE}._get_groups_and_members_recursively")
-@patch(f"{MODULE}.sleep_and_retry")
-def test_enumerate_all_without_token_skips(
-    mock_sleep: MagicMock,  # noqa: ARG001
-    mock_recursive: MagicMock,
-    mock_enum: MagicMock,
-) -> None:
-    """Even if enumerate_all_ad_groups=True, no token means skip."""
-    mock_recursive.return_value = GroupsResult(
-        groups_to_emails={},
-        found_public_group=False,
+def test_site_page_access_reads_the_page_assignments() -> None:
+    page_url = f"{SITE_URL}/SitePages/Home.aspx"
+    reader = FakeSharepointReader()
+
+    get_external_access_from_sharepoint(
+        reader,
+        SITE_URL,
+        list_id=None,
+        drive_item=None,
+        site_page={"webUrl": page_url},
     )
 
-    results = get_sharepoint_external_groups(
-        client_context=MagicMock(),
-        graph_client=MagicMock(),
-        get_access_token=None,
-        enumerate_all_ad_groups=True,
-        graph_api_base=GRAPH_API_BASE,
+    assert reader.calls[-1].securable == SharepointSecurable(
+        kind=SharepointSecurableKind.PAGE, page_url=page_url
     )
-
-    assert results == []
-    mock_enum.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# get_external_access_from_sharepoint – site page URL handling
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "site_base_url, web_url, expected_relative_url",
+    ("scopes", "treat_sharing_link_as_public", "expected"),
     [
-        (
-            "https://tenant.sharepoint.com/sites/Evan%27sSite",
-            "https://tenant.sharepoint.com/sites/Evan%27sSite/SitePages/Home.aspx",
-            "/sites/Evan%27sSite/SitePages/Home.aspx",
-        ),
-        (
-            "https://tenant.sharepoint.com/sites/NormalSite",
-            "https://tenant.sharepoint.com/sites/NormalSite/SitePages/Page.aspx",
-            "/sites/NormalSite/SitePages/Page.aspx",
-        ),
-        (
-            "https://tenant.sharepoint.com/sites/Site%20With%20Spaces",
-            "https://tenant.sharepoint.com/sites/Site%20With%20Spaces/SitePages/Doc.aspx",
-            "/sites/Site%20With%20Spaces/SitePages/Doc.aspx",
-        ),
+        (["anonymous"], True, True),
+        (["organization"], True, True),
+        (["anonymous"], False, False),
+        (["organization"], False, False),
+        (["users"], True, False),
+        ([], True, False),
     ],
-    ids=["apostrophe-encoded", "no-special-chars", "space-encoded"],
 )
-@patch(f"{MODULE}._get_groups_and_members_recursively")
-@patch(f"{MODULE}.sleep_and_retry")
-def test_site_page_url_not_duplicated(
-    mock_sleep: MagicMock,  # noqa: ARG001
-    mock_recursive: MagicMock,
-    site_base_url: str,
-    web_url: str,
-    expected_relative_url: str,
+def test_is_public_item_follows_sharing_link_scopes(
+    scopes: list[str], treat_sharing_link_as_public: bool, expected: bool
 ) -> None:
-    """Regression: the server-relative URL passed to
-    get_file_by_server_relative_url must preserve percent-encoding so the
-    Office365 library's SPResPath.create_relative() recognises the site prefix
-    and doesn't duplicate it."""
-    mock_recursive.return_value = GroupsResult(
-        groups_to_emails={},
-        found_public_group=False,
+    item = _drive_item()
+    reader = FakeSharepointReader(link_scopes={item.id: scopes})
+
+    assert _is_public_item(reader, item, treat_sharing_link_as_public) is expected
+
+
+def test_is_public_item_default_is_false() -> None:
+    item = _drive_item()
+    reader = FakeSharepointReader(link_scopes={item.id: ["anonymous"]})
+
+    assert _is_public_item(reader, item) is False
+    assert reader.calls == []
+
+
+def test_is_public_item_read_failure_is_not_public() -> None:
+    item = _drive_item()
+    reader = FakeSharepointReader(
+        link_scopes={item.id: MicrosoftGraphError(503, "serviceNotAvailable", "")}
     )
 
-    ctx = MagicMock()
-    ctx.base_url = site_base_url
-
-    site_page = {"webUrl": web_url}
-
-    get_external_access_from_sharepoint(
-        client_context=ctx,
-        graph_client=MagicMock(),
-        drive_name=None,
-        drive_item=None,
-        site_page=site_page,
-    )
-
-    ctx.web.get_file_by_server_relative_url.assert_called_once_with(
-        expected_relative_url
-    )
+    assert _is_public_item(reader, item, treat_sharing_link_as_public=True) is False
 
 
-# ---------------------------------------------------------------------------
-# _is_public_item – sharing link visibility
-# ---------------------------------------------------------------------------
+def test_drive_item_without_list_id_fails_before_any_read() -> None:
+    reader = FakeSharepointReader()
+
+    with pytest.raises(ValueError, match="requires a list ID"):
+        get_sharepoint_external_access(
+            reader=reader,
+            site_url=SITE_URL,
+            permission_cache=SharepointPermissionCache(),
+            list_id=None,
+            drive_item=_drive_item(),
+        )
+
+    assert reader.calls == []
 
 
-def _make_permission(scope: str | None) -> MagicMock:
-    perm = MagicMock()
-    if scope is None:
-        perm.link = None
-    else:
-        perm.link = MagicMock()
-        perm.link.scope = scope
-    return perm
-
-
-def _make_drive_item_with_permissions(
-    permissions: list[MagicMock],
-) -> MagicMock:
-    drive_item = MagicMock()
-    drive_item.id = "item-123"
-    drive_item.permissions.get_all.return_value = permissions
-    return drive_item
-
-
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
-def test_is_public_item_anonymous_link_when_enabled(
-    _mock_sleep: MagicMock,
-) -> None:
-    drive_item = _make_drive_item_with_permissions([_make_permission("anonymous")])
-    assert _is_public_item(drive_item, treat_sharing_link_as_public=True) is True
-
-
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
-def test_is_public_item_org_link_when_enabled(
-    _mock_sleep: MagicMock,
-) -> None:
-    drive_item = _make_drive_item_with_permissions([_make_permission("organization")])
-    assert _is_public_item(drive_item, treat_sharing_link_as_public=True) is True
-
-
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
-def test_is_public_item_anonymous_link_when_disabled(
-    _mock_sleep: MagicMock,
-) -> None:
-    """When the flag is off, anonymous links do NOT make the item public."""
-    drive_item = _make_drive_item_with_permissions([_make_permission("anonymous")])
-    assert _is_public_item(drive_item, treat_sharing_link_as_public=False) is False
-
-
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
-def test_is_public_item_org_link_when_disabled(
-    _mock_sleep: MagicMock,
-) -> None:
-    """When the flag is off, org links do NOT make the item public."""
-    drive_item = _make_drive_item_with_permissions([_make_permission("organization")])
-    assert _is_public_item(drive_item, treat_sharing_link_as_public=False) is False
-
-
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
-def test_is_public_item_no_sharing_links(
-    _mock_sleep: MagicMock,
-) -> None:
-    """User-level permissions only — not public even when flag is on."""
-    drive_item = _make_drive_item_with_permissions([_make_permission(None)])
-    assert _is_public_item(drive_item, treat_sharing_link_as_public=True) is False
-
-
-@patch(f"{MODULE}.sleep_and_retry", side_effect=lambda query, _label: query)
-def test_is_public_item_default_is_false(
-    _mock_sleep: MagicMock,
-) -> None:
-    """Default value of the flag is False, so sharing links are ignored."""
-    drive_item = _make_drive_item_with_permissions([_make_permission("anonymous")])
-    assert _is_public_item(drive_item) is False
-
-
-def test_is_public_item_skips_api_call_when_disabled() -> None:
-    """When the flag is off, the permissions API is never called."""
-    drive_item = MagicMock()
-    _is_public_item(drive_item, treat_sharing_link_as_public=False)
-    drive_item.permissions.get_all.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# get_external_access_from_sharepoint – sharing link integration
-# ---------------------------------------------------------------------------
-
-
-@patch(f"{MODULE}._is_public_item", return_value=True)
-@patch(f"{MODULE}.sleep_and_retry")
-def test_drive_item_public_when_sharing_link_enabled(
-    _mock_sleep: MagicMock,
-    _mock_is_public: MagicMock,
-) -> None:
-    """With treat_sharing_link_as_public=True, a public item returns is_public=True
-    and skips role-assignment resolution entirely."""
-    drive_item = MagicMock()
+def test_drive_item_public_when_sharing_link_enabled() -> None:
+    """A public item skips role-assignment resolution entirely."""
+    item = _drive_item()
+    reader = FakeSharepointReader(link_scopes={item.id: ["anonymous"]})
 
     result = get_external_access_from_sharepoint(
-        client_context=MagicMock(),
-        graph_client=MagicMock(),
-        drive_name="Documents",
-        drive_item=drive_item,
+        reader,
+        SITE_URL,
+        list_id="list-id",
+        drive_item=item,
         site_page=None,
         treat_sharing_link_as_public=True,
     )
@@ -815,31 +533,66 @@ def test_drive_item_public_when_sharing_link_enabled(
     assert result.is_public is True
     assert result.external_user_emails == set()
     assert result.external_user_group_ids == set()
+    assert "list_role_assignments" not in reader.operations()
 
 
 @patch(f"{MODULE}._resolve_document_groups")
-@patch(f"{MODULE}.sleep_and_retry")
-@patch(f"{MODULE}._is_public_item", return_value=False)
 def test_drive_item_falls_through_when_sharing_link_disabled(
-    _mock_is_public: MagicMock,
-    mock_sleep: MagicMock,  # noqa: ARG001
     mock_resolve_groups: MagicMock,
 ) -> None:
-    """With treat_sharing_link_as_public=False, the function falls through to
-    role-assignment-based permission resolution."""
+    """Without the flag, access comes from the list item's role assignments."""
     mock_resolve_groups.return_value = DocumentGroupsResult(
         group_ids={"SiteMembers_abc"},
         found_public_group=False,
     )
+    item = _drive_item()
+    reader = FakeSharepointReader(list_item_ids={item.id: 42})
 
     result = get_external_access_from_sharepoint(
-        client_context=MagicMock(),
-        graph_client=MagicMock(),
-        drive_name="Documents",
-        drive_item=MagicMock(),
+        reader,
+        SITE_URL,
+        list_id="list-id",
+        drive_item=item,
         site_page=None,
         treat_sharing_link_as_public=False,
     )
 
     assert result.is_public is False
-    assert len(result.external_user_group_ids) > 0
+    assert result.external_user_group_ids == {"sitemembers_abc"}
+    assert reader.calls[-1].securable == SharepointSecurable(
+        kind=SharepointSecurableKind.LIST_ITEM, list_id="list-id", item_id=42
+    )
+
+
+def test_drive_item_without_list_item_id_fails() -> None:
+    item = _drive_item()
+    reader = FakeSharepointReader(list_item_ids={item.id: None})
+
+    with pytest.raises(RuntimeError, match="list item ID"):
+        get_external_access_from_sharepoint(
+            reader, SITE_URL, list_id="list-id", drive_item=item, site_page=None
+        )
+
+
+def test_document_access_collects_users_and_prefixed_groups() -> None:
+    reader = FakeSharepointReader(
+        role_assignments={
+            SITE_URL: [
+                _assignment(
+                    SharepointPrincipalType.USER,
+                    "Ada",
+                    user_principal_name="ada@contoso.onmicrosoft.com",
+                ),
+                _assignment(SharepointPrincipalType.USER, "No UPN"),
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Members"),
+                _assignment(SharepointPrincipalType.SHAREPOINT_GROUP, "Limited", [1]),
+            ]
+        }
+    )
+
+    result = get_hierarchy_node_external_access_from_sharepoint(
+        reader, SITE_URL, HierarchyNodeType.SITE, None, None
+    )
+
+    assert result.external_user_emails == {"ada@contoso.com"}
+    assert result.external_user_group_ids == {f"sharepoint_{SITE_URL}::members".lower()}

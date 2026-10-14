@@ -1,12 +1,16 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
+import { render } from "@tests/setup/test-utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
-import type { BuildMessage } from "@/app/craft/types/streamingTypes";
+import type {
+  BuildMessage,
+  OutputCard,
+} from "@/app/craft/types/streamingTypes";
 import type { StreamItem } from "@/app/craft/types/displayTypes";
 
 jest.mock("@/lib/app/components", () => ({
-  Logo: () => <div data-testid="onyx-logo" />,
+  FoldableLogo: () => <div data-testid="onyx-logo" />,
 }));
 
 jest.mock("@/components/chat/MinimalMarkdown", () => ({
@@ -86,6 +90,105 @@ const savedAssistantMessage: BuildMessage = {
     ],
   },
 };
+
+// Output ownership follows settled turns, independently of assistant prose.
+test("renders a settled output-only turn but never places its cards before a live response", () => {
+  const message: BuildMessage = {
+    id: "user",
+    type: "user",
+    content: "Make a report",
+    timestamp: new Date(),
+    turn_index: 0,
+  };
+  const output: OutputCard = {
+    id: "report",
+    kind: "file",
+    path: "outputs/report.md",
+    name: "report.md",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 12,
+    deleted: false,
+    viewed_revision: null,
+  };
+  const props = {
+    sessionId: "session-1",
+    messages: [message],
+    streamItems: [],
+    outputCards: [output],
+    onOutputOpen: jest.fn(),
+    onTurnOutputsOpen: jest.fn(),
+    scrollContainerRef: scrollRef(),
+    autoScrollEnabled: false,
+  };
+  const { rerender } = render(<BuildMessageList {...props} isStreaming />);
+  expect(
+    screen.queryByRole("button", { name: output.name })
+  ).not.toBeInTheDocument();
+  rerender(<BuildMessageList {...props} isStreaming={false} />);
+  expect(screen.getByRole("button", { name: output.name })).toBeInTheDocument();
+  expect(screen.getByText(message.content)).toBeInTheDocument();
+});
+
+test("moves a file card to its latest persisted turn and retains an output-only turn", () => {
+  const messages: BuildMessage[] = [
+    { ...savedAssistantMessage, turn_index: 0 },
+    {
+      id: "assistant-2",
+      type: "assistant",
+      content: "",
+      timestamp: new Date(),
+      turn_index: 1,
+    },
+  ];
+  const output: OutputCard = {
+    id: "report",
+    kind: "file",
+    path: "outputs/report.md",
+    name: "report.md",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 12,
+    deleted: false,
+    viewed_revision: null,
+  };
+  const onOutputOpen = jest.fn();
+  const props = {
+    sessionId: "session-1",
+    messages,
+    streamItems: [],
+    autoScrollEnabled: false,
+    scrollContainerRef: scrollRef(),
+    onOutputOpen,
+    onTurnOutputsOpen: jest.fn(),
+  };
+  const { rerender } = render(
+    <BuildMessageList {...props} outputCards={[output]} />
+  );
+  expect(
+    within(screen.getByTestId("craft-turn-outputs-0")).getByRole("button", {
+      name: output.name,
+    })
+  ).toBeInTheDocument();
+  rerender(
+    <BuildMessageList
+      {...props}
+      outputCards={[{ ...output, turn_index: 1, revision: 2 }]}
+    />
+  );
+  expect(screen.queryByTestId("craft-turn-outputs-0")).not.toBeInTheDocument();
+  fireEvent.click(
+    within(screen.getByTestId("craft-turn-outputs-1")).getByRole("button", {
+      name: output.name,
+    })
+  );
+  expect(onOutputOpen).toHaveBeenCalledWith({
+    ...output,
+    turn_index: 1,
+    revision: 2,
+  });
+  expect(screen.getByText("Final answer")).toBeInTheDocument();
+});
 
 describe("BuildMessageList thinking visibility", () => {
   it("renders image attachments on user messages", () => {
@@ -199,4 +302,30 @@ describe("BuildMessageList thinking visibility", () => {
       "provider model not found"
     );
   });
+});
+
+// Finalization uses the existing assistant block until canonical history is ready.
+test("keeps one assistant cursor during finalization and removes it when finalization stops", () => {
+  const props = {
+    sessionId: "session-1",
+    messages: [savedAssistantMessage],
+    streamItems: [],
+    scrollContainerRef: scrollRef(),
+    autoScrollEnabled: false,
+  };
+  const { rerender } = render(
+    <TooltipProvider>
+      <BuildMessageList {...props} isStreaming isFinalizing />
+    </TooltipProvider>
+  );
+  expect(screen.getAllByText("Final answer")).toHaveLength(1);
+  expect(screen.getAllByTestId("onyx-logo")).toHaveLength(1);
+  expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
+  rerender(
+    <TooltipProvider>
+      <BuildMessageList {...props} isFinalizing={false} />
+    </TooltipProvider>
+  );
+  expect(screen.getByText("Final answer")).toBeInTheDocument();
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });

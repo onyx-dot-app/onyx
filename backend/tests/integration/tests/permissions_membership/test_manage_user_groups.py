@@ -34,7 +34,7 @@ from tests.integration.tests.permissions._access_matrix import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User-group permission tests are enterprise only",
 )
 
@@ -322,3 +322,45 @@ def test_holder_can_still_add_users_to_an_ordinary_group(
     )
     assert resp.status_code == 200, resp.text
     assert holder_user.id in {user["id"] for user in resp.json()["users"]}
+
+
+def test_holder_cannot_touch_the_basic_group(
+    permission_admin_user: DATestUser,
+    holder_user: DATestUser,
+) -> None:
+    """The holder is a Basic member and already holds every Basic grant, so the
+    amplification check above can't be what stops them. The default-group gate is. The
+    affordance map agrees, which is what keeps the groups page from listing Admin/Basic
+    for them."""
+    basic = UserGroupManager.get_default(
+        user_performing_action=permission_admin_user, name="Basic"
+    )
+
+    listed = next(
+        group
+        for group in UserGroupManager.get_all(holder_user, include_default=True)
+        if group.id == basic.id
+    )
+    assert not any(listed.permissions.values()), listed.permissions
+
+    patched = call_endpoint(
+        "PATCH",
+        f"/manage/admin/user-group/{basic.id}",
+        {
+            "user_ids": [user.id for user in basic.users],
+            "cc_pair_ids": [cc_pair.id for cc_pair in basic.cc_pairs],
+        },
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert patched.status_code == 403, patched.text
+
+    # holder is already in Basic, so this is add-users' no-op path: still gated, not 200
+    added = call_endpoint(
+        "POST",
+        f"/manage/admin/user-group/{basic.id}/add-users",
+        {"user_ids": [holder_user.id]},
+        holder_user.headers,
+        holder_user.cookies,
+    )
+    assert added.status_code == 403, added.text

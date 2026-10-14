@@ -1,27 +1,26 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
-
-const ERROR_MESSAGES = {
-  Anonymous: "Your team does not have anonymous access enabled.",
-};
 
 export default function AuthErrorDisplay({
   searchParams,
 }: {
   searchParams: any;
 }) {
+  const t = useTranslations("auth.errorDisplay");
   const error = searchParams?.error;
 
   useEffect(() => {
     if (error) {
       toast.error(
-        ERROR_MESSAGES[error as keyof typeof ERROR_MESSAGES] ||
-          "An error occurred."
+        error === "Anonymous"
+          ? t("anonymousDisabled.toast")
+          : t("generic.toast")
       );
     }
-  }, [error]);
+  }, [error, t]);
 
   return null;
 }

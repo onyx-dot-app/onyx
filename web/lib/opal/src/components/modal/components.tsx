@@ -5,6 +5,7 @@ import "@opal/components/modal/styles.css";
 import React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import type {
+  ColorTypes,
   IconFunctionComponent,
   RichStr,
   SizeVariants,
@@ -15,6 +16,7 @@ import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
 import useContainerCenter from "@opal/hooks/useContainerCenter";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Root + Overlay
@@ -318,6 +320,8 @@ interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
   icon?: IconFunctionComponent;
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
+  /** Colour mode of the icon and title, as on `Content`. */
+  color?: ColorTypes;
   title: string | RichStr;
   description?: string | RichStr;
   onClose?: () => void;
@@ -328,13 +332,24 @@ function ModalHeader({
   icon,
   moreIcon1,
   moreIcon2,
+  color,
   title,
   description,
   onClose,
   children,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  padding = 2,
+  alignItems = "start",
+  height = "fit",
   ...props
 }: ModalHeaderProps) {
   const { closeButtonRef, setHasDescription } = useModalContext();
+  const strings = useOpalStrings();
 
   React.useLayoutEffect(() => {
     setHasDescription(!!description);
@@ -348,7 +363,7 @@ function ModalHeader({
     >
       <DialogPrimitive.Close asChild>
         <Button
-          aria-label="Close"
+          aria-label={strings.close}
           icon={SvgX}
           prominence="tertiary"
           size="sm"
@@ -359,7 +374,13 @@ function ModalHeader({
   );
 
   return (
-    <Section ref={ref} padding={2} alignItems="start" height="fit" {...props}>
+    <Section
+      ref={ref}
+      padding={padding}
+      alignItems={alignItems}
+      height={height}
+      {...props}
+    >
       <Section
         flexDirection="row"
         justifyContent="between"
@@ -375,6 +396,7 @@ function ModalHeader({
                 icon={icon}
                 moreIcon1={moreIcon1}
                 moreIcon2={moreIcon2}
+                color={color}
                 title={title}
                 description={description}
                 sizePreset="section"
@@ -408,6 +430,16 @@ function ModalBody({
   ref,
   twoTone = true,
   children,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  height = "auto",
+  padding = 4,
+  gap = 4,
+  alignItems = "start",
   ...props
 }: ModalBodyProps) {
   return (
@@ -416,7 +448,13 @@ function ModalBody({
       className="opal-modal-body"
       {...(twoTone && { "data-two-tone": "" })}
     >
-      <Section height="auto" padding={4} gap={4} alignItems="start" {...props}>
+      <Section
+        height={height}
+        padding={padding}
+        gap={gap}
+        alignItems={alignItems}
+        {...props}
+      >
         {children}
       </Section>
     </div>
@@ -427,15 +465,29 @@ interface ModalFooterProps extends WithoutStyles<SectionProps> {
   ref?: React.Ref<HTMLDivElement>;
 }
 
-function ModalFooter({ ref, ...props }: ModalFooterProps) {
+function ModalFooter({
+  ref,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  flexDirection = "row",
+  justifyContent = "end",
+  gap = 2,
+  padding = 4,
+  height = "fit",
+  ...props
+}: ModalFooterProps) {
   return (
     <Section
       ref={ref}
-      flexDirection="row"
-      justifyContent="end"
-      gap={2}
-      padding={4}
-      height="fit"
+      flexDirection={flexDirection}
+      justifyContent={justifyContent}
+      gap={gap}
+      padding={padding}
+      height={height}
       {...props}
     />
   );

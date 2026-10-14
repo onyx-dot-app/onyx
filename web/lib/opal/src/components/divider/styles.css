@@ -12,6 +12,8 @@
 .opal-divider {
   @apply flex flex-col w-full;
   gap: 0.75rem;
+  /* The default inset for every variant: 0.375rem along the line, 0.25rem across. */
+  padding: 0.25rem 0.375rem;
 }
 
 .opal-divider-row {
@@ -39,6 +41,7 @@
   /* self-stretch overrides items-center on the parent so the divider spans
      the full cross-axis height of the flex container. */
   @apply flex flex-row self-stretch;
+  padding: 0.375rem 0.25rem;
 }
 
 .opal-divider-line-vertical {

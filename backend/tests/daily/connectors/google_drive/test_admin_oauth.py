@@ -10,6 +10,8 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     ADMIN_FOLDER_3_FILE_IDS,
     ADMIN_MY_DRIVE_ID,
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+    EXTERNAL_ONLY_ADMIN_FOLDER_ID,
+    EXTERNAL_SHARED_FOLDER_ID,
     FOLDER_1_1_FILE_IDS,
     FOLDER_1_1_URL,
     FOLDER_1_2_FILE_IDS,
@@ -23,6 +25,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     FOLDER_2_URL,
     FOLDER_3_ID,
     FOLDER_3_URL,
+    GROUP_ORGANIZER_DRIVE_ID,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
     PERM_SYNC_DRIVE_ADMIN_ONLY_ID,
@@ -104,6 +107,9 @@ def test_include_all(
             TEST_USER_1_EXTRA_FOLDER_ID,
             FOLDER_3_ID,
             *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+            GROUP_ORGANIZER_DRIVE_ID,
+            EXTERNAL_SHARED_FOLDER_ID,
+            EXTERNAL_ONLY_ADMIN_FOLDER_ID,
         )
     )
     assert_hierarchy_nodes_match_expected(
@@ -163,6 +169,7 @@ def test_include_shared_drives_only(
             TEST_USER_1_EXTRA_DRIVE_1_ID,
             TEST_USER_1_EXTRA_DRIVE_2_ID,
             RESTRICTED_ACCESS_FOLDER_ID,
+            GROUP_ORGANIZER_DRIVE_ID,
         )
     )
     assert_hierarchy_nodes_match_expected(
@@ -205,6 +212,8 @@ def test_include_my_drives_only(
         PILL_FOLDER_ID,
         TEST_USER_1_EXTRA_FOLDER_ID,
         *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+        EXTERNAL_SHARED_FOLDER_ID,
+        EXTERNAL_ONLY_ADMIN_FOLDER_ID,
     )
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,

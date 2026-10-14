@@ -1,11 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
+import { InputSingleSelectField } from "@opal/form";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -17,7 +18,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -76,8 +77,21 @@ function BedrockModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: BedrockModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
+  const tInputSelect = useTranslations("common.inputSelect");
+  const { appName } = useSettings();
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
+  // A provider saved with a region outside the list (a newer AWS region)
+  // keeps it as an option, so the saved value shows instead of an error.
+  const savedRegion = formikProps.values.custom_config?.AWS_REGION_NAME;
+  const regionOptions = AWS_REGION_OPTIONS.map((option) => ({
+    value: option.value,
+    title: option.name,
+  }));
+  if (savedRegion && !AWS_REGION_OPTIONS.some((o) => o.value === savedRegion)) {
+    regionOptions.push({ value: savedRegion, title: savedRegion });
+  }
 
   useEffect(() => {
     if (authMethod === AUTH_METHOD_IAM) {
@@ -117,13 +131,7 @@ function BedrockModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(models));
   };
 
   return (
@@ -132,68 +140,69 @@ function BedrockModalInternals({
         <Section gap={4}>
           <InputVertical
             withLabel={FIELD_AWS_REGION_NAME}
-            title="AWS Region"
-            subDescription="Region where your Amazon Bedrock models are hosted."
+            title={t("bedrock.regionField.title")}
+            subDescription={t("bedrock.regionField.description")}
           >
-            <InputSelectField name={FIELD_AWS_REGION_NAME}>
-              <InputSelect.Trigger placeholder="Select a region" />
-              <InputSelect.Content>
-                {AWS_REGION_OPTIONS.map((option) => (
-                  <InputSelect.Item key={option.value} value={option.value}>
-                    {option.name}
-                  </InputSelect.Item>
-                ))}
-              </InputSelect.Content>
-            </InputSelectField>
+            <InputSingleSelectField
+              name={FIELD_AWS_REGION_NAME}
+              placeholder={t("bedrock.regionField.placeholder")}
+              options={regionOptions}
+            />
           </InputVertical>
 
           <InputVertical
             withLabel={FIELD_BEDROCK_AUTH_METHOD}
-            title="Authentication Method"
-            subDescription="Choose how Onyx should authenticate with Bedrock."
+            title={t("bedrock.authMethodField.title")}
+            subDescription={t("bedrock.authMethodField.description", {
+              appName,
+            })}
           >
-            <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
-              <InputSelect.Trigger />
-              <InputSelect.Content>
-                <InputSelect.Item
-                  value={AUTH_METHOD_IAM}
-                  description="Recommended for AWS environments"
-                >
-                  Environment IAM Role
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value={AUTH_METHOD_ACCESS_KEY}
-                  description="For non-AWS environments"
-                >
-                  Access Key
-                </InputSelect.Item>
-                <InputSelect.Item
-                  value={AUTH_METHOD_LONG_TERM_API_KEY}
-                  description="For non-AWS environments"
-                >
-                  Long-term API Key
-                </InputSelect.Item>
-              </InputSelect.Content>
-            </InputSelectField>
+            <InputSingleSelectField
+              name={FIELD_BEDROCK_AUTH_METHOD}
+              defaultOption={AUTH_METHOD_IAM}
+              placeholder={tInputSelect("placeholder.fallback")}
+              options={[
+                {
+                  value: AUTH_METHOD_IAM,
+                  title: t("bedrock.authMethodField.iam.label"),
+                  description: t("bedrock.authMethodField.iam.description"),
+                },
+                {
+                  value: AUTH_METHOD_ACCESS_KEY,
+                  title: t("bedrock.authMethodField.accessKey.label"),
+                  description: t(
+                    "bedrock.authMethodField.accessKey.description"
+                  ),
+                },
+                {
+                  value: AUTH_METHOD_LONG_TERM_API_KEY,
+                  title: t("bedrock.authMethodField.longTermApiKey.label"),
+                  description: t(
+                    "bedrock.authMethodField.longTermApiKey.description"
+                  ),
+                },
+              ]}
+            />
           </InputVertical>
         </Section>
       </InputPadder>
 
       {authMethod === AUTH_METHOD_ACCESS_KEY && (
-        <Card background="light" border="none" padding={2}>
+        <Card color="background-tint-00" border="none" padding={2}>
           <Section gap={4}>
             <InputVertical
               withLabel={FIELD_AWS_ACCESS_KEY_ID}
-              title="AWS Access Key ID"
+              title={t("bedrock.accessKeyIdField.title")}
             >
               <InputTypeInField
                 name={FIELD_AWS_ACCESS_KEY_ID}
+                // oxlint-disable-next-line i18n/no-raw-jsx-text -- AWS example key, not copy
                 placeholder="AKIAIOSFODNN7EXAMPLE"
               />
             </InputVertical>
             <InputVertical
               withLabel={FIELD_AWS_SECRET_ACCESS_KEY}
-              title="AWS Secret Access Key"
+              title={t("bedrock.secretAccessKeyField.title")}
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
@@ -207,22 +216,24 @@ function BedrockModalInternals({
       {authMethod === AUTH_METHOD_IAM && (
         <InputPadder>
           <MessageCard
+            outerPadding={1}
+            innerPadding={1}
             variant="info"
-            title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
+            title={t("bedrock.iamNotice.title", { appName })}
           />
         </InputPadder>
       )}
 
       {authMethod === AUTH_METHOD_LONG_TERM_API_KEY && (
-        <Card background="light" border="none" padding={2}>
+        <Card color="background-tint-00" border="none" padding={2}>
           <Section gap={2}>
             <InputVertical
               withLabel={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-              title="Long-term API Key"
+              title={t("bedrock.longTermApiKeyField.title")}
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-                placeholder="Your long-term API key"
+                placeholder={t("bedrock.longTermApiKeyField.placeholder")}
               />
             </InputVertical>
           </Section>
@@ -260,6 +271,7 @@ export default function BedrockModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -286,12 +298,14 @@ export default function BedrockModal({
         (existingLlmProvider?.custom_config
           ?.AWS_BEARER_TOKEN_BEDROCK as string) ?? "",
     },
-  } as BedrockModalValues;
+  };
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     extra: {
       custom_config: Yup.object({
-        AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
+        AWS_REGION_NAME: Yup.string().required(
+          t("bedrock.validation.regionRequired")
+        ),
       }),
     },
   });
@@ -317,6 +331,7 @@ export default function BedrockModal({
         };
 
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -337,8 +352,8 @@ export default function BedrockModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

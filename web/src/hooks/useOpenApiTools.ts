@@ -1,7 +1,7 @@
 "use client";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot } from "@/lib/tools/types";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 

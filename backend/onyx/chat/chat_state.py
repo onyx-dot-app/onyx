@@ -1,13 +1,13 @@
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
-
-from pydantic import BaseModel
 
 from onyx.cache.interface import CacheBackend
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.models import (
+    AvailableFiles,
     ChatLoadedFile,
     ChatMessageSimple,
     ExtractedContextFiles,
@@ -22,7 +22,7 @@ from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.models import ChatFile, ToolCallInfo
+from onyx.tools.models import ChatFile, PersonaToolConfiguration, ToolCallInfo
 
 # Type alias for search doc deduplication key
 # Simple key: just document_id (str)
@@ -55,6 +55,8 @@ class ChatStateContainer:
         self.is_clarification: bool = False
         # Pre-answer processing time (time before answer starts) in seconds
         self.pre_answer_processing_time: float | None = None
+        # Per-model: the outcome is persisted from whichever thread claims it.
+        self.request_params: dict[str, Any] | None = None
         # Note: LLM cost tracking is now handled in multi_llm.py
         # Search doc collection - maps dedup key to SearchDoc for all docs from tool calls
         self._all_search_docs: dict[SearchDocKey, SearchDoc] = {}
@@ -75,6 +77,16 @@ class ChatStateContainer:
         """Set the answer tokens from the final answer generation."""
         with self._lock:
             self.answer_tokens = answer
+
+    def set_request_params(self, request_params: dict[str, Any] | None) -> None:
+        """Set the request params the answer generation sent to the provider."""
+        with self._lock:
+            self.request_params = request_params
+
+    def get_request_params(self) -> dict[str, Any] | None:
+        """Thread-safe getter for request_params."""
+        with self._lock:
+            return self.request_params
 
     def set_citation_mapping(self, citation_to_doc: CitationMapping) -> None:
         """Set the citation mapping from citation processor."""
@@ -170,15 +182,6 @@ class ChatStateContainer:
             return self._emitted_citations.copy()
 
 
-class AvailableFiles(BaseModel):
-    """Separated file IDs for the FileReaderTool so it knows which loader to use."""
-
-    # IDs from the ``user_file`` table (project / persona-attached files).
-    user_file_ids: list[UUID] = []
-    # IDs from the ``file_record`` table (chat-attached files).
-    chat_file_ids: list[UUID] = []
-
-
 @dataclass(frozen=True)
 class ChatTurnSetup:
     """Immutable context produced by ``build_chat_turn`` and consumed by ``_run_models``.
@@ -201,6 +204,7 @@ class ChatTurnSetup:
     # The session's pinned recording policy. None is an ordinary chat.
     incognito_record_mode: IncognitoRecordMode | None
     persona: Persona
+    tool_configuration: PersonaToolConfiguration
     user_message_id: int
     user_identity: LLMUserIdentity
     llms: list[LLM]  # length 1 for single-model, N for multi-model
@@ -208,8 +212,8 @@ class ChatTurnSetup:
     simple_chat_history: list[ChatMessageSimple]
     extracted_context_files: ExtractedContextFiles
     reserved_messages: list[ChatMessage]  # length 1 for single, N for multi
-    # Processing-fence value and stream-buffer key — single source for the run id
-    processing_run_id: int
+    # Processing-fence value, stream-buffer key, and Stop-request key
+    processing_stream_id: int
     reserved_token_count: int
     reasoning_effort: ReasoningEffort
     search_params: SearchParams
@@ -226,7 +230,6 @@ class ChatTurnSetup:
     check_is_connected: Callable[[], bool]
     cache: CacheBackend
     # Execution params forwarded to per-model tool construction
-    bypass_acl: bool
     slack_context: SlackContext | None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None

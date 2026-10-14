@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import BaseInputBar, {
   type BaseInputBarHandle,
@@ -30,7 +31,7 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
-import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { useCraftMcpServers } from "@/lib/mcp/hooks";
 import {
   pickerEntryConnectionPath,
   pickerEntryKey,
@@ -56,7 +57,7 @@ export interface CraftInputBarProps {
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string, files: BuildFile[]) => void;
+  onQueueMessage?: (text: string, files: BuildFile[]) => boolean | void;
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
@@ -93,6 +94,8 @@ const CraftInputBar = memo(
       },
       ref
     ) => {
+      const t = useTranslations("craft.inputBar");
+      const entryMenuT = useTranslations("craft.entryMenu");
       const baseRef = useRef<BaseInputBarHandle>(null);
       const fileInputRef = useRef<HTMLInputElement>(null);
       const router = useRouter();
@@ -209,20 +212,22 @@ const CraftInputBar = memo(
             currentMessageFiles
           );
           setActiveEntries([]);
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
         },
         [activeEntries, currentMessageFiles, onSubmit, clearFiles]
       );
 
       const handleQueueMessage = useCallback(
         (message: string) => {
-          if (!onQueueMessage) return;
-          onQueueMessage(
+          if (!onQueueMessage) return false;
+          const accepted = onQueueMessage(
             withEntryPrefixes(message, activeEntries),
             currentMessageFiles
           );
+          if (accepted === false) return false;
           setActiveEntries([]);
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
+          return true;
         },
         [activeEntries, currentMessageFiles, onQueueMessage, clearFiles]
       );
@@ -240,17 +245,21 @@ const CraftInputBar = memo(
 
       const plusMenuItems = useMemo(
         () =>
-          buildEntryMenuItems(pickerSections, {
-            onAttachFiles: () => fileInputRef.current?.click(),
-            onSelectEntry: addEntry,
-            onBrowseSkills: () => router.push("/craft/v1/skills"),
-            onBrowseApps: () => router.push("/craft/v1/apps"),
-            libraryFiles,
-            // Defer the modal until the + popover finishes closing, else it paints over it.
-            onManageLibrary: () =>
-              window.setTimeout(() => setLibraryModalOpen(true), 200),
-          }),
-        [pickerSections, addEntry, libraryFiles, router]
+          buildEntryMenuItems(
+            pickerSections,
+            {
+              onAttachFiles: () => fileInputRef.current?.click(),
+              onSelectEntry: addEntry,
+              onBrowseSkills: () => router.push("/craft/v1/skills"),
+              onBrowseApps: () => router.push("/craft/v1/apps"),
+              libraryFiles,
+              // Defer the modal until the + popover finishes closing, else it paints over it.
+              onManageLibrary: () =>
+                window.setTimeout(() => setLibraryModalOpen(true), 200),
+            },
+            entryMenuT
+          ),
+        [pickerSections, addEntry, libraryFiles, router, entryMenuT]
       );
 
       const bottomLeftSlot = (
@@ -258,7 +267,7 @@ const CraftInputBar = memo(
           <PlusMenuButton
             items={plusMenuItems}
             disabled={disabled}
-            tooltip="Add files or skills"
+            tooltip={t("plusMenu.tooltip")}
           />
           {interruptible && <InterruptHint interrupting={isInterrupting} />}
         </>
@@ -322,8 +331,8 @@ const CraftInputBar = memo(
                 entryInfo.entry.kind === "skill"
                   ? entryInfo.entry.description
                   : entryInfo.entry.authenticated
-                    ? "Connected"
-                    : "Connection required"
+                    ? t("entryInfo.connected")
+                    : t("entryInfo.connectionRequired")
               }
               tileElement={entryInfo.chipEl}
               onDismiss={dismissEntryInfo}

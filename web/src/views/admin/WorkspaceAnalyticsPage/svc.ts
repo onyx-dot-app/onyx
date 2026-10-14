@@ -1,5 +1,6 @@
 /** API helpers for the Workspace Analytics page. */
 
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ReportPeriod } from "@/views/admin/WorkspaceAnalyticsPage/interfaces";
 
@@ -27,10 +28,12 @@ export async function generateUsageReport(
     }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch((parseError: unknown) => {
-      console.error("Usage report error response was not JSON:", parseError);
-      return null;
-    });
+    const detail: ErrorResponseBody | null = await res
+      .json()
+      .catch((parseError: unknown) => {
+        console.error("Usage report error response was not JSON:", parseError);
+        return null;
+      });
     throw new Error(
       detail?.detail ?? `Failed to start report generation: ${res.statusText}`
     );

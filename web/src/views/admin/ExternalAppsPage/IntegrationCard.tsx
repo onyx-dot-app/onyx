@@ -1,19 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Button,
+  Dropdown,
   Card,
-  Popover,
-  PopoverMenu,
-  Switch,
+  type DropdownMenuItem,
+  InputSwitch,
   Tag,
   Text,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { cn } from "@opal/utils";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { ConfirmationModalLayout, toast } from "@opal/layouts";
 import { SvgEdit, SvgMoreHorizontal, SvgTrash } from "@opal/icons";
 import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/interfaces";
@@ -34,6 +34,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
     edit,
     remove,
   } = integration;
+  const t = useTranslations("admin.externalApps");
   const [isMutating, setIsMutating] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
@@ -54,9 +55,35 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
     }
   }
 
+  const menuItems: DropdownMenuItem[] = [
+    ...(edit
+      ? [
+          {
+            kind: "action" as const,
+            id: "edit",
+            icon: SvgEdit,
+            title: t("card.editAction.label"),
+            onSelect: edit,
+          },
+        ]
+      : []),
+    ...(remove
+      ? [
+          {
+            kind: "action" as const,
+            id: "delete",
+            icon: SvgTrash,
+            danger: true,
+            title: t("card.deleteAction.label"),
+            onSelect: () => setConfirmingRemoval(true),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <Hoverable.Root group="integration-row">
-      <Card background="light" border="solid" rounding="lg">
+      <Card color="background-tint-00" border="solid" rounding={4}>
         <div className="flex items-center gap-3 w-full">
           {/* Off rows read as inert at a glance; controls keep full opacity. */}
           <div
@@ -69,7 +96,9 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
             <div className="flex-1 min-w-0 flex flex-col gap-0.5">
               <div className="flex items-center gap-2">
                 <Text font="main-ui-action">{name}</Text>
-                {isCustom && <Tag title="Custom" color="purple" />}
+                {isCustom && (
+                  <Tag title={t("card.customTag.label")} color="purple" />
+                )}
                 {warnings.map((warning) => (
                   <Tag key={warning} title={warning} color="amber" error />
                 ))}
@@ -83,92 +112,76 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
             {/* Toggles org-wide availability, never a single member's
                 connection; the label fades in on hover or focus. */}
             <Hoverable.Item group="integration-row" variant="appear-on-hover">
-              <Text font="secondary-body" color="text-03" nowrap>
-                Available in Craft
+              <Text
+                font="secondary-body"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
+                {t("card.availableInCraft.label")}
               </Text>
             </Hoverable.Item>
-            <Switch
+            <InputSwitch
               checked={enabled}
               onCheckedChange={() =>
                 run(
                   toggleEnabled,
-                  `Failed to ${enabled ? "disable" : "enable"} "${name}"`
+                  enabled
+                    ? t("card.toasts.disableFailed", { name })
+                    : t("card.toasts.enableFailed", { name })
                 )
               }
               disabled={isMutating}
-              aria-label={`${enabled ? "Disable" : "Enable"} ${name}`}
+              aria-label={
+                enabled
+                  ? t("card.toggle.disableAriaLabel", { name })
+                  : t("card.toggle.enableAriaLabel", { name })
+              }
             />
             {/* Secondary actions live in an overflow menu at the card's edge.
                 Every row renders the trigger, so the switch position is
                 uniform whether or not a row can be edited or deleted. */}
-            <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-              <Popover.Trigger asChild>
+            <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
+              <Dropdown.Trigger asChild>
                 <Button
                   prominence="tertiary"
                   icon={SvgMoreHorizontal}
                   disabled={isMutating || (!edit && !remove)}
-                  aria-label={`${name} actions`}
+                  aria-label={t("card.actionsButton.ariaLabel", { name })}
                 />
-              </Popover.Trigger>
-              <Popover.Content align="end" width="sm">
-                <PopoverMenu>
-                  {[
-                    edit ? (
-                      <LineItem
-                        key="edit"
-                        icon={SvgEdit}
-                        onClick={() => {
-                          setMenuOpen(false);
-                          edit();
-                        }}
-                      >
-                        Edit
-                      </LineItem>
-                    ) : undefined,
-                    remove ? (
-                      <LineItem
-                        key="delete"
-                        icon={SvgTrash}
-                        danger
-                        onClick={() => {
-                          setMenuOpen(false);
-                          setConfirmingRemoval(true);
-                        }}
-                      >
-                        Delete
-                      </LineItem>
-                    ) : undefined,
-                  ]}
-                </PopoverMenu>
-              </Popover.Content>
-            </Popover>
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("card.actionsButton.ariaLabel", { name })}
+                items={menuItems}
+              />
+            </Dropdown>
           </div>
         </div>
         {confirmingRemoval && remove && (
           <ConfirmationModalLayout
             icon={SvgTrash}
-            title={`Delete “${name}”?`}
-            description="This deletes the app for your whole organization: its configuration, every member's connection, and any provider-managed skills."
+            title={t("card.deleteModal.title", { name })}
+            description={t("card.deleteModal.description")}
             onClose={isMutating ? undefined : () => setConfirmingRemoval(false)}
             submit={
               <Button
                 variant="danger"
                 disabled={isMutating}
                 onClick={async () => {
-                  if (await run(remove.run, `Failed to delete "${name}"`)) {
+                  const failure = t("card.toasts.deleteFailed", { name });
+                  if (await run(remove.run, failure)) {
                     setConfirmingRemoval(false);
                   }
                 }}
               >
-                {isMutating ? "Deleting…" : "Delete app"}
+                {isMutating
+                  ? t("card.deleteModal.submitting.label")
+                  : t("card.deleteModal.submit.label")}
               </Button>
             }
           >
-            {remove.retainedCustomSkillCount === 0
-              ? "No associated custom skills will be deleted."
-              : `${remove.retainedCustomSkillCount} associated custom ${
-                  remove.retainedCustomSkillCount === 1 ? "skill" : "skills"
-                } will be kept, unlinked from this app, and disabled for everyone.`}
+            {t("card.deleteModal.retainedSkills", {
+              count: remove.retainedCustomSkillCount,
+            })}
           </ConfirmationModalLayout>
         )}
       </Card>

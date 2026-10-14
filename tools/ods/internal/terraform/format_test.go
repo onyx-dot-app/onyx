@@ -77,3 +77,44 @@ func TestFormatFileRejectsInvalidHCL(t *testing.T) {
 		t.Fatal("expected invalid HCL to be reported")
 	}
 }
+
+// Results and errors line up with the input files, whatever order the
+// concurrent workers finish in.
+func TestFormatFilesKeepsInputOrder(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"clean.tf":   "a = 1\n",
+		"messy.tf":   "a=1\n",
+		"invalid.tf": "variable \"x\" {\n",
+	}
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := []string{
+		filepath.Join(dir, "messy.tf"),
+		filepath.Join(dir, "missing.tf"),
+		filepath.Join(dir, "clean.tf"),
+		filepath.Join(dir, "invalid.tf"),
+	}
+
+	results, errs := FormatFiles(paths, false)
+
+	wantChanged := []bool{true, false, false, false}
+	wantErr := []bool{false, true, false, true}
+	for i, path := range paths {
+		if results[i].Path != path {
+			t.Errorf("result %d: expected %q, got %q", i, path, results[i].Path)
+		}
+		if results[i].Changed != wantChanged[i] {
+			t.Errorf("%s: expected changed=%v, got %v", path, wantChanged[i], results[i].Changed)
+		}
+		if (errs[i] != nil) != wantErr[i] {
+			t.Errorf("%s: expected error=%v, got %v", path, wantErr[i], errs[i])
+		}
+	}
+	if got, err := os.ReadFile(paths[0]); err != nil || string(got) != "a=1\n" {
+		t.Errorf("expected the check to leave messy.tf alone, got %q (%v)", got, err)
+	}
+}

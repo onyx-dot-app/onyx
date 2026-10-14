@@ -74,7 +74,7 @@ def get_action_policies(
         .join(GatedApp, GatedApp.id == GatedActionPolicy.gated_app_id)
         .where(_target_column(kind) == target_id)
     ).all()
-    return {action_id: policy for action_id, policy in rows}
+    return {action_id: policy for action_id, policy in rows}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def replace_action_policies__no_commit(

@@ -51,13 +51,17 @@ Examples:
   ods db restore --fetch-seeded          # Download and restore seeded snapshot`,
 		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
+			var err error
 			if opts.FetchSeeded {
-				runDBRestoreSeeded(opts)
+				err = runDBRestoreSeeded(opts)
 			} else {
 				if len(args) == 0 {
 					log.Fatal("Must provide an input file or use --fetch-seeded")
 				}
-				runDBRestore(args[0], opts)
+				err = runDBRestore(args[0], opts)
+			}
+			if err != nil {
+				log.Fatal(err)
 			}
 		},
 		ValidArgsFunction: completeSnapshotFiles,
@@ -100,43 +104,43 @@ func completeSnapshotFiles(cmd *cobra.Command, args []string, toComplete string)
 	return completions, cobra.ShellCompDirectiveDefault
 }
 
-func runDBRestoreSeeded(opts *DBRestoreOptions) {
+func runDBRestoreSeeded(opts *DBRestoreOptions) error {
 	// Download seeded snapshot to snapshots directory.
 	destPath := filepath.Join(paths.SnapshotsDir(), "seeded.dump")
 
 	log.Infof("Downloading seeded snapshot from %s...", seededSnapshotURL)
 	if err := s3.FetchToFile(seededSnapshotURL, destPath); err != nil {
-		log.Fatalf("Failed to download seeded snapshot: %v", err)
+		return fatalErrorf("Failed to download seeded snapshot: %w", err)
 	}
 
 	// Verify download is non-empty.
 	info, err := os.Stat(destPath)
 	if err != nil {
-		log.Fatalf("Failed to stat downloaded snapshot: %v", err)
+		return fatalErrorf("Failed to stat downloaded snapshot: %w", err)
 	}
 	if info.Size() == 0 {
-		log.Fatalf("Downloaded snapshot is empty (0 bytes). The S3 object may be missing or the download was corrupted.")
+		return fatalErrorf("Downloaded snapshot is empty (0 bytes). The S3 object may be missing or the download was corrupted.")
 	}
 
 	log.Infof("Downloaded seeded snapshot to: %s (%d bytes)", destPath, info.Size())
 
 	// Restore the downloaded snapshot.
-	runDBRestore(destPath, opts)
+	return runDBRestore(destPath, opts)
 }
 
-func runDBRestore(input string, opts *DBRestoreOptions) {
+func runDBRestore(input string, opts *DBRestoreOptions) error {
 	// Resolve input path.
 	inputPath := resolveInputPath(input)
 
 	// Check if file exists.
 	if _, err := os.Stat(inputPath); os.IsNotExist(err) {
-		log.Fatalf("Input file not found: %s", inputPath)
+		return fatalErrorf("Input file not found: %s", inputPath)
 	}
 
 	// Find PostgreSQL container.
 	container, err := docker.FindPostgresContainer(docker.ProjectName())
 	if err != nil {
-		log.Fatalf("Failed to find PostgreSQL container: %v", err)
+		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
 	}
 	log.Infof("Found PostgreSQL container: %s", container)
 
@@ -148,7 +152,7 @@ func runDBRestore(input string, opts *DBRestoreOptions) {
 			filepath.Base(inputPath), config.Database)
 		if !prompt.Confirm(msg) {
 			log.Info("Aborted.")
-			return
+			return nil
 		}
 	}
 
@@ -160,7 +164,7 @@ func runDBRestore(input string, opts *DBRestoreOptions) {
 	// Copy file to container.
 	containerTmpFile := "/tmp/onyx_restore_tmp"
 	if err := docker.CopyToContainer(container, inputPath, containerTmpFile); err != nil {
-		log.Fatalf("Failed to copy file to container: %v", err)
+		return fatalErrorf("Failed to copy file to container: %w", err)
 	}
 
 	env := config.Env()
@@ -185,7 +189,7 @@ func runDBRestore(input string, opts *DBRestoreOptions) {
 
 		psqlArgs := append([]string{"psql"}, args...)
 		if err := docker.ExecWithEnv(container, env, psqlArgs...); err != nil {
-			log.Fatalf("Failed to restore from SQL file: %v", err)
+			return fatalErrorf("Failed to restore from SQL file: %w", err)
 		}
 	}
 
@@ -193,6 +197,7 @@ func runDBRestore(input string, opts *DBRestoreOptions) {
 	_ = docker.Exec(container, "rm", "-f", containerTmpFile)
 
 	log.Info("Restore completed successfully")
+	return nil
 }
 
 // resolveInputPath resolves the input file path.

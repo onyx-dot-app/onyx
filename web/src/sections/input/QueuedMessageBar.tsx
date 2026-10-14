@@ -1,3 +1,6 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import { Text, Button } from "@opal/components";
 import { SvgTrash } from "@opal/icons";
 import { cn, clickOnKeyDown } from "@opal/utils";
@@ -6,7 +9,6 @@ import { QueuedMessage } from "@/app/app/interfaces";
 interface QueuedMessageBarProps {
   messages: readonly QueuedMessage[];
   highlightedIndex: number | null;
-  awaitingPreferredSelection: boolean;
   onDiscard: (index: number) => void;
   onHighlight: (index: number | null) => void;
 }
@@ -14,10 +16,10 @@ interface QueuedMessageBarProps {
 function QueuedMessageBar({
   messages,
   highlightedIndex,
-  awaitingPreferredSelection,
   onDiscard,
   onHighlight,
 }: QueuedMessageBarProps) {
+  const t = useTranslations("chat.input");
   const isEmpty = messages.length === 0;
 
   return (
@@ -31,8 +33,6 @@ function QueuedMessageBar({
         <div className="flex flex-col gap-1 pb-1.5">
           {messages.map((item, index) => {
             const isHighlighted = highlightedIndex === index;
-            const showAwaitingLabel = awaitingPreferredSelection && index === 0;
-            const showEditLabel = isHighlighted && !showAwaitingLabel;
 
             return (
               <div
@@ -44,7 +44,7 @@ function QueuedMessageBar({
                 )}
                 role="button"
                 tabIndex={0}
-                aria-label="Toggle queued message"
+                aria-label={t("queuedMessageBar.item.ariaLabel")}
                 onKeyDown={clickOnKeyDown(() =>
                   onHighlight(isHighlighted ? null : index)
                 )}
@@ -63,26 +63,19 @@ function QueuedMessageBar({
                     {item.text}
                   </Text>
                 </div>
-                {showAwaitingLabel && (
-                  <div className="shrink-0 whitespace-nowrap">
-                    <Text font="secondary-body" color="text-02">
-                      Select a response to continue
-                    </Text>
-                  </div>
-                )}
-                {showEditLabel && (
+                {isHighlighted && (
                   <div className="shrink-0 whitespace-nowrap flex items-center gap-0.5">
                     <span className="translate-y-[1.5px] text-text-02 text-[0.7rem]">
                       ↵
                     </span>
                     <Text font="secondary-body" color="text-02">
-                      edit ·
+                      {t("queuedMessageBar.editHint.label")}
                     </Text>
                     <span className="translate-y-[1.5px] text-text-02 text-[0.7rem]">
                       ⌫
                     </span>
                     <Text font="secondary-body" color="text-02">
-                      remove
+                      {t("queuedMessageBar.removeHint.label")}
                     </Text>
                   </div>
                 )}
@@ -90,7 +83,7 @@ function QueuedMessageBar({
                   icon={SvgTrash}
                   prominence="tertiary"
                   size="xs"
-                  tooltip="Remove queued message"
+                  tooltip={t("queuedMessageBar.discardButton.tooltip")}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDiscard(index);

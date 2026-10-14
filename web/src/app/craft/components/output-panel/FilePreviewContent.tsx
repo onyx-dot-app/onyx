@@ -1,318 +1,212 @@
 "use client";
 
-import { useEffect } from "react";
-import useSWR from "swr";
+import { useTranslations } from "next-intl";
+import { useCallback, type ReactNode } from "react";
+import { SWRConfig } from "swr";
+import { useUser } from "@/providers/UserProvider";
+import { useFilePreview } from "@/lib/build/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { fetchFileContent } from "@/app/craft/services/apiServices";
-import { Text } from "@opal/components";
-import { SvgFileText } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
+import {
+  downloadArtifactFile,
+  fetchFileContent,
+} from "@/app/craft/services/apiServices";
+import { Button, Text } from "@opal/components";
+import { SvgDownloadCloud } from "@opal/icons";
+import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
 import ImagePreview from "@/app/craft/components/output-panel/ImagePreview";
-import MarkdownFilePreview, {
-  type FileRendererProps,
-} from "@/app/craft/components/output-panel/MarkdownFilePreview";
+import MarkdownFilePreview from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import PptxPreview from "@/app/craft/components/output-panel/PptxPreview";
 import PdfPreview from "@/app/craft/components/output-panel/PdfPreview";
 
-// ── Preview registry ─────────────────────────────────────────────────────
-// Unified registry for all file preview types. First match wins.
-//
-// "standalone" — binary formats that handle their own data fetching.
-// "content"    — text-based formats that receive already-fetched content.
+import {
+  FilePreviewScrollArea,
+  type FilePreviewScrollPosition,
+} from "@/app/craft/components/output-panel/FilePreviewScrollArea";
 
-interface StandaloneEntry {
-  type: "standalone";
-  matches: (filePath: string) => boolean;
-  component: React.FC<{
-    sessionId: string;
-    filePath: string;
-    refreshKey?: number;
-  }>;
-}
+import { CsvPreview } from "@/app/craft/components/output-panel/CsvPreview";
 
-interface ContentEntry {
-  type: "content";
-  matches: (filePath: string, mimeType: string, isImage: boolean) => boolean;
-  component: React.FC<FileRendererProps>;
-}
-
-type PreviewEntry = StandaloneEntry | ContentEntry;
-
-function ImageRendererWrapper({ content, fileName }: FileRendererProps) {
-  return <ImagePreview src={content} fileName={fileName} />;
-}
-
-const PREVIEW_REGISTRY: PreviewEntry[] = [
-  {
-    type: "standalone",
-    matches: (path) => /\.pptx?$/i.test(path),
-    component: PptxPreview,
-  },
-  {
-    type: "standalone",
-    matches: (path) => /\.pdf$/i.test(path),
-    component: PdfPreview,
-  },
-  {
-    type: "content",
-    matches: (_, __, isImage) => isImage,
-    component: ImageRendererWrapper,
-  },
-  {
-    type: "content",
-    matches: (path) => /\.md$/i.test(path),
-    component: MarkdownFilePreview,
-  },
-];
-
-function findStandalonePreview(filePath: string): StandaloneEntry | undefined {
-  return PREVIEW_REGISTRY.find(
-    (e): e is StandaloneEntry => e.type === "standalone" && e.matches(filePath)
-  );
-}
-
-function findContentPreview(
-  filePath: string,
-  mimeType: string,
-  isImage: boolean
-): ContentEntry | undefined {
-  return PREVIEW_REGISTRY.find(
-    (e): e is ContentEntry =>
-      e.type === "content" && e.matches(filePath, mimeType, isImage)
-  );
-}
-
-// ── Public components ────────────────────────────────────────────────────
-
-interface FilePreviewContentProps {
+interface FilePreviewContentProps extends FilePreviewScrollPosition {
+  onRefreshingChange?: (isRefreshing: boolean) => void;
+  initialSlide?: number;
+  onSlideChange?: (slide: number) => void;
   sessionId: string;
   filePath: string;
+  revision?: string;
   /** Changing this value forces the preview to reload its data */
   refreshKey?: number;
 }
 
 /**
- * FilePreviewContent — full-height file preview for the main output panel.
  * Routes to the appropriate preview component based on file type.
  */
 export function FilePreviewContent({
   sessionId,
   filePath,
+  isActive = true,
+  revision,
   refreshKey,
+  onRefreshingChange,
+  initialSlide,
+  onSlideChange,
+  initialScrollTop,
+  onScrollTopChange,
 }: FilePreviewContentProps) {
-  const standalone = findStandalonePreview(filePath);
-  if (standalone) {
-    const Comp = standalone.component;
-    return (
-      <Comp sessionId={sessionId} filePath={filePath} refreshKey={refreshKey} />
-    );
-  }
-
+  const { user } = useUser();
+  const onPdfPageChange = useCallback(
+    (page: number) => onSlideChange?.(page - 1),
+    [onSlideChange]
+  );
+  if (!user) return null;
+  // The retained viewer owns its bytes. Eviction or an identity change releases its cache.
   return (
-    <FetchedFilePreview
-      sessionId={sessionId}
-      filePath={filePath}
-      fullHeight
-      refreshKey={refreshKey}
-    />
+    <SWRConfig
+      key={`${user.id}:${sessionId}:${filePath}`}
+      value={{ provider: () => new Map() }}
+    >
+      {/\.pptx?$/i.test(filePath) ? (
+        <PptxPreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          initialSlide={initialSlide}
+          onSlideChange={onSlideChange}
+          isActive={isActive}
+          onRefreshingChange={onRefreshingChange}
+        />
+      ) : /\.pdf$/i.test(filePath) ? (
+        <PdfPreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          initialPage={(initialSlide ?? 0) + 1}
+          onPageChange={onPdfPageChange}
+          isActive={isActive}
+          onRefreshingChange={onRefreshingChange}
+        />
+      ) : (
+        <FetchedFilePreview
+          sessionId={sessionId}
+          filePath={filePath}
+          revision={revision}
+          refreshKey={refreshKey}
+          onRefreshingChange={onRefreshingChange}
+          initialScrollTop={initialScrollTop}
+          onScrollTopChange={onScrollTopChange}
+          isActive={isActive}
+        />
+      )}
+    </SWRConfig>
   );
 }
 
-/**
- * InlineFilePreview — compact file preview for pre-provisioned mode.
- * Same routing logic, without full-height layout.
- */
-export function InlineFilePreview({
-  sessionId,
-  filePath,
-}: FilePreviewContentProps) {
-  const standalone = findStandalonePreview(filePath);
-  if (standalone) {
-    const Comp = standalone.component;
-    return <Comp sessionId={sessionId} filePath={filePath} />;
-  }
-
-  return <FetchedFilePreview sessionId={sessionId} filePath={filePath} />;
-}
-
-// ── FetchedFilePreview (inner) ───────────────────────────────────────────
-
-interface FetchedFilePreviewProps {
-  sessionId: string;
-  filePath: string;
-  fullHeight?: boolean;
-  refreshKey?: number;
-}
-
-/**
- * Fetches file content via SWR, then delegates to the first matching
- * "content" entry in the registry (or falls back to raw monospace text).
- */
+/** Fetch text or image content; unsupported text formats use a plain preview. */
 function FetchedFilePreview({
   sessionId,
   filePath,
-  fullHeight,
+  isActive,
+  revision,
   refreshKey,
-}: FetchedFilePreviewProps) {
-  const { data, error, isLoading, mutate } = useSWR(
+  onRefreshingChange,
+  initialScrollTop,
+  onScrollTopChange,
+}: FilePreviewContentProps) {
+  const t = useTranslations("craft.filePreview");
+  const downloadTranslations = useTranslations("craft.filesTab");
+  const { data, error, isLoading } = useFilePreview(
     SWR_KEYS.buildSessionArtifactFile(sessionId, filePath),
     () => fetchFileContent(sessionId, filePath),
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 5000,
-    }
+    { revision, refreshKey, isActive, onRefreshingChange }
   );
 
-  // Re-fetch when refreshKey changes
-  useEffect(() => {
-    if (refreshKey && refreshKey > 0) {
-      mutate();
+  if (!data || data.error) {
+    let title: string | undefined;
+    let description = t("noContent.label");
+    if (isLoading) {
+      description = t("loading.label");
+    } else if (error) {
+      title = t("error.title");
+      description = error.message;
+    } else if (data?.error) {
+      title = t("cannotPreview.title");
+      description =
+        data.error === "unsupported_binary"
+          ? t("unsupported.description")
+          : t("imageTooLarge.description");
     }
-  }, [refreshKey, mutate]);
-
-  if (isLoading) {
-    if (fullHeight) {
-      return (
-        <Section
-          height="full"
-          alignItems="center"
-          justifyContent="center"
-          padding={8}
-        >
-          <Text font="secondary-body" color="text-03">
-            Loading file...
-          </Text>
-        </Section>
-      );
-    }
-    return (
-      <div className="p-4">
+    const message = (
+      <div className="flex flex-col items-center gap-3 text-center">
         <Text font="secondary-body" color="text-03">
-          Loading file...
+          {description}
         </Text>
+        {data?.error && !isLoading && !error && (
+          <Button
+            icon={SvgDownloadCloud}
+            prominence="secondary"
+            size="sm"
+            onClick={() => downloadArtifactFile(sessionId, filePath)}
+          >
+            {downloadTranslations("download.label")}
+          </Button>
+        )}
       </div>
     );
-  }
-
-  if (error) {
-    if (fullHeight) {
-      return (
-        <Section
-          height="full"
-          alignItems="center"
-          justifyContent="center"
-          padding={8}
-        >
-          <SvgFileText size={48} className="stroke-text-02" />
-          <Text font="heading-h3" color="text-03">
-            Error loading file
-          </Text>
-          <Text font="secondary-body" color="text-02">
-            {error.message}
-          </Text>
-        </Section>
-      );
-    }
     return (
-      <div className="p-4">
-        <Text font="secondary-body" color="text-02">
-          {`Error: ${error.message}`}
-        </Text>
-      </div>
+      <WorkspaceHome title={title ?? description}>
+        {title && message}
+      </WorkspaceHome>
     );
   }
 
-  if (!data) {
-    if (fullHeight) {
-      return (
-        <Section
-          height="full"
-          alignItems="center"
-          justifyContent="center"
-          padding={8}
-        >
-          <Text font="secondary-body" color="text-03">
-            No content
-          </Text>
-        </Section>
-      );
-    }
-    return (
-      <div className="p-4">
-        <Text font="secondary-body" color="text-03">
-          No content
-        </Text>
-      </div>
-    );
-  }
-
-  if (data.error) {
-    if (fullHeight) {
-      return (
-        <Section
-          height="full"
-          alignItems="center"
-          justifyContent="center"
-          padding={8}
-        >
-          <SvgFileText size={48} className="stroke-text-02" />
-          <Text font="heading-h3" color="text-03">
-            Cannot preview file
-          </Text>
-          <div className="text-center max-w-md">
-            <Text font="secondary-body" color="text-02">
-              {data.error}
-            </Text>
-          </div>
-        </Section>
-      );
-    }
-    return (
-      <div className="p-4 text-center">
-        <Text font="secondary-body" color="text-02">
-          {data.error}
-        </Text>
-      </div>
-    );
-  }
-
-  // Match against content-based renderers
   const fileName = filePath.split("/").pop() || filePath;
-  const mimeType = data.mimeType ?? "text/plain";
-  const isImage = !!data.isImage;
-
-  const contentPreview = findContentPreview(filePath, mimeType, isImage);
-  if (contentPreview) {
-    const Comp = contentPreview.component;
-    return (
-      <Comp
+  let viewer: ReactNode;
+  if (data.isImage) {
+    viewer = <ImagePreview src={data.content} fileName={fileName} />;
+  } else if (/\.csv$/i.test(filePath)) {
+    viewer = (
+      <CsvPreview
         content={data.content}
-        fileName={fileName}
-        filePath={filePath}
-        mimeType={mimeType}
-        isImage={isImage}
+        initialScrollTop={initialScrollTop}
+        onScrollTopChange={onScrollTopChange}
+        isActive={isActive}
       />
     );
-  }
-
-  // Default fallback: raw text
-  if (fullHeight) {
-    return (
-      <div className="h-full flex flex-col">
-        <div className="flex-1 overflow-auto p-4">
-          <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
-            {data.content}
-          </pre>
-        </div>
-      </div>
+  } else if (/\.md$/i.test(filePath)) {
+    viewer = (
+      <MarkdownFilePreview
+        initialScrollTop={initialScrollTop}
+        onScrollTopChange={onScrollTopChange}
+        isActive={isActive}
+        content={data.content}
+      />
+    );
+  } else {
+    viewer = (
+      <FilePreviewScrollArea
+        initialScrollTop={initialScrollTop}
+        onScrollTopChange={onScrollTopChange}
+        isActive={isActive}
+      >
+        <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
+          {data.content}
+        </pre>
+      </FilePreviewScrollArea>
     );
   }
-
   return (
-    <div className="p-4">
-      <pre className="font-mono text-sm text-text-04 whitespace-pre-wrap wrap-break-word">
-        {data.content}
-      </pre>
+    <div className="flex h-full flex-col">
+      {error && (
+        <div
+          role="alert"
+          className="shrink-0 bg-background-neutral-00 px-4 py-2"
+        >
+          <Text font="secondary-body" color="text-03">
+            {t("error.inline", { message: error.message })}
+          </Text>
+        </div>
+      )}
+      <div className="min-h-0 flex-1">{viewer}</div>
     </div>
   );
 }

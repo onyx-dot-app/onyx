@@ -21,6 +21,8 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
     EXTERNAL_SHARED_FOLDER_ID,
     FOLDER_3_ID,
+    LIMITED_ACCESS_MY_DRIVE_FOLDER_ID,
+    PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
     PERM_SYNC_DRIVE_ACCESS_MAPPING,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_A_ID,
     PERM_SYNC_DRIVE_ADMIN_AND_USER_1_B_ID,
@@ -37,6 +39,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import (
     TEST_USER_1_MY_DRIVE_ID,
     TEST_USER_2_MY_DRIVE,
     TEST_USER_3_MY_DRIVE_ID,
+    _clear_parents,
     _pick,
     assert_hierarchy_nodes_match_expected,
     assert_resource_key_shortcut_target_in_retrieved_docs,
@@ -260,8 +263,12 @@ def test_gdrive_perm_sync_with_real_data(
             EXTERNAL_SHARED_FOLDER_ID,
             FOLDER_3_ID,
             *ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS,
+            *PARTIAL_VISIBILITY_FIXTURE_NODE_IDS,
         )
     )
+    # The service account reaches this folder without resolving test_user_1's
+    # My Drive root, so its parent comes back unset.
+    expected_nodes = _clear_parents(expected_nodes, LIMITED_ACCESS_MY_DRIVE_FOLDER_ID)
     assert_hierarchy_nodes_match_expected(
         retrieved_nodes=output.hierarchy_nodes,
         expected_nodes=expected_nodes,

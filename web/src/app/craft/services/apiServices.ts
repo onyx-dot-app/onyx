@@ -1,3 +1,6 @@
+import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/interfaces";
+import { downloadFile } from "@/lib/download";
+import { FetchError } from "@/lib/fetcher";
 import {
   ApiSessionResponse,
   ApiDetailedSessionResponse,
@@ -14,6 +17,8 @@ import {
   DirectoryListing,
   SharingScope,
   ApiSessionSkillsState,
+  type OutputInventory,
+  type OutputCard,
 } from "@/app/craft/types/streamingTypes";
 import {
   ApprovalListResponse,
@@ -25,6 +30,7 @@ import {
   RateLimitDetails,
 } from "@/app/app/interfaces";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 
@@ -59,7 +65,7 @@ export async function processSSEStream(
         const dataStr = line.slice(line.indexOf(":") + 1).trim();
         if (dataStr) {
           try {
-            const data = JSON.parse(dataStr);
+            const data: StreamPacket = JSON.parse(dataStr);
             // The backend sends `event: message` for all events and puts the
             // actual type in data.type. Only use SSE event type as fallback
             // if data.type is not present and SSE event is not "message".
@@ -95,7 +101,7 @@ export interface CreateSessionOptions {
 // falling back to the status code when the body isn't the expected shape.
 async function errorDetail(res: Response, fallback: string): Promise<string> {
   try {
-    const body = await res.json();
+    const body: ErrorResponseBody | null = await res.json();
     if (typeof body?.detail === "string" && body.detail.trim()) {
       return body.detail;
     }
@@ -103,6 +109,16 @@ async function errorDetail(res: Response, fallback: string): Promise<string> {
     // body wasn't JSON — fall through
   }
   return `${fallback}: ${res.status}`;
+}
+
+// Mirrors backend `SessionListResponse`.
+interface ApiSessionListResponse {
+  sessions: ApiSessionResponse[];
+}
+
+// Mirrors backend `SessionNameGenerateResponse`.
+interface ApiSessionNameGenerateResponse {
+  name: string;
 }
 
 export async function createSession(
@@ -177,7 +193,7 @@ export async function fetchSessionHistory(): Promise<SessionHistoryItem[]> {
     throw new Error(`Failed to fetch session history: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data: ApiSessionListResponse = await res.json();
   return data.sessions.map((s: ApiSessionResponse) => ({
     id: s.id,
     title: s.name || `Session ${s.id.slice(0, 8)}...`,
@@ -198,7 +214,7 @@ export async function generateSessionName(sessionId: string): Promise<string> {
     throw new Error(`Failed to generate session name: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data: ApiSessionNameGenerateResponse = await res.json();
   return data.name;
 }
 
@@ -274,7 +290,7 @@ export async function restoreSession(
       continue;
     }
 
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to restore session: ${res.status}`
     );
@@ -329,6 +345,8 @@ function extractAttachmentsFromMetadata(
 ): BuildMessageAttachment[] {
   if (!Array.isArray(metadata?.attachments)) return [];
 
+  // Element of an unvalidated attachments array; the body below decodes it.
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters
   return metadata.attachments.flatMap((attachment: unknown) => {
     if (
       typeof attachment !== "object" ||
@@ -353,6 +371,11 @@ function extractAttachmentsFromMetadata(
   });
 }
 
+// Mirrors backend `MessageListResponse`.
+interface ApiMessageListResponse {
+  messages: ApiMessageResponse[];
+}
+
 export async function fetchMessages(
   sessionId: string
 ): Promise<BuildMessage[]> {
@@ -362,7 +385,7 @@ export async function fetchMessages(
     throw new Error(`Failed to fetch messages: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data: ApiMessageListResponse = await res.json();
   return data.messages.map((m: ApiMessageResponse) => ({
     id: m.id,
     type: m.type,
@@ -420,13 +443,9 @@ export async function createTurn(
           path: attachment.path,
           mime_type: attachment.mimeType,
         })),
-        ...(model
-          ? {
-              provider: CRAFT_GATEWAY_PROVIDER,
-              provider_id: model.providerId,
-              model: model.modelName,
-            }
-          : {}),
+        provider: model ? CRAFT_GATEWAY_PROVIDER : undefined,
+        provider_id: model?.providerId,
+        model: model?.modelName,
       }),
       signal,
     }
@@ -463,10 +482,31 @@ export async function fetchActiveTurn(
   );
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch active turn: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch active turn: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
-  return (await res.json()) as ApiInteractiveTurnResponse | null;
+  return await res.json();
+}
+
+export async function fetchKnownTurn(
+  sessionId: string,
+  turnId: string
+): Promise<ApiInteractiveTurnResponse | null> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/turns/${turnId}`
+  );
+  if (!res.ok) {
+    throw new FetchError(
+      `Failed to fetch turn: ${res.status}`,
+      res.status,
+      null
+    );
+  }
+  return res.json();
 }
 
 export async function fetchTurnEventStream(
@@ -483,7 +523,11 @@ export async function fetchTurnEventStream(
     if (res.status === 404 || res.status === 409) {
       return null;
     }
-    throw new Error(`Failed to stream turn: ${res.status}`);
+    throw new FetchError(
+      `Failed to stream turn: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return res;
@@ -493,14 +537,38 @@ export async function fetchTurnEventStream(
  * Interrupt the in-flight agent turn for a session. The backend interrupts the
  * sandbox turn; any attached live stream then terminates normally.
  */
-export async function interruptMessageStream(sessionId: string): Promise<void> {
-  const res = await fetch(`${BUILD_API_BASE}/sessions/${sessionId}/interrupt`, {
-    method: "POST",
-  });
+export async function interruptMessageStream(
+  sessionId: string,
+  turnId?: string
+): Promise<boolean> {
+  const query = turnId ? `?turn_id=${encodeURIComponent(turnId)}` : "";
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/interrupt${query}`,
+    {
+      method: "POST",
+    }
+  );
 
   if (!res.ok) {
     throw new Error(`Failed to interrupt message: ${res.status}`);
   }
+  const result: { interrupted: boolean } = await res.json();
+  return result.interrupted;
+}
+
+export async function fetchScheduledRunContext(
+  sessionId: string
+): Promise<ScheduledRunContextResponse> {
+  const res = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-context`
+  );
+  if (!res.ok)
+    throw new FetchError(
+      await errorDetail(res, "Failed to fetch scheduled run"),
+      res.status,
+      null
+    );
+  return res.json();
 }
 
 export async function fetchScheduledRunEventStream(
@@ -517,7 +585,11 @@ export async function fetchScheduledRunEventStream(
   }
 
   if (!res.ok) {
-    throw new Error(`Failed to stream scheduled run: ${res.status}`);
+    throw new FetchError(
+      `Failed to stream scheduled run: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return res;
@@ -534,7 +606,7 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
     throw new Error(`Failed to fetch artifacts: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data: ApiArtifactResponse[] = await res.json();
   // Backend returns a direct array, not wrapped in an object
   return data.map((a: ApiArtifactResponse) => ({
     id: a.id,
@@ -552,15 +624,84 @@ export async function fetchArtifacts(sessionId: string): Promise<Artifact[]> {
 // Webapp API
 // =============================================================================
 
-export async function fetchWebappInfo(
+export async function fetchOutputCards(
   sessionId: string
+): Promise<OutputCard[]> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards`
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to fetch output cards: ${response.status}`,
+      response.status,
+      null
+    );
+  const result: { cards: OutputCard[] } = await response.json();
+  return result.cards;
+}
+
+export async function markOutputsViewed(
+  sessionId: string,
+  cards: readonly OutputCard[]
+): Promise<OutputCard[]> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards/viewed`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        revisions: Object.fromEntries(
+          cards.map((card) => [card.id, card.revision])
+        ),
+      }),
+    }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to mark outputs viewed: ${response.status}`,
+      response.status,
+      null
+    );
+  const result: { cards: OutputCard[] } = await response.json();
+  return result.cards;
+}
+
+export async function markOutputViewed(
+  sessionId: string,
+  card: OutputCard
+): Promise<OutputCard> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-cards/${card.id}/viewed`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revision: card.revision }),
+    }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to mark output viewed: ${response.status}`,
+      response.status,
+      null
+    );
+  return response.json();
+}
+
+export async function fetchWebappInfo(
+  sessionId: string,
+  signal?: AbortSignal
 ): Promise<ApiWebappInfoResponse> {
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/webapp-info`
+    `${BUILD_API_BASE}/sessions/${sessionId}/webapp-info`,
+    { signal }
   );
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch webapp info: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch webapp info: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   return res.json();
@@ -570,9 +711,27 @@ export async function fetchWebappInfo(
 // Files API
 // =============================================================================
 
+export async function fetchOutputInventory(
+  sessionId: string,
+  signal?: AbortSignal
+): Promise<OutputInventory> {
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/outputs`,
+    { signal }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to fetch output inventory: ${response.status}`,
+      response.status,
+      null
+    );
+  return response.json();
+}
+
 export async function fetchDirectoryListing(
   sessionId: string,
-  path: string = ""
+  path: string = "",
+  signal?: AbortSignal
 ): Promise<DirectoryListing> {
   const url = new URL(
     `${BUILD_API_BASE}/sessions/${sessionId}/files`,
@@ -582,17 +741,35 @@ export async function fetchDirectoryListing(
     url.searchParams.set("path", path);
   }
 
-  const res = await fetch(url.toString());
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch directory listing: ${res.status}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () =>
+      controller.abort(
+        new DOMException("Directory listing timed out", "TimeoutError")
+      ),
+    10_000
+  );
+  try {
+    const res = await fetch(url.toString(), {
+      signal: signal
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal,
+    });
+    if (!res.ok) {
+      throw new FetchError(
+        `Failed to fetch directory listing: ${res.status}`,
+        res.status,
+        null
+      );
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return res.json();
 }
 
 /**
- * Trigger a browser download for a single file from the sandbox.
+ * Build an encoded sandbox file URL for previews and downloads.
  */
 export function buildArtifactUrl(sessionId: string, path: string): string {
   const encodedPath = path
@@ -603,12 +780,9 @@ export function buildArtifactUrl(sessionId: string, path: string): string {
 }
 
 export function downloadArtifactFile(sessionId: string, path: string): void {
-  const link = document.createElement("a");
-  link.href = buildArtifactUrl(sessionId, path);
-  link.download = path.split("/").pop() || path;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadFile(path.split("/").pop() || path, {
+    url: buildArtifactUrl(sessionId, path),
+  });
 }
 
 /**
@@ -619,36 +793,72 @@ export function downloadDirectory(sessionId: string, path: string): void {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-  const link = document.createElement("a");
-  link.href = `${BUILD_API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`;
-  link.download = "";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  downloadFile("", {
+    url: `${BUILD_API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`,
+  });
 }
 
 export interface FileContentResponse {
   content: string; // For text files: text content. For images: data URL (base64-encoded)
   mimeType: string;
   isImage?: boolean; // True if the content is an image data URL
-  error?: string; // Error message if file can't be previewed
+  error?: "unsupported_binary" | "image_too_large";
 }
 
 // Maximum file size for image preview (10MB)
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MAX_UNKNOWN_TEXT_SIZE = 10 * 1024 * 1024;
 
 /**
  * Fetch file content from the sandbox for preview.
  * Reuses the artifacts download endpoint but reads content as text.
  */
+function imageBlobDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("FileReader returned unexpected type"));
+    };
+    reader.onerror = () =>
+      reject(new Error(reader.error?.message || "Failed to read image file"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Fetch the sandbox converter's cached first page without mounting a document viewer. */
+export async function fetchOutputThumbnail(
+  sessionId: string,
+  path: string
+): Promise<string> {
+  const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `${BUILD_API_BASE}/sessions/${sessionId}/output-thumbnail/${encodedPath}`,
+    { cache: "no-store" }
+  );
+  if (!response.ok)
+    throw new FetchError(
+      `Failed to fetch thumbnail: ${response.status}`,
+      response.status,
+      null
+    );
+  return imageBlobDataUrl(await response.blob());
+}
+
 export async function fetchFileContent(
   sessionId: string,
   path: string
 ): Promise<FileContentResponse> {
-  const res = await fetch(buildArtifactUrl(sessionId, path));
+  const res = await fetch(buildArtifactUrl(sessionId, path), {
+    cache: "no-store",
+  });
 
   if (!res.ok) {
-    throw new Error(`Failed to fetch file content: ${res.status}`);
+    throw new FetchError(
+      `Failed to fetch file content: ${res.status}`,
+      res.status,
+      null
+    );
   }
 
   const mimeType = res.headers.get("Content-Type") || "text/plain";
@@ -663,32 +873,48 @@ export async function fetchFileContent(
         content: "",
         mimeType,
         isImage: false,
-        error: `Image too large to preview (${(
-          blob.size /
-          (1024 * 1024)
-        ).toFixed(1)}MB). Maximum size is ${MAX_IMAGE_SIZE / (1024 * 1024)}MB.`,
+        error: "image_too_large",
       };
     }
 
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        // Verify result is a string
-        if (typeof reader.result !== "string") {
-          reject(new Error("FileReader returned unexpected type"));
-          return;
+    return { content: await imageBlobDataUrl(blob), mimeType, isImage: true };
+  }
+
+  const textMimeType =
+    /^(text\/|application\/(json|(?:[^;]+\+)?json|xml|(?:[^;]+\+)?xml|javascript|x-yaml|yaml))/i.test(
+      mimeType
+    );
+  // MIME guessing often labels source files as binary (for example TSX and TypeScript).
+  const sourceFile =
+    /\.(?:py|js|jsx|ts|tsx|mjs|cjs|sql|sh|bash|zsh|css|scss|sass|html?|xml|ya?ml|toml|ini|conf|config|env|log|go|rs|java|c|cpp|h|hpp|rb|r|vue|svelte|md|txt|csv)$/i.test(
+      path
+    ) || /(?:^|\/)(?:Dockerfile|Makefile|README|LICENSE)$/i.test(path);
+  if (!textMimeType && !sourceFile) {
+    if (/^application\/octet-stream(?:;|$)/i.test(mimeType)) {
+      const bytes = await res.arrayBuffer();
+      if (
+        bytes.byteLength <= MAX_UNKNOWN_TEXT_SIZE &&
+        !new Uint8Array(bytes).some(
+          (byte) => byte < 9 || (byte >= 14 && byte < 32)
+        )
+      ) {
+        try {
+          const content = new TextDecoder("utf-8", { fatal: true }).decode(
+            bytes
+          );
+          return { content, mimeType, isImage: false };
+        } catch {
+          // Unknown binary files must not become replacement-character text previews.
         }
-        resolve({
-          content: reader.result,
-          mimeType,
-          isImage: true,
-        });
-      };
-      reader.onerror = () => {
-        reject(new Error(reader.error?.message || "Failed to read image file"));
-      };
-      reader.readAsDataURL(blob);
-    });
+      }
+    }
+
+    return {
+      content: "",
+      mimeType,
+      isImage: false,
+      error: "unsupported_binary",
+    };
   }
 
   const content = await res.text();
@@ -722,37 +948,15 @@ export async function uploadFile(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to upload file: ${res.status}`);
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
+    throw new FetchError(
+      errorData.detail || `Failed to upload file: ${res.status}`,
+      res.status,
+      errorData
+    );
   }
 
   return res.json();
-}
-
-/**
- * Delete a file from the session's sandbox.
- */
-export async function deleteFile(
-  sessionId: string,
-  path: string
-): Promise<void> {
-  // Encode each path segment individually (spaces, special chars) but preserve slashes
-  const encodedPath = path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/files/${encodedPath}`,
-    {
-      method: "DELETE",
-    }
-  );
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
-  }
 }
 
 /**
@@ -773,7 +977,7 @@ export async function exportDocx(
   );
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to export as DOCX: ${res.status}`
     );
@@ -806,13 +1010,16 @@ export async function fetchPptxPreview(
     .join("/");
 
   const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`
+    `${BUILD_API_BASE}/sessions/${sessionId}/pptx-preview/${encodedPath}`,
+    { cache: "no-store" }
   );
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(
-      errorData.detail || `Failed to generate PPTX preview: ${res.status}`
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
+    throw new FetchError(
+      errorData.detail || `Failed to generate PPTX preview: ${res.status}`,
+      res.status,
+      errorData
     );
   }
 
@@ -863,11 +1070,11 @@ export async function postApprovalDecision(
   );
 
   if (res.status === 409) {
-    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    const body: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new ApprovalConflictError(body.detail ?? "decision conflict");
   }
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to post approval decision: ${res.status}`
     );
@@ -886,11 +1093,11 @@ export async function postApprovalSessionGrant(
   );
 
   if (res.status === 409) {
-    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    const body: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new ApprovalConflictError(body.detail ?? "decision conflict");
   }
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to approve for session: ${res.status}`
     );
@@ -942,7 +1149,7 @@ export async function uploadLibraryFiles(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to upload files: ${res.status}`
     );
@@ -968,7 +1175,7 @@ export async function uploadLibraryZip(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(errorData.detail || `Failed to upload zip: ${res.status}`);
   }
 
@@ -988,7 +1195,7 @@ export async function createLibraryDirectory(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
     throw new Error(
       errorData.detail || `Failed to create directory: ${res.status}`
     );
@@ -1009,7 +1216,11 @@ export async function deleteLibraryFile(documentId: string): Promise<void> {
   );
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Failed to delete file: ${res.status}`);
+    const errorData: ErrorResponseBody = await res.json().catch(() => ({}));
+    throw new FetchError(
+      errorData.detail || `Failed to delete file: ${res.status}`,
+      res.status,
+      errorData
+    );
   }
 }

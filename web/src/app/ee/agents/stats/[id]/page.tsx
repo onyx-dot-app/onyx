@@ -21,7 +21,7 @@ export default async function GalleryPage(props: {
 
   return (
     <>
-      <div className="absolute top-4 left-4">
+      <div className="absolute top-4 start-4">
         <BackButton />
       </div>
 

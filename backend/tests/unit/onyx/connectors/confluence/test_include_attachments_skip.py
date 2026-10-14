@@ -6,8 +6,13 @@ from typing import Any
 from unittest import mock
 
 from onyx.connectors.confluence.connector import ConfluenceConnector
-from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
+from onyx.connectors.confluence.source_operations import (
+    _OnyxConfluence,
+)
 from onyx.connectors.models import SlimDocument
+from tests.unit.onyx.connectors.confluence.confluence_gateway_fakes import (
+    gateway_with_client,
+)
 
 _PAGE_CQL = "PAGE_CQL"
 _ATTACHMENT_CQL = "ATTACHMENT_CQL"
@@ -58,9 +63,9 @@ def _collect_slim_doc_ids(
     with (
         mock.patch.object(
             ConfluenceConnector,
-            "confluence_client",
+            "source_operations",
             new_callable=mock.PropertyMock,
-            return_value=fake_client,
+            return_value=gateway_with_client(fake_client),
         ),
         mock.patch.object(
             connector, "_yield_space_hierarchy_nodes", return_value=iter([])
@@ -87,7 +92,7 @@ def _collect_slim_doc_ids(
 
 def test_slim_docs_skip_attachments_when_disabled() -> None:
     connector = _build_connector(include_attachments=False)
-    fake_client = mock.Mock(spec=OnyxConfluence)
+    fake_client = mock.Mock(spec=_OnyxConfluence)
 
     ids = _collect_slim_doc_ids(connector, fake_client)
 
@@ -110,7 +115,7 @@ def test_slim_docs_include_attachments_by_default() -> None:
         is_cloud=True,
     )
     connector.allow_images = True
-    fake_client = mock.Mock(spec=OnyxConfluence)
+    fake_client = mock.Mock(spec=_OnyxConfluence)
 
     ids = _collect_slim_doc_ids(connector, fake_client)
 
@@ -120,13 +125,13 @@ def test_slim_docs_include_attachments_by_default() -> None:
 
 def test_main_pass_skips_attachment_fetch_when_disabled() -> None:
     connector = _build_connector(include_attachments=False)
-    fake_client = mock.Mock(spec=OnyxConfluence)
+    fake_client = mock.Mock(spec=_OnyxConfluence)
 
     with mock.patch.object(
         ConfluenceConnector,
-        "confluence_client",
+        "source_operations",
         new_callable=mock.PropertyMock,
-        return_value=fake_client,
+        return_value=gateway_with_client(fake_client),
     ):
         docs, failures = connector._fetch_page_attachments(_PAGE)
 

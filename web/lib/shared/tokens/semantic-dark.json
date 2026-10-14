@@ -564,6 +564,10 @@
       "value": "{alpha-grey-00-20}",
       "type": "color"
     },
+    "shadow-dark-01": {
+      "value": "{alpha-grey-100-50}",
+      "type": "color"
+    },
     "mask-01": {
       "value": "{alpha-grey-00-10}",
       "type": "color"

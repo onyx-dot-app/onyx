@@ -661,12 +661,14 @@ def approve_user_invite(email: str, tenant_id: str) -> None:
             destination.active = True
         db_session.commit()
 
-    # Also remove the user from pending users list
-    # Remove from pending users
+    # Consume the pending request. It is stored as the requester typed it, so an
+    # exact match would leave a stale entry behind to authorize a later move.
     pending_users = get_pending_users()
-    if email in pending_users:
-        pending_users.remove(email)
-        write_pending_users(pending_users)
+    remaining_pending = [
+        pending for pending in pending_users if pending.lower() != email
+    ]
+    if len(remaining_pending) != len(pending_users):
+        write_pending_users(remaining_pending)
 
     # Add to invited users
     invited_users = get_invited_users()

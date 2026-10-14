@@ -41,7 +41,11 @@ def _to_unix_ts(dt: datetime | None) -> int:
 
 
 def _enum_label(value: object, valid: tuple[str, ...]) -> str:
-    raw = getattr(value, "value", None) or getattr(value, "name", None) or str(value)
+    raw = (
+        getattr(value, "value", None)  # ods: ignore[getattr]
+        or getattr(value, "name", None)  # ods: ignore[getattr]
+        or str(value)
+    )
     return raw if raw in valid else _UNKNOWN_LABEL
 
 

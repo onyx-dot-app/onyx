@@ -1,0 +1,12 @@
+.sf/
+.sfdx/
+.localdevserver/
+deploy-options.json
+coverage/
+logs/
+*.log
+node_modules/
+.pmdCache/
+.eslintcache
+.DS_Store
+.env

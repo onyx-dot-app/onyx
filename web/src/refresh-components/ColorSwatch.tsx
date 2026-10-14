@@ -1,5 +1,7 @@
 import "@/app/css/color-swatch.css";
 
+import { useTranslations } from "next-intl";
+
 /**
  * A small color swatch chip component that displays a visual preview of light or dark color modes.
  * Shows "Aa" text sample with appropriate background and text colors.
@@ -19,12 +21,13 @@ export interface ColorSwatchProps {
 }
 
 export default function ColorSwatch({ light, dark }: ColorSwatchProps) {
+  const t = useTranslations("common.colorSwatch");
   const mode = light ? "light" : dark ? "dark" : "light";
 
   return (
     <div className="color-swatch" data-state={mode}>
       <div className="rounded-full h-[0.3rem] w-[0.3rem] bg-action-selection-05" />
-      <span className="color-swatch__text">Aa</span>
+      <span className="color-swatch__text">{t("sample.text")}</span>
     </div>
   );
 }

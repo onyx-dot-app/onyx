@@ -1,6 +1,8 @@
 "use client";
 
-import { DateRangePicker } from "@/refresh-components/DateRangePicker";
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useTranslations } from "next-intl";
+import { InputDateRangePicker } from "@opal/components";
 import { useTimeRange } from "@/lib/usage/hooks";
 import {
   FeedbackChart,
@@ -12,21 +14,26 @@ import UsageReports from "@/views/admin/WorkspaceAnalyticsPage/UsageReports";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Divider } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
+import { useSettings } from "@/lib/settings/hooks";
 
 const route = ADMIN_ROUTES.WORKSPACE_ANALYTICS;
 
 export default function WorkspaceAnalyticsPage() {
+  const t = useTranslations("admin.analytics");
+  const { appName } = useSettings();
+  const adminRouteTitle = useAdminRouteTitle();
   const [timeRange, setTimeRange] = useTimeRange();
 
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
-        description="Understand how your workspace uses Onyx across queries, feedback, and agents."
+        title={adminRouteTitle(route)}
+        description={t("page.description", { appName })}
         divider
-        rightChildren={
-          <DateRangePicker
+        actions={[
+          <InputDateRangePicker
+            key="primary"
             value={timeRange}
             onValueChange={(range) =>
               setTimeRange((previous) =>
@@ -35,8 +42,8 @@ export default function WorkspaceAnalyticsPage() {
                   : previous
               )
             }
-          />
-        }
+          />,
+        ]}
       />
       <SettingsLayouts.Body>
         <UsageChart timeRange={timeRange} />

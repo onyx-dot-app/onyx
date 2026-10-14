@@ -262,7 +262,7 @@ class SkillCreateRequest(BaseModel):
     @model_validator(mode="after")
     def _strip_values(self) -> "SkillCreateRequest":
         for field in ("name", "description", "instructions_markdown"):
-            stripped = getattr(self, field).strip()
+            stripped = getattr(self, field).strip()  # ods: ignore[getattr]
             if not stripped:
                 raise ValueError(f"{field} cannot be empty")
             setattr(self, field, stripped)
@@ -293,7 +293,7 @@ class SkillPatchRequest(BaseModel):
     @model_validator(mode="after")
     def _strip_values(self) -> "SkillPatchRequest":
         for field in ("description", "instructions_markdown"):
-            value = getattr(self, field)
+            value = getattr(self, field)  # ods: ignore[getattr]
             if value is None:
                 continue
             stripped = value.strip()

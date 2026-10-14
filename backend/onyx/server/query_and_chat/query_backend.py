@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.permissions import require_permission
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.constants import DocumentSource
@@ -29,6 +30,8 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin")
 basic_router = APIRouter(prefix="/query")
 
+MAX_VALID_TAGS_LIMIT = 100
+
 
 @admin_router.post("/search", dependencies=[Depends(require_vector_db)])
 def admin_search(
@@ -40,7 +43,7 @@ def admin_search(
 
     query = question.query
     logger.notice("Received admin search query: %s", query)
-    user_acl_filters = build_access_filters_for_user(user, db_session)
+    user_access_filters = build_access_filters_for_user(user, db_session)
 
     final_filters = IndexFilters(
         source_type=question.filters.source_type,
@@ -48,12 +51,12 @@ def admin_search(
         created_at_range=question.filters.created_at_range,
         updated_at_range=question.filters.updated_at_range,
         tags=question.filters.tags,
-        access_control_list=user_acl_filters,
+        access_control_list=user_access_filters.access_control_list,
+        cc_pair_access=user_access_filters.cc_pair_access,
         tenant_id=tenant_id,
     )
     search_settings = get_current_search_settings(db_session)
-    # This flow is for search so we do not get all indices.
-    document_index = get_default_document_index(search_settings, None, db_session)
+    document_index = get_default_document_index(search_settings, None)
 
     if not query or query.strip() == "":
         matching_chunks = document_index.random_retrieval(filters=final_filters)
@@ -86,11 +89,13 @@ def get_tags(
     sources: list[DocumentSource] | None = None,
     allow_prefix: bool = True,  # This is currently the only option
     limit: int = 50,
-    _: User = Depends(require_permission(Permission.READ_SEARCH)),
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> TagResponse:
     if not allow_prefix:
         raise NotImplementedError("Cannot disable prefix match for now")
+
+    limit = min(max(limit, 1), MAX_VALID_TAGS_LIMIT)
 
     key_prefix = match_pattern
     value_prefix = match_pattern
@@ -110,6 +115,10 @@ def get_tags(
         sources=sources,
         limit=limit,
         db_session=db_session,
+        user_email=user.email,
+        prior_emails=user.prior_emails,
+        external_group_ids=get_user_external_group_ids(db_session, user),
+        user_id=user.id,
         require_both_to_match=require_both_to_match,
     )
     server_tags = [

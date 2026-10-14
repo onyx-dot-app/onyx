@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Modal } from "@opal/components";
 import {
   Button,
   MessageCard,
-  PasswordInputTypeIn,
+  InputPasswordTypeIn,
   Text,
 } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
+import { toTitleCase } from "@opal/utils";
 
 interface UserCredentialsModalProps {
   open: boolean;
@@ -23,15 +25,6 @@ interface UserCredentialsModalProps {
   /** Previously stored (masked) values, for pre-filling. */
   credentialValues: Record<string, string>;
   save: (values: Record<string, string>) => Promise<void>;
-}
-
-/** Turn a credential key (`discord_token`, `apiKey`) into a readable label. */
-function humanizeKey(key: string): string {
-  return key
-    .replace(/[_-]+/g, " ")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /**
@@ -49,6 +42,7 @@ export default function UserCredentialsModal({
   credentialValues,
   save,
 }: UserCredentialsModalProps) {
+  const t = useTranslations("craft.apps.userCredentials");
   const [values, setValues] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,16 +82,16 @@ export default function UserCredentialsModal({
       <Modal.Content width="md">
         <Modal.Header
           icon={Logo}
-          title={`Connect ${name}`}
-          description="Enter your credentials to authorize this app for your account."
+          title={t("title", { name })}
+          description={t("description")}
         />
         <Modal.Body>
           <div className="flex flex-col gap-4 w-full">
             <div className="flex flex-col gap-3 w-full">
               {credentialKeys.map((key) => (
                 <div key={key} className="flex flex-col gap-1 w-full">
-                  <Text font="main-ui-action">{humanizeKey(key)}</Text>
-                  <PasswordInputTypeIn
+                  <Text font="main-ui-action">{toTitleCase(key)}</Text>
+                  <InputPasswordTypeIn
                     value={values[key] ?? ""}
                     onChange={(e) =>
                       setValues((prev) => ({ ...prev, [key]: e.target.value }))
@@ -110,8 +104,10 @@ export default function UserCredentialsModal({
 
             {error && (
               <MessageCard
+                outerPadding={1}
+                innerPadding={1}
                 variant="error"
-                title="Couldn't connect"
+                title={t("errors.connectFailedTitle")}
                 description={error}
               />
             )}
@@ -124,10 +120,10 @@ export default function UserCredentialsModal({
               onClick={onClose}
               disabled={isSaving}
             >
-              Cancel
+              {t("cancelButton")}
             </Button>
             <Button onClick={saveValues} disabled={!canSave}>
-              {isSaving ? "Connecting…" : "Connect"}
+              {isSaving ? t("connectingButton") : t("connectButton")}
             </Button>
           </div>
         </Modal.Footer>

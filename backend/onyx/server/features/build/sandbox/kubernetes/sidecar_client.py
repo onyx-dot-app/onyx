@@ -16,15 +16,18 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from onyx.server.features.build.configs import SANDBOX_PUSH_PRIVATE_KEY
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     PUSH_DAEMON_PORT,
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
+    SIDECAR_OUTPUTS_MANIFEST_PATH,
     SIDECAR_PUSH_PATH,
+    FilesystemEntry,
     FilesystemListRequest,
     FilesystemListResponse,
+    OutputsManifestRequest,
+    OutputsManifestResponse,
 )
-from onyx.server.features.build.sandbox.models import FilesystemEntry
 from onyx.server.features.build.timeouts import (
     BULK_TRANSFER_TIMEOUT_SECONDS,
     CONNECT_TIMEOUT_SECONDS,
@@ -159,16 +162,38 @@ class SidecarClient:
             raise SidecarStatusError("filesystem list", resp.status_code, resp.text)
 
         listing = FilesystemListResponse.model_validate_json(resp.content)
-        return [
-            FilesystemEntry(
-                name=entry.name,
-                path=entry.path,
-                is_directory=entry.is_directory,
-                size=entry.size,
-                mime_type=entry.mime_type,
-            )
-            for entry in listing.entries
-        ]
+        return listing.entries
+
+    def outputs_manifest(
+        self,
+        *,
+        sandbox_id: UUID,
+        session_id: UUID,
+        include_web: bool = False,
+        timeout_seconds: float = RPC_TIMEOUT_SECONDS,
+    ) -> OutputsManifestResponse:
+        payload = OutputsManifestRequest(session_id=session_id, include_web=include_web)
+        body = payload.model_dump_json(exclude_defaults=True).encode()
+        sha256_hex = hashlib.sha256(body).hexdigest()
+
+        try:
+            with httpx.Client(timeout=timeout_seconds) as http_client:
+                resp = http_client.post(
+                    self._url(self._host(sandbox_id), SIDECAR_OUTPUTS_MANIFEST_PATH),
+                    content=body,
+                    headers=self._signed_headers(
+                        signing_path=SIDECAR_OUTPUTS_MANIFEST_PATH,
+                        sha256_hex=sha256_hex,
+                        content_type="application/json",
+                    ),
+                )
+        except httpx.TransportError as e:
+            raise SidecarRequestError(f"outputs manifest request failed: {e}") from e
+
+        if resp.status_code != 200:
+            raise SidecarStatusError("outputs manifest", resp.status_code, resp.text)
+
+        return OutputsManifestResponse.model_validate_json(resp.content)
 
     @contextmanager
     def request_and_stream_new_snapshot(

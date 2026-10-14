@@ -34,12 +34,30 @@ type dependabotAlert struct {
 	} `json:"security_vulnerability"`
 }
 
+// dependabotEcosystems maps Dependabot's ecosystem names to OSV's, so the same
+// package from both sources matches one allowlist entry and one alert.
+var dependabotEcosystems = map[string]string{
+	"pip":     "PyPI",
+	"go":      "Go",
+	"rust":    "crates.io",
+	"actions": "GitHub Actions",
+}
+
+// canonicalEcosystem names an ecosystem the way OSV does.
+func canonicalEcosystem(ecosystem string) string {
+	if osv, ok := dependabotEcosystems[strings.ToLower(ecosystem)]; ok {
+		return osv
+	}
+	return ecosystem
+}
+
 // auditDependabot queries open Dependabot security alerts for the current repo
 // via the GitHub CLI and maps them into Findings.
 func auditDependabot() ([]Finding, error) {
 	// {owner}/{repo} is resolved by gh from the repo's git remote. --paginate
-	// merges array pages into a single JSON array.
-	cmd := exec.Command("gh", "api",
+	// merges array pages into a single JSON array. gh switches to POST when -f
+	// fields are present, and the list endpoint 404s on POST.
+	cmd := exec.Command("gh", "api", "--method", "GET",
 		"repos/{owner}/{repo}/dependabot/alerts",
 		"--paginate",
 		"-f", "state=open",
@@ -50,7 +68,7 @@ func auditDependabot() ([]Finding, error) {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := strings.TrimSpace(string(exitErr.Stderr))
 			if strings.Contains(stderr, "404") || strings.Contains(stderr, "Not Found") {
-				return nil, fmt.Errorf("gh api dependabot/alerts returned 404: ensure Dependabot alerts are enabled and the token has 'security_events: read' (or repo admin) access: %s", stderr)
+				return nil, fmt.Errorf("gh api dependabot/alerts returned 404: ensure Dependabot alerts are enabled and the token can read them ('vulnerability-alerts: read' for GITHUB_TOKEN, the security_events scope for a classic PAT): %s", stderr)
 			}
 			return nil, fmt.Errorf("gh api dependabot/alerts failed: %w: %s", err, stderr)
 		}

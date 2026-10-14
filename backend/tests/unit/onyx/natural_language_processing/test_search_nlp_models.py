@@ -1,19 +1,25 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
 from threading import Lock
-from typing import Any, cast
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.auth.credentials import Credentials
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
 from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
+from onyx.natural_language_processing.embedding_auth import build_embedding_auth
+from onyx.natural_language_processing.embedding_rate_limit import EmbeddingRateLimiter
 from onyx.natural_language_processing.search_nlp_models import (
     CloudEmbedding,
     EmbeddingModel,
+    EmbeddingRequestPolicy,
+    EmbeddingRetryBackoff,
     clean_model_name,
 )
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
 
@@ -88,14 +94,71 @@ def _build_google_embed_response(
 
 
 @pytest.mark.asyncio
+async def test_vertex_workload_identity_embeds_each_gemini_2_input_separately() -> None:
+    client = MagicMock()
+    client.aio.models.embed_content = AsyncMock(
+        side_effect=[
+            _build_google_embed_response([[0.1, 0.2]]),
+            _build_google_embed_response([[0.3, 0.4]]),
+        ]
+    )
+    client.aio.aclose = AsyncMock()
+    with (
+        patch(
+            "google.auth.default",
+            return_value=(MagicMock(spec=Credentials), "cluster-project"),
+        ),
+        patch("google.genai.Client", return_value=client) as genai,
+        patch("onyx.natural_language_processing.search_nlp_models.get_tokenizer"),
+    ):
+        model = EmbeddingModel(
+            server_host="localhost",
+            server_port=9000,
+            model_name="gemini-embedding-2",
+            normalize=False,
+            query_prefix=None,
+            passage_prefix=None,
+            api_key=None,
+            api_url=None,
+            provider_type=EmbeddingProvider.GOOGLE,
+            auth=build_embedding_auth(
+                EmbeddingProvider.GOOGLE,
+                None,
+                VertexEmbeddingConfig(
+                    auth_method="workload_identity",
+                    project_id="target-project",
+                    location="global",
+                ),
+            ),
+        )
+        response = await model._make_direct_api_call(
+            EmbedRequest(
+                model_name="gemini-embedding-2",
+                texts=["first", "second"],
+                text_type=EmbedTextType.PASSAGE,
+                max_context_length=512,
+                normalize_embeddings=False,
+            )
+        )
+    assert response.embeddings == [[0.1, 0.2], [0.3, 0.4]]
+    assert genai.call_args.kwargs["project"] == "target-project"
+    assert client.aio.models.embed_content.await_count == 2
+    assert all(
+        len(call.kwargs["contents"]) == 1
+        for call in client.aio.models.embed_content.await_args_list
+    )
+    client.aio.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_vertex_embed_keeps_task_type_for_existing_models(
     sample_embeddings: list[list[float]],
 ) -> None:
     """Existing Vertex models continue to receive task_type and unmodified text."""
     with patch(
-        "google.oauth2.service_account.Credentials.from_service_account_info"
+        "google.oauth2.service_account.Credentials.from_service_account_info",
     ) as mock_credentials:
-        mock_credentials.return_value = MagicMock()
+        mock_credentials.return_value = MagicMock(spec=Credentials)
 
         with patch("google.genai.Client") as mock_genai_client:
             mock_client = MagicMock()
@@ -152,9 +215,9 @@ async def test_vertex_embed_uses_instruction_prefix_for_gemini_embedding_2(
 ) -> None:
     """gemini-embedding-2 omits task_type and prefixes the text per Google's docs."""
     with patch(
-        "google.oauth2.service_account.Credentials.from_service_account_info"
+        "google.oauth2.service_account.Credentials.from_service_account_info",
     ) as mock_credentials:
-        mock_credentials.return_value = MagicMock()
+        mock_credentials.return_value = MagicMock(spec=Credentials)
 
         with patch("google.genai.Client") as mock_genai_client:
             mock_client = MagicMock()
@@ -250,6 +313,35 @@ async def test_cohere_embed_supports_v4_response_format(
 
 
 @pytest.mark.asyncio
+async def test_voyage_embed_splits_requests_under_per_request_token_cap() -> None:
+    """voyage-4-large accepts at most 120k tokens per request, so a full API
+    batch (512 chunks of up to 512 tokens) must go out as several requests."""
+    texts = [f"text-{i}" for i in range(300)]
+
+    async def fake_embed(texts: list[str], **_: Any) -> MagicMock:
+        response = MagicMock()
+        response.embeddings = [[float(t.split("-")[1])] for t in texts]
+        return response
+
+    with patch(
+        "onyx.natural_language_processing.search_nlp_models.voyageai.AsyncClient"
+    ) as mock_voyage:
+        mock_client = MagicMock()
+        mock_client.embed = AsyncMock(side_effect=fake_embed)
+        mock_voyage.return_value = mock_client
+
+        embedding = CloudEmbedding("fake-key", EmbeddingProvider.VOYAGE)
+        try:
+            result = await embedding._embed_voyage(texts, "voyage-4-large", "document")
+        finally:
+            await embedding.aclose()
+
+    batch_sizes = [len(c.kwargs["texts"]) for c in mock_client.embed.call_args_list]
+    assert batch_sizes == [128, 128, 44]
+    assert result == [[float(i)] for i in range(300)]
+
+
+@pytest.mark.asyncio
 async def test_rate_limit_handling() -> None:
     with patch(
         "onyx.natural_language_processing.search_nlp_models.CloudEmbedding.embed"
@@ -292,7 +384,7 @@ async def test_cloud_embedding_retries_on_transient_failure() -> None:
         return [[0.1, 0.2, 0.3] for _ in texts]
 
     with (
-        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
+        patch.object(EmbeddingRetryBackoff, "wait", lambda _self: wait_none()),
         patch.object(
             CloudEmbedding,
             CloudEmbedding._embed_openai.__name__,
@@ -346,7 +438,7 @@ async def test_cloud_embedding_retries_on_vertex_429() -> None:
         return [[0.1, 0.2, 0.3] for _ in texts]
 
     with (
-        patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()),
+        patch.object(EmbeddingRetryBackoff, "wait", lambda _self: wait_none()),
         patch.object(
             CloudEmbedding,
             CloudEmbedding._embed_vertex.__name__,
@@ -391,7 +483,16 @@ def _embedding_for_text(text: str) -> list[float]:
     return _embedding_for_idx(int(text.split("_")[1]))
 
 
-def _fake_direct_api_call(embed_request: EmbedRequest) -> EmbedResponse:
+@pytest.fixture(autouse=True)
+def _no_embedding_rate_limit() -> Iterator[None]:
+    with patch(f"{_SEARCH_NLP_MODULE}.load_embedding_rate_limiter", return_value=None):
+        yield
+
+
+def _fake_direct_api_call(
+    embed_request: EmbedRequest,
+    *_retry_config: object,
+) -> EmbedResponse:
     return EmbedResponse(
         embeddings=[_embedding_for_text(t) for t in embed_request.texts]
     )
@@ -401,6 +502,7 @@ def _fake_model_server_call(
     embed_request: EmbedRequest,
     tenant_id: str | None = None,  # noqa: ARG001
     request_id: str | None = None,  # noqa: ARG001
+    policy: EmbeddingRequestPolicy | None = None,  # noqa: ARG001
 ) -> EmbedResponse:
     return EmbedResponse(
         embeddings=[_embedding_for_text(t) for t in embed_request.texts]
@@ -552,7 +654,9 @@ def test_batch_encode_error_propagates() -> None:
     call_count = {"n": 0}
     call_count_lock = Lock()
 
-    def _fail_on_second_call(embed_request: EmbedRequest) -> EmbedResponse:
+    def _fail_on_second_call(
+        embed_request: EmbedRequest, *_retry_config: object
+    ) -> EmbedResponse:
         with call_count_lock:
             call_count["n"] += 1
             if call_count["n"] == 2:
@@ -673,3 +777,78 @@ async def test_batch_encode_async_caller_multi_batch() -> None:
     # Postcondition.
     assert result == [_embedding_for_idx(i) for i in range(n_texts)]
     assert spy_asyncio_run.call_count == 0
+
+
+def test_passage_model_server_requests_wait_for_the_rate_limit() -> None:
+    """Every passage request to the model server, retries included, takes a
+    slot from the rate limiter and passes it the stop check."""
+    callback = MagicMock()
+    callback.should_stop.return_value = False
+    model = _make_local_embedding_model()
+    model.callback = callback
+    limiter = MagicMock(spec=EmbeddingRateLimiter)
+    limiter.acquire.return_value = 0.0
+
+    rate_limited = MagicMock(status_code=429, text="slow down")
+    ok = MagicMock(status_code=200)
+    ok.json.return_value = {"embeddings": [[1.0]]}
+
+    with (
+        patch(
+            f"{_SEARCH_NLP_MODULE}.load_embedding_rate_limiter", return_value=limiter
+        ),
+        patch(f"{_SEARCH_NLP_MODULE}.wait_sleeps", return_value=iter([0.0])),
+        patch(
+            f"{_SEARCH_NLP_MODULE}.requests.post", side_effect=[rate_limited, ok]
+        ) as post,
+    ):
+        result = model.encode(texts=["text_0"], text_type=EmbedTextType.PASSAGE)
+
+    assert result == [[1.0]]
+    assert post.call_count == 2
+    assert limiter.acquire.call_count == 2
+    assert limiter.acquire.call_args.args[0] is callback.should_stop
+
+
+def test_query_embeddings_never_wait_for_the_rate_limit() -> None:
+    model = _make_local_embedding_model()
+    ok = MagicMock(status_code=200)
+    ok.json.return_value = {"embeddings": [[1.0]]}
+
+    with (
+        patch(f"{_SEARCH_NLP_MODULE}.load_embedding_rate_limiter") as load_limiter,
+        patch(f"{_SEARCH_NLP_MODULE}.requests.post", return_value=ok),
+    ):
+        model.encode(texts=["text_0"], text_type=EmbedTextType.QUERY)
+
+    load_limiter.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("block_on_provider_rate_limit", "expected_retries"),
+    [(True, 0), (False, 2)],
+)
+async def test_openai_sdk_retries_are_off_when_the_policy_counts_requests(
+    block_on_provider_rate_limit: bool, expected_retries: int
+) -> None:
+    """SDK retries would send requests that take no rate limit slot."""
+    import openai
+
+    policy = EmbeddingRequestPolicy(
+        retry_backoff=EmbeddingRetryBackoff(scale_seconds=0, max_seconds=0),
+        retry_tries=1,
+        block_on_provider_rate_limit=block_on_provider_rate_limit,
+    )
+    created = MagicMock()
+    created.data = [MagicMock(embedding=[0.1])]
+    client = MagicMock()
+    client.embeddings.create = AsyncMock(return_value=created)
+
+    with patch.object(openai, "AsyncOpenAI", return_value=client) as make_client:
+        async with CloudEmbedding(
+            "fake-key", EmbeddingProvider.OPENAI, policy=policy
+        ) as embedding:
+            await embedding._embed_openai(["a"], "text-embedding-3-small", None)
+
+    assert make_client.call_args.kwargs["max_retries"] == expected_retries

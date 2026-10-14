@@ -83,6 +83,10 @@ export default function useCCPairs(enabled: boolean = true) {
   return {
     ccPairs: data ?? [],
     isLoading: enabled && isLoading,
+    // Whether a complete snapshot exists: fetched at least once, or the
+    // fetch is disabled and the empty list IS the complete answer. SWR keeps
+    // stale data through failed revalidations, so this stays true then.
+    hasLoaded: !enabled || data !== undefined,
     error,
     refetch: mutate,
   };

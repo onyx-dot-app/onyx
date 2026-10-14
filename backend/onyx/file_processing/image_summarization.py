@@ -8,20 +8,20 @@ from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_USER_PROMPT,
 )
 from onyx.configs.chat_configs import IMAGE_SUMMARIZATION_TIMEOUT
-from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
-    ChatCompletionMessage,
     ContentPart,
+    GenerationRequest,
     ImageContentPart,
     ImageUrlDetail,
+    Message,
     SystemMessage,
     TextContentPart,
     UserMessage,
 )
-from onyx.llm.utils import llm_response_to_string
 from onyx.server.metrics.image_processing import track_image_summarization
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
+from onyx.tracing.framework.traces import TraceContentMode
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
@@ -114,7 +114,7 @@ def _summarize_image(
 ) -> str:
     """Use default LLM (if it is multimodal) to generate a summary of an image."""
 
-    messages: list[ChatCompletionMessage] = []
+    messages: list[Message] = []
 
     if system_prompt:
         messages.append(SystemMessage(content=system_prompt))
@@ -131,20 +131,15 @@ def _summarize_image(
     )
 
     try:
-        # Call LLM with Braintrust tracing
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.IMAGE_SUMMARIZATION,
-            input_messages=[{"type": "image_summarization_request"}],
-        ) as span_generation:
-            # Note: We don't include the actual image in the span input to avoid bloating traces
-            response = llm.invoke(
-                messages, total_timeout_override=IMAGE_SUMMARIZATION_TIMEOUT
-            )
-            record_llm_response(span_generation, response)
-            summary = llm_response_to_string(response)
-
-        return summary
+        response = llm.invoke(
+            GenerationRequest(messages=messages),
+            context=GenerationContext(
+                flow=LLMFlow.IMAGE_SUMMARIZATION,
+                content_mode=TraceContentMode.METADATA_ONLY,
+                total_timeout_s=IMAGE_SUMMARIZATION_TIMEOUT,
+            ),
+        )
+        return response.text
 
     except Exception as e:
         # Extract structured details from LiteLLM exceptions when available,
@@ -154,9 +149,9 @@ def _summarize_image(
         if len(str_e) > 512:
             str_e = str_e[:512] + "... (truncated)"
         parts = [f"Summarization failed: {type(e).__name__}: {str_e}"]
-        status_code = getattr(e, "status_code", None)
-        llm_provider = getattr(e, "llm_provider", None)
-        model = getattr(e, "model", None)
+        status_code = getattr(e, "status_code", None)  # ods: ignore[getattr]
+        llm_provider = getattr(e, "llm_provider", None)  # ods: ignore[getattr]
+        model = getattr(e, "model", None)  # ods: ignore[getattr]
         if status_code is not None:
             parts.append(f"status_code={status_code}")
         if llm_provider is not None:

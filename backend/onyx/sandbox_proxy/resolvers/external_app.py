@@ -17,8 +17,8 @@ from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.sandbox_proxy.credential_injection import (
     CredentialResolver,
     CredentialUnavailableError,
-    InjectionContext,
 )
+from onyx.sandbox_proxy.models import InjectionContext
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

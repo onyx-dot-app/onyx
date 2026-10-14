@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Tooltip } from "@opal/components";
 import { SvgCode, SvgEye } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
@@ -7,14 +8,22 @@ import { cn } from "@opal/utils";
 
 export type InstructionsDisplayMode = "rendered" | "raw";
 
-const OPTIONS: {
+// Modules cannot call hooks, so the options hold message keys (inside the
+// `skills.sections` namespace) and the component resolves them with `t`.
+type DisplayModeOption = {
   value: InstructionsDisplayMode;
-  label: string;
+  labelKey: string;
   icon: IconFunctionComponent;
-}[] = [
-  { value: "rendered", label: "Rendered markdown", icon: SvgEye },
-  { value: "raw", label: "Raw markdown", icon: SvgCode },
-];
+};
+
+const OPTIONS = [
+  {
+    value: "rendered",
+    labelKey: "instructionsToggle.rendered.label",
+    icon: SvgEye,
+  },
+  { value: "raw", labelKey: "instructionsToggle.raw.label", icon: SvgCode },
+] as const satisfies readonly DisplayModeOption[];
 
 interface InstructionsDisplayModeToggleProps {
   value: InstructionsDisplayMode;
@@ -25,20 +34,23 @@ export default function InstructionsDisplayModeToggle({
   value,
   onChange,
 }: InstructionsDisplayModeToggleProps) {
+  const t = useTranslations("skills.sections");
+
   return (
     <div
       role="group"
       className="inline-flex shrink-0 rounded-08 border border-border-01 bg-background-tint-01 p-0.5"
-      aria-label="Instruction display mode"
+      aria-label={t("instructionsToggle.group.ariaLabel")}
     >
       {OPTIONS.map((option) => {
         const isSelected = option.value === value;
         const Icon = option.icon;
+        const label = t(option.labelKey);
         return (
-          <Tooltip key={option.value} tooltip={option.label} side="top">
+          <Tooltip key={option.value} tooltip={label} side="top">
             <button
               type="button"
-              aria-label={option.label}
+              aria-label={label}
               aria-pressed={isSelected}
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-04 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-border-04",

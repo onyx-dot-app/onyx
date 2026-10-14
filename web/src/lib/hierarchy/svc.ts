@@ -1,10 +1,11 @@
-import { ValidSources } from "@/lib/types";
+import type { ErrorResponseBody } from "@/lib/fetcher";
+import { ValidSources } from "@/lib/connectors/types/source";
 import {
   HierarchyNodesResponse,
   HierarchyNodeDocumentsRequest,
   HierarchyNodeDocumentsResponse,
   HierarchyNodeSearchResponse,
-} from "./interfaces";
+} from "@/lib/hierarchy/types";
 
 const HIERARCHY_NODES_PREFIX = "/api/hierarchy-nodes";
 
@@ -13,7 +14,7 @@ async function extractErrorDetail(
   fallback: string
 ): Promise<string> {
   try {
-    const body = await response.json();
+    const body: ErrorResponseBody = await response.json();
     if (body.detail) return body.detail;
   } catch {
     // JSON parsing failed — fall through to fallback

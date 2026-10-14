@@ -81,7 +81,11 @@ function IconContainer({
     const initial = (name?.trim()[0] ?? "?").toUpperCase();
     content = (
       <div className="opal-icon-container-avatar opal-icon-container-avatar-user">
-        <Text font="secondary-action" color="text-inverted-05" nowrap>
+        <Text
+          font="secondary-action"
+          color="text-inverted-05"
+          wordWrap="whitespace-nowrap"
+        >
           {initial}
         </Text>
       </div>

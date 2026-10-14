@@ -19,7 +19,11 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
+from ee.onyx.db.connector_credential_pair import (
+    clear_perm_sync_pending__no_commit,
+    get_all_auto_sync_cc_pairs,
+    get_perm_sync_pending_cc_pair_sources,
+)
 from ee.onyx.db.document import upsert_document_external_perms
 from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.models import DocExternalAccess, ElementExternalAccess
@@ -59,7 +63,6 @@ from onyx.db.engine.sql_engine import (
     get_session_with_tenant,
 )
 from onyx.db.enums import (
-    AccessType,
     CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
     SyncStatus,
@@ -104,7 +107,6 @@ from onyx.utils.logger import (
     format_error_for_logging,
     setup_logger,
 )
-from onyx.utils.telemetry import RecordType, optional_telemetry
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -115,7 +117,6 @@ DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER = 10 * 60
 DOCUMENT_PERMISSIONS_UPDATE_MAX_WAIT = 60
 
 
-# 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
 LIGHT_SOFT_TIME_LIMIT = 105
 LIGHT_TIME_LIMIT = LIGHT_SOFT_TIME_LIMIT + 15
 
@@ -141,18 +142,29 @@ def _get_fence_validation_block_expiration() -> int:
 """Jobs / utils for kicking off doc permissions sync tasks."""
 
 
-def _fail_doc_permission_sync_attempt(attempt_id: int, error_msg: str) -> None:
+def _fail_doc_permission_sync_attempt(
+    attempt_id: int,
+    error_msg: str,
+    full_exception_trace: str | None = None,
+    total_docs_synced: int = 0,
+    docs_with_permission_errors: int = 0,
+) -> None:
     """Helper to mark a doc permission sync attempt as failed with an error message."""
     with get_session_with_current_tenant() as db_session:
         mark_doc_permission_sync_attempt_failed(
-            attempt_id, db_session, error_message=error_msg
+            attempt_id,
+            db_session,
+            error_message=error_msg,
+            full_exception_trace=full_exception_trace,
+            total_docs_synced=total_docs_synced,
+            docs_with_permission_errors=docs_with_permission_errors,
         )
 
 
-def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
+def is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     """Returns boolean indicating if external doc permissions sync is due."""
 
-    if cc_pair.access_type != AccessType.SYNC:
+    if not cc_pair.access_type.is_perm_synced():
         return False
 
     # skip doc permissions sync if not active
@@ -179,6 +191,12 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     # If the last sync is None, it has never been run so we run the sync
     last_perm_sync = cc_pair.last_time_perm_sync
     if last_perm_sync is None:
+        return True
+
+    # A sync that started before the pair began to wait for its first
+    # permission sync does not count, so the pair is not hidden for a period.
+    pending_since = cc_pair.perm_sync_pending_since
+    if pending_since is not None and last_perm_sync < pending_since:
         return True
 
     source_sync_period = sync_config.doc_sync_config.doc_sync_frequency
@@ -224,7 +242,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             cc_pair_ids_to_sync.extend(
                 cc_pair.id
                 for cc_pair in cc_pairs
-                if _is_external_doc_permissions_sync_due(cc_pair)
+                if is_external_doc_permissions_sync_due(cc_pair)
             )
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
@@ -283,6 +301,9 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
                     monitor_ccpair_permissions_taskset(
                         tenant_id, key_bytes, r, db_session
                     )
+
+        lock_beat.reacquire()
+        clear_caught_up_perm_sync_pending_marks(tenant_id)
         task_logger.info(f"check_for_doc_permissions_sync finished: tenant={tenant_id}")
     except SoftTimeLimitExceeded:
         task_logger.info(
@@ -301,6 +322,36 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             lock_beat.release()
 
     return True
+
+
+def clear_caught_up_perm_sync_pending_marks(tenant_id: str) -> None:
+    """Clears the mark of each pair awaiting its first permission sync whose
+    permissions are now in the document index. Group ACL entries are only as
+    current as the group memberships, so a source with group sync also waits
+    for one. A mark on a source with no doc permission sync clears at once."""
+    with get_session_with_current_tenant() as db_session:
+        pending_cc_pair_sources = get_perm_sync_pending_cc_pair_sources(db_session)
+        if not pending_cc_pair_sources:
+            return
+        # Keeps this beat running for the tenant until the marks clear.
+        maybe_mark_tenant_active(tenant_id, caller="doc_permission_sync")
+        for cc_pair_id, source in pending_cc_pair_sources.items():
+            sync_config = get_source_perm_sync_config(source)
+            if clear_perm_sync_pending__no_commit(
+                db_session,
+                cc_pair_id,
+                needs_doc_sync=(
+                    sync_config is not None and sync_config.doc_sync_config is not None
+                ),
+                needs_group_sync=(
+                    sync_config is not None
+                    and sync_config.group_sync_config is not None
+                ),
+            ):
+                task_logger.info(
+                    f"Cleared perm sync pending mark: cc_pair={cc_pair_id}"
+                )
+        db_session.commit()
 
 
 def try_creating_permissions_sync_task(
@@ -365,10 +416,10 @@ def try_creating_permissions_sync_task(
 
         result = app.send_task(
             OnyxCeleryTask.CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK,
-            kwargs=dict(
-                cc_pair_id=cc_pair_id,
-                tenant_id=tenant_id,
-            ),
+            kwargs={
+                "cc_pair_id": cc_pair_id,
+                "tenant_id": tenant_id,
+            },
             queue=OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.MEDIUM,
@@ -496,7 +547,12 @@ def connector_permission_sync_generator_task(
 
     sync_start = time.monotonic()
     connector_type: str = "unknown"
+    tasks_generated = 0
+    docs_with_errors = 0
     try:
+        # Scoped to setup, never across the crawl below: on multi-tenant this session
+        # is bound to one checked-out Connection, which PgBouncer closes once the gaps
+        # between its queries pass client_idle_timeout.
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
@@ -509,6 +565,18 @@ def connector_permission_sync_generator_task(
                     f"No connector credential pair found for id: {cc_pair_id}"
                 )
 
+            if not cc_pair.access_type.is_perm_synced():
+                error_msg = (
+                    f"cc_pair={cc_pair_id} is not perm-synced: {cc_pair.access_type}"
+                )
+                task_logger.warning(error_msg)
+                _fail_doc_permission_sync_attempt(attempt_id, error_msg)
+                # Clear the fence so a later sync is not blocked.
+                redis_connector.permissions.generator_clear()
+                redis_connector.permissions.taskset_clear()
+                redis_connector.permissions.set_fence(None)
+                return None
+
             try:
                 created = validate_ccpair_for_user(
                     cc_pair.connector.id,
@@ -517,6 +585,7 @@ def connector_permission_sync_generator_task(
                     db_session,
                     enforce_creation=False,
                     trigger=CapabilityCheckTrigger.PERM_SYNC_ATTEMPT,
+                    user=None,
                 )
                 if not created:
                     task_logger.warning(
@@ -568,82 +637,86 @@ def connector_permission_sync_generator_task(
                 redis_connector, lock, r, timeout_seconds=JOB_TIMEOUT
             )
 
-            # pass in the capability to fetch all existing docs for the cc_pair
-            # this is can be used to determine documents that are "missing" and thus
-            # should no longer be accessible. The decision as to whether we should find
-            # every document during the doc sync process is connector-specific.
-            def fetch_all_existing_docs_fn(
-                sort_order: SortOrder | None = None,
-            ) -> list[DocumentRow]:
-                result = get_documents_for_connector_credential_pair_limited_columns(
-                    db_session=db_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    sort_order=sort_order,
-                )
-                return list(result)
+            connector_id = cc_pair.connector.id
+            credential_id = cc_pair.credential.id
 
-            def fetch_all_existing_docs_ids_fn() -> list[str]:
-                result = get_document_ids_for_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                )
-                return result
-
-            doc_sync_func = sync_config.doc_sync_config.doc_sync_func
-            document_external_accesses = doc_sync_func(
-                cc_pair,
-                fetch_all_existing_docs_fn,
-                fetch_all_existing_docs_ids_fn,
-                callback,
-            )
-
-            task_logger.info(
-                f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
-            )
-
-            tasks_generated = 0
-            docs_with_errors = 0
-            for doc_external_access in document_external_accesses:
-                if callback.should_stop():
-                    raise RuntimeError(
-                        f"Permission sync task timed out or stop signal detected: "
-                        f"cc_pair={cc_pair_id} "
-                        f"tasks_generated={tasks_generated}"
+        # lets each connector decide which existing docs are now missing and should
+        # lose access
+        def fetch_all_existing_docs_fn(
+            sort_order: SortOrder | None = None,
+        ) -> list[DocumentRow]:
+            with get_session_with_current_tenant() as fetch_session:
+                return list(
+                    get_documents_for_connector_credential_pair_limited_columns(
+                        db_session=fetch_session,
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                        sort_order=sort_order,
                     )
-
-                result = redis_connector.permissions.update_db(
-                    lock=lock,
-                    new_permissions=[doc_external_access],
-                    source_string=connector_type,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    task_logger=task_logger,
                 )
-                tasks_generated += result.num_updated
-                docs_with_errors += result.num_errors
 
-            task_logger.info(
-                f"RedisConnector.permissions.generate_tasks finished. "
-                f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
+        def fetch_all_existing_docs_ids_fn() -> list[str]:
+            with get_session_with_current_tenant() as fetch_session:
+                return get_document_ids_for_connector_credential_pair(
+                    db_session=fetch_session,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
+                )
+
+        # cc_pair is detached: connectors may read eager-loaded connector/credential
+        # columns off it, never a lazy relationship.
+        doc_sync_func = sync_config.doc_sync_config.doc_sync_func
+        document_external_accesses = doc_sync_func(
+            cc_pair,
+            fetch_all_existing_docs_fn,
+            fetch_all_existing_docs_ids_fn,
+            callback,
+        )
+
+        task_logger.info(
+            f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
+        )
+
+        for doc_external_access in document_external_accesses:
+            if callback.should_stop():
+                raise RuntimeError(
+                    f"Permission sync task timed out or stop signal detected: "
+                    f"cc_pair={cc_pair_id} "
+                    f"tasks_generated={tasks_generated}"
+                )
+
+            result = redis_connector.permissions.update_db(
+                lock=lock,
+                new_permissions=[doc_external_access],
+                source_string=connector_type,
+                connector_id=connector_id,
+                credential_id=credential_id,
+                task_logger=task_logger,
             )
+            tasks_generated += result.num_updated
+            docs_with_errors += result.num_errors
 
-            inc_doc_perm_sync_docs_processed(connector_type, tasks_generated)
-            if docs_with_errors > 0:
-                inc_doc_perm_sync_errors(connector_type, docs_with_errors)
+        task_logger.info(
+            f"RedisConnector.permissions.generate_tasks finished. "
+            f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
+        )
 
+        inc_doc_perm_sync_docs_processed(connector_type, tasks_generated)
+        if docs_with_errors > 0:
+            inc_doc_perm_sync_errors(connector_type, docs_with_errors)
+
+        with get_session_with_current_tenant() as db_session:
             complete_doc_permission_sync_attempt(
                 db_session=db_session,
                 attempt_id=attempt_id,
                 total_docs_synced=tasks_generated,
                 docs_with_permission_errors=docs_with_errors,
             )
-            task_logger.info(
-                f"Completed doc permission sync attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
-            )
+        task_logger.info(
+            f"Completed doc permission sync attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
+        )
 
-            redis_connector.permissions.generator_complete = tasks_generated
+        redis_connector.permissions.generator_complete = tasks_generated
 
     except Exception as e:
         error_msg = format_error_for_logging(e)
@@ -656,13 +729,13 @@ def connector_permission_sync_generator_task(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id}"
         )
 
-        with get_session_with_current_tenant() as db_session:
-            mark_doc_permission_sync_attempt_failed(
-                attempt_id,
-                db_session,
-                error_message=error_msg,
-                full_exception_trace=full_exception_trace,
-            )
+        _fail_doc_permission_sync_attempt(
+            attempt_id,
+            error_msg,
+            full_exception_trace=full_exception_trace,
+            total_docs_synced=tasks_generated,
+            docs_with_permission_errors=docs_with_errors,
+        )
 
         redis_connector.permissions.generator_clear()
         redis_connector.permissions.taskset_clear()
@@ -1079,30 +1152,12 @@ def monitor_ccpair_permissions_taskset(
         f"Permissions sync progress: cc_pair={cc_pair_id} id={payload.id} remaining={remaining} initial={initial}"
     )
 
-    # Add telemetry for permission syncing progress
-    optional_telemetry(
-        record_type=RecordType.PERMISSION_SYNC_PROGRESS,
-        data={
-            "cc_pair_id": cc_pair_id,
-            "total_docs_synced": initial if initial is not None else 0,
-            "remaining_docs_to_sync": remaining,
-        },
-        tenant_id=tenant_id,
-    )
-
     if remaining > 0:
         return
 
     mark_cc_pair_as_permissions_synced(db_session, int(cc_pair_id), payload.started)
     task_logger.info(
         f"Permissions sync finished: cc_pair={cc_pair_id} id={payload.id} num_synced={initial}"
-    )
-
-    # Add telemetry for permission syncing complete
-    optional_telemetry(
-        record_type=RecordType.PERMISSION_SYNC_COMPLETE,
-        data={"cc_pair_id": cc_pair_id},
-        tenant_id=tenant_id,
     )
 
     update_sync_record_status(

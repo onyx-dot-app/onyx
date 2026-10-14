@@ -3,21 +3,31 @@ import Text from "@/refresh-components/texts/Text";
 
 // Expanded view: normal spacing between paragraphs/lists
 export const mutedTextMarkdownComponents = {
-  p: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="p" text03 mainUiMuted className="my-1!">
+  p: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <Text as="p" dir={dir} text03 mainUiMuted className="my-1!">
       {children}
     </Text>
   ),
-  li: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="li" text03 mainUiMuted className="my-0! py-0! leading-normal">
+  li: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <Text
+      as="li"
+      dir={dir}
+      text03
+      mainUiMuted
+      className="my-0! py-0! leading-normal"
+    >
       {children}
     </Text>
   ),
-  ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="pl-0! ml-0! my-0.5! list-inside">{children}</ul>
+  ul: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <ul dir={dir} className="ps-0! ms-0! my-0.5! list-inside">
+      {children}
+    </ul>
   ),
-  ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="pl-0! ml-0! my-0.5! list-inside">{children}</ol>
+  ol: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <ol dir={dir} className="ps-0! ms-0! my-0.5! list-inside">
+      {children}
+    </ol>
   ),
   a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
     <a
@@ -33,21 +43,31 @@ export const mutedTextMarkdownComponents = {
 
 // Collapsed view: no spacing for compact display
 export const collapsedMarkdownComponents = {
-  p: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="p" text03 mainUiMuted className="my-0!">
+  p: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <Text as="p" dir={dir} text03 mainUiMuted className="my-0!">
       {children}
     </Text>
   ),
-  li: ({ children }: { children?: React.ReactNode }) => (
-    <Text as="li" text03 mainUiMuted className="my-0! py-0! leading-normal">
+  li: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <Text
+      as="li"
+      dir={dir}
+      text03
+      mainUiMuted
+      className="my-0! py-0! leading-normal"
+    >
       {children}
     </Text>
   ),
-  ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="pl-0! ml-0! my-0! list-inside">{children}</ul>
+  ul: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <ul dir={dir} className="ps-0! ms-0! my-0! list-inside">
+      {children}
+    </ul>
   ),
-  ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="pl-0! ml-0! my-0! list-inside">{children}</ol>
+  ol: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <ol dir={dir} className="ps-0! ms-0! my-0! list-inside">
+      {children}
+    </ol>
   ),
   a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
     <a

@@ -14,8 +14,11 @@ import {
 } from "react";
 
 import { useWorkspaceSettings } from "@/api/settings";
+import { useAvailableTools } from "@/api/tools";
+import { useLlmProviders } from "@/api/chat/llm";
 import type { ChatToolOptions } from "@/api/chat/stream";
 import { DEFAULT_AGENT_ID, type MinimalAgent } from "@/chat/agents";
+import { toLlmOverride, type ModelOption } from "@/chat/models";
 import {
   buildInternalSearchFilters,
   configuredSources,
@@ -32,6 +35,7 @@ import { useAgentPreferences } from "@/hooks/useAgentPreferences";
 import { useConnectorSources } from "@/hooks/useConnectorSources";
 import { useDeepResearchToggle } from "@/hooks/useDeepResearchToggle";
 import { useForcedTools } from "@/hooks/useForcedTools";
+import { useSelectedModel } from "@/hooks/useSelectedModel";
 import { useSourceSelection } from "@/hooks/useSourceSelection";
 
 const NO_TOOLS: ToolSnapshot[] = [];
@@ -43,10 +47,18 @@ export interface ComposerTools {
   deepResearchEnabled: boolean;
   toggleDeepResearch: () => void;
   actionTools: ToolSnapshot[];
+  // A row in actionTools whose backend integration isn't configured right now (e.g. no image
+  // provider set up) — still assigned to the agent, but not usable until an admin configures it.
+  unavailableToolIds: number[];
   forcedToolId: number | null;
   toggleForcedTool: (toolId: number) => void;
   disabledToolIds: number[];
   toggleToolEnabled: (toolId: number) => void;
+  modelOptions: ModelOption[];
+  // The user's pick if there is one, else the agent's default. For display only — the send path
+  // reads the pick alone.
+  effectiveModel: ModelOption | null;
+  selectModel: (model: ModelOption) => void;
   sourceToolId: number | null;
   sourceOptions: DocumentSource[];
   enabledSourceCount: number;
@@ -79,6 +91,8 @@ export function useComposerToolsState({
   projectId,
 }: ComposerToolsInputs): ComposerTools {
   const { settings } = useWorkspaceSettings();
+  const { tools: globallyAvailableTools, isSuccess: availableToolsLoaded } =
+    useAvailableTools();
   const agentId = agent?.id;
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -141,11 +155,31 @@ export function useComposerToolsState({
     [effectiveAgent],
   );
 
+  // The search tool's own availability is governed by connector state, not this generic check —
+  // matching web, which never marks it unavailable here. Before the fetch resolves, treat every
+  // tool as available rather than flashing them all as unavailable.
+  const unavailableToolIds = useMemo(() => {
+    if (!availableToolsLoaded) return NO_IDS;
+    const availableIds = new Set(globallyAvailableTools.map((t) => t.id));
+    return actionTools
+      .filter((tool) => !availableIds.has(tool.id) && !isSearchTool(tool))
+      .map((tool) => tool.id);
+  }, [actionTools, availableToolsLoaded, globallyAvailableTools]);
+
   const disabledToolIds = useMemo(
     () =>
       effectiveAgentId == null ? NO_IDS : disabledToolIdsFor(effectiveAgentId),
     [effectiveAgentId, disabledToolIdsFor],
   );
+
+  const { selectedModel, selectModel } = useSelectedModel({
+    chatSessionId,
+    agentId,
+    projectId,
+  });
+  const { options: modelOptions, defaultOption: defaultModel } =
+    useLlmProviders(effectiveAgentId ?? null, selectedModel?.modelVersion);
+  const effectiveModel = selectedModel ?? defaultModel;
 
   // Inert in a project: a connector-type filter would exclude the project's own files.
   const sourcesManaged = !isProjectWorkflow;
@@ -352,6 +386,7 @@ export function useComposerToolsState({
       deepResearchEnabled,
       toggleDeepResearch,
       actionTools,
+      unavailableToolIds,
       forcedToolId,
       /*
        * Unwrapped: the effect already keeps "search on" and "some source on" equivalent. Web
@@ -360,6 +395,9 @@ export function useComposerToolsState({
       toggleForcedTool,
       disabledToolIds,
       toggleToolEnabled,
+      modelOptions,
+      effectiveModel,
+      selectModel,
       sourceToolId,
       sourceOptions,
       enabledSourceCount,
@@ -395,6 +433,10 @@ export function useComposerToolsState({
           internalSearchFilters: buildInternalSearchFilters(
             sourceOptions.filter(isSourceEnabled),
           ),
+          // Only an explicit pick is sent. Sending the resolved default instead would pin the
+          // conversation to whatever this client happened to read, rather than letting the
+          // backend apply its own.
+          llmOverride: selectedModel ? toLlmOverride(selectedModel) : null,
         };
       },
     }),
@@ -404,10 +446,15 @@ export function useComposerToolsState({
       deepResearchEnabled,
       toggleDeepResearch,
       actionTools,
+      unavailableToolIds,
       forcedToolId,
       toggleForcedTool,
       disabledToolIds,
       toggleToolEnabled,
+      modelOptions,
+      effectiveModel,
+      selectedModel,
+      selectModel,
       sourceToolId,
       sourceOptions,
       enabledSourceCount,

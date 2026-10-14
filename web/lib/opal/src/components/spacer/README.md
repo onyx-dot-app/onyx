@@ -7,10 +7,10 @@ Defaults to vertical spacing of 1rem. Use `orientation` to choose the axis.
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
+| Prop          | Type                         | Default      | Description     |
+| ------------- | ---------------------------- | ------------ | --------------- |
 | `orientation` | `"vertical" \| "horizontal"` | `"vertical"` | Axis of the gap |
-| `rem` | `number` | `1` | Size in rem |
+| `rem`         | `number`                     | `1`          | Size in rem     |
 
 ## Usage
 

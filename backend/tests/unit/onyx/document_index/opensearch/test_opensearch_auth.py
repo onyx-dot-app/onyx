@@ -23,7 +23,7 @@ def test_iam_auth_uses_sigv4_signer() -> None:
     """
     with (
         patch("onyx.document_index.opensearch.client.OpenSearch") as mock_os,
-        patch("onyx.document_index.opensearch.client.boto3.Session") as mock_session,
+        patch("boto3.Session") as mock_session,
     ):
         mock_session.return_value.get_credentials.return_value = MagicMock()
         OpenSearchClient(
@@ -59,7 +59,7 @@ def test_iam_without_region_raises() -> None:
 
 
 def test_iam_without_credentials_raises() -> None:
-    with patch("onyx.document_index.opensearch.client.boto3.Session") as mock_session:
+    with patch("boto3.Session") as mock_session:
         mock_session.return_value.get_credentials.return_value = None
         with pytest.raises(ValueError, match="no AWS credentials"):
             OpenSearchClient(

@@ -22,6 +22,7 @@ from fastapi import (
     Request,
     Response,
     WebSocket,
+    WebSocketException,
     status,
 )
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -76,8 +77,9 @@ from onyx.auth.mobile_sso.sso_completion import (
     complete_mobile_sso,
     is_mobile_sso,
 )
+from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.permissions import has_global_permission
+from onyx.auth.permissions import get_effective_permissions, has_global_permission
 from onyx.auth.pkce import generate_pkce_pair
 from onyx.auth.schemas import AuthBackend, UserCreate
 from onyx.auth.session_tokens import (
@@ -99,7 +101,6 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     EMAIL_CONFIGURED,
     INTEGRATION_TESTS_MODE,
-    JWT_PUBLIC_KEY_URL,
     REDIS_AUTH_KEY_PREFIX,
     REQUIRE_EMAIL_VERIFICATION,
     SESSION_EXPIRE_TIME_SECONDS,
@@ -118,7 +119,7 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     OnyxRedisLocks,
 )
-from onyx.db.api_key import fetch_api_key_auth_result
+from onyx.db.api_key import fetch_api_key_auth_result, is_api_key_email_address
 from onyx.db.auth import (
     get_access_token_db,
     get_default_admin_user_emails,
@@ -132,6 +133,7 @@ from onyx.db.engine.async_sql_engine import (
 from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_tenant,
+    is_valid_schema_name,
 )
 from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, User
@@ -139,9 +141,11 @@ from onyx.db.pat import resolve_pat
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
+    fetch_user_by_id,
     get_user_by_email,
     get_user_by_oauth_account,
     is_limited_user,
+    promote_placeholder_to_web_login__no_commit,
     reconcile_user_email__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -150,17 +154,23 @@ from onyx.error_handling.exceptions import (
     log_onyx_error,
     onyx_error_to_json_response,
 )
-from onyx.redis.redis_pool import get_async_redis_connection, retrieve_ws_token_data
+from onyx.oauth_provider.auth import (
+    authenticate_oauth_provider_request,
+    extract_oauth_provider_bearer,
+)
+from onyx.redis.redis_pool import (
+    get_async_redis_connection,
+    retrieve_auth_token_data,
+    retrieve_ws_token_data,
+)
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
-    RecordType,
     mt_cloud_identify_user,
     mt_cloud_telemetry,
-    optional_telemetry,
 )
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params, sanitize_next_url
@@ -526,6 +536,47 @@ def _invalidate_license_cache_after_seat_change() -> None:
     )()
 
 
+def _upgrade_placeholder_to_web_login__no_commit(
+    user_id: uuid.UUID, is_verified_by_default: bool, db_session: Session
+) -> bool:
+    """Promote a placeholder row (EXT_PERM_USER, BOT) to a real web login.
+
+    Does NOT commit. Must run on the session that already holds the ``"user"``
+    row lock from ``reconcile_user_email__no_commit``; a second connection
+    would wait on that lock until the callback returns, which it never does.
+
+    Locks the row again rather than trusting that one: an email change commits
+    the reconcile before this runs, which drops it. Re-locking on the same
+    connection is a no-op when it is still held, and serializes concurrent
+    first logins when it is not.
+
+    Returns whether the upgrade consumed a seat.
+    """
+    user = fetch_user_by_id(db_session, user_id, for_update=True)
+    if user is None:
+        return False
+
+    # The caller decided to promote from a read taken before this lock. Confirm
+    # the row is still a placeholder now that it is held: a concurrent login may
+    # have promoted it already, and an admin may have since deactivated the
+    # resulting account. Promoting again would reactivate a disabled account and
+    # re-check a seat that is already taken.
+    if user.account_type.is_web_login():
+        return False
+
+    # The row is active once this returns: it already was, or the promotion
+    # below reactivates it.
+    seat_added = False
+    if _upgrade_will_add_seat(user, will_become_active=True):
+        enforce_seat_limit_locked(db_session, seats_needed=1)
+        seat_added = True
+
+    promote_placeholder_to_web_login__no_commit(
+        db_session, user, is_verified=is_verified_by_default
+    )
+    return seat_added
+
+
 async def resolve_tenant_for_user(email: str, request: Request | None = None) -> str:
     """Workspace to bind a user to. An explicit override wins, since an SSO login
     knows its workspace before the user row exists."""
@@ -540,23 +591,28 @@ async def resolve_tenant_for_user(email: str, request: Request | None = None) ->
     )(email=email, request=request)
 
 
-@asynccontextmanager
-async def _tenant_session_with_context(
-    tenant_id: str,
-) -> AsyncGenerator[AsyncSession, None]:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-    try:
-        async with get_async_session_context_manager(tenant_id) as db_session:
-            yield db_session
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
+
+    @asynccontextmanager
+    async def _tenant_session_with_bound_user_db(
+        self, tenant_id: str
+    ) -> AsyncGenerator[AsyncSession, None]:
+        """Run tenant work on one AsyncSession; user_db writes use that connection."""
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        previous_user_db = self.user_db
+        try:
+            async with get_async_session_context_manager(tenant_id) as db_session:
+                self.user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
+                    db_session, User, OAuthAccount
+                )
+                yield db_session
+        finally:
+            self.user_db = previous_user_db
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     async def get_by_email(self, user_email: str) -> User:
         tenant_id = fetch_ee_implementation_or_noop(
@@ -691,7 +747,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # Get captcha token from request body or headers
             captcha_token = None
             if hasattr(user_create, "captcha_token"):
-                captcha_token = getattr(user_create, "captcha_token", None)
+                captcha_token = getattr(  # ods: ignore[getattr]
+                    user_create, "captcha_token", None
+                )
 
             # Also check headers as a fallback
             if not captcha_token:
@@ -795,7 +853,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create, is_admin)
+                    self._upgrade_user_to_standard__sync(
+                        user_id, user_create, is_admin, safe=safe
+                    )
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -825,7 +885,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create, is_admin)
+                    self._upgrade_user_to_standard__sync(
+                        user_id, user_create, is_admin, safe=safe
+                    )
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -846,12 +908,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user_id: uuid.UUID,
         user_create: UserCreate,
         is_admin: bool,
+        safe: bool,
     ) -> None:
         """Upgrade a non-web user to STANDARD + assign groups in one tx.
 
         Enforces the seat limit inside the same transaction when the
         upgrade flips an uncounted user (EXT_PERM_USER, SERVICE_ACCOUNT)
         into a counted one.
+
+        ``safe`` marks the public register path, where the request body is
+        untrusted and cannot decide is_verified.
         """
         seat_added = False
         with get_session_with_current_tenant() as sync_db:
@@ -869,7 +935,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 sync_user.hashed_password = self.password_helper.hash(
                     user_create.password
                 )
-                sync_user.is_verified = user_create.is_verified or False
+                # A registrant must not self-verify an address they do not own.
+                sync_user.is_verified = (
+                    False if safe else (user_create.is_verified or False)
+                )
                 sync_user.account_type = AccountType.STANDARD
                 assign_user_to_default_groups__no_commit(
                     sync_db,
@@ -923,7 +992,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
         return
 
-    @log_function_time(print_only=True)
+    async def _rewrite_oauth_link(
+        self, user: User, link: OAuthAccount, oauth_account_dict: dict[str, Any]
+    ) -> User:
+        return await self.user_db.update_oauth_account(
+            user,
+            # OAuthAccount implements OAuthAccountProtocol, but the type
+            # checker cannot see it through the fastapi-users generics.
+            link,  # ty: ignore[invalid-argument-type]
+            oauth_account_dict,
+        )
+
+    @log_function_time()
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
         oauth_name: str,
@@ -940,7 +1020,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         enforce_verified_domain: bool = False,
     ) -> User:
         referral_source = (
-            getattr(request.state, "referral_source", None) if request else None
+            getattr(request.state, "referral_source", None)  # ods: ignore[getattr]
+            if request
+            else None
         )
 
         # A workspace-configured provider vouches for who someone is, never for
@@ -962,8 +1044,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if not tenant_id:
             raise HTTPException(status_code=401, detail="User not found")
 
-        # Proceed with the tenant context
-        async with _tenant_session_with_context(tenant_id) as db_session:
+        async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
             verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
@@ -990,14 +1071,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         "single sign-on.",
                     )
 
-            # NOTE(rkuo): If this UserManager is instantiated per connection
-            # should we even be doing this here?
-            if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
-                    db_session, User, OAuthAccount
-                )
-                self.user_db = tenant_user_db
-
             oauth_account_dict = {
                 "oauth_name": oauth_name,
                 "access_token": access_token,
@@ -1020,6 +1093,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.user_db.get_by_email(account_email)
                     if user is None:
                         raise exceptions.UserNotExists()
+                    # No link matched this subject, so any link this provider holds on
+                    # the row is stale: the IdP re-issued its subjects (a new Entra
+                    # app registration).
+                    stale_link: OAuthAccount | None = next(
+                        (
+                            link
+                            for link in user.oauth_accounts
+                            if link.oauth_name == oauth_name
+                        ),
+                        None,
+                    )
+
                     # Placeholders (EXT_PERM_USER, bots) carry no credentials or
                     # sessions, so neither check applies and the upgrade claims them.
                     if user.account_type.is_web_login():
@@ -1030,15 +1115,36 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                         # An owned row must not take a second provider, and a
                         # rename stops the address identifying the row. All else
-                        # is claimable, password signups included.
+                        # is claimable, password signups included. The same provider
+                        # with a new subject is admin-gated: the subject alone does
+                        # not prove who holds the address now.
+                        relink_allowed: bool = (
+                            stale_link is not None
+                            and oauth_security_settings.allow_same_provider_subject_relink
+                        )
                         if not associate_by_email and (
-                            user.oauth_accounts or user.prior_emails
+                            user.prior_emails
+                            or (user.oauth_accounts and not relink_allowed)
                         ):
                             raise exceptions.UserAlreadyExists()
 
-                    user = await self.user_db.add_oauth_account(
-                        user, oauth_account_dict
-                    )
+                    # Rewrite rather than append: an appended link would leave the
+                    # dead subject and its refresh token on the row.
+                    if stale_link is None:
+                        user = await self.user_db.add_oauth_account(
+                            user, oauth_account_dict
+                        )
+                    else:
+                        logger.notice(
+                            "Relinked %s login for user %s from subject %s to %s",
+                            oauth_name,
+                            user.id,
+                            stale_link.account_id,
+                            account_id,
+                        )
+                        user = await self._rewrite_oauth_link(
+                            user, stale_link, oauth_account_dict
+                        )
 
                 except exceptions.UserNotExists:
                     # OAuth-created accounts are not subject to the dotted-Gmail
@@ -1077,12 +1183,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             existing_oauth_account.account_id == account_id
                             and existing_oauth_account.oauth_name == oauth_name
                         ):
-                            user = await self.user_db.update_oauth_account(
-                                user,
-                                # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
-                                # but the type checker doesn't know that :(
-                                existing_oauth_account,  # ty: ignore[invalid-argument-type]
-                                oauth_account_dict,
+                            user = await self._rewrite_oauth_link(
+                                user, existing_oauth_account, oauth_account_dict
                             )
 
             assert user is not None
@@ -1139,48 +1241,27 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.account_type.is_web_login():
-                # We must use the existing user in the session if it matches
-                # the user we just got by email/oauth. Note that this only applies
-                # to multi-tenant, due to the overwriting of the user_db
-                if MULTI_TENANT:
-                    if user.id:
-                        user_by_session = await db_session.get(User, user.id)
-                        if user_by_session:
-                            user = user_by_session
+                # Cache the id before the commit below expires `user`. Reading
+                # an attribute off an expired object here triggers a sync lazy
+                # load, which raises MissingGreenlet in this async context.
+                refreshed_user_id = user.id
 
-                # Lock + check + upgrade in one transaction.
-                was_inactive = not user.is_active
-                seat_added = False
-                with get_session_with_current_tenant() as sync_db:
-                    sync_user = (
-                        sync_db.query(User)
-                        .filter(User.id == user.id)  # ty: ignore[invalid-argument-type]
-                        .first()
+                # Runs on this session, which already holds the `"user"` row
+                # lock taken by reconcile_user_email__no_commit above. A second
+                # connection would wait on that lock for the whole callback.
+                seat_added = await db_session.run_sync(
+                    partial(
+                        _upgrade_placeholder_to_web_login__no_commit,
+                        refreshed_user_id,
+                        is_verified_by_default,
                     )
-                    if sync_user:
-                        will_become_active = (
-                            True if was_inactive else bool(sync_user.is_active)
-                        )
-                        if _upgrade_will_add_seat(
-                            sync_user, will_become_active=will_become_active
-                        ):
-                            enforce_seat_limit_locked(sync_db, seats_needed=1)
-                            seat_added = True
-                        sync_user.is_verified = is_verified_by_default
-                        sync_user.account_type = AccountType.STANDARD
-                        if was_inactive:
-                            sync_user.is_active = True
-                        assign_user_to_default_groups__no_commit(sync_db, sync_user)
-                        sync_db.commit()
+                )
+                await db_session.commit()
                 if seat_added:
                     _invalidate_license_cache_after_seat_change()
 
-                # Refresh the async user object so downstream code
-                # (e.g. oidc_expiry check) sees the updated fields.
-                # Cache id before expire. Accessing attrs on an expired object
-                # triggers a sync lazy-load which raises MissingGreenlet in this
-                # async context.
-                refreshed_user_id = user.id
+                # Reload so downstream code (e.g. the oidc_expiry check) sees
+                # the upgraded fields.
                 self.user_db.session.expire(user)
                 user = await self.user_db.get(refreshed_user_id)
                 assert user is not None
@@ -1232,6 +1313,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id = await resolve_tenant_for_user(user.email, request)
 
         user_count = None
+        is_admin = False
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
@@ -1325,16 +1407,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
 
         logger.debug("User %s has registered.", user.id)
-        optional_telemetry(
-            record_type=RecordType.SIGN_UP,
-            data={"action": "create"},
-            user_id=str(user.id),
-        )
 
         emit_audit_event(
             AuditAction.REGISTER,
             AuditOutcome.SUCCESS,
             actor=AuditActor(user_id=str(user.id), email=user.email),
+            # This is the only record of the first-user and
+            # DEFAULT_ADMIN_USER_EMAILS admin grants; neither one goes through
+            # the admin-access route.
+            extra={"is_admin": is_admin},
         )
 
     async def on_after_forgot_password(
@@ -1343,6 +1424,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token: str,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
+        # Return silently so the response matches the one for an unknown address.
+        if not user.account_type.allows_password_login() or is_api_key_email_address(
+            user.email
+        ):
+            logger.warning("Refused password reset for non-login account %s", user.id)
+            return
         if not EMAIL_CONFIGURED:
             logger.error(
                 "Email is not configured. Please configure email in the admin panel"
@@ -1441,7 +1528,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
@@ -1500,7 +1587,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 _audit_login_failure()
                 return None
 
-            if not user.account_type.is_web_login():
+            if not user.account_type.allows_password_login():
                 _audit_login_failure(AuditOutcome.DENIED)
                 raise BasicAuthenticationError(
                     detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
@@ -1768,11 +1855,30 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
             public_key=public_key,
         )
 
-    async def write_token(self, user: User) -> str:
-        data = {
+    def get_session_id(self, token: str, user: User) -> str | None:
+        try:
+            data = decode_jwt(
+                token,
+                self.decode_key,
+                self.token_audience,
+                algorithms=[self.algorithm],
+            )
+        except jwt.PyJWTError:
+            return None
+        if data.get("sub") != str(user.id):
+            return None
+
+        sid = data.get("sid")
+        if isinstance(sid, str) and sid:
+            return sid
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    async def write_token(self, user: User, session_id: str | None = None) -> str:
+        data: dict[str, Any] = {
             "sub": str(user.id),
             "aud": self.token_audience,
             "iat": int(datetime.now(timezone.utc).timestamp()),
+            "sid": session_id or secrets.token_urlsafe(32),
         }
         return generate_jwt(
             data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm
@@ -1789,11 +1895,12 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
 
     async def refresh_token(
         self,
-        token: Optional[str],  # noqa: ARG002
-        user: User,  # noqa: ARG002
+        token: Optional[str],
+        user: User,
     ) -> str:
         """Issue a fresh JWT with a new expiry."""
-        return await self.write_token(user)
+        session_id = self.get_session_id(token, user) if token else None
+        return await self.write_token(user, session_id)
 
 
 def get_redis_strategy() -> TenantAwareRedisStrategy:
@@ -1864,15 +1971,18 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
         router = APIRouter()
 
+        # Authenticate only via this router's own transport. Otherwise a
+        # same-origin script could send the HttpOnly cookie to the bearer
+        # router and read the session token from the response body.
         get_current_user_token = self.authenticator.current_user_token(
-            active=True, verified=requires_verification
+            active=True,
+            verified=requires_verification,
+            get_enabled_backends=lambda: [backend],
         )
 
         refresh_responses: OpenAPIResponseType = {
-            **{
-                status.HTTP_401_UNAUTHORIZED: {
-                    "description": "Missing token or inactive user."
-                }
+            status.HTTP_401_UNAUTHORIZED: {
+                "description": "Missing token or inactive user."
             },
             **backend.transport.get_openapi_login_responses_success(),
         }
@@ -1901,12 +2011,12 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
                 # Check if strategy supports refreshing
                 supports_refresh = hasattr(strategy, "refresh_token") and callable(
-                    getattr(strategy, "refresh_token")  # noqa: B009
+                    getattr(strategy, "refresh_token")  # noqa: B009  # ods: ignore[getattr]
                 )
 
                 if supports_refresh:
                     try:
-                        refresh_method = getattr(strategy, "refresh_token")  # noqa: B009
+                        refresh_method = getattr(strategy, "refresh_token")  # noqa: B009  # ods: ignore[getattr]
                         new_token = await refresh_method(token, user)
                         logger.info(
                             "Successfully refreshed session token for user %s",
@@ -1944,7 +2054,9 @@ fastapi_users = FastAPIUserWithRefreshRouter[User, uuid.UUID](
 # take care of that in `double_check_user` ourself. This is needed, since
 # we want the /me endpoint to still return a user even if they are not
 # yet verified, so that the frontend knows they exist
-optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
+optional_fastapi_current_user = fastapi_users.authenticator.current_user_token(
+    active=True, optional=True
+)
 
 
 _JWT_EMAIL_CLAIM_KEYS = ("email", "preferred_username", "upn")
@@ -2057,7 +2169,7 @@ async def _check_for_saml_and_jwt(
     async_db_session: AsyncSession,
 ) -> User | None:
     # If user is None, check for JWT in Authorization header
-    if user is None and JWT_PUBLIC_KEY_URL is not None:
+    if user is None and get_security_settings().jwt_public_key_url is not None:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[len("Bearer ") :].strip()
@@ -2082,7 +2194,7 @@ async def _maybe_refresh_oauth_tokens(
     """Best-effort refresh of any near-expiry OAuth access tokens.
 
     PT_OAUTH MCP tools and any custom HTTP tool with bearer pass-through forward
-    `user.oauth_accounts[0].access_token` directly to the upstream service. The
+    `user.live_oauth_token` directly to the upstream service. The
     web client's /auth/refresh ticker (``useTokenRefresh`` in
     `web/src/lib/auth/hooks.ts`) only fires for visible tabs, so without this
     hook the stored access_token could rot at the IdP's lifetime (~1 h on
@@ -2127,8 +2239,10 @@ def _scoped_pat_permitted_on_route(
     if not isinstance(route, APIRoute):
         return False
     return any(
-        getattr(dependency.call, "_is_require_permission", False)
-        or getattr(dependency.call, "_is_scope_exempt", False)
+        getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
+        or getattr(dependency.call, "_is_scope_exempt", False)  # ods: ignore[getattr]
         for dependency in route.dependant.dependencies
     )
 
@@ -2139,6 +2253,14 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
+    mcp_token = extract_oauth_provider_bearer(request)
+    if mcp_token is not None:
+        mcp_user = await authenticate_oauth_provider_request(
+            request, async_db_session, mcp_token
+        )
+        await _maybe_refresh_oauth_tokens(mcp_user, async_db_session, user_manager)
+        return mcp_user
+
     if user is not None:
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.SESSION
@@ -2169,7 +2291,8 @@ async def _resolve_optional_user(
                 )
         elif hashed_api_key := get_hashed_api_key_from_request(request):
             api_key = await fetch_api_key_auth_result(hashed_api_key, async_db_session)
-            if api_key is not None:
+            # Deactivating a service account revokes its key, as for PATs.
+            if api_key is not None and api_key.user.is_active:
                 user = api_key.user
                 request.state.usage_credential = UsageCredentialIdentity(
                     UsageCredentialType.API_KEY,
@@ -2184,7 +2307,7 @@ async def _resolve_optional_user(
     # Fail-closed: a scoped PAT may only reach routes guarded by a
     # require_permission its scopes can satisfy (see require_permission).
     if not _scoped_pat_permitted_on_route(
-        getattr(request.state, "token_scopes", None),
+        getattr(request.state, "token_scopes", None),  # ods: ignore[getattr]
         request.scope.get("route"),
     ):
         raise OnyxError(
@@ -2200,18 +2323,43 @@ async def _resolve_optional_user(
 async def optional_user(
     request: Request,
     async_db_session: AsyncSession = Depends(get_async_session),
-    user: User | None = Depends(optional_fastapi_current_user),
+    user_token: tuple[User | None, str | None] = Depends(optional_fastapi_current_user),
     user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
 ) -> AsyncGenerator[User | None, None]:
+    user, token = user_token
+    if user is not None and token is not None:
+        request.state.authenticated_session_token = token
     user = await _resolve_optional_user(
         request,
         async_db_session,
         user,
         user_manager,
     )
+    # End the auth read transaction here so its DB connection is not held for
+    # the whole turn: FastAPI closes this session only after the response
+    # finishes, and streaming chat responses can run for minutes.
+    # is_active is False when a best-effort write above (e.g. the OAuth token
+    # refresh) failed and left the transaction needing rollback. Auth must not
+    # fail on that, so leave that cleanup — and any commit failure here — to
+    # the dependency teardown.
+    if (
+        async_db_session.in_transaction()
+        and async_db_session.is_active
+        and not (
+            async_db_session.new or async_db_session.dirty or async_db_session.deleted
+        )
+    ):
+        try:
+            await async_db_session.commit()
+        except Exception:
+            logger.warning(
+                "Early release of the auth DB connection failed; "
+                "it is released at request teardown instead.",
+                exc_info=True,
+            )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
     credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
-        getattr(request.state, "usage_credential", None)
+        getattr(request.state, "usage_credential", None)  # ods: ignore[getattr]
     )
     try:
         yield user
@@ -2348,19 +2496,58 @@ def is_same_origin(actual: str, expected: str) -> bool:
     operator, so port differences carry no security significance — the
     CSWSH threat is remote origins, not local ones.
     """
-    a = urlparse(actual.rstrip("/"))
-    e = urlparse(expected.rstrip("/"))
+    # The actual origin is attacker-controlled. Accessing hostname/port raises
+    # ValueError on malformed input (bad port, invalid IPv6); read that as a
+    # mismatch rather than letting the handshake 500.
+    try:
+        a = urlparse(actual.rstrip("/"))
+        e = urlparse(expected.rstrip("/"))
 
-    if a.scheme != e.scheme or a.hostname != e.hostname:
+        if a.scheme != e.scheme or a.hostname != e.hostname:
+            return False
+
+        if a.hostname in _LOOPBACK_HOSTNAMES:
+            return True
+
+        actual_port = a.port or (443 if a.scheme == "https" else 80)
+        expected_port = e.port or (443 if e.scheme == "https" else 80)
+
+        return actual_port == expected_port
+    except ValueError:
         return False
 
-    if a.hostname in _LOOPBACK_HOSTNAMES:
-        return True
 
-    actual_port = a.port or (443 if a.scheme == "https" else 80)
-    expected_port = e.port or (443 if e.scheme == "https" else 80)
+def _check_websocket_origin(websocket: WebSocket) -> None:
+    """CSWSH guard: WebSockets are exempt from the same-origin policy and
+    cookie auth is attached automatically. Browsers always send Origin on
+    WebSocket upgrades, so a missing header is rejected too."""
+    origin = websocket.headers.get("origin")
+    if not origin:
+        logger.warning("WS auth: missing Origin header")
+        raise WebSocketException(code=1008)
+    if not is_same_origin(origin, WEB_DOMAIN):
+        logger.warning(
+            "WS auth: origin mismatch. Expected %s, got %s", WEB_DOMAIN, origin
+        )
+        raise WebSocketException(code=1008)
 
-    return actual_port == expected_port
+
+def _websocket_tenant_id(token_data: dict | None) -> str | None:
+    """Tenant a websocket connection runs against, from its auth token data.
+
+    The tenant middleware only runs for HTTP requests, so every websocket auth
+    dependency resolves the tenant itself and keeps the contextvar set for the
+    connection's lifetime. Returns None when the token names no usable tenant.
+    """
+    if not MULTI_TENANT:
+        # Single-tenant deployments always run on the default schema.
+        return POSTGRES_DEFAULT_SCHEMA
+    if token_data is None:
+        return None
+    tenant_id = token_data.get("tenant_id")
+    if not isinstance(tenant_id, str) or not is_valid_schema_name(tenant_id):
+        return None
+    return tenant_id
 
 
 async def current_user_from_websocket(
@@ -2371,7 +2558,7 @@ async def current_user_from_websocket(
     WebSocket authentication dependency using query parameter.
 
     Validates the WS token from query param and yields the User.
-    Raises BasicAuthenticationError if authentication fails.
+    Raises WebSocketException if authentication fails.
 
     The token must be obtained from POST /voice/ws-token before connecting.
     Tokens are single-use and expire after 60 seconds.
@@ -2382,58 +2569,116 @@ async def current_user_from_websocket(
 
     This applies the same auth checks as current_user() for HTTP endpoints.
     """
-    # Check Origin header to prevent Cross-Site WebSocket Hijacking (CSWSH).
-    # Browsers always send Origin on WebSocket connections.
-    origin = websocket.headers.get("origin")
-    if not origin:
-        logger.warning("WS auth: missing Origin header")
-        raise BasicAuthenticationError(detail="Access denied. Missing origin.")
-
-    if not is_same_origin(origin, WEB_DOMAIN):
-        logger.warning(
-            "WS auth: origin mismatch. Expected %s, got %s", WEB_DOMAIN, origin
-        )
-        raise BasicAuthenticationError(detail="Access denied. Invalid origin.")
+    _check_websocket_origin(websocket)
 
     # Validate WS token in Redis (single-use, deleted after retrieval)
     try:
         token_data = await retrieve_ws_token_data(token)
-        if token_data is None:
-            raise BasicAuthenticationError(
-                detail="Access denied. Invalid or expired authentication token."
-            )
-    except BasicAuthenticationError:
-        raise
     except Exception as e:
         logger.error("WS auth: error during token validation: %s", e)
-        raise BasicAuthenticationError(
-            detail="Authentication verification failed."
-        ) from e
+        raise WebSocketException(code=1008) from e
+    if token_data is None:
+        logger.warning("WS auth: invalid or expired websocket token")
+        raise WebSocketException(code=1008)
 
-    # Get user from token data
-    user = await _get_user_from_token_data(token_data)
-    if user is None:
-        logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
-        raise BasicAuthenticationError(
-            detail="Access denied. User not found or inactive."
-        )
+    token_tenant_id = _websocket_tenant_id(token_data)
+    if token_tenant_id is None:
+        logger.warning("WS auth: token missing tenant_id")
+        raise WebSocketException(code=1008)
 
-    # Apply same checks as HTTP auth (verification, OIDC expiry, role)
-    user = await double_check_user(user)
-
-    # Block limited users (same as current_user)
-    if is_limited_user(user):
-        logger.warning("WS auth: user %s is limited", user.email)
-        raise BasicAuthenticationError(
-            detail="Access denied. User has limited permissions.",
-        )
-
-    logger.debug("WS auth: authenticated %s", user.email)
-    context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+    tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(token_tenant_id)
     try:
-        yield user
+        user = await _get_user_from_token_data(token_data)
+        if user is None:
+            logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
+            raise WebSocketException(code=1008)
+
+        try:
+            user = await double_check_user(user)
+        except BasicAuthenticationError as e:
+            raise WebSocketException(code=1008) from e
+
+        if is_limited_user(user):
+            logger.warning("WS auth: user %s is limited", user.email)
+            raise WebSocketException(code=1008)
+
+        logger.debug("WS auth: authenticated %s", user.email)
+        user_context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+        try:
+            yield user
+        finally:
+            CURRENT_USER_ID_CONTEXTVAR.reset(user_context_token)
     finally:
-        CURRENT_USER_ID_CONTEXTVAR.reset(context_token)
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
+
+
+async def current_user_from_websocket_cookie(
+    websocket: WebSocket,
+    strategy: Strategy[User, uuid.UUID] = Depends(auth_backend.get_strategy),
+) -> AsyncGenerator[User, None]:
+    """WebSocket authentication dependency using the session cookie.
+
+    For same-origin browser flows where the page's session carries over to a
+    websocket (e.g. the craft webapp HMR proxy). Validates the session cookie
+    and yields the User. Raises WebSocketException if authentication fails.
+    """
+    _check_websocket_origin(websocket)
+
+    token = websocket.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME)
+    if not token:
+        raise WebSocketException(code=1008)
+
+    # The single-tenant session token can be a JWT with no Redis entry, so only
+    # consult Redis when the tenant is actually needed. Multi-tenant requires
+    # the Redis session backend — the HTTP tenant middleware resolves tenants
+    # from the same Redis lookup (see _get_tenant_id_from_request).
+    if MULTI_TENANT:
+        try:
+            token_data = await retrieve_auth_token_data(token)
+        except Exception as e:
+            logger.error("WS auth: error during token validation: %s", e)
+            raise WebSocketException(code=1008) from e
+    else:
+        token_data = None
+    tenant_id = _websocket_tenant_id(token_data)
+    if tenant_id is None:
+        logger.warning("WS auth: session token missing tenant_id")
+        raise WebSocketException(code=1008)
+
+    tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        # Build the user manager inside the tenant scope. As a route-level
+        # Depends it would open its DB session before the tenant is set.
+        get_user_db_context = asynccontextmanager(get_user_db)
+        get_user_manager_context = asynccontextmanager(get_user_manager)
+        async with get_async_session_context_manager() as db_session:
+            async with get_user_db_context(db_session) as user_db:
+                async with get_user_manager_context(user_db) as user_manager:
+                    user = await strategy.read_token(token, user_manager)
+
+        if user is None or not user.is_active:
+            raise WebSocketException(code=1008)
+
+        try:
+            user = await double_check_user(user)
+        except BasicAuthenticationError as e:
+            raise WebSocketException(code=1008) from e
+
+        if Permission.BASIC_ACCESS not in get_effective_permissions(user):
+            logger.warning("WS auth: user %s lacks basic access", user.email)
+            raise WebSocketException(code=1008)
+
+        logger.debug("WS auth: authenticated %s", user.email)
+        user_context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+        try:
+            yield user
+        finally:
+            CURRENT_USER_ID_CONTEXTVAR.reset(user_context_token)
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
+
+
+current_user_from_websocket_cookie._is_websocket_auth_dependency = True  # ty: ignore[unresolved-attribute]
 
 
 def get_default_admin_user_emails_() -> list[str]:
@@ -2806,7 +3051,7 @@ def get_oauth_router(
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     @router.get(
         "/callback",
         name=callback_route_name,
@@ -2926,7 +3171,8 @@ def get_oauth_router(
                 token = await oauth_client.get_access_token(
                     code, callback_redirect_url, code_verifier
                 )
-            except GetAccessTokenError:
+            except GetAccessTokenError as e:
+                log_token_exchange_failure(e)
                 return build_error_response(
                     OnyxError(
                         OnyxErrorCode.VALIDATION_ERROR,

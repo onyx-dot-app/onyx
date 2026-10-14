@@ -181,6 +181,7 @@ function usePaginatedFetch<T extends PaginatedType>({
       if (disableUrlSync || !currentPath || !searchParams) return;
       const params = new URLSearchParams(searchParams);
       params.set("page", page.toString());
+      // SAFETY: currentPath is the current pathname, a route of this app.
       router.replace(`${currentPath}?${params.toString()}` as Route, {
         scroll: false,
       });

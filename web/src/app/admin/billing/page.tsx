@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -27,6 +28,7 @@ import { LinkButton, MessageCard } from "@opal/components";
 import PlansView from "./PlansView";
 import CheckoutView from "./CheckoutView";
 import BillingDetailsView from "./BillingDetailsView";
+import DowngradeToCommunityLink from "@/app/admin/billing/DowngradeToCommunityLink";
 import LicenseActivationCard from "./LicenseActivationCard";
 import "./billing.css";
 
@@ -60,10 +62,11 @@ function FooterLinks({
   onActivateLicense?: () => void;
   hideLicenseLink?: boolean;
 }) {
+  const t = useTranslations("admin.billing");
   const { user } = useUser();
   const licenseText = hasSubscription
-    ? "Update License Key"
-    : "Activate License Key";
+    ? t("footer.updateLicenseKey.label")
+    : t("footer.activateLicenseKey.label");
   const billingHelpHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
     `[Billing] support for ${user?.email ?? "unknown"}`
   )}`;
@@ -73,14 +76,17 @@ function FooterLinks({
       {onActivateLicense && !hideLicenseLink && (
         <>
           <Text secondaryBody text03>
-            Have a license key?
+            {t("footer.licenseKeyPrompt.label")}
           </Text>
           <LinkButton onClick={onActivateLicense} external={false}>
             {licenseText}
           </LinkButton>
         </>
       )}
-      <LinkButton href={billingHelpHref}>Billing Help</LinkButton>
+      <DowngradeToCommunityLink />
+      <LinkButton href={billingHelpHref}>
+        {t("footer.billingHelp.label")}
+      </LinkButton>
     </Section>
   );
 }
@@ -90,6 +96,7 @@ function FooterLinks({
 // ----------------------------------------------------------------------------
 
 export default function BillingPage() {
+  const t = useTranslations("admin.billing");
   const router = useRouter();
   const searchParams = useSearchParams();
   // Start with null view to prevent flash - will be set once data loads
@@ -337,11 +344,11 @@ export default function BillingPage() {
       .then(() => handleRefresh())
       .catch((error: unknown) =>
         toast.error(
-          error instanceof Error ? error.message : "License sync failed"
+          error instanceof Error ? error.message : t("toasts.licenseSyncFailed")
         )
       )
       .finally(() => setIsGraceSyncing(false));
-  }, [isSelfHosted, graceSyncAttempted, licenseData?.expiry_warning_stage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSelfHosted, graceSyncAttempted, licenseData?.expiry_warning_stage, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hide license activation card when Stripe connection is restored (only if auto-opened)
   useEffect(() => {
@@ -382,7 +389,7 @@ export default function BillingPage() {
     if (isLoading || view === null) {
       return {
         icon: SvgWallet,
-        title: "Plans & Billing",
+        title: t("header.plansBilling.title"),
         showBackButton: false,
       };
     }
@@ -390,13 +397,15 @@ export default function BillingPage() {
       case "checkout":
         return {
           icon: SvgArrowUpCircle,
-          title: "Upgrade Plan",
+          title: t("header.upgradePlan.title"),
           showBackButton: false,
         };
       case "plans":
         return {
           icon: hasSubscription ? SvgWallet : SvgArrowUpCircle,
-          title: hasSubscription ? "View Plans" : "Upgrade Plan",
+          title: hasSubscription
+            ? t("header.viewPlans.title")
+            : t("header.upgradePlan.title"),
           showBackButton: !!(
             hasSubscription ||
             (isSelfHosted && licenseData?.has_license)
@@ -405,7 +414,7 @@ export default function BillingPage() {
       case "details":
         return {
           icon: SvgWallet,
-          title: "Plans & Billing",
+          title: t("header.plansBilling.title"),
           showBackButton: false,
         };
     }
@@ -528,7 +537,7 @@ export default function BillingPage() {
       <SettingsLayouts.Header
         icon={viewConfig.icon}
         title={viewConfig.title}
-        backButton={viewConfig.showBackButton && handleBack}
+        cancel={viewConfig.showBackButton && handleBack}
         divider
       />
       <SettingsLayouts.Body>
@@ -536,8 +545,8 @@ export default function BillingPage() {
           {isActivating && (
             <MessageCard
               variant="warning"
-              title="Your license is still activating"
-              description="Your license is being processed. You'll be taken to billing details automatically once confirmed."
+              title={t("activatingBanner.title")}
+              description={t("activatingBanner.description")}
               onClose={() => {
                 sessionStorage.removeItem(BILLING_ACTIVATING_KEY);
                 setIsActivating(false);

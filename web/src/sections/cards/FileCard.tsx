@@ -1,14 +1,16 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { ProjectFile } from "@/lib/projects/types";
 import { UserFileStatus } from "@/lib/projects/types";
+import { isFilePending } from "@/lib/projects/utils";
 import { isImageFile } from "@/lib/utils";
 import { cn } from "@opal/utils";
-import { SvgFileText, SvgX, SvgSimpleLoader } from "@opal/icons";
+import { SvgFileText, SvgX } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
-import { AttachmentItemLayout } from "@/layouts/general-layouts";
-import { Spacer } from "@opal/components";
+import { AttachmentItemButton } from "@opal/components";
 
 interface RemovableProps {
   onRemove?: () => void;
@@ -16,6 +18,8 @@ interface RemovableProps {
 }
 
 function Removable({ onRemove, children }: RemovableProps) {
+  const t = useTranslations("cards");
+
   if (!onRemove) {
     return <>{children}</>;
   }
@@ -25,7 +29,7 @@ function Removable({ onRemove, children }: RemovableProps) {
       <div className="relative">
         <div
           className={cn(
-            "absolute -left-2 -top-2 z-10",
+            "absolute -start-2 -top-2 z-10",
             "pointer-events-none focus-within:pointer-events-auto"
           )}
         >
@@ -36,8 +40,8 @@ function Removable({ onRemove, children }: RemovableProps) {
                 e.stopPropagation();
                 onRemove();
               }}
-              title="Remove"
-              aria-label="Remove"
+              title={t("file.remove.label")}
+              aria-label={t("file.remove.label")}
               className={cn(
                 "h-4 w-4",
                 "flex items-center justify-center",
@@ -126,9 +130,9 @@ function ImageFileCard({
           onFileClick && !isProcessing ? () => onFileClick(file) : undefined
         }
       >
-        {!doneUploading || !imageUrl ? (
+        {isProcessing || !imageUrl ? (
           <div className="h-full w-full flex items-center justify-center">
-            <SvgSimpleLoader className={loaderSize} />
+            <IconLoader className={loaderSize} />
           </div>
         ) : imgError ? (
           <div className="h-full w-full flex items-center justify-center">
@@ -150,17 +154,16 @@ function ImageFileCard({
 export interface FileCardProps {
   file: ProjectFile;
   removeFile?: (fileId: string) => void;
-  hideProcessingState?: boolean;
   onFileClick?: (file: ProjectFile) => void;
   compactImages?: boolean;
 }
 export function FileCard({
   file,
   removeFile,
-  hideProcessingState = false,
   onFileClick,
   compactImages = false,
 }: FileCardProps) {
+  const t = useTranslations("cards");
   const typeLabel = useMemo(() => {
     const name = String(file.name || "");
     const lastDotIndex = name.lastIndexOf(".");
@@ -181,12 +184,7 @@ export function FileCard({
     return null;
   }, [isImage, file.file_id]);
 
-  const isActuallyProcessing =
-    String(file.status) === UserFileStatus.UPLOADING ||
-    String(file.status) === UserFileStatus.PROCESSING;
-
-  // When hideProcessingState is true, we treat processing files as completed for display purposes
-  const isProcessing = hideProcessingState ? false : isActuallyProcessing;
+  const isProcessing = isFilePending(file.status);
 
   const doneUploading = String(file.status) !== UserFileStatus.UPLOADING;
 
@@ -212,27 +210,20 @@ export function FileCard({
     >
       <div className="min-w-0 max-w-48">
         <Interactive.Container border size="fit" width="full">
-          <AttachmentItemLayout
-            icon={isProcessing ? SvgSimpleLoader : SvgFileText}
+          <AttachmentItemButton
+            presentational
+            icon={isProcessing ? IconLoader : SvgFileText}
             title={file.name}
             description={
               isProcessing
                 ? file.status === UserFileStatus.UPLOADING
-                  ? "Uploading..."
-                  : "Processing..."
+                  ? t("file.uploading.description")
+                  : t("file.processing.description")
                 : typeLabel
             }
           />
-          <Spacer orientation="horizontal" rem={0.5} />
         </Interactive.Container>
       </div>
     </Removable>
-  );
-}
-
-// Skeleton loading component for file cards
-export function FileCardSkeleton() {
-  return (
-    <div className="min-w-[120px] max-w-[240px] h-11 rounded-08 bg-background-tint-02 animate-pulse" />
   );
 }

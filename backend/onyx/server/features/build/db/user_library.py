@@ -15,6 +15,7 @@ from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector, fetch_connectors
 from onyx.db.connector_credential_pair import (
+    CCPairAccessLevel,
     add_credential_to_connector,
     get_connector_credential_pairs_for_user,
 )
@@ -256,7 +257,7 @@ def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int,
     cc_pairs = get_connector_credential_pairs_for_user(
         db_session=db_session,
         user=user,
-        get_editable=False,
+        access_level=CCPairAccessLevel.READ,
         eager_load_connector=True,
         eager_load_credential=True,
         processing_mode=ProcessingMode.RAW_BINARY,
@@ -302,7 +303,8 @@ def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int,
     credential = None
     for cred in existing_credentials:
         if (
-            cred.source == DocumentSource.CRAFT_FILE
+            cred.user_id == user.id
+            and cred.source == DocumentSource.CRAFT_FILE
             and cred.name == USER_LIBRARY_CREDENTIAL_NAME
         ):
             credential = cred
@@ -329,7 +331,7 @@ def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int,
         user=user,
         cc_pair_name=USER_LIBRARY_CONNECTOR_NAME,
         access_type=AccessType.PRIVATE,
-        groups=None,
+        manage_access={},
         processing_mode=ProcessingMode.RAW_BINARY,
     )
 

@@ -39,11 +39,15 @@ _SEARCH_SURFACE_HANDLERS: list[Callable[..., Any]] = [
 def _permission_gates(handler: Callable[..., Any]) -> list[Permission | None]:
     gates: list[Permission | None] = []
     for param in inspect.signature(handler).parameters.values():
-        dependency = getattr(param.default, "dependency", None)
-        if dependency is not None and getattr(
+        dependency = getattr(param.default, "dependency", None)  # ods: ignore[getattr]
+        if dependency is not None and getattr(  # ods: ignore[getattr]
             dependency, "_is_require_permission", False
         ):
-            gates.append(getattr(dependency, "_required_permission", None))
+            gates.append(
+                getattr(  # ods: ignore[getattr]
+                    dependency, "_required_permission", None
+                )
+            )
     return gates
 
 

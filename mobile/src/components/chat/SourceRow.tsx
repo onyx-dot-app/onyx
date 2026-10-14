@@ -21,7 +21,7 @@ function metaLine(doc: SearchDoc): string {
 
 function snippet(doc: SearchDoc): string {
   const raw = doc.match_highlights?.[0] ?? doc.blurb ?? "";
-  // Strip Vespa <hi>…</hi> highlight markup so it doesn't render literally.
+  // Strip <hi>…</hi> highlight markup so it doesn't render literally.
   const clean = raw.replace(/<\/?hi>/g, "").trim();
   return clean.length > 200 ? `${clean.slice(0, 200)}…` : clean;
 }

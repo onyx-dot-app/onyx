@@ -7,12 +7,17 @@ from pydantic import BaseModel
 
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters, TimeRange
-from onyx.llm.interfaces import LLM
-from onyx.llm.models import ChatCompletionMessage, ReasoningEffort, UserMessage
+from onyx.llm.interfaces import LLM, GenerationContext
+from onyx.llm.models import (
+    GenerationOptions,
+    GenerationRequest,
+    Message,
+    ReasoningEffort,
+    UserMessage,
+)
 from onyx.prompts.filter_extration import TIME_SCOPE_DECISION_PROMPT
 from onyx.tools.models import ChatMinimalTextMessage
 from onyx.tracing.flows import LLMFlow
-from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -52,8 +57,12 @@ class TimeFilter(BaseModel):
         return filters
 
 
-# The model's "(start, end)" output; each side is one comma/paren-free token.
-_TIME_FILTER_PAIR_RE = re.compile(r"\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)")
+# The model's "(start, end)" output; each side is one comma/paren-free slot,
+# stripped by _parse_bound. One quantifier per slot keeps matching linear.
+_TIME_FILTER_PAIR_RE = re.compile(r"\(([^(),]+),([^(),]+)\)")
+
+# The expected output is under ~40 chars; only a short prefix is parsed.
+_MAX_TIME_FILTER_OUTPUT_CHARS = 512
 
 # The date field the model prefixes its pair with ("created (...)" /
 # "updated (...)"). Absent / anything else defaults to updated.
@@ -109,6 +118,7 @@ def _parse_time_decision(
     now = now or datetime.now(timezone.utc)
     if not content:
         return None
+    content = content[:_MAX_TIME_FILTER_OUTPUT_CHARS]
     # search() tolerates code fences / stray text around the pair.
     match = _TIME_FILTER_PAIR_RE.search(content)
     if match is None:
@@ -176,17 +186,17 @@ def decide_time_filter(
         conversation_history=conversation_history,
         last_user_query=last_user_query,
     )
-    messages: list[ChatCompletionMessage] = [UserMessage(content=prompt)]
+    messages: list[Message] = [UserMessage(content=prompt)]
 
     try:
-        with llm_generation_span(
-            llm=llm,
-            flow=LLMFlow.TIME_FILTER_EXTRACTION,
-            input_messages=messages,
-        ) as span_generation:
-            response = llm.invoke(prompt=messages, reasoning_effort=ReasoningEffort.OFF)
-            record_llm_response(span_generation, response)
-            content = response.choice.message.content
+        response = llm.invoke(
+            GenerationRequest(
+                messages=messages,
+                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+            ),
+            context=GenerationContext(flow=LLMFlow.TIME_FILTER_EXTRACTION),
+        )
+        content = response.text
         return _parse_time_decision(content, now)
     except Exception:
         logger.exception("Time filter decision failed; searching across all time")

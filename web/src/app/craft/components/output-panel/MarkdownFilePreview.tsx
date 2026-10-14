@@ -1,37 +1,64 @@
 "use client";
 
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import { memo } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { rehypeDirection } from "@/lib/rehypeDirection";
+import {
+  FilePreviewScrollArea,
+  type FilePreviewScrollPosition,
+} from "@/app/craft/components/output-panel/FilePreviewScrollArea";
+import remarkGfm from "remark-gfm";
+import { transformLinkUri } from "@/lib/utils";
 
-/** Shared interface for the file renderer registry */
-export interface FileRendererProps {
+interface MarkdownFilePreviewProps extends FilePreviewScrollPosition {
   content: string;
-  fileName: string;
-  filePath: string;
-  mimeType: string;
-  isImage: boolean;
 }
 
-export default function MarkdownFilePreview({ content }: FileRendererProps) {
+export default function MarkdownFilePreview({
+  content,
+  initialScrollTop,
+  onScrollTopChange,
+  isActive,
+}: MarkdownFilePreviewProps) {
   return (
-    <div className="relative h-full">
-      <div className="absolute inset-0 overflow-auto default-scrollbar p-6">
-        <MinimalMarkdown
-          content={content}
-          className="max-w-3xl mx-auto"
-          components={{
-            a: ({ href, children }: any) => (
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-link hover:text-link-hover underline"
-              >
-                {children}
-              </a>
-            ),
-          }}
-        />
-      </div>
-    </div>
+    <FilePreviewScrollArea
+      initialScrollTop={initialScrollTop}
+      onScrollTopChange={onScrollTopChange}
+      isActive={isActive}
+      padding={6}
+    >
+      <MarkdownContent content={content} />
+    </FilePreviewScrollArea>
   );
 }
+
+function MarkdownContentView({
+  content,
+  thumbnail = false,
+}: {
+  content: string;
+  thumbnail?: boolean;
+}) {
+  return (
+    <ReactMarkdown
+      className="prose max-w-none text-sm wrap-break-word"
+      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+      rehypePlugins={[rehypeKatex, rehypeDirection]}
+      urlTransform={transformLinkUri}
+      components={{
+        ...(thumbnail && { img: () => null }),
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+export const MarkdownContent = memo(MarkdownContentView);

@@ -4,6 +4,7 @@ import urllib.parse
 from onyx.configs.app_configs import (
     CELERY_BROKER_POOL_LIMIT,
     CELERY_RESULT_EXPIRES,
+    EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS,
     REDIS_DB_NUMBER_CELERY,
     REDIS_DB_NUMBER_CELERY_RESULT_BACKEND,
     REDIS_HEALTH_CHECK_INTERVAL,
@@ -17,6 +18,7 @@ from onyx.configs.app_configs import (
     REDIS_SSL_CA_CERTS,
     REDIS_SSL_CERT_REQS,
     REDIS_SSL_CERTFILE,
+    REDIS_SSL_CHECK_HOSTNAME,
     REDIS_SSL_KEYFILE,
     USE_REDIS_IAM_AUTH,
 )
@@ -34,7 +36,10 @@ REDIS_SCHEME = "redis"
 SSL_QUERY_PARAMS = ""
 if REDIS_SSL and not USE_REDIS_IAM_AUTH:
     REDIS_SCHEME = "rediss"
-    SSL_QUERY_PARAMS = f"?ssl_cert_reqs={REDIS_SSL_CERT_REQS}"
+    SSL_QUERY_PARAMS = (
+        f"?ssl_cert_reqs={REDIS_SSL_CERT_REQS}"
+        f"&ssl_check_hostname={str(REDIS_SSL_CHECK_HOSTNAME).lower()}"
+    )
     if REDIS_SSL_CA_CERTS:
         SSL_QUERY_PARAMS += f"&ssl_ca_certs={REDIS_SSL_CA_CERTS}"
     # Client certificate for mutual TLS — the broker URL is how the Celery
@@ -55,8 +60,11 @@ USE_SENTINEL = bool(REDIS_SENTINEL_HOSTS)
 _SENTINEL_USE_SSL = REDIS_SSL and not USE_REDIS_IAM_AUTH
 
 
-def _redis_ssl_settings() -> dict[str, str]:
-    settings: dict[str, str] = {"ssl_cert_reqs": REDIS_SSL_CERT_REQS}
+def _redis_ssl_settings() -> dict[str, str | bool]:
+    settings: dict[str, str | bool] = {
+        "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
+        "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
+    }
     if REDIS_SSL_CA_CERTS:
         settings["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
     if REDIS_SSL_CERTFILE and REDIS_SSL_KEYFILE:
@@ -82,8 +90,8 @@ _SENTINEL_TRANSPORT_OPTIONS: dict = {}
 # Celery TLS settings for the Sentinel data connections. Always defined (empty =
 # no SSL, matching Celery's default) so they're not conditionally-present module
 # globals.
-broker_use_ssl: dict[str, str] = {}
-redis_backend_use_ssl: dict[str, str] = {}
+broker_use_ssl: dict[str, str | bool] = {}
+redis_backend_use_ssl: dict[str, str | bool] = {}
 if USE_SENTINEL:
     _SENTINEL_TRANSPORT_OPTIONS["master_name"] = REDIS_SENTINEL_MASTER_NAME
     _sentinel_kwargs: dict = {}
@@ -123,6 +131,10 @@ broker_transport_options = {
     "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
     "socket_keepalive": True,
     "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
+    # Unacked (acks_late) tasks are redelivered after this long. A
+    # docprocessing batch can block on the embedding rate limit for up to
+    # EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS, so leave an hour for the rest.
+    "visibility_timeout": EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS + 60 * 60,
 }
 if USE_SENTINEL:
     broker_transport_options.update(_SENTINEL_TRANSPORT_OPTIONS)

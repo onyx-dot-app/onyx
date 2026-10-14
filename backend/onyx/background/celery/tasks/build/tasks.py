@@ -19,13 +19,6 @@ from onyx.server.features.build.db.sandbox import (
     user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.server.features.build.session.locks import get_session_creation_lock
-from onyx.server.features.build.session.sandbox_lifecycle import (
-    create_session_snapshot_keep_latest,
-    is_sandbox_idle,
-    list_snapshotable_session_workspaces,
-    sleep_sandbox,
-)
 
 # 100 minutes - snapshotting can take time
 TIMEOUT_SECONDS = 6000
@@ -54,6 +47,14 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     fail-closed: snapshot failure on a reachable pod keeps the sandbox
     RUNNING for retry next sweep.
     """
+    from onyx.server.features.build.session.locks import get_session_creation_lock
+    from onyx.server.features.build.session.sandbox_lifecycle import (
+        create_session_snapshot_keep_latest,
+        is_sandbox_idle,
+        list_snapshotable_session_workspaces,
+        sleep_sandbox,
+    )
+
     task_logger.info(f"cleanup_idle_sandboxes_task starting for tenant {tenant_id}")
 
     redis_client = get_redis_client(tenant_id=tenant_id)

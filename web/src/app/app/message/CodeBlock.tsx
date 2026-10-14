@@ -2,6 +2,7 @@ import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
 import { SvgCheck, SvgCode, SvgCopy } from "@opal/icons";
+import { useTranslations } from "next-intl";
 
 interface CodeBlockProps {
   className?: string;
@@ -22,6 +23,7 @@ export const CodeBlock = memo(function CodeBlock({
   showHeader = true,
   noPadding = false,
 }: CodeBlockProps) {
+  const t = useTranslations("chat.messages");
   const [copied, setCopied] = useState(false);
 
   const language = useMemo(() => {
@@ -43,21 +45,21 @@ export const CodeBlock = memo(function CodeBlock({
   const CopyButton = () => (
     <button
       type="button"
-      className="ml-auto cursor-pointer select-none"
+      className="ms-auto cursor-pointer select-none"
       onClick={handleCopy}
     >
       {copied ? (
         <div className="flex items-center space-x-2">
           <SvgCheck height={14} width={14} stroke="currentColor" />
           <Text as="p" secondaryMono>
-            Copied!
+            {t("codeBlock.copyButton.copiedLabel")}
           </Text>
         </div>
       ) : (
         <div className="flex items-center space-x-2">
           <SvgCopy height={14} width={14} stroke="currentColor" />
           <Text as="p" secondaryMono>
-            Copy
+            {t("codeBlock.copyButton.label")}
           </Text>
         </div>
       )}
@@ -66,7 +68,10 @@ export const CodeBlock = memo(function CodeBlock({
 
   if (typeof children === "string" && !language) {
     return (
+      // dir="ltr": code is always LTR, even inside RTL prose. The dir
+      // attribute also bidi-isolates the run from the surrounding text.
       <span
+        dir="ltr"
         data-testid="code-block"
         className={cn(
           "font-mono",
@@ -95,7 +100,10 @@ export const CodeBlock = memo(function CodeBlock({
   const CodeContent = () => {
     if (!language) {
       return (
+        // dir="ltr" on both pre branches: code is always LTR, even when
+        // the surrounding message resolved to RTL.
         <pre
+          dir="ltr"
           className={cn(
             "p-2! m-0 overflow-x-auto w-0 min-w-full hljs",
             innerRounding
@@ -114,6 +122,7 @@ export const CodeBlock = memo(function CodeBlock({
 
     return (
       <pre
+        dir="ltr"
         className={cn(
           "p-2! m-0 overflow-x-auto w-0 min-w-full hljs",
           innerRounding

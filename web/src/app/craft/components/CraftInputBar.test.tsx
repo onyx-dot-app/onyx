@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { render } from "@tests/setup/test-utils";
 import CraftInputBar from "@/app/craft/components/CraftInputBar";
 import {
   UploadFileStatus,
@@ -63,6 +64,8 @@ jest.mock("next/navigation", () => ({
 jest.mock("swr", () => ({
   __esModule: true,
   default: () => ({ data: [], mutate: jest.fn() }),
+  // The test-utils render wrapper mounts the real SWRConfig provider.
+  SWRConfig: jest.requireActual("swr").SWRConfig,
 }));
 
 jest.mock("@/hooks/useUserSkills", () => ({
@@ -75,7 +78,7 @@ jest.mock("@/hooks/useUserExternalApps", () => ({
   default: () => ({ data: undefined }),
 }));
 
-jest.mock("@/lib/tools/hooks", () => ({
+jest.mock("@/lib/mcp/hooks", () => ({
   useCraftMcpServers: () => ({ data: undefined }),
 }));
 
@@ -139,6 +142,20 @@ describe("CraftInputBar queued attachments", () => {
     fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
 
     expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
-    expect(mockClearFiles).toHaveBeenCalledWith({ suppressRefetch: true });
+    expect(mockClearFiles).toHaveBeenCalledWith();
+  });
+
+  it("keeps composer files when the queue rejects the handoff", () => {
+    const onQueueMessage = jest.fn().mockReturnValue(false);
+    render(
+      <CraftInputBar
+        onSubmit={jest.fn()}
+        isRunning
+        onQueueMessage={onQueueMessage}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
+    expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
+    expect(mockClearFiles).not.toHaveBeenCalled();
   });
 });

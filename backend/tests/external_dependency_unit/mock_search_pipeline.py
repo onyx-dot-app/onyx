@@ -12,9 +12,10 @@ from onyx.context.search.models import (
     InferenceChunk,
     PersonaSearchInfo,
     SearchDoc,
+    UserAccessFilters,
 )
 from onyx.db.models import SearchSettings, User
-from onyx.document_index.interfaces_new import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.federated_connectors.federated_retrieval import FederatedRetrievalInfo
 from onyx.llm.interfaces import LLM
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -207,7 +208,7 @@ def use_mock_search_pipeline(
         ),
         patch(
             "onyx.tools.tool_implementations.search.search_tool.build_access_filters_for_user",
-            return_value=[],
+            return_value=UserAccessFilters(access_control_list=[], cc_pair_access=None),
         ),
         patch(
             "onyx.tools.tool_implementations.search.search_tool.get_current_search_settings",

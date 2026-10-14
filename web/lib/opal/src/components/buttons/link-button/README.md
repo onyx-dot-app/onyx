@@ -9,6 +9,7 @@ A compact, anchor-styled link with an underlined label and an optional trailing 
 Deliberately **does not** use `Interactive.Stateless` / `Interactive.Container`. Those primitives come with height, rounding, padding, and a colour matrix designed for clickable surfaces — all wrong for an inline text link.
 
 The component renders a plain `<a>` (when given `href`) or `<button>` (when given `onClick`) with:
+
 - `inline-flex` so the label + optional icon track naturally next to surrounding prose
 - `text-text-03` that shifts to `text-text-05` on hover
 - `underline` on the label only (the icon stays non-underlined)
@@ -16,16 +17,16 @@ The component renders a plain `<a>` (when given `href`) or `<button>` (when give
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `children` | `string` | — | Visible label (required) |
-| `href` | `string` | — | Destination URL. Renders the component as `<a>`. |
-| `target` | `string` | — | Anchor target (e.g. `"_blank"`). Adds `rel="noopener noreferrer"` automatically when `"_blank"`. |
-| `onClick` | `() => void` | — | Click handler. Without `href`, renders the component as `<button>`. |
-| `external` | `boolean` | `true` | Shows the trailing external-link glyph. Turn off for in-app links and link-styled actions. |
-| `disabled` | `boolean` | `false` | Applies disabled styling + suppresses navigation / clicks |
-| `tooltip` | `string \| RichStr` | — | Hover tooltip text. Pass `markdown(...)` for inline markdown. |
-| `tooltipSide` | `TooltipSide` | `"top"` | Tooltip placement |
+| Prop          | Type                | Default | Description                                                                                      |
+| ------------- | ------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| `children`    | `string`            | —       | Visible label (required)                                                                         |
+| `href`        | `string`            | —       | Destination URL. Renders the component as `<a>`.                                                 |
+| `target`      | `string`            | —       | Anchor target (e.g. `"_blank"`). Adds `rel="noopener noreferrer"` automatically when `"_blank"`. |
+| `onClick`     | `() => void`        | —       | Click handler. Without `href`, renders the component as `<button>`.                              |
+| `external`    | `boolean`           | `true`  | Shows the trailing external-link glyph. Turn off for in-app links and link-styled actions.       |
+| `disabled`    | `boolean`           | `false` | Applies disabled styling + suppresses navigation / clicks                                        |
+| `tooltip`     | `string \| RichStr` | —       | Hover tooltip text. Pass `markdown(...)` for inline markdown.                                    |
+| `tooltipSide` | `TooltipSide`       | `"top"` | Tooltip placement                                                                                |
 
 Exactly one of `href` / `onClick` is expected. Passing both is allowed but only `href` takes effect (renders as an anchor).
 

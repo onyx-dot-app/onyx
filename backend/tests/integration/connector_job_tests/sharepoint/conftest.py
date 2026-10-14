@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.models import InputType
-from onyx.connectors.sharepoint.connector import SharepointAuthMethod
 from onyx.db.enums import AccessType
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
@@ -52,7 +52,7 @@ def sharepoint_test_env_setup() -> Generator[SharepointTestEnvSetupTuple]:
 
     # Certificate-based credentials
     credentials = {
-        "authentication_method": SharepointAuthMethod.CERTIFICATE.value,
+        "authentication_method": MicrosoftAuthMethod.CERTIFICATE.value,
         "sp_client_id": sp_client_id,
         "sp_private_key": sp_private_key,
         "sp_certificate_password": sp_certificate_password,

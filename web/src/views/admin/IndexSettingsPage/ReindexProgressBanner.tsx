@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { cn, markdown } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
 import { Button, MessageCard, ProgressBar, Tag, Text } from "@opal/components";
@@ -13,20 +14,24 @@ import {
   SvgPauseCircle,
 } from "@opal/icons";
 import ReindexErrorsModal from "@/views/admin/IndexSettingsPage/ReindexErrorsModal";
-import { useReindexProgress } from "@/lib/indexing/hooks";
+import { useReindexProgress } from "@/lib/searchSettings/hooks";
+import type { ReindexProgress } from "@/lib/searchSettings/types";
 
 interface ReindexProgressBannerProps {
   secondaryModelName?: string;
-  onCancel: () => void;
+  // Omitted when the reindex can't be reverted (INSTANT backfill: the new model is
+  // already live) — the banner then shows progress only, no Cancel button.
+  onCancel?: () => void;
 }
 
-const ZERO = {
+const ZERO: ReindexProgress = {
   total: 0,
   waiting: 0,
   in_progress: 0,
   completed: 0,
   failed: 0,
   paused: 0,
+  reembeds: true,
 };
 
 // Stable identity so the spinner doesn't remount (and restart at 0°) each poll.
@@ -38,15 +43,27 @@ export default function ReindexProgressBanner({
   secondaryModelName,
   onCancel,
 }: ReindexProgressBannerProps) {
+  const t = useTranslations("admin.indexSettings");
   const [errorsOpen, setErrorsOpen] = useState(false);
   const { data } = useReindexProgress({ pollIntervalMs: 5000 });
-  const { total, waiting, in_progress, completed, failed, paused } =
+  const { total, waiting, in_progress, completed, failed, paused, reembeds } =
     data ?? ZERO;
 
+  // A copy-only port (e.g. a quantization change) rebuilds from the stored
+  // vectors, so the slow re-embedding wording does not apply.
+  // Only an explicit false means a copy; an unknown flag keeps the re-index text.
+  const title: string =
+    reembeds === false
+      ? t("progressBanner.copyTitle")
+      : t("progressBanner.title");
   const description = markdown(
-    `New embedding settings${
-      secondaryModelName ? ` (**${secondaryModelName}**)` : ""
-    } are being applied as re-indexing progresses. This may take **hours or days** depending on corpus size.`
+    reembeds === false
+      ? t("progressBanner.description.copy")
+      : secondaryModelName
+        ? t("progressBanner.description.withModel", {
+            model: secondaryModelName,
+          })
+        : t("progressBanner.description.withoutModel")
   );
 
   return (
@@ -57,14 +74,18 @@ export default function ReindexProgressBanner({
 
       <MessageCard
         variant="pending"
-        title="Re-indexing in progress…"
+        title={title}
         description={description}
         bottomChildren={
           <div className="flex flex-row items-center gap-4 px-2 py-1">
             <div className="flex flex-1 flex-col gap-2 min-w-0">
               <div className="flex flex-row items-center justify-between gap-2">
-                <Text font="main-ui-body" color="text-03" nowrap>
-                  Re-Indexing Status:
+                <Text
+                  font="main-ui-body"
+                  color="text-03"
+                  wordWrap="whitespace-nowrap"
+                >
+                  {t("progressBanner.status.label")}
                 </Text>
                 <div className="flex flex-row items-center gap-1.5">
                   <Tag color="purple" icon={SvgClock} title={String(waiting)} />
@@ -94,8 +115,8 @@ export default function ReindexProgressBanner({
                       variant={failed > 0 ? "danger" : "default"}
                       prominence="tertiary"
                       size="sm"
-                      tooltip="View units needing attention"
-                      aria-label="View units needing attention"
+                      tooltip={t("progressBanner.attentionButton.label")}
+                      aria-label={t("progressBanner.attentionButton.label")}
                       onClick={() => setErrorsOpen(true)}
                     />
                   )}
@@ -107,14 +128,20 @@ export default function ReindexProgressBanner({
                 value={completed}
                 max={total}
                 color="blue"
-                aria-label="Re-indexing progress"
+                aria-label={t("progressBanner.progress.ariaLabel")}
               />
             </div>
-            <div className="shrink-0">
-              <Button variant="danger" prominence="primary" onClick={onCancel}>
-                Cancel Re-index & Revert
-              </Button>
-            </div>
+            {onCancel && (
+              <div className="shrink-0">
+                <Button
+                  variant="danger"
+                  prominence="primary"
+                  onClick={onCancel}
+                >
+                  {t("progressBanner.cancelButton.label")}
+                </Button>
+              </div>
+            )}
           </div>
         }
       />

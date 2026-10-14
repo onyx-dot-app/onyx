@@ -139,9 +139,7 @@ def _parse_canvas_dt(timestamp_str: str) -> datetime:
     Canvas returns timestamps with a trailing 'Z' instead of '+00:00',
     so we normalise before parsing.
     """
-    return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00")).astimezone(
-        timezone.utc
-    )
+    return datetime.fromisoformat(timestamp_str).astimezone(timezone.utc)
 
 
 def _unix_to_canvas_time(epoch: float) -> str:
@@ -348,6 +346,9 @@ class CanvasConnector(
     CheckpointedConnectorWithPermSync[CanvasConnectorCheckpoint],
     SlimConnectorWithPermSync,
 ):
+    # The slim listings of pages and assignments ignore `start`.
+    slim_listing_honors_indexing_start = False
+
     def __init__(
         self,
         canvas_base_url: str,

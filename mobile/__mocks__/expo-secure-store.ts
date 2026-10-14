@@ -6,9 +6,8 @@ const store = new Map<string, string>();
 // Readable sentinel; the mock ignores the options arg.
 export const WHEN_UNLOCKED_THIS_DEVICE_ONLY = "WHEN_UNLOCKED_THIS_DEVICE_ONLY";
 
-export const getItemAsync = jest.fn(
-  (key: string): Promise<string | null> =>
-    Promise.resolve(store.get(key) ?? null),
+export const getItemAsync = jest.fn((key: string): Promise<string | null> =>
+  Promise.resolve(store.get(key) ?? null),
 );
 
 export const setItemAsync = jest.fn(

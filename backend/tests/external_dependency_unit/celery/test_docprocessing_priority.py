@@ -20,7 +20,6 @@ from onyx.connectors.models import InputType
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexingStatus,
     IndexModelStatus,
 )
@@ -98,7 +97,6 @@ def _create_test_search_settings(
         passage_prefix="",
         status=IndexModelStatus.PRESENT,
         index_name=index_name,
-        embedding_precision=EmbeddingPrecision.FLOAT,
     )
     db_session.add(search_settings)
     db_session.commit()

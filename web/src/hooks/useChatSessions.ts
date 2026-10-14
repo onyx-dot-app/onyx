@@ -12,8 +12,9 @@ import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MinimalAgent } from "@/lib/agents/types";
-import useAppFocus from "./useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useAgents } from "@/lib/agents/hooks";
+import { useActiveProject } from "@/lib/projects/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 const PAGE_SIZE = 50;
@@ -111,7 +112,7 @@ function useFindAgentForCurrentChatSession(
   currentChatSession: ChatSession | null
 ): MinimalAgent | null {
   const { agents } = useAgents();
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
 
   let agentIdToFind: number;
 
@@ -121,13 +122,14 @@ function useFindAgentForCurrentChatSession(
   }
 
   // This could be a new chat-session. Therefore, `currentChatSession` is false, but there could still be some agent.
-  else if (appFocus.isNewSession()) {
+  else if (appPosition.isNewSession()) {
     agentIdToFind = DEFAULT_AGENT_ID;
   }
 
   // Or this could be a new chat-session with an agent.
-  else if (appFocus.isAgent()) {
-    agentIdToFind = Number.parseInt(appFocus.getId()!);
+  else {
+    const agentId = appPosition.agent();
+    if (agentId !== null) agentIdToFind = agentId;
   }
 
   return agents.find((agent) => agent.id === agentIdToFind) ?? null;
@@ -174,7 +176,8 @@ export default function useChatSessions(): UseChatSessionsOutput {
     }
   );
 
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
+  const activeProject = useActiveProject();
   const pendingSessions = usePendingSessions();
 
   // Flatten all pages into a single session list
@@ -240,11 +243,24 @@ export default function useChatSessions(): UseChatSessionsOutput {
     return [...remainingPending, ...allFetchedSessions];
   }, [allFetchedSessions, pendingSessions]);
 
-  const currentChatSessionId = appFocus.isChat() ? appFocus.getId() : null;
-  const currentChatSession =
-    chatSessions.find(
-      (chatSession) => chatSession.id === currentChatSessionId
-    ) ?? null;
+  const currentChatSessionId = appPosition.chat();
+
+  // `chatSessions` is the Recents feed, which excludes project chats on purpose
+  // (`only_non_project_chats` defaults to true on the server). Fall back to the
+  // owning project's session list so a project chat still resolves — otherwise
+  // the header actions, document title, and agent lookup all see `null`.
+  const currentChatSession = useMemo(() => {
+    if (!currentChatSessionId) return null;
+    return (
+      chatSessions.find(
+        (chatSession) => chatSession.id === currentChatSessionId
+      ) ??
+      activeProject?.chat_sessions.find(
+        (chatSession) => chatSession.id === currentChatSessionId
+      ) ??
+      null
+    );
+  }, [chatSessions, activeProject, currentChatSessionId]);
 
   const agentForCurrentChatSession =
     useFindAgentForCurrentChatSession(currentChatSession);

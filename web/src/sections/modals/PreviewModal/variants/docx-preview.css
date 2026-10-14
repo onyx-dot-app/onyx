@@ -1,0 +1,13 @@
+/* We render without docx-preview's wrapper, which is what supplies the white
+   page, the centering and the gap between pages. Its text stays hardcoded
+   black, so the pages need the paper surface back. */
+
+.docx-host section.docx {
+  background-color: var(--background-neutral-light-00);
+  border-radius: var(--radius-08);
+  margin-inline: auto;
+}
+
+.docx-host section.docx + section.docx {
+  margin-top: 1rem;
+}

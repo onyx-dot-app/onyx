@@ -1,6 +1,6 @@
 "use client";
 
-import { getProvider } from "@/lib/languageModels";
+import { getProvider } from "@/lib/languageModels/utils";
 import { LLMProviderFormProps } from "@/lib/languageModels/types";
 
 interface ProviderSetupModalProps extends Omit<

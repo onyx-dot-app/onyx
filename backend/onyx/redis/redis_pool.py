@@ -1,6 +1,8 @@
 import asyncio
 import json
 import threading
+import time
+import uuid
 from typing import Any, Optional, cast
 
 import redis
@@ -11,7 +13,6 @@ from redis.backoff import ExponentialBackoff
 from redis.client import Redis
 from redis.exceptions import BusyLoadingError
 from redis.exceptions import ConnectionError as RedisConnectionError
-from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.lock import Lock as RedisLock
 from redis.retry import Retry
 from redis.sentinel import Sentinel
@@ -33,10 +34,12 @@ from onyx.configs.app_configs import (
     REDIS_SENTINEL_HOSTS,
     REDIS_SENTINEL_MASTER_NAME,
     REDIS_SENTINEL_PASSWORD,
+    REDIS_SOCKET_TIMEOUT_KWARGS,
     REDIS_SSL,
     REDIS_SSL_CA_CERTS,
     REDIS_SSL_CERT_REQS,
     REDIS_SSL_CERTFILE,
+    REDIS_SSL_CHECK_HOSTNAME,
     REDIS_SSL_KEYFILE,
     USE_REDIS_IAM_AUTH,
 )
@@ -50,6 +53,7 @@ from onyx.redis.iam_auth import (
 )
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
+from onyx.voice.interface import VoiceSessionPolicy
 from shared_configs.configs import DEFAULT_REDIS_PREFIX
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -57,22 +61,36 @@ logger = setup_logger()
 
 SCAN_ITER_COUNT_DEFAULT = 4096
 
-# Retry transient Redis errors — in particular BusyLoadingError, which is
-# raised while Redis is loading its RDB snapshot after a restart or
-# failover. redis-py's default retry policy only covers ConnectionError,
-# so these surface as uncaught exceptions and ship to Sentry
-# (ONYX-BACKEND-H4NT / H43M).
-_RETRYABLE_ERRORS: list[type[Exception]] = [
-    BusyLoadingError,
-    RedisConnectionError,
-    RedisTimeoutError,
-]
 
+def _pool_retry_kwargs(operation_timeout: float | None = None) -> dict[str, Any]:
+    """Connection retry settings for a pool.
 
-def _client_retry_kwargs() -> dict[str, Any]:
+    redis-py reads retries from the pool's connections and ignores ``retry``
+    passed to ``redis.Redis(connection_pool=...)``.
+
+    Commands retry only BusyLoadingError, which Redis returns without running
+    the command while it loads its snapshot after a restart or failover. Other
+    connection errors and timeouts can arrive after the command ran, so a
+    retry could apply a write twice. ``supported_errors`` also lets health
+    check PINGs and Sentinel reconnects retry ConnectionError; they send no
+    command. The health check PINGs connections idle longer than
+    REDIS_HEALTH_CHECK_INTERVAL, so dropped idle connections reconnect.
+
+    Timeout pools scale the backoff so that all retry sleeps take less than
+    the operation timeout.
+    """
+    backoff = (
+        ExponentialBackoff(cap=2.0, base=0.1)
+        if operation_timeout is None
+        else ExponentialBackoff(cap=operation_timeout / 4, base=operation_timeout / 20)
+    )
     return {
-        "retry": Retry(ExponentialBackoff(cap=2.0, base=0.1), retries=3),
-        "retry_on_error": _RETRYABLE_ERRORS,
+        "retry": Retry(
+            backoff,
+            retries=3,
+            supported_errors=(RedisConnectionError,),
+        ),
+        "retry_on_error": [BusyLoadingError],
     }
 
 
@@ -82,7 +100,7 @@ def _redis_ssl_connect_kwargs() -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "ssl": True,
         "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
-        "ssl_check_hostname": False,
+        "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
     }
     if REDIS_SSL_CA_CERTS:
         kwargs["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
@@ -97,15 +115,18 @@ def _sentinel_connection_kwargs() -> tuple[dict[str, Any], dict[str, Any]]:
 
     connection_kwargs apply to the master/replica data connections;
     sentinel_kwargs apply to the connections to the sentinel nodes themselves.
-    TLS (when enabled) and the relevant auth apply to both.
+    TLS (when enabled), socket deadlines, and the relevant auth apply to both.
     """
     connection_kwargs: dict[str, Any] = {
         "password": REDIS_PASSWORD or None,
         "socket_keepalive": True,
         "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
         "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
+        **REDIS_SOCKET_TIMEOUT_KWARGS,
     }
-    sentinel_kwargs: dict[str, Any] = {}
+    # Passing sentinel_kwargs (needed for sentinel auth and TLS) disables redis-py's
+    # copy of socket_* options from connection_kwargs, so seed the deadlines here too.
+    sentinel_kwargs: dict[str, Any] = dict(REDIS_SOCKET_TIMEOUT_KWARGS)
     if REDIS_SENTINEL_PASSWORD:
         sentinel_kwargs["password"] = REDIS_SENTINEL_PASSWORD
     if REDIS_SSL:
@@ -131,20 +152,37 @@ class RedisPool:
 
     def _init_pools(self) -> None:
         self._pool = RedisPool.create_pool(ssl=REDIS_SSL)
+        self._timeout_pools: dict[float, redis.ConnectionPool] = {}
+        self._timeout_pool_lock = threading.Lock()
         self._replica_pool = RedisPool.create_pool(
             host=REDIS_REPLICA_HOST, ssl=REDIS_SSL, replica=True
         )
 
-    def get_client(self, tenant_id: str) -> TenantRedisClient:
-        return TenantRedisClient(
-            tenant_id,
-            redis.Redis(connection_pool=self._pool, **_client_retry_kwargs()),
+    def get_client(
+        self, tenant_id: str, *, operation_timeout_s: float | None = None
+    ) -> TenantRedisClient:
+        pool = (
+            self._pool
+            if operation_timeout_s is None
+            else self._get_timeout_pool(operation_timeout_s)
         )
+        return TenantRedisClient(tenant_id, redis.Redis(connection_pool=pool))
+
+    def _get_timeout_pool(self, operation_timeout_s: float) -> redis.ConnectionPool:
+        """One pool per timeout value, since socket timeouts are set per connection."""
+        with self._timeout_pool_lock:
+            pool = self._timeout_pools.get(operation_timeout_s)
+            if pool is None:
+                pool = RedisPool.create_pool(
+                    ssl=REDIS_SSL, operation_timeout=operation_timeout_s
+                )
+                self._timeout_pools[operation_timeout_s] = pool
+            return pool
 
     def get_replica_client(self, tenant_id: str) -> TenantRedisClient:
         return TenantRedisClient(
             tenant_id,
-            redis.Redis(connection_pool=self._replica_pool, **_client_retry_kwargs()),
+            redis.Redis(connection_pool=self._replica_pool),
         )
 
     def get_raw_client(self) -> Redis:
@@ -152,14 +190,14 @@ class RedisPool:
         Returns a Redis client with direct access to the primary connection pool,
         without tenant prefixing.
         """
-        return redis.Redis(connection_pool=self._pool, **_client_retry_kwargs())
+        return redis.Redis(connection_pool=self._pool)
 
     def get_raw_replica_client(self) -> Redis:
         """
         Returns a Redis client with direct access to the replica connection pool,
         without tenant prefixing.
         """
-        return redis.Redis(connection_pool=self._replica_pool, **_client_retry_kwargs())
+        return redis.Redis(connection_pool=self._replica_pool)
 
     @staticmethod
     def create_pool(
@@ -170,10 +208,12 @@ class RedisPool:
         max_connections: int = REDIS_POOL_MAX_CONNECTIONS,
         ssl_ca_certs: str | None = REDIS_SSL_CA_CERTS,
         ssl_cert_reqs: str = REDIS_SSL_CERT_REQS,
+        ssl_check_hostname: bool = REDIS_SSL_CHECK_HOSTNAME,
         ssl_certfile: str | None = REDIS_SSL_CERTFILE,
         ssl_keyfile: str | None = REDIS_SSL_KEYFILE,
         ssl: bool = False,
         replica: bool = False,
+        operation_timeout: float | None = None,
     ) -> redis.ConnectionPool:
         """
         Create a Redis connection pool with appropriate SSL configuration.
@@ -191,13 +231,28 @@ class RedisPool:
         behavior and aligned with how we want to use Redis (Sentinel mode uses
         redis-py's SentinelConnectionPool instead)."""
 
+        socket_timeouts = (
+            {
+                "socket_timeout": operation_timeout,
+                "socket_connect_timeout": operation_timeout,
+            }
+            if operation_timeout is not None
+            else REDIS_SOCKET_TIMEOUT_KWARGS
+        )
+        connection_settings = {
+            **socket_timeouts,
+            **_pool_retry_kwargs(operation_timeout),
+        }
         # Using ConnectionPool is not well documented.
         # Useful examples: https://github.com/redis/redis-py/issues/780
 
         # Handle Sentinel (HA) first — it owns master/replica discovery.
         if REDIS_SENTINEL_HOSTS:
             return RedisPool._create_sentinel_pool(
-                db=db, max_connections=max_connections, replica=replica
+                db=db,
+                max_connections=max_connections,
+                replica=replica,
+                operation_timeout=operation_timeout,
             )
 
         # Handle IAM authentication
@@ -211,12 +266,13 @@ class RedisPool:
                 db=db,
                 password=None,  # No password with IAM auth
                 max_connections=max_connections,
-                timeout=None,
+                timeout=operation_timeout,
                 health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
                 socket_keepalive=True,
                 socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
                 connection_class=redis.SSLConnection,
                 ssl_context=ssl_context,  # Use IAM auth SSL context
+                **connection_settings,
             )
 
         if ssl:
@@ -226,15 +282,17 @@ class RedisPool:
                 db=db,
                 password=password,
                 max_connections=max_connections,
-                timeout=None,
+                timeout=operation_timeout,
                 health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
                 socket_keepalive=True,
                 socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
                 connection_class=redis.SSLConnection,
                 ssl_ca_certs=ssl_ca_certs,
                 ssl_cert_reqs=ssl_cert_reqs,
+                ssl_check_hostname=ssl_check_hostname,
                 ssl_certfile=ssl_certfile,
                 ssl_keyfile=ssl_keyfile,
+                **connection_settings,
             )
 
         return redis.BlockingConnectionPool(
@@ -243,21 +301,32 @@ class RedisPool:
             db=db,
             password=password,
             max_connections=max_connections,
-            timeout=None,
+            timeout=operation_timeout,
             health_check_interval=REDIS_HEALTH_CHECK_INTERVAL,
             socket_keepalive=True,
             socket_keepalive_options=REDIS_SOCKET_KEEPALIVE_OPTIONS,
+            **connection_settings,
         )
 
     @staticmethod
     def _create_sentinel_pool(
-        db: int, max_connections: int, replica: bool
+        db: int,
+        max_connections: int,
+        replica: bool,
+        operation_timeout: float | None = None,
     ) -> redis.ConnectionPool:
         """Return a SentinelConnectionPool for the master (or a replica) of
         REDIS_SENTINEL_MASTER_NAME. Sentinel discovers the node and re-resolves
         it on failover; the pool plugs into ``redis.Redis(connection_pool=...)``
         like the direct pool."""
         connection_kwargs, sentinel_kwargs = _sentinel_connection_kwargs()
+        if operation_timeout is not None:
+            for kwargs in (connection_kwargs, sentinel_kwargs):
+                kwargs["socket_timeout"] = operation_timeout
+                kwargs["socket_connect_timeout"] = operation_timeout
+        # Data connections only: discover_master already moves on to the next
+        # sentinel node on errors.
+        connection_kwargs.update(_pool_retry_kwargs(operation_timeout))
         sentinel = Sentinel(
             REDIS_SENTINEL_HOSTS,
             sentinel_kwargs=sentinel_kwargs,
@@ -419,6 +488,7 @@ def _build_async_redis_connection() -> aioredis.Redis:
         "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
         "socket_keepalive": True,
         "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
+        **REDIS_SOCKET_TIMEOUT_KWARGS,
     }
 
     if USE_REDIS_IAM_AUTH:
@@ -430,7 +500,7 @@ def _build_async_redis_connection() -> aioredis.Redis:
         # but the CA / client cert are dropped). Hand it the native ssl_* params.
         connection_kwargs["ssl"] = True
         connection_kwargs["ssl_cert_reqs"] = REDIS_SSL_CERT_REQS
-        connection_kwargs["ssl_check_hostname"] = False
+        connection_kwargs["ssl_check_hostname"] = REDIS_SSL_CHECK_HOSTNAME
         if REDIS_SSL_CA_CERTS:
             connection_kwargs["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
         # Client certificate for mutual TLS, if configured.
@@ -574,9 +644,91 @@ WS_TOKEN_RATE_LIMIT_MAX = 10
 WS_TOKEN_RATE_LIMIT_WINDOW_SECONDS = 60
 REDIS_WS_TOKEN_RATE_LIMIT_PREFIX = "ws_token_rate:"
 
+# A session member outlives the policy cap by this grace so a slow teardown
+# cannot free capacity before the provider session is really gone.
+VOICE_SESSION_TTL_GRACE_SECONDS = 60
+# How long a caller waits for the admission lock.
+VOICE_SESSION_ADMISSION_WAIT_SECONDS = 5
+# Lease on the admission lock. The critical section is a few Redis commands,
+# so this only matters if Redis itself stalls; it must outlive that stall or
+# two admissions could run at once.
+VOICE_SESSION_ADMISSION_LEASE_SECONDS = 30
+
 
 class WsTokenRateLimitExceeded(Exception):
     """Raised when a user exceeds the WS token generation rate limit."""
+
+
+class VoiceSessionLimitExceeded(Exception):
+    """Raised when a voice provider has no local session capacity."""
+
+
+def _voice_session_keys(*, scope: str, tenant_id: str, user_id: str) -> tuple[str, str]:
+    # Concurrency is an account-level quota and a tenant can hold several rows
+    # for one account, so the budget is per tenant and provider family.
+    base_key = f"voice_sessions:{scope}:tenant:{tenant_id}"
+    return base_key, f"{base_key}:user:{user_id}"
+
+
+def voice_session_member_ttl_seconds(policy: VoiceSessionPolicy) -> float:
+    return policy.max_session_seconds + VOICE_SESSION_TTL_GRACE_SECONDS
+
+
+def voice_session_key_ttl_seconds(policy: VoiceSessionPolicy) -> float:
+    return voice_session_member_ttl_seconds(policy) + VOICE_SESSION_TTL_GRACE_SECONDS
+
+
+async def acquire_voice_session(*, policy: VoiceSessionPolicy, user_id: str) -> str:
+    """Reserve local capacity for one session under the provider's policy.
+
+    Members are scored by expiry so a session whose release never ran still
+    frees its slot. The lock keeps the prune, count and add atomic across
+    API replicas.
+    """
+    redis = await get_async_redis_connection()
+    tenant_id = get_current_tenant_id()
+    tenant_key, user_key = _voice_session_keys(
+        scope=policy.scope, tenant_id=tenant_id, user_id=user_id
+    )
+    session_member_id = uuid.uuid4().hex
+    now_ms = int(time.time() * 1000)
+    expires_at_ms = now_ms + int(voice_session_member_ttl_seconds(policy) * 1000)
+    key_ttl_seconds = int(voice_session_key_ttl_seconds(policy))
+
+    async with redis.lock(
+        f"{tenant_key}:lock",
+        timeout=VOICE_SESSION_ADMISSION_LEASE_SECONDS,
+        blocking_timeout=VOICE_SESSION_ADMISSION_WAIT_SECONDS,
+    ):
+        await redis.zremrangebyscore(tenant_key, "-inf", now_ms)
+        await redis.zremrangebyscore(user_key, "-inf", now_ms)
+        if await redis.zcard(tenant_key) >= policy.tenant_concurrency_limit:
+            raise VoiceSessionLimitExceeded(policy.limit_message)
+        if await redis.zcard(user_key) >= policy.user_concurrency_limit:
+            raise VoiceSessionLimitExceeded(policy.limit_message)
+        # MULTI/EXEC so a reservation is written to both keys or to neither;
+        # a half-written member would hold quota until its TTL with no id to
+        # release it.
+        async with redis.pipeline(transaction=True) as pipe:
+            pipe.zadd(tenant_key, {session_member_id: expires_at_ms})
+            pipe.zadd(user_key, {session_member_id: expires_at_ms})
+            pipe.expire(tenant_key, key_ttl_seconds)
+            pipe.expire(user_key, key_ttl_seconds)
+            await pipe.execute()
+    return session_member_id
+
+
+async def release_voice_session(
+    *, policy: VoiceSessionPolicy, user_id: str, session_member_id: str
+) -> None:
+    """Release local capacity reserved by acquire_voice_session."""
+    redis = await get_async_redis_connection()
+    tenant_id = get_current_tenant_id()
+    tenant_key, user_key = _voice_session_keys(
+        scope=policy.scope, tenant_id=tenant_id, user_id=user_id
+    )
+    await redis.zrem(tenant_key, session_member_id)
+    await redis.zrem(user_key, session_member_id)
 
 
 async def store_ws_token(token: str, user_id: str) -> None:
@@ -607,9 +759,13 @@ async def store_ws_token(token: str, user_id: str) -> None:
             f"Rate limit exceeded. Maximum {WS_TOKEN_RATE_LIMIT_MAX} tokens per minute."
         )
 
-    # Store the actual token
     redis_key = REDIS_WS_TOKEN_PREFIX + token
-    token_data = json.dumps({"sub": user_id})
+    token_data = json.dumps(
+        {
+            "sub": user_id,
+            "tenant_id": get_current_tenant_id(),
+        }
+    )
     await redis.set(redis_key, token_data, ex=WS_TOKEN_TTL_SECONDS)
 
 

@@ -1,21 +1,29 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { Formik, useFormikContext } from "formik";
+import { useTranslations } from "next-intl";
+import { useSettings } from "@/lib/settings/hooks";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
-import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowExchange } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Modal } from "@opal/components";
-import { toast } from "@opal/layouts";
+import { InputVertical, toast } from "@opal/layouts";
+import { InputSingleSelectField } from "@opal/form";
 import {
   EmbeddingModelRequest,
   EmbeddingProviderName,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingProvider,
-} from "@/lib/indexing/types";
-import { connectEmbeddingProvider, testEmbedding } from "@/lib/indexing/svc";
+  type VertexEmbeddingConfig,
+} from "@/lib/searchSettings/types";
+import {
+  connectEmbeddingProvider,
+  testEmbedding,
+} from "@/lib/searchSettings/svc";
 import {
   ApiKeyField,
   ApiUrlField,
@@ -40,6 +48,7 @@ interface ModalShellProps {
 }
 
 function ModalShell({ provider, isEditing, children }: ModalShellProps) {
+  const t = useTranslations("admin.indexSettings");
   const { isValid, isSubmitting, submitForm, dirty } = useFormikContext();
   const onClose = useModalClose();
 
@@ -52,13 +61,15 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           moreIcon2={SvgOnyxLogo}
           title={
             isEditing
-              ? `Manage ${provider.displayName}`
-              : `Set up ${provider.displayName}`
+              ? t("modal.manage.title", { provider: provider.displayName })
+              : t("modal.setUp.title", { provider: provider.displayName })
           }
           description={
             isEditing
-              ? `Manage ${provider.displayName} provider and model details.`
-              : `Connect to ${provider.displayName} and set up your ${provider.displayName} embedding models.`
+              ? t("modal.manage.description", {
+                  provider: provider.displayName,
+                })
+              : t("modal.setUp.description", { provider: provider.displayName })
           }
           onClose={onClose}
         />
@@ -67,14 +78,16 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>
-            Cancel
+            {t("modal.cancelButton.label")}
           </Button>
           <Button
             disabled={!isValid || !dirty || isSubmitting}
             onClick={submitForm}
-            icon={isSubmitting ? SvgSimpleLoader : undefined}
+            icon={isSubmitting ? IconLoader : undefined}
           >
-            {isEditing ? "Update" : "Connect"}
+            {isEditing
+              ? t("modal.updateButton.label")
+              : t("modal.connectButton.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>
@@ -84,44 +97,56 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
 
 // ---------------------------------------------------------------------------
 // Tests credentials against the backend then persists them if the test passes.
-// Returns `true` on success so callers can chain their own follow-up
-// (e.g. staging a freshly-defined LiteLLM model). On failure, toasts the
-// error and returns `false`.
+// Returns the test result on success so callers can chain their own follow-up
+// (e.g. staging a freshly-defined LiteLLM model). `dimension` is the test
+// vector length, or null when no test ran. On failure, toasts the error and
+// returns `null`.
 //
 // `apiUrl`, `apiVersion`, `deploymentName` default to "" / null so simple
 // providers (OpenAI / Cohere / Voyage / Google) only have to pass `apiKey`.
 // ---------------------------------------------------------------------------
 
+interface ProviderTestResult {
+  dimension: number | null;
+}
+
 async function testAndSaveProviderCredentials({
   provider,
   apiKey,
+  unknownErrorMessage,
   apiUrl = "",
   modelName = "",
   apiVersion = null,
   deploymentName = null,
+  vertexConfig,
+  alwaysTest = false,
 }: {
   provider: EmbeddingProvider;
   apiKey: string | null;
+  /** Fallback toast copy when the backend error carries no message. */
+  unknownErrorMessage: string;
   apiUrl?: string;
   modelName?: string;
   apiVersion?: string | null;
   deploymentName?: string | null;
-}): Promise<boolean> {
+  vertexConfig?: VertexEmbeddingConfig | null;
+  alwaysTest?: boolean;
+}): Promise<ProviderTestResult | null> {
   try {
-    await connectEmbeddingProvider({
+    const dimension = await connectEmbeddingProvider({
       providerType: provider.providerName,
       apiKey,
       apiUrl,
       modelName,
       apiVersion,
       deploymentName,
+      vertexConfig,
+      alwaysTest,
     });
-    return true;
+    return { dimension };
   } catch (error: unknown) {
-    toast.error(
-      error instanceof Error ? error.message : "An unknown error occurred"
-    );
-    return false;
+    toast.error(error instanceof Error ? error.message : unknownErrorMessage);
+    return null;
   }
 }
 
@@ -133,10 +158,8 @@ interface ProviderModalProps {
   provider: EmbeddingProvider;
   existingCredentials?: ConfiguredEmbeddingProvider;
   /**
-   * Current model spec for THIS provider, when the active embedding model
-   * belongs to it. `LiteLLMProviderModal` and `CustomSelfHostedModal` use
-   * this to preload model-spec fields (modelName, modelDim, prefixes,
-   * normalize) so the user doesn't have to retype them when editing.
+   * Model being connected, selected, or edited for this provider. Google
+   * tests this model. Custom providers also use it to preload model fields.
    */
   existingModel?: EmbeddingModel;
   /**
@@ -160,13 +183,14 @@ function StandardProviderModal({
   existingCredentials,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
+      : Yup.string().trim().required(t("validation.apiKeyRequired")),
   });
 
   const initialValues: StandardFormValues = { apiKey: maskedApiKey };
@@ -179,7 +203,13 @@ function StandardProviderModal({
       onSubmit={async (values) => {
         const apiKey =
           values.apiKey === maskedApiKey ? null : values.apiKey || null;
-        if (await testAndSaveProviderCredentials({ provider, apiKey })) {
+        if (
+          await testAndSaveProviderCredentials({
+            provider,
+            apiKey,
+            unknownErrorMessage: t("toasts.unknownError"),
+          })
+        ) {
           onSubmit();
         }
       }}
@@ -197,39 +227,118 @@ function StandardProviderModal({
 
 interface GoogleFormValues {
   apiKey: string;
+  authMethod: VertexEmbeddingConfig["auth_method"];
+  projectId: string;
+  location: string;
 }
+
+function GoogleAuthenticationFields() {
+  const t = useTranslations("admin.indexSettings");
+  const tVertex = useTranslations("admin.languageModels.modals.vertexAi");
+  const tSelect = useTranslations("common.inputSelect");
+  const { values, setFieldValue } = useFormikContext<GoogleFormValues>();
+  const settings = useSettings();
+  return (
+    <>
+      {settings.hooks_enabled && (
+        <InputVertical
+          withLabel="authMethod"
+          title={tVertex("authMethodField.title")}
+        >
+          <InputSingleSelectField
+            name="authMethod"
+            defaultOption="service_account_json"
+            placeholder={tSelect("placeholder.fallback")}
+            options={[
+              {
+                value: "service_account_json",
+                title: tVertex("authMethodField.serviceAccount.label"),
+              },
+              {
+                value: "workload_identity",
+                title: tVertex("authMethodField.workloadIdentity.label"),
+              },
+            ]}
+            onValueChange={() => {
+              void setFieldValue("apiKey", "");
+            }}
+          />
+        </InputVertical>
+      )}
+      {values.authMethod === "workload_identity" ? (
+        <TextField
+          name="projectId"
+          title={tVertex("projectField.title")}
+          subDescription={t("fields.googleWorkloadIdentity.description")}
+          placeholder={tVertex("projectField.placeholder")}
+        />
+      ) : (
+        <GoogleCredentialsField />
+      )}
+      <TextField
+        name="location"
+        title={tVertex("locationField.title")}
+        subDescription={tVertex("locationField.description")}
+        placeholder={tVertex("locationField.placeholder")}
+      />
+    </>
+  );
+}
+
 function GoogleProviderModal({
   provider,
   existingCredentials,
+  existingModel,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
+  const existingConfig = existingCredentials?.vertex_config;
 
   const schema = Yup.object({
-    apiKey: isEditing
-      ? Yup.string()
-      : Yup.string()
-          .required("Service account JSON is required")
-          .test(
-            "service-account-json",
-            "Must be a valid Google service account JSON file",
-            (value) => {
-              if (!value) return false;
-              try {
-                const parsed = JSON.parse(value);
-                return (
-                  parsed.type === "service_account" &&
-                  typeof parsed.client_email === "string" &&
-                  typeof parsed.private_key === "string"
-                );
-              } catch {
-                return false;
-              }
+    authMethod: Yup.string()
+      .oneOf(["service_account_json", "workload_identity"])
+      .required(),
+    projectId: Yup.string()
+      .trim()
+      .when("authMethod", {
+        is: "workload_identity",
+        then: (schema) =>
+          schema.required(t("validation.googleProjectRequired")),
+      }),
+    location: Yup.string().trim(),
+    apiKey: Yup.string().when("authMethod", {
+      is: "service_account_json",
+      then: (schema) =>
+        schema.test(
+          "service-account-json",
+          t("validation.serviceAccountJsonInvalid"),
+          (value) => {
+            if (!value)
+              return (
+                isEditing && existingConfig?.auth_method !== "workload_identity"
+              );
+            try {
+              const parsed = JSON.parse(value);
+              return (
+                parsed.type === "service_account" &&
+                typeof parsed.client_email === "string" &&
+                typeof parsed.private_key === "string"
+              );
+            } catch {
+              return false;
             }
-          ),
+          }
+        ),
+    }),
   });
 
-  const initialValues: GoogleFormValues = { apiKey: "" };
+  const initialValues: GoogleFormValues = {
+    apiKey: "",
+    authMethod: existingConfig?.auth_method ?? "service_account_json",
+    projectId: existingConfig?.project_id ?? "",
+    location: existingConfig?.location ?? "",
+  };
 
   return (
     <Formik<GoogleFormValues>
@@ -241,6 +350,19 @@ function GoogleProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey: values.apiKey || null,
+            vertexConfig: {
+              auth_method: values.authMethod,
+              project_id:
+                values.authMethod === "workload_identity"
+                  ? values.projectId.trim()
+                  : null,
+              location: values.location.trim() || null,
+            },
+            modelName:
+              existingModel?.modelName ??
+              provider.embeddingModels[0]?.modelName ??
+              "",
+            unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
           onSubmit();
@@ -248,7 +370,7 @@ function GoogleProviderModal({
       }}
     >
       <ModalShell provider={provider} isEditing={isEditing}>
-        <GoogleCredentialsField />
+        <GoogleAuthenticationFields />
       </ModalShell>
     </Formik>
   );
@@ -275,20 +397,26 @@ function AzureProviderModal({
   existingModel,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
-      .required("Target URL is required")
-      .url("Must be a valid URL"),
+      .required(t("validation.targetUrlRequired"))
+      .url(t("validation.urlInvalid")),
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
-    apiVersion: Yup.string().trim().required("API version is required"),
-    deploymentName: Yup.string().trim().required("Deployment name is required"),
-    ...modelSpecSchemaShape,
+      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+    apiVersion: Yup.string()
+      .trim()
+      .required(t("validation.apiVersionRequired")),
+    deploymentName: Yup.string()
+      .trim()
+      .required(t("validation.deploymentNameRequired")),
+    ...modelSpecSchemaShape(t),
   });
 
   const initialValues: AzureFormValues = {
@@ -315,6 +443,7 @@ function AzureProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey,
+            unknownErrorMessage: t("toasts.unknownError"),
             apiUrl: values.apiUrl,
             apiVersion: values.apiVersion,
             deploymentName: values.deploymentName,
@@ -332,24 +461,28 @@ function AzureProviderModal({
     >
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
-          title="Target URL"
+          title={t("azure.targetUrl.title")}
           placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
         />
         <ApiKeyField provider={provider} />
         <TextField
           name="apiVersion"
-          title="API Version"
-          placeholder="e.g., 2023-05-15"
-          subDescription="The Azure OpenAI API version your deployment targets."
+          title={t("azure.apiVersion.title")}
+          placeholder={t("azure.apiVersion.placeholder")}
+          subDescription={t("azure.apiVersion.description")}
         />
         <TextField
           name="deploymentName"
-          title="Deployment Name"
-          placeholder="my-embedding-deployment"
-          subDescription="The deployment name you configured for this embedding model in Azure."
+          title={t("azure.deploymentName.title")}
+          placeholder={t("azure.deploymentName.placeholder")}
+          subDescription={t("azure.deploymentName.description")}
         />
 
-        <ModelSpecFields modelNameSubDescription="A label for this model in Onyx. Azure routes requests by deployment name, so this only needs to be a unique identifier." />
+        <ModelSpecFields
+          modelNameSubDescription={t("azure.modelName.description", {
+            appName,
+          })}
+        />
       </ModalShell>
     </Formik>
   );
@@ -374,18 +507,20 @@ function LiteLLMProviderModal({
   existingModel,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
-      .required("API base URL is required")
-      .url("Must be a valid URL"),
+      .required(t("validation.apiBaseUrlRequired"))
+      .url(t("validation.urlInvalid")),
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
-    ...modelSpecSchemaShape,
+      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+    ...modelSpecSchemaShape(t),
   });
 
   const initialValues: LiteLLMFormValues = {
@@ -412,6 +547,7 @@ function LiteLLMProviderModal({
             apiKey,
             apiUrl: values.apiUrl,
             modelName: values.modelName.trim(),
+            unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
           onSubmit({
@@ -426,15 +562,123 @@ function LiteLLMProviderModal({
     >
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
-          title="API Base URL"
+          title={t("litellm.apiUrl.title")}
           placeholder="https://..."
-          subDescription={`Paste your ${provider.displayName}-compatible endpoint URL.`}
+          subDescription={t("litellm.apiUrl.description", {
+            provider: provider.displayName,
+          })}
         />
 
         <ApiKeyField provider={provider} />
 
         <ModelSpecFields
-          modelNameSubDescription={`Onyx will connect to this model on your ${provider.displayName} proxy.`}
+          modelNameSubDescription={t("litellm.modelName.description", {
+            provider: provider.displayName,
+            appName,
+          })}
+        />
+      </ModalShell>
+    </Formik>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bifrost — the model is free text. Every save embeds a test string, which
+// rejects non-embedding models and gives the dimension.
+// ---------------------------------------------------------------------------
+
+function isHttpUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const { protocol, hostname } = new URL(value.trim());
+    return (protocol === "http:" || protocol === "https:") && hostname !== "";
+  } catch {
+    return false;
+  }
+}
+
+interface BifrostFormValues {
+  apiUrl: string;
+  apiKey: string;
+  modelName: string;
+}
+function BifrostProviderModal({
+  provider,
+  existingCredentials,
+  existingModel,
+  onSubmit,
+}: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
+  const { appName } = useSettings();
+  const isEditing = !!existingCredentials;
+  const maskedApiKey = existingCredentials?.api_key ?? "";
+  // Editing manages the connection only; another model is picked from the
+  // model list. The kept model is tested against the new URL and key.
+  const isModelLocked = isEditing && !!existingModel;
+
+  const schema = Yup.object({
+    apiUrl: Yup.string()
+      .trim()
+      .required(t("validation.apiBaseUrlRequired"))
+      // Yup's .url() rejects in-cluster hosts such as http://bifrost:8080.
+      .test("http-url", t("validation.urlInvalid"), isHttpUrl),
+    apiKey: Yup.string().trim(),
+    modelName: Yup.string().trim().required(t("validation.modelNameRequired")),
+  });
+
+  const initialValues: BifrostFormValues = {
+    apiUrl: existingCredentials?.api_url ?? "",
+    apiKey: maskedApiKey,
+    modelName: existingModel?.modelName ?? "",
+  };
+
+  return (
+    <Formik<BifrostFormValues>
+      initialValues={initialValues}
+      validationSchema={schema}
+      validateOnMount
+      onSubmit={async (values) => {
+        const apiKey =
+          values.apiKey === maskedApiKey ? null : values.apiKey || null;
+        const modelName = values.modelName.trim();
+        const result = await testAndSaveProviderCredentials({
+          provider,
+          apiKey,
+          apiUrl: values.apiUrl.trim(),
+          modelName,
+          alwaysTest: true,
+          unknownErrorMessage: t("toasts.unknownError"),
+        });
+        if (result?.dimension) {
+          onSubmit({
+            modelName,
+            modelDim: result.dimension,
+            normalize: false,
+            queryPrefix: null,
+            passagePrefix: null,
+          });
+        }
+      }}
+    >
+      <ModalShell provider={provider} isEditing={isEditing}>
+        <ApiUrlField
+          title={t("bifrost.apiUrl.title")}
+          placeholder="https://bifrost.example.com"
+          subDescription={t("bifrost.apiUrl.description", { appName })}
+        />
+
+        <ApiKeyField provider={provider} optional />
+
+        <TextField
+          name="modelName"
+          title={t("fields.modelName.title")}
+          placeholder="openai/text-embedding-3-large"
+          subDescription={
+            isModelLocked
+              ? t("bifrost.modelName.editDescription", { appName })
+              : t("bifrost.modelName.description", { appName })
+          }
+          readOnly={isModelLocked}
         />
       </ModalShell>
     </Formik>
@@ -445,13 +689,14 @@ function LiteLLMProviderModal({
 // Custom Self-Hosted
 // ---------------------------------------------------------------------------
 
-const customSchema = Yup.object(modelSpecSchemaShape);
 function CustomSelfHostedModal({
   provider,
   existingModel,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingModel;
+  const customSchema = Yup.object(modelSpecSchemaShape(t));
 
   const initialValues: EmbeddingModelRequest = {
     modelName: existingModel?.modelName,
@@ -495,6 +740,8 @@ export function ProviderCredentialsModal(props: ProviderModalProps) {
       return <AzureProviderModal {...props} />;
     case EmbeddingProviderName.LITELLM:
       return <LiteLLMProviderModal {...props} />;
+    case EmbeddingProviderName.BIFROST:
+      return <BifrostProviderModal {...props} />;
     case EmbeddingProviderName.CUSTOM:
       return <CustomSelfHostedModal {...props} />;
     default:

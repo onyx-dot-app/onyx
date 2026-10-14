@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 
 interface EntryInfoPopoverProps {
@@ -19,6 +20,7 @@ function EntryInfoPopover({
   tileElement,
   onDismiss,
 }: EntryInfoPopoverProps) {
+  const t = useTranslations("chat.input");
   const [rect, setRect] = useState(() => tileElement.getBoundingClientRect());
   const rafId = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -111,7 +113,7 @@ function EntryInfoPopover({
       <div
         ref={containerRef}
         role="dialog"
-        aria-label={`Skill: ${name}`}
+        aria-label={t("entryInfoPopover.dialog.ariaLabel", { name })}
         tabIndex={-1}
         data-testid="skill-info-popover"
         className="fixed z-50 flex flex-col gap-1 bg-background-neutral-00 border border-border-01 rounded-08 shadow-box-02 p-3 overflow-y-auto outline-hidden"

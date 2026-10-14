@@ -89,13 +89,14 @@ def test_tool_definition_shape() -> None:
     tool, _ = _make_tool()
     definition = tool.tool_definition()
 
-    assert definition["type"] == "function"
-    fn = definition["function"]
-    assert fn["name"] == "bash"
-    params = fn["parameters"]
+    assert definition.name == "bash"
+    params = definition.parameters
     assert params["type"] == "object"
-    assert CMD_FIELD in params["properties"]
-    assert params["properties"][CMD_FIELD]["type"] == "string"
+    properties = params["properties"]
+    assert isinstance(properties, dict)
+    command = properties[CMD_FIELD]
+    assert isinstance(command, dict)
+    assert command["type"] == "string"
     assert params["required"] == [CMD_FIELD]
 
 
@@ -449,7 +450,10 @@ def test_is_available_true_when_all_checks_pass() -> None:
         # mocks at runtime); assert by name rather than by identity.
         mock_client.supports.assert_called_once()
         called_args, _ = mock_client.supports.call_args
-        called_names = {getattr(arg, "_mock_name", "") for arg in called_args}
+        called_names = {
+            getattr(arg, "_mock_name", "")  # ods: ignore[getattr]
+            for arg in called_args
+        }
         assert called_names == {
             "create_session",
             "execute_bash_in_session",

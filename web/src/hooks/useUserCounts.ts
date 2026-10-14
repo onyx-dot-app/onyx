@@ -5,7 +5,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { InvitedUserSnapshot } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { StatusCountMap } from "@/views/admin/UsersPage/interfaces";
+import type { StatusCountMap } from "@/views/admin/UsersPage/types";
 
 type UserCountsResponse = {
   account_type_counts: Record<string, number>;
@@ -44,10 +44,10 @@ export default function useUserCounts(): UserCounts {
     pendingCount: pendingUsers?.length ?? null,
     accountTypeCounts: countsData?.account_type_counts ?? {},
     statusCounts: {
-      ...(activeCount !== null ? { active: activeCount } : {}),
-      ...(inactiveCount !== null ? { inactive: inactiveCount } : {}),
-      ...(invitedUsers ? { invited: invitedUsers.length } : {}),
-      ...(pendingUsers ? { requested: pendingUsers.length } : {}),
+      active: activeCount ?? undefined,
+      inactive: inactiveCount ?? undefined,
+      invited: invitedUsers?.length,
+      requested: pendingUsers?.length,
     } satisfies StatusCountMap,
     refreshCounts,
   };

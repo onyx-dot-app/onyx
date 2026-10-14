@@ -1,8 +1,23 @@
 /** API helpers for the Groups pages. */
 
+import type { ScopedMutator } from "swr";
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { UserGroup } from "@/lib/types";
 
 const USER_GROUP_URL = SWR_KEYS.adminUserGroups;
+
+/**
+ * Refresh both group-list caches. These pages read the include_default key, but the users
+ * and connector pages read the plain one, so a rename, membership edit or delete has to
+ * reach both or they keep serving a stale name or a group that no longer exists.
+ */
+async function refreshGroupLists(mutate: ScopedMutator): Promise<void> {
+  await Promise.all([
+    mutate(SWR_KEYS.adminUserGroups),
+    mutate(SWR_KEYS.adminUserGroupsWithDefault),
+  ]);
+}
 
 // Logs an unparseable body — without it a proxy's HTML 502 is indistinguishable from a
 // clean API error at the call site.
@@ -44,7 +59,7 @@ async function createGroup(
   if (!res.ok) {
     throw await responseError(res, "Failed to create group");
   }
-  const group = await res.json();
+  const group: UserGroup = await res.json();
   return group.id;
 }
 
@@ -76,7 +91,7 @@ async function setGroupIncognito(
     body: JSON.stringify({ enabled }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
+    const detail: ErrorResponseBody | null = await res.json().catch(() => null);
     throw new Error(
       detail?.detail ?? `Failed to update incognito access: ${res.statusText}`
     );
@@ -303,6 +318,7 @@ async function setGroupManager(
 }
 
 export {
+  refreshGroupLists,
   renameGroup,
   createGroup,
   updateGroup,

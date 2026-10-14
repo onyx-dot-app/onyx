@@ -206,6 +206,6 @@ The gate therefore loads the resource's **current** groups in the same transacti
 
 - Dropping `role` / `UserRole` / `is_curator` and migrating the 3 residual `user.role==ADMIN` readers
   (`persona_sharing.py:53`, `build_session.py:638`, `search/api.py:104`) — deferred cleanup release.
-- Any change to document-level Vespa ACL (`get_acl_for_user`) — unchanged; managers affect entity-level access
+- Any change to document-level document-index ACL (`get_acl_for_user`) — unchanged; managers affect entity-level access
   only.
 - CE behavior — Group Manager is an EE capability (custom groups are EE); CE has only Basic + Admins.

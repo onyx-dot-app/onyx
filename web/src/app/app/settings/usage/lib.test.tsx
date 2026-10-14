@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import useSWR from "swr";
 import { useUserUsage } from "@/app/app/settings/usage/lib";
-import { rangeForInclusiveDays } from "@/refresh-components/DateRangePicker";
+import { rangeForInclusiveDays } from "@opal/components";
 
 jest.mock("swr", () => jest.fn());
 

@@ -95,17 +95,15 @@ def _handle_standard_answers(
     configured_standard_answer_categories = (
         slack_channel_config.standard_answer_categories
     )
-    configured_standard_answers = set(
-        [
-            standard_answer
-            for standard_answer_category in configured_standard_answer_categories
-            for standard_answer in standard_answer_category.standard_answers
-        ]
-    )
+    configured_standard_answers = {
+        standard_answer
+        for standard_answer_category in configured_standard_answer_categories
+        for standard_answer in standard_answer_category.standard_answers
+    }
     query_msg = message_info.thread_messages[-1]
 
     if slack_thread_id is None:
-        used_standard_answer_ids = set([])
+        used_standard_answer_ids = set()
     else:
         chat_sessions = get_chat_sessions_by_slack_thread_id(
             slack_thread_id=slack_thread_id,
@@ -118,13 +116,11 @@ def _handle_standard_answers(
             db_session=db_session,
             skip_permission_check=True,
         )
-        used_standard_answer_ids = set(
-            [
-                standard_answer.id
-                for chat_message in chat_messages
-                for standard_answer in chat_message.standard_answers
-            ]
-        )
+        used_standard_answer_ids = {
+            standard_answer.id
+            for chat_message in chat_messages
+            for standard_answer in chat_message.standard_answers
+        }
 
     usable_standard_answers = configured_standard_answers.difference(
         used_standard_answer_ids

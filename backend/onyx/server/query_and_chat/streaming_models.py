@@ -13,7 +13,6 @@ class StreamingType(Enum):
 
     SECTION_END = "section_end"
     STOP = "stop"
-    TOP_LEVEL_BRANCHING = "top_level_branching"
     ERROR = "error"
     CHAT_HEARTBEAT = "chat_heartbeat"
 
@@ -77,14 +76,6 @@ class SectionEnd(BaseObj):
 class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
     stop_reason: str | None = None
-
-
-class TopLevelBranching(BaseObj):
-    # This class is used to give advanced heads up to the frontend that the top level flow is branching
-    # This is used to avoid having the frontend render the first call then rerendering the other parallel branches
-    type: Literal["top_level_branching"] = StreamingType.TOP_LEVEL_BRANCHING.value
-
-    num_parallel_branches: int
 
 
 class PacketException(BaseObj):
@@ -435,7 +426,6 @@ PacketObj = Union[
     # Control Packets
     OverallStop,
     SectionEnd,
-    TopLevelBranching,
     PacketException,
     ChatHeartbeat,
     # Agent Response Packets

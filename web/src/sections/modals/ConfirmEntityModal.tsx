@@ -3,6 +3,7 @@ import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { SvgAlertCircle } from "@opal/icons";
 import type { IconProps } from "@opal/types";
+import { useTranslations } from "next-intl";
 
 export interface ConfirmEntityModalProps {
   danger?: boolean;
@@ -41,17 +42,22 @@ export function ConfirmEntityModal({
 
   removeConfirmationText = false,
 }: ConfirmEntityModalProps) {
+  const t = useTranslations("chat.modals.confirmEntity");
   const buttonText = actionButtonText
     ? actionButtonText
     : danger
-      ? "Delete"
-      : "Confirm";
-  const actionText = action ? action : danger ? "delete" : "modify";
+      ? t("deleteButton.label")
+      : t("confirmButton.label");
+  const actionText = action
+    ? action
+    : danger
+      ? t("deleteAction.label")
+      : t("modifyAction.label");
 
   return (
     <Modal
       icon={Icon || SvgAlertCircle}
-      title={`${buttonText} ${entityType}`}
+      title={t("header.title", { action: buttonText, entityType })}
       onClose={onClose}
       submit={
         <Button variant={danger ? "danger" : "default"} onClick={onSubmit}>
@@ -62,7 +68,11 @@ export function ConfirmEntityModal({
       <div className="flex flex-col gap-4">
         {!removeConfirmationText && (
           <Text as="p">
-            Are you sure you want to {actionText} <b>{entityName}</b>?
+            {t.rich("confirmation.description", {
+              action: actionText,
+              entityName,
+              b: (chunks) => <b>{chunks}</b>,
+            })}
           </Text>
         )}
 

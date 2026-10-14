@@ -851,7 +851,9 @@ def pool_session(
     with ``{"headless": False}`` for webapp/preview tests, or use
     ``webapp_pool_session`` to also get the webapp bootstrapped.
     """
-    headless = getattr(request, "param", {}).get("headless", True)
+    headless = getattr(request, "param", {}).get(  # ods: ignore[getattr]
+        "headless", True
+    )
     return _create_pool_session(_pool_pod, headless=headless)
 
 

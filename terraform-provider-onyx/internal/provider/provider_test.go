@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -96,13 +97,27 @@ func testAccAdminGroupID(t *testing.T) int64 {
 	return id
 }
 
+// parseIDString converts a resource id from state into the numeric id the
+// client expects.
+func parseIDString(id string) (int64, error) {
+	parsed, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("resource id %q is not numeric: %w", id, err)
+	}
+	return parsed, nil
+}
+
 // testAccClient returns an API client for pre/post-condition checks.
 func testAccClient(t *testing.T) *client.Client {
 	t.Helper()
 	if bootstrapKey == "" {
 		t.Fatal("testAccClient called before testAccPreCheck")
 	}
-	return client.NewClient(testAccServerURL(), testAccAPIPrefix(), bootstrapKey)
+	return client.NewClient(client.Config{
+		ServerURL: testAccServerURL(),
+		APIPrefix: testAccAPIPrefix(),
+		APIKey:    bootstrapKey,
+	})
 }
 
 func bootstrapAPIKey(serverURL, apiPrefix string) (string, error) {

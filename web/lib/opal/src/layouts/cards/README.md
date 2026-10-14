@@ -14,10 +14,10 @@ A card header layout with a main content slot and a full-width `bottomChildren` 
 
 ### Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `children` | `ReactNode` | `undefined` | Content rendered in the header slot — typically a `<ContentAction />` block. |
-| `bottomChildren` | `ReactNode` | `undefined` | Content rendered below the entire header, spanning the full width. |
+| Prop             | Type        | Default     | Description                                                                  |
+| ---------------- | ----------- | ----------- | ---------------------------------------------------------------------------- |
+| `children`       | `ReactNode` | `undefined` | Content rendered in the header slot — typically a `<ContentAction />` block. |
+| `bottomChildren` | `ReactNode` | `undefined` | Content rendered below the entire header, spanning the full width.           |
 
 ### Layout Structure
 
@@ -57,7 +57,7 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
       </Button>
     }
   />
-</Card.Header>
+</Card.Header>;
 ```
 
 #### Card with only a connect action
@@ -83,9 +83,7 @@ import { SvgGlobe, SvgCheckSquare } from "@opal/icons";
 #### Card with bottom children
 
 ```tsx
-<Card.Header
-  bottomChildren={<SearchBar placeholder="Search tools..." />}
->
+<Card.Header bottomChildren={<SearchBar placeholder="Search tools..." />}>
   <ContentAction
     icon={SvgServer}
     title="MCP Server"

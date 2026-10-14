@@ -63,7 +63,9 @@ Example usage:
     $ ods deploy wiki`,
 		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
-			deployWiki(opts)
+			if err := deployWiki(opts, defaultRunPolling()); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -77,14 +79,17 @@ Example usage:
 	return cmd
 }
 
-func deployWiki(opts *DeployWikiOptions) {
+func deployWiki(opts *DeployWikiOptions, polling runPolling) error {
 	git.CheckGitHubCLI()
 
-	deployRepo, deployWorkflow := resolveDeployTarget(
+	deployRepo, deployWorkflow, err := resolveDeployTarget(
 		opts.TargetRepo,
 		opts.TargetWorkflow,
 		func(c *config.Config) *string { return &c.DeployWiki.TargetWorkflow },
 	)
+	if err != nil {
+		return err
+	}
 
 	if opts.DryRun {
 		log.Warning("=== DRY RUN MODE: workflow dispatches will be skipped ===")
@@ -102,7 +107,7 @@ func deployWiki(opts *DeployWikiOptions) {
 		}
 		if !prompt.Confirm(msg) {
 			log.Info("Exiting...")
-			return
+			return nil
 		}
 	}
 
@@ -110,70 +115,74 @@ func deployWiki(opts *DeployWikiOptions) {
 		if opts.DryRun {
 			log.Warnf("[DRY RUN] Would dispatch %s in %s", wikiBuildWorkflow, wikiBuildRepo)
 		} else {
-			runBuild()
+			if err := runBuild(polling); err != nil {
+				return err
+			}
 		}
 	}
 
 	if opts.DryRun {
 		log.Warnf("[DRY RUN] Would dispatch %s in %s with version_tag=%s", deployWorkflow, deployRepo, versionTag)
-		return
+		return nil
 	}
 
-	runDeploy(deployRepo, deployWorkflow, versionTag, opts.NoWaitDeploy)
+	return runDeploy(polling, deployRepo, deployWorkflow, versionTag, opts.NoWaitDeploy)
 }
 
-func runBuild() {
+func runBuild(polling runPolling) error {
 	priorRunID, err := latestWorkflowRunID(wikiBuildRepo, wikiBuildWorkflow, "workflow_dispatch", "")
 	if err != nil {
-		log.Fatalf("Failed to query existing build runs: %v", err)
+		return fatalErrorf("Failed to query existing build runs: %w", err)
 	}
 	log.Debugf("Most recent prior build run id: %d", priorRunID)
 
 	log.Infof("Dispatching %s in %s...", wikiBuildWorkflow, wikiBuildRepo)
 	if err := dispatchWorkflow(wikiBuildRepo, wikiBuildWorkflow, nil); err != nil {
-		log.Fatalf("Failed to dispatch build workflow: %v", err)
+		return fatalErrorf("Failed to dispatch build workflow: %w", err)
 	}
 
 	log.Info("Waiting for build workflow to start...")
-	buildRun, err := waitForNewRun(wikiBuildRepo, wikiBuildWorkflow, "workflow_dispatch", "", priorRunID)
+	buildRun, err := waitForNewRun(polling, wikiBuildRepo, wikiBuildWorkflow, "workflow_dispatch", "", priorRunID)
 	if err != nil {
-		log.Fatalf("Failed to find triggered build run: %v", err)
+		return fatalErrorf("Failed to find triggered build run: %w", err)
 	}
 	log.Infof("Build run started: %s", buildRun.URL)
 
-	if err := waitForRunCompletion(wikiBuildRepo, buildRun.DatabaseID, wikiBuildPollLimit, "build"); err != nil {
-		log.Fatalf("Build did not complete successfully: %v", err)
+	if err := waitForRunCompletion(polling, wikiBuildRepo, buildRun.DatabaseID, wikiBuildPollLimit, "build"); err != nil {
+		return fatalErrorf("Build did not complete successfully: %w", err)
 	}
 	log.Info("Build completed successfully.")
+	return nil
 }
 
-func runDeploy(deployRepo, deployWorkflow, versionTag string, noWait bool) {
+func runDeploy(polling runPolling, deployRepo, deployWorkflow, versionTag string, noWait bool) error {
 	priorRunID, err := latestWorkflowRunID(deployRepo, deployWorkflow, "workflow_dispatch", "")
 	if err != nil {
-		log.Fatalf("Failed to query existing deploy runs: %v", err)
+		return fatalErrorf("Failed to query existing deploy runs: %w", err)
 	}
 	log.Debugf("Most recent prior deploy run id: %d", priorRunID)
 
 	log.Infof("Dispatching %s with version_tag=%s...", deployWorkflow, versionTag)
 	if err := dispatchWorkflow(deployRepo, deployWorkflow, map[string]string{"version_tag": versionTag}); err != nil {
-		log.Fatalf("Failed to dispatch deploy workflow: %v", err)
+		return fatalErrorf("Failed to dispatch deploy workflow: %w", err)
 	}
 
 	log.Info("Waiting for deploy workflow to start...")
-	deployRun, err := waitForNewRun(deployRepo, deployWorkflow, "workflow_dispatch", "", priorRunID)
+	deployRun, err := waitForNewRun(polling, deployRepo, deployWorkflow, "workflow_dispatch", "", priorRunID)
 	if err != nil {
-		log.Fatalf("Failed to find dispatched deploy run: %v", err)
+		return fatalErrorf("Failed to find dispatched deploy run: %w", err)
 	}
 	log.Infof("Deploy run started: %s", deployRun.URL)
 	log.Info("A kickoff Slack message will appear in #monitor-deployments.")
 
 	if noWait {
 		log.Info("--no-wait-deploy set; not waiting for deploy completion.")
-		return
+		return nil
 	}
 
-	if err := waitForRunCompletion(deployRepo, deployRun.DatabaseID, wikiDeployPollLimit, "deploy"); err != nil {
-		log.Fatalf("Deploy did not complete successfully: %v", err)
+	if err := waitForRunCompletion(polling, deployRepo, deployRun.DatabaseID, wikiDeployPollLimit, "deploy"); err != nil {
+		return fatalErrorf("Deploy did not complete successfully: %w", err)
 	}
 	log.Info("Deploy completed successfully.")
+	return nil
 }

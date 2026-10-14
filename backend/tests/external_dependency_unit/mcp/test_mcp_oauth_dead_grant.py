@@ -33,7 +33,6 @@ from onyx.server.features.mcp.credentials import (
 )
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.server.features.mcp.oauth import (
-    UNUSED_RETURN_PATH,
     make_oauth_provider,
 )
 from tests.external_dependency_unit.conftest import create_test_user
@@ -146,9 +145,7 @@ def test_invalid_grant_refresh_discards_persisted_tokens(
         refresh_token="revoked-refresh-token",
     )
 
-    provider = make_oauth_provider(
-        server, str(user.id), UNUSED_RETURN_PATH, config_id, None
-    )
+    provider = make_oauth_provider(server, config_id, None)
 
     # A stale attempt (its refresh token was already rotated away by a
     # concurrent refresh or reconnect) must not wipe the stored grant.

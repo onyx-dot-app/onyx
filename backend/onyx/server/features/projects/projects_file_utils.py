@@ -13,12 +13,12 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.db.llm import fetch_default_llm_model
 from onyx.file_processing.extract_file_text import (
     count_docx_embedded_images,
-    count_pdf_embedded_images,
     extract_file_text,
     get_file_ext,
 )
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.password_validation import is_file_password_protected
+from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
 from onyx.natural_language_processing.utils import count_tokens, get_tokenizer
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -269,10 +269,12 @@ def categorize_uploaded_files(
                 # images (either per-file or accumulated across this upload
                 # batch). A file with thousands of embedded images can OOM the
                 # user-file-processing celery worker because every image is
-                # decoded with PIL and then sent to the vision LLM.
+                # decoded with PIL and then sent to the vision LLM. With image
+                # extraction off, no image is ever decoded, so the caps (and
+                # the cost of counting) do not apply.
                 count: int = 0
                 image_bearing_ext = extension in (".pdf", ".docx")
-                if image_bearing_ext:
+                if image_bearing_ext and image_extraction_enabled:
                     file_cap = MAX_EMBEDDED_IMAGES_PER_FILE
                     batch_cap = MAX_EMBEDDED_IMAGES_PER_UPLOAD
                     # Use the larger of the two caps as the short-circuit
@@ -320,9 +322,9 @@ def categorize_uploaded_files(
                 if not text_content:
                     # Documents with embedded images (e.g. scans) have no
                     # extractable text but can still be indexed via the
-                    # vision-LLM captioning path when image analysis is
-                    # enabled.
-                    if image_bearing_ext and count > 0 and image_extraction_enabled:
+                    # vision-LLM captioning path. `count` is only populated
+                    # when image extraction is enabled.
+                    if image_bearing_ext and count > 0:
                         results.acceptable.append(upload)
                         results.acceptable_file_to_token_count[filename] = 0
                         try:
@@ -336,11 +338,15 @@ def categorize_uploaded_files(
                         continue
 
                     logger.warning("No text content extracted from '%s'", filename)
-                    results.rejected.append(
-                        RejectedFile(
-                            filename=filename,
-                            reason=f"Unsupported file type: {extension}",
+                    if image_bearing_ext and not image_extraction_enabled:
+                        reason = (
+                            "No text could be extracted, and image processing "
+                            "is disabled by an admin"
                         )
+                    else:
+                        reason = f"Unsupported file type: {extension}"
+                    results.rejected.append(
+                        RejectedFile(filename=filename, reason=reason)
                     )
                     continue
 

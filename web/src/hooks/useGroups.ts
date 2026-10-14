@@ -5,7 +5,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { buildApiPath } from "@/lib/urlBuilder";
 
 /**
  * Fetches all user groups in the organization.
@@ -45,7 +44,7 @@ export default function useGroups(includeDefault = false) {
     !settings.isLoading && settings.enterprise !== null;
 
   const url = includeDefault
-    ? buildApiPath(SWR_KEYS.adminUserGroups, { include_default: true })
+    ? SWR_KEYS.adminUserGroupsWithDefault
     : SWR_KEYS.adminUserGroups;
 
   const { data, error, isLoading } = useSWR<UserGroup[]>(

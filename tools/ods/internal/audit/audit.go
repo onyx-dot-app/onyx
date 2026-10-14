@@ -7,6 +7,7 @@ package audit
 import (
 	"fmt"
 	"io"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -114,9 +115,15 @@ type Options struct {
 	Python     bool
 	Dependabot bool
 	Actions    bool
-	Format     string // comma-separated list of text|json|sarif
-	FailOn     Severity
-	IgnoreURL  string
+	// AllLockfiles widens the lockfile scan from the root and web lockfiles the
+	// deploy gate covers to every tracked one.
+	AllLockfiles bool
+	// Strict fails the run on any backend or per-action query failure, for
+	// callers that read a missing finding as a resolved one.
+	Strict    bool
+	Format    string // comma-separated list of text|json|sarif
+	FailOn    Severity
+	IgnoreURL string
 	// Stdout receives the machine-readable formats (json, sarif), or the text
 	// report when it is the only format requested. Stderr receives the text
 	// report when it is combined with a machine format. See renderReport.
@@ -142,19 +149,19 @@ func Run(opts Options) (*Result, error) {
 	scanActionsSrc := runAll || opts.Actions
 
 	// A lockfile scan (web/python) is the primary deploy gate. While one is
-	// running, a flaky Dependabot/Actions backend is downgraded to a warning;
-	// otherwise a failure of an explicitly requested backend is fatal, so the
-	// audit can't report success without having actually checked anything.
-	lockfileGate := scanWeb || scanPython
+	// running, a flaky Dependabot/Actions backend is downgraded to a warning
+	// unless Strict. Otherwise a failure of an explicitly requested backend is
+	// fatal, so the audit can't report success without having checked anything.
+	warnOnBackendFailure := (scanWeb || scanPython) && !opts.Strict
 
 	var findings []Finding
 
 	if scanWeb || scanPython {
-		lockfiles, err := lockfilePaths(scanWeb, scanPython)
+		lockfiles, err := lockfilePaths(scanWeb, scanPython, opts.AllLockfiles)
 		if err != nil {
 			return nil, fmt.Errorf("failed to locate lockfiles: %w", err)
 		}
-		fs, err := scanLockfiles(lockfiles)
+		fs, err := scanLockfiles(lockfiles, opts.Strict)
 		if err != nil {
 			return nil, fmt.Errorf("dependency scan failed: %w", err)
 		}
@@ -164,7 +171,7 @@ func Run(opts Options) (*Result, error) {
 	if scanDependabot {
 		fs, err := auditDependabot()
 		if err != nil {
-			if !lockfileGate {
+			if !warnOnBackendFailure {
 				return nil, fmt.Errorf("dependabot audit failed: %w", err)
 			}
 			log.Warnf("Dependabot audit skipped: %v", err)
@@ -174,9 +181,9 @@ func Run(opts Options) (*Result, error) {
 	}
 
 	if scanActionsSrc {
-		fs, err := scanActions()
+		fs, err := scanActions(osvQueryURL, opts.Strict)
 		if err != nil {
-			if !lockfileGate {
+			if !warnOnBackendFailure {
 				return nil, fmt.Errorf("github actions audit failed: %w", err)
 			}
 			log.Warnf("GitHub Actions audit skipped: %v", err)
@@ -219,11 +226,15 @@ func Run(opts Options) (*Result, error) {
 }
 
 // lockfilePaths returns the lockfiles to scan based on the selectors, skipping
-// any that don't exist.
-func lockfilePaths(web, python bool) ([]string, error) {
+// any that don't exist. With all set, it returns every tracked lockfile of the
+// selected kinds instead of the fixed set.
+func lockfilePaths(web, python, all bool) ([]string, error) {
 	root, err := paths.GitRoot()
 	if err != nil {
 		return nil, err
+	}
+	if all {
+		return trackedLockfiles(root, web, python)
 	}
 	var candidates []string
 	if web {
@@ -244,6 +255,49 @@ func lockfilePaths(web, python bool) ([]string, error) {
 		}
 	}
 	return existing, nil
+}
+
+// lockfileManifests maps each lockfile name to the manifest that must sit beside
+// it, so a lockfile left behind by a removed project is not scanned.
+var lockfileManifests = map[string]string{
+	"bun.lock": "package.json",
+	"uv.lock":  "pyproject.toml",
+}
+
+// trackedLockfiles lists the lockfiles git tracks anywhere under root, in index
+// order, keeping those whose manifest is still beside them.
+func trackedLockfiles(root string, web, python bool) ([]string, error) {
+	var names []string
+	if web {
+		names = append(names, "bun.lock")
+	}
+	if python {
+		names = append(names, "uv.lock")
+	}
+
+	args := []string{"-C", root, "ls-files", "-z", "--"}
+	for _, name := range names {
+		args = append(args, ":(glob)**/"+name)
+	}
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files failed: %w", err)
+	}
+
+	var lockfiles []string
+	for rel := range strings.SplitSeq(string(out), "\x00") {
+		if rel == "" {
+			continue
+		}
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		manifest := filepath.Join(filepath.Dir(path), lockfileManifests[filepath.Base(path)])
+		if !fileExists(manifest) {
+			log.Debugf("Skipping %s: no %s beside it", rel, filepath.Base(manifest))
+			continue
+		}
+		lockfiles = append(lockfiles, path)
+	}
+	return lockfiles, nil
 }
 
 // relManifest returns p relative to root when p is under it; otherwise returns

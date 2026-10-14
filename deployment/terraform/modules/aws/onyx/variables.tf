@@ -186,6 +186,18 @@ variable "s3_vpc_endpoint_id" {
   }
 }
 
+variable "s3_additional_policy_documents" {
+  type        = list(string)
+  description = "IAM policy documents (JSON strings) merged into the main bucket's policy. See additional_policy_documents on the s3 module."
+  default     = []
+}
+
+variable "s3_upload_additional_policy_documents" {
+  type        = list(string)
+  description = "IAM policy documents (JSON strings) merged into the upload bucket's policy. Only used when enable_upload_bucket is true."
+  default     = []
+}
+
 variable "rds_db_connect_arn" {
   type        = string
   description = "Full rds-db:connect ARN to pass to the EKS module. Required when enable_rds_iam_auth is true."
@@ -267,19 +279,19 @@ variable "vespa_node_enabled" {
 
 variable "vespa_node_instance_types" {
   type        = list(string)
-  description = "Instance types for the Vespa EKS node group Null uses the t-shirt size default."
+  description = "Instance types for the dedicated document-index EKS node group. Null uses the t-shirt size default."
   default     = null
 }
 
 variable "vespa_node_disk_size_gb" {
   type        = number
-  description = "Root EBS volume (GiB) for the Vespa/document-index node. Null keeps the node-group default (100 GiB). Null uses the t-shirt size default."
+  description = "Root EBS volume (GiB) for the dedicated document-index node. Null keeps the node-group default (100 GiB). Null uses the t-shirt size default."
   default     = null
 }
 
 variable "vespa_node_subnet_ids" {
   type        = list(string)
-  description = "Subnet IDs for the Vespa node group (must be in same AZ as Vespa PV)"
+  description = "Subnet IDs for the dedicated document-index node group (must be in same AZ as the index PV)"
   default     = []
 }
 
@@ -524,4 +536,22 @@ variable "alarm_actions" {
   type        = list(string)
   description = "SNS topic ARNs for RDS/ElastiCache CloudWatch alarm + ok actions. Empty = infra alarms exist but notify nothing."
   default     = []
+}
+
+variable "iam_role_permissions_boundary" {
+  type        = string
+  description = "ARN of a permissions boundary to attach to every IAM role the stack creates (VPC flow logs, EKS cluster and node groups, IRSA and add-on roles). Null attaches none."
+  default     = null
+}
+
+variable "iam_role_path" {
+  type        = string
+  description = "IAM path for every role the stack creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
+  default     = null
+}
+
+variable "cluster_admin_principal_arn" {
+  type        = string
+  description = "IAM principal that gets EKS cluster-admin and administers the cluster's KMS key. Null keeps the default: whoever runs Terraform."
+  default     = null
 }

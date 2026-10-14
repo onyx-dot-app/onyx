@@ -1,25 +1,45 @@
 """
 Assumptions:
 - The test users have already been created
-- General is empty of messages
 - In addition to the normal slack oauth permissions, the following scopes are needed:
     - channels:manage
     - groups:write
     - chat:write
-    - chat:write.public
 """
 
+import time
 from collections.abc import Callable, Generator
+from enum import StrEnum
 from typing import Any, cast
-from uuid import uuid4
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.http_retry import RateLimitErrorRetryHandler
 from slack_sdk.web import SlackResponse
 
 from onyx.connectors.slack.models import ChannelType, MessageType
 
 _SLACK_LIMIT = 900
+# Concurrent CI runs share each workspace's rate limits, so calls wait out 429s instead of failing the test.
+_RATE_LIMIT_MAX_RETRIES = 7
+
+# Names used by the per-run channels that tests created before the channel pool.
+_LEGACY_TEST_CHANNEL_PREFIXES = ("public_channel-", "private_channel-")
+# Older than any test run can last, so a sweep never archives a channel in use.
+_SWEEP_MIN_CHANNEL_AGE_SECONDS = 60 * 60
+# conversations.archive allows about 20 calls per minute.
+_SWEEP_MAX_CHANNELS = 100
+
+
+class SlackApiErrorCode(StrEnum):
+    ALREADY_ARCHIVED = "already_archived"
+    CHANNEL_NOT_FOUND = "channel_not_found"
+    MESSAGE_NOT_FOUND = "message_not_found"
+    NAME_TAKEN = "name_taken"
+
+
+def slack_error_code(error: SlackApiError) -> str:
+    return cast(str, error.response.get("error", ""))
 
 
 def make_paginated_slack_api_call(
@@ -46,10 +66,6 @@ def get_channel_messages(
     slack_client: WebClient, channel: ChannelType
 ) -> Generator[list[MessageType], None, None]:
     """Yields message batches for a channel via the test-management client."""
-    if not channel["is_member"]:
-        # Join only works for public channels; private membership needs an
-        # invite, handled by the test setup.
-        slack_client.conversations_join(channel=channel["id"])
     for result in make_paginated_slack_api_call(
         slack_client.conversations_history,
         channel=channel["id"],
@@ -61,36 +77,6 @@ def _get_slack_channel_id(channel: ChannelType) -> str:
     if not (channel_id := channel.get("id")):
         raise ValueError("Channel ID is missing")
     return channel_id
-
-
-def _get_non_general_channels(
-    slack_client: WebClient,
-    get_private: bool,
-    get_public: bool,
-    only_get_done: bool = False,
-) -> list[ChannelType]:
-    channel_types = []
-    if get_private:
-        channel_types.append("private_channel")
-    if get_public:
-        channel_types.append("public_channel")
-
-    conversations: list[dict[str, Any]] = []
-    for result in make_paginated_slack_api_call(
-        slack_client.conversations_list,
-        exclude_archived=False,
-        types=channel_types,
-    ):
-        conversations.extend(result["channels"])
-
-    filtered_conversations = []
-    for conversation in conversations:
-        if conversation.get("is_general", False):
-            continue
-        if only_get_done and "done" not in conversation.get("name", ""):
-            continue
-        filtered_conversations.append(conversation)
-    return cast(list[ChannelType], filtered_conversations)
 
 
 def _clear_slack_conversation_members(
@@ -117,12 +103,6 @@ def _clear_slack_conversation_members(
                 continue
             print(f"Error kicking member: {e}")
             print(member_id)
-    try:
-        slack_client.conversations_unarchive(channel=channel_id)
-        channel["is_archived"] = False
-    except Exception:
-        # Channel is already unarchived
-        pass
 
 
 def _add_slack_conversation_members(
@@ -142,13 +122,12 @@ def _add_slack_conversation_members(
 def _delete_slack_conversation_messages(
     slack_client: WebClient,
     channel: ChannelType,
-    message_to_delete: str | None = None,
+    message_to_delete: str,
 ) -> None:
-    """deletes all messages from a channel if message_to_delete is None"""
     channel_id = _get_slack_channel_id(channel)
     for message_batch in get_channel_messages(slack_client, channel):
         for message in message_batch:
-            if message_to_delete and message.get("text") != message_to_delete:
+            if message.get("text") != message_to_delete:
                 continue
             print(" removing message: ", message.get("text"))
 
@@ -161,92 +140,87 @@ def _delete_slack_conversation_messages(
                 print(message)
 
 
-def _build_slack_channel_from_name(
-    slack_client: WebClient,
-    admin_user_id: str,
-    suffix: str,
-    is_private: bool,
-    channel: ChannelType | None,
+def _delete_all_slack_conversation_messages(
+    slack_client: WebClient, channel: ChannelType
+) -> None:
+    """Deletes plain messages; system messages (joins, renames) cannot be deleted."""
+    channel_id = _get_slack_channel_id(channel)
+    timestamps = [
+        ts
+        for message_batch in get_channel_messages(slack_client, channel)
+        for message in message_batch
+        if not message.get("subtype") and (ts := message.get("ts"))
+    ]
+    for ts in timestamps:
+        try:
+            slack_client.chat_delete(channel=channel_id, ts=ts)
+        except SlackApiError as e:
+            print(f"Error deleting message {ts} in {channel_id}: {e}")
+
+
+def create_slack_channel(
+    slack_client: WebClient, admin_user_id: str, name: str, is_private: bool
 ) -> ChannelType:
-    base = "public_channel" if not is_private else "private_channel"
-    channel_name = f"{base}-{suffix}"
-    if channel:
-        # If channel is provided, we rename it
-        channel_id = _get_slack_channel_id(channel)
-        channel_response = slack_client.conversations_rename(
-            channel=channel_id,
-            name=channel_name,
-        )
-    else:
-        # Otherwise, we create a new channel
-        channel_response = slack_client.conversations_create(
-            name=channel_name,
-            is_private=is_private,
-        )
-
-    try:
-        slack_client.conversations_unarchive(channel=channel_response["channel"]["id"])
-    except Exception:
-        # Channel is already unarchived
-        pass
-    try:
-        slack_client.conversations_invite(
-            channel=channel_response["channel"]["id"],
-            users=[admin_user_id],
-        )
-    except Exception:
-        pass
-
-    final_channel = channel_response["channel"] if channel_response else {}
-    return cast(ChannelType, final_channel)
+    response: SlackResponse = slack_client.conversations_create(
+        name=name, is_private=is_private
+    )
+    channel: ChannelType = cast(ChannelType, response["channel"])
+    _add_slack_conversation_members(
+        slack_client=slack_client, channel=channel, member_ids=[admin_user_id]
+    )
+    return channel
 
 
 class SlackManager:
     @staticmethod
     def get_slack_client(token: str) -> WebClient:
-        return WebClient(token=token)
+        client: WebClient = WebClient(token=token)
+        client.retry_handlers.append(
+            RateLimitErrorRetryHandler(max_retry_count=_RATE_LIMIT_MAX_RETRIES)
+        )
+        return client
 
     @staticmethod
-    def get_and_provision_available_slack_channels(
-        slack_client: WebClient, admin_user_id: str
-    ) -> tuple[ChannelType, ChannelType, str]:
-        run_id = str(uuid4())
-        public_channels = _get_non_general_channels(
-            slack_client, get_private=False, get_public=True, only_get_done=True
-        )
+    def list_active_channels(slack_client: WebClient) -> list[ChannelType]:
+        """Unarchived public channels plus the private channels the bot is in."""
+        channels: list[ChannelType] = []
+        for result in make_paginated_slack_api_call(
+            slack_client.conversations_list,
+            exclude_archived=True,
+            types="public_channel,private_channel",
+        ):
+            channels.extend(cast(list[ChannelType], result["channels"]))
+        return channels
 
-        first_available_channel = (
-            None if len(public_channels) < 1 else public_channels[0]
-        )
-        public_channel = _build_slack_channel_from_name(
+    @staticmethod
+    def reset_channel(
+        slack_client: WebClient, admin_user_id: str, channel: ChannelType
+    ) -> None:
+        """Returns a reused channel to the state of a new one: no messages, only the admin."""
+        _delete_all_slack_conversation_messages(slack_client, channel)
+        SlackManager.set_channel_members(
             slack_client=slack_client,
             admin_user_id=admin_user_id,
-            suffix=run_id,
-            is_private=False,
-            channel=first_available_channel,
-        )
-        _delete_slack_conversation_messages(
-            slack_client=slack_client, channel=public_channel
+            channel=channel,
+            user_ids=[admin_user_id],
         )
 
-        private_channels = _get_non_general_channels(
-            slack_client, get_private=True, get_public=False, only_get_done=True
-        )
-        second_available_channel = (
-            None if len(private_channels) < 1 else private_channels[0]
-        )
-        private_channel = _build_slack_channel_from_name(
-            slack_client=slack_client,
-            admin_user_id=admin_user_id,
-            suffix=run_id,
-            is_private=True,
-            channel=second_available_channel,
-        )
-        _delete_slack_conversation_messages(
-            slack_client=slack_client, channel=private_channel
-        )
-
-        return public_channel, private_channel, run_id
+    @staticmethod
+    def sweep_leaked_test_channels(bot_token: str) -> None:
+        """Archives old per-run test channels. Safe to run concurrently; never raises."""
+        try:
+            slack_client = SlackManager.get_slack_client(bot_token)
+            cutoff = time.time() - _SWEEP_MIN_CHANNEL_AGE_SECONDS
+            leaked = [
+                channel
+                for channel in SlackManager.list_active_channels(slack_client)
+                if channel["name"].startswith(_LEGACY_TEST_CHANNEL_PREFIXES)
+                and channel["created"] < cutoff
+            ][:_SWEEP_MAX_CHANNELS]
+            print(f"Sweeping {len(leaked)} leaked Slack test channels")
+            SlackManager.archive_channels(slack_client=slack_client, channels=leaked)
+        except Exception as e:
+            print(f"Error sweeping leaked Slack test channels: {e}")
 
     @staticmethod
     def build_slack_user_email_id_map(slack_client: WebClient) -> dict[str, str]:
@@ -301,25 +275,21 @@ class SlackManager:
         )
 
     @staticmethod
-    def cleanup_after_test(
-        slack_client: WebClient,
-        test_id: str,
-    ) -> None:
-        channel_types = ["private_channel", "public_channel"]
-        channels: list[ChannelType] = []
-        for result in make_paginated_slack_api_call(
-            slack_client.conversations_list,
-            exclude_archived=False,
-            types=channel_types,
-        ):
-            channels.extend(result["channels"])
+    def archive_channels(slack_client: WebClient, channels: list[ChannelType]) -> None:
+        """Logs failures instead of raising so cleanup never fails a test.
 
+        A concurrent sweep may archive the same channel first, so that error is ignored.
+        """
         for channel in channels:
-            if test_id not in channel.get("name", ""):
-                continue
-            # "done" in the channel name indicates that this channel is free to be used for a new test
-            new_name = f"done_{str(uuid4())}"
+            channel_id: str = _get_slack_channel_id(channel)
             try:
-                slack_client.conversations_rename(channel=channel["id"], name=new_name)
+                slack_client.conversations_archive(channel=channel_id)
             except SlackApiError as e:
-                print(f"Error renaming channel {channel['id']}: {e}")
+                if slack_error_code(e) in (
+                    SlackApiErrorCode.ALREADY_ARCHIVED,
+                    SlackApiErrorCode.CHANNEL_NOT_FOUND,
+                ):
+                    continue
+                print(f"Error archiving channel {channel_id}: {e}")
+            except Exception as e:
+                print(f"Error archiving channel {channel_id}: {e}")

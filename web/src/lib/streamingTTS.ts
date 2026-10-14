@@ -3,6 +3,7 @@
  * Plays audio chunks as they arrive for smooth, low-latency playback.
  */
 
+import type { ErrorResponseBody } from "@/lib/fetcher";
 import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
 
 /**
@@ -137,7 +138,7 @@ export class HTTPStreamingTTSPlayer {
       if (!response.ok) {
         let message = `TTS request failed (${response.status})`;
         try {
-          const errorJson = await response.json();
+          const errorJson: ErrorResponseBody = await response.json();
           if (errorJson.detail) message = errorJson.detail;
         } catch {
           // response wasn't JSON — use status text
@@ -259,7 +260,7 @@ export class HTTPStreamingTTSPlayer {
     if (!response.ok) {
       let message = `TTS request failed (${response.status})`;
       try {
-        const errorJson = await response.json();
+        const errorJson: ErrorResponseBody = await response.json();
         if (errorJson.detail) message = errorJson.detail;
       } catch {
         // response wasn't JSON — use status text
@@ -394,7 +395,8 @@ export class WebSocketStreamingTTSPlayer {
     if (!tokenResponse.ok) {
       throw new Error("Failed to get WebSocket authentication token");
     }
-    const { token } = await tokenResponse.json();
+    // Mirrors `WSTokenResponse` in backend/onyx/server/manage/voice/user_api.py.
+    const { token }: { token: string } = await tokenResponse.json();
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = IS_DEV ? new URL(INTERNAL_URL).host : window.location.host;

@@ -44,10 +44,10 @@ function Switch({
 
   const trackColor = disabled
     ? checked
-      ? "bg-action-link-03"
+      ? "bg-action-selection-03"
       : "bg-background-neutral-04"
     : checked
-      ? "bg-action-link-05"
+      ? "bg-action-selection-05"
       : "bg-background-tint-03";
   const thumbColor = disabled
     ? "bg-background-neutral-03"

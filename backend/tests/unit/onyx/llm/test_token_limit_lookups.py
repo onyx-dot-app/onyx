@@ -11,6 +11,44 @@ from onyx.llm.model_capabilities import (
 )
 
 
+def test_model_context_metadata_is_not_inferred_or_overwritten() -> None:
+    """The rendered map carries a catalog entry's limits verbatim — no
+    inferred or synthesized token fields."""
+    from onyx.llm import model_catalog
+
+    catalog = {
+        "openai": {
+            "models": {
+                "gpt-5.6-sol": {
+                    "name": "GPT-5.6 Sol",
+                    "limit": {"context": 922000, "output": 128000},
+                },
+                "gpt-5.6-terra": {
+                    "name": "GPT-5.6 Terra",
+                    "limit": {"context": 1048000, "output": 128000},
+                },
+            },
+            "aliases": {},
+        }
+    }
+    with patch.object(model_catalog, "_catalog", return_value=catalog):
+        model_catalog.build_model_map.cache_clear()
+        try:
+            model_map = model_catalog.build_model_map()
+        finally:
+            model_catalog.build_model_map.cache_clear()
+
+    sol = model_map["openai/gpt-5.6-sol"]
+    assert sol["max_input_tokens"] == 922000
+    assert sol["max_output_tokens"] == 128000
+    terra = model_map["openai/gpt-5.6-terra"]
+    assert terra["max_input_tokens"] == 1048000
+    assert terra["max_output_tokens"] == 128000
+    assert "max_context_tokens" not in sol
+    # Models absent from the catalog do not appear in the map.
+    assert "gpt-5.6" not in model_map
+
+
 class TestLlmMaxInputTokens:
     def test_prefers_max_input_tokens(self) -> None:
         model_map = {"openai/gpt-4o": {"max_input_tokens": 128000, "max_tokens": 4096}}

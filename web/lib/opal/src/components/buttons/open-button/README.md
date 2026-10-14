@@ -32,28 +32,28 @@ Interactive.Stateful           <- variant="select-heavy", interaction, state, di
             ├─ div > Icon?                 (interactive-foreground-icon)
             ├─ [Foldable]?                 (wraps label + chevron when foldable)
             │    ├─ <span>?                .opal-button-label
-            │    └─ div > ChevronIcon      .opal-open-button-chevron
+            │    └─ div > ChevronIcon      .opal-chevron
             └─ <span>? / ChevronIcon       (non-foldable)
 ```
 
 - **`interaction` controls both the chevron and the hover visual state.** When `interaction` is `"hover"` (explicitly or via Radix `data-state="open"`), the chevron rotates 180° and the hover background activates.
-- **Open-state detection** is dual-resolution: the explicit `interaction` prop takes priority; otherwise the component reads `data-state="open"` injected by Radix triggers (e.g. `Popover.Trigger`).
-- **Chevron rotation** is CSS-driven via `.interactive[data-interaction="hover"] .opal-open-button-chevron { rotate: -180deg }`. The `ChevronIcon` is a stable named component (not an inline function) to preserve React element identity across renders.
+- **Open-state detection**: the explicit `interaction` prop takes priority; otherwise the component reads the trigger attributes merged onto it: `data-state="open"` from Radix triggers (e.g. `Popover.Trigger`), or `aria-expanded` from an Opal `Dropdown.Trigger`.
+- **Chevron rotation** is CSS-driven, in `buttons/chevron.css`: `.interactive[data-interaction="hover"] .opal-chevron { rotate: -180deg }` (and the same for `"active"`). The `ChevronIcon` is a stable named component (not an inline function) to preserve React element identity across renders.
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `state` | `"empty" \| "filled" \| "selected"` | `"empty"` | Current value state |
-| `interaction` | `"rest" \| "hover" \| "active"` | auto | JS-controlled interaction override. Falls back to Radix `data-state="open"` when omitted. |
-| `icon` | `IconFunctionComponent` | — | Left icon component |
-| `children` | `string` | — | Content between icon and chevron |
-| `foldable` | `boolean` | `false` | When `true`, requires both `icon` and `children`; the left icon stays visible while the label + chevron collapse when not hovered. If `tooltip` is omitted on a disabled foldable button, the label text is used as the tooltip. |
-| `size` | `SizeVariant` | `"lg"` | Size preset controlling height, rounding, and padding |
-| `width` | `WidthVariant` | — | Width preset |
-| `tooltip` | `string` | — | Tooltip text shown on hover |
-| `tooltipSide` | `TooltipSide` | `"top"` | Which side the tooltip appears on |
-| `disabled` | `boolean` | `false` | Disables the button |
+| Prop          | Type                                | Default   | Description                                                                                                                                                                                                                      |
+| ------------- | ----------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`       | `"empty" \| "filled" \| "selected"` | `"empty"` | Current value state                                                                                                                                                                                                              |
+| `interaction` | `"rest" \| "hover" \| "active"`     | auto      | JS-controlled interaction override. Falls back to Radix `data-state="open"` or Opal Dropdown `aria-expanded` when omitted.                                                                                                                                        |
+| `icon`        | `IconFunctionComponent`             | —         | Left icon component                                                                                                                                                                                                              |
+| `children`    | `string`                            | —         | Content between icon and chevron                                                                                                                                                                                                 |
+| `foldable`    | `boolean`                           | `false`   | When `true`, requires both `icon` and `children`; the left icon stays visible while the label + chevron collapse when not hovered. If `tooltip` is omitted on a disabled foldable button, the label text is used as the tooltip. |
+| `size`        | `SizeVariant`                       | `"lg"`    | Size preset controlling height, rounding, and padding                                                                                                                                                                            |
+| `width`       | `WidthVariant`                      | —         | Width preset                                                                                                                                                                                                                     |
+| `tooltip`     | `string`                            | —         | Tooltip text shown on hover                                                                                                                                                                                                      |
+| `tooltipSide` | `TooltipSide`                       | `"top"`   | Which side the tooltip appears on                                                                                                                                                                                                |
+| `disabled`    | `boolean`                           | `false`   | Disables the button                                                                                                                                                                                                              |
 
 ## Usage
 

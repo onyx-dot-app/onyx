@@ -12,15 +12,16 @@ import {
 } from "@/app/craft/services/externalAppsService";
 import {
   disconnectMCPServer,
+  getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
   startMCPUserOAuth,
-} from "@/lib/tools/mcpService";
+} from "@/lib/mcp/svc";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPServer,
-} from "@/lib/tools/interfaces";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+} from "@/lib/mcp/types";
+import { getActionIcon } from "@/lib/tools/utils";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 
 /** Which system a connectable came from. Surfaced to the user: the two are
@@ -110,7 +111,9 @@ export function mcpServerToConnectable(server: MCPServer): ConnectableApp {
   const userConnectable = perUserAuth || requiresHeaderValues;
   const authenticated = server.craft_connected ?? false;
   const startOAuth = async () =>
-    (await startMCPUserOAuth(server.id, CRAFT_APPS_PATH)).oauth_url;
+    getMCPUserOAuthNavigationUrl(
+      await startMCPUserOAuth(server.id, CRAFT_APPS_PATH)
+    );
   return {
     key: `mcp-${server.id}`,
     kind: "mcp",

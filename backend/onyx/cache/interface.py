@@ -81,12 +81,27 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def getdel(self, key: str) -> bytes | None:
+        """Atomically return and remove an unexpired value."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def set(
         self,
         key: str,
         value: str | bytes | int | float,
         ex: int | None = None,
     ) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        """Set a value only if no unexpired value uses the key."""
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -101,6 +116,14 @@ class CacheBackend(abc.ABC):
 
     @abc.abstractmethod
     def expire(self, key: str, seconds: int) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def renew_if_value(self, key: str, expected: bytes, seconds: int) -> bool:
+        """Reset an unexpired key's TTL to ``seconds`` only while it holds ``expected``.
+
+        Returns whether the key was renewed.
+        """
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -2,7 +2,7 @@
 // LLM Selection Types and Utilities
 // =============================================================================
 
-import { ModelConfiguration } from "@/lib/languageModels/types";
+import { DefaultModel, ModelConfiguration } from "@/lib/languageModels/types";
 import {
   readStorageItem,
   writeStorageItem,
@@ -88,9 +88,33 @@ export function hasSupportedCraftProvider(
 
 // Access control is enforced server-side at session create.
 export function getDefaultLlmSelection(
-  llmProviders: MinimalLlmProvider[] | undefined
+  llmProviders: MinimalLlmProvider[] | undefined,
+  configuredDefaults: (DefaultModel | null | undefined)[] = []
 ): BuildLlmSelection | null {
   if (!llmProviders) return null;
+
+  // Each configured default (e.g. Craft's own default, then the shared chat
+  // default) outranks the built-in recommendation, tried in order. Mirrors
+  // the backend's _select_gateway_default.
+  for (const configuredDefault of configuredDefaults) {
+    if (!configuredDefault) continue;
+    const provider = llmProviders.find(
+      (candidate) => candidate.id === configuredDefault.provider_id
+    );
+    if (
+      provider?.model_configurations.some(
+        (model) =>
+          model.is_visible && model.name === configuredDefault.model_name
+      )
+    ) {
+      return {
+        providerId: provider.id,
+        providerName: provider.name ?? "",
+        provider: provider.provider,
+        modelName: configuredDefault.model_name,
+      };
+    }
+  }
 
   // Must match the backend's casefold-then-id ordering in
   // _gateway_provider_order; localeCompare would diverge.

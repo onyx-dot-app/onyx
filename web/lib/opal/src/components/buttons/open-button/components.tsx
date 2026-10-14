@@ -1,13 +1,10 @@
-import {
-  Interactive,
-  type InteractiveStatefulProps,
-  type InteractiveStatefulInteraction,
-} from "@opal/core";
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ContainerSizeVariants,
   ExtremaSizeVariants,
   IconFunctionComponent,
   RichStr,
+  Rounding,
 } from "@opal/types";
 import {
   Text,
@@ -16,10 +13,11 @@ import {
   type TextFont,
   type TooltipSide,
 } from "@opal/components";
-import type { InteractiveContainerRoundingVariant } from "@opal/core";
+
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
+import { resolveTriggerInteraction } from "@opal/components/buttons/trigger-interaction";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -28,13 +26,13 @@ import { ChevronIcon } from "@opal/components/buttons/chevron";
 /**
  * Content props — a discriminated union on `foldable` that enforces:
  *
- * - `foldable: true`  → `icon` and `children` are required (icon stays visible,
- *                        label + chevron fold away)
- * - `foldable?: false` → at least one of `icon` or `children` must be provided
+ * - `foldable: boolean` → `icon` and `children` are required (icon stays
+ *                          visible, label + chevron fold away when true)
+ * - `foldable?: false`  → at least one of `icon` or `children` must be provided
  */
 type OpenButtonContentProps =
   | {
-      foldable: true;
+      foldable: boolean;
       icon: IconFunctionComponent;
       children: string | RichStr;
     }
@@ -49,7 +47,7 @@ type OpenButtonContentProps =
       children?: string | RichStr;
     };
 
-type OpenButtonVariant = "select-light" | "select-heavy" | "select-tinted";
+type OpenButtonVariant = "select-light" | "select-heavy";
 
 type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
   variant?: OpenButtonVariant;
@@ -82,7 +80,7 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     tooltipSide?: TooltipSide;
 
     /** Override the default rounding derived from `size`. */
-    rounding?: InteractiveContainerRoundingVariant;
+    rounding?: Rounding;
 
     /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
@@ -109,12 +107,10 @@ function OpenButton({
   disabled,
   ...statefulProps
 }: OpenButtonProps) {
-  // Derive open state: explicit prop → Radix data-state (injected via Slot chain)
-  const dataState = (statefulProps as Record<string, unknown>)["data-state"] as
-    | string
-    | undefined;
-  const resolvedInteraction: InteractiveStatefulInteraction =
-    interaction ?? (dataState === "open" ? "hover" : "rest");
+  const resolvedInteraction = resolveTriggerInteraction(
+    interaction,
+    statefulProps
+  );
 
   const isLarge = size === "lg";
 
@@ -122,7 +118,7 @@ function OpenButton({
     <Text
       font={labelFont ?? (isLarge ? "main-ui-body" : "secondary-body")}
       color={labelColor ?? "inherit"}
-      nowrap
+      wordWrap="whitespace-nowrap"
     >
       {children}
     </Text>
@@ -139,9 +135,7 @@ function OpenButton({
         type="button"
         size={size}
         width={width}
-        rounding={
-          roundingOverride ?? (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
-        }
+        rounding={roundingOverride ?? (isLarge ? 3 : size === "2xs" ? 1 : 2)}
       >
         <div
           className={cn(

@@ -1,10 +1,10 @@
 import re
 from collections.abc import Generator
 from datetime import datetime
-from typing import Any, Optional, cast
+from itertools import islice
+from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
-import requests
 from pydantic import BaseModel
 from typing_extensions import override
 
@@ -13,7 +13,7 @@ from onyx.configs.app_configs import (
     NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rl_requests
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -37,6 +37,11 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
+from onyx.connectors.notion.models import NotionSearchObjectType
+from onyx.connectors.notion.source_operations import (
+    NotionApiError,
+    NotionSourceOperations,
+)
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.batching import batch_generator
@@ -46,8 +51,6 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
-_NOTION_PAGE_SIZE = 100
-_NOTION_CALL_TIMEOUT = 30  # 30 seconds
 _MAX_PAGES = 1000
 
 
@@ -87,14 +90,6 @@ class NotionBlock(BaseModel):
     prefix: str
 
 
-class NotionSearchResponse(BaseModel):
-    """Represents the response from the Notion Search API"""
-
-    results: list[dict[str, Any]]
-    next_cursor: Optional[str]
-    has_more: bool = False
-
-
 class BlockReadOutput(BaseModel):
     """Output from reading blocks of a page."""
 
@@ -128,6 +123,17 @@ class _FinalizeBlock(BaseModel):
 _BlockWorkItem = _ProcessBlock | _FinalizeBlock
 
 
+def _is_error_response(error: NotionApiError) -> bool:
+    """True for an error status other than a rate limit. Network errors,
+    exhausted rate-limit waits and bad success bodies propagate, as they did
+    before the gateway."""
+    return (
+        error.status_code is not None
+        and error.status_code >= 400
+        and not error.is_rate_limited
+    )
+
+
 class NotionConnector(LoadConnector, PollConnector, SlimConnector):
     """Notion Page connector that reads all Notion pages
     this integration has been granted access to.
@@ -144,12 +150,10 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> None:
         """Initialize with parameters."""
         self.batch_size = batch_size
-        self.headers = {
-            "Content-Type": "application/json",
-            "Notion-Version": "2026-03-11",
-        }
+        self._source_operations: NotionSourceOperations | None = None
         self.indexed_pages: set[str] = set()
-        self.root_page_id = root_page_id
+        # A blank root page ID means "every shared page", as on the create form.
+        self.root_page_id = (root_page_id or "").strip() or None
         # if enabled, will recursively index child pages as they are found rather
         # relying entirely on the `search` API. We have received reports that the
         # `search` API misses many pages - in those cases, this might need to be
@@ -174,6 +178,12 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         # node in _read_pages even if they have no block-detected children, so that the
         # STUB created for them during database upsert gets promoted.
         self._database_parent_page_ids: set[str] = set()
+
+    @property
+    def source_operations(self) -> NotionSourceOperations:
+        if self._source_operations is None:
+            raise ConnectorMissingCredentialError("Notion")
+        return self._source_operations
 
     @classmethod
     @override
@@ -225,19 +235,14 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         self, block_id: str, cursor: str | None = None
     ) -> dict[str, Any] | None:
         """Fetch all child blocks via the Notion API."""
-        logger.debug("Fetching children of block with ID '%s'", block_id)
-        block_url = f"https://api.notion.com/v1/blocks/{block_id}/children"
-        query_params = None if not cursor else {"start_cursor": cursor}
-        res = rl_requests.get(
-            block_url,
-            headers=self.headers,
-            params=query_params,
-            timeout=_NOTION_CALL_TIMEOUT,
-        )
         try:
-            res.raise_for_status()
-        except Exception as e:
-            if res.status_code == 404:
+            return self.source_operations.get_block_children(
+                block_id=block_id, start_cursor=cursor
+            )
+        except NotionApiError as e:
+            if not _is_error_response(e):
+                raise
+            if e.status_code == 404:
                 # this happens when a page is not shared with the integration
                 # in this case, we should just ignore the page
                 logger.error(
@@ -250,14 +255,13 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
             else:
                 logger.exception(
                     "Error fetching blocks with status code %s: %s",
-                    res.status_code,
-                    res.json(),
+                    e.status_code,
+                    e,
                 )
 
             # This can occasionally happen, the reason is unknown and cannot be reproduced on our internal Notion
             # Assuming this will not be a critical loss of data
             return None
-        return res.json()
 
     def _fetch_all_child_blocks(self, block_id: str) -> list[dict[str, Any]]:
         """Fetch all child blocks of `block_id` across pagination, in order.
@@ -279,16 +283,11 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
     @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_page(self, page_id: str) -> NotionPage:
         """Fetch a page from its ID via the Notion API, retry with database if page fetch fails."""
-        logger.debug("Fetching page for ID '%s'", page_id)
-        page_url = f"https://api.notion.com/v1/pages/{page_id}"
-        res = rl_requests.get(
-            page_url,
-            headers=self.headers,
-            timeout=_NOTION_CALL_TIMEOUT,
-        )
         try:
-            res.raise_for_status()
-        except Exception as e:
+            page_data = self.source_operations.get_page(page_id=page_id)
+        except NotionApiError as e:
+            if not _is_error_response(e):
+                raise
             logger.warning(
                 "Failed to fetch page, trying database for ID '%s'. Exception: %s",
                 page_id,
@@ -297,7 +296,7 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
             # Try fetching as a database if page fetch fails, this happens if the page is set to a wiki
             # it becomes a database from the notion perspective
             return self._fetch_database_as_page(page_id)
-        return NotionPage(**res.json())
+        return NotionPage(**page_data)
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_database_as_page(self, database_id: str) -> NotionPage:
@@ -307,18 +306,12 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         `properties` (schema moved to individual data sources).
         """
         logger.debug("Fetching database for ID '%s' as a page", database_id)
-        database_url = f"https://api.notion.com/v1/databases/{database_id}"
-        res = rl_requests.get(
-            database_url,
-            headers=self.headers,
-            timeout=_NOTION_CALL_TIMEOUT,
-        )
         try:
-            res.raise_for_status()
-        except Exception as e:
-            logger.exception("Error fetching database as page - %s", res.json())
-            raise e
-        db_data = res.json()
+            db_data = self.source_operations.get_database(database_id=database_id)
+        except NotionApiError as e:
+            if _is_error_response(e):
+                logger.exception("Error fetching database as page - %s", e)
+            raise
         database_name = db_data.get("title")
         database_name = (
             database_name[0].get("text", {}).get("content") if database_name else None
@@ -334,15 +327,12 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> list[NotionDataSource]:
         """Fetch the list of data sources for a database."""
         logger.debug("Fetching data sources for database '%s'", database_id)
-        res = rl_requests.get(
-            f"https://api.notion.com/v1/databases/{database_id}",
-            headers=self.headers,
-            timeout=_NOTION_CALL_TIMEOUT,
-        )
         try:
-            res.raise_for_status()
-        except Exception as e:
-            if res.status_code in (403, 404):
+            db_data = self.source_operations.get_database(database_id=database_id)
+        except NotionApiError as e:
+            if not _is_error_response(e):
+                raise
+            if e.status_code in (403, 404):
                 logger.error(
                     "Unable to access database with ID '%s'. "
                     "This is likely due to the database not being shared "
@@ -351,10 +341,9 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                     e,
                 )
                 return []
-            logger.exception("Error fetching database - %s", res.json())
-            raise e
+            logger.exception("Error fetching database - %s", e)
+            raise
 
-        db_data = res.json()
         data_sources = db_data.get("data_sources", [])
         return [
             NotionDataSource(id=ds["id"], name=ds.get("name", ""))
@@ -367,19 +356,14 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         self, data_source_id: str, cursor: str | None = None
     ) -> dict[str, Any]:
         """Query a data source via POST /v1/data_sources/{id}/query."""
-        logger.debug("Querying data source '%s'", data_source_id)
-        url = f"https://api.notion.com/v1/data_sources/{data_source_id}/query"
-        body = None if not cursor else {"start_cursor": cursor}
-        res = rl_requests.post(
-            url,
-            headers=self.headers,
-            json=body,
-            timeout=_NOTION_CALL_TIMEOUT,
-        )
         try:
-            res.raise_for_status()
-        except Exception as e:
-            if res.status_code in (403, 404):
+            return self.source_operations.query_data_source(
+                data_source_id=data_source_id, start_cursor=cursor
+            )
+        except NotionApiError as e:
+            if not _is_error_response(e):
+                raise
+            if e.status_code in (403, 404):
                 logger.error(
                     "Unable to access data source with ID '%s'. "
                     "This is likely due to it not being shared "
@@ -388,20 +372,13 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                     e,
                 )
                 return {"results": [], "next_cursor": None}
-            logger.exception("Error querying data source - %s", res.json())
-            raise e
-        return res.json()
+            logger.exception("Error querying data source - %s", e)
+            raise
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def _fetch_workspace_info(self) -> tuple[str, str]:
         """Fetch workspace ID and name from the bot user endpoint."""
-        res = rl_requests.get(
-            "https://api.notion.com/v1/users/me",
-            headers=self.headers,
-            timeout=_NOTION_CALL_TIMEOUT,
-        )
-        res.raise_for_status()
-        data = res.json()
+        data = self.source_operations.get_bot_user()
         bot = data.get("bot", {})
         # workspace_id may be in bot object, fallback to user id
         workspace_id = bot.get("workspace_id", data.get("id"))
@@ -529,7 +506,7 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                 if (
                     "name" in sub_inner_dict
                     and isinstance(sub_inner_dict["name"], str)
-                    and type_name not in ("title",)
+                    and type_name != "title"
                 ):
                     return sub_inner_dict["name"]
 
@@ -1047,20 +1024,6 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                 # Reversed so the first batch (and its subtree) is processed first.
                 stack.extend(reversed(child_batches))
 
-    @retry_builder(tries=3, delay=1, backoff=2)
-    def _search_notion(self, query_dict: dict[str, Any]) -> NotionSearchResponse:
-        """Search for pages from a Notion database. Includes some small number of
-        retries to handle misc, flakey failures."""
-        logger.debug("Searching for pages in Notion with query_dict: %s", query_dict)
-        res = rl_requests.post(
-            "https://api.notion.com/v1/search",
-            headers=self.headers,
-            json=query_dict,
-            timeout=_NOTION_CALL_TIMEOUT,
-        )
-        res.raise_for_status()
-        return NotionSearchResponse(**res.json())
-
     # The | Document is needed for type-checking
     def _yield_database_hierarchy_nodes(
         self,
@@ -1075,13 +1038,10 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         database_id as the hierarchy node key and deduplicate via
         _maybe_yield_hierarchy_node.
         """
-        query_dict: dict[str, Any] = {
-            "filter": {"property": "object", "value": "data_source"},
-            "page_size": _NOTION_PAGE_SIZE,
-        }
-        pages_seen = 0
-        while pages_seen < _MAX_PAGES:
-            db_res = self._search_notion(query_dict)
+        search_pages = self.source_operations.iter_search(
+            object_type=NotionSearchObjectType.DATA_SOURCE
+        )
+        for db_res in islice(search_pages, _MAX_PAGES):
             for ds in db_res.results:
                 # Extract the parent database_id from the data source's parent
                 ds_parent = ds.get("parent", {})
@@ -1112,7 +1072,9 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                         and parent_raw_id
                     ):
                         self._database_parent_page_ids.add(parent_raw_id)
-                except requests.exceptions.RequestException as e:
+                except NotionApiError as e:
+                    if e.is_rate_limited:
+                        raise
                     logger.warning(
                         "Could not fetch database '%s', "
                         "defaulting to workspace root. Error: %s",
@@ -1134,11 +1096,6 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                 )
                 if node:
                     yield node
-
-            if not db_res.has_more:
-                break
-            query_dict["start_cursor"] = db_res.next_cursor
-            pages_seen += 1
 
     def _filter_pages_by_time(
         self,
@@ -1187,9 +1144,10 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
         )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        """Applies integration token to headers"""
-        self.headers["Authorization"] = (
-            f"Bearer {credentials['notion_integration_token']}"
+        self._source_operations = NotionSourceOperations(
+            credentials_provider=OnyxStaticCredentialsProvider(
+                None, DocumentSource.NOTION.value, credentials
+            )
         )
         return None
 
@@ -1215,20 +1173,13 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
             self._yield_database_hierarchy_nodes(), self.batch_size
         )
 
-        query_dict: dict[str, Any] = {
-            "filter": {"property": "object", "value": "page"},
-            "page_size": _NOTION_PAGE_SIZE,
-        }
-        while True:
-            db_res = self._search_notion(query_dict)
+        for db_res in self.source_operations.iter_search(
+            object_type=NotionSearchObjectType.PAGE
+        ):
             pages = [NotionPage(**page) for page in db_res.results]
             yield from batch_generator(
                 self._read_pages(pages, is_slim=is_slim), self.batch_size
             )
-            if db_res.has_more:
-                query_dict["start_cursor"] = db_res.next_cursor
-            else:
-                break
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Loads all page data from a Notion workspace.
@@ -1286,54 +1237,34 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
             self._yield_database_hierarchy_nodes(), self.batch_size
         )
 
-        query_dict: dict[str, Any] = {
-            "page_size": _NOTION_PAGE_SIZE,
-            "sort": {"timestamp": "last_edited_time", "direction": "descending"},
-            "filter": {"property": "object", "value": "page"},
-        }
-        while True:
-            db_res = self._search_notion(query_dict)
+        for db_res in self.source_operations.iter_search(
+            object_type=NotionSearchObjectType.PAGE, sort_by_last_edited=True
+        ):
             pages = self._filter_pages_by_time(
                 db_res.results, start, end, filter_field="last_edited_time"
             )
-            if len(pages) > 0:
-                yield from batch_generator(self._read_pages(pages), self.batch_size)
-                if db_res.has_more:
-                    query_dict["start_cursor"] = db_res.next_cursor
-                else:
-                    break
-            else:
+            if not pages:
                 break
+            yield from batch_generator(self._read_pages(pages), self.batch_size)
 
     def validate_connector_settings(self) -> None:
-        if not self.headers.get("Authorization"):
+        if self._source_operations is None:
             raise ConnectorMissingCredentialError("Notion credentials not loaded.")
 
         try:
-            # We'll do a minimal search call (page_size=1) to confirm accessibility
+            # One small call to confirm access.
             if self.root_page_id:
-                # If root_page_id is set, fetch the specific page
-                res = rl_requests.get(
-                    f"https://api.notion.com/v1/pages/{self.root_page_id}",
-                    headers=self.headers,
-                    timeout=_NOTION_CALL_TIMEOUT,
-                )
+                self._source_operations.get_page(page_id=self.root_page_id)
             else:
-                # If root_page_id is not set, perform a minimal search
-                test_query = {
-                    "filter": {"property": "object", "value": "page"},
-                    "page_size": 1,
-                }
-                res = rl_requests.post(
-                    "https://api.notion.com/v1/search",
-                    headers=self.headers,
-                    json=test_query,
-                    timeout=_NOTION_CALL_TIMEOUT,
+                next(
+                    self._source_operations.iter_search(
+                        object_type=NotionSearchObjectType.PAGE, page_size=1
+                    ),
+                    None,
                 )
-            res.raise_for_status()
 
-        except requests.exceptions.HTTPError as http_err:
-            status_code = http_err.response.status_code if http_err.response else None
+        except NotionApiError as api_err:
+            status_code = api_err.status_code
 
             if status_code == 401:
                 raise CredentialExpiredError(
@@ -1349,13 +1280,14 @@ class NotionConnector(LoadConnector, PollConnector, SlimConnector):
                     "Notion resource not found or not shared with the integration (HTTP 404)."
                 )
             elif status_code == 429:
-                raise ConnectorValidationError(
+                # Transient: must not pause a valid connector.
+                raise UnexpectedValidationError(
                     "Validation failed due to Notion rate-limits being exceeded (HTTP 429). Please try again later."
-                )
+                ) from api_err
             else:
                 raise UnexpectedValidationError(
-                    f"Unexpected Notion HTTP error (status={status_code}): {http_err}"
-                ) from http_err
+                    f"Unexpected Notion HTTP error (status={status_code}): {api_err}"
+                ) from api_err
 
         except Exception as exc:
             raise UnexpectedValidationError(

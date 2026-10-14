@@ -1,14 +1,7 @@
 import type React from "react";
-export type FormFieldState = "idle" | "success" | "error";
+export type { FieldContextType, FormFieldState } from "@opal/form";
+import type { FormFieldState } from "@opal/form";
 export type APIFormFieldState = FormFieldState | "loading";
-
-export interface FieldContextType {
-  baseId: string;
-  name?: string;
-  required?: boolean;
-  state: FormFieldState;
-  describedByIds: string[];
-}
 
 export type FormFieldRootProps = React.HTMLAttributes<HTMLDivElement> & {
   name?: string;

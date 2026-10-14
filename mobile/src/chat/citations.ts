@@ -13,13 +13,15 @@ export interface SelectedSources {
   hasSources: boolean;
 }
 
-const HOST_RE = /^https?:\/\/([^/?#]+)/i;
-
 export function domainOf(link: string | null): string | null {
   if (!link) return null;
-  const match = HOST_RE.exec(link);
-  if (!match) return null;
-  return match[1].replace(/^www\./i, "");
+  try {
+    const url = new URL(link);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.hostname.replace(/^www\./i, "") || null;
+  } catch {
+    return null;
+  }
 }
 
 // Public favicon service — the URL isn't auth'd, so a plain (non-bearer) image fetch is fine.

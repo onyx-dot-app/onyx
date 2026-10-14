@@ -314,7 +314,7 @@ function Show-OnyxHelp {
     $help += "`nUsage: .\install.ps1 [OPTIONS]`n"
     $help += "`nOptions:"
     $help += "`n  -IncludeCraft  Enable Onyx Craft (AI-powered web app building)"
-    $help += "`n  -Lite          Deploy Onyx Lite (no Vespa, Redis, or model servers)"
+    $help += "`n  -Lite          Deploy Onyx Lite (no OpenSearch, Redis, or model servers)"
     $help += "`n  -Local         Use existing config files instead of downloading from GitHub"
     $help += "`n  -Shutdown      Stop (pause) Onyx containers"
     $help += "`n  -DeleteData    Remove all Onyx data (containers, volumes, and files)"
@@ -1110,7 +1110,7 @@ function Main {
     Print-Info "The first user created will automatically have admin privileges"
 
     if ($script:LiteMode) {
-        Print-Info "Running in Lite mode - Vespa, Redis, model servers, and background workers are NOT started."
+        Print-Info "Running in Lite mode - OpenSearch, Redis, model servers, and background workers are NOT started."
         Print-Info "Connectors and RAG search are disabled. LLM chat, tools, Projects still work."
     }
 

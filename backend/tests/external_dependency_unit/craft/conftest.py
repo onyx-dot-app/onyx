@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import text
+from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -33,11 +33,11 @@ from onyx.db.llm import (
 from onyx.db.models import (
     BuildSession,
     Sandbox,
+    ScheduledTask,
     Skill,
     Skill__UserGroup,
     User,
     UserGroup,
-    UserRole,
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
@@ -160,6 +160,11 @@ def test_user(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> Generator[User, None, None]:
+    """A group-less, permission-less external-permission placeholder.
+
+    That is deliberate: it matches the row production's permission sync creates.
+    Use ``make_user(standard_account=True)`` when a test needs real authority.
+    """
     password_helper = PasswordHelper()
     user = User(
         id=uuid4(),
@@ -168,16 +173,18 @@ def test_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.EXT_PERM_USER,
         account_type=AccountType.EXT_PERM_USER,
     )
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
+    user_id = user.id
     yield user
-    # Release uncommitted locks before the separate-session delete cascades from this user.
     db_session.rollback()
-    _best_effort_delete(User, [user.id])
+    # Remove recurring jobs even if the later best-effort user cleanup fails.
+    db_session.execute(delete(ScheduledTask).where(ScheduledTask.user_id == user_id))
+    db_session.commit()
+    _best_effort_delete(User, [user_id])
 
 
 @pytest.fixture(scope="function")

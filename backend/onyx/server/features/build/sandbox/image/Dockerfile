@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1-labs
 # Sandbox Container Image
 #
 # User-shared sandbox: one pod per user, sessions created via kubectl exec.
@@ -16,7 +17,7 @@ FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb
 
 # Node.js source. The final image is Python-based, but the sandbox still needs
 # Node/npm/npx for MCP commands and skill-runtime packages.
-FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:45fbb3ca3b6c7e6646cd2889d0ac7bf314bb180036da792221fc2f48fe4d43fb AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66 AS node_source
 ARG NPM_VERSION=11.17.0
 RUN npm install -g "npm@${NPM_VERSION}" && \
     npm cache clean --force && \
@@ -40,7 +41,10 @@ RUN set -eux; \
     tar -xzf "${tarball}"; \
     install -m 0755 "gh_${GH_CLI_VERSION}_linux_${arch}/bin/gh" /usr/local/bin/gh
 
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233e582eb31336f4954b39cae020b6dcf5b3ed0e5cbcd74
+# Every OS package the sandbox ships, in its own stage: the audit gate builds
+# this stage alone and scans it, so an apt install belongs here, never in the
+# runtime stage below.
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c AS os
 
 # Set ENABLE_SKILLS=false in dev/CI to skip skill-runtime deps (LibreOffice,
 # poppler, fonts, pptxgenjs) and shave ~700 MB. Skills themselves are pushed by
@@ -48,8 +52,6 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233
 # the image.
 ARG ENABLE_SKILLS=true
 ARG ENABLE_BROWSER=true
-ARG OPENCODE_VERSION=1.18.13
-ARG AGENT_BROWSER_VERSION=0.31.1
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust
 # store), gosu (legacy, not currently invoked). setpriv ships with util-linux in
@@ -63,12 +65,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     gosu \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
-COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
-    ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
-    ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
 
 RUN if [ "$ENABLE_SKILLS" = "true" ]; then \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -101,6 +97,18 @@ RUN if [ "$ENABLE_BROWSER" = "true" ]; then \
     libnss3-tools \
     && rm -rf /var/lib/apt/lists/*; \
     fi
+
+FROM os
+ARG ENABLE_SKILLS=true
+ARG ENABLE_BROWSER=true
+ARG OPENCODE_VERSION=1.18.19
+ARG AGENT_BROWSER_VERSION=0.31.1
+
+COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    ln -sf ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
 
 # agent-browser CLI/daemon. Do NOT run `agent-browser install` — it fetches
 # Chrome-for-Testing (no arm64 build); we use system chromium via
@@ -174,6 +182,15 @@ USER sandbox
 RUN curl -fsSL -o /tmp/opencode-install.sh https://opencode.ai/install && \
     bash /tmp/opencode-install.sh --version "${OPENCODE_VERSION}" --no-modify-path && \
     rm /tmp/opencode-install.sh
+# OpenCode installs this SDK in each config directory during cold initialization.
+RUN npm install --prefix /workspace/templates/opencode --ignore-scripts --no-audit --no-fund \
+    --save-exact "@opencode-ai/plugin@${OPENCODE_VERSION}" && \
+    for config_dir in /home/sandbox/.config/opencode /home/sandbox/.opencode; do \
+        mkdir -p "$config_dir" && \
+        cp -al /workspace/templates/opencode/node_modules "$config_dir/" && \
+        cp -a /workspace/templates/opencode/package.json \
+            /workspace/templates/opencode/package-lock.json "$config_dir/" || exit 1; \
+    done
 # Pre-warm Bun's tarball cache so per-session installs hit a local store.
 RUN cd /workspace/templates/outputs/web && \
     bun install --frozen-lockfile && \
@@ -186,6 +203,15 @@ ENV PATH="/home/sandbox/.opencode/bin:${PATH}"
 ENV OPENCODE_DISABLE_MODELS_FETCH=1
 
 COPY --exclude=__pycache__ sandbox_daemon/ /workspace/sandbox_daemon/
+# Root-owned copy for exec-based backends: the manifest must run code the
+# sandbox user cannot replace. /workspace stays sandbox-owned below. The
+# contract model needs pydantic, so the root-owned system interpreter gets its
+# own copy (version pinned to match initial-requirements.txt): the exec path
+# must share nothing with the sandbox-owned venv.
+COPY --exclude=__pycache__ sandbox_daemon/ /opt/sandbox_daemon/
+RUN /usr/local/bin/python3 -m pip install --no-cache-dir --only-binary=:all: \
+    pydantic==2.13.4 && \
+    rm -rf /root/.cache/pip
 COPY entrypoint.sh /workspace/entrypoint.sh
 COPY sidecar-entrypoint.sh /workspace/sidecar-entrypoint.sh
 
@@ -196,6 +222,8 @@ RUN chmod +x /workspace/firewall-init.sh
 # Per-session egress tagging plugin. Path must match
 # kubernetes_sandbox_manager._OPENCODE_SESSION_TAG_PLUGIN_PATH.
 COPY opencode-plugins/ /workspace/opencode-plugins/
+
+COPY --chmod=0755 seed-opencode-dependencies.sh /usr/local/bin/seed-opencode-dependencies
 
 COPY browser-cli.sh /usr/local/bin/browser
 RUN chmod 0755 /usr/local/bin/browser

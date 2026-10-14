@@ -1,6 +1,8 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from onyx.voice.interface import normalize_provider_type
 
 
 class VoiceProviderView(BaseModel):
@@ -8,7 +10,7 @@ class VoiceProviderView(BaseModel):
 
     id: int
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     is_default_stt: bool
     is_default_tts: bool
     stt_model: str | None
@@ -17,6 +19,10 @@ class VoiceProviderView(BaseModel):
     api_key: str | None = Field(
         default=None,
         description="Masked API key for display (e.g. 'sk-a...b1c2'). Non-null means a key is stored.",
+    )
+    api_secret: str | None = Field(
+        default=None,
+        description="Fixed placeholder for display. Non-null means a secret is stored.",
     )
     target_uri: str | None = Field(
         default=None,
@@ -46,7 +52,7 @@ class VoiceProviderUpsertRequest(BaseModel):
 
     id: int | None = Field(default=None, description="Existing provider ID to update.")
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     api_key: str | None = Field(
         default=None,
         description="API key for the provider.",
@@ -54,6 +60,14 @@ class VoiceProviderUpsertRequest(BaseModel):
     api_key_changed: bool = Field(
         default=False,
         description="Set to true when providing a new API key for an existing provider.",
+    )
+    api_secret: str | None = Field(
+        default=None,
+        description="API secret for providers that require one.",
+    )
+    api_secret_changed: bool = Field(
+        default=False,
+        description="Set to true when providing a new API secret for an existing provider.",
     )
     llm_provider_id: int | None = Field(
         default=None,
@@ -81,10 +95,19 @@ class VoiceProviderUpsertRequest(BaseModel):
         description="If true, sets this provider as the default TTS provider after upsert.",
     )
 
+    @field_validator("provider_type")
+    @classmethod
+    def _lowercase_provider_type(cls, value: str) -> str:
+        return normalize_provider_type(value)
+
 
 class VoiceProviderTestRequest(BaseModel):
     """Request model for testing a voice provider connection."""
 
+    id: int | None = Field(
+        default=None,
+        description="Existing provider ID to use when testing stored credentials.",
+    )
     provider_type: str
     api_key: str | None = Field(
         default=None,
@@ -94,9 +117,22 @@ class VoiceProviderTestRequest(BaseModel):
         default=False,
         description="If true, use the stored API key for this provider type.",
     )
+    api_secret: str | None = Field(
+        default=None,
+        description="API secret for testing providers that require one.",
+    )
+    use_stored_secret: bool = Field(
+        default=False,
+        description="If true, use the stored API secret for this provider type.",
+    )
     api_base: str | None = None
     target_uri: str | None = Field(
         default=None,
         description="Target URI for Azure Speech Services (maps to api_base).",
     )
     custom_config: dict[str, Any] | None = None
+
+    @field_validator("provider_type")
+    @classmethod
+    def _lowercase_provider_type(cls, value: str) -> str:
+        return normalize_provider_type(value)

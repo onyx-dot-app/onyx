@@ -57,7 +57,7 @@ var (
 		Mode:      0644,
 	}
 	// DevOverlay publishes the service ports (API, Postgres, Redis,
-	// OpenSearch, model server, MinIO, code interpreter) on the host. Stacked
+	// OpenSearch, model server, object store, MinIO, code interpreter) on the host. Stacked
 	// on Compose like LiteOverlay, but flag-only (--dev): it takes the
 	// deployment's internals out from behind nginx.
 	DevOverlay = File{
@@ -116,7 +116,35 @@ var (
 		DestRel:   "data/nginx/run-nginx.sh",
 		Mode:      0755,
 	}
+	// run-nginx.sh renders the MCP templates into the includes both app.conf
+	// templates load when MCP_SERVER_ENABLED is true.
+	NginxMcpConf = File{
+		EmbedPath: "embedded/data/nginx/mcp.conf.inc.template",
+		RepoPath:  "deployment/data/nginx/mcp.conf.inc.template",
+		DestRel:   "data/nginx/mcp.conf.inc.template",
+		Mode:      0644,
+	}
+	NginxMcpUpstreamConf = File{
+		EmbedPath: "embedded/data/nginx/mcp_upstream.conf.inc.template",
+		RepoPath:  "deployment/data/nginx/mcp_upstream.conf.inc.template",
+		DestRel:   "data/nginx/mcp_upstream.conf.inc.template",
+		Mode:      0644,
+	}
 )
+
+// OverrideNames lists the user-owned compose override, in the precedence
+// order Docker Compose's own auto-discovery uses (compose-go's
+// DefaultOverrideFileNames — first match wins). None of these is a File: the
+// CLI never writes, fetches, checksums, or backs any of them up — it only
+// stacks whichever one is found last on the -f list when the deployment
+// directory has one. The CLI's explicit -f flags otherwise suppress Compose's
+// own auto-discovery of these same names.
+var OverrideNames = []string{
+	"compose.override.yml",
+	"compose.override.yaml",
+	"docker-compose.override.yml",
+	"docker-compose.override.yaml",
+}
 
 // All lists every managed file.
 var All = []File{
@@ -132,4 +160,6 @@ var All = []File{
 	NginxAppConf,
 	NginxAppConfProd,
 	NginxRunScript,
+	NginxMcpConf,
+	NginxMcpUpstreamConf,
 }

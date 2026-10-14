@@ -4,9 +4,9 @@ Covers the bypass where a user could override a persona's configured document
 sets by supplying `internal_search_filters.document_set` on a chat message.
 
 The SearchTool is only invoked when the LLM decides to call it, so these tests
-force the call with `forced_tool_id` + `mock_llm_response` to make coverage
-deterministic. They also need a seeded connector because DocumentSetManager
-rejects creation with no connectors.
+force the call with `forced_tool_id` and script the mock LLM to make it. They
+also need a seeded connector because DocumentSetManager rejects creation with
+no connectors.
 """
 
 import json
@@ -25,21 +25,23 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
-from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.tool import ToolManager
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.mock_services.mock_llm_server.models import (
+    Reply,
+    RequestConditions,
+    ToolCall,
+)
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Document set group restrictions are enterprise only",
 )
 
-_MOCK_SEARCH_TOOL_CALL = (
-    '{"name":"internal_search","arguments":{"queries":["test query"]}}'
-)
+_SEARCH_CALL_ID = "call_search_1"
 
 
 def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
@@ -50,19 +52,41 @@ def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
     raise AssertionError("SearchTool must exist for this test")
 
 
-def _setup_search_infrastructure() -> tuple[DATestUser, DATestUser, int, int]:
-    """Admin + basic user, a seeded connector, an LLM provider, and the
-    SearchTool id. Required because DocumentSetManager rejects empty connector
-    fields and SearchTool is only exposed when at least one connector exists."""
-    admin_user = UserManager.create(name="admin_user")
-    basic_user = UserManager.create(name="basic_user")
-    LLMProviderManager.create(user_performing_action=admin_user)
+def _setup_search_infrastructure(
+    admin_user: DATestUser, mock_llm: MockLLMScript, search_expected: bool
+) -> tuple[int, int]:
+    """A seeded connector, a scripted forced search, and the SearchTool id.
+    Required because DocumentSetManager rejects empty connector fields and
+    SearchTool is only exposed when at least one connector exists.
+
+    A blocked request may fail before any LLM call, so its replies are optional."""
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id=_SEARCH_CALL_ID,
+                    name="internal_search",
+                    arguments={"queries": ["test query"]},
+                )
+            ],
+            conditions=RequestConditions(
+                offers=["internal_search"], tool_choice="required"
+            ),
+            required=search_expected,
+        ),
+        Reply(
+            text="No matching documents.",
+            conditions=RequestConditions(has_results_for=[_SEARCH_CALL_ID]),
+            required=search_expected,
+        ),
+    )
     cc_pair = CCPairManager.create_from_scratch(
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )
     search_tool_id = _get_internal_search_tool_id(admin_user)
-    return admin_user, basic_user, cc_pair.id, search_tool_id
+    return cc_pair.id, search_tool_id
 
 
 @contextmanager
@@ -81,7 +105,6 @@ def _send_message_with_document_set_filter(
             "stream": True,
             "internal_search_filters": {"document_set": document_set_names},
             "forced_tool_id": forced_tool_id,
-            "mock_llm_response": _MOCK_SEARCH_TOOL_CALL,
         },
         headers=user.headers,
         cookies=user.cookies,
@@ -123,8 +146,13 @@ def _create_search_persona_chat_session(
 
 def test_document_set_filter_blocks_unauthorized_names(
     reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+    mock_llm: MockLLMScript,
 ) -> None:
-    admin_user, basic_user, cc_pair_id, search_tool_id = _setup_search_infrastructure()
+    cc_pair_id, search_tool_id = _setup_search_infrastructure(
+        admin_user, mock_llm, search_expected=False
+    )
 
     restricted_group = UserGroupManager.create(
         user_performing_action=admin_user,
@@ -157,8 +185,13 @@ def test_document_set_filter_blocks_unauthorized_names(
 
 def test_document_set_filter_allows_authorized_names(
     reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+    mock_llm: MockLLMScript,
 ) -> None:
-    admin_user, basic_user, cc_pair_id, search_tool_id = _setup_search_infrastructure()
+    cc_pair_id, search_tool_id = _setup_search_infrastructure(
+        admin_user, mock_llm, search_expected=True
+    )
 
     allowed_group = UserGroupManager.create(
         user_performing_action=admin_user,
@@ -190,8 +223,13 @@ def test_document_set_filter_allows_authorized_names(
 
 def test_public_document_set_is_accessible_to_any_user(
     reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+    mock_llm: MockLLMScript,
 ) -> None:
-    admin_user, basic_user, cc_pair_id, search_tool_id = _setup_search_infrastructure()
+    cc_pair_id, search_tool_id = _setup_search_infrastructure(
+        admin_user, mock_llm, search_expected=True
+    )
 
     public_doc_set = DocumentSetManager.create(
         user_performing_action=admin_user,
@@ -215,11 +253,16 @@ def test_public_document_set_is_accessible_to_any_user(
 
 def test_nonexistent_document_set_name_is_blocked(
     reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    basic_user: DATestUser,
+    mock_llm: MockLLMScript,
 ) -> None:
     """Names that don't correspond to any existing document set are treated as
     inaccessible — callers shouldn't be able to probe for existence by getting
     silent acceptance."""
-    admin_user, basic_user, _, search_tool_id = _setup_search_infrastructure()
+    _, search_tool_id = _setup_search_infrastructure(
+        admin_user, mock_llm, search_expected=False
+    )
 
     chat_session_id = _create_search_persona_chat_session(
         admin_user, basic_user, search_tool_id

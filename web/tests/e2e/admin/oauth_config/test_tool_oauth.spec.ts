@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Page, Browser } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
@@ -95,7 +96,7 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
     `"title": "${toolName}"`
   );
 
-  await page.goto("/admin/actions/open-api");
+  await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
   await page.waitForLoadState("networkidle");
 
   // Click "Add OpenAPI Action" button to open modal
@@ -150,7 +151,7 @@ test("Tool OAuth Configuration: Creation, Selection, and Assistant Integration",
   await page.waitForLoadState("networkidle");
 
   // Verify we're on the open-api page
-  expect(page.url()).toContain("/admin/actions/open-api");
+  expect(page.url()).toContain(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
 
   // The tool should appear in the actions list - look for our unique tool name
   await expect(page.getByText(toolName, { exact: false }).first()).toBeVisible({

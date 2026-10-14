@@ -1,4 +1,6 @@
+import { parseCsv } from "@/lib/csv";
 // CsvContent
+import { IconLoader } from "@opal/loaders";
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -9,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
-import { SvgAlertCircle, SvgSimpleLoader } from "@opal/icons";
+import { SvgAlertCircle } from "@opal/icons";
 import Text from "@/refresh-components/texts/Text";
 import { cn } from "@opal/utils";
 
@@ -59,7 +61,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
       }
 
       const csvData = await response.text();
-      const rows = parseCSV(csvData.trim());
+      const rows = parseCsv(csvData.trim()).rows;
       const firstRow = rows[0];
       if (!firstRow) {
         throw new Error("CSV file is empty");
@@ -95,7 +97,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
   if (isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
-        <SvgSimpleLoader />
+        <IconLoader />
       </div>
     );
   }
@@ -132,7 +134,7 @@ const CsvContent: React.FC<ContentComponentProps> = ({
                 {headers.map((header, cellIndex) => (
                   <TableCell
                     className={cn(
-                      cellIndex === 0 && "sticky left-0 bg-background-tint-01",
+                      cellIndex === 0 && "sticky start-0 bg-background-tint-01",
                       "py-0 px-4"
                     )}
                     key={cellIndex}
@@ -173,53 +175,3 @@ const csvCache = new Map<
   string,
   { headers: string[]; data: Record<string, string>[] }
 >();
-
-export function parseCSV(text: string): string[][] {
-  const rows: string[][] = [];
-  let field = "";
-  let fields: string[] = [];
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-
-    if (inQuotes) {
-      if (char === '"') {
-        if (i + 1 < text.length && text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += char;
-      }
-    } else if (char === '"') {
-      inQuotes = true;
-    } else if (char === ",") {
-      fields.push(field);
-      field = "";
-    } else if (char === "\n" || char === "\r") {
-      if (char === "\r" && i + 1 < text.length && text[i + 1] === "\n") {
-        i++;
-      }
-      fields.push(field);
-      field = "";
-      rows.push(fields);
-      fields = [];
-    } else {
-      field += char;
-    }
-  }
-
-  if (inQuotes) {
-    throw new Error("Malformed CSV: unterminated quoted field");
-  }
-
-  if (field.length > 0 || fields.length > 0) {
-    fields.push(field);
-    rows.push(fields);
-  }
-
-  return rows;
-}
