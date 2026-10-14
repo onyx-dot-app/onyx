@@ -1,4 +1,5 @@
 import secrets
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -35,26 +36,28 @@ def _request(auth_header: str) -> MagicMock:
     return request
 
 
-def _real_tokens() -> list[str]:
+_TOKEN_BUILDERS: dict[str, Callable[[], str]] = {
+    "api_key": lambda: generate_api_key(),
+    "api_key_tenant": lambda: generate_api_key(WORST_CASE_TENANT),
+    "dn_key": lambda: DEPRECATED_API_KEY_PREFIX + secrets.token_urlsafe(API_KEY_LENGTH),
+    "dn_key_tenant": lambda: (
+        f"{DEPRECATED_API_KEY_PREFIX}tenant_abc.{secrets.token_urlsafe(API_KEY_LENGTH)}"
+    ),
+    "pat": lambda: generate_pat(),
+    "pat_tenant": lambda: generate_pat(WORST_CASE_TENANT),
+    "scim": lambda: generate_scim_token()[0],
+    "scim_tenant": lambda: generate_scim_token(WORST_CASE_TENANT)[0],
+}
+
+
+@pytest.mark.parametrize("kind", list(_TOKEN_BUILDERS))
+def test_real_tokens_are_hashed(kind: str) -> None:
     with (
         patch("onyx.auth.api_key.MULTI_TENANT", True),
         patch("onyx.auth.pat.MULTI_TENANT", True),
         patch("ee.onyx.server.scim.auth.MULTI_TENANT", True),
     ):
-        return [
-            generate_api_key(),
-            generate_api_key(WORST_CASE_TENANT),
-            DEPRECATED_API_KEY_PREFIX + secrets.token_urlsafe(API_KEY_LENGTH),
-            f"{DEPRECATED_API_KEY_PREFIX}tenant_abc.{secrets.token_urlsafe(API_KEY_LENGTH)}",
-            generate_pat(),
-            generate_pat(WORST_CASE_TENANT),
-            generate_scim_token()[0],
-            generate_scim_token(WORST_CASE_TENANT)[0],
-        ]
-
-
-@pytest.mark.parametrize("token", _real_tokens())
-def test_real_tokens_are_hashed(token: str) -> None:
+        token = _TOKEN_BUILDERS[kind]()
     assert len(token) <= MAX_BEARER_TOKEN_LENGTH
     hash_fn = MagicMock(return_value="hashed")
 
