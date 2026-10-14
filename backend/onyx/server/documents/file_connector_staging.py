@@ -4,6 +4,7 @@
 import json
 from io import BytesIO
 from typing import Any
+from uuid import UUID
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -16,7 +17,10 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.file_record import get_stored_file_facts
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.constants import STAGED_FOR_CC_PAIR_METADATA_KEY
+from onyx.file_store.constants import (
+    STAGED_FOR_CC_PAIR_METADATA_KEY,
+    UPLOADED_BY_USER_ID_METADATA_KEY,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.connector import upload_files
 from onyx.server.documents.models import FileUploadResponse
@@ -77,6 +81,7 @@ def stage_file_connector_upload(
     cc_pair_id: int,
     files: list[UploadFile],
     draft_zip_metadata_file_id: str | None = None,
+    uploaded_by: UUID | None = None,
 ) -> FileUploadResponse:
     """Saves the uploads as files staged for an edit of the pair. An upload
     with the content, name and type of a current file returns that file's id,
@@ -96,7 +101,10 @@ def stage_file_connector_upload(
         db_session, cc_pair_id, current, draft_zip_metadata_file_id
     )
     uploaded = upload_files(
-        files, FileOrigin.CONNECTOR, staged_for_cc_pair_id=cc_pair_id
+        files,
+        FileOrigin.CONNECTOR,
+        staged_for_cc_pair_id=cc_pair_id,
+        uploaded_by=uploaded_by,
     )
     file_store = get_default_file_store()
 
@@ -127,7 +135,14 @@ def stage_file_connector_upload(
             display_name=ONYX_METADATA_FILENAME,
             file_origin=FileOrigin.CONNECTOR_METADATA,
             file_type="application/json",
-            file_metadata={STAGED_FOR_CC_PAIR_METADATA_KEY: cc_pair_id},
+            file_metadata={
+                STAGED_FOR_CC_PAIR_METADATA_KEY: cc_pair_id,
+                **(
+                    {UPLOADED_BY_USER_ID_METADATA_KEY: str(uploaded_by)}
+                    if uploaded_by is not None
+                    else {}
+                ),
+            },
         )
         file_store.delete_file(uploaded.zip_metadata_file_id)
 

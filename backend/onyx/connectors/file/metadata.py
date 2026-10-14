@@ -6,6 +6,7 @@ import json
 import os
 from typing import Any
 
+from onyx.configs.constants import FileOrigin
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -43,9 +44,11 @@ def _metadata_by_file_name(loaded_metadata: Any) -> dict[str, Any]:
 
 def _read_zip_metadata_file(zip_metadata_file_id: str) -> dict[str, Any]:
     try:
-        metadata_io = get_default_file_store().read_file(
-            file_id=zip_metadata_file_id, mode="b"
-        )
+        file_store = get_default_file_store()
+        record = file_store.read_file_record(zip_metadata_file_id)
+        if record.file_origin != FileOrigin.CONNECTOR_METADATA:
+            raise ValueError(f"origin is {record.file_origin.value}")
+        metadata_io = file_store.read_file(file_id=zip_metadata_file_id, mode="b")
         loaded_metadata = json.loads(metadata_io.read())
     except Exception as e:
         raise ZipMetadataError(

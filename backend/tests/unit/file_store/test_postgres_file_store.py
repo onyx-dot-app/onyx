@@ -70,6 +70,7 @@ class TestSaveFile:
         mock_session.connection.return_value.connection.dbapi_connection = raw_conn
 
         with (
+            patch("onyx.file_store.postgres_file_store.assert_file_id_writable"),
             patch(
                 "onyx.file_store.postgres_file_store.upsert_filerecord"
             ) as mock_upsert_fr,

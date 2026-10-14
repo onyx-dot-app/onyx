@@ -1,15 +1,24 @@
 from collections.abc import Callable
+from hashlib import sha256
 from io import BytesIO
 from typing import Tuple
 
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import ImageSection, TabularSection, TextSection
+from onyx.db.file_record import FileOriginConflictError
 from onyx.file_processing.file_types import OnyxMimeTypes
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def remote_image_file_id(prefix: str, scope: str, remote_id: str) -> str:
+    """A file-store id for an image named by a remote server. The digest keeps
+    a remote id from naming any other stored file."""
+    digest = sha256(f"{scope}\0{remote_id}".encode()).hexdigest()
+    return f"{prefix}_{digest}"
 
 
 def make_image_callback(
@@ -78,15 +87,26 @@ def store_image_and_create_section(
         - The file_id in FileStore or None if storage failed
     """
     # Storage logic
+    file_store = get_default_file_store()
     try:
-        file_store = get_default_file_store()
-        file_id = file_store.save_file(
-            content=BytesIO(image_data),
-            display_name=display_name,
-            file_origin=file_origin,
-            file_type=media_type,
-            file_id=file_id,
-        )
+        try:
+            file_id = file_store.save_file(
+                content=BytesIO(image_data),
+                display_name=display_name,
+                file_origin=file_origin,
+                file_type=media_type,
+                file_id=file_id,
+            )
+        except FileOriginConflictError:
+            # A file of another origin holds the id; save beside it.
+            logger.warning("Image id %s is taken by another file", file_id)
+            file_id = file_store.save_file(
+                content=BytesIO(image_data),
+                display_name=display_name,
+                file_origin=file_origin,
+                file_type=media_type,
+                file_id=remote_image_file_id(file_origin.value, "", file_id),
+            )
     except Exception as e:
         logger.error("Failed to store image: %s", e)
         raise e

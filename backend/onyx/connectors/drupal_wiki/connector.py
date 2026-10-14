@@ -51,7 +51,10 @@ from onyx.connectors.models import (
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.html_utils import parse_html_page_basic
-from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.file_processing.image_utils import (
+    remote_image_file_id,
+    store_image_and_create_section,
+)
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
@@ -251,6 +254,9 @@ class DrupalWikiConnector(
                 )
 
             attachment_id = attachment["id"]
+            image_file_id = remote_image_file_id(
+                "drupal_wiki", self.base_url, str(attachment_id)
+            )
             file_name = attachment.get("fileName", f"attachment_{attachment_id}")
             file_size = attachment.get("fileSize", 0)
             media_type = self._get_media_type_from_filename(file_name)
@@ -274,7 +280,7 @@ class DrupalWikiConnector(
                 try:
                     image_section, _ = store_image_and_create_section(
                         image_data=raw_bytes,
-                        file_id=str(attachment_id),
+                        file_id=image_file_id,
                         display_name=attachment.get(
                             "name", attachment.get("fileName", "Unknown")
                         ),
@@ -345,7 +351,7 @@ class DrupalWikiConnector(
                 try:
                     image_section, _ = store_image_and_create_section(
                         image_data=image_data,
-                        file_id=f"{attachment_id}_embedded_{image_counter}",
+                        file_id=f"{image_file_id}_embedded_{image_counter}",
                         display_name=display_name,
                         link=download_url,
                         media_type=media_for_image,

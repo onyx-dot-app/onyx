@@ -464,6 +464,10 @@ access-control consequence of this.
    `save_file` call, or the new write silently overwrites the renamed object
    still referenced by the old key. The Postgres backend is safe: it moves the
    `FileContent` row to the new id, so a reused id makes a new large object.
+8. **A caller-chosen `file_id` only overwrites a record of the same origin.**
+   Every backend's `save_file` calls `db/file_record.py:assert_file_id_writable`
+   and raises `FileOriginConflictError` on a mismatch. An image id that a remote
+   server names goes through `image_utils.py:remote_image_file_id`.
 
 ---
 
