@@ -9,6 +9,7 @@
 # Required env: SANDBOX_PROXY_HOST, SANDBOX_PROXY_PORT, SANDBOX_PROXY_BOOTSTRAP_MODE.
 # Optional env: SANDBOX_PROXY_CA_BUNDLE_SRC (default /sandbox-ca/ca.crt),
 #               SANDBOX_PROXY_CA_BUNDLE_DST (default /etc/ssl/sandbox/ca-bundle.crt).
+#               SANDBOX_NET_ADMIN_LOCKDOWN (default true; false requires cluster enforcement).
 
 set -euo pipefail
 
@@ -32,7 +33,21 @@ case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
     *) die "unknown SANDBOX_PROXY_BOOTSTRAP_MODE=$SANDBOX_PROXY_BOOTSTRAP_MODE" ;;
 esac
 
-for bin in iptables ip6tables update-ca-certificates getent; do
+NET_ADMIN_LOCKDOWN="${SANDBOX_NET_ADMIN_LOCKDOWN-true}"
+case "$NET_ADMIN_LOCKDOWN" in
+    true) ;;
+    false)
+        [[ "$SANDBOX_PROXY_BOOTSTRAP_MODE" == "initcontainer" ]] \
+            || die "disabling network lockdown requires Kubernetes network enforcement"
+        ;;
+    *) die "SANDBOX_NET_ADMIN_LOCKDOWN must be true or false" ;;
+esac
+
+required_bins=(update-ca-certificates)
+if [[ "$NET_ADMIN_LOCKDOWN" == "true" ]]; then
+    required_bins+=(iptables ip6tables getent)
+fi
+for bin in "${required_bins[@]}"; do
     command -v "$bin" >/dev/null 2>&1 || die "required binary '$bin' missing"
 done
 if [[ "$SANDBOX_PROXY_BOOTSTRAP_MODE" == "entrypoint" ]] \
@@ -130,8 +145,12 @@ step_self_verify() {
 
 
 step_install_ca
-step_apply_iptables
-step_self_verify
+if [[ "$NET_ADMIN_LOCKDOWN" == "true" ]]; then
+    step_apply_iptables
+    step_self_verify
+else
+    log "iptables disabled; cluster must enforce proxy-only egress before workload startup"
+fi
 
 
 case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in

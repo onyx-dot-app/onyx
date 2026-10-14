@@ -1874,6 +1874,15 @@ craft:
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.
 sandboxPod:
+  # Onyx tests the default runtime with NET_ADMIN and iptables enabled.
+  # If you change either setting, verify sandbox isolation and network restrictions.
+  # Allow proxy traffic; block direct internet, DNS, internal services, nodes,
+  # and cloud metadata over IPv4 and IPv6.
+  # Optional, cluster-provided RuntimeClass (for example gvisor or kata).
+  runtimeClassName: ""
+  # Install firewall rules using NET_ADMIN. If false, the cluster must enforce
+  # proxy-only access from pod creation. Runtime isolation alone is not enough.
+  netAdminLockdown: true
   # Shared OpenCode, sidecar, and preview listener. Set to "::" for IPv6-only pods.
   listenHost: "0.0.0.0"
   nodeSelector:

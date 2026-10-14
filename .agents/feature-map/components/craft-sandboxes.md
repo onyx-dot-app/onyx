@@ -249,7 +249,7 @@ raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
 ```
                      Pod "sandbox-{uuid[:8]}"  (namespace onyx-sandboxes)
  ┌─────────────────────────────────────────────────────────────────────┐
- │ initContainer: sandbox-init   (NET_ADMIN, firewall-init.sh)         │
+ │ initContainer: sandbox-init   (firewall-init.sh)                    │
  │   installs the proxy CA, applies the iptables egress lockdown        │
  │                                                                       │
  │ initContainer (restartable, restartPolicy=Always): sidecar           │
@@ -272,6 +272,12 @@ raising on a nonzero exit or timeout (`session_workspace.py` module docstring).
  └─────────────────────────────────────────────────────────────────────┘
 ```
 (`deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`)
+
+The diagram shows the default firewall-enabled configuration. With
+`sandboxPod.netAdminLockdown: false`, CA bootstrap remains, but `NET_ADMIN`
+and iptables setup are omitted. A per-pod lockdown label keeps these pods excluded
+from bootstrap DNS access across Helm upgrades. The image prepuller uses the same
+RuntimeClass as sandbox pods. See §5 for the required cluster controls.
 
 **The pod spec comes from a Helm-rendered `core/v1` `PodTemplate` object**, not
 from Python. `KubernetesSandboxManager._create_sandbox_pod`
@@ -517,8 +523,8 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    it in Python instead will be silently overwritten by the next
    `read_namespaced_pod_template` call or, worse, drift from what the chart
    documents.
-4. **The sandbox must not reach internal cluster/host addresses.** Enforced at
-   two layers: the in-pod iptables lockdown
+4. **The sandbox must not reach internal cluster/host addresses.** By default,
+   enforced at two layers: the in-pod iptables lockdown
    (`image/firewall-init.sh:step_apply_iptables`, applied by the `sandbox-init`
    init container, dropping all outbound traffic except to the proxy) is
    authoritative; the `onyx-sandbox-egress`
@@ -531,6 +537,14 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
    family permits new TCP connections to the proxy port. IPv6 permits
    neighbor solicitations and advertisements with hop limit 255. The unused
    address family stays blocked, including IPv4 compatibility egress on EKS.
+   Helm `sandboxPod.netAdminLockdown: false` removes `NET_ADMIN` and skips
+   firewall setup and verification. CA bootstrap still runs as root. The chart
+   excludes these pods from bootstrap DNS access and relies on cluster enforcement of proxy-only
+   egress. Operators must enforce policy before workload startup and address
+   node-traffic exceptions and broader additive policies. The chart cannot
+   verify those controls. Docker cannot disable firewall bootstrap.
+   `sandboxPod.runtimeClassName` selects an optional cluster-provided runtime;
+   it does not change network enforcement. Both settings affect new pods.
 5. **The sidecar and main container must agree on the workspace path.**
    `SESSIONS_ROOT` is defined twice (`session_workspace.py:19` on the
    api-server side, `image/sandbox_daemon/snapshot.py:18` inside the image)
@@ -609,7 +623,7 @@ re-provisions from `SLEEPING` (§4.2) and restores each session on demand.
 | changes the snapshot format (what's included/excluded, archive layout) | `sandbox_daemon/snapshot.py`'s `_SNAPSHOT_ROOTS`/`_SNAPSHOT_GENERATED_*` sets; `restore_snapshot`'s webapp-restore path; existing snapshots in FileStore become unreadable by a format change unless restore stays backward-compatible |
 | changes the sidecar contract (`models.py`, `server.py` routes) | both `sidecar_client.py` (api-server side) and every route in `sandbox_daemon/server.py`; the image must ship the updated daemon in the same release as the api-server that calls it (version skew is a real risk, no negotiation exists) |
 | changes RBAC (`sandbox-rbac.yaml`) | `_wait_for_pod_ready`'s `watch.Watch()` usage needs `pods:watch`; removing it makes every provision fail with an `ApiException`, and no unit test catches it (see §9); `pods/exec` is still needed for the many residual exec call sites; `_create_sandbox_pod`'s `podtemplates:get` |
-| changes network policy (`network-policy-sandbox-*.yaml`) | the in-pod iptables lockdown (`firewall-init.sh`) stays authoritative regardless of CNI enforcement; keep the allow-list in sync with whichever worker consumes the `sandbox` Celery queue (currently `celery-worker-heavy`) |
+| changes network policy (`network-policy-sandbox-*.yaml`) | with default settings, the in-pod iptables lockdown (`firewall-init.sh`) stays authoritative regardless of CNI enforcement; without it, verify cluster enforcement; keep the allow-list in sync with whichever worker consumes the `sandbox` Celery queue (currently `celery-worker-heavy`) |
 | changes idle timeout or snapshot cadence | the `SNAPSHOT_INTERVAL_DIVISOR` relationship between idle timeout and background-snapshot freshness bound; opencode-history durability exposure scales with this gap |
 | adds a new sandbox-wide (not per-session) persisted artifact | it needs its own capture point like opencode history's, since only `outputs/`+`attachments/` ride the per-session snapshot |
 
@@ -713,8 +727,9 @@ set.
   connected-app traffic is policy-gated.** The iptables lockdown
   (`firewall-init.sh`) drops all outbound traffic except to the proxy, which
   forwards public HTTPS (needed for `npm`/`pip`); the NetworkPolicy is a CNI-dependent backstop
-  restricted to the proxy and DNS only, which is stricter-looking but inert on
-  non-enforcing clusters. Neither of these is the same control as the
+  restricted to the proxy and DNS by default, but inert on non-enforcing
+  clusters. With `netAdminLockdown: false`, it becomes the primary network
+  control and omits DNS. See §5 for the operator requirements. Neither of these is the same control as the
   egress-proxy's action-policy gate (`[[craft-admin]]` §5.4), which only
   evaluates traffic attributed to a connected app or MCP server. Don't conflate
   "the sandbox can reach `example.com`" with "the org didn't approve that."
