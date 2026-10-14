@@ -26,6 +26,7 @@ from onyx.agents.execution_records import (
     RunStatus,
 )
 from onyx.agents.models import (
+    AgentInfo,
     AgentState,
     ExecutionCheckpoint,
     RunAction,
@@ -62,6 +63,7 @@ from onyx.db.chat import (
     get_or_create_root_message,
     load_message_branch,
     reserve_chat_response_ids,
+    root_response_id,
     translate_db_message_to_chat_message_detail,
     visible_message_ids,
 )
@@ -70,6 +72,7 @@ from onyx.db.chat_response import (
     read_chat_execution,
     read_response__no_commit,
     read_response_steps,
+    reserve_child_response__no_commit,
     save_chat_response_to_db,
     save_chat_turn,
     save_response_content,
@@ -233,7 +236,7 @@ def _response(
 
 def _record(response: ChatMessage, answer: str = "Answer") -> ResponseRecord:
     assert response.parent_message is not None
-    run_id = str(uuid4())
+    run_id = str(response.id)
     return ResponseRecord(
         agent_id=str(response.chat_session_id),
         run_id=run_id,
@@ -256,11 +259,15 @@ def _save(db_session: Session, response: ChatMessage, record: ResponseRecord) ->
 
 
 def _child_record(
+    db_session: Session,
     parent: ResponseRecord,
     child_id: UUID,
     answer: str,
     previous: str | None = None,
+    *,
+    path: str | None = None,
 ) -> ResponseRecord:
+    path = path or f"{parent.agent_path}/research"
     parent.steps = _steps(
         parent.run_id,
         [
@@ -270,10 +277,32 @@ def _child_record(
         ],
     )
 
-    run_id = str(uuid4())
+    parent_row = db_session.get(ChatMessage, int(parent.run_id))
+    assert parent_row is not None
+    root_id = root_response_id(db_session, parent_row)
+    save_response_record__no_commit(db_session, root_id, parent)
+    instruction = UserMessage(content=f"Find {answer}")
+    run_id = str(
+        reserve_child_response__no_commit(
+            db_session,
+            root_id,
+            agent=AgentInfo(
+                id=str(child_id),
+                path=path,
+                parent_id=parent.agent_id,
+                description="Research child",
+                restoration_config=None,
+            ),
+            instruction=instruction,
+            previous_response_id=int(previous) if previous else None,
+            parent_response_id=int(parent.run_id),
+            parent_message_id=f"{parent.run_id}:0",
+            parent_tool_call_id="delegate",
+        )
+    )
     child = ResponseRecord(
         agent_id=str(child_id),
-        agent_path="/root/research",
+        agent_path=path,
         run_id=run_id,
         previous_run_id=previous,
         parent_run_id=parent.run_id,
@@ -450,7 +479,7 @@ def test_suspended_search_result_restores_after_database_round_trip(
         id=f"chat:{response.parent_message.id}", content=response.parent_message.message
     )
     snapshot = RunState(
-        run_id=str(uuid4()),
+        run_id=str(response.id),
         agent_id=str(conversation.id),
         status=RunStatus.SUSPENDED,
         input_messages=[instruction],
@@ -497,27 +526,32 @@ def test_suspended_search_result_restores_after_database_round_trip(
     )
     context = AgentState(messages=[instruction])
     record = response_record(snapshot)
-    binding = CheckpointBinding(tenant_id="public", branch_id=str(response.id))
+    binding = CheckpointBinding(tenant_id="public", response_id=str(response.id))
     checkpoint = serialize_checkpoint(
         ExecutionCheckpoint(agent_state=context, run_state=snapshot), record, binding
     )
     save_response_record__no_commit(db_session, response.id, record)
     db_session.flush()
     db_session.expire_all()
-    saved = read_response__no_commit(db_session, snapshot.run_id)
+    saved = read_response__no_commit(db_session, int(snapshot.run_id))
     assert saved is not None
     restored = deserialize_checkpoint(checkpoint, saved.response, context, binding)
     assert restored.run_state.model_dump() == snapshot.model_dump()
 
 
-def test_response_tools_flush_together_and_keep_result_links(
+def test_response_tools_flush_together_and_keep_result_identity(
     db_session: Session, conversation: ChatSession
 ) -> None:
     response = _response(db_session, conversation)
     calls = [ToolCall(id=f"call-{i}", name="search", arguments={}) for i in range(4)]
     messages: list[Message] = [AssistantMessage(content=list(calls))]
     messages.extend(
-        ToolResultMessage(tool_call_id=call.id, tool_name=call.name, content=call.id)
+        ToolResultMessage(
+            id=f"result:{call.id}",
+            tool_call_id=call.id,
+            tool_name=call.name,
+            content=call.id,
+        )
         for call in calls
     )
     steps = _steps(str(uuid4()), messages)
@@ -550,17 +584,17 @@ def test_response_tools_flush_together_and_keep_result_links(
         assert [step.model_dump() for step in read_response_steps(response)] == [
             step.model_dump() for step in steps
         ]
-        for call in calls:
-            linked = [
-                row.tool_call_id
-                for row in response.response_items
-                if row.tool_call is not None and row.tool_call.tool_call_id == call.id
-            ]
-            assert len(linked) == 1
+        assert len(response.response_items) == 1
+        assert {tool.result.id for tool in tools.values() if tool.result} == {
+            f"result:{call.id}" for call in calls
+        }
 
 
+@pytest.mark.parametrize(
+    "first_status", [ExecutionStatus.COMPLETE, ExecutionStatus.CANCELLED]
+)
 def test_resumed_tool_results_keep_row_identity_and_model_call_order(
-    db_session: Session, conversation: ChatSession
+    db_session: Session, conversation: ChatSession, first_status: ExecutionStatus
 ) -> None:
     response = _response(db_session, conversation)
     record = _record(response)
@@ -580,7 +614,10 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
             "second": ToolExecutionRecord(
                 status=ExecutionStatus.COMPLETE,
                 result=ToolResultMessage(
-                    tool_call_id="second", tool_name="search", content="Second result"
+                    id=f"{record.run_id}:0:result:second",
+                    tool_call_id="second",
+                    tool_name="search",
+                    content="Second result",
                 ),
             ),
         },
@@ -589,10 +626,12 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
     save_response_record__no_commit(db_session, response.id, record)
     db_session.flush()
     db_session.expire(response)
-    second_row = next(
-        row for row in response.response_items if row.tool_call_id is not None
+    assert response.tool_calls is not None
+    second_tool = next(
+        tool for tool in response.tool_calls if tool.tool_call_id == "second"
     )
-    second_id, second_tool_id = second_row.id, second_row.tool_call_id
+    second_tool_id = second_tool.id
+    assert len(response.response_items) == 1
     suspended = read_chat_execution(response)
     assert suspended is not None and suspended.response is not None
     assert [step.model_dump() for step in suspended.response.steps] == [
@@ -601,9 +640,13 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
     assert suspended.response.steps[0].tools["first"].result is None
 
     step.tools["first"] = ToolExecutionRecord(
-        status=ExecutionStatus.COMPLETE,
+        status=first_status,
         result=ToolResultMessage(
-            tool_call_id="first", tool_name="search", content="First result"
+            id=f"{record.run_id}:0:result:first",
+            tool_call_id="first",
+            tool_name="search",
+            content="First result",
+            is_error=first_status == ExecutionStatus.CANCELLED,
         ),
     )
     record.steps.append(
@@ -630,8 +673,15 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
         "Second result",
         "Answer",
     ]
-    stored_second = next(row for row in response.response_items if row.id == second_id)
-    assert stored_second.tool_call_id == second_tool_id
+    assert response.tool_calls is not None
+    stored_second = next(
+        tool for tool in response.tool_calls if tool.tool_call_id == "second"
+    )
+    assert stored_second.id == second_tool_id
+    assert stored_second.result is not None
+    assert stored_second.result.id == f"{record.run_id}:0:result:second"
+    assert restored.response.messages[1].id == f"{record.run_id}:0:result:first"
+    assert len(response.response_items) == 2
     assert restored.response.answer_step_index == 1
 
 
@@ -652,7 +702,10 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
             ]
         ),
         ToolResultMessage(
-            tool_call_id="same-id", tool_name="search", content="First result"
+            id=f"{record.run_id}:0:result:same-id",
+            tool_call_id="same-id",
+            tool_name="search",
+            content="First result",
         ),
         AssistantMessage(
             content=[
@@ -661,7 +714,10 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
             ]
         ),
         ToolResultMessage(
-            tool_call_id="same-id", tool_name="search", content="Second result"
+            id=f"{record.run_id}:1:result:same-id",
+            tool_call_id="same-id",
+            tool_name="search",
+            content="Second result",
         ),
         AssistantMessage(content=[TextContent(text="Final answer")]),
     ]
@@ -700,13 +756,14 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
         "Second result",
     }
     assert all(tool.legacy_response == "" for tool in tools)
-    result_ids = [
-        row.tool_call_id
-        for row in response.response_items
-        if row.tool_call_id is not None
+    assert len(response.response_items) == 3
+    assert [message.id for message in restored.messages] == [
+        message.id for message in record.messages
     ]
-    assert set(result_ids) == {tool.id for tool in tools}
-    assert len(result_ids) == 2
+    assert {tool.result.id for tool in tools if tool.result} == {
+        f"{record.run_id}:0:result:same-id",
+        f"{record.run_id}:1:result:same-id",
+    }
 
 
 @pytest.mark.parametrize(
@@ -821,13 +878,48 @@ def test_response_item_rejects_mismatched_embedded_identity(
     response = _response(db_session, conversation)
     _save(db_session, response, _record(response))
     row = response.response_items[0]
-    assert row.message is not None
     row.message = row.message.model_copy(update={"id": "unrelated-message"})
     db_session.flush()
     db_session.expire_all()
 
     with pytest.raises(ValueError, match="assistant identity"):
         read_response_steps(response)
+
+
+@pytest.mark.parametrize("removed", ["result", "call"])
+def test_response_update_cannot_discard_a_stored_tool_result(
+    db_session: Session, conversation: ChatSession, removed: str
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="search", name="search", arguments={})]
+            ),
+            ToolResultMessage(
+                id=f"{record.run_id}:0:result:search",
+                tool_call_id="search",
+                tool_name="search",
+                content="Accepted result",
+            ),
+        ],
+    )
+    _save(db_session, response, record)
+    changed = record.model_copy(deep=True)
+    if removed == "result":
+        changed.steps[0].tools["search"].result = None
+    else:
+        changed.steps[0].message.content = []
+        changed.steps[0].tools = {}
+    with pytest.raises(ValueError, match="cannot discard recorded results"):
+        with db_session.begin_nested():
+            save_response_record__no_commit(db_session, response.id, changed)
+    db_session.expire_all()
+    assert [step.model_dump() for step in read_response_steps(response)] == [
+        step.model_dump() for step in record.steps
+    ]
 
 
 @pytest.mark.parametrize("field", ["tool_call_id", "tool_name"])
@@ -965,7 +1057,7 @@ def test_child_reuse_follows_selected_branch_not_completion_order(
     base = _response(db_session, conversation)
     parent = _record(base)
     child_id = uuid4()
-    _child_record(parent, child_id, "Base")
+    _child_record(db_session, parent, child_id, "Base")
     _save(db_session, base, parent)
     base_execution = read_chat_execution(base)
     assert base_execution is not None
@@ -973,7 +1065,7 @@ def test_child_reuse_follows_selected_branch_not_completion_order(
     branches = [_response(db_session, conversation, previous=base) for _ in range(2)]
     for index in [1, 0] if reverse_save_order else [0, 1]:
         parent = _record(branches[index])
-        _child_record(parent, child_id, f"Branch {index}", previous)
+        _child_record(db_session, parent, child_id, f"Branch {index}", previous)
         _save(db_session, branches[index], parent)
     child = db_session.get(ChatSession, child_id)
     assert child is not None
@@ -1020,9 +1112,10 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
     sibling = _response(db_session, conversation, question=base.parent_message)
     parent = _record(base)
     child_id, grandchild_id = uuid4(), uuid4()
-    child_record = _child_record(parent, child_id, "Child")
-    grandchild_record = _child_record(child_record, grandchild_id, "Base")
-    grandchild_record.agent_path = "/root/research/facts"
+    child_record = _child_record(db_session, parent, child_id, "Child")
+    _child_record(
+        db_session, child_record, grandchild_id, "Base", path="/root/research/facts"
+    )
     _save(db_session, base, parent)
     execution = read_chat_execution(base)
     assert execution is not None
@@ -1058,11 +1151,17 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
     branches = [_response(db_session, conversation, previous=base) for _ in range(2)]
     for index in [1, 0] if reverse_save_order else [0, 1]:
         parent = _record(branches[index])
-        child_record = _child_record(parent, child_id, "Child", child_saved.run_id)
-        grandchild_record = _child_record(
-            child_record, grandchild_id, f"Branch {index}", grandchild_saved.run_id
+        child_record = _child_record(
+            db_session, parent, child_id, "Child", child_saved.run_id
         )
-        grandchild_record.agent_path = "/root/research/facts"
+        _child_record(
+            db_session,
+            child_record,
+            grandchild_id,
+            f"Branch {index}",
+            grandchild_saved.run_id,
+            path="/root/research/facts",
+        )
         _save(db_session, branches[index], parent)
     for index, branch in enumerate(branches):
         history = _load_history(
@@ -1088,8 +1187,8 @@ def test_multiple_child_requests_from_one_invocation_keep_distinct_predecessors(
     response = _response(db_session, conversation)
     parent = _record(response)
     child_id = uuid4()
-    first = _child_record(parent, child_id, "First")
-    _child_record(parent, child_id, "Second", first.run_id)
+    first = _child_record(db_session, parent, child_id, "First")
+    _child_record(db_session, parent, child_id, "Second", first.run_id)
     _save(db_session, response, parent)
     execution = read_chat_execution(response)
     assert execution is not None
@@ -1137,8 +1236,8 @@ def test_child_history_rejects_unrelated_responses_on_the_same_branch(
     response = _response(db_session, conversation)
     parent = _record(response)
     child_id = uuid4()
-    _child_record(parent, child_id, "First")
-    _child_record(parent, child_id, "Unrelated")
+    _child_record(db_session, parent, child_id, "First")
+    _child_record(db_session, parent, child_id, "Unrelated")
     _save(db_session, response, parent)
     child = db_session.get(ChatSession, child_id)
     assert child is not None
@@ -1159,8 +1258,8 @@ def test_child_publication_rolls_back_with_parent(
     response = _response(db_session, conversation)
     parent = _record(response)
     child_id = uuid4()
-    _child_record(parent, child_id, "Answer")
     transaction = db_session.begin_nested()
+    _child_record(db_session, parent, child_id, "Answer")
     _save(db_session, response, parent)
     transaction.rollback()
     assert db_session.get(ChatSession, child_id) is None
@@ -1175,19 +1274,37 @@ def test_child_multimodal_input_is_rejected_before_child_storage(
     response = _response(db_session, conversation)
     parent = _record(response)
     child_id = uuid4()
-    child = _child_record(parent, child_id, "Answer")
-    child.input_messages = [
-        UserMessage(
-            content=[
-                ImageContentPart(
-                    image_url=ImageUrlDetail(url="https://example.com/image.png")
-                )
-            ]
-        )
-    ]
+    parent.steps = _steps(
+        parent.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ],
+    )
+    _save(db_session, response, parent)
     with pytest.raises(ValueError, match="text only"):
-        save_response_content(
-            response, parent, db_session=db_session, persist_content=True
+        reserve_child_response__no_commit(
+            db_session,
+            response.id,
+            agent=AgentInfo(
+                id=str(child_id),
+                path="/root/research",
+                parent_id=parent.agent_id,
+                description="Research child",
+                restoration_config=None,
+            ),
+            instruction=UserMessage(
+                content=[
+                    ImageContentPart(
+                        image_url=ImageUrlDetail(url="https://example.com/image.png")
+                    )
+                ]
+            ),
+            previous_response_id=None,
+            parent_response_id=int(parent.run_id),
+            parent_message_id=f"{parent.run_id}:0",
+            parent_tool_call_id="delegate",
         )
     assert db_session.get(ChatSession, child_id) is None
 
@@ -1347,7 +1464,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
     tool.in_code_tool_id = implementation
     db_session.flush()
     row = _response(db_session, conversation)
-    agent_id, run_id = str(session.id), str(uuid4())
+    agent_id, run_id = str(session.id), str(row.id)
     snapshot = RunState(
         agent_id=agent_id,
         run_id=run_id,
@@ -1590,15 +1707,21 @@ def test_session_delete_removes_reused_child_history_and_tool_items(
     base = _response(db_session, conversation)
     record = _record(base)
     child_id = uuid4()
-    child = _child_record(record, child_id, "First")
+    child = _child_record(db_session, record, child_id, "First")
     grandchild_id = uuid4()
-    _child_record(child, grandchild_id, "Nested")
+    _child_record(db_session, child, grandchild_id, "Nested")
     _save(db_session, base, record)
     first = read_chat_execution(base)
     assert first is not None
     next_response = _response(db_session, conversation, previous=base)
     record = _record(next_response)
-    _child_record(record, child_id, "Second", first.response.child_runs[0].run_id)
+    _child_record(
+        db_session,
+        record,
+        child_id,
+        "Second",
+        first.response.child_runs[0].run_id,
+    )
     _save(db_session, next_response, record)
     descendant_ids = [child_id, grandchild_id]
     response_ids = list(
@@ -1644,15 +1767,17 @@ def test_unsettled_execution_is_rejected_before_saving(
     response = _response(db_session, conversation)
     record = _record(response)
     if unfinished_child:
-        child = _child_record(record, uuid4(), "Partial child output")
+        child = _child_record(db_session, record, uuid4(), "Partial child output")
         child.status = status
         record.child_runs = [child]
     else:
         record.status = status
+    original_status = response.response_status
+    original_items = list(response.response_items)
     with pytest.raises(ValueError, match="terminal execution records"):
         _save(db_session, response, record)
-    assert response.response_status is None
-    assert response.response_items == []
+    assert response.response_status == original_status
+    assert response.response_items == original_items
 
 
 @pytest.mark.parametrize("child_count", [0, 1, 4])
@@ -1672,8 +1797,13 @@ def test_discovery_batches_response_metadata(
     response = _response(db_session, conversation)
     record = _record(response)
     for index in range(child_count):
-        child = _child_record(record, uuid4(), f"Answer {index}")
-        child.agent_path = f"/root/research_{index}"
+        _child_record(
+            db_session,
+            record,
+            uuid4(),
+            f"Answer {index}",
+            path=f"/root/research_{index}",
+        )
     _save(db_session, response, record)
     message_id = response.id
     db_session.expire_all()
@@ -1712,8 +1842,13 @@ def test_child_reload_batches_siblings(
         response = _response(db_session, conversation)
         record = _record(response)
         for index in range(child_count):
-            child = _child_record(record, uuid4(), f"Answer {index}")
-            child.agent_path = f"/root/research_{index}"
+            _child_record(
+                db_session,
+                record,
+                uuid4(),
+                f"Answer {index}",
+                path=f"/root/research_{index}",
+            )
         _save(db_session, response, record)
         db_session.expire_all()
         executed_sql.clear()
@@ -1736,9 +1871,8 @@ def test_nested_reload_reuses_parent_identity(
 ) -> None:
     response = _response(db_session, conversation)
     record = _record(response)
-    child = _child_record(record, uuid4(), "Child")
-    grandchild = _child_record(child, uuid4(), "Grandchild")
-    grandchild.agent_path = "/root/research/facts"
+    child = _child_record(db_session, record, uuid4(), "Child")
+    _child_record(db_session, child, uuid4(), "Grandchild", path="/root/research/facts")
     _save(db_session, response, record)
     db_session.expire_all()
     executed_sql.clear()
@@ -1913,7 +2047,7 @@ def test_lifecycle_and_display_saves_share_response_content(
     response = _response(db_session, conversation)
     record = _record(response)
     child_id = uuid4()
-    child = _child_record(record, child_id, "Child answer")
+    child = _child_record(db_session, record, child_id, "Child answer")
     child.checkpoint = CompactionCheckpoint(
         summary="Child summary",
         covered_through_message_id=f"run:{child.run_id}:input:0",
@@ -1922,7 +2056,6 @@ def test_lifecycle_and_display_saves_share_response_content(
     root_session_id = conversation.id
     initial = record.model_copy(
         update={
-            "steps": [],
             "answer_step_index": None,
             "child_runs": [],
             "status": RunStatus.RUNNING,
@@ -1982,7 +2115,7 @@ def test_lifecycle_and_display_saves_share_response_content(
         assert saved_root is not None
         assert saved_root.message == "Answer"
         assert read_response_steps(saved_root) == record.steps
-        saved_child = read_response__no_commit(db_session, child.run_id)
+        saved_child = read_response__no_commit(db_session, int(child.run_id))
         assert saved_child is not None
         assert saved_child.response.parent_run_id == record.run_id
         assert saved_child.response.checkpoint == child.checkpoint

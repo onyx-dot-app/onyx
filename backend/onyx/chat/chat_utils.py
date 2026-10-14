@@ -292,7 +292,6 @@ def capture_chat_history(
     history: list[ChatHistoryMessage] = []
     for message in messages:
         response_messages: list[Message] = []
-        agent_run_id = None
         if message.message_type == MessageType.ASSISTANT:
             if message.response_status is not None and record_mode_persists_content(
                 message.chat_session.incognito_record_mode
@@ -307,7 +306,6 @@ def capture_chat_history(
                             omit_tool_result_content=response_message.tool_name
                             != IMAGE_GENERATION_TOOL_NAME
                         )
-                agent_run_id = str(message.id)
             else:
                 response_messages = _legacy_tool_messages(
                     message, tool_names, token_counter
@@ -328,7 +326,6 @@ def capture_chat_history(
                 files=message.files or [],
                 is_clarification=message.is_clarification,
                 response_messages=response_messages,
-                agent_run_id=agent_run_id,
             )
         )
     if checkpoint is not None:

@@ -95,7 +95,8 @@ Three migrations prepare SDK storage: `7a03b6e90c12` adds response items,
 The first two run transactionally. The third builds indexes concurrently on existing chat tables
 and supports rerunning after an interrupted index build.
 
-`chat_response_item.message` stores one complete or partial model message; alternative rows reference tool results.
+`chat_response_item.message` stores one complete or partial assistant model message per step.
+Tool results and their execution statuses live in `tool_call`; they do not need response-item link rows.
 `generation_status` records the model generation outcome, independently of the whole response or tool outcome.
 `is_answer` identifies the step the runtime accepted as its answer. Partial output need not be an accepted answer.
 Response items use `step_index` for generation order and the assistant’s tool-call list for result order.
@@ -106,8 +107,18 @@ Finalization also retains the existing final-thinking display column. SDK pre-to
 Old API pods can omit SDK pre-tool thinking during deployment overlap; the stored model content remains intact.
 No thinking backfill or column-removal migration runs in this release.
 
-The nonunique `(chat_message_id, step_index)` index supports response lookups.
-A separate partial unique index permits one assistant message per step.
+A unique `(chat_message_id, step_index)` index orders response lookups and permits one generation per step.
+The assistant message orders its tool calls. Each call resolves to a tool row in that response and step,
+including pending calls with no result. Stored result IDs remain stable across saves and replay.
+
+For durable chat, the SDK run ID is the assistant `chat_message.id` represented as a string.
+Root preparation reserves its response rows. Child startup reserves its question and response before constructing the run.
+Output writers update those reserved rows. Resume retains the same response identity.
+Standalone SDK runs and temporary incognito runs use generated IDs. Usage-only incognito stores no durable model/tool content or execution checkpoints.
+Owner tokens and checkpoint ownership versions protect against stale writers; response IDs do not identify ownership attempts.
+`ResponseRecord` retains the SDK names `run_id`, `previous_run_id`, `parent_run_id`, and `child_runs`.
+Database operations use integer response IDs; execution records use their string form.
+The root agent uses the chat-session ID in both history backends; incognito does not allocate a separate root identity.
 
 Tool names and argument parsing details stay in the saved model message. Tool rows retain queryable arguments and execution results.
 `tool_call.result` stores model content, outcome flags, and typed application details together.
@@ -152,7 +163,7 @@ separate share-link table.
 |---|---|
 | `id` | Integer PK. |
 | `chat_session_id` | FK. |
-| `parent_message_id` | Nullable. NULL only for the empty root message. |
+| `parent_message_id` | NULL for the public session root or a child session's first question. Otherwise links to the preceding message. |
 | `latest_child_message_id` | Which child branch is "active" for this node. Only this pointer, not the whole tree, is walked to render the live conversation. |
 | `last_summarized_message_id` | Set on a compression-summary message; the last original message it replaces. |
 | `preferred_response_id` | User-message-only: which assistant child (of a multi-model turn) was chosen. `set_preferred_response` (`db/chat.py`) writes this and also advances `latest_child_message_id`. |
@@ -161,8 +172,8 @@ separate share-link table.
 | `reasoning_tokens` | See §5, reasoning attaches forward. |
 | `message` | Text. Blank string for a content-free incognito row. |
 | `token_count` | |
-| `message_type` | `MessageType`: `SYSTEM` (root only, never sent to the LLM as-is), `USER`, `ASSISTANT`, `TOOL_CALL_RESPONSE`, `USER_REMINDER` (`configs/constants.py:MessageType`). |
-| `files` | `FileDescriptor` list, user message only. |
+| `message_type` | `MessageType`: `SYSTEM` (root only, never sent to the LLM as-is), `USER`, `ASSISTANT`, `SUMMARY`, `TOOL_CALL_RESPONSE`, `USER_REMINDER` (`configs/constants.py:MessageType`). |
+| `files` | `FileDescriptor` list: user attachments or referenced generated files on assistant responses. |
 | `citations` | `{citation_number: search_doc_id}`, assistant message only. |
 | `error` | |
 | `time_sent` | |
@@ -175,9 +186,9 @@ separate share-link table.
 |---|---|
 | `id` | |
 | `chat_session_id` | |
-| `parent_chat_message_id` | Set only for a **top-level** call (one the LLM issued directly on this turn). |
-| `parent_tool_call_id` | Set only for a **nested** call (issued by a sub-agent tool, itself a `ToolCall`). Exactly one of `parent_chat_message_id` / `parent_tool_call_id` is non-NULL. |
-| `turn_number` | Same turn number + same parent = called in parallel. Different turn number = called sequentially. |
+| `parent_chat_message_id` | Canonical response owner for every SDK call, including calls made by child agents. Legacy nested calls can omit it. |
+| `parent_tool_call_id` | Optional display nesting under the tool that invoked the child. It does not replace canonical response ownership. |
+| `turn_number` | SDK step index within the owning response. Calls in one step can execute in parallel. Legacy rows retain their display grouping. |
 | `tab_index` | Ordering within a parallel group, for UI tabs. |
 | `tool_id` | Not a FK; deleting the `Tool` row does not cascade here. |
 | `tool_call_id` | The provider-facing call id string (must round-trip to the LLM). |
@@ -225,9 +236,11 @@ snapshot.
 ```
 ChatSession
   └─< ChatMessage (parent_message_id → self, tree)
-        ├─< ToolCall (parent_chat_message_id)      top-level calls
-        │     └─< ToolCall (parent_tool_call_id)    nested/sub-agent calls
-        │           └── ToolCall__SearchDoc → SearchDoc
+        ├─< ChatResponseItem                     model generations
+        ├── ChatResponseCheckpoint               suspended execution progress
+        ├─< ToolCall (parent_chat_message_id)      results and execution status
+        │     ├── parent_tool_call_id → ToolCall  optional child display nesting
+        │     └── ToolCall__SearchDoc → SearchDoc
         ├── ChatMessage__SearchDoc → SearchDoc       message's displayed docs
         ├─< ChatMessageFeedback
         └─< DocumentRetrievalFeedback
@@ -245,15 +258,18 @@ Reproduced from `db/README.md`:
 [Second Message]  [Second Message of Edit 1 Branch]
 ```
 
-Every session has exactly one root `ChatMessage` with `parent_message_id IS
+Every public chat session has one root `ChatMessage` with `parent_message_id IS
 NULL` and `message_type=SYSTEM`
 (`db/chat.py:get_or_create_root_message`). Editing a message creates a new
 sibling under the same parent, not a mutation of the original row. Each
-`ChatMessage.latest_child_message_id` marks which child is the "live" branch;
+`ChatMessage.latest_child_message_id` marks which child is the selected branch;
 walking the chain of `latest_child_message_id` pointers from the root gives
 the currently displayed conversation. `set_as_latest_chat_message`
 (`db/chat.py`) is what a branch switch calls: it repoints the parent's
 pointer to the selected child, nothing else moves.
+
+Child sessions start with a user question linked to the invoking tool call. They
+do not need an empty SYSTEM root. Their later questions link to prior child responses.
 
 `set_preferred_response` accepts only an assistant child in the user message's
 chat session. It validates the type, session, and parent before changing either
@@ -266,58 +282,49 @@ both pointers unchanged. The endpoint checks ownership of the user message first
 
 ### 4.1 Writing a turn
 
-```
+```text
 prepare_chat_turn                        chat/prepare.py
-  ├─ create_new_chat_message (user msg)   db/chat.py
-  └─ reserve_message_id /
-     reserve_multi_model_message_ids      db/chat.py        → assistant row(s) exist before streaming
-...
-ChatResponsePersistence                  chat/persistence.py
-  └─ history store                       chat/history_store.py
-        └─ save_chat_turn                 db/chat_response.py  → single db_session.commit()
-              ├─ create_db_search_doc (per unique SearchDoc)
-              ├─ add_search_docs_to_chat_message
-              ├─ _create_and_link_tool_calls
-              │     ├─ create_tool_call_no_commit  (per ToolCall, no parent yet)
-              │     ├─ db_session.flush()          (assigns ids)
-              │     ├─ set parent_tool_call_id from the id map
-              │     └─ add_search_docs_to_tool_call
-              └─ assistant_message.citations = {...}
+  -> create_new_chat_message             db/chat.py: accepted user input
+  -> reserve_chat_response_ids           db/chat.py: assistant rows
+
+ChatRunStore                             chat/run_store.py
+  -> save_response_record__no_commit      db/chat_response.py: progressive execution
+  -> checkpoint storage                  db/chat_checkpoint.py: suspended progress
+
+ChatResponsePersistence                  chat/persistence.py: final root output
+  -> ChatHistoryStore                    chat/history_store.py
+  -> save_chat_response_to_db             db/chat_response.py
+  -> save_chat_turn                      db/chat_response.py: final transaction
 ```
 
-The user message is created and committed independently
-(`create_new_chat_message`), so it can exist even if the assistant message
-later errors. The assistant row is reserved before the first token is
-streamed (`reserve_message_id`, `reserve_multi_model_message_ids`), with a
-placeholder message ("Response was terminated prior to completion...") and a
-placeholder `token_count`. `save_chat_turn` then overwrites that same row and
-commits once for the whole turn: message text, reasoning, tool calls, search
-docs, and citations all land in one transaction. `_create_and_link_tool_calls`
-creates every `ToolCall` first with no `parent_tool_call_id`, flushes to get
-real ids, then wires up `parent_tool_call_id` from a `tool_call_id → id`
-map built after the flush; it drops any child whose parent went missing
-(possible when a stop cancels mid-tool-execution) rather than leave an
-orphaned FK.
+Preparation commits accepted user input before slow file loading. It reserves each
+assistant response before execution starts, so streamed output has a stable identity.
+Child startup also reserves its question and response before constructing a run.
+
+Execution saves upsert model generations and tool records as work progresses.
+This makes child references and suspended work available before the root finishes.
+Final root persistence writes display text, documents, citations, execution content,
+and completion status in one transaction. It updates the reserved response row.
+Usage-only incognito keeps conversation content in temporary storage instead.
+
+Tool calls retain their response owner and step. Child calls can also link to their
+invoking parent tool for nested display. Result content is stored once on `ToolCall`;
+model generations retain the original call names, arguments, and order.
 
 ### 4.2 Reading a session back
 
-`GET /chat/get-chat-session/{id}` (`chat_backend.py:get_chat_session`) does
-not re-run the turn. It loads every `ChatMessage` for the session
-(`db/chat.py:get_chat_messages_by_session`, which eager-loads two levels of
-`ToolCall` via `selectinload(ChatMessage.tool_calls).selectinload(ToolCall.tool_call_children)`),
-converts each to a `ChatMessageDetail`
-(`translate_db_message_to_chat_message_detail`), and for every assistant
-message calls `translate_assistant_message_to_packets`
-(`session_loading.py`) to rebuild a `Packet` sequence from the persisted state. It is
-not a byte-for-byte replay of the live stream: the saved answer text is one
-`AgentResponseDelta`, where the live loop emits many streamed deltas. The
-sequence is: tool calls grouped by `turn_number` (with per-turn
-reasoning inserted just before the group, see §5), then the answer, then
-citations, then an `OverallStop`. Which packet-builder runs is dispatched
-per-tool by `tool.in_code_tool_id` (search, web search, open URL, image
-generation, file reader, research agent, coding agent, memory, python, or a
-generic custom-tool fallback). The frontend renders these replayed packets
-with the same renderer it uses for the live stream.
+`GET /chat/get-chat-session/{id}` loads the session's message tree and builds
+`ChatMessageDetail` objects. `translate_assistant_message_to_packets` selects one
+of two readers for assistant responses:
+
+- SDK responses load recorded generations and tool results through `read_chat_execution`.
+  Shared chat renderers project that content into browser packets.
+- Legacy responses reconstruct display from old message and tool columns, grouping
+  calls by `turn_number`. Their thinking placement is approximate.
+
+Neither path reruns tools or models. Saved output can arrive in larger text chunks
+than live output, but uses the same browser packet types. SDK replay preserves
+interleaved text, thinking, call identity, and partial work.
 
 SDK replay skips child-response queries for messages without tool calls. Root
 sessions also skip ancestor queries. Loading plain chat history must not add
@@ -345,17 +352,14 @@ incognito mode does not persist content skip the naming call.
 
 ## 5. Contracts and invariants
 
-1. **Messages alternate user and assistant.** The empty `SYSTEM` root row is
-   persisted (`get_or_create_root_message`). Prompt-time `SYSTEM`,
-   `USER_REMINDER`, and custom-agent-prompt messages are never persisted. They
-   are constructed at load time (`db/README.md`, `chat/README.md`,
-   [[context-assembly]]).
-2. **The empty root message must exist exactly once per session.**
-   `get_or_create_root_message` reads the root row and inserts one if none
-   exists. It does not use an atomic uniqueness constraint, so two
-   concurrent first loads could each insert a root. Code must expect one
-   root. `MultipleResultsFound` on a later read is treated as data
-   corruption, not a recoverable case.
+1. **Public message trees contain user input and assistant responses.**
+   Each response belongs to a user message. Model steps and tools belong to that response.
+   SUMMARY rows store compaction cutoffs and stay out of public message history.
+   Prompt-only instructions and reminders are assembled for requests, not saved as user input.
+2. **Public sessions use one empty SYSTEM root.** `get_or_create_root_message`
+   provides it for branching the first question. Child sessions begin with their
+   first user question instead. Multiple public roots indicate corrupt state.
+
 3. **Input is on the user message; everything produced during inference is on
    the assistant message.** Response text, tool calls, feedback, and
    citations never live on a `USER` row.
@@ -363,18 +367,16 @@ incognito mode does not persist content skip the naming call.
    Legacy thinking precedes its tool-call group or final answer. For parallel legacy calls, the loader selects
    the first nonempty thinking value in the group. Legacy display text does not provide exact model block order
    or provider signatures and must not be treated as a recorded SDK generation.
-5. **`save_chat_turn` commits exactly once per assistant message.** All of
-   message text, `SearchDoc` rows, `ToolCall` rows, and citations land in that
-   one transaction. Do not add a code path that commits partway through.
-6. **A reserved assistant row must always resolve.** Either `save_chat_turn`
-   overwrites it with real content, or the error path
-   (`_save_errored_message`, owned by [[core-chat-loop]]) sets `error`. A row
-   left at the "terminated prior to completion" placeholder with no error is
-   a bug.
-7. **A `ToolCall`'s parent is exactly one of `parent_chat_message_id` /
-   `parent_tool_call_id`.** Same turn number + same parent = parallel;
-   different turn number = sequential; a non-null `parent_tool_call_id` means
-   this call happened *inside* an agent tool call, not as a retry of it.
+5. **Final projection is atomic.** `save_chat_turn` commits display text, documents,
+   tool records, and citations together. Progressive execution saves and checkpoint
+   writes use separate transactions before finalization.
+6. **Reserved responses must reach a recorded outcome.** Normal completion, cancellation,
+   and failure save partial work or an error. Root startup failures record an error;
+   failed child startup removes unused question/response reservations.
+7. **SDK tool calls have canonical response ownership.** `parent_chat_message_id`
+   identifies the response; `turn_number` identifies its step. Optional
+   `parent_tool_call_id` adds child-agent display nesting. Both links can be set.
+
 8. **Incognito must not persist content.** `save_chat_turn(...,
    persist_content=False)` blanks `message`/`reasoning_tokens`, and drops
    `tool_calls`, `citation_to_doc`, `all_search_docs`, and
@@ -412,9 +414,8 @@ incognito mode does not persist content skip the naming call.
   schema.
 
 **Depended on by**
-- [[core-chat-loop]]: `save_chat_turn` is its single persistence entry point;
-  it reserves rows here before streaming and loads history from here to build
-  each cycle's context.
+- [[core-chat-loop]]: reserves responses before streaming, saves progressive
+  execution and final display, and loads the selected history branch.
 - [[chat-frontend]]: renders both the live packet stream and the replayed one
   from `GET /chat/get-chat-session/{id}`; consumes `latest_child_message_id`
   to drive branch switching in the UI.
@@ -431,7 +432,7 @@ incognito mode does not persist content skip the naming call.
 |---|---|
 | adds a column to `ChatMessage` | write a migration; decide what `save_chat_turn` writes into it; decide the incognito behavior (blank it or keep it, and say why); add it to `translate_db_message_to_chat_message_detail` and the `ChatMessageDetail` API model if the frontend needs it; check whether `session_loading.py` needs to replay it |
 | changes the tree (adds a new kind of branch, changes what `latest_child_message_id` means) | `set_as_latest_chat_message`, `set_preferred_response`, every caller that walks the chain in [[core-chat-loop]] and [[context-assembly]], and the frontend's branch-switch UI in [[chat-frontend]] |
-| adds a new tool call "kind" (e.g. a new nesting pattern) | `_create_and_link_tool_calls` (parent resolution and orphan handling), `translate_assistant_message_to_packets`'s per-tool dispatch, and [[tools-framework]] |
+| adds a new tool call "kind" (e.g. a new nesting pattern) | `save_response_content` (response ownership and parent resolution), `translate_assistant_message_to_packets`'s per-tool dispatch, and [[tools-framework]] |
 | changes replay (`session_loading.py`) | confirm the packets it builds still match what the live loop in [[core-chat-loop]] emits for the same tool; check every `tool.in_code_tool_id` branch, not just the one you touched |
 | changes retention or deletion | `delete_messages_and_files_from_chat_session`, `delete_orphaned_search_docs`, the EE `perform_ttl_management_task` chain, and the incognito teardown paths in `chat_backend.py:_teardown_incognito_after_delete` |
 | changes incognito record modes | every `record_mode_persists_content` call site (`db/chat.py`, `backend/onyx/db/chat_response.py`, `chat/incognito.py`), and the search/history exclusion filters in `db/chat.py:content_persisting_sessions_filter` and `db/chat_search.py` |

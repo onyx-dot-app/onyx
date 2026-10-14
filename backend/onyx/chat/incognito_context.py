@@ -51,7 +51,6 @@ _MAX_CONTEXT_MESSAGES = 200
 _MAX_CONTEXT_BYTES = 1_000_000
 _MAX_VERSION_DIGITS = 15
 _MAX_COMMIT_ATTEMPTS = 8
-_ROOT_ID_FIELD = b"root_id"
 _PREVIOUS_RUN_FIELD = b"previous_run_id"
 
 _KEY_PREFIX = "incognito_ctx"
@@ -625,32 +624,6 @@ def load_incognito_saved_run(
             if run.run_id == run_id:
                 return run
     return None
-
-
-def get_or_create_incognito_root_id(
-    chat_session_id: UUID, proposed_agent_id: str
-) -> str:
-    root_id: str | None = None
-
-    def update(raw: bytes | None, agents: dict[bytes, bytes]) -> _IncognitoWrite | None:
-        nonlocal root_id
-        root_id = None
-        if raw is None:
-            raise RuntimeError("Incognito session ended")
-        if existing := agents.get(_ROOT_ID_FIELD):
-            root_id = existing.decode()
-            return None
-        agents[_ROOT_ID_FIELD] = proposed_agent_id.encode()
-        context = _decode_context(chat_session_id, raw, agents.get(_PREVIOUS_RUN_FIELD))
-        return _retained_state(context, agents)
-
-    if _update_incognito_state(
-        chat_session_id, update, max_attempts=_MAX_COMMIT_ATTEMPTS
-    ):
-        return proposed_agent_id
-    if root_id is not None:
-        return root_id
-    raise RuntimeError("Incognito session ended or state lock is unavailable")
 
 
 def _response_records(
