@@ -38,6 +38,7 @@ from onyx.db.models import (
     ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
+    StoredToolResult,
     ToolCall,
 )
 from onyx.file_processing.file_types import guess_mime_type
@@ -101,17 +102,9 @@ def _attach_tool_artifacts(
         record = db_session.get(ToolCall, record_id)
         if record is None:
             raise ValueError("Accepted tool call is unavailable")
-        record.legacy_response = (
-            info.result_metadata.model_dump_json()
-            if info.result_metadata is not None
-            else ""
-        )
         record.tool_id = info.tool_id
         record.turn_number = info.turn_index
         record.tab_index = info.tab_index
-        record.generated_images = [
-            image.model_dump() for image in info.generated_images or []
-        ] or None
         records[info.execution_key] = record
     for info in tool_calls:
         record = records[info.execution_key]
@@ -542,14 +535,11 @@ def save_response_content(
     if (
         message.response_status is not None
         and message.response_status.is_terminal
-        and message.run_id != record.run_id
+        and message.run_id != sanitize_string(record.run_id)
     ):
         raise ValueError("Response content has already been saved")
     if record.agent_id != str(message.chat_session_id):
         raise ValueError("Root response must use its session identity")
-    record = ResponseRecord.model_validate(
-        sanitize_json_like(record.model_dump(mode="json"))
-    )
     writer = _ResponseWriter(db_session, message, presentation or {})
     writer.store(record, None)
     if writer.presentation:
@@ -597,9 +587,10 @@ class _ResponseWriter:
                 raise ValueError("Root response has no question")
         else:
             response = self._child_response(record, parent, instruction)
-        if response.run_id is not None and response.run_id != record.run_id:
+        run_id = sanitize_string(record.run_id)
+        if response.run_id is not None and response.run_id != run_id:
             raise ValueError("Response belongs to another SDK run")
-        response.run_id = record.run_id
+        response.run_id = run_id
         response.response_status = record.status
         response.response_failure = record.failure
         self.responses[record.run_id] = response
@@ -613,19 +604,26 @@ class _ResponseWriter:
         )
         if parent is not None:
             response.message = (
-                record.steps[record.answer_step_index].message.text
+                sanitize_string(record.steps[record.answer_step_index].message.text)
                 if record.answer_step_index is not None
                 else ""
             )
             response.token_count = count_tokens(response.message)
         if record.checkpoint is not None and record.checkpoint.summary:
+            checkpoint = record.checkpoint.model_copy(
+                update={
+                    "summary": sanitize_string(record.checkpoint.summary),
+                    "covered_through_message_id": sanitize_string(
+                        record.checkpoint.covered_through_message_id
+                    ),
+                }
+            )
             previous_summary = find_summary_for_ancestry(
                 self.db_session,
                 response.chat_session_id,
                 visible_message_ids(self.db_session, response),
             )
-            if record.checkpoint != checkpoint_from_summary(previous_summary):
-                checkpoint = record.checkpoint
+            if checkpoint != checkpoint_from_summary(previous_summary):
                 summary = ChatMessage(
                     chat_session_id=response.chat_session_id,
                     parent_message_id=response.id,
@@ -659,8 +657,8 @@ class _ResponseWriter:
             session = ChatSession(
                 id=session_id,
                 spawned_by_message_id=parent.id,
-                agent_name=record.agent_path.rsplit("/", 1)[-1],
-                description=record.agent_description,
+                agent_name=sanitize_string(record.agent_path.rsplit("/", 1)[-1]),
+                description=sanitize_string(record.agent_description),
                 restoration_config=record.restoration_config,
             )
             self.db_session.add(session)
@@ -685,7 +683,7 @@ class _ResponseWriter:
             else:
                 predecessor_id = self.db_session.scalar(
                     select(ChatMessage.id).where(
-                        ChatMessage.run_id == record.previous_run_id
+                        ChatMessage.run_id == sanitize_string(record.previous_run_id)
                     )
                 )
                 if predecessor_id is None:
@@ -699,7 +697,9 @@ class _ResponseWriter:
         if predecessor is not None and predecessor.chat_session_id != session.id:
             raise ValueError("Child predecessor belongs to another conversation")
         response = self.db_session.scalar(
-            select(ChatMessage).where(ChatMessage.run_id == record.run_id)
+            select(ChatMessage).where(
+                ChatMessage.run_id == sanitize_string(record.run_id)
+            )
         )
         if response is not None:
             if response.chat_session_id != session.id:
@@ -708,12 +708,13 @@ class _ResponseWriter:
             if question is None or question.invoking_tool_call_id != invocation.id:
                 raise ValueError("Saved response belongs to another invocation")
         else:
+            instruction_text = sanitize_string(instruction.text)
             question = ChatMessage(
                 chat_session_id=session.id,
                 parent_message_id=predecessor.id if predecessor else None,
                 invoking_tool_call_id=invocation.id,
-                message=instruction.text,
-                token_count=count_tokens(instruction.text),
+                message=instruction_text,
+                token_count=count_tokens(instruction_text),
                 message_type=MessageType.USER,
             )
             self.db_session.add(question)
@@ -880,6 +881,7 @@ def write_response_items(
         raise ValueError("Selected answer is not a recorded step")
 
     def item_row(item_id: str, step_index: int) -> ChatResponseItem:
+        item_id = sanitize_string(item_id)
         if item_id in incoming_ids:
             raise ValueError("Response contains duplicate item identities")
         incoming_ids.add(item_id)
@@ -909,7 +911,7 @@ def write_response_items(
         row.is_answer = step_index == record.answer_step_index
         setting = presentation.pop(message_id, None)
         if setting is not None:
-            row.rendering = setting.model_dump(mode="json")
+            row.rendering = sanitize_json_like(setting.model_dump(mode="json"))
         if step.tools.keys() - {call.id for call in message.tool_calls}:
             raise ValueError("Tool execution has no call in its assistant message")
         for call in message.tool_calls:
@@ -917,20 +919,22 @@ def write_response_items(
             if key in tools:
                 raise ValueError("Duplicate tool call within one assistant message")
             execution = step.tools.get(call.id)
-            tool = stored_tools.get((step_index, call.id)) or ToolCall(
+            stored_call_id = sanitize_string(call.id)
+            arguments = sanitize_json_like(call.arguments)
+            tool = stored_tools.get((step_index, stored_call_id)) or ToolCall(
                 chat_session_id=response.chat_session_id,
                 parent_chat_message_id=response.id,
                 turn_number=step_index,
                 tab_index=len(tools),
                 tool_id=None,
-                tool_call_id=call.id,
-                tool_call_arguments=call.arguments,
-                tool_call_tokens=count_tokens(json.dumps(call.arguments)),
-                tool_call_response="",
+                tool_call_id=stored_call_id,
+                tool_call_arguments=arguments,
+                tool_call_tokens=count_tokens(json.dumps(arguments)),
+                legacy_response="",
             )
-            tool.tool_call_arguments = call.arguments
+            tool.tool_call_arguments = arguments
             tool.operation_status = execution.status if execution is not None else None
-            if (step_index, call.id) not in stored_tools:
+            if (step_index, stored_call_id) not in stored_tools:
                 response_tools.append(tool)
             db_session.add(tool)
             tools[key] = tool
@@ -938,7 +942,9 @@ def write_response_items(
                 result = execution.result
                 if result.tool_call_id != call.id or result.tool_name != call.name:
                     raise ValueError("Tool result does not match its invocation")
-                tool.result = result
+                tool.result = StoredToolResult.model_validate(
+                    result, from_attributes=True
+                )
                 result_row = item_row(f"{message_id}:result:{call.id}", step_index)
                 result_row.tool_call = tool
                 result_row.is_answer = False
@@ -1113,9 +1119,6 @@ def save_response_record__no_commit(
     record: ResponseRecord,
 ) -> int:
     configure_response_transaction__no_commit(session)
-    record = ResponseRecord.model_validate(
-        sanitize_json_like(record.model_dump(mode="json"))
-    )
     root = session.get(ChatMessage, root_message_id)
     if root is None:
         raise ValueError("Response root is unavailable")
