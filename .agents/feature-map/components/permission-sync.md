@@ -354,8 +354,14 @@ sync safe to lag doc sync.
 ```
 beat: CHECK_FOR_EXTERNAL_GROUP_SYNC (every 20s)
   check_for_external_group_sync                  external_group_syncing/tasks.py
-    get_all_auto_sync_cc_pairs
-    _is_external_group_sync_due(cc_pair)           per cc_pair, per §2 frequency table
+    get_all_auto_sync_cc_pairs                     every perm-synced cc_pair
+    (filter in check_for_external_group_sync)      keeps only active statuses (not PAUSED,
+                                                   INVALID, DELETING); for agnostic sources
+                                                   keeps the lowest-id active cc_pair
+    is_external_group_sync_due(cc_pair)            per cc_pair, per §2 frequency table
+    get_external_group_sync_retry_after            backs off after consecutive FAILED attempts
+                                                   (request_retry_delay: 5 min doubling to 6 h);
+                                                   the manual sync endpoint ignores it
     try_creating_external_group_sync_task          fences, inserts SyncRecord, dispatches:
   CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK
     connector_external_group_sync_generator_task -> _perform_external_group_sync

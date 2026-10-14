@@ -7,7 +7,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import build_cc_pair_has_unsynced_documents_clause
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.enums import AccessType
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
@@ -61,33 +61,6 @@ def _delete_connector_credential_pair_user_groups_relationship__no_commit(
         UserGroup__ConnectorCredentialPair.cc_pair_id == cc_pair.id,
     )
     db_session.execute(stmt)
-
-
-def get_cc_pairs_by_source(
-    db_session: Session,
-    source_type: DocumentSource,
-    access_types: list[AccessType] | None = None,
-    status: ConnectorCredentialPairStatus | None = None,
-) -> list[ConnectorCredentialPair]:
-    """
-    Get all cc_pairs for a given source type with optional filtering by access_types and status
-    result is sorted by cc_pair id
-    """
-    query = (
-        db_session.query(ConnectorCredentialPair)
-        .join(ConnectorCredentialPair.connector)
-        .filter(Connector.source == source_type)
-        .order_by(ConnectorCredentialPair.id)
-    )
-
-    if access_types is not None:
-        query = query.filter(ConnectorCredentialPair.access_type.in_(access_types))
-
-    if status is not None:
-        query = query.filter(ConnectorCredentialPair.status == status)
-
-    cc_pairs = query.all()
-    return cc_pairs
 
 
 def get_all_auto_sync_cc_pairs(
