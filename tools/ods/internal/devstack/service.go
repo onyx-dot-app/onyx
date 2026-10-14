@@ -26,6 +26,10 @@ type Spec struct {
 	Health string `json:"health,omitempty"`
 	// Optional services may exit without making the stack unready.
 	Optional bool `json:"optional,omitempty"`
+	// FixedPort is a port the service binds that is not leased, such as
+	// the Slack bot's metrics port. The service is skipped when something
+	// other than this stack holds it.
+	FixedPort int `json:"fixed_port,omitempty"`
 	// Skip, when set, is the reason the service is not started.
 	Skip string `json:"skip,omitempty"`
 }

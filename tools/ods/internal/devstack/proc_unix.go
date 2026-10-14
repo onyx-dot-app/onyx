@@ -186,20 +186,30 @@ func stopRecords(recs []ServiceRecord, timeout time.Duration) []ServiceRecord {
 		_ = syscall.Kill(-rec.PGID, syscall.SIGTERM)
 		active = append(active, rec)
 	}
-	active = waitGroups(active, timeout)
-	for _, rec := range active {
+	var killed []ServiceRecord
+	for _, rec := range waitGroups(active, timeout) {
+		if !groupIsOurs(rec) {
+			// Still alive, but no recorded member proves the group is ours
+			// any more: report it rather than kill or forget it.
+			log.Warnf("Cannot prove ownership of surviving process group %d for %s", rec.PGID, rec.Name)
+			unresolved = append(unresolved, rec)
+			continue
+		}
 		log.Warnf("%s did not stop in %s, killing its process group", rec.Name, timeout)
 		_ = syscall.Kill(-rec.PGID, syscall.SIGKILL)
+		killed = append(killed, rec)
 	}
-	return append(waitGroups(active, 5*time.Second), unresolved...)
+	return append(waitGroups(killed, 5*time.Second), unresolved...)
 }
 
 func waitGroups(recs []ServiceRecord, timeout time.Duration) []ServiceRecord {
 	deadline := time.Now().Add(timeout)
 	for len(recs) > 0 {
+		// A group stays tracked while any member lives, whether or not
+		// ownership can still be proven.
 		var left []ServiceRecord
 		for _, rec := range recs {
-			if groupIsOurs(rec) {
+			if groupAlive(rec.PGID) {
 				left = append(left, rec)
 			}
 		}

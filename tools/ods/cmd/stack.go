@@ -344,8 +344,7 @@ func (p *stackProvider) Prepare(ctx context.Context) error {
 	if err := runInDir(ctx, p.stack.Root, "uv", "sync", "--frozen"); err != nil {
 		return err
 	}
-	prepareWebDirOutput(filepath.Join(p.stack.Root, "web"), os.Stderr)
-	return nil
+	return prepareWebDirOutput(filepath.Join(p.stack.Root, "web"), os.Stderr)
 }
 
 func runInDir(ctx context.Context, dir, name string, args ...string) error {

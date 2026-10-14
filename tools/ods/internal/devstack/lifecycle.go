@@ -103,7 +103,11 @@ func (s *Stack) run(ctx context.Context, p Provider, opts Options, infra bool) (
 		return nil, err
 	}
 	defer unlock()
+	return s.runLocked(ctx, p, opts, infra)
+}
 
+// runLocked is run with the lifecycle lock already held.
+func (s *Stack) runLocked(ctx context.Context, p Provider, opts Options, infra bool) (*Status, error) {
 	st, err := s.ReadState()
 	if err != nil {
 		return nil, err
@@ -389,6 +393,9 @@ func (s *Stack) reconcile(st *State, specs []Spec, stopTimeout time.Duration) ([
 		if keptSlugs[sp.Slug] {
 			continue
 		}
+		if sp.Skip == "" && sp.FixedPort > 0 && !bindable(sp.FixedPort) {
+			sp.Skip = fmt.Sprintf("its port %d is in use", sp.FixedPort)
+		}
 		if sp.Skip != "" {
 			log.Infof("Skipping %s: %s", sp.Name, sp.Skip)
 			st.Services = append(st.Services, ServiceRecord{Name: sp.Name, Slug: sp.Slug, Skipped: sp.Skip, Optional: sp.Optional, SpecHash: sp.Hash()})
@@ -473,10 +480,15 @@ func (s *Stack) Down(ctx context.Context, p Provider, opts Options) error {
 // infrastructure.
 func (s *Stack) Restart(ctx context.Context, p Provider, opts Options) (*Status, error) {
 	opts = opts.WithDefaults()
-	if err := s.Stop(ctx, opts); err != nil {
+	unlock, err := s.Lock(ctx, "stack restart", opts.LockWait)
+	if err != nil {
 		return nil, err
 	}
-	return s.Start(ctx, p, opts)
+	defer unlock()
+	if err := s.stopServices(opts.StopTimeout); err != nil {
+		return nil, err
+	}
+	return s.runLocked(ctx, p, opts, false)
 }
 
 // ServiceStatus is one service as reported by Status.
@@ -515,6 +527,10 @@ type Status struct {
 	Services []ServiceStatus   `json:"services"`
 	Errors   []string          `json:"errors"`
 	StateDir string            `json:"state_dir"`
+
+	// healthyNow is Ready without the phase condition, for the readiness
+	// wait while the phase is still starting.
+	healthyNow bool
 }
 
 // Status reports the current state without taking the lock. It returns nil
@@ -575,7 +591,10 @@ func (s *Stack) status(st *State, probe bool) *Status {
 	if settle == 0 {
 		settle = Options{}.WithDefaults().SettleTime
 	}
-	out.Ready = ready && settled(st.Services, settle) && (st.Phase == PhaseReady || st.Phase == PhaseStarting || st.Phase == PhaseDegraded)
+	out.healthyNow = ready && settled(st.Services, settle)
+	// A stack is ready only after a reconcile finished: an interrupted
+	// start may have saved just part of the profile.
+	out.Ready = out.healthyNow && (st.Phase == PhaseReady || st.Phase == PhaseDegraded)
 	return out
 }
 
@@ -685,13 +704,12 @@ func (s *Stack) waitReady(ctx context.Context, st *State, timeout, settle time.D
 			err := s.fail(st, fmt.Errorf("services exited during startup: %s", strings.Join(exited, ", ")))
 			return s.status(st, true), err
 		}
-		if status.Ready && settled(st.Services, settle) {
+		if status.healthyNow {
 			st.Phase = PhaseReady
 			if err := s.WriteState(st); err != nil {
 				return status, err
 			}
-			status.Phase = PhaseReady
-			return status, nil
+			return s.status(st, true), nil
 		}
 		if time.Now().After(deadline) {
 			st.Phase = PhaseDegraded

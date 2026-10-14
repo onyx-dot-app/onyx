@@ -107,9 +107,12 @@ type fakeProvider struct {
 	services []string
 	// extraArgs per service slug, such as "--spawn-child".
 	extraArgs map[string][]string
-	migrated  [][]string
-	composeUp int
-	prepared  int
+	// fixedPorts per service slug: a port the service binds that is not
+	// leased, as the Slack bot's metrics port.
+	fixedPorts map[string]int
+	migrated   [][]string
+	composeUp  int
+	prepared   int
 }
 
 func (p *fakeProvider) Prepare(context.Context) error {
@@ -153,8 +156,11 @@ func (p *fakeProvider) Plan(_ string, ports map[string]int, env Env, _ Options) 
 	var specs []Spec
 	for _, name := range p.services {
 		port := ports[name]
+		if fixed, ok := p.fixedPorts[name]; ok {
+			port = fixed
+		}
 		cmd := append([]string{exe, "--port", fmt.Sprint(port)}, p.extraArgs[name]...)
-		specs = append(specs, Spec{
+		spec := Spec{
 			Name:    name,
 			Slug:    name,
 			Command: cmd,
@@ -162,7 +168,11 @@ func (p *fakeProvider) Plan(_ string, ports map[string]int, env Env, _ Options) 
 			Env:     env.With([]string{fakeServiceEnv + "=1"}),
 			Port:    port,
 			Health:  fmt.Sprintf("http://localhost:%d/health", port),
-		})
+		}
+		if fixed, ok := p.fixedPorts[name]; ok {
+			spec.Port, spec.FixedPort, spec.Optional, spec.Health = 0, fixed, true, ""
+		}
+		specs = append(specs, spec)
 	}
 	return specs, nil
 }
@@ -525,4 +535,84 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+func TestUp_keepsServiceOnFixedPortItHolds(t *testing.T) {
+	s := newTestStack(t, t.TempDir())
+	fixed := freeBasePort() + 5
+	p := &fakeProvider{services: []string{"web", "bot"}, fixedPorts: map[string]int{"bot": fixed}}
+	mustUp(t, s, p)
+	bot := servicePID(t, s, "bot")
+	if bot.PID == 0 || bot.Skipped != "" {
+		t.Fatalf("bot not started: %+v", bot)
+	}
+
+	// The bot itself now holds its fixed port; a second up must keep it.
+	mustUp(t, s, p)
+	again := servicePID(t, s, "bot")
+	if again.PID != bot.PID || again.Skipped != "" {
+		t.Errorf("bot restarted or skipped on rerun: %+v -> %+v", bot, again)
+	}
+
+	// Once something else holds the port, the bot is skipped, not killed
+	// wrongly: stop first so the port is free for the foreign listener.
+	if err := s.Stop(context.Background(), testOptions()); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", fixed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	mustUp(t, s, p)
+	if skipped := servicePID(t, s, "bot"); skipped.Skipped == "" {
+		t.Errorf("bot not skipped while port is foreign: %+v", skipped)
+	}
+}
+
+func TestStatus_notReadyWhileStartIsIncomplete(t *testing.T) {
+	s := newTestStack(t, t.TempDir())
+	p := &fakeProvider{services: []string{"web"}}
+	mustUp(t, s, p)
+	st, _ := s.ReadState()
+	// An interrupted start saved a healthy web but never reached the rest.
+	st.Phase = PhaseStarting
+	if err := s.WriteState(st); err != nil {
+		t.Fatal(err)
+	}
+	status, err := s.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Ready {
+		t.Fatalf("incomplete start reported ready: %+v", status)
+	}
+	mustUp(t, s, p)
+	if status, _ := s.Status(); !status.Ready {
+		t.Fatalf("finished start not ready: %+v", status)
+	}
+}
+
+func TestRestart_holdsOneLock(t *testing.T) {
+	s := newTestStack(t, t.TempDir())
+	p := &fakeProvider{services: []string{"web"}}
+	first := mustUp(t, s, p)
+
+	// While Restart runs, no other lifecycle command may take the lock.
+	blocked := make(chan error, 1)
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		_, err := s.Lock(context.Background(), "intruder", 200*time.Millisecond)
+		blocked <- err
+	}()
+	status, err := s.Restart(context.Background(), p, testOptions())
+	if err != nil || !status.Ready {
+		t.Fatalf("restart: %v %+v", err, status)
+	}
+	if err := <-blocked; !errors.Is(err, ErrLocked) {
+		t.Errorf("another command took the lock during restart: %v", err)
+	}
+	if status.Ports["web"] != first.Ports["web"] {
+		t.Errorf("restart changed the port: %d -> %d", first.Ports["web"], status.Ports["web"])
+	}
 }

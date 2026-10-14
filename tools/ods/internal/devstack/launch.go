@@ -248,9 +248,7 @@ func Translate(root string, c LaunchConfig, ports map[string]int, env Env) (Spec
 		sp.Health = fmt.Sprintf("http://localhost:%d/api/health", sp.Port)
 	case "slack-bot":
 		sp.Optional = true
-		if !bindable(slackMetricsPort) {
-			sp.Skip = fmt.Sprintf("its metrics port %d is in use", slackMetricsPort)
-		}
+		sp.FixedPort = slackMetricsPort
 	}
 
 	args := make([]string, 0, len(c.Args))
