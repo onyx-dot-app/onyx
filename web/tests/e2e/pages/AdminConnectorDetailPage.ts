@@ -15,13 +15,13 @@ export class AdminConnectorDetailPage {
   readonly indexingSection: Locator;
   /** The attempt history at the bottom of the page. */
   readonly runsSection: Locator;
-  /** Opens the action menu; present only when the caller may edit. */
+  /** Opens the action menu. Present only when the caller may operate. */
   readonly manageButton: Locator;
   readonly deleteMenuItem: Locator;
-  /** Enters the inline file editor of a file connector. */
+  /** Enters the inline file editor of a file connector, inside Index Configurations. */
   readonly filesEditButton: Locator;
   /** Opens the connector in the creation form in edit mode. */
-  readonly editConnectorMenuItem: Locator;
+  readonly editConnectorButton: Locator;
   /** Unfolds the section listing the connector's settings. */
   readonly indexConfigurationsToggle: Locator;
 
@@ -31,13 +31,13 @@ export class AdminConnectorDetailPage {
     this.runsSection = page.getByText("Index Runs", { exact: true });
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
-      name: "Manage",
+      name: "Manage Index",
       exact: true,
     });
     this.deleteMenuItem = page.getByRole("menuitem", { name: /Delete/i });
     // By id: the header's title pencil is also a button named "Edit".
     this.filesEditButton = page.getByTestId("file-manager-edit");
-    this.editConnectorMenuItem = page.getByRole("menuitem", {
+    this.editConnectorButton = page.getByRole("button", {
       name: "Edit connector",
       exact: true,
     });
@@ -46,13 +46,19 @@ export class AdminConnectorDetailPage {
     });
   }
 
+  /** Unfolds Index Configurations, which starts folded and holds the settings and the file editor. */
+  async expandIndexConfigurations(): Promise<void> {
+    await this.indexConfigurationsToggle.click();
+  }
+
   /** Unfolds Index Configurations and checks that a setting shows `value`. */
   async expectIndexConfigurationValue(value: string): Promise<void> {
-    await this.indexConfigurationsToggle.click();
+    await this.expandIndexConfigurations();
     await expect(this.page.getByText(value).first()).toBeVisible();
   }
 
   async openFilesEditor(): Promise<void> {
+    await this.expandIndexConfigurations();
     await this.filesEditButton.click();
   }
 
@@ -74,9 +80,8 @@ export class AdminConnectorDetailPage {
   }
 
   async openEditForm(): Promise<void> {
-    await this.openManageMenu();
-    await expect(this.editConnectorMenuItem).toBeVisible({ timeout: 30000 });
-    await this.editConnectorMenuItem.click();
+    await expect(this.editConnectorButton).toBeVisible({ timeout: 30000 });
+    await this.editConnectorButton.click();
   }
 
   /** The connector name in the page header. */
