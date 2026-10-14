@@ -14,7 +14,7 @@
 **Edition:** CE, with a Cloud-only lockdown on built-in credential editing (see `[[craft-admin]]`)
 **Owns:**
 `backend/onyx/sandbox_proxy/` (`server.py`, `request_evaluator.py`,
-`credential_injection.py`, `approval_cache.py`, `destination_resolver.py`, `sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`,
+`credential_injection.py`, `approval_cache.py`, `destination_policy.py`, `sandbox_identity/resolution.py`, `sandbox_identity/kubernetes.py`,
 `sandbox_identity/docker.py`, `certificate_authority/bootstrap.py`, `certificate_authority/kubernetes.py`, `certificate_authority/docker.py`, `errors.py`,
 `logging_utils.py`, `mcp_jsonrpc.py`, `addons/gate.py`, `resolvers/external_app.py`,
 `resolvers/mcp_server.py`, `resolvers/mcp_matching.py`, `resolvers/onyx_pat.py`),
@@ -188,13 +188,13 @@ sandbox process (opencode / a tool call)
      sandbox_proxy/addons/gate.py:GateAddon.http_connect
   │
 2. Destination checks and address pinning
-     DestinationResolver.resolve applies one policy across all three hooks.
+     resolve_sandbox_destination applies one policy across all three hooks.
      resolve_destination rejects non-global addresses and configured internal CIDRs,
      except ONYX_SERVER_URL's exact host:port. For blocked addresses, it invokes
      an authorization callback without repeating the DNS lookup.
      CONNECT checks HTTPS; requests check their scheme. Upstream sockets check TLS
      or the accepted CONNECT origin before allowing internal MCP addresses.
-     DestinationResolver authorizes the exact MCP origin for the source sandbox,
+     resolve_sandbox_destination authorizes the exact MCP origin for the source sandbox,
      then reads that tenant's SSRF settings with fallback disabled.
      resolve_destination applies these settings to the original DNS answers,
      including embedded IPv4, with the shared URL validator.

@@ -10,6 +10,7 @@ import binascii
 import operator
 import threading
 from collections.abc import Callable
+from functools import partial
 from typing import Protocol
 from uuid import UUID
 
@@ -35,8 +36,8 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.destination_policy import (
     clear_destination,
     pin_destination,
+    resolve_sandbox_destination,
 )
-from onyx.sandbox_proxy.destination_resolver import DestinationResolver
 from onyx.sandbox_proxy.errors import SandboxProxyError, http_403
 from onyx.sandbox_proxy.logging_utils import (
     APPROVAL_DECIDED_FIELDS,
@@ -157,8 +158,11 @@ class GateAddon:
         stream_responses: bool = True,
         mcp_resolver: MCPServerResolver | None = None,
     ) -> None:
-        self._destinations = DestinationResolver(
-            destination_policy, identity.resolve_sandbox, mcp_resolver
+        self._resolve_destination = partial(
+            resolve_sandbox_destination,
+            config=destination_policy,
+            resolve_sandbox=identity.resolve_sandbox,
+            mcp_resolver=mcp_resolver,
         )
         self._identity = identity
         self._request_evaluator = request_evaluator
@@ -204,7 +208,7 @@ class GateAddon:
         # can do a blocking DNS lookup, so run it off the event loop.
         if (
             await asyncio.to_thread(
-                self._destinations.resolve,
+                self._resolve_destination,
                 flow.client_conn.peername,
                 "https",
                 flow.request.host,
@@ -256,7 +260,7 @@ class GateAddon:
             return
         host, port = server.address[0], server.address[1]
         addresses = await asyncio.to_thread(
-            self._destinations.resolve,
+            self._resolve_destination,
             data.client.peername,
             "https"
             if server.tls
@@ -311,7 +315,7 @@ class GateAddon:
         # pin. Resolution can block, so run it off the event loop.
         if (
             await asyncio.to_thread(
-                self._destinations.resolve,
+                self._resolve_destination,
                 flow.client_conn.peername,
                 flow.request.scheme,
                 flow.request.host,

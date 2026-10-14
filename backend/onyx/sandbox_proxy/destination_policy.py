@@ -11,9 +11,14 @@ from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urlsplit
 
 from onyx.sandbox_proxy.models import DestinationPolicyConfig, IPNetwork
-from onyx.server.security.models import OutboundSSRFParams
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
+from onyx.sandbox_proxy.sandbox_identity.resolution import PeerAddress, source_ip
+from onyx.server.security.models import OutboundSSRFParams, outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 if TYPE_CHECKING:
     from socket import _RetAddress
@@ -124,6 +129,46 @@ def resolve_destination(
             except (SSRFException, ValueError):
                 return None
     return tuple(dict.fromkeys(str(address) for address in addresses))
+
+
+def resolve_sandbox_destination(
+    peer: PeerAddress | None,
+    scheme: str,
+    host: str,
+    port: int,
+    *,
+    config: DestinationPolicyConfig,
+    resolve_sandbox: Callable[[str], ResolvedSandbox | None],
+    mcp_resolver: MCPServerResolver | None = None,
+) -> tuple[str, ...] | None:
+    """Resolve once and authorize internal answers for the source sandbox."""
+
+    def authorize_internal() -> OutboundSSRFParams | None:
+        if mcp_resolver is None:
+            return None
+        try:
+            src_ip = source_ip(peer)
+            if src_ip is None:
+                return None
+            sandbox = resolve_sandbox(src_ip)
+            if sandbox is None or not mcp_resolver.allows_destination(
+                sandbox, scheme, host, port
+            ):
+                return None
+            token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
+            try:
+                return outbound_ssrf_params(
+                    get_security_settings(allow_fallback=False).ssrf_protection_level
+                )
+            finally:
+                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        except Exception:
+            logger.exception("mcp_destination_error host=%s port=%s", host, port)
+            return None
+
+    return resolve_destination(
+        config, host, port, authorize_internal=authorize_internal
+    )
 
 
 def is_destination_blocked(

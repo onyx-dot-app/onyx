@@ -1,5 +1,6 @@
 """Private MCP origins stay scoped to the sandbox user and exact origin."""
 
+from functools import partial
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,8 +9,10 @@ from mitmproxy.proxy import server_hooks
 
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
-from onyx.sandbox_proxy.destination_policy import parse_destination_policy
-from onyx.sandbox_proxy.destination_resolver import DestinationResolver
+from onyx.sandbox_proxy.destination_policy import (
+    parse_destination_policy,
+    resolve_sandbox_destination,
+)
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.server.security.models import SSRFProtectionLevel
@@ -214,12 +217,13 @@ def test_mcp_rechecks_tenant_ssrf_settings(
         return mcp_ssrf_settings
 
     monkeypatch.setattr(
-        "onyx.sandbox_proxy.destination_resolver.get_security_settings", settings
+        "onyx.sandbox_proxy.destination_policy.get_security_settings", settings
     )
-    destinations = DestinationResolver(
-        parse_destination_policy("https://onyx.test"),
-        StubResolver(sandbox=sandbox).resolve_sandbox,
-        resolver,
+    resolve = partial(
+        resolve_sandbox_destination,
+        config=parse_destination_policy("https://onyx.test"),
+        resolve_sandbox=StubResolver(sandbox=sandbox).resolve_sandbox,
+        mcp_resolver=resolver,
     )
     previous = CURRENT_TENANT_ID_CONTEXTVAR.get()
     for level, expected in [
@@ -228,16 +232,13 @@ def test_mcp_rechecks_tenant_ssrf_settings(
         (SSRFProtectionLevel.DISABLED, ("10.1.2.3",)),
     ]:
         mcp_ssrf_settings.ssrf_protection_level = level
-        assert (
-            destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443)
-            == expected
-        )
+        assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) == expected
         assert CURRENT_TENANT_ID_CONTEXTVAR.get() == previous
     monkeypatch.setattr(
-        "onyx.sandbox_proxy.destination_resolver.get_security_settings",
+        "onyx.sandbox_proxy.destination_policy.get_security_settings",
         MagicMock(side_effect=RuntimeError("settings unavailable")),
     )
-    assert destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
+    assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
     assert CURRENT_TENANT_ID_CONTEXTVAR.get() == previous
 
 
@@ -282,14 +283,15 @@ def test_private_mcp_denies_real_settings_read_failure(
         )
     )
     monkeypatch.setattr(store, "_db_load_overrides", db_read)
-    destinations = DestinationResolver(
-        parse_destination_policy("https://onyx.test"),
-        StubResolver(sandbox=sandbox).resolve_sandbox,
-        resolver,
+    resolve = partial(
+        resolve_sandbox_destination,
+        config=parse_destination_policy("https://onyx.test"),
+        resolve_sandbox=StubResolver(sandbox=sandbox).resolve_sandbox,
+        mcp_resolver=resolver,
     )
 
     # Populate MCP access and strict tenant settings through the actual reader.
-    assert destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
+    assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
     store.invalidate_security_cache(sandbox.tenant_id)
     if failure == "database":
         db_read.side_effect = RuntimeError("database unavailable")
@@ -302,9 +304,7 @@ def test_private_mcp_denies_real_settings_read_failure(
             store.get_security_settings().ssrf_protection_level
             == SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK
         )
-        assert (
-            destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
-        )
+        assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
     targets.assert_called_once()
@@ -315,9 +315,7 @@ def test_private_mcp_denies_real_settings_read_failure(
     db_read.side_effect = None
     kv_store.load.side_effect = None
     db_read.return_value = SecuritySettingsOverrides()
-    assert destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) == (
-        "10.1.2.3",
-    )
+    assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) == ("10.1.2.3",)
 
 
 @pytest.mark.parametrize(
@@ -411,10 +409,14 @@ def test_destination_resolver_uses_one_dns_snapshot(
         ]
     )
     monkeypatch.setattr(socket, "getaddrinfo", dns)
-    destinations = DestinationResolver(parse_destination_policy(api_url), identity, mcp)
-
-    result = destinations.resolve(
-        ("::ffff:10.0.0.1", 1234), "https", "private-mcp.test", 443
+    result = resolve_sandbox_destination(
+        ("::ffff:10.0.0.1", 1234),
+        "https",
+        "private-mcp.test",
+        443,
+        config=parse_destination_policy(api_url),
+        resolve_sandbox=identity,
+        mcp_resolver=mcp,
     )
 
     assert result == (tuple(addresses) if allowed else None)

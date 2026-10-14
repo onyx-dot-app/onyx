@@ -280,7 +280,7 @@ def mcp_ssrf_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
         return settings
 
     monkeypatch.setattr(
-        "onyx.sandbox_proxy.destination_resolver.get_security_settings", read_settings
+        "onyx.sandbox_proxy.destination_policy.get_security_settings", read_settings
     )
     return settings
 
