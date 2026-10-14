@@ -15,3 +15,5 @@ func groupAlive(int) bool { return false }
 func groupIsOurs(ServiceRecord) bool { return false }
 
 func stopRecords(recs []ServiceRecord, _ time.Duration) []ServiceRecord { return nil }
+
+func portHeldByGroup(int, int) bool { return false }

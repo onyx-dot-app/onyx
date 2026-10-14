@@ -221,3 +221,25 @@ func waitGroups(recs []ServiceRecord, timeout time.Duration) []ServiceRecord {
 	}
 	return recs
 }
+
+// portHeldByGroup reports whether a process in the group listens on port.
+// Without lsof it falls back to the port being bound at all.
+func portHeldByGroup(port, pgid int) bool {
+	out, err := exec.Command("lsof", "-t", "-nP", "-iTCP:"+strconv.Itoa(port), "-sTCP:LISTEN").Output()
+	if err != nil {
+		if _, lookErr := exec.LookPath("lsof"); lookErr != nil {
+			return !bindable(port)
+		}
+		return false
+	}
+	members := map[int]bool{}
+	for _, pid := range groupMembers(pgid) {
+		members[pid] = true
+	}
+	for _, field := range strings.Fields(string(out)) {
+		if pid, err := strconv.Atoi(field); err == nil && members[pid] {
+			return true
+		}
+	}
+	return false
+}

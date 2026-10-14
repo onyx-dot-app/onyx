@@ -113,10 +113,15 @@ func newStackLifecycleCommand(name, short string) *cobra.Command {
 			}
 			if err != nil {
 				log.Error(err)
-				if status != nil && status.Phase != devstack.PhaseFailed {
+				switch {
+				case errors.Is(err, devstack.ErrLocked):
+					// The printed status is older context, not this run's result.
+					exitHook(3)
+				case status != nil && status.Phase != devstack.PhaseFailed:
 					exitHook(2)
+				default:
+					exitHook(1)
 				}
-				exitHook(1)
 			}
 		},
 	}

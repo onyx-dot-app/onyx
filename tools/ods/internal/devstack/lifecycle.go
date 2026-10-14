@@ -266,11 +266,20 @@ func (s *Stack) leasePorts(st *State, requests []PortRequest) error {
 	}
 	for i, req := range requests {
 		for _, rec := range st.Services {
-			if req.Name == rec.Slug+"-metrics" && st.Ports[req.Name] > 0 && isCurrent(rec) {
-				requests[i].Fixed = st.Ports[req.Name]
+			if !isCurrent(rec) {
+				continue
 			}
-			if rec.Slug == req.Name && rec.Port > 0 && isCurrent(rec) {
-				requests[i].Fixed = rec.Port
+			port := 0
+			switch req.Name {
+			case rec.Slug:
+				port = rec.Port
+			case rec.Slug + "-metrics":
+				port = st.Ports[req.Name]
+			}
+			// A port stays fixed only while this stack's own process group
+			// holds it; a port lost to another process is leased again.
+			if port > 0 && portHeldByGroup(port, rec.PGID) {
+				requests[i].Fixed = port
 			}
 		}
 	}
@@ -709,7 +718,11 @@ func (s *Stack) waitReady(ctx context.Context, st *State, timeout, settle time.D
 			if err := s.WriteState(st); err != nil {
 				return status, err
 			}
-			return s.status(st, true), nil
+			// Return the snapshot that passed, not a fresh probe that could
+			// disagree with the nil error.
+			status.Phase = PhaseReady
+			status.Ready = true
+			return status, nil
 		}
 		if time.Now().After(deadline) {
 			st.Phase = PhaseDegraded

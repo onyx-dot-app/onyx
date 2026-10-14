@@ -307,6 +307,8 @@ ready, 2 when it is not, and 1 when the worktree has no stack.
 exit 1 when startup fails, including a missing tool, dependency installation,
 Compose, migrations, or an exited required service. Migration diagnostics appear in `errors`.
 They exit 2 when running services do not become healthy within `--timeout`.
+They exit 3 when another lifecycle command still held the worktree lock after
+`--lock-wait`; the printed status is then the last recorded one.
 A service without a health check must stay alive for five seconds before the
 stack counts as ready, so a crash on startup is reported rather than hidden.
 

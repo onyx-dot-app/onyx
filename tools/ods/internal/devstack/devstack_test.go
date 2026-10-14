@@ -598,19 +598,35 @@ func TestRestart_holdsOneLock(t *testing.T) {
 	p := &fakeProvider{services: []string{"web"}}
 	first := mustUp(t, s, p)
 
-	// While Restart runs, no other lifecycle command may take the lock.
-	blocked := make(chan error, 1)
+	// While Restart runs, every attempt to take the lock must fail.
+	done := make(chan struct{})
+	leaked := make(chan bool, 1)
 	go func() {
-		time.Sleep(300 * time.Millisecond)
-		_, err := s.Lock(context.Background(), "intruder", 200*time.Millisecond)
-		blocked <- err
+		for {
+			unlock, err := s.Lock(context.Background(), "intruder", 20*time.Millisecond)
+			select {
+			case <-done:
+				if err == nil {
+					unlock()
+				}
+				leaked <- false
+				return
+			default:
+			}
+			if err == nil {
+				unlock()
+				leaked <- true
+				return
+			}
+		}
 	}()
 	status, err := s.Restart(context.Background(), p, testOptions())
+	close(done)
 	if err != nil || !status.Ready {
 		t.Fatalf("restart: %v %+v", err, status)
 	}
-	if err := <-blocked; !errors.Is(err, ErrLocked) {
-		t.Errorf("another command took the lock during restart: %v", err)
+	if <-leaked {
+		t.Error("another command took the lock during restart")
 	}
 	if status.Ports["web"] != first.Ports["web"] {
 		t.Errorf("restart changed the port: %d -> %d", first.Ports["web"], status.Ports["web"])

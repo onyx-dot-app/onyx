@@ -27,7 +27,7 @@ test("dev stack streams and persists a backend chat response", async ({
   await chat.expectHumanMessage(message);
   await expect(chat.aiMessage()).toContainText(MOCK_LLM_DEFAULT_RESPONSE);
   await expect(page).toHaveURL(/chatId=/);
-  await page.reload();
+  await chat.reload();
   await chat.expectHumanMessage(message);
   await expect(chat.aiMessage()).toContainText(MOCK_LLM_DEFAULT_RESPONSE);
 });

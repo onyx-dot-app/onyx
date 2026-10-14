@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestMetricsLeaseKeepsRunningWorkerPortAndMovesForeignPort(t *testing.T) {
+func TestMetricsLeaseMovesOffForeignListener(t *testing.T) {
 	stack := newTestStack(t, t.TempDir())
 	provider := &fakeProvider{services: []string{"celery-primary"}}
 	mustUp(t, stack, provider)
@@ -23,6 +23,17 @@ func TestMetricsLeaseKeepsRunningWorkerPortAndMovesForeignPort(t *testing.T) {
 		t.Fatal(err)
 	}
 	port := state.Ports[requests[0].Name]
+
+	// Nothing else holds the port: the running worker keeps it.
+	if err := stack.leasePorts(state, append([]PortRequest(nil), requests...)); err != nil {
+		t.Fatal(err)
+	}
+	if got := state.Ports[requests[0].Name]; got != port {
+		t.Fatalf("free metrics port moved from %d to %d", port, got)
+	}
+
+	// A foreign process took the port while the worker runs: the lease
+	// moves so the next start restores a metrics endpoint.
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		t.Fatal(err)
@@ -31,8 +42,9 @@ func TestMetricsLeaseKeepsRunningWorkerPortAndMovesForeignPort(t *testing.T) {
 	if err := stack.leasePorts(state, append([]PortRequest(nil), requests...)); err != nil {
 		t.Fatal(err)
 	}
-	if got := state.Ports[requests[0].Name]; got != port {
-		t.Fatalf("running worker metrics moved from %d to %d", port, got)
+	moved := state.Ports[requests[0].Name]
+	if moved == port {
+		t.Fatal("running worker kept a metrics port held by a foreign listener")
 	}
 	if err := stack.Stop(context.Background(), testOptions()); err != nil {
 		t.Fatal(err)
@@ -44,8 +56,8 @@ func TestMetricsLeaseKeepsRunningWorkerPortAndMovesForeignPort(t *testing.T) {
 	if err := stack.leasePorts(state, append([]PortRequest(nil), requests...)); err != nil {
 		t.Fatal(err)
 	}
-	if state.Ports[requests[0].Name] == port {
-		t.Fatal("stopped worker kept metrics port occupied by a foreign listener")
+	if got := state.Ports[requests[0].Name]; got != moved {
+		t.Fatalf("stopped worker lost its free metrics port: %d -> %d", moved, got)
 	}
 }
 
