@@ -256,7 +256,9 @@ export class ScheduledTasksPage {
 
   async expectActiveStatus(): Promise<void> {
     await expect(
-      this.page.getByTestId("task-status-ACTIVE").first()
+      this.page
+        .getByLabel("admin-page-title")
+        .getByText("Active", { exact: true })
     ).toBeVisible();
   }
 

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { cn } from "@opal/utils";
 import { Divider, Button, Spacer } from "@opal/components";
+import type { TagProps } from "@opal/components";
 import type {
   IconFunctionComponent,
   RichStr,
@@ -62,6 +63,8 @@ export interface SettingsHeaderProps {
   moreIcon2?: IconFunctionComponent;
   title: string | RichStr;
   description?: string | RichStr;
+  /** Tag inline after the description, e.g. a status. */
+  descriptionTag?: TagProps;
   children?: React.ReactNode;
   /**
    * Controls on the right of the title block, left to right. The header lays
@@ -88,6 +91,7 @@ function SettingsHeader({
   moreIcon2,
   title,
   description,
+  descriptionTag,
   children,
   actions,
   cancel,
@@ -144,6 +148,7 @@ function SettingsHeader({
               moreIcon2={moreIcon2}
               title={title}
               description={description}
+              descriptionTag={descriptionTag}
               sizePreset="headline"
               variant="heading"
             />
