@@ -54,13 +54,10 @@ function isActive(run: CCPairRun): boolean {
   );
 }
 
-/** When the run finished, or `null` while it has not. Index attempts store no
- * finish time, so their last update stands in. */
+/** When the run finished, or `null` while it has not. */
 function finishedAt(run: CCPairRun): string | null {
   if (isActive(run)) return null;
-  return run.kind === "indexing"
-    ? run.attempt.time_updated
-    : run.attempt.time_finished;
+  return run.attempt.time_finished;
 }
 
 interface FigureProps {
