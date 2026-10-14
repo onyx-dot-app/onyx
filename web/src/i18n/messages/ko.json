@@ -2688,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "단계 세부 정보",
-        "batches": "배치",
+        "calls": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
         "uneven": {

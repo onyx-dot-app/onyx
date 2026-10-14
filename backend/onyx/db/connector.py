@@ -183,8 +183,10 @@ def update_connector(
         if connector_data.prune_freq is not None
         else DEFAULT_PRUNING_FREQ
     )
-    connector.check_freq = connector_data.check_freq
-    connector.validate_check_freq()
+    # Omitted keeps the schedule (Terraform's upsert never sends it), an explicit null clears it.
+    if "check_freq" in connector_data.model_fields_set:
+        connector.check_freq = connector_data.check_freq
+        connector.validate_check_freq()
 
     db_session.commit()
     return connector

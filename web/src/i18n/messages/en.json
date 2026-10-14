@@ -2688,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "Stage Details",
-        "batches": "Batches",
+        "calls": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",
         "uneven": {

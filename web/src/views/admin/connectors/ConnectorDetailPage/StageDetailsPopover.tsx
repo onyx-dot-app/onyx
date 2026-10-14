@@ -289,7 +289,7 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
           <ColumnTitle>{t("stageDetails.title")}</ColumnTitle>
         </Cell>
         <Cell width={BATCHES_WIDTH} align="end">
-          <ColumnTitle>{t("stageDetails.batches")}</ColumnTitle>
+          <ColumnTitle>{t("stageDetails.calls")}</ColumnTitle>
           <Text font="secondary-mono-label" color="text-04">
             {total === undefined ? "-" : format.number(total.event_count)}
           </Text>

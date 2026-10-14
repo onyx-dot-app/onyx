@@ -2688,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "ステージ詳細",
-        "batches": "バッチ",
+        "calls": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
         "uneven": {

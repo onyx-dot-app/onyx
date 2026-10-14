@@ -2688,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "تفاصيل المراحل",
-        "batches": "الدفعات",
+        "calls": "الدفعات",
         "averageTime": "متوسط الوقت",
         "maxTime": "أقصى وقت",
         "uneven": {
