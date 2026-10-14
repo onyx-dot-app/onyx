@@ -3242,7 +3242,8 @@
           "description": "Web-Connector konfigurieren",
           "fields": {
             "base_url": {
-              "label": "Basis-URL"
+              "label": "Basis-URL",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "Scraping-Methode",
@@ -3260,7 +3261,9 @@
               "label": "URL-Umschreibungen",
               "description": "URLs von Dokumenten vor dem Speichern umschreiben. Nützlich, wenn über einen internen Mirror gecrawlt wird, aber die öffentlichen kanonischen Links gespeichert werden sollen, zum Beispiel https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "Quell-URL-Präfix",
-              "rightLabel": "Ersatzpräfix"
+              "rightLabel": "Ersatzpräfix",
+              "leftPlaceholder": "https://internal-mirror.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3297,8 @@
           "fields": {
             "github_base_url": {
               "label": "URL des GitHub Enterprise Servers",
-              "description": "Für github.com leer lassen."
+              "description": "Für github.com leer lassen.",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "Repository-Eigentümer"
@@ -3340,7 +3344,8 @@
           "description": "TestRail-Connector konfigurieren",
           "fields": {
             "testrail_base_url": {
-              "label": "TestRail-Basis-URL"
+              "label": "TestRail-Basis-URL",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "Projekt-IDs",
@@ -3364,7 +3369,8 @@
           "description": "GitLab-Connector konfigurieren",
           "fields": {
             "gitlab_url": {
-              "label": "GitLab-URL"
+              "label": "GitLab-URL",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "Projekteigentümer"
@@ -3496,7 +3502,8 @@
           "description": "BookStack-Connector konfigurieren",
           "fields": {
             "bookstack_base_url": {
-              "label": "BookStack-Basis-URL"
+              "label": "BookStack-Basis-URL",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3511,8 @@
           "description": "Outline-Connector konfigurieren",
           "fields": {
             "outline_base_url": {
-              "label": "Outline-Basis-URL"
+              "label": "Outline-Basis-URL",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3524,8 @@
               "description": "Wählen Sie Confluence Cloud für eine Site auf atlassian.net oder Confluence Data Center für eine selbst gehostete Confluence-Server- oder Data-Center-Site."
             },
             "wiki_base": {
-              "label": "Site-URL"
+              "label": "Site-URL",
+              "placeholder": "https://your-domain.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3570,8 @@
           "subtext": "Legen Sie fest, welche Jira-Inhalte indexiert werden. Sie können alles indexieren oder ein bestimmtes Projekt angeben.",
           "fields": {
             "jira_base_url": {
-              "label": "Site-URL"
+              "label": "Site-URL",
+              "placeholder": "https://your-domain.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3792,8 @@
           "description": "Axero-Connector konfigurieren",
           "fields": {
             "base_url": {
-              "label": "Axero-Basis-URL"
+              "label": "Axero-Basis-URL",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "Spaces",
@@ -3835,7 +3846,8 @@
           "fields": {
             "gong_base_url": {
               "label": "Gong-API-Basis-URL",
-              "description": "Standardwert ist `https://api.gong.io`."
+              "description": "Standardwert ist `https://api.gong.io`.",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "Workspaces",
@@ -3848,7 +3860,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Loopio-Subdomain",
-              "description": "Die Subdomain Ihrer Loopio-Site, etwa `acme` in `acme.loopio.com`."
+              "description": "Die Subdomain Ihrer Loopio-Site, etwa `acme` in `acme.loopio.com`.",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Loopio-Stack-Name",
@@ -3940,7 +3953,8 @@
           "description": "Google-Sites-Connector konfigurieren",
           "fields": {
             "base_url": {
-              "label": "Basis-URL"
+              "label": "Basis-URL",
+              "placeholder": "https://sites.google.com/view/your-site"
             },
             "file_locations": {
               "label": "Site-Export",
@@ -3953,7 +3967,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Zendesk-Subdomain",
-              "description": "Die Subdomain Ihrer Zendesk-Site, etwa `acme` in `acme.zendesk.com`."
+              "description": "Die Subdomain Ihrer Zendesk-Site, etwa `acme` in `acme.zendesk.com`.",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "Inhaltstyp",
@@ -4142,7 +4157,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Freshdesk-Domain",
-              "description": "Die Subdomain Ihrer Freshdesk-Site, etwa `acme` in `acme.freshdesk.com`."
+              "description": "Die Subdomain Ihrer Freshdesk-Site, etwa `acme` in `acme.freshdesk.com`.",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4192,8 @@
           "fields": {
             "domain": {
               "label": "Egnyte-Domain",
-              "description": "Die Subdomain Ihrer Egnyte-Site, etwa `acme` in `acme.egnyte.com`."
+              "description": "Die Subdomain Ihrer Egnyte-Site, etwa `acme` in `acme.egnyte.com`.",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "Ordnerpfad",
@@ -4220,7 +4237,8 @@
           "description": "Highspot-Connector konfigurieren",
           "fields": {
             "highspot_url": {
-              "label": "Highspot-URL"
+              "label": "Highspot-URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "Zu indexierende Highspot-Inhalte",

@@ -3242,7 +3242,8 @@
           "description": "تهيئة موصل الويب",
           "fields": {
             "base_url": {
-              "label": "عنوان URL الأساسي"
+              "label": "عنوان URL الأساسي",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "طريقة الاستخراج",
@@ -3260,7 +3261,9 @@
               "label": "إعادة كتابة عناوين URL",
               "description": "أعد كتابة عناوين URL للمستندات قبل التخزين. مفيد عند الزحف عبر نسخة داخلية مع تخزين الروابط العامة الأصلية، مثلاً https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "بادئة URL المصدر",
-              "rightLabel": "بادئة الاستبدال"
+              "rightLabel": "بادئة الاستبدال",
+              "leftPlaceholder": "https://internal-mirror.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3297,8 @@
           "fields": {
             "github_base_url": {
               "label": "عنوان URL لخادم GitHub Enterprise",
-              "description": "اتركه فارغًا لـ github.com."
+              "description": "اتركه فارغًا لـ github.com.",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "مالك المستودع"
@@ -3340,7 +3344,8 @@
           "description": "تهيئة موصل TestRail",
           "fields": {
             "testrail_base_url": {
-              "label": "عنوان URL الأساسي لـ TestRail"
+              "label": "عنوان URL الأساسي لـ TestRail",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "معرّفات المشاريع",
@@ -3364,7 +3369,8 @@
           "description": "تهيئة موصل GitLab",
           "fields": {
             "gitlab_url": {
-              "label": "عنوان URL لـ GitLab"
+              "label": "عنوان URL لـ GitLab",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "مالك المشروع"
@@ -3496,7 +3502,8 @@
           "description": "تهيئة موصل Bookstack",
           "fields": {
             "bookstack_base_url": {
-              "label": "عنوان URL الأساسي لـ BookStack"
+              "label": "عنوان URL الأساسي لـ BookStack",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3511,8 @@
           "description": "تهيئة موصل Outline",
           "fields": {
             "outline_base_url": {
-              "label": "عنوان URL الأساسي لـ Outline"
+              "label": "عنوان URL الأساسي لـ Outline",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3524,8 @@
               "description": "اختر Confluence Cloud لموقع على atlassian.net، أو Confluence Data Center لموقع Confluence Server أو Data Center مستضاف ذاتيًا."
             },
             "wiki_base": {
-              "label": "عنوان URL للموقع"
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://your-domain.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3570,8 @@
           "subtext": "حدّد محتوى Jira المراد فهرسته. يمكنك فهرسة كل شيء أو تحديد مشروع معين.",
           "fields": {
             "jira_base_url": {
-              "label": "عنوان URL للموقع"
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://your-domain.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3792,8 @@
           "description": "تهيئة موصل Axero",
           "fields": {
             "base_url": {
-              "label": "عنوان URL الأساسي لـ Axero"
+              "label": "عنوان URL الأساسي لـ Axero",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "المساحات",
@@ -3835,7 +3846,8 @@
           "fields": {
             "gong_base_url": {
               "label": "عنوان URL الأساسي لـ Gong API",
-              "description": "القيمة الافتراضية `https://api.gong.io`."
+              "description": "القيمة الافتراضية `https://api.gong.io`.",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "مساحات العمل",
@@ -3848,7 +3860,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "النطاق الفرعي لـ Loopio",
-              "description": "النطاق الفرعي لموقع Loopio لديك، مثل `acme` في `acme.loopio.com`."
+              "description": "النطاق الفرعي لموقع Loopio لديك، مثل `acme` في `acme.loopio.com`.",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "اسم مكدّس Loopio",
@@ -3940,7 +3953,8 @@
           "description": "تهيئة موصل Google Sites",
           "fields": {
             "base_url": {
-              "label": "عنوان URL الأساسي"
+              "label": "عنوان URL الأساسي",
+              "placeholder": "https://sites.google.com/view/your-site"
             },
             "file_locations": {
               "label": "تصدير الموقع",
@@ -3953,7 +3967,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "النطاق الفرعي لـ Zendesk",
-              "description": "النطاق الفرعي لموقع Zendesk لديك، مثل `acme` في `acme.zendesk.com`."
+              "description": "النطاق الفرعي لموقع Zendesk لديك، مثل `acme` في `acme.zendesk.com`.",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "نوع المحتوى",
@@ -4142,7 +4157,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "نطاق Freshdesk",
-              "description": "النطاق الفرعي لموقع Freshdesk لديك، مثل `acme` في `acme.freshdesk.com`."
+              "description": "النطاق الفرعي لموقع Freshdesk لديك، مثل `acme` في `acme.freshdesk.com`.",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4192,8 @@
           "fields": {
             "domain": {
               "label": "نطاق Egnyte",
-              "description": "النطاق الفرعي لموقع Egnyte لديك، مثل `acme` في `acme.egnyte.com`."
+              "description": "النطاق الفرعي لموقع Egnyte لديك، مثل `acme` في `acme.egnyte.com`.",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "مسار المجلد",
@@ -4220,7 +4237,8 @@
           "description": "تهيئة موصل Highspot",
           "fields": {
             "highspot_url": {
-              "label": "عنوان URL لـ Highspot"
+              "label": "عنوان URL لـ Highspot",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "محتوى Highspot المراد فهرسته",

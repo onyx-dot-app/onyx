@@ -3242,7 +3242,8 @@
           "description": "Web コネクターを設定",
           "fields": {
             "base_url": {
-              "label": "ベース URL"
+              "label": "ベース URL",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "スクレイピング方法",
@@ -3260,7 +3261,9 @@
               "label": "URL の書き換え",
               "description": "保存前にドキュメントの URL を書き換えます。社内ミラー経由でクロールしつつ、正規の公開リンクを保存する場合に便利です。例: https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "元の URL プレフィックス",
-              "rightLabel": "置換後のプレフィックス"
+              "rightLabel": "置換後のプレフィックス",
+              "leftPlaceholder": "https://internal-mirror.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3297,8 @@
           "fields": {
             "github_base_url": {
               "label": "GitHub Enterprise Server の URL",
-              "description": "github.com を使用する場合は空欄のままにしてください。"
+              "description": "github.com を使用する場合は空欄のままにしてください。",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "リポジトリのオーナー"
@@ -3340,7 +3344,8 @@
           "description": "TestRail コネクターを設定",
           "fields": {
             "testrail_base_url": {
-              "label": "TestRail のベース URL"
+              "label": "TestRail のベース URL",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "プロジェクト ID",
@@ -3364,7 +3369,8 @@
           "description": "GitLab コネクターを設定",
           "fields": {
             "gitlab_url": {
-              "label": "GitLab の URL"
+              "label": "GitLab の URL",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "プロジェクトのオーナー"
@@ -3496,7 +3502,8 @@
           "description": "Bookstack コネクターを設定",
           "fields": {
             "bookstack_base_url": {
-              "label": "BookStack のベース URL"
+              "label": "BookStack のベース URL",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3511,8 @@
           "description": "Outline コネクターを設定",
           "fields": {
             "outline_base_url": {
-              "label": "Outline のベース URL"
+              "label": "Outline のベース URL",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3524,8 @@
               "description": "atlassian.net 上のサイトには Confluence Cloud を、セルフホストの Confluence Server または Data Center サイトには Confluence Data Center を選択してください。"
             },
             "wiki_base": {
-              "label": "サイト URL"
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3570,8 @@
           "subtext": "インデックスする Jira コンテンツを設定します。すべてをインデックスすることも、特定のプロジェクトを指定することもできます。",
           "fields": {
             "jira_base_url": {
-              "label": "サイト URL"
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3792,8 @@
           "description": "Axero コネクターを設定",
           "fields": {
             "base_url": {
-              "label": "Axero のベース URL"
+              "label": "Axero のベース URL",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "スペース",
@@ -3835,7 +3846,8 @@
           "fields": {
             "gong_base_url": {
               "label": "Gong API のベース URL",
-              "description": "デフォルトは `https://api.gong.io` です。"
+              "description": "デフォルトは `https://api.gong.io` です。",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "ワークスペース",
@@ -3848,7 +3860,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Loopio サブドメイン",
-              "description": "Loopio サイトのサブドメイン。`acme.loopio.com` の `acme` の部分です。"
+              "description": "Loopio サイトのサブドメイン。`acme.loopio.com` の `acme` の部分です。",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Loopio スタック名",
@@ -3940,7 +3953,8 @@
           "description": "Google Sites コネクターを設定",
           "fields": {
             "base_url": {
-              "label": "ベース URL"
+              "label": "ベース URL",
+              "placeholder": "https://sites.google.com/view/your-site"
             },
             "file_locations": {
               "label": "サイトのエクスポート",
@@ -3953,7 +3967,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Zendesk サブドメイン",
-              "description": "Zendesk サイトのサブドメイン。`acme.zendesk.com` の `acme` の部分です。"
+              "description": "Zendesk サイトのサブドメイン。`acme.zendesk.com` の `acme` の部分です。",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "コンテンツタイプ",
@@ -4142,7 +4157,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Freshdesk ドメイン",
-              "description": "Freshdesk サイトのサブドメイン。`acme.freshdesk.com` の `acme` の部分です。"
+              "description": "Freshdesk サイトのサブドメイン。`acme.freshdesk.com` の `acme` の部分です。",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4192,8 @@
           "fields": {
             "domain": {
               "label": "Egnyte ドメイン",
-              "description": "Egnyte サイトのサブドメイン。`acme.egnyte.com` の `acme` の部分です。"
+              "description": "Egnyte サイトのサブドメイン。`acme.egnyte.com` の `acme` の部分です。",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "フォルダーパス",
@@ -4220,7 +4237,8 @@
           "description": "Highspot コネクターを設定",
           "fields": {
             "highspot_url": {
-              "label": "Highspot の URL"
+              "label": "Highspot の URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "インデックスする Highspot コンテンツ",

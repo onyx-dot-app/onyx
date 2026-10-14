@@ -3242,7 +3242,8 @@
           "description": "配置 Web 连接器",
           "fields": {
             "base_url": {
-              "label": "基础 URL"
+              "label": "基础 URL",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "抓取方式",
@@ -3260,7 +3261,9 @@
               "label": "URL 重写",
               "description": "在存储前重写文档 URL。适用于通过内部镜像抓取、同时存储规范的公开链接的场景，例如 https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "源 URL 前缀",
-              "rightLabel": "替换前缀"
+              "rightLabel": "替换前缀",
+              "leftPlaceholder": "https://internal-mirror.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3297,8 @@
           "fields": {
             "github_base_url": {
               "label": "GitHub Enterprise Server URL",
-              "description": "使用 github.com 时请留空。"
+              "description": "使用 github.com 时请留空。",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "仓库所有者"
@@ -3340,7 +3344,8 @@
           "description": "配置 TestRail 连接器",
           "fields": {
             "testrail_base_url": {
-              "label": "TestRail 基础 URL"
+              "label": "TestRail 基础 URL",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "项目 ID",
@@ -3364,7 +3369,8 @@
           "description": "配置 GitLab 连接器",
           "fields": {
             "gitlab_url": {
-              "label": "GitLab URL"
+              "label": "GitLab URL",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "项目所有者"
@@ -3496,7 +3502,8 @@
           "description": "配置 Bookstack 连接器",
           "fields": {
             "bookstack_base_url": {
-              "label": "BookStack 基础 URL"
+              "label": "BookStack 基础 URL",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3511,8 @@
           "description": "配置 Outline 连接器",
           "fields": {
             "outline_base_url": {
-              "label": "Outline 基础 URL"
+              "label": "Outline 基础 URL",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3524,8 @@
               "description": "对于 atlassian.net 上的站点，请选择 Confluence Cloud；对于自托管的 Confluence Server 或 Data Center 站点，请选择 Confluence Data Center。"
             },
             "wiki_base": {
-              "label": "站点 URL"
+              "label": "站点 URL",
+              "placeholder": "https://your-domain.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3570,8 @@
           "subtext": "配置要索引的 Jira 内容。您可以索引全部内容，也可以指定某个项目。",
           "fields": {
             "jira_base_url": {
-              "label": "站点 URL"
+              "label": "站点 URL",
+              "placeholder": "https://your-domain.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3792,8 @@
           "description": "配置 Axero 连接器",
           "fields": {
             "base_url": {
-              "label": "Axero 基础 URL"
+              "label": "Axero 基础 URL",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "空间",
@@ -3835,7 +3846,8 @@
           "fields": {
             "gong_base_url": {
               "label": "Gong API 基础 URL",
-              "description": "默认为 `https://api.gong.io`。"
+              "description": "默认为 `https://api.gong.io`。",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "工作区",
@@ -3848,7 +3860,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Loopio 子域名",
-              "description": "您的 Loopio 站点的子域名，例如 `acme.loopio.com` 中的 `acme`。"
+              "description": "您的 Loopio 站点的子域名，例如 `acme.loopio.com` 中的 `acme`。",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Loopio Stack 名称",
@@ -3940,7 +3953,8 @@
           "description": "配置 Google Sites 连接器",
           "fields": {
             "base_url": {
-              "label": "基础 URL"
+              "label": "基础 URL",
+              "placeholder": "https://sites.google.com/view/your-site"
             },
             "file_locations": {
               "label": "站点导出文件",
@@ -3953,7 +3967,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Zendesk 子域名",
-              "description": "您的 Zendesk 站点的子域名，例如 `acme.zendesk.com` 中的 `acme`。"
+              "description": "您的 Zendesk 站点的子域名，例如 `acme.zendesk.com` 中的 `acme`。",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "内容类型",
@@ -4142,7 +4157,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Freshdesk 域名",
-              "description": "您的 Freshdesk 站点的子域名，例如 `acme.freshdesk.com` 中的 `acme`。"
+              "description": "您的 Freshdesk 站点的子域名，例如 `acme.freshdesk.com` 中的 `acme`。",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4192,8 @@
           "fields": {
             "domain": {
               "label": "Egnyte 域名",
-              "description": "您的 Egnyte 站点的子域名，例如 `acme.egnyte.com` 中的 `acme`。"
+              "description": "您的 Egnyte 站点的子域名，例如 `acme.egnyte.com` 中的 `acme`。",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "文件夹路径",
@@ -4220,7 +4237,8 @@
           "description": "配置 Highspot 连接器",
           "fields": {
             "highspot_url": {
-              "label": "Highspot URL"
+              "label": "Highspot URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "要索引的 Highspot 内容",

@@ -177,7 +177,8 @@ type FieldText =
   | ((currentCredential: CredentialValues | null) => string);
 
 /**
- * The connector's form config with its copy translated. The configs hold
+ * The connector's form config with its copy translated: labels,
+ * descriptions, placeholders, and tab and option names. The configs hold
  * message keys under `admin.connectorsList` (`connectors.<source>...`, and
  * OneDrive's and Linear's own namespaces); this swaps in the messages.
  */
@@ -228,9 +229,18 @@ export function translateConfiguration(
         name: translate(option.name),
       }));
     }
+    if (out.type === "text" && out.placeholder !== undefined) {
+      out.placeholder = translate(out.placeholder);
+    }
     if (out.type === "string_pair_list") {
       out.leftLabel = translate(out.leftLabel);
       out.rightLabel = translate(out.rightLabel);
+      if (out.leftPlaceholder !== undefined) {
+        out.leftPlaceholder = translate(out.leftPlaceholder);
+      }
+      if (out.rightPlaceholder !== undefined) {
+        out.rightPlaceholder = translate(out.rightPlaceholder);
+      }
     }
     // SAFETY: `out` is a copy of `f` with only its copy replaced.
     return out as T;
@@ -303,7 +313,7 @@ export const connectorConfigs: Record<
         type: "text",
         label: "connectors.web.fields.base_url.label",
         name: "base_url",
-        placeholder: "https://example.com",
+        placeholder: "connectors.web.fields.base_url.placeholder",
         optional: false,
       },
       {
@@ -344,8 +354,8 @@ export const connectorConfigs: Record<
         description: "connectors.web.fields.url_rewrites.description",
         leftLabel: "connectors.web.fields.url_rewrites.leftLabel",
         rightLabel: "connectors.web.fields.url_rewrites.rightLabel",
-        leftPlaceholder: "https://internal-mirror.example.com",
-        rightPlaceholder: "https://docs.example.com",
+        leftPlaceholder: "connectors.web.fields.url_rewrites.leftPlaceholder",
+        rightPlaceholder: "connectors.web.fields.url_rewrites.rightPlaceholder",
         default: [],
       },
     ],
@@ -404,7 +414,7 @@ export const connectorConfigs: Record<
         name: "github_base_url",
         optional: true,
         description: "connectors.github.fields.github_base_url.description",
-        placeholder: "https://github.example.com",
+        placeholder: "connectors.github.fields.github_base_url.placeholder",
         subDescription: "siteUrl",
       },
       {
@@ -487,7 +497,7 @@ export const connectorConfigs: Record<
         label: "connectors.testrail.fields.testrail_base_url.label",
         name: "testrail_base_url",
         optional: false,
-        placeholder: "https://acme.testrail.io",
+        placeholder: "connectors.testrail.fields.testrail_base_url.placeholder",
         subDescription: "siteUrl",
       },
       {
@@ -531,7 +541,7 @@ export const connectorConfigs: Record<
         label: "connectors.gitlab.fields.gitlab_url.label",
         name: "gitlab_url",
         optional: false,
-        placeholder: "https://gitlab.com",
+        placeholder: "connectors.gitlab.fields.gitlab_url.placeholder",
         subDescription: "siteUrl",
       },
       {
@@ -786,7 +796,8 @@ export const connectorConfigs: Record<
         label: "connectors.bookstack.fields.bookstack_base_url.label",
         name: "bookstack_base_url",
         optional: false,
-        placeholder: "https://bookstack.example.com",
+        placeholder:
+          "connectors.bookstack.fields.bookstack_base_url.placeholder",
         subDescription: "siteUrl",
       },
     ],
@@ -800,7 +811,7 @@ export const connectorConfigs: Record<
         label: "connectors.outline.fields.outline_base_url.label",
         name: "outline_base_url",
         optional: false,
-        placeholder: "https://app.getoutline.com",
+        placeholder: "connectors.outline.fields.outline_base_url.placeholder",
         subDescription: "siteUrl",
       },
     ],
@@ -847,7 +858,7 @@ export const connectorConfigs: Record<
           }
           return false;
         },
-        placeholder: "https://your-domain.atlassian.net/wiki",
+        placeholder: "connectors.confluence.fields.wiki_base.placeholder",
         subDescription: "siteUrl",
       },
       ATLASSIAN_SCOPED_TOKEN_FIELD,
@@ -937,7 +948,7 @@ export const connectorConfigs: Record<
         label: "connectors.jira.fields.jira_base_url.label",
         name: "jira_base_url",
         optional: false,
-        placeholder: "https://your-domain.atlassian.net",
+        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
         subDescription: "siteUrl",
       },
       ATLASSIAN_SCOPED_TOKEN_FIELD,
@@ -1349,7 +1360,7 @@ export const connectorConfigs: Record<
         label: "connectors.axero.fields.base_url.label",
         name: "base_url",
         optional: false,
-        placeholder: "https://axero.example.com",
+        placeholder: "connectors.axero.fields.base_url.placeholder",
         subDescription: "siteUrl",
       },
       {
@@ -1443,7 +1454,7 @@ export const connectorConfigs: Record<
         name: "gong_base_url",
         optional: true,
         description: "connectors.gong.fields.gong_base_url.description",
-        placeholder: "https://api.gong.io",
+        placeholder: "connectors.gong.fields.gong_base_url.placeholder",
         subDescription: "siteUrl",
       },
       {
@@ -1465,7 +1476,7 @@ export const connectorConfigs: Record<
         name: "loopio_subdomain",
         optional: false,
         description: "connectors.loopio.fields.loopio_subdomain.description",
-        placeholder: "acme",
+        placeholder: "connectors.loopio.fields.loopio_subdomain.placeholder",
       },
       {
         type: "text",
@@ -1631,7 +1642,7 @@ export const connectorConfigs: Record<
         name: "base_url",
         optional: false,
         // The published site's root; each page's link is this plus its path.
-        placeholder: "https://sites.google.com/view/your-site",
+        placeholder: "connectors.google_sites.fields.base_url.placeholder",
       },
       {
         type: "file",
@@ -1655,7 +1666,7 @@ export const connectorConfigs: Record<
         name: "zendesk_subdomain",
         optional: false,
         description: "connectors.zendesk.fields.zendesk_subdomain.description",
-        placeholder: "acme",
+        placeholder: "connectors.zendesk.fields.zendesk_subdomain.placeholder",
       },
       {
         type: "select",
@@ -1986,7 +1997,7 @@ export const connectorConfigs: Record<
         name: "freshdesk_domain",
         optional: false,
         description: "connectors.freshdesk.fields.freshdesk_domain.description",
-        placeholder: "acme",
+        placeholder: "connectors.freshdesk.fields.freshdesk_domain.placeholder",
       },
     ],
     advanced_values: [],
@@ -2114,7 +2125,7 @@ export const connectorConfigs: Record<
         name: "domain",
         optional: false,
         description: "connectors.egnyte.fields.domain.description",
-        placeholder: "acme",
+        placeholder: "connectors.egnyte.fields.domain.placeholder",
       },
       {
         type: "text",
@@ -2195,7 +2206,7 @@ export const connectorConfigs: Record<
         label: "connectors.highspot.fields.highspot_url.label",
         name: "highspot_url",
         optional: false,
-        placeholder: "https://api-su2.highspot.com/v1.0/",
+        placeholder: "connectors.highspot.fields.highspot_url.placeholder",
         subDescription: "siteUrl",
       },
       {

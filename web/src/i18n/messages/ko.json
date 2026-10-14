@@ -3242,7 +3242,8 @@
           "description": "웹 커넥터 구성",
           "fields": {
             "base_url": {
-              "label": "기본 URL"
+              "label": "기본 URL",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "스크래핑 방식",
@@ -3260,7 +3261,9 @@
               "label": "URL 재작성",
               "description": "저장하기 전에 문서 URL을 재작성합니다. 내부 미러를 통해 크롤링하면서 정식 공개 링크를 저장할 때 유용합니다. 예: https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "원본 URL 접두사",
-              "rightLabel": "대체 접두사"
+              "rightLabel": "대체 접두사",
+              "leftPlaceholder": "https://internal-mirror.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3297,8 @@
           "fields": {
             "github_base_url": {
               "label": "GitHub Enterprise Server URL",
-              "description": "github.com을 사용하면 비워 두세요."
+              "description": "github.com을 사용하면 비워 두세요.",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "저장소 소유자"
@@ -3340,7 +3344,8 @@
           "description": "TestRail 커넥터 구성",
           "fields": {
             "testrail_base_url": {
-              "label": "TestRail 기본 URL"
+              "label": "TestRail 기본 URL",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "프로젝트 ID",
@@ -3364,7 +3369,8 @@
           "description": "GitLab 커넥터 구성",
           "fields": {
             "gitlab_url": {
-              "label": "GitLab URL"
+              "label": "GitLab URL",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "프로젝트 소유자"
@@ -3496,7 +3502,8 @@
           "description": "Bookstack 커넥터 구성",
           "fields": {
             "bookstack_base_url": {
-              "label": "BookStack 기본 URL"
+              "label": "BookStack 기본 URL",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3511,8 @@
           "description": "Outline 커넥터 구성",
           "fields": {
             "outline_base_url": {
-              "label": "Outline 기본 URL"
+              "label": "Outline 기본 URL",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3524,8 @@
               "description": "atlassian.net 사이트이면 Confluence Cloud를, 자체 호스팅하는 Confluence Server 또는 Data Center 사이트이면 Confluence Data Center를 선택하세요."
             },
             "wiki_base": {
-              "label": "사이트 URL"
+              "label": "사이트 URL",
+              "placeholder": "https://your-domain.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3570,8 @@
           "subtext": "인덱싱할 Jira 콘텐츠를 구성합니다. 전체를 인덱싱하거나 특정 프로젝트를 지정할 수 있습니다.",
           "fields": {
             "jira_base_url": {
-              "label": "사이트 URL"
+              "label": "사이트 URL",
+              "placeholder": "https://your-domain.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3792,8 @@
           "description": "Axero 커넥터 구성",
           "fields": {
             "base_url": {
-              "label": "Axero 기본 URL"
+              "label": "Axero 기본 URL",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "스페이스",
@@ -3835,7 +3846,8 @@
           "fields": {
             "gong_base_url": {
               "label": "Gong API 기본 URL",
-              "description": "기본값은 `https://api.gong.io`입니다."
+              "description": "기본값은 `https://api.gong.io`입니다.",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "워크스페이스",
@@ -3848,7 +3860,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Loopio 서브도메인",
-              "description": "Loopio 사이트의 서브도메인입니다. `acme.loopio.com`의 `acme`가 해당합니다."
+              "description": "Loopio 사이트의 서브도메인입니다. `acme.loopio.com`의 `acme`가 해당합니다.",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Loopio 스택 이름",
@@ -3940,7 +3953,8 @@
           "description": "Google Sites 커넥터 구성",
           "fields": {
             "base_url": {
-              "label": "기본 URL"
+              "label": "기본 URL",
+              "placeholder": "https://sites.google.com/view/your-site"
             },
             "file_locations": {
               "label": "사이트 내보내기",
@@ -3953,7 +3967,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Zendesk 서브도메인",
-              "description": "Zendesk 사이트의 서브도메인입니다. `acme.zendesk.com`의 `acme`가 해당합니다."
+              "description": "Zendesk 사이트의 서브도메인입니다. `acme.zendesk.com`의 `acme`가 해당합니다.",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "콘텐츠 유형",
@@ -4142,7 +4157,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Freshdesk 도메인",
-              "description": "Freshdesk 사이트의 서브도메인입니다. `acme.freshdesk.com`의 `acme`가 해당합니다."
+              "description": "Freshdesk 사이트의 서브도메인입니다. `acme.freshdesk.com`의 `acme`가 해당합니다.",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4192,8 @@
           "fields": {
             "domain": {
               "label": "Egnyte 도메인",
-              "description": "Egnyte 사이트의 서브도메인입니다. `acme.egnyte.com`의 `acme`가 해당합니다."
+              "description": "Egnyte 사이트의 서브도메인입니다. `acme.egnyte.com`의 `acme`가 해당합니다.",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "폴더 경로",
@@ -4220,7 +4237,8 @@
           "description": "Highspot 커넥터 구성",
           "fields": {
             "highspot_url": {
-              "label": "Highspot URL"
+              "label": "Highspot URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "인덱싱할 Highspot 콘텐츠",
