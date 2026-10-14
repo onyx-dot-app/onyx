@@ -4,7 +4,10 @@ other sources, shown in their keys."""
 import json
 from typing import Any
 
+import pytest
+
 from onyx.configs.constants import DocumentSource
+from onyx.error_handling.error_codes import OnyxErrorCode
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -94,6 +97,42 @@ def test_gmail_credential_is_listed_for_google_drive(admin_user: DATestUser) -> 
         "google_primary_admin",
         "authentication_method",
     }
+
+
+@pytest.mark.parametrize(
+    "service_account_key",
+    [
+        "not json",
+        json.dumps({"web": {"client_id": "oauth-app"}}),
+        json.dumps({"type": "service_account"}),
+        json.dumps({**json.loads(_SERVICE_ACCOUNT_KEY), "type": "authorized_user"}),
+    ],
+    ids=["malformed", "oauth_app", "incomplete", "wrong_type"],
+)
+def test_google_credential_rejects_a_bad_service_account_key(
+    admin_user: DATestUser, service_account_key: str
+) -> None:
+    # Under test.
+    response = client.post(
+        f"{API_SERVER_URL}/manage/credential",
+        json={
+            "credential_json": {
+                "google_service_account_key": service_account_key,
+                "google_primary_admin": "admin@example.com",
+                "authentication_method": "uploaded",
+            },
+            "admin_public": True,
+            "source": DocumentSource.GMAIL.value,
+            "name": None,
+            "curator_public": False,
+            "groups": [],
+        },
+        headers=admin_user.headers,
+    )
+
+    # Postcondition.
+    assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
+    assert response.json()["error_code"] == OnyxErrorCode.INVALID_INPUT.code
 
 
 def test_sharepoint_credential_is_listed_for_teams(admin_user: DATestUser) -> None:
