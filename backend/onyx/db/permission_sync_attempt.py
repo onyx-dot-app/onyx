@@ -326,12 +326,12 @@ def get_recent_external_group_sync_attempts_for_cc_pair(
 
 def get_external_group_sync_retry_after(
     cc_pair_id: int,
-    failures_since: datetime,
     db_session: Session,
 ) -> datetime | None:
-    """The time before which the pair's group sync must not run again, from
-    its consecutive FAILED attempts created after ``failures_since``. None
-    when the latest finished attempt did not fail."""
+    """The time before which the beat must not start the pair's group sync
+    again, from its consecutive FAILED attempts. None when the latest finished
+    attempt did not fail. A manual sync ignores this, and its success clears
+    it."""
     attempts = get_recent_external_group_sync_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
         limit=_GROUP_SYNC_BACKOFF_LOOKBACK,
@@ -340,8 +340,6 @@ def get_external_group_sync_retry_after(
     failure_count = 0
     last_failed_at: datetime | None = None
     for attempt in attempts:
-        if attempt.time_created < failures_since:
-            break
         if not attempt.status.is_terminal():
             continue
         if attempt.status != PermissionSyncStatus.FAILED:

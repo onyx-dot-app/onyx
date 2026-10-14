@@ -214,11 +214,8 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
                 if not is_external_group_sync_due(cc_pair):
                     continue
 
-                # Failed syncs back off. A credential update resets the backoff.
                 retry_after = get_external_group_sync_retry_after(
-                    cc_pair_id=cc_pair.id,
-                    failures_since=cc_pair.credential.time_updated,
-                    db_session=db_session,
+                    cc_pair_id=cc_pair.id, db_session=db_session
                 )
                 if retry_after is not None and now < retry_after:
                     task_logger.debug(

@@ -570,15 +570,12 @@ class TestExternalGroupSyncBackoff:
         self, db_session: Session
     ) -> None:
         cc_pair = _create_test_connector_credential_pair(db_session)
-        since = datetime.now(timezone.utc) - timedelta(days=1)
-        assert (
-            get_external_group_sync_retry_after(cc_pair.id, since, db_session) is None
-        )
+        assert get_external_group_sync_retry_after(cc_pair.id, db_session) is None
 
         base = datetime.now(timezone.utc) - timedelta(hours=1)
         _add_finished_attempt(db_session, cc_pair.id, PermissionSyncStatus.FAILED, base)
         assert get_external_group_sync_retry_after(
-            cc_pair.id, since, db_session
+            cc_pair.id, db_session
         ) == base + request_retry_delay(1)
 
         latest = base + timedelta(minutes=1)
@@ -586,13 +583,12 @@ class TestExternalGroupSyncBackoff:
             db_session, cc_pair.id, PermissionSyncStatus.FAILED, latest
         )
         assert get_external_group_sync_retry_after(
-            cc_pair.id, since, db_session
+            cc_pair.id, db_session
         ) == latest + request_retry_delay(2)
         assert request_retry_delay(2) > request_retry_delay(1)
 
     def test_success_clears_backoff(self, db_session: Session) -> None:
         cc_pair = _create_test_connector_credential_pair(db_session)
-        since = datetime.now(timezone.utc) - timedelta(days=1)
         base = datetime.now(timezone.utc) - timedelta(hours=1)
         _add_finished_attempt(db_session, cc_pair.id, PermissionSyncStatus.FAILED, base)
         _add_finished_attempt(
@@ -601,21 +597,7 @@ class TestExternalGroupSyncBackoff:
             PermissionSyncStatus.SUCCESS,
             base + timedelta(minutes=1),
         )
-        assert (
-            get_external_group_sync_retry_after(cc_pair.id, since, db_session) is None
-        )
-
-    def test_failures_before_since_are_ignored(self, db_session: Session) -> None:
-        """A credential update resets the backoff."""
-        cc_pair = _create_test_connector_credential_pair(db_session)
-        base = datetime.now(timezone.utc) - timedelta(hours=1)
-        _add_finished_attempt(db_session, cc_pair.id, PermissionSyncStatus.FAILED, base)
-        assert (
-            get_external_group_sync_retry_after(
-                cc_pair.id, base + timedelta(minutes=1), db_session
-            )
-            is None
-        )
+        assert get_external_group_sync_retry_after(cc_pair.id, db_session) is None
 
     def test_paused_pair_is_not_due(self, db_session: Session) -> None:
         cc_pair = _create_test_connector_credential_pair(
