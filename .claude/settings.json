@@ -42,6 +42,11 @@
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/pre_commit_on_stop.py\"",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/ensure_latest_main.py\"",
+            "timeout": 30
           }
         ]
       }

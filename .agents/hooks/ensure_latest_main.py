@@ -3,9 +3,14 @@
 
 The feature map in `.agents/feature-map/`, the skills and these hooks are only as
 current as the checkout, so an agent on a stale branch works from old context. At
-session start this hook fetches `origin/main`, compares it with HEAD and, when HEAD
-is missing commits from main, prints how to catch up. Both agents add a
-`SessionStart` hook's stdout to the model's context.
+session start this hook fetches `origin/main`, compares it with HEAD and prints the
+result; when HEAD is missing commits from main, it says how to catch up. Both agents
+add a `SessionStart` hook's stdout to the model's context.
+
+On `UserPromptSubmit` it repeats the check for a session that stays on a stale
+branch, but quietly: it fetches at most once an hour per checkout (the time of the
+last attempt is the mtime of `.git/onyx-main-sync-check`) and prints only when HEAD is
+behind `origin/main`.
 
 It never changes the working tree: no pull, rebase, merge or checkout. It only
 updates the `origin/main` remote-tracking ref (and FETCH_HEAD), which is what
@@ -20,6 +25,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +33,8 @@ _REMOTE = "origin"
 _BRANCH = "main"
 _REF = f"{_REMOTE}/{_BRANCH}"
 _FETCH_TIMEOUT_SECONDS = 20
+_PROMPT_FETCH_INTERVAL_SECONDS = 60 * 60
+_STAMP_NAME = "onyx-main-sync-check"
 _GIT_TIMEOUT_SECONDS = 10
 _MAX_LISTED_FILES = 8
 _AGENT_CONTEXT_DIR = ".agents/"
@@ -90,6 +98,39 @@ def _fetch(repo: Path) -> bool:
         return False
 
 
+def _fetch_due(repo: Path) -> bool:
+    """True when the last fetch attempt is over an hour old; marks a new attempt.
+
+    The stamp records attempts, not successes, so a checkout that is offline
+    does not wait for a fetch to fail on every prompt.
+    """
+    git_dir = _git(repo, "rev-parse", "--absolute-git-dir")
+    if not git_dir:
+        return False
+    stamp = Path(git_dir) / _STAMP_NAME
+    try:
+        if time.time() - stamp.stat().st_mtime < _PROMPT_FETCH_INTERVAL_SECONDS:
+            return False
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    try:
+        stamp.touch()
+    except OSError:
+        return False
+    return True
+
+
+def _mark_fetched(repo: Path) -> None:
+    git_dir = _git(repo, "rev-parse", "--absolute-git-dir")
+    try:
+        if git_dir:
+            (Path(git_dir) / _STAMP_NAME).touch()
+    except OSError:
+        pass
+
+
 def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}{'' if count == 1 else 's'}"
 
@@ -100,7 +141,12 @@ def _agent_context_changes(repo: Path, base: str) -> list[str]:
     return out.splitlines() if out else []
 
 
-def _report(repo: Path, fetched: bool) -> str | None:
+def _report(repo: Path, fetched: bool | None, quiet: bool) -> str | None:
+    """The message for the agent.
+
+    `fetched` is None when no fetch was tried. With `quiet`, only a branch that is
+    behind gets a message.
+    """
     if _git(repo, "rev-parse", "--verify", "--quiet", f"{_REF}^{{commit}}") is None:
         return None  # no origin/main to compare with (no remote, not fetched yet)
 
@@ -110,7 +156,7 @@ def _report(repo: Path, fetched: bool) -> str | None:
 
     stale_note = (
         ""
-        if fetched
+        if fetched is not False
         else (
             f"Could not fetch {_REF} (offline or no access to `{_REMOTE}`), so this "
             f"compares against the last {_REF} this checkout saw, which may itself "
@@ -120,6 +166,8 @@ def _report(repo: Path, fetched: bool) -> str | None:
 
     if _git(repo, "merge-base", "--is-ancestor", _REF, "HEAD") is not None:
         # HEAD already contains everything on origin/main.
+        if quiet:
+            return None
         if not fetched:
             return f"[ensure-latest-main] {stale_note}No newer commits known."
         return f"[ensure-latest-main] `{branch}` includes the latest {_REF}."
@@ -181,12 +229,19 @@ def main() -> int:
     except (json.JSONDecodeError, OSError):
         payload = {}
     start = Path(payload.get("cwd") or os.getcwd())
+    quiet = payload.get("hook_event_name") == "UserPromptSubmit"
     try:
         top = _git(start, "rev-parse", "--show-toplevel")
         if not top:
             return 0
         repo = Path(top)
-        report = _report(repo, _fetch(repo))
+        fetched: bool | None = None
+        if not quiet:
+            fetched = _fetch(repo)
+            _mark_fetched(repo)
+        elif _fetch_due(repo):
+            fetched = _fetch(repo)
+        report = _report(repo, fetched, quiet)
     except Exception:  # a session-start hook must never break the session
         return 0
     if report:
