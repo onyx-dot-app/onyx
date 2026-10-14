@@ -23,6 +23,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
@@ -191,6 +192,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
             assert revision is not None
             with Operations.context(MigrationContext.configure(connection)):
                 revision.module.upgrade()
+                _assert_response_schema_contract(connection, schema)
                 assert connection.execute(
                     text("""
                     SELECT oid, confdeltype FROM pg_constraint
@@ -270,7 +272,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                         (10, :root, 42, NULL, NULL, 'Control result');
                     INSERT INTO tool_call (id, chat_session_id, parent_chat_message_id, tool_id, tool_call_response, result) VALUES
                         (11, :root, 42, 1, '', '{"content": [{"type": "text", "text": "Saved result"}]}');
-                    INSERT INTO chat_response_message (id, chat_message_id, position, step_index, operation_status, content) VALUES
+                    INSERT INTO chat_response_message (id, chat_message_id, position, step_index, generation_status, message) VALUES
                         ('leaf-message', 202, 0, 0, 'complete', '{"role": "assistant", "id": "leaf-message", "content": [{"type": "text", "text": "Grandchild output"}]}');
                     INSERT INTO chat_feedback (id, chat_message_id) VALUES (1, 202);
                     INSERT INTO search_doc (id) VALUES (1);
@@ -416,10 +418,10 @@ def test_current_chat_writers_accept_response_storage_schema(
             .where(ChatMessage.id == answer_id)
         ).one() == (None, None)
         assert db_session.execute(
-            select(literal_column("arguments_complete"), literal_column("result"))
+            select(literal_column("operation_status"), literal_column("result"))
             .select_from(ToolCall)
             .where(ToolCall.id == call_id)
-        ).one() == (True, None)
+        ).one() == (None, None)
         response_messages = Table(
             "chat_response_message", MetaData(), Column("chat_message_id", Integer)
         )
@@ -435,3 +437,92 @@ def test_current_chat_writers_accept_response_storage_schema(
         db_session.rollback()
         db_session.execute(delete(ChatSession).where(ChatSession.id == session_id))
         db_session.commit()
+
+
+def _assert_response_schema_contract(connection: Connection, schema: str) -> None:
+    inspector = inspect(connection)
+    response_columns = {
+        column["name"]
+        for column in inspector.get_columns("chat_response_message", schema=schema)
+    }
+    assert {"message", "generation_status"} <= response_columns
+    assert not {"content", "operation_status"} & response_columns
+    tool_columns = {
+        column["name"] for column in inspector.get_columns("tool_call", schema=schema)
+    }
+    assert not {"argument_error", "raw_arguments", "arguments_complete"} & tool_columns
+    assert "ix_chat_response_message_chat_message_id" not in {
+        index["name"]
+        for index in inspector.get_indexes("chat_response_message", schema=schema)
+    }
+    assert any(
+        constraint["column_names"] == ["chat_message_id", "position"]
+        for constraint in inspector.get_unique_constraints(
+            "chat_response_message", schema=schema
+        )
+    )
+    checkpoint_columns = {
+        column["name"]
+        for column in inspector.get_columns("chat_response_checkpoint", schema=schema)
+    }
+    assert (
+        "claim_version" in checkpoint_columns and "revision" not in checkpoint_columns
+    )
+    connection.execute(
+        text("""
+        INSERT INTO chat_response_checkpoint (chat_message_id, state) VALUES (42, '{}');
+        INSERT INTO chat_response_message (id, chat_message_id, position, step_index, generation_status, message)
+        VALUES ('schema-contract', 42, 0, 0, 'running', '{}');
+    """)
+    )
+    assert (
+        connection.scalar(
+            text(
+                "SELECT claim_version FROM chat_response_checkpoint WHERE chat_message_id=42"
+            )
+        )
+        == 0
+    )
+    for table, column, row_id, allowed in (
+        (
+            "chat_message",
+            "response_status",
+            42,
+            ("running", "suspended", "complete", "limit", "cancelled", "error", None),
+        ),
+        (
+            "tool_call",
+            "operation_status",
+            7,
+            ("running", "complete", "cancelled", "error", None),
+        ),
+        (
+            "chat_response_message",
+            "generation_status",
+            "schema-contract",
+            ("running", "complete", "cancelled", "error"),
+        ),
+    ):
+        statement = text(f"UPDATE {table} SET {column}=:status WHERE id=:id")
+        for status in allowed:
+            connection.execute(statement, {"status": status, "id": row_id})
+        with pytest.raises(IntegrityError), connection.begin_nested():
+            connection.execute(statement, {"status": "invalid", "id": row_id})
+    assert (
+        connection.scalar(
+            text("""
+        SELECT count(*) FROM pg_constraint
+        WHERE connamespace = CAST(:schema AS regnamespace) AND convalidated
+          AND conname IN ('ck_chat_message_response_status', 'ck_tool_call_operation_status',
+                          'ck_response_message_generation_status')
+    """),
+            {"schema": schema},
+        )
+        == 3
+    )
+    connection.execute(
+        text("""
+        DELETE FROM chat_response_checkpoint WHERE chat_message_id=42;
+        DELETE FROM chat_response_message WHERE id='schema-contract';
+    """)
+    )

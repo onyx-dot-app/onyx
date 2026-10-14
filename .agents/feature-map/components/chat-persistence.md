@@ -96,6 +96,18 @@ It also permits null tool IDs for agent control operations. Existing writers sti
 Current ORM mappings and writers do not use these additions. Canonical response writing requires the later SDK application change.
 The migration preserves existing answer, reasoning, tool-response, citation, and history columns.
 
+`chat_response_message.message` stores one complete or partial model message; alternative rows reference tool results.
+`generation_status` records the model generation outcome, independently of the whole response or tool outcome.
+`is_answer` identifies the step the runtime accepted as its answer. Partial output need not be an accepted answer.
+The unique `(chat_message_id, position)` index also supports lookups by response; no separate response-ID index is needed.
+
+Tool argument parsing details stay in the saved model message. Tool rows retain queryable arguments and execution results.
+Database checks restrict response, generation, and tool status values while allowing null statuses on historical rows.
+
+`chat_response_checkpoint` stores resume progress alongside response history, rather than another copy of that history.
+Its `claim_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
+The runtime revision inside `state` tracks execution changes and serves a separate purpose.
+
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 
 | Column | Notes |
