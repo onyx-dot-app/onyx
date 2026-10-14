@@ -820,6 +820,9 @@
         "messaging": {
           "label": "Messaging"
         },
+        "meetings": {
+          "label": "Meetings"
+        },
         "sales": {
           "label": "Vertrieb & GTM"
         },

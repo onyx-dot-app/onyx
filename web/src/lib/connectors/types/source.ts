@@ -132,6 +132,7 @@ export enum SourceCategory {
   Storage = "Cloud Storage",
   TicketingAndTaskManagement = "Ticketing & Task Management",
   Messaging = "Messaging",
+  Meetings = "Meetings",
   Sales = "Sales",
   CodeRepository = "Code Repository",
   AiObservability = "AI & Observability",

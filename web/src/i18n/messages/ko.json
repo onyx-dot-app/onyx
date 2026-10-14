@@ -820,6 +820,9 @@
         "messaging": {
           "label": "메시징"
         },
+        "meetings": {
+          "label": "회의"
+        },
         "sales": {
           "label": "영업 및 GTM"
         },

@@ -820,6 +820,9 @@
         "messaging": {
           "label": "即时通讯"
         },
+        "meetings": {
+          "label": "会议"
+        },
         "sales": {
           "label": "销售与 GTM"
         },
