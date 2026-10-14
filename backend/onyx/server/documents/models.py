@@ -27,6 +27,7 @@ from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
 from onyx.db.backfill_models import PendingBackfill
+from onyx.db.cc_pair_runs_models import CCPairRunPage
 from onyx.db.enums import (
     AccessType,
     CapabilityCheckRunStatus,
@@ -648,6 +649,20 @@ class CCPairRunsResponse(BaseModel):
     status_counts: dict[CCPairRunStatusGroup, int]
 
 
+class RunFeed(BaseModel):
+    """One page of a run feed, for a pair's own feed and the fleet's: the rows
+    for lookups, the items to serve, the runs matching every filter, and the
+    counts per status group ignoring the status filter."""
+
+    # ORM rows ride inside, as in db/projects.py
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    page: CCPairRunPage
+    items: list[CCPairRun]
+    total_items: int
+    status_counts: dict[CCPairRunStatusGroup, int]
+
+
 class CCPairThroughputWindow(str, Enum):
     """How far back a throughput chart reaches."""
 
@@ -697,6 +712,35 @@ class IndexingOverviewResponse(BaseModel):
     recent_docs_indexed: int
     total_docs_indexed: int
     throughput: CCPairThroughputResponse
+
+
+class CCPairRef(BaseModel):
+    """A pair named in a fleet-wide feed."""
+
+    id: int
+    name: str
+    source: DocumentSource
+    # The caller may re-fetch single documents of this pair: they may submit a
+    # targeted reindex, operate the pair, and its connector resolves documents.
+    can_resolve: bool
+
+
+class IndexingRun(BaseModel):
+    """One run in the fleet-wide feed, with the pair it ran on."""
+
+    cc_pair: CCPairRef
+    run: CCPairRun
+
+
+class IndexingRunsResponse(BaseModel):
+    """One page of the readable pairs' runs, newest first."""
+
+    items: list[IndexingRun]
+    # Runs matching every filter.
+    total_items: int
+    # Per status group, ignoring the status filter, so the counts stay put
+    # while one is applied.
+    status_counts: dict[CCPairRunStatusGroup, int]
 
 
 class IndexingConnectorStatus(str, Enum):

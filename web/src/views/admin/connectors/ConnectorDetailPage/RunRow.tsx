@@ -50,7 +50,7 @@ export function checkCount(
   return run.check_results.filter((result) => result.status === status).length;
 }
 
-/** How run times print: a full date and time, as `useFormatter().dateTime` takes it. */
+/** How run times print: a full date and 24-hour time, as `useFormatter().dateTime` takes it. */
 export const RUN_TIME_FORMAT = {
   year: "numeric",
   month: "2-digit",
@@ -58,6 +58,7 @@ export const RUN_TIME_FORMAT = {
   hour: "2-digit",
   minute: "2-digit",
   second: "2-digit",
+  hourCycle: "h23",
 } as const;
 
 /** The run's own error message, without its trace. */

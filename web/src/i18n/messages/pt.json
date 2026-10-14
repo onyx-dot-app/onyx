@@ -5774,6 +5774,9 @@
         },
         "loadError": "Não foi possível carregar a visão geral."
       },
+      "activities": {
+        "title": "Atividades"
+      },
       "list": {
         "search": {
           "placeholder": "Pesquisar conectores..."

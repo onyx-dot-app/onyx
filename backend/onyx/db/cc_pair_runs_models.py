@@ -15,10 +15,13 @@ from onyx.db.models import (
 
 class CCPairRunFilter(BaseModel):
     """What narrows a run feed. ``None`` leaves that axis open. ``source`` widens
-    a single pair's group syncs to the history its source shares across pairs."""
+    a single pair's group syncs to the history its source shares across pairs,
+    and ``shared_sources`` widens many pairs' group syncs to every pair of those
+    sources, since such a source logs its one sync against whichever pair ran it."""
 
     cc_pair_ids: list[int]
     source: DocumentSource | None
+    shared_sources: set[DocumentSource]
     since: datetime | None
     error_query: str | None
     status_groups: set[CCPairRunStatusGroup] | None

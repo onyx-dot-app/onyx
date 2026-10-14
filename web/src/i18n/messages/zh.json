@@ -5774,6 +5774,9 @@
         },
         "loadError": "无法加载概览。"
       },
+      "activities": {
+        "title": "活动"
+      },
       "list": {
         "search": {
           "placeholder": "搜索连接器..."

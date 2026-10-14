@@ -5774,6 +5774,9 @@
         },
         "loadError": "Die Übersicht konnte nicht geladen werden."
       },
+      "activities": {
+        "title": "Aktivitäten"
+      },
       "list": {
         "search": {
           "placeholder": "Konnektoren suchen..."

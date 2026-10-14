@@ -5774,6 +5774,9 @@
         },
         "loadError": "No se pudo cargar el resumen."
       },
+      "activities": {
+        "title": "Actividades"
+      },
       "list": {
         "search": {
           "placeholder": "Buscar conectores..."

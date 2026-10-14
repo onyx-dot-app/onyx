@@ -5774,6 +5774,9 @@
         },
         "loadError": "The overview could not load."
       },
+      "activities": {
+        "title": "Activities"
+      },
       "list": {
         "search": {
           "placeholder": "Search connectors..."

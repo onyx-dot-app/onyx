@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import useSWRInfinite from "swr/infinite";
@@ -11,8 +11,9 @@ import type {
   CCPairFullInfo,
   CCPairRun,
   CCPairRunErrors,
+  CCPairRunsQuery,
   CCPairRunStatusGroup,
-  CCPairRunsResponse,
+  IndexingRun,
 } from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -112,9 +113,12 @@ const ACTIVITY_GROUP_QUERY: Record<
 
 const ACTIVITY_PAGE_SIZE = 20;
 
-export interface ActivityGroupState {
+/** Which pairs an activity feed reads: one pair, or every readable one. */
+export type ActivityScope = { ccPairId: number } | "fleet";
+
+export interface ActivityGroupState<Run> {
   group: ActivityGroup;
-  runs: CCPairRun[];
+  runs: Run[];
   /** Runs in the group, loaded or not. */
   total: number;
   loaded: boolean;
@@ -125,33 +129,40 @@ export interface ActivityGroupState {
   more: () => void;
 }
 
-/** One activity group, polled while `enabled`. `more` loads the next page; a new search starts over. */
-export function useActivityGroup(
-  ccPairId: number,
+interface RunsPage<Run> {
+  items: Run[];
+  total_items: number;
+}
+
+/** Pages one feed query, polled while `enabled`. `more` loads the next page; a new search starts over. */
+function usePagedRuns<Run>(
+  keyFor: (query: CCPairRunsQuery) => string,
+  runKey: (run: Run) => string,
   group: ActivityGroup,
   q: string,
   enabled: boolean,
   pollMs: number
-): ActivityGroupState {
-  const { data, error, isLoading, size, setSize } =
-    useSWRInfinite<CCPairRunsResponse>(
-      (pageIndex, previous: CCPairRunsResponse | null) => {
-        if (!enabled) return null;
-        if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
-          return null;
-        }
-        return SWR_KEYS.ccPairRuns(ccPairId, {
-          pageNum: pageIndex,
-          pageSize: ACTIVITY_PAGE_SIZE,
-          since: null,
-          kinds: null,
-          q,
-          ...ACTIVITY_GROUP_QUERY[group],
-        });
-      },
-      errorHandlingFetcher,
-      { refreshInterval: pollMs, keepPreviousData: true }
-    );
+): ActivityGroupState<Run> {
+  const { data, error, isLoading, size, setSize } = useSWRInfinite<
+    RunsPage<Run>
+  >(
+    (pageIndex, previous: RunsPage<Run> | null) => {
+      if (!enabled) return null;
+      if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
+        return null;
+      }
+      return keyFor({
+        pageNum: pageIndex,
+        pageSize: ACTIVITY_PAGE_SIZE,
+        since: null,
+        kinds: null,
+        q,
+        ...ACTIVITY_GROUP_QUERY[group],
+      });
+    },
+    errorHandlingFetcher,
+    { refreshInterval: pollMs, keepPreviousData: true }
+  );
   useEffect(() => {
     void setSize(1);
   }, [q, setSize]);
@@ -160,13 +171,13 @@ export function useActivityGroup(
     const seen = new Set<string>();
     return (data ?? []).flatMap((page) =>
       page.items.filter((run) => {
-        const key = `${run.kind}-${run.attempt.id}`;
+        const key = runKey(run);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       })
     );
-  }, [data]);
+  }, [data, runKey]);
   const first = data?.[0];
   const last = data?.[data.length - 1];
   return {
@@ -183,4 +194,51 @@ export function useActivityGroup(
       last.items.length === ACTIVITY_PAGE_SIZE,
     more: () => void setSize(size + 1),
   };
+}
+
+function ccPairRunKey(run: CCPairRun): string {
+  return `${run.kind}-${run.attempt.id}`;
+}
+
+function indexingRunKey(item: IndexingRun): string {
+  return ccPairRunKey(item.run);
+}
+
+/** One activity group of a pair. */
+export function useActivityGroup(
+  ccPairId: number,
+  group: ActivityGroup,
+  q: string,
+  enabled: boolean,
+  pollMs: number
+): ActivityGroupState<CCPairRun> {
+  const keyFor = useCallback(
+    (query: CCPairRunsQuery) => SWR_KEYS.ccPairRuns(ccPairId, query),
+    [ccPairId]
+  );
+  return usePagedRuns<CCPairRun>(
+    keyFor,
+    ccPairRunKey,
+    group,
+    q,
+    enabled,
+    pollMs
+  );
+}
+
+/** One activity group across every readable pair. Each run names its pair. */
+export function useFleetActivityGroup(
+  group: ActivityGroup,
+  q: string,
+  enabled: boolean,
+  pollMs: number
+): ActivityGroupState<IndexingRun> {
+  return usePagedRuns<IndexingRun>(
+    SWR_KEYS.indexMonitoringRuns,
+    indexingRunKey,
+    group,
+    q,
+    enabled,
+    pollMs
+  );
 }

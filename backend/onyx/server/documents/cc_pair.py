@@ -15,7 +15,6 @@ from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import (
     CHECK_FOR_INDEXING_EXPIRES_SECONDS,
     PUBLIC_API_TAGS,
-    DocumentSource,
     OnyxCeleryPriority,
     OnyxCeleryTask,
 )
@@ -25,15 +24,9 @@ from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_h
 from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.capability_checks.registry import has_named_capability_checks
 from onyx.connectors.exceptions import ValidationError
-from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
-from onyx.connectors.interfaces import Resolver
-from onyx.connectors.models import InputType
+from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.pairing_access import validate_pairing_access
-from onyx.db.cc_pair_runs import (
-    count_cc_pair_runs_by_status_group,
-    get_cc_pair_run_page,
-)
-from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
+from onyx.db.cc_pair_runs_models import CCPairRunFilter
 from onyx.db.connector import fetch_connector_by_id, set_connector_check_frequency
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
@@ -96,34 +89,28 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.cc_pair_runs_feed import (
+    connector_supports_targeted_reindex,
+    fetch_run_feed,
+)
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.credential import credential_ids_to_mask
 from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
-    CCPairChecksRun,
-    CCPairDocPermissionSyncRun,
     CCPairFullInfo,
-    CCPairGroupSyncRun,
     CCPairHierarchyBreakdown,
-    CCPairIndexRun,
-    CCPairPruneRun,
-    CCPairRun,
     CCPairRunsResponse,
     CCPairThroughputResponse,
     CCPairThroughputWindow,
     CCPropertyUpdateRequest,
     CCStatusUpdateRequest,
-    CheckRunSnapshot,
     ConnectorCredentialPairIdentifier,
     ConnectorCredentialPairMetadata,
-    DocPermissionSyncAttemptSnapshot,
     DocumentSyncStatus,
-    ExternalGroupSyncAttemptSnapshot,
     IndexAttemptSnapshot,
     IndexAttemptStageMetricSnapshot,
     IndexAttemptStageMetricsResponse,
     PaginatedReturn,
-    PruneRunSnapshot,
     synthesize_unaccounted,
 )
 from onyx.server.models import StatusResponse
@@ -278,54 +265,6 @@ def _cc_pair_run_kinds(
     return kinds
 
 
-def _run_item(
-    kind: CCPairRunKind,
-    run_id: int,
-    page: CCPairRunPage,
-    error_counts: dict[int, int],
-    open_counts: dict[int, int],
-) -> CCPairRun:
-    match kind:
-        case CCPairRunKind.INDEXING:
-            attempt = page.index_attempts[run_id]
-            return CCPairIndexRun(
-                time_created=attempt.time_created,
-                attempt=IndexAttemptSnapshot.from_index_attempt_db_model(
-                    attempt,
-                    error_count=error_counts.get(run_id, 0),
-                    open_doc_error_count=open_counts.get(run_id, 0),
-                ),
-            )
-        case CCPairRunKind.DOC_PERMISSION_SYNC:
-            sync = page.doc_permission_syncs[run_id]
-            return CCPairDocPermissionSyncRun(
-                time_created=sync.time_created,
-                attempt=DocPermissionSyncAttemptSnapshot.from_doc_permission_sync_attempt_db_model(
-                    sync
-                ),
-            )
-        case CCPairRunKind.GROUP_SYNC:
-            group_sync = page.group_syncs[run_id]
-            return CCPairGroupSyncRun(
-                time_created=group_sync.time_created,
-                attempt=ExternalGroupSyncAttemptSnapshot.from_external_group_sync_attempt_db_model(
-                    group_sync
-                ),
-            )
-        case CCPairRunKind.PRUNING:
-            prune = page.prune_runs[run_id]
-            return CCPairPruneRun(
-                time_created=prune.sync_start_time,
-                attempt=PruneRunSnapshot.from_sync_record(prune),
-            )
-        case CCPairRunKind.CHECKS:
-            check_run = page.check_runs[run_id]
-            return CCPairChecksRun(
-                time_created=check_run.time_created,
-                attempt=CheckRunSnapshot.from_check_run(check_run),
-            )
-
-
 @router.get("/admin/cc-pair/{cc_pair_id}/runs")
 def get_cc_pair_runs(
     cc_pair_id: int,
@@ -360,37 +299,18 @@ def get_cc_pair_runs(
     run_filter = CCPairRunFilter(
         cc_pair_ids=[cc_pair_id],
         source=cc_pair.connector.source,
+        shared_sources=set(),
         since=since,
         error_query=(q or "").strip() or None,
         status_groups=groups,
         errors=errors,
     )
-    page = get_cc_pair_run_page(
-        db_session,
-        wanted,
-        run_filter,
-        offset=page_num * page_size,
-        limit=page_size,
-    )
-    error_counts = get_error_counts_for_index_attempts(
-        db_session, list(page.index_attempts)
-    )
-    open_counts = get_open_doc_error_counts_for_index_attempts(
-        db_session, list(page.index_attempts)
-    )
-    status_counts = count_cc_pair_runs_by_status_group(db_session, wanted, run_filter)
+    feed = fetch_run_feed(db_session, wanted, run_filter, page_num, page_size)
     return CCPairRunsResponse(
-        items=[
-            _run_item(kind, run_id, page, error_counts, open_counts)
-            for kind, run_id in page.order
-        ],
-        total_items=sum(
-            count
-            for group, count in status_counts.items()
-            if groups is None or group in groups
-        ),
+        items=feed.items,
+        total_items=feed.total_items,
         kinds=pair_kinds,
-        status_counts=status_counts,
+        status_counts=feed.status_counts,
     )
 
 
@@ -614,7 +534,7 @@ def get_cc_pair_full_info(
             if latest_permission_sync_attempt
             else None
         ),
-        supports_targeted_reindex=_connector_supports_targeted_reindex(
+        supports_targeted_reindex=connector_supports_targeted_reindex(
             cc_pair.connector.source, cc_pair.connector.input_type
         ),
         has_named_checks=has_named_capability_checks(cc_pair.connector.source),
@@ -634,15 +554,6 @@ def get_cc_pair_hierarchy_breakdown(
     reads every document of the pair and the detail page must load fast."""
     cc_pair = _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
     return build_cc_pair_hierarchy_breakdown(db_session, cc_pair)
-
-
-def _connector_supports_targeted_reindex(
-    source: DocumentSource, input_type: InputType
-) -> bool:
-    try:
-        return issubclass(identify_connector_class(source, input_type), Resolver)
-    except Exception:
-        return False
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/status", tags=PUBLIC_API_TAGS)

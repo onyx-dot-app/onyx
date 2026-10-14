@@ -1,4 +1,6 @@
 import type {
+  CCPairRun,
+  CCPairRunStatusGroup,
   CCPairThroughputResponse,
   ConnectorCredentialPairStatus,
 } from "@/lib/connectors/types/ccPair";
@@ -65,4 +67,26 @@ export interface IndexingConnectorsQuery {
   /** Matched against the name. */
   q: string;
   status: IndexingConnectorStatus | null;
+}
+
+/** Mirrors `CCPairRef`: a pair named in a fleet-wide feed. */
+export interface CCPairRef {
+  id: number;
+  name: string;
+  source: ValidSources;
+  /** The viewer may re-fetch single documents of this pair. */
+  can_resolve: boolean;
+}
+
+/** Mirrors `IndexingRun`: one run in the fleet-wide feed, with the pair it ran on. */
+export interface IndexingRun {
+  cc_pair: CCPairRef;
+  run: CCPairRun;
+}
+
+/** Mirrors `IndexingRunsResponse`. `status_counts` ignores the status filter. */
+export interface IndexingRunsResponse {
+  items: IndexingRun[];
+  total_items: number;
+  status_counts: Record<CCPairRunStatusGroup, number>;
 }

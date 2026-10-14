@@ -254,6 +254,7 @@
   "GET /manage/admin/index-attempt/{index_attempt_id}/stage-metrics": "read:connectors +scope",
   "GET /manage/admin/index-monitoring/connectors": "read:connectors +scope",
   "GET /manage/admin/index-monitoring/overview": "read:connectors +scope",
+  "GET /manage/admin/index-monitoring/runs": "read:connectors +scope",
   "GET /manage/admin/indexing/failed-documents": "admin",
   "GET /manage/admin/indexing/targeted-reindex/{job_id}": "manage:connectors +scope",
   "GET /manage/admin/manage-access-prefill": "manage:connectors +scope",
