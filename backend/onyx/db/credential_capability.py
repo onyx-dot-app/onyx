@@ -537,11 +537,16 @@ def delete_capability_check_runs_older_than(
 ) -> int:
     """Deletes finished check runs that ended more than ``retain_for`` ago and
     returns how many. A run still going is kept whatever its age, so the sweep
-    never races its terminal write. Commits."""
+    never races its terminal write, and so is each scope's newest run, which
+    the check schedule reads. Commits."""
+    newest_per_scope = select(func.max(CapabilityCheckRun.id)).group_by(
+        CapabilityCheckRun.credential_id, CapabilityCheckRun.connector_id
+    )
     result = db_session.execute(
         delete(CapabilityCheckRun).where(
             CapabilityCheckRun.status != CapabilityCheckRunStatus.RUNNING,
             CapabilityCheckRun.time_finished < func.now() - retain_for,
+            CapabilityCheckRun.id.not_in(newest_per_scope),
         )
     )
     db_session.commit()

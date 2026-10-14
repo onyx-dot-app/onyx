@@ -526,10 +526,14 @@ def test_retention_deletes_only_old_finished_check_runs(db_session: Session) -> 
     old = _check_run(db_session, cc_pair, 0, CapabilityCheckRunStatus.PASSED)
     recent = _check_run(db_session, cc_pair, 1, CapabilityCheckRunStatus.PASSED)
     stuck = _check_run(db_session, cc_pair, 2, CapabilityCheckRunStatus.RUNNING)
+    # Another pair whose only run is old: the schedule still reads it, so it stays.
+    other_pair = _create_cc_pair(db_session)
+    other_only = _check_run(db_session, other_pair, 0, CapabilityCheckRunStatus.PASSED)
     now = get_db_current_time(db_session)
     old.time_finished = now - timedelta(days=100)
     recent.time_finished = now - timedelta(days=1)
     stuck.time_created = now - timedelta(days=100)
+    other_only.time_finished = now - timedelta(days=100)
     db_session.commit()
 
     deleted = delete_capability_check_runs_older_than(
@@ -539,4 +543,4 @@ def test_retention_deletes_only_old_finished_check_runs(db_session: Session) -> 
     assert deleted == 1
     remaining = {run.id for run in db_session.scalars(select(CapabilityCheckRun)).all()}
     assert old.id not in remaining
-    assert {recent.id, stuck.id} <= remaining
+    assert {recent.id, stuck.id, other_only.id} <= remaining
