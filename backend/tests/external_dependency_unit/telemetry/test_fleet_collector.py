@@ -26,6 +26,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import SyncType
 from onyx.db.fleet_telemetry import (
     attempt_rows,
+    connector_rows,
     email_domain_rows,
     has_indexed_connectors__no_commit,
     job_rows,
@@ -216,6 +217,12 @@ def test_a_slow_read_is_stopped(schema: str) -> None:
 def test_one_pass_sends_only_safe_events(
     schema: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        _add_document_link(db_session, 1, 1, "indexed-document")
+        mark_document_as_indexed_for_cc_pair__no_commit(
+            db_session, 1, 1, ["indexed-document"]
+        )
+        db_session.commit()
     sender = make_sender(capacity=256)
     monkeypatch.setattr(collector, "get_sender", lambda: sender)
     monkeypatch.setattr(collector, "get_cache_backend", Mock(return_value=FakeCache()))
@@ -240,6 +247,10 @@ def test_one_pass_sends_only_safe_events(
     )
     assert failed["error_code"] == "auth"
     assert by_type["connector"][0]["metadata"]["permission_sync_enabled"] is True
+    assert {data["cc_pair_id"]: data["doc_count"] for data in by_type["connector"]} == {
+        1: 1,
+        2: 0,
+    }
     assert "PRIVATE" not in json.dumps(events)
 
 
@@ -279,10 +290,12 @@ def test_indexed_connector_presence_follows_successful_indexing(schema: str) -> 
         assert not has_indexed_connectors__no_commit(db_session)
         _add_document_link(db_session, 2, 1, "indexed-document")
         assert not has_indexed_connectors__no_commit(db_session)
+        assert [row["doc_count"] for row in connector_rows(db_session)] == [0, 0]
         mark_document_as_indexed_for_cc_pair__no_commit(
             db_session, 2, 1, ["indexed-document"]
         )
         assert has_indexed_connectors__no_commit(db_session)
+        assert [row["doc_count"] for row in connector_rows(db_session)] == [0, 1]
         # Indexing updates the link, not the pair's legacy counter.
         assert (
             db_session.scalar(
@@ -298,6 +311,38 @@ def test_indexed_connector_presence_follows_successful_indexing(schema: str) -> 
             )
         )
         assert not has_indexed_connectors__no_commit(db_session)
+        assert [row["doc_count"] for row in connector_rows(db_session)] == [0, 0]
+
+
+def test_connector_counts_are_scoped_to_each_credential_pair(schema: str) -> None:
+    with get_session_with_tenant(tenant_id=schema) as db_session:
+        limit_statement_time(db_session)
+        db_session.execute(
+            text(
+                f'INSERT INTO "{schema}".connector_credential_pair '
+                "(id,name,status,connector_id,credential_id,access_type,total_docs_indexed) "
+                "VALUES (3,'Other credential','ACTIVE',1,2,'PUBLIC',0)"
+            )
+        )
+        for connector_id, credential_id, doc_id in [
+            (1, 1, "shared-document"),
+            (1, 2, "shared-document"),
+            (1, 2, "second-document"),
+            (2, 1, "other-connector"),
+            (1, 99, "unconfigured-credential"),
+        ]:
+            _add_document_link(db_session, connector_id, credential_id, doc_id)
+            mark_document_as_indexed_for_cc_pair__no_commit(
+                db_session, connector_id, credential_id, [doc_id]
+            )
+        _add_document_link(db_session, 1, 1, "pending-document")
+        rows = connector_rows(db_session)
+        assert {row["cc_pair_id"]: row["doc_count"] for row in rows} == {
+            1: 1,
+            2: 1,
+            3: 2,
+        }
+        assert all("credential_id" not in row for row in rows)
 
 
 def test_raw_library_upload_does_not_count_as_indexed(

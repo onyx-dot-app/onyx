@@ -431,6 +431,12 @@ reads. The intervals are constants in `utils/fleet_telemetry.py`
 (`COLLECTION_INTERVAL_SECONDS` and the others); the fleet service cannot change
 them.
 
+Connector document counts use `db/document.py:get_document_counts_for_cc_pairs`,
+the same query as the connector admin page. It counts indexed document links for
+each connector and credential pair. Pending links do not count. The collector
+batches the capped inventory under its statement timeout; it does not read the
+legacy `ConnectorCredentialPair.total_docs_indexed` counter.
+
 **Identity.** `utils/fleet_telemetry.py:deployment_key` returns the stored key
 (`db/fleet_enrollment.py:get_or_create_deployment_key`). Under `MULTI_TENANT`, it
 derives the key from `WEB_DOMAIN`, and each tenant reports as a separate customer
