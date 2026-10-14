@@ -13800,6 +13800,17 @@
       "app": "应用",
       "unavailable": "已不可用",
       "appTitle": "预览你的应用"
+    },
+    "upgrade": {
+      "title": "Craft 需要商业版套餐",
+      "adminDescription": "Craft 适用于商业版和企业版套餐。在 Craft 并入主聊天之前，社区版不支持 Craft。",
+      "userDescription": "Craft 适用于商业版和企业版套餐。请联系管理员升级以使用 Craft。",
+      "backToChat": {
+        "label": "返回聊天"
+      },
+      "viewPlans": {
+        "label": "查看套餐"
+      }
     }
   },
   "knowledge": {
@@ -14841,7 +14852,8 @@
         "title": "智能体"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "商业版"
       },
       "exploreAgents": {
         "label": "探索智能体"

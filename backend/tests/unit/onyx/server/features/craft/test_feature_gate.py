@@ -19,7 +19,7 @@ from onyx.db.enums import AccountType
 from onyx.feature_flags.interface import FeatureFlagProvider, NoOpFeatureFlagProvider
 from onyx.server.features.build import utils as build_utils
 from onyx.server.features.build.utils import is_craft_enabled_for_user
-from onyx.server.settings.models import Settings
+from onyx.server.settings.models import Settings, Tier
 
 
 class _StubPostHogProvider(FeatureFlagProvider):
@@ -42,6 +42,11 @@ class _StubPostHogProvider(FeatureFlagProvider):
     ) -> bool:
         self.calls.append((flag_key, user_id, user_properties))
         return self._enabled
+
+
+@pytest.fixture(autouse=True)
+def _business_tier(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.BUSINESS)
 
 
 def _make_user() -> MagicMock:
@@ -225,3 +230,69 @@ def test_posthog_flag_disables_when_false(monkeypatch: pytest.MonkeyPatch) -> No
             {"tenant_id": "tenant_other", "email": "user@tenant-dev.example"},
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "tier,expected",
+    [(Tier.COMMUNITY, False), (Tier.BUSINESS, True), (Tier.ENTERPRISE, True)],
+)
+def test_craft_requires_gateway_tier(
+    monkeypatch: pytest.MonkeyPatch, tier: Tier, expected: bool
+) -> None:
+    """Craft turns go through the tier-gated LLM gateway, so an unlicensed
+    (Community) deployment never gets Craft even with ENABLE_CRAFT=True."""
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: tier)
+
+    assert is_craft_enabled_for_user(_make_user()) is expected
+
+
+def test_tier_not_resolved_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", False)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(
+        build_utils,
+        "get_current_tier",
+        lambda: pytest.fail("tier should not be resolved when Craft is off"),
+    )
+
+    assert is_craft_enabled_for_user(_make_user()) is False
+
+
+@pytest.mark.parametrize(
+    "tier,expected",
+    [(Tier.COMMUNITY, True), (Tier.BUSINESS, False), (Tier.ENTERPRISE, False)],
+)
+def test_craft_locked_by_tier(
+    monkeypatch: pytest.MonkeyPatch, tier: Tier, expected: bool
+) -> None:
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: tier)
+
+    assert build_utils.is_craft_locked_by_tier(_make_user()) is expected
+
+
+def test_craft_not_locked_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", False)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.COMMUNITY)
+
+    assert build_utils.is_craft_locked_by_tier(_make_user()) is False
