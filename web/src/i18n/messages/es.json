@@ -814,7 +814,7 @@
       "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://your-mcp-server.com/mcp"
+      "mcpServerUrl": "https://tu-servidor-mcp.com/mcp"
     }
   },
   "admin": {
@@ -3268,7 +3268,7 @@
               "description": "Reescribe las URL de los documentos antes de almacenarlas. Útil al rastrear a través de un espejo interno y almacenar los enlaces públicos canónicos, por ejemplo https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "Prefijo de URL de origen",
               "rightLabel": "Prefijo de reemplazo",
-              "leftPlaceholder": "https://internal-mirror.example.com",
+              "leftPlaceholder": "https://espejo-interno.example.com",
               "rightPlaceholder": "https://docs.example.com"
             }
           }
@@ -3531,7 +3531,7 @@
             },
             "wiki_base": {
               "label": "URL del sitio",
-              "placeholder": "https://your-domain.atlassian.net/wiki"
+              "placeholder": "https://tu-dominio.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3577,7 +3577,7 @@
           "fields": {
             "jira_base_url": {
               "label": "URL del sitio",
-              "placeholder": "https://your-domain.atlassian.net"
+              "placeholder": "https://tu-dominio.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3960,7 +3960,7 @@
           "fields": {
             "base_url": {
               "label": "URL base",
-              "placeholder": "https://sites.google.com/view/your-site"
+              "placeholder": "https://sites.google.com/view/tu-sitio"
             },
             "file_locations": {
               "label": "Exportación del sitio",
@@ -6080,7 +6080,7 @@
         }
       },
       "placeholders": {
-        "endpointUrl": "https://your-api-endpoint.com"
+        "endpointUrl": "https://tu-endpoint-api.com"
       }
     },
     "imageGeneration": {
@@ -8844,7 +8844,7 @@
           "nameField": {
             "description": "Identificador único en minúsculas que se usa en la URL de inicio de sesión. No se puede cambiar después.",
             "title": "Nombre",
-            "placeholder": "company-a"
+            "placeholder": "empresa-a"
           },
           "providerTypeField": {
             "description": "El protocolo con el que autentica este proveedor.",
@@ -9115,7 +9115,7 @@
         }
       },
       "placeholders": {
-        "matchRegex": "(?:it|support)\\s*ticket"
+        "matchRegex": "(?:ti|soporte)\\s*ticket"
       }
     },
     "status": {
@@ -10210,7 +10210,7 @@
         "searxngBaseUrl": {
           "label": "URL base de SearXNG",
           "description": "Pega la URL base de tu [instancia de SearXNG](https://docs.searxng.org/admin/installation.html).",
-          "placeholder": "https://your-searxng-instance.com"
+          "placeholder": "https://tu-instancia-searxng.com"
         },
         "firecrawlBaseUrl": {
           "label": "URL base de la API",
@@ -13560,27 +13560,27 @@
       "availableFor": "Disponible en el {plan}"
     },
     "placeholders": {
-      "email": "email@yourcompany.com",
+      "email": "correo@tuempresa.com",
       "url": "https://",
       "azure": {
-        "chatCompletionsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
-        "imageGenerationsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview",
-        "embeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
-        "speechEndpoint": "https://your_resource_region.tts.speech.microsoft.com/"
+        "chatCompletionsUrl": "https://tu-recurso.cognitiveservices.azure.com/openai/deployments/nombre-del-despliegue/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://tu-recurso.cognitiveservices.azure.com/openai/deployments/nombre-del-despliegue/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://nombre_de_tu_recurso.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://region_de_tu_recurso.tts.speech.microsoft.com/"
       },
       "bifrost": {
-        "apiBase": "https://your-bifrost-gateway.com/v1",
+        "apiBase": "https://tu-gateway-bifrost.com/v1",
         "embeddingsApiBase": "https://bifrost.example.com",
         "embeddingModel": "openai/text-embedding-3-large"
       },
       "litellm": {
-        "apiBase": "https://your-litellm-proxy.com"
+        "apiBase": "https://tu-proxy-litellm.com"
       },
       "openAICompatible": {
         "apiBase": "http://localhost:8000/v1"
       },
       "vertexAi": {
-        "projectId": "my-vertex-project",
+        "projectId": "mi-proyecto-vertex",
         "location": "global"
       }
     }
@@ -16531,7 +16531,7 @@
         }
       },
       "placeholders": {
-        "githubRepository": "owner/repository o https://github.com/owner/repository"
+        "githubRepository": "propietario/repositorio o https://github.com/propietario/repositorio"
       }
     },
     "page": {

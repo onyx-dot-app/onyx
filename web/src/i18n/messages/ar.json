@@ -814,7 +814,7 @@
       "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://your-mcp-server.com/mcp"
+      "mcpServerUrl": "https://خادم-mcp.com/mcp"
     }
   },
   "admin": {
@@ -3268,7 +3268,7 @@
               "description": "أعد كتابة عناوين URL للمستندات قبل التخزين. مفيد عند الزحف عبر نسخة داخلية مع تخزين الروابط العامة الأصلية، مثلاً https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "بادئة URL المصدر",
               "rightLabel": "بادئة الاستبدال",
-              "leftPlaceholder": "https://internal-mirror.example.com",
+              "leftPlaceholder": "https://مرآة-داخلية.example.com",
               "rightPlaceholder": "https://docs.example.com"
             }
           }
@@ -3531,7 +3531,7 @@
             },
             "wiki_base": {
               "label": "عنوان URL للموقع",
-              "placeholder": "https://your-domain.atlassian.net/wiki"
+              "placeholder": "https://نطاقك.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3577,7 +3577,7 @@
           "fields": {
             "jira_base_url": {
               "label": "عنوان URL للموقع",
-              "placeholder": "https://your-domain.atlassian.net"
+              "placeholder": "https://نطاقك.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3960,7 +3960,7 @@
           "fields": {
             "base_url": {
               "label": "عنوان URL الأساسي",
-              "placeholder": "https://sites.google.com/view/your-site"
+              "placeholder": "https://sites.google.com/view/موقعك"
             },
             "file_locations": {
               "label": "تصدير الموقع",
@@ -6080,7 +6080,7 @@
         }
       },
       "placeholders": {
-        "endpointUrl": "https://your-api-endpoint.com"
+        "endpointUrl": "https://نقطة-نهاية-api.com"
       }
     },
     "imageGeneration": {
@@ -8844,7 +8844,7 @@
           "nameField": {
             "description": "معرّف فريد بأحرف صغيرة يُستخدم في رابط تسجيل الدخول. لا يمكن تغييره لاحقًا.",
             "title": "الاسم",
-            "placeholder": "company-a"
+            "placeholder": "شركة-a"
           },
           "providerTypeField": {
             "description": "البروتوكول الذي يصادق به هذا الموفر.",
@@ -9115,7 +9115,7 @@
         }
       },
       "placeholders": {
-        "matchRegex": "(?:it|support)\\s*ticket"
+        "matchRegex": "(?:تقنية|دعم)\\s*تذكرة"
       }
     },
     "status": {
@@ -10210,7 +10210,7 @@
         "searxngBaseUrl": {
           "label": "عنوان URL الأساسي لـ SearXNG",
           "description": "الصق عنوان URL الأساسي لـ [مثيل SearXNG](https://docs.searxng.org/admin/installation.html) الخاص بك.",
-          "placeholder": "https://your-searxng-instance.com"
+          "placeholder": "https://مثيل-searxng.com"
         },
         "firecrawlBaseUrl": {
           "label": "عنوان URL الأساسي لواجهة API",
@@ -13560,27 +13560,27 @@
       "availableFor": "متاح في {plan}"
     },
     "placeholders": {
-      "email": "email@yourcompany.com",
+      "email": "البريد@شركتك.com",
       "url": "https://",
       "azure": {
-        "chatCompletionsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
-        "imageGenerationsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview",
-        "embeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
-        "speechEndpoint": "https://your_resource_region.tts.speech.microsoft.com/"
+        "chatCompletionsUrl": "https://المورد.cognitiveservices.azure.com/openai/deployments/اسم-النشر/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://المورد.cognitiveservices.azure.com/openai/deployments/اسم-النشر/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://اسم_المورد.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://منطقة_المورد.tts.speech.microsoft.com/"
       },
       "bifrost": {
-        "apiBase": "https://your-bifrost-gateway.com/v1",
+        "apiBase": "https://بوابة-bifrost.com/v1",
         "embeddingsApiBase": "https://bifrost.example.com",
         "embeddingModel": "openai/text-embedding-3-large"
       },
       "litellm": {
-        "apiBase": "https://your-litellm-proxy.com"
+        "apiBase": "https://وكيل-litellm.com"
       },
       "openAICompatible": {
         "apiBase": "http://localhost:8000/v1"
       },
       "vertexAi": {
-        "projectId": "my-vertex-project",
+        "projectId": "مشروع-vertex",
         "location": "global"
       }
     }
@@ -16531,7 +16531,7 @@
         }
       },
       "placeholders": {
-        "githubRepository": "owner/repository أو https://github.com/owner/repository"
+        "githubRepository": "المالك/المستودع أو https://github.com/المالك/المستودع"
       }
     },
     "page": {

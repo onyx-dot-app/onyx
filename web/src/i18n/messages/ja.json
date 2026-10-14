@@ -814,7 +814,7 @@
       "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://your-mcp-server.com/mcp"
+      "mcpServerUrl": "https://mcp-サーバー.com/mcp"
     }
   },
   "admin": {
@@ -3268,7 +3268,7 @@
               "description": "保存前にドキュメントの URL を書き換えます。社内ミラー経由でクロールしつつ、正規の公開リンクを保存する場合に便利です。例: https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "元の URL プレフィックス",
               "rightLabel": "置換後のプレフィックス",
-              "leftPlaceholder": "https://internal-mirror.example.com",
+              "leftPlaceholder": "https://内部ミラー.example.com",
               "rightPlaceholder": "https://docs.example.com"
             }
           }
@@ -3531,7 +3531,7 @@
             },
             "wiki_base": {
               "label": "サイト URL",
-              "placeholder": "https://your-domain.atlassian.net/wiki"
+              "placeholder": "https://ドメイン名.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3577,7 +3577,7 @@
           "fields": {
             "jira_base_url": {
               "label": "サイト URL",
-              "placeholder": "https://your-domain.atlassian.net"
+              "placeholder": "https://ドメイン名.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3960,7 +3960,7 @@
           "fields": {
             "base_url": {
               "label": "ベース URL",
-              "placeholder": "https://sites.google.com/view/your-site"
+              "placeholder": "https://sites.google.com/view/サイト名"
             },
             "file_locations": {
               "label": "サイトのエクスポート",
@@ -6080,7 +6080,7 @@
         }
       },
       "placeholders": {
-        "endpointUrl": "https://your-api-endpoint.com"
+        "endpointUrl": "https://api-エンドポイント.com"
       }
     },
     "imageGeneration": {
@@ -8844,7 +8844,7 @@
           "nameField": {
             "description": "ログイン URL に使用する一意の小文字スラッグです。後から変更できません。",
             "title": "名前",
-            "placeholder": "company-a"
+            "placeholder": "会社-a"
           },
           "providerTypeField": {
             "description": "このプロバイダーが認証に使用するプロトコルです。",
@@ -9115,7 +9115,7 @@
         }
       },
       "placeholders": {
-        "matchRegex": "(?:it|support)\\s*ticket"
+        "matchRegex": "(?:IT|サポート)\\s*チケット"
       }
     },
     "status": {
@@ -10210,7 +10210,7 @@
         "searxngBaseUrl": {
           "label": "SearXNG ベース URL",
           "description": "[SearXNG インスタンス](https://docs.searxng.org/admin/installation.html)のベース URL を貼り付けてください。",
-          "placeholder": "https://your-searxng-instance.com"
+          "placeholder": "https://searxng-インスタンス.com"
         },
         "firecrawlBaseUrl": {
           "label": "API ベース URL",
@@ -13560,27 +13560,27 @@
       "availableFor": "{plan}で利用可能"
     },
     "placeholders": {
-      "email": "email@yourcompany.com",
+      "email": "名前@会社名.com",
       "url": "https://",
       "azure": {
-        "chatCompletionsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
-        "imageGenerationsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview",
-        "embeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
-        "speechEndpoint": "https://your_resource_region.tts.speech.microsoft.com/"
+        "chatCompletionsUrl": "https://リソース名.cognitiveservices.azure.com/openai/deployments/デプロイ名/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://リソース名.cognitiveservices.azure.com/openai/deployments/デプロイ名/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://リソース名.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://リソースのリージョン.tts.speech.microsoft.com/"
       },
       "bifrost": {
-        "apiBase": "https://your-bifrost-gateway.com/v1",
+        "apiBase": "https://bifrost-ゲートウェイ.com/v1",
         "embeddingsApiBase": "https://bifrost.example.com",
         "embeddingModel": "openai/text-embedding-3-large"
       },
       "litellm": {
-        "apiBase": "https://your-litellm-proxy.com"
+        "apiBase": "https://litellm-プロキシ.com"
       },
       "openAICompatible": {
         "apiBase": "http://localhost:8000/v1"
       },
       "vertexAi": {
-        "projectId": "my-vertex-project",
+        "projectId": "vertex-プロジェクト",
         "location": "global"
       }
     }
@@ -16531,7 +16531,7 @@
         }
       },
       "placeholders": {
-        "githubRepository": "owner/repository または https://github.com/owner/repository"
+        "githubRepository": "オーナー/リポジトリ または https://github.com/オーナー/リポジトリ"
       }
     },
     "page": {
