@@ -1,4 +1,4 @@
-"""The response-message migration preserves main's public response records."""
+"""The response-item migration preserves main's public response records."""
 
 from pathlib import Path
 from uuid import uuid4
@@ -200,7 +200,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                       AND conname = 'chat_message_chat_session_id_fkey'
                 """)
                 ).one() == (original_fk_oid, "c")
-                assert "chat_response_message" in inspect(connection).get_table_names(
+                assert "chat_response_item" in inspect(connection).get_table_names(
                     schema=schema
                 )
                 # A failed unique build leaves a committed schema and an invalid index.
@@ -271,9 +271,9 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                         (9, :grandchild, 202, 8, 1, 'Leaf result'),
                         (10, :root, 42, NULL, NULL, 'Control result');
                     INSERT INTO tool_call (id, chat_session_id, parent_chat_message_id, tool_id, tool_call_response, result) VALUES
-                        (11, :root, 42, 1, '', '{"content": [{"type": "text", "text": "Saved result"}]}');
-                    INSERT INTO chat_response_message (id, chat_message_id, position, step_index, generation_status, message) VALUES
-                        ('leaf-message', 202, 0, 0, 'complete', '{"role": "assistant", "id": "leaf-message", "content": [{"type": "text", "text": "Grandchild output"}]}');
+                        (11, :root, 42, 1, '', '{"content": "Saved result"}');
+                    INSERT INTO chat_response_item (id, chat_message_id, step_index, generation_status, message) VALUES
+                        ('leaf-message', 202, 0, 'complete', '{"role": "assistant", "id": "leaf-message", "content": [{"type": "text", "text": "Grandchild output"}]}');
                     INSERT INTO chat_feedback (id, chat_message_id) VALUES (1, 202);
                     INSERT INTO search_doc (id) VALUES (1);
                     INSERT INTO tool_call__search_doc VALUES (9, 1);
@@ -351,7 +351,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                       AND conname = 'chat_message_chat_session_id_fkey'
                 """)
                 ).one() == (original_fk_oid, "c")
-                assert "chat_response_message" in inspect(connection).get_table_names(
+                assert "chat_response_item" in inspect(connection).get_table_names(
                     schema=schema
                 )
         finally:
@@ -422,14 +422,14 @@ def test_current_chat_writers_accept_response_storage_schema(
             .select_from(ToolCall)
             .where(ToolCall.id == call_id)
         ).one() == (None, None)
-        response_messages = Table(
-            "chat_response_message", MetaData(), Column("chat_message_id", Integer)
+        response_items = Table(
+            "chat_response_item", MetaData(), Column("chat_message_id", Integer)
         )
         assert (
             db_session.scalar(
                 select(func.count())
-                .select_from(response_messages)
-                .where(response_messages.c.chat_message_id == answer_id)
+                .select_from(response_items)
+                .where(response_items.c.chat_message_id == answer_id)
             )
             == 0
         )
@@ -443,23 +443,25 @@ def _assert_response_schema_contract(connection: Connection, schema: str) -> Non
     inspector = inspect(connection)
     response_columns = {
         column["name"]
-        for column in inspector.get_columns("chat_response_message", schema=schema)
+        for column in inspector.get_columns("chat_response_item", schema=schema)
     }
     assert {"message", "generation_status"} <= response_columns
-    assert not {"content", "operation_status"} & response_columns
+    assert not {"content", "operation_status", "position"} & response_columns
     tool_columns = {
         column["name"] for column in inspector.get_columns("tool_call", schema=schema)
     }
-    assert not {"argument_error", "raw_arguments", "arguments_complete"} & tool_columns
-    assert "ix_chat_response_message_chat_message_id" not in {
+    assert (
+        not {"argument_error", "raw_arguments", "arguments_complete", "tool_name"}
+        & tool_columns
+    )
+    assert "ix_chat_response_item_chat_message_id" not in {
         index["name"]
-        for index in inspector.get_indexes("chat_response_message", schema=schema)
+        for index in inspector.get_indexes("chat_response_item", schema=schema)
     }
     assert any(
-        constraint["column_names"] == ["chat_message_id", "position"]
-        for constraint in inspector.get_unique_constraints(
-            "chat_response_message", schema=schema
-        )
+        index["column_names"] == ["chat_message_id", "step_index"]
+        and not index["unique"]
+        for index in inspector.get_indexes("chat_response_item", schema=schema)
     )
     checkpoint_columns = {
         column["name"]
@@ -472,8 +474,8 @@ def _assert_response_schema_contract(connection: Connection, schema: str) -> Non
     connection.execute(
         text("""
         INSERT INTO chat_response_checkpoint (chat_message_id, state) VALUES (42, '{}');
-        INSERT INTO chat_response_message (id, chat_message_id, position, step_index, generation_status, message)
-        VALUES ('schema-contract', 42, 0, 0, 'running', '{}');
+        INSERT INTO chat_response_item (id, chat_message_id, step_index, generation_status, message)
+        VALUES ('schema-contract', 42, 0, 'running', '{}');
     """)
     )
     assert (
@@ -484,46 +486,9 @@ def _assert_response_schema_contract(connection: Connection, schema: str) -> Non
         )
         == 0
     )
-    for table, column, row_id, allowed in (
-        (
-            "chat_message",
-            "response_status",
-            42,
-            ("running", "suspended", "complete", "limit", "cancelled", "error", None),
-        ),
-        (
-            "tool_call",
-            "operation_status",
-            7,
-            ("running", "complete", "cancelled", "error", None),
-        ),
-        (
-            "chat_response_message",
-            "generation_status",
-            "schema-contract",
-            ("running", "complete", "cancelled", "error"),
-        ),
-    ):
-        statement = text(f"UPDATE {table} SET {column}=:status WHERE id=:id")
-        for status in allowed:
-            connection.execute(statement, {"status": status, "id": row_id})
-        with pytest.raises(IntegrityError), connection.begin_nested():
-            connection.execute(statement, {"status": "invalid", "id": row_id})
-    assert (
-        connection.scalar(
-            text("""
-        SELECT count(*) FROM pg_constraint
-        WHERE connamespace = CAST(:schema AS regnamespace) AND convalidated
-          AND conname IN ('ck_chat_message_response_status', 'ck_tool_call_operation_status',
-                          'ck_response_message_generation_status')
-    """),
-            {"schema": schema},
-        )
-        == 3
-    )
     connection.execute(
         text("""
         DELETE FROM chat_response_checkpoint WHERE chat_message_id=42;
-        DELETE FROM chat_response_message WHERE id='schema-contract';
+        DELETE FROM chat_response_item WHERE id='schema-contract';
     """)
     )

@@ -91,18 +91,19 @@ data being gone.
 ## 3. Data model
 
 Migration `7a03b6e90c12` prepares storage for agent responses, child sessions, and checkpoints.
-It adds nullable identities and status fields, plus response-message and checkpoint tables.
+It adds nullable identities and status fields, plus response-item and checkpoint tables.
 It also permits null tool IDs for agent control operations. Existing writers still supply their tool IDs.
 Current ORM mappings and writers do not use these additions. Canonical response writing requires the later SDK application change.
 The migration preserves existing answer, reasoning, tool-response, citation, and history columns.
 
-`chat_response_message.message` stores one complete or partial model message; alternative rows reference tool results.
+`chat_response_item.message` stores one complete or partial model message; alternative rows reference tool results.
 `generation_status` records the model generation outcome, independently of the whole response or tool outcome.
 `is_answer` identifies the step the runtime accepted as its answer. Partial output need not be an accepted answer.
-The unique `(chat_message_id, position)` index also supports lookups by response; no separate response-ID index is needed.
+Items use `step_index` to identify their model generation. Tool results follow the calls recorded in that generation.
+The `(chat_message_id, step_index)` index supports response lookups and step ordering. No separate position column is stored.
 
-Tool argument parsing details stay in the saved model message. Tool rows retain queryable arguments and execution results.
-Database checks restrict response, generation, and tool status values while allowing null statuses on historical rows.
+Tool names and argument parsing details stay in the saved model message. Tool rows retain queryable arguments and execution results.
+Application enums define response, generation, and tool statuses; historical response and tool rows can have null statuses.
 
 `chat_response_checkpoint` stores resume progress alongside response history, rather than another copy of that history.
 Its `ownership_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
