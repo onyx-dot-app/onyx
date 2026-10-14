@@ -27,6 +27,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
+from onyx.db.tools import can_manage_mcp_server
 from onyx.server.features.mcp.models import MCPConnectionData
 from onyx.utils.logger import setup_logger
 
@@ -150,6 +151,18 @@ def user_can_access_mcp_server(user: User, server_id: int, db_session: Session) 
         select(MCPServer.id).where(MCPServer.id == server_id), user
     )
     return db_session.scalar(stmt) is not None
+
+
+def user_can_configure_mcp_credentials(
+    user: User, server: MCPServer, db_session: Session
+) -> bool:
+    """Whether the user may connect their own credentials to this server: users
+    who may attach it, plus its managers. Kept apart from
+    ``user_can_access_mcp_server``, which also gates agent attachment and
+    shared-credential injection."""
+    return user_can_access_mcp_server(
+        user, server.id, db_session
+    ) or can_manage_mcp_server(user, server)
 
 
 def affected_user_ids_for_mcp_server(
