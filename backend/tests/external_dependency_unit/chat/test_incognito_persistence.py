@@ -458,7 +458,7 @@ def test_incognito_response_restores_agents_without_database_content(
     from onyx.chat.models import ChatResponseSnapshot, MessageRendering
     from onyx.chat.subagents import create_chat_agent_coordinator
     from onyx.db.enums import IncognitoRecordMode
-    from onyx.db.models import ChatResponseMessage
+    from onyx.db.models import ChatResponseItem
     from onyx.llm.interfaces import LLMUserIdentity
     from onyx.llm.models import ToolCall, ToolResult
     from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
@@ -576,7 +576,7 @@ def test_incognito_response_restores_agents_without_database_content(
         history_store.save_response(response_snapshot)
         assert load_incognito_context(session.id).previous_run_id == transcript.run_id
         db_session.expire_all()
-        assert assistant.message == "" and not assistant.response_messages
+        assert assistant.message == "" and not assistant.response_items
         assert (
             db_session.scalars(
                 select(ChatSession)
@@ -587,8 +587,8 @@ def test_incognito_response_restores_agents_without_database_content(
         )
         assert (
             db_session.scalars(
-                select(ChatResponseMessage).where(
-                    ChatResponseMessage.chat_message_id == assistant.id
+                select(ChatResponseItem).where(
+                    ChatResponseItem.chat_message_id == assistant.id
                 )
             ).all()
             == []
