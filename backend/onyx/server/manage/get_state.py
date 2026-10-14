@@ -248,54 +248,70 @@ def get_version() -> VersionResponse:
 DOCUMENT_INDEX_IMAGE = "opensearchproject/opensearch:3.6.0"
 
 
-@router.get("/versions", tags=PUBLIC_API_TAGS)
-def get_versions() -> AllVersions:
-    """
-    Fetches the latest stable and beta versions of Onyx Docker images.
-    Since DockerHub does not explicitly flag stable and beta images,
-    this endpoint can be used to programmatically check for new images.
-    """
-    # Fetch the latest tags from DockerHub for each Onyx component
-    dockerhub_repos = [
-        "onyxdotapp/onyx-model-server",
-        "onyxdotapp/onyx-backend",
-        "onyxdotapp/onyx-web-server",
-    ]
+_DOCKERHUB_REPOS = (
+    "onyxdotapp/onyx-model-server",
+    "onyxdotapp/onyx-backend",
+    "onyxdotapp/onyx-web-server",
+)
+_DOCKERHUB_PAGE_SIZE = 100
+_DOCKERHUB_MAX_PAGES = 2
+_DOCKERHUB_TIMEOUT_SECONDS = 5
 
-    # For good measure, we fetch 10 pages of tags
-    def get_dockerhub_tags(repo: str, pages: int = 10) -> list[str]:
-        url = f"https://hub.docker.com/v2/repositories/{repo}/tags"
-        tags = []
-        for _ in range(pages):
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            tags.extend(
-                [
-                    tag["name"]
-                    for tag in data["results"]
-                    if re.match(r"^v\d", tag["name"])
-                ]
-            )
-            url = data.get("next")
-            if not url:
-                break
-        return tags
+# Public endpoint, so cache the DockerHub lookup to keep it from being an
+# amplification vector. The lock makes concurrent misses share one fetch.
+_VERSIONS_TTL_SECONDS = 60 * 60
+_VERSIONS_CACHE: TTLCache[str, AllVersions] = TTLCache(
+    maxsize=1, ttl=_VERSIONS_TTL_SECONDS
+)
+_VERSIONS_KEY = "versions"
+_VERSIONS_LOCK = threading.Lock()
+# Outlives the TTL so a DockerHub outage serves the last good answer.
+_LAST_GOOD_VERSIONS: AllVersions | None = None
+# After a failure, skip refetching for a while: serve last good or re-raise.
+_VERSIONS_FAILURE_COOLDOWN_SECONDS = 60.0
+_LAST_VERSIONS_FAILURE: tuple[float, Exception] | None = None
 
-    # Get tags for all repos in parallel
+
+def _get_dockerhub_tags(repo: str) -> list[str]:
+    url: str | None = (
+        f"https://hub.docker.com/v2/repositories/{repo}/tags"
+        f"?page_size={_DOCKERHUB_PAGE_SIZE}"
+    )
+    tags: list[str] = []
+    for _ in range(_DOCKERHUB_MAX_PAGES):
+        if not url:
+            break
+        response = requests.get(url, timeout=_DOCKERHUB_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        data = response.json()
+        tags.extend(
+            tag["name"] for tag in data["results"] if re.match(r"^v\d", tag["name"])
+        )
+        url = data.get("next")
+    return tags
+
+
+def _version_key(version: str) -> tuple[int, int, int, int]:
+    """Extract major, minor, patch, beta as integers for sorting"""
+    clean_version = version[1:]
+    if "-beta." in clean_version:
+        base_version, beta_num = clean_version.split("-beta.")
+        parts = base_version.split(".")
+        return (int(parts[0]), int(parts[1]), int(parts[2]), int(beta_num))
+    parts = clean_version.split(".")
+    return (int(parts[0]), int(parts[1]), int(parts[2]), 0)
+
+
+def _fetch_versions() -> AllVersions:
     with concurrent.futures.ThreadPoolExecutor() as executor:
         all_tags = list(
-            executor.map(lambda repo: set(get_dockerhub_tags(repo)), dockerhub_repos)
+            executor.map(lambda repo: set(_get_dockerhub_tags(repo)), _DOCKERHUB_REPOS)
         )
 
-    # Find common tags across all repos
     common_tags = set.intersection(*all_tags)
-
-    # Filter tags by strict version patterns
     dev_tags = [tag for tag in common_tags if DEV_VERSION_PATTERN.match(tag)]
     stable_tags = [tag for tag in common_tags if STABLE_VERSION_PATTERN.match(tag)]
 
-    # Ensure we have at least one tag of each type
     if not dev_tags:
         raise HTTPException(
             status_code=500,
@@ -307,25 +323,8 @@ def get_versions() -> AllVersions:
             detail="No valid stable versions found matching pattern v(number).(number).(number)",
         )
 
-    # Sort common tags and get the latest one
-    def version_key(version: str) -> tuple[int, int, int, int]:
-        """Extract major, minor, patch, beta as integers for sorting"""
-        # Remove 'v' prefix
-        clean_version = version[1:]
-
-        # Check if it's a beta version
-        if "-beta." in clean_version:
-            # Split on '-beta.' to separate version and beta number
-            base_version, beta_num = clean_version.split("-beta.")
-            parts = base_version.split(".")
-            return (int(parts[0]), int(parts[1]), int(parts[2]), int(beta_num))
-        else:
-            # Stable version - no beta number
-            parts = clean_version.split(".")
-            return (int(parts[0]), int(parts[1]), int(parts[2]), 0)
-
-    latest_dev_version = max(dev_tags, key=version_key)
-    latest_stable_version = max(stable_tags, key=version_key)
+    latest_dev_version = max(dev_tags, key=_version_key)
+    latest_stable_version = max(stable_tags, key=_version_key)
 
     return AllVersions(
         stable=ContainerVersions(
@@ -347,3 +346,42 @@ def get_versions() -> AllVersions:
             nginx="nginx:1.25.5-alpine",
         ),
     )
+
+
+def _get_cached_versions() -> AllVersions:
+    global _LAST_GOOD_VERSIONS, _LAST_VERSIONS_FAILURE
+    with _VERSIONS_LOCK:
+        cached = _VERSIONS_CACHE.get(_VERSIONS_KEY)
+        if cached is not None:
+            return cached
+        if _LAST_VERSIONS_FAILURE is not None:
+            failed_at, error = _LAST_VERSIONS_FAILURE
+            if time.monotonic() - failed_at < _VERSIONS_FAILURE_COOLDOWN_SECONDS:
+                if _LAST_GOOD_VERSIONS is not None:
+                    return _LAST_GOOD_VERSIONS
+                raise error
+        try:
+            versions = _fetch_versions()
+        except Exception as e:
+            _LAST_VERSIONS_FAILURE = (time.monotonic(), e)
+            if _LAST_GOOD_VERSIONS is None:
+                raise
+            logger.warning(
+                "DockerHub version lookup failed; serving last good value",
+                exc_info=True,
+            )
+            return _LAST_GOOD_VERSIONS
+        _VERSIONS_CACHE[_VERSIONS_KEY] = versions
+        _LAST_GOOD_VERSIONS = versions
+        _LAST_VERSIONS_FAILURE = None
+        return versions
+
+
+@router.get("/versions", tags=PUBLIC_API_TAGS)
+def get_versions() -> AllVersions:
+    """
+    Fetches the latest stable and beta versions of Onyx Docker images.
+    Since DockerHub does not explicitly flag stable and beta images,
+    this endpoint can be used to programmatically check for new images.
+    """
+    return _get_cached_versions()
