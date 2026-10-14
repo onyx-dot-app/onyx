@@ -6,11 +6,14 @@ including creation, status updates, progress tracking, and querying.
 Supports both connector-specific and global group sync attempts.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.orm import Session
 
+from ee.onyx.background.celery.tasks.external_group_syncing.tasks import (
+    _is_external_group_sync_due,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import (
@@ -28,7 +31,9 @@ from onyx.db.permission_sync_attempt import (
     complete_external_group_sync_attempt,
     create_external_group_sync_attempt,
     get_external_group_sync_attempt,
+    get_external_group_sync_retry_after,
     get_recent_external_group_sync_attempts_for_cc_pair,
+    group_sync_retry_delay,
     mark_external_group_sync_attempt_failed,
     mark_external_group_sync_attempt_in_progress,
 )
@@ -540,3 +545,73 @@ class TestExternalGroupPermissionSyncAttempt:
         assert attempt.time_finished is not None
         assert attempt.status.is_terminal()
         assert not attempt.status.is_successful()
+
+
+def _add_finished_attempt(
+    db_session: Session,
+    cc_pair_id: int,
+    status: PermissionSyncStatus,
+    finished_at: datetime,
+) -> None:
+    db_session.add(
+        ExternalGroupPermissionSyncAttempt(
+            connector_credential_pair_id=cc_pair_id,
+            status=status,
+            time_created=finished_at - timedelta(seconds=10),
+            time_started=finished_at - timedelta(seconds=10),
+            time_finished=finished_at,
+        )
+    )
+    db_session.commit()
+
+
+class TestExternalGroupSyncBackoff:
+    def test_retry_delay_grows_with_consecutive_failures(
+        self, db_session: Session
+    ) -> None:
+        cc_pair = _create_test_connector_credential_pair(db_session)
+        assert get_external_group_sync_retry_after(cc_pair.id, db_session) is None
+
+        base = datetime.now(timezone.utc) - timedelta(hours=1)
+        _add_finished_attempt(db_session, cc_pair.id, PermissionSyncStatus.FAILED, base)
+        assert get_external_group_sync_retry_after(
+            cc_pair.id, db_session
+        ) == base + group_sync_retry_delay(1)
+
+        latest = base + timedelta(minutes=1)
+        _add_finished_attempt(
+            db_session, cc_pair.id, PermissionSyncStatus.FAILED, latest
+        )
+        assert get_external_group_sync_retry_after(
+            cc_pair.id, db_session
+        ) == latest + group_sync_retry_delay(2)
+        assert group_sync_retry_delay(2) > group_sync_retry_delay(1)
+
+    def test_success_clears_backoff(self, db_session: Session) -> None:
+        cc_pair = _create_test_connector_credential_pair(db_session)
+        base = datetime.now(timezone.utc) - timedelta(hours=1)
+        _add_finished_attempt(db_session, cc_pair.id, PermissionSyncStatus.FAILED, base)
+        _add_finished_attempt(
+            db_session,
+            cc_pair.id,
+            PermissionSyncStatus.SUCCESS,
+            base + timedelta(minutes=1),
+        )
+        assert get_external_group_sync_retry_after(cc_pair.id, db_session) is None
+
+    def test_paused_pair_is_not_due(self, db_session: Session) -> None:
+        cc_pair = _create_test_connector_credential_pair(
+            db_session, source=DocumentSource.CONFLUENCE
+        )
+        cc_pair.access_type = AccessType.SYNC
+        db_session.commit()
+        assert _is_external_group_sync_due(cc_pair)
+
+        for status in (
+            ConnectorCredentialPairStatus.PAUSED,
+            ConnectorCredentialPairStatus.INVALID,
+            ConnectorCredentialPairStatus.DELETING,
+        ):
+            cc_pair.status = status
+            db_session.commit()
+            assert not _is_external_group_sync_due(cc_pair)
