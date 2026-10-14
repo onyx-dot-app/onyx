@@ -2926,9 +2926,6 @@
         "fieldInvalid": "Vérifiez le champ « {field} » : {detail}",
         "rejected": "Ces identifiants ne peuvent pas être utilisés avec ces paramètres. {detail}"
       },
-      "credentialsLoadError": {
-        "title": "Échec du chargement des identifiants."
-      },
       "field": {
         "optionalSuffix": {
           "label": "facultatif"
@@ -2951,10 +2948,6 @@
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "Votre identifiant Gmail a été créé. Gérez-le ou révoquez-le depuis la liste des identifiants.",
-          "title": "Authentification terminée"
-        },
         "authFailed": {
           "toast": "Échec de l'authentification avec Gmail : {error}"
         },
@@ -2962,51 +2955,12 @@
           "label": "S'authentifier avec Gmail",
           "pendingLabel": "Authentification en cours..."
         },
-        "createButton": {
-          "label": "Créer l'identifiant",
-          "pendingLabel": "Création..."
-        },
-        "credentialsLoadError": {
-          "title": "Échec du chargement des identifiants Gmail."
-        },
-        "invalidFile": {
-          "toast": "Fichier fourni non valide : {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Fichier fourni non valide : une clé JSON de compte de service est attendue"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Téléversez une clé de compte de service avant de créer un identifiant"
-        },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer la messagerie Gmail.",
-          "title": "Option 1 : application OAuth",
           "sharedScopesNote": "Google demande l'accès à Gmail et à Google Drive en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Gmail, décochez les autorisations Google Drive sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
-        },
-        "primaryAdmin": {
-          "description": "Saisissez l'e-mail d'un administrateur ou d'un propriétaire de l'organisation Google qui possède le ou les comptes Gmail que vous voulez indexer.",
-          "invalidEmail": "Doit être un e-mail valide",
-          "label": "E-mail de l'administrateur principal",
-          "placeholder": "admin@votreentreprise.com",
-          "required": "Obligatoire"
-        },
-        "section": {
-          "title": "Authentification Gmail"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Échec de la création de l'identifiant du compte de service : {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Identifiant du compte de service créé avec succès"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2 : compte de service"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Téléversez ou collez la clé JSON de votre compte de service"
         }
       },
       "header": {
@@ -3573,7 +3527,6 @@
         "namespace": "Espace de noms {source}",
         "region": "Région {source}",
         "portalId": "ID de portail {source}",
-        "oauthTokens": "Jetons OAuth {source}",
         "isSandbox": "Environnement sandbox",
         "serviceUserEmail": "E-mail de l'utilisateur de service",
         "zuliprcContent": "Contenu de zuliprc",

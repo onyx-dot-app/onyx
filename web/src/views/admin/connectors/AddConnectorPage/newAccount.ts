@@ -1,5 +1,5 @@
 import { getIn } from "formik";
-import { ValidSources } from "@/lib/connectors/types/source";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import type {
   CredentialSpec,
   CredentialValidationMessages,
@@ -34,19 +34,12 @@ export type NewAccountValues = ShareAccountFormValues & {
 
 export type NewAccountSchema = ReturnType<typeof createValidationSchema>;
 
-/** Sources with their own account setup instead of typed fields. */
-const OWN_ACCOUNT_SETUP: ReadonlySet<ValidSources> = new Set([
-  ValidSources.Gmail,
-]);
-
 /**
  * The source's credential spec when a new account is typed into the form;
- * `null` when it is not, as Gmail sets accounts up its own way. A file field
- * (a .pfx certificate) is typed in too, as the file's base64 text, which is
- * how the account stores it.
+ * `null` for a source with no credential. A file field is typed in too: a
+ * .pfx certificate as the file's base64 text, a Google key as its JSON text.
  */
 export function typedAccountSpec(source: ValidSources): CredentialSpec | null {
-  if (OWN_ACCOUNT_SETUP.has(source)) return null;
   return getCredentialSpec(source) ?? null;
 }
 

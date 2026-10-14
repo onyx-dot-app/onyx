@@ -323,7 +323,10 @@ function getStoredAuthMethod(
 ): string | undefined {
   // Google stores "uploaded" for an uploaded OAuth app as well as for a
   // service account, so its keys say which tab the account belongs to.
-  if (sourceType === ValidSources.GoogleDrive) {
+  if (
+    sourceType === ValidSources.GoogleDrive ||
+    sourceType === ValidSources.Gmail
+  ) {
     const kind = googleCredentialKind({ credential_json: credentialJson });
     if (kind === "service_account") return "uploaded";
     if (kind === "oauth") return "oauth";

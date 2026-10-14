@@ -2926,9 +2926,6 @@
         "fieldInvalid": "تحقق من «{field}»: {detail}",
         "rejected": "لا يمكن استخدام بيانات الاعتماد هذه مع هذه الإعدادات. {detail}"
       },
-      "credentialsLoadError": {
-        "title": "فشل تحميل بيانات الاعتماد."
-      },
       "field": {
         "optionalSuffix": {
           "label": "اختياري"
@@ -2951,10 +2948,6 @@
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "تم إنشاء بيانات اعتماد Gmail. أدرها أو ألغها من قائمة بيانات الاعتماد.",
-          "title": "اكتملت المصادقة"
-        },
         "authFailed": {
           "toast": "فشلت المصادقة مع Gmail - {error}"
         },
@@ -2962,51 +2955,12 @@
           "label": "المصادقة عبر Gmail",
           "pendingLabel": "جارٍ المصادقة..."
         },
-        "createButton": {
-          "label": "إنشاء بيانات اعتماد",
-          "pendingLabel": "جارٍ الإنشاء..."
-        },
-        "credentialsLoadError": {
-          "title": "فشل تحميل بيانات اعتماد Gmail."
-        },
-        "invalidFile": {
-          "toast": "ملف غير صالح - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "ملف غير صالح - كان المتوقع مفتاح JSON لحساب خدمة"
-        },
-        "missingServiceAccountKey": {
-          "toast": "يرجى رفع مفتاح حساب خدمة قبل إنشاء بيانات الاعتماد"
-        },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Gmail الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth",
           "sharedScopesNote": "يطلب Google الوصول إلى Gmail وGoogle Drive معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Gmail فقط، ألغِ تحديد نطاقات Google Drive في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
-        },
-        "primaryAdmin": {
-          "description": "أدخل بريد مسؤول أو مالك مؤسسة Google التي تملك حسابات Gmail المراد فهرستها.",
-          "invalidEmail": "يجب أن يكون بريدًا إلكترونيًا صالحًا",
-          "label": "بريد المسؤول الرئيسي",
-          "placeholder": "admin@yourcompany.com",
-          "required": "مطلوب"
-        },
-        "section": {
-          "title": "مصادقة Gmail"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "فشل إنشاء بيانات اعتماد حساب الخدمة - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "تم إنشاء بيانات اعتماد حساب الخدمة بنجاح"
-        },
-        "serviceAccountOption": {
-          "title": "الخيار 2: حساب خدمة"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "ارفع أو الصق مفتاح JSON لحساب الخدمة"
         }
       },
       "header": {
@@ -3573,7 +3527,6 @@
         "namespace": "مساحة أسماء {source}",
         "region": "منطقة {source}",
         "portalId": "معرّف بوابة {source}",
-        "oauthTokens": "رموز {source} OAuth",
         "isSandbox": "بيئة تجريبية (Sandbox)",
         "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
         "zuliprcContent": "محتوى Zuliprc",
