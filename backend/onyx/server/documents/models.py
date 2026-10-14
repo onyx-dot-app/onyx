@@ -120,7 +120,11 @@ class ConnectorUpdateRequest(ConnectorBase):
     groups: list[int] = Field(default_factory=list)
 
     def to_connector_base(self) -> ConnectorBase:
-        return ConnectorBase(**self.model_dump(exclude={"access_type", "groups"}))
+        # Only the request's own fields, so an omitted check_freq stays omitted
+        # (update_connector keeps the stored schedule) instead of becoming null.
+        return ConnectorBase(
+            **self.model_dump(exclude_unset=True, exclude={"access_type", "groups"})
+        )
 
 
 class ConnectorSnapshot(ConnectorBase):

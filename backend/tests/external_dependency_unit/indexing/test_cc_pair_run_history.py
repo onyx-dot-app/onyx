@@ -27,6 +27,7 @@ from onyx.connectors.capability_checks.models import (
 from onyx.connectors.capability_checks.registry import has_named_capability_checks
 from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.models import InputType
+from onyx.db.connector import update_connector
 from onyx.db.connector_credential_pair import get_cc_pairs_with_check_schedule
 from onyx.db.credential_capability import (
     STALE_RUN_ERROR,
@@ -59,7 +60,11 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import cc_pair as cc_pair_routes
 from onyx.server.documents.cc_pair import get_cc_pair_runs, release_indexing_hold
-from onyx.server.documents.models import CCPairRunsResponse, ConnectorSnapshot
+from onyx.server.documents.models import (
+    CCPairRunsResponse,
+    ConnectorSnapshot,
+    ConnectorUpdateRequest,
+)
 from tests.external_dependency_unit.conftest import create_test_user
 
 # The sync kinds come from the EE-only sync_params helpers.
@@ -472,3 +477,26 @@ def test_scheduled_checks_come_due_on_the_check_frequency(
     assert cc_pair.id not in {
         pair.id for pair in get_cc_pairs_with_check_schedule(db_session)
     }
+
+
+def test_update_request_keeps_an_omitted_check_schedule(db_session: Session) -> None:
+    cc_pair = _create_cc_pair(db_session, check_freq=3600)
+    connector = cc_pair.connector
+
+    fields = {
+        "name": connector.name,
+        "source": connector.source,
+        "input_type": connector.input_type,
+        "connector_specific_config": connector.connector_specific_config,
+        "access_type": AccessType.PUBLIC,
+    }
+
+    # A request without the field (Terraform's upsert, the file upload path) keeps the schedule.
+    omitted = ConnectorUpdateRequest.model_validate(fields)
+    update_connector(connector.id, omitted.to_connector_base(), db_session)
+    assert connector.check_freq == 3600
+
+    # An explicit null clears it.
+    cleared = ConnectorUpdateRequest.model_validate({**fields, "check_freq": None})
+    update_connector(connector.id, cleared.to_connector_base(), db_session)
+    assert connector.check_freq is None
