@@ -1,3 +1,4 @@
+import io
 import json
 from types import SimpleNamespace
 from typing import Any
@@ -5,6 +6,7 @@ from unittest import mock
 
 import pytest
 import requests
+import urllib3
 from atlassian.errors import ApiError
 
 from onyx.connectors.confluence import source_operations
@@ -55,6 +57,7 @@ def _response(status_code: int, content: bytes = b"") -> requests.Response:
     response = requests.Response()
     response.status_code = status_code
     response._content = content
+    response.raw = urllib3.HTTPResponse(body=io.BytesIO(content), preload_content=False)
     response.url = _WIKI_BASE
     return response
 
@@ -104,7 +107,11 @@ def test_download_attachment_retries_server_errors() -> None:
     # Postcondition.
     assert content == b"file bytes"
     assert sdk.session.get.call_count == 2
-    sdk.session.get.assert_called_with(_WIKI_BASE + "/download/attachments/1/spec.pdf")
+    sdk.session.get.assert_called_with(
+        _WIKI_BASE + "/download/attachments/1/spec.pdf",
+        stream=True,
+        timeout=source_operations._ATTACHMENT_REQUEST_TIMEOUT,
+    )
 
 
 def test_download_attachment_uses_the_refreshed_client() -> None:

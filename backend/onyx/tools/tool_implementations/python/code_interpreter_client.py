@@ -11,12 +11,14 @@ import requests
 from pydantic import BaseModel
 
 from onyx.configs.app_configs import CODE_INTERPRETER_BASE_URL
+from onyx.utils.bounded_http import read_bounded_body
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
 _HEALTH_CACHE_TTL_SECONDS = 30
+_DOWNLOAD_BODY_DEADLINE_SECONDS = 120.0
 _DEFAULT_SERVER_VERSION = "0.0.0"
 _health_cache: dict[str, tuple[float, "HealthResponse"]] = {}
 
@@ -598,14 +600,18 @@ class CodeInterpreterClient:
 
         return response.json()["file_id"]
 
-    def download_file(self, file_id: str) -> bytes:
-        """Download file from Code Interpreter"""
+    def download_file(self, file_id: str, *, max_bytes: int) -> bytes:
+        """Download file from Code Interpreter. Raises ``BoundedBodyError``
+        when the file exceeds ``max_bytes`` or the read deadline."""
         url = f"{self.base_url}/v1/files/{file_id}"
 
-        response = self.session.get(url, timeout=30)
-        response.raise_for_status()
-
-        return response.content
+        with self.session.get(url, timeout=30, stream=True) as response:
+            response.raise_for_status()
+            return read_bounded_body(
+                response,
+                max_bytes=max_bytes,
+                deadline_seconds=_DOWNLOAD_BODY_DEADLINE_SECONDS,
+            )
 
     def delete_file(self, file_id: str) -> None:
         """Delete file from Code Interpreter"""

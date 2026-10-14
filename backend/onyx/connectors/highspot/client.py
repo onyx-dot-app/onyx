@@ -7,10 +7,12 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import HTTPError, RequestException, Timeout
 from urllib3.util.retry import Retry
 
+from onyx.utils.bounded_http import read_bounded_body
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 PAGE_SIZE = 100
+_CONTENT_BODY_DEADLINE_SECONDS = 300.0
 
 
 class HighspotClientError(Exception):
@@ -258,23 +260,31 @@ class HighspotClient:
             raise ValueError("item_id is required")
         return self._make_request("GET", f"items/{item_id}")
 
-    def get_item_content(self, item_id: str) -> bytes:
+    def get_item_content(self, item_id: str, *, max_bytes: int) -> bytes:
         """
         Get the raw content of an item.
 
         Args:
             item_id: ID of the item
+            max_bytes: Largest body to read
 
         Returns:
             Raw content bytes
+
+        Raises:
+            BoundedBodyError: The body exceeds max_bytes or the read deadline.
         """
         if not item_id:
             raise ValueError("item_id is required")
 
         url = urljoin(self.base_url, f"items/{item_id}/content")
-        response = self.session.get(url, timeout=self.timeout)
-        response.raise_for_status()
-        return response.content
+        with self.session.get(url, timeout=self.timeout, stream=True) as response:
+            response.raise_for_status()
+            return read_bounded_body(
+                response,
+                max_bytes=max_bytes,
+                deadline_seconds=_CONTENT_BODY_DEADLINE_SECONDS,
+            )
 
     def health_check(self) -> bool:
         """

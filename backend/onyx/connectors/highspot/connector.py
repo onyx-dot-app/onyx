@@ -5,7 +5,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import (
+    HIGHSPOT_CONNECTOR_SIZE_THRESHOLD,
+    INDEX_BATCH_SIZE,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.highspot.client import HighspotClient, HighspotClientError
 from onyx.connectors.highspot.utils import scrape_url_content
@@ -27,6 +30,7 @@ from onyx.connectors.models import (
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.utils.bounded_http import BoundedBodyError
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
@@ -344,7 +348,9 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                 and file_extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
                 and can_download
             ):
-                content_response = self.client.get_item_content(item_id)
+                content_response = self.client.get_item_content(
+                    item_id, max_bytes=HIGHSPOT_CONNECTOR_SIZE_THRESHOLD
+                )
                 # Process and extract text from binary content based on type
                 if content_response:
                     text_content = extract_file_text(
@@ -359,6 +365,9 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
                 )
                 return default_content
 
+        except BoundedBodyError as e:
+            logger.warning("Skipping content of item %s: %s", item_id, e)
+            return default_content
         except HighspotClientError as e:
             error_context = f"item {item_id}" if item_id else "(item id not found)"
             logger.warning(

@@ -67,6 +67,8 @@ frontend, not `:8080` directly.
 | `CODE_INTERPRETER_MAX_OUTPUT_LENGTH` | 50,000 | Character cap applied to stdout and stderr independently before they enter the LLM-facing response (`utils.py:truncate_output`). |
 | `CODE_INTERPRETER_MAX_STAGED_FILES` | 25 | Max chat files staged into one Python execution. |
 | `CODE_INTERPRETER_MAX_STAGED_BYTES` | 100 MiB | Byte budget for staged files in one execution. |
+| `CODE_INTERPRETER_MAX_OUTPUT_FILES` | 25 | Max generated files saved from one Python execution. |
+| `CODE_INTERPRETER_MAX_OUTPUT_BYTES` | 100 MiB | Byte budget for generated files saved from one execution. |
 | `CODE_INTERPRETER_STAGING_CONCURRENCY` | 8 | Bounded parallelism for file reads/uploads during staging. |
 
 There is no env var for bash-specific timeouts or output caps; `BashTool` reuses
@@ -235,7 +237,10 @@ best-effort `delete_session` call itself fails, the pod's own TTL is the backsto
 **Generated files from `run_python` are retained, not the execution state.** A generated file
 is downloaded from the Code Interpreter (`client.download_file`), saved into Onyx's own file
 store under `FileOrigin.CHAT_IMAGE_GEN` (`python_tool.py:run`), and only then is the
-Code-Interpreter-side copy deleted (`client.delete_file`). Once saved, the file is served
+Code-Interpreter-side copy deleted (`client.delete_file`). The download stops at the remaining
+`CODE_INTERPRETER_MAX_OUTPUT_BYTES` budget, and files past `CODE_INTERPRETER_MAX_OUTPUT_FILES`
+are not downloaded. Dropped files are deleted in the Code Interpreter and listed for the LLM in
+`output_notice`. Once saved, the file is served
 through the ordinary chat-file path and follows the access rule
 `[[file-store-and-user-files]]` documents for that origin: `access.py:_user_can_access_chat_image_gen_file`
 grants the chat session's owner, or anyone when the session is public and not deleted
