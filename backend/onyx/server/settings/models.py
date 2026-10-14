@@ -120,6 +120,8 @@ class UserSettings(Settings):
     # Deployment-level Craft availability, ignoring the per-user admin toggle.
     # Gates visibility of the admin per-user Craft controls.
     onyx_craft_available: bool = False
+    # Craft is switched on but the tier is too low: show the upgrade prompt.
+    onyx_craft_requires_upgrade: bool = False
     # Dev/debug flag: when true, the FE renders a button that streams the
     # user's sandbox pod's opencode-serve logs. Gated by the
     # ENABLE_OPENCODE_DEBUGGING env var; never set in prod.

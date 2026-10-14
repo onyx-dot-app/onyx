@@ -9196,7 +9196,8 @@
         "title": "エージェント"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "エージェントを探す"
@@ -9604,6 +9605,19 @@
         "error": {
           "readFailed": "アップロードされたファイルを読み込めませんでした。"
         }
+      }
+    }
+  },
+  "craft": {
+    "upgrade": {
+      "title": "Craft には Business プランが必要です",
+      "adminDescription": "Craft は Business プランと Enterprise プランで利用できます。Craft がメインチャットに統合されるまで、Community Edition ではサポートされません。",
+      "userDescription": "Craft は Business プランと Enterprise プランで利用できます。Craft を使用するには、管理者にアップグレードを依頼してください。",
+      "backToChat": {
+        "label": "チャットに戻る"
+      },
+      "viewPlans": {
+        "label": "プランを表示"
       }
     }
   }
