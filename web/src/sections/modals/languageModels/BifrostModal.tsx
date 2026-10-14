@@ -66,6 +66,7 @@ function BifrostModalInternals({
   isOnboarding,
 }: BifrostModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   const formikProps = useFormikContext<BifrostModalValues>();
   const { setFieldValue, values } = formikProps;
 
@@ -114,7 +115,7 @@ function BifrostModalInternals({
 
       <APIBaseField
         subDescription={t("bifrost.apiBaseField.description")}
-        placeholder={t("placeholders.bifrostApiBase")}
+        placeholder={tPlaceholders("bifrost.apiBase")}
       />
 
       <APIKeyField

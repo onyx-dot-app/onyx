@@ -66,6 +66,7 @@ export function VoiceProviderSetupModal({
   onSuccess,
 }: VoiceProviderSetupModalProps) {
   const t = useTranslations("admin.voice");
+  const tPlaceholders = useTranslations("common.placeholders");
   const tInputSelect = useTranslations("common.inputSelect");
   const { appName } = useSettings();
   const onClose = useModalClose();
@@ -336,7 +337,7 @@ export function VoiceProviderSetupModal({
                     >
                       <InputTypeInField
                         name="target_uri"
-                        placeholder={t("placeholders.azureEndpoint")}
+                        placeholder={tPlaceholders("azure.speechEndpoint")}
                       />
                     </InputVertical>
                   )}

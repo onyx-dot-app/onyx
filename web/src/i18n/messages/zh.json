@@ -6266,11 +6266,6 @@
       },
       "setDefaultSuccess": {
         "message": "已将 {title} 设为默认"
-      },
-      "placeholders": {
-        "vertexProjectId": "my-vertex-project",
-        "vertexLocation": "global",
-        "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview"
       }
     },
     "indexSettings": {
@@ -6829,10 +6824,7 @@
         }
       },
       "placeholders": {
-        "azureEmbeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
-        "apiUrl": "https://...",
-        "bifrostApiBase": "https://bifrost.example.com",
-        "bifrostModel": "openai/text-embedding-3-large"
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
@@ -7459,14 +7451,6 @@
           "workloadIdentityNotice": {
             "title": "{appName} 将使用 Pod 的环境 Google Cloud 凭据（通过 google.auth.default）。请确保 Kubernetes ServiceAccount 已绑定到有权访问 Vertex AI 的 GCP 服务账号。"
           }
-        },
-        "placeholders": {
-          "bifrostApiBase": "https://your-bifrost-gateway.com/v1",
-          "vertexProjectId": "my-vertex-project",
-          "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
-          "openAICompatibleApiBase": "http://localhost:8000/v1",
-          "litellmApiBase": "https://your-litellm-proxy.com",
-          "apiBase": "https://"
         }
       },
       "newCustomProviderCard": {
@@ -10108,7 +10092,6 @@
         "message": "发生意外错误。"
       },
       "placeholders": {
-        "azureEndpoint": "https://your_resource_region.tts.speech.microsoft.com/",
         "languages": "en-US, fr-FR"
       }
     },
@@ -11432,9 +11415,6 @@
       "sendFailed": {
         "toast": "发送新的验证邮件失败 - {errorDetail}"
       }
-    },
-    "placeholders": {
-      "email": "email@yourcompany.com"
     }
   },
   "cards": {
@@ -13578,6 +13558,31 @@
         "label": "升级方案"
       },
       "availableFor": "{plan}可用"
+    },
+    "placeholders": {
+      "email": "email@yourcompany.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://your_resource_region.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://your-bifrost-gateway.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://your-litellm-proxy.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "my-vertex-project",
+        "location": "global"
+      }
     }
   },
   "craft": {

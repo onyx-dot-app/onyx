@@ -6266,11 +6266,6 @@
       },
       "setDefaultSuccess": {
         "message": "تم تعيين {title} كافتراضي"
-      },
-      "placeholders": {
-        "vertexProjectId": "my-vertex-project",
-        "vertexLocation": "global",
-        "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview"
       }
     },
     "indexSettings": {
@@ -6829,10 +6824,7 @@
         }
       },
       "placeholders": {
-        "azureEmbeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
-        "apiUrl": "https://...",
-        "bifrostApiBase": "https://bifrost.example.com",
-        "bifrostModel": "openai/text-embedding-3-large"
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
@@ -7459,14 +7451,6 @@
           "workloadIdentityNotice": {
             "title": "سيستخدم {appName} بيانات اعتماد Google Cloud المحيطة بالحاوية (عبر google.auth.default). تأكد من ربط ServiceAccount الخاص بـ Kubernetes بحساب خدمة GCP لديه وصول إلى Vertex AI."
           }
-        },
-        "placeholders": {
-          "bifrostApiBase": "https://your-bifrost-gateway.com/v1",
-          "vertexProjectId": "my-vertex-project",
-          "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
-          "openAICompatibleApiBase": "http://localhost:8000/v1",
-          "litellmApiBase": "https://your-litellm-proxy.com",
-          "apiBase": "https://"
         }
       },
       "newCustomProviderCard": {
@@ -10108,7 +10092,6 @@
         "message": "حدث خطأ غير متوقع."
       },
       "placeholders": {
-        "azureEndpoint": "https://your_resource_region.tts.speech.microsoft.com/",
         "languages": "en-US, fr-FR"
       }
     },
@@ -11432,9 +11415,6 @@
       "sendFailed": {
         "toast": "فشل إرسال بريد تحقق جديد - {errorDetail}"
       }
-    },
-    "placeholders": {
-      "email": "email@yourcompany.com"
     }
   },
   "cards": {
@@ -13578,6 +13558,31 @@
         "label": "ترقية الخطة"
       },
       "availableFor": "متاح في {plan}"
+    },
+    "placeholders": {
+      "email": "email@yourcompany.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://your_resource_region.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://your-bifrost-gateway.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://your-litellm-proxy.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "my-vertex-project",
+        "location": "global"
+      }
     }
   },
   "craft": {

@@ -178,6 +178,7 @@ export function APIBaseField({
   rightChildren,
 }: APIBaseFieldProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   return (
     <InputPadder>
       <InputVertical
@@ -188,7 +189,7 @@ export function APIBaseField({
       >
         <InputTypeInField
           name="api_base"
-          placeholder={placeholder ?? t("placeholders.apiBase")}
+          placeholder={placeholder ?? tPlaceholders("url")}
           rightChildren={rightChildren}
         />
       </InputVertical>

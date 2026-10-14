@@ -99,6 +99,7 @@ export default function AzureModal({
   analyticsSource,
 }: LLMProviderFormProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -174,7 +175,7 @@ export default function AzureModal({
         >
           <InputTypeInField
             name="target_uri"
-            placeholder={t("placeholders.azureTargetUri")}
+            placeholder={tPlaceholders("azure.chatCompletionsUrl")}
           />
         </InputVertical>
       </InputPadder>

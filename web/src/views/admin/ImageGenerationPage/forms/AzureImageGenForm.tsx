@@ -36,6 +36,7 @@ const AZURE_OPENAI_URL = "https://oai.azure.com";
 
 function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
   const t = useTranslations("admin.imageGeneration");
+  const tPlaceholders = useTranslations("common.placeholders");
   const {
     formikProps,
     apiStatus,
@@ -59,7 +60,7 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
             <FormField.Control>
               <InputTypeIn
                 {...field}
-                placeholder={t("placeholders.azureTargetUri")}
+                placeholder={tPlaceholders("azure.imageGenerationsUrl")}
                 variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>

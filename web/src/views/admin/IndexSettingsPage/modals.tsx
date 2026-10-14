@@ -398,6 +398,7 @@ function AzureProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
+  const tPlaceholders = useTranslations("common.placeholders");
   const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
@@ -462,7 +463,7 @@ function AzureProviderModal({
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           title={t("azure.targetUrl.title")}
-          placeholder={t("placeholders.azureEmbeddingsUrl")}
+          placeholder={tPlaceholders("azure.embeddingsUrl")}
         />
         <ApiKeyField provider={provider} />
         <TextField
@@ -609,6 +610,7 @@ function BifrostProviderModal({
   onSubmit,
 }: ProviderModalProps) {
   const t = useTranslations("admin.indexSettings");
+  const tPlaceholders = useTranslations("common.placeholders");
   const { appName } = useSettings();
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
@@ -663,7 +665,7 @@ function BifrostProviderModal({
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           title={t("bifrost.apiUrl.title")}
-          placeholder={t("placeholders.bifrostApiBase")}
+          placeholder={tPlaceholders("bifrost.embeddingsApiBase")}
           subDescription={t("bifrost.apiUrl.description", { appName })}
         />
 
@@ -672,7 +674,7 @@ function BifrostProviderModal({
         <TextField
           name="modelName"
           title={t("fields.modelName.title")}
-          placeholder={t("placeholders.bifrostModel")}
+          placeholder={tPlaceholders("bifrost.embeddingModel")}
           subDescription={
             isModelLocked
               ? t("bifrost.modelName.editDescription", { appName })

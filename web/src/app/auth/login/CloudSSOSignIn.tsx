@@ -30,6 +30,7 @@ interface CloudSSOSignInProps {
 
 export default function CloudSSOSignIn({ nextUrl }: CloudSSOSignInProps) {
   const t = useTranslations("auth");
+  const tPlaceholders = useTranslations("common.placeholders");
   const [expanded, setExpanded] = useState(false);
   const [providers, setProviders] = useState<SSOProviderOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +90,7 @@ export default function CloudSSOSignIn({ nextUrl }: CloudSSOSignInProps) {
                 >
                   <InputTypeInField
                     name="email"
-                    placeholder={t("placeholders.email")}
+                    placeholder={tPlaceholders("email")}
                     data-testid="sso-email"
                     autoComplete="username"
                   />

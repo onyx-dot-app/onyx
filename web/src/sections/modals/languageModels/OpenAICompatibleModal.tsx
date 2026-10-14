@@ -44,6 +44,7 @@ function OpenAICompatibleModalInternals({
   isOnboarding,
 }: OpenAICompatibleModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   const formikProps = useFormikContext<OpenAICompatibleModalValues>();
   const apiBaseSubDescription = useApiBaseSubDescription(
     t("openAiCompatible.apiBaseField.description"),
@@ -68,7 +69,7 @@ function OpenAICompatibleModalInternals({
     <>
       <APIBaseField
         subDescription={apiBaseSubDescription}
-        placeholder={t("placeholders.openAICompatibleApiBase")}
+        placeholder={tPlaceholders("openAICompatible.apiBase")}
       />
 
       <APIKeyField
