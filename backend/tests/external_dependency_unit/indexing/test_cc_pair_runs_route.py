@@ -5,7 +5,7 @@ status filter, `since` and `q` narrow the feed, a non-synced pair shows only
 indexing, and cancel acts only on active attempts of a pair the caller operates."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
+from onyx.db import cc_pair_runs
 from onyx.db.enums import (
     AccessType,
     CCPairRunKind,
@@ -193,6 +194,28 @@ def test_merges_kinds_newest_first_across_pages(db_session: Session) -> None:
         (CCPairRunKind.DOC_PERMISSION_SYNC, doc_1.id),
         (CCPairRunKind.INDEXING, index_0.id),
     ]
+
+
+def test_leaves_out_a_run_deleted_while_the_page_loads(db_session: Session) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
+    kept = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    gone = _index_attempt(db_session, cc_pair, 1, IndexingStatus.SUCCESS)
+    load_rows = cc_pair_runs._rows_by_id
+
+    def load_rows_without_gone(
+        db_session: Session, model: type[IndexAttempt], ids: list[int]
+    ) -> dict[int, IndexAttempt]:
+        return {
+            row_id: row
+            for row_id, row in load_rows(db_session, model, ids).items()
+            if row_id != gone.id
+        }
+
+    with patch.object(cc_pair_runs, "_rows_by_id", load_rows_without_gone):
+        response = _runs(db_session, admin, cc_pair, page_num=0, page_size=10)
+
+    assert _order(response) == [(CCPairRunKind.INDEXING, kept.id)]
 
 
 def test_leaves_out_another_pairs_runs(db_session: Session) -> None:

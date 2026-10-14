@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import {
   Card,
@@ -88,6 +88,7 @@ export interface RunsCardProps {
 /** The pair's index attempts and, when perm-synced, its permission syncs, newest first. */
 export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
   const t = useTranslations("admin.connector.runs");
+  const format = useFormatter();
   const [page, setPage] = useState(1);
   const [picked, setPicked] = useState<PickedWindow>(ALL_TIME);
   const [kind, setKind] = useState<CCPairRunKind | null>(null);
@@ -205,7 +206,7 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
               <Tag
                 key={group}
                 icon={icon}
-                title={String(data?.status_counts[group] ?? 0)}
+                title={format.number(data?.status_counts[group] ?? 0)}
                 tooltip={t(`counts.${group}`, {
                   count: data?.status_counts[group] ?? 0,
                 })}

@@ -188,21 +188,26 @@ def get_cc_pair_run_page(
     def ids_of(kind: CCPairRunKind) -> list[int]:
         return [run_id for run_kind, run_id in order if run_kind == kind]
 
+    index_attempts = _rows_by_id(
+        db_session, IndexAttempt, ids_of(CCPairRunKind.INDEXING)
+    )
+    doc_permission_syncs = _rows_by_id(
+        db_session, DocPermissionSyncAttempt, ids_of(CCPairRunKind.DOC_PERMISSION_SYNC)
+    )
+    group_syncs = _rows_by_id(
+        db_session, ExternalGroupPermissionSyncAttempt, ids_of(CCPairRunKind.GROUP_SYNC)
+    )
+    loaded = {
+        CCPairRunKind.INDEXING: index_attempts.keys(),
+        CCPairRunKind.DOC_PERMISSION_SYNC: doc_permission_syncs.keys(),
+        CCPairRunKind.GROUP_SYNC: group_syncs.keys(),
+    }
     return CCPairRunPage(
-        order=order,
-        index_attempts=_rows_by_id(
-            db_session, IndexAttempt, ids_of(CCPairRunKind.INDEXING)
-        ),
-        doc_permission_syncs=_rows_by_id(
-            db_session,
-            DocPermissionSyncAttempt,
-            ids_of(CCPairRunKind.DOC_PERMISSION_SYNC),
-        ),
-        group_syncs=_rows_by_id(
-            db_session,
-            ExternalGroupPermissionSyncAttempt,
-            ids_of(CCPairRunKind.GROUP_SYNC),
-        ),
+        # A deletion between the id query and the row loads leaves an id with no row.
+        order=[(kind, run_id) for kind, run_id in order if run_id in loaded[kind]],
+        index_attempts=index_attempts,
+        doc_permission_syncs=doc_permission_syncs,
+        group_syncs=group_syncs,
     )
 
 
