@@ -84,15 +84,33 @@ function NodeRow({ entry }: NodeRowProps) {
   );
 }
 
+interface BreakdownNoteProps {
+  children: string;
+}
+/** A line in place of the list: an error, or nothing to list yet. */
+function BreakdownNote({ children }: BreakdownNoteProps) {
+  return (
+    <Section padding={2} height="fit">
+      <Text font="secondary-body" color="text-03">
+        {children}
+      </Text>
+    </Section>
+  );
+}
+
 export interface HierarchyBreakdownProps {
   ccPairId: number;
+  /** Nothing else fills the section, so an empty breakdown says so. */
+  showEmpty?: boolean;
 }
 
 /** The pair's documents by hierarchy node, one foldable group per node type. */
 export default function HierarchyBreakdown({
   ccPairId,
+  showEmpty = false,
 }: HierarchyBreakdownProps) {
   const t = useTranslations("admin.connector.configuration.breakdown");
+  const empty = showEmpty ? <BreakdownNote>{t("empty")}</BreakdownNote> : null;
   // The request reads every document of the pair, so it runs once per visit and gives up early.
   const { data, error } = useSWR<CCPairHierarchyBreakdown | null>(
     SWR_KEYS.ccPairHierarchyBreakdown(ccPairId),
@@ -104,13 +122,7 @@ export default function HierarchyBreakdown({
     }
   );
   if (error !== undefined) {
-    return (
-      <Section padding={2} height="fit">
-        <Text font="secondary-body" color="text-03">
-          {t("loadError")}
-        </Text>
-      </Section>
-    );
+    return <BreakdownNote>{t("loadError")}</BreakdownNote>;
   }
   if (data === undefined) {
     return (
@@ -120,13 +132,13 @@ export default function HierarchyBreakdown({
     );
   }
   // null until the pair has a successful index run.
-  if (data === null) return null;
+  if (data === null) return empty;
   // SAFETY: the backend keys the dict by its own node type enum, which the union mirrors.
   const groups = Object.entries(data.nodes_by_type).filter(
     (group): group is [HierarchyNodeType, HierarchyBreakdownEntry[]] =>
       group[1] !== undefined
   );
-  if (groups.length === 0 && data.other_doc_count === 0) return null;
+  if (groups.length === 0 && data.other_doc_count === 0) return empty;
 
   return (
     <Section alignItems="stretch" gap={1} padding={1} height="fit">

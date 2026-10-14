@@ -2426,7 +2426,8 @@
           "notIndexed": "Non indexé",
           "other": "Autres documents",
           "loadError": "Impossible de charger la répartition des documents.",
-          "open": "Ouvrir dans la source"
+          "open": "Ouvrir dans la source",
+          "empty": "Aucun document indexé pour le moment."
         }
       },
       "sharing": {

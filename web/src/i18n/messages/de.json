@@ -2426,7 +2426,8 @@
           "notIndexed": "Nicht indexiert",
           "other": "Weitere Dokumente",
           "loadError": "Die Dokumentaufschlüsselung konnte nicht geladen werden.",
-          "open": "In der Quelle öffnen"
+          "open": "In der Quelle öffnen",
+          "empty": "Noch keine Dokumente indexiert."
         }
       },
       "sharing": {

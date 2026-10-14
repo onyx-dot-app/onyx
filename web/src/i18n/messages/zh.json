@@ -2426,7 +2426,8 @@
           "notIndexed": "未索引",
           "other": "其他文档",
           "loadError": "无法加载文档分布。",
-          "open": "在来源中打开"
+          "open": "在来源中打开",
+          "empty": "尚未索引任何文档。"
         }
       },
       "sharing": {

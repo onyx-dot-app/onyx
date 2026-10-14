@@ -2426,7 +2426,8 @@
           "notIndexed": "Não indexado",
           "other": "Outros documentos",
           "loadError": "Não foi possível carregar a distribuição de documentos.",
-          "open": "Abrir na fonte"
+          "open": "Abrir na fonte",
+          "empty": "Nenhum documento indexado ainda."
         }
       },
       "sharing": {

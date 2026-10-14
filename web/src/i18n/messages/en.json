@@ -2426,7 +2426,8 @@
           "notIndexed": "Not indexed",
           "other": "Other documents",
           "loadError": "Couldn't load the document breakdown.",
-          "open": "Open in the source"
+          "open": "Open in the source",
+          "empty": "No documents indexed yet."
         }
       },
       "sharing": {

@@ -2426,7 +2426,8 @@
           "notIndexed": "No indexado",
           "other": "Otros documentos",
           "loadError": "No se pudo cargar el desglose de documentos.",
-          "open": "Abrir en la fuente"
+          "open": "Abrir en la fuente",
+          "empty": "Aún no hay documentos indexados."
         }
       },
       "sharing": {
