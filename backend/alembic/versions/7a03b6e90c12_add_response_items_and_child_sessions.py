@@ -196,7 +196,9 @@ def _add_response_storage() -> None:
             sa.ForeignKey("chat_message.id", ondelete="CASCADE"),
             primary_key=True,
         ),
-        sa.Column("claim_version", sa.BigInteger(), server_default="0", nullable=False),
+        sa.Column(
+            "ownership_version", sa.BigInteger(), server_default="0", nullable=False
+        ),
         sa.Column("state", postgresql.JSONB(), nullable=False),
     )
 

@@ -105,7 +105,7 @@ Tool argument parsing details stay in the saved model message. Tool rows retain 
 Database checks restrict response, generation, and tool status values while allowing null statuses on historical rows.
 
 `chat_response_checkpoint` stores resume progress alongside response history, rather than another copy of that history.
-Its `claim_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
+Its `ownership_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
 The runtime revision inside `state` tracks execution changes and serves a separate purpose.
 
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)

@@ -466,7 +466,8 @@ def _assert_response_schema_contract(connection: Connection, schema: str) -> Non
         for column in inspector.get_columns("chat_response_checkpoint", schema=schema)
     }
     assert (
-        "claim_version" in checkpoint_columns and "revision" not in checkpoint_columns
+        "ownership_version" in checkpoint_columns
+        and "revision" not in checkpoint_columns
     )
     connection.execute(
         text("""
@@ -478,7 +479,7 @@ def _assert_response_schema_contract(connection: Connection, schema: str) -> Non
     assert (
         connection.scalar(
             text(
-                "SELECT claim_version FROM chat_response_checkpoint WHERE chat_message_id=42"
+                "SELECT ownership_version FROM chat_response_checkpoint WHERE chat_message_id=42"
             )
         )
         == 0
