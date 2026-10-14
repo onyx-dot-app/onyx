@@ -814,7 +814,7 @@
       "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://mcp-服务器.com/mcp"
+      "mcpServerUrl": "https://mcp-fuwuqi.com/mcp"
     }
   },
   "admin": {
@@ -3268,7 +3268,7 @@
               "description": "在存储前重写文档 URL。适用于通过内部镜像抓取、同时存储规范的公开链接的场景，例如 https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "源 URL 前缀",
               "rightLabel": "替换前缀",
-              "leftPlaceholder": "https://内部镜像.example.com",
+              "leftPlaceholder": "https://neibu-jingxiang.example.com",
               "rightPlaceholder": "https://docs.example.com"
             }
           }
@@ -3531,7 +3531,7 @@
             },
             "wiki_base": {
               "label": "站点 URL",
-              "placeholder": "https://你的域名.atlassian.net/wiki"
+              "placeholder": "https://nide-yuming.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3577,7 +3577,7 @@
           "fields": {
             "jira_base_url": {
               "label": "站点 URL",
-              "placeholder": "https://你的域名.atlassian.net"
+              "placeholder": "https://nide-yuming.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3960,7 +3960,7 @@
           "fields": {
             "base_url": {
               "label": "基础 URL",
-              "placeholder": "https://sites.google.com/view/你的站点"
+              "placeholder": "https://sites.google.com/view/nide-zhandian"
             },
             "file_locations": {
               "label": "站点导出文件",
@@ -6080,7 +6080,7 @@
         }
       },
       "placeholders": {
-        "endpointUrl": "https://api-端点.com"
+        "endpointUrl": "https://api-duandian.com"
       }
     },
     "imageGeneration": {
@@ -8844,7 +8844,7 @@
           "nameField": {
             "description": "用于登录 URL 的唯一小写标识符。创建后无法更改。",
             "title": "名称",
-            "placeholder": "公司-a"
+            "placeholder": "gongsi-a"
           },
           "providerTypeField": {
             "description": "此提供商使用的认证协议。",
@@ -10210,7 +10210,7 @@
         "searxngBaseUrl": {
           "label": "SearXNG 基础 URL",
           "description": "粘贴您的 [SearXNG 实例](https://docs.searxng.org/admin/installation.html)的基础 URL。",
-          "placeholder": "https://searxng-实例.com"
+          "placeholder": "https://searxng-shili.com"
         },
         "firecrawlBaseUrl": {
           "label": "API 基础 URL",
@@ -13560,27 +13560,27 @@
       "availableFor": "{plan}可用"
     },
     "placeholders": {
-      "email": "邮箱@你的公司.com",
+      "email": "youxiang@nide-gongsi.com",
       "url": "https://",
       "azure": {
-        "chatCompletionsUrl": "https://资源名.cognitiveservices.azure.com/openai/deployments/部署名称/chat/completions?api-version=2025-01-01-preview",
-        "imageGenerationsUrl": "https://资源名.cognitiveservices.azure.com/openai/deployments/部署名称/images/generations?api-version=2025-01-01-preview",
-        "embeddingsUrl": "https://资源名称.openai.azure.com/openai/v1/embeddings",
-        "speechEndpoint": "https://资源区域.tts.speech.microsoft.com/"
+        "chatCompletionsUrl": "https://ziyuan-ming.cognitiveservices.azure.com/openai/deployments/bushu-mingcheng/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://ziyuan-ming.cognitiveservices.azure.com/openai/deployments/bushu-mingcheng/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://ziyuan_mingcheng.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://ziyuan_quyu.tts.speech.microsoft.com/"
       },
       "bifrost": {
-        "apiBase": "https://bifrost-网关.com/v1",
+        "apiBase": "https://bifrost-wangguan.com/v1",
         "embeddingsApiBase": "https://bifrost.example.com",
         "embeddingModel": "openai/text-embedding-3-large"
       },
       "litellm": {
-        "apiBase": "https://litellm-代理.com"
+        "apiBase": "https://litellm-daili.com"
       },
       "openAICompatible": {
         "apiBase": "http://localhost:8000/v1"
       },
       "vertexAi": {
-        "projectId": "我的-vertex-项目",
+        "projectId": "wode-vertex-xiangmu",
         "location": "global"
       }
     }
@@ -16531,7 +16531,7 @@
         }
       },
       "placeholders": {
-        "githubRepository": "所有者/仓库 或 https://github.com/所有者/仓库"
+        "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
       }
     },
     "page": {

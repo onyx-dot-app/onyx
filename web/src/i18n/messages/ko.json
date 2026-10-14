@@ -814,7 +814,7 @@
       "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
       "oauthTokenUrl": "https://example.com/oauth/access_token",
       "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://mcp-서버.com/mcp"
+      "mcpServerUrl": "https://mcp-seobeo.com/mcp"
     }
   },
   "admin": {
@@ -3268,7 +3268,7 @@
               "description": "저장하기 전에 문서 URL을 재작성합니다. 내부 미러를 통해 크롤링하면서 정식 공개 링크를 저장할 때 유용합니다. 예: https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "원본 URL 접두사",
               "rightLabel": "대체 접두사",
-              "leftPlaceholder": "https://내부-미러.example.com",
+              "leftPlaceholder": "https://naebu-mireo.example.com",
               "rightPlaceholder": "https://docs.example.com"
             }
           }
@@ -3531,7 +3531,7 @@
             },
             "wiki_base": {
               "label": "사이트 URL",
-              "placeholder": "https://도메인.atlassian.net/wiki"
+              "placeholder": "https://domein.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3577,7 +3577,7 @@
           "fields": {
             "jira_base_url": {
               "label": "사이트 URL",
-              "placeholder": "https://도메인.atlassian.net"
+              "placeholder": "https://domein.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3960,7 +3960,7 @@
           "fields": {
             "base_url": {
               "label": "기본 URL",
-              "placeholder": "https://sites.google.com/view/사이트"
+              "placeholder": "https://sites.google.com/view/saiteu"
             },
             "file_locations": {
               "label": "사이트 내보내기",
@@ -6080,7 +6080,7 @@
         }
       },
       "placeholders": {
-        "endpointUrl": "https://api-엔드포인트.com"
+        "endpointUrl": "https://api-endeupointeu.com"
       }
     },
     "imageGeneration": {
@@ -8844,7 +8844,7 @@
           "nameField": {
             "description": "로그인 URL에 사용되는 고유한 소문자 슬러그입니다. 나중에 변경할 수 없습니다.",
             "title": "이름",
-            "placeholder": "회사-a"
+            "placeholder": "hoesa-a"
           },
           "providerTypeField": {
             "description": "이 공급자가 인증에 사용하는 프로토콜입니다.",
@@ -10210,7 +10210,7 @@
         "searxngBaseUrl": {
           "label": "SearXNG 기본 URL",
           "description": "[SearXNG 인스턴스](https://docs.searxng.org/admin/installation.html)의 기본 URL을 붙여넣으세요.",
-          "placeholder": "https://searxng-인스턴스.com"
+          "placeholder": "https://searxng-inseuteonseu.com"
         },
         "firecrawlBaseUrl": {
           "label": "API 기본 URL",
@@ -13560,27 +13560,27 @@
       "availableFor": "{plan}에서 사용 가능"
     },
     "placeholders": {
-      "email": "이름@회사.com",
+      "email": "ireum@hoesa.com",
       "url": "https://",
       "azure": {
-        "chatCompletionsUrl": "https://리소스.cognitiveservices.azure.com/openai/deployments/배포-이름/chat/completions?api-version=2025-01-01-preview",
-        "imageGenerationsUrl": "https://리소스.cognitiveservices.azure.com/openai/deployments/배포-이름/images/generations?api-version=2025-01-01-preview",
-        "embeddingsUrl": "https://리소스_이름.openai.azure.com/openai/v1/embeddings",
-        "speechEndpoint": "https://리소스_지역.tts.speech.microsoft.com/"
+        "chatCompletionsUrl": "https://riseoseu.cognitiveservices.azure.com/openai/deployments/baepo-ireum/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://riseoseu.cognitiveservices.azure.com/openai/deployments/baepo-ireum/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://riseoseu_ireum.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://riseoseu_jiyeok.tts.speech.microsoft.com/"
       },
       "bifrost": {
-        "apiBase": "https://bifrost-게이트웨이.com/v1",
+        "apiBase": "https://bifrost-geiteuwei.com/v1",
         "embeddingsApiBase": "https://bifrost.example.com",
         "embeddingModel": "openai/text-embedding-3-large"
       },
       "litellm": {
-        "apiBase": "https://litellm-프록시.com"
+        "apiBase": "https://litellm-peurokssi.com"
       },
       "openAICompatible": {
         "apiBase": "http://localhost:8000/v1"
       },
       "vertexAi": {
-        "projectId": "내-vertex-프로젝트",
+        "projectId": "nae-vertex-peurojekteu",
         "location": "global"
       }
     }
@@ -16531,7 +16531,7 @@
         }
       },
       "placeholders": {
-        "githubRepository": "소유자/저장소 또는 https://github.com/소유자/저장소"
+        "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
       }
     },
     "page": {
