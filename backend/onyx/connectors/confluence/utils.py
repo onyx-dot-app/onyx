@@ -20,6 +20,7 @@ from onyx.file_processing.extract_file_text import extract_file_text, get_file_e
 from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.utils.bounded_http import BoundedBodyError
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
@@ -97,30 +98,38 @@ def process_attachment(
 
         attachment_size = attachment["extensions"]["fileSize"]
 
-        if media_type.startswith("image/"):
-            if not allow_images:
-                return AttachmentProcessingResult(
-                    text=None,
-                    file_name=None,
-                    error="Image downloading is not enabled",
-                )
-        else:
-            if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
-                logger.warning(
-                    "Skipping %s due to size. size=%s threshold=%s",
-                    attachment["title"],
-                    attachment_size,
-                    CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
-                )
-                return AttachmentProcessingResult(
-                    text=None,
-                    file_name=None,
-                    error=f"Attachment text too long: {attachment_size} chars",
-                )
+        if media_type.startswith("image/") and not allow_images:
+            return AttachmentProcessingResult(
+                text=None,
+                file_name=None,
+                error="Image downloading is not enabled",
+            )
+        if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
+            logger.warning(
+                "Skipping %s due to size. size=%s threshold=%s",
+                attachment["title"],
+                attachment_size,
+                CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+            )
+            return AttachmentProcessingResult(
+                text=None,
+                file_name=None,
+                error=f"Attachment text too long: {attachment_size} chars",
+            )
 
-        raw_bytes = source_operations.download_attachment(
-            attachment=attachment, parent_content_id=parent_content_id
-        )
+        # The declared size comes from the remote server; the download cap
+        # enforces the same threshold on the bytes actually received.
+        try:
+            raw_bytes = source_operations.download_attachment(
+                attachment=attachment,
+                parent_content_id=parent_content_id,
+                max_bytes=CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
+            )
+        except BoundedBodyError as e:
+            logger.warning("Skipping %s: %s", attachment["title"], e)
+            return AttachmentProcessingResult(
+                text=None, file_name=None, error=f"Attachment download stopped: {e}"
+            )
         if not raw_bytes:
             return AttachmentProcessingResult(
                 text=None, file_name=None, error="attachment.content is None"
