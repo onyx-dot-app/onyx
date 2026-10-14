@@ -277,6 +277,11 @@ call fragments are keyed by `index`: an early chunk carries `id` and
 reading any single chunk's `tool_calls` as complete
 truncates the call.
 
+Both response converters use `model_response.py:_usage_from_usage_data` to normalize
+usage for cost accounting and tracing. A missing or null `cache_read_input_tokens`
+falls back to `prompt_tokens_details.cached_tokens`. An explicit zero takes precedence
+over the nested count. Missing counts become zero.
+
 Cost is tracked with `LitellmLLM._track_llm_cost` whenever a chunk's `usage`
 is set, which is normally only the final chunk. It records cost only when usage
 limits are enabled and the call uses an Onyx-managed API key (some providers emit a
