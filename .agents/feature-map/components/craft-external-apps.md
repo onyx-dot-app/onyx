@@ -107,6 +107,7 @@ users with access in the sandbox tenant. The resolver caches access for 30 secon
 Lookup failures deny access. The tenant’s SSRF Protection setting applies to the addresses used for the connection.
 This exception uses `get_security_settings(allow_fallback=False)`; failed reads cannot substitute environment defaults.
 Raw TCP forwarding is disabled. Path, credential, and action checks still apply.
+MCP requests cannot upgrade to WebSocket or other protocols that bypass HTTP action checks.
 Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
 Use listeners and Services in that address family: IPv4 remains the default;
 IPv6 listeners support IPv6-only deployments. Switching an IPv4-primary

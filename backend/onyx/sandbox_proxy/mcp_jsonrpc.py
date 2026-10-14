@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from mitmproxy import http
+
 from onyx.sandbox_proxy.models import McpRpcClassification, McpRpcKind
 
 _TOOL_CALL_METHOD = "tools/call"
@@ -43,7 +45,7 @@ _PLUMBING = McpRpcClassification(kind=McpRpcKind.PLUMBING)
 _UNCLASSIFIABLE = McpRpcClassification(kind=McpRpcKind.UNCLASSIFIABLE)
 
 
-def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassification:
+def classify_mcp_request(request: http.Request) -> McpRpcClassification:
     """Classify one intercepted request to a matched craft MCP host.
 
     Bodyless ``GET`` (SSE stream) and ``DELETE`` (session termination) are the
@@ -57,7 +59,15 @@ def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassifi
     * anything else (unknown method, malformed body, a ``tools/call`` missing its
       name) → ``UNCLASSIFIABLE``.
     """
-    verb = (http_method or "").upper()
+    # Upgraded streams bypass HTTP request checks. MCP uses HTTP and SSE only.
+    if "upgrade" in request.headers or "upgrade" in {
+        token.strip().lower()
+        for token in request.headers.get("connection", "").split(",")
+    }:
+        return _UNCLASSIFIABLE
+
+    verb = (request.method or "").upper()
+    body = request.raw_content
     if verb in ("GET", "DELETE"):
         return _PLUMBING if not body else _UNCLASSIFIABLE
     if verb != "POST":

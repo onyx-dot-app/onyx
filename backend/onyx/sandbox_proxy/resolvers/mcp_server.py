@@ -116,7 +116,7 @@ class MCPServerResolver(CredentialResolver):
         # call (or anything unclassifiable) reaching injection ungated means the
         # evaluator failed and the gate fell open — fail closed here so no
         # invocation ever forwards with credentials but without a verdict.
-        classification = classify_mcp_request(request.method or "", request.raw_content)
+        classification = classify_mcp_request(request)
         if classification.kind is not McpRpcKind.PLUMBING:
             raise CredentialUnavailableError(
                 f"non-plumbing MCP request on {request.host} reached credential "
