@@ -2811,9 +2811,6 @@
         "fieldInvalid": "「{field}」を確認してください: {detail}",
         "rejected": "この認証情報はこの設定では使用できません。{detail}"
       },
-      "credentialsLoadError": {
-        "title": "認証情報の読み込みに失敗しました。"
-      },
       "field": {
         "optionalSuffix": {
           "label": "任意"
@@ -2836,10 +2833,6 @@
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "Gmail の認証情報を作成しました。認証情報の一覧から管理または取り消しができます。",
-          "title": "認証が完了しました"
-        },
         "authFailed": {
           "toast": "Gmail での認証に失敗しました - {error}"
         },
@@ -2847,51 +2840,12 @@
           "label": "Gmail で認証",
           "pendingLabel": "認証しています..."
         },
-        "createButton": {
-          "label": "認証情報を作成",
-          "pendingLabel": "作成しています..."
-        },
-        "credentialsLoadError": {
-          "title": "Gmail の認証情報の読み込みに失敗しました。"
-        },
-        "invalidFile": {
-          "toast": "指定したファイルが無効です - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "指定したファイルが無効です - サービスアカウントの JSON キーが必要です"
-        },
-        "missingServiceAccountKey": {
-          "toast": "認証情報を作成する前に、サービスアカウントキーをアップロードしてください"
-        },
         "oauthOption": {
           "description": "Google Cloud Console から OAuth アプリの JSON をアップロードし（[セットアップ手順]({docsUrl})）、インデックスを作成する Gmail を持つ Google アカウントで認証してください。",
-          "title": "オプション 1: OAuth アプリ",
           "sharedScopesNote": "1 つのアカウントで両方のコネクタを使えるように、Google は Gmail と Google Drive へのアクセスをまとめて求めます。このアカウントを Gmail だけに使う場合は、同意画面で Google Drive のスコープのチェックを外してください（[理由]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "OAuth アプリの JSON をアップロードまたは貼り付け"
-        },
-        "primaryAdmin": {
-          "description": "インデックスを作成する Gmail アカウントを所有する Google 組織の、管理者またはオーナーのメールアドレスを入力してください。",
-          "invalidEmail": "有効なメールアドレスを入力してください",
-          "label": "主管理者のメールアドレス",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必須です"
-        },
-        "section": {
-          "title": "Gmail の認証"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "サービスアカウントの認証情報を作成できませんでした - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "サービスアカウントの認証情報を作成しました"
-        },
-        "serviceAccountOption": {
-          "title": "オプション 2: サービスアカウント"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "サービスアカウントの JSON キーをアップロードまたは貼り付け"
         }
       },
       "header": {
@@ -3474,7 +3428,6 @@
         "namespace": "{source} ネームスペース",
         "region": "{source} リージョン",
         "portalId": "{source} ポータル ID",
-        "oauthTokens": "{source} OAuth トークン",
         "isSandbox": "サンドボックス環境かどうか",
         "serviceUserEmail": "サービスユーザーのメールアドレス",
         "zuliprcContent": "Zuliprc の内容",

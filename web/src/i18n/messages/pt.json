@@ -2811,9 +2811,6 @@
         "fieldInvalid": "Verifique o campo \"{field}\": {detail}",
         "rejected": "Esta credencial não pode ser usada com estas configurações. {detail}"
       },
-      "credentialsLoadError": {
-        "title": "Falha ao carregar as credenciais."
-      },
       "field": {
         "optionalSuffix": {
           "label": "opcional"
@@ -2836,10 +2833,6 @@
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "Sua credencial do Gmail foi criada. Gerencie ou revogue essa credencial na lista de credenciais.",
-          "title": "Autenticação concluída"
-        },
         "authFailed": {
           "toast": "Falha na autenticação com o Gmail - {error}"
         },
@@ -2847,51 +2840,12 @@
           "label": "Autenticar com o Gmail",
           "pendingLabel": "Autenticando..."
         },
-        "createButton": {
-          "label": "Criar credencial",
-          "pendingLabel": "Criando..."
-        },
-        "credentialsLoadError": {
-          "title": "Falha ao carregar as credenciais do Gmail."
-        },
-        "invalidFile": {
-          "toast": "Arquivo inválido - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Arquivo inválido - era esperada uma chave JSON de conta de serviço"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Envie uma chave de conta de serviço antes de criar uma credencial"
-        },
         "oauthOption": {
           "description": "Envie o JSON do app OAuth do Google Cloud Console ([instruções de configuração]({docsUrl})) e depois autentique com a conta Google cujo Gmail você quer indexar.",
-          "title": "Opção 1: app OAuth",
           "sharedScopesNote": "O Google solicita acesso ao Gmail e ao Google Drive juntos, para que uma conta atenda aos dois conectores. Para usar esta conta apenas com o Gmail, desmarque os escopos do Google Drive na tela de consentimento ([por que pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Envie ou cole o JSON do seu app OAuth"
-        },
-        "primaryAdmin": {
-          "description": "Digite o e-mail de um administrador ou proprietário da organização Google que é dona das contas do Gmail que você quer indexar.",
-          "invalidEmail": "Precisa ser um e-mail válido",
-          "label": "E-mail do administrador principal",
-          "placeholder": "admin@suaempresa.com",
-          "required": "Obrigatório"
-        },
-        "section": {
-          "title": "Autenticação do Gmail"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Falha ao criar a credencial de conta de serviço - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Credencial de conta de serviço criada com sucesso"
-        },
-        "serviceAccountOption": {
-          "title": "Opção 2: conta de serviço"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Envie ou cole a chave JSON da sua conta de serviço"
         }
       },
       "header": {
@@ -3474,7 +3428,6 @@
         "namespace": "Namespace do {source}",
         "region": "Região do {source}",
         "portalId": "ID do portal do {source}",
-        "oauthTokens": "Tokens OAuth do {source}",
         "isSandbox": "Ambiente de sandbox",
         "serviceUserEmail": "E-mail do usuário de serviço",
         "zuliprcContent": "Conteúdo do Zuliprc",

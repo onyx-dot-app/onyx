@@ -24,7 +24,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-export class GoogleDriveConnectorSetupPage {
+/** A Google source: the two share one account form. */
+export type GoogleSource = "google_drive" | "gmail";
+
+const BRAND_NAMES: Record<GoogleSource, string> = {
+  google_drive: "Google Drive",
+  gmail: "Gmail",
+};
+
+export class GoogleConnectorSetupPage {
   /** The typed account of the latest check run. */
   credentialJson: Record<string, unknown> | null = null;
   /** The connector config of each create request. */
@@ -38,15 +46,18 @@ export class GoogleDriveConnectorSetupPage {
     credential_json: unknown;
   }[] = [];
 
-  constructor(private readonly page: Page) {}
+  constructor(
+    private readonly page: Page,
+    private readonly source: GoogleSource
+  ) {}
 
   async mockRoutes() {
     await this.page.route(
-      "**/api/manage/admin/similar-credentials/google_drive*",
+      `**/api/manage/admin/similar-credentials/${this.source}*`,
       (route) => route.fulfill({ json: [] })
     );
     await this.page.route(
-      "**/api/connector/oauth/details/google_drive",
+      `**/api/connector/oauth/details/${this.source}`,
       (route) =>
         route.fulfill({
           json: {
@@ -95,7 +106,7 @@ export class GoogleDriveConnectorSetupPage {
   }
 
   async goto() {
-    await this.page.goto("/admin/connectors/google_drive");
+    await this.page.goto(`/admin/connectors/${this.source}`);
     await expect(
       this.page.locator('[aria-label="admin-page-title"]')
     ).toBeVisible();
@@ -108,7 +119,7 @@ export class GoogleDriveConnectorSetupPage {
    */
   async openAccountForm() {
     const card = this.page.getByRole("button", {
-      name: "New Google Drive Account",
+      name: `New ${BRAND_NAMES[this.source]} Account`,
     });
     await expect(async () => {
       if ((await card.getAttribute("aria-expanded")) !== "true") {
@@ -131,7 +142,9 @@ export class GoogleDriveConnectorSetupPage {
   /** The OAuth tab: its sign-in saves the account, so there is no Create. */
   async expectOAuthSetup() {
     await expect(
-      this.page.getByRole("button", { name: "Authenticate with Google Drive" })
+      this.page.getByRole("button", {
+        name: `Authenticate with ${BRAND_NAMES[this.source]}`,
+      })
     ).toBeDisabled();
     await expect(
       this.page.getByRole("button", { name: "Create", exact: true })

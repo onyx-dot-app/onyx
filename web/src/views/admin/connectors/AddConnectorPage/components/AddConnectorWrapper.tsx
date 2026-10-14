@@ -73,7 +73,6 @@ import type {
 import { useSettings } from "@/lib/settings/hooks";
 import {
   useCredentialFieldCopy,
-  useGmailCredentials,
   useCredentialLoad,
   useResetSavedDraftCredential,
   useSavedDraftCredential,
@@ -354,7 +353,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   }, []);
 
   // Hooks for Google Drive and Gmail credentials
-  const { liveGmailCredential } = useGmailCredentials(connector);
 
   // Sources without a credential spec skip the credential section.
   const noCredentials = credentialSpec == null;
@@ -377,15 +375,12 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   /**
    * The chosen account for these form values: the saved pick; else the typed
-   * one when its values are valid (or Gmail's live account).
+   * one when its values are valid.
    */
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
-    currentCredential ||
-    typedDraft(connector, accountSchema, values) ||
-    liveGmailCredential ||
-    null;
+    currentCredential || typedDraft(connector, accountSchema, values) || null;
 
   // The page body waits for the source's saved credentials: no connector
   // can be set up without them. Sources without credentials fetch nothing and go

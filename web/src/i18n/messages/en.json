@@ -2811,9 +2811,6 @@
         "fieldInvalid": "Check the {field}: {detail}",
         "rejected": "This credential cannot be used with these settings. {detail}"
       },
-      "credentialsLoadError": {
-        "title": "Failed to load credentials."
-      },
       "field": {
         "optionalSuffix": {
           "label": "optional"
@@ -2836,10 +2833,6 @@
         }
       },
       "gmail": {
-        "authComplete": {
-          "description": "Your Gmail credential was created. Manage or revoke it from the credential list.",
-          "title": "Authentication Complete"
-        },
         "authFailed": {
           "toast": "Failed to authenticate with Gmail - {error}"
         },
@@ -2847,51 +2840,12 @@
           "label": "Authenticate with Gmail",
           "pendingLabel": "Authenticating..."
         },
-        "createButton": {
-          "label": "Create Credential",
-          "pendingLabel": "Creating..."
-        },
-        "credentialsLoadError": {
-          "title": "Failed to load Gmail credentials."
-        },
-        "invalidFile": {
-          "toast": "Invalid file provided - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Invalid file provided - expected a Service Account JSON key"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Please upload a service account key before creating a credential"
-        },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Gmail you want to index.",
-          "title": "Option 1: OAuth app",
           "sharedScopesNote": "Google asks for Gmail and Google Drive access together, so one account can back both connectors. To use this account for Gmail only, untick the Google Drive scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
-        },
-        "primaryAdmin": {
-          "description": "Enter the email of an admin or owner of the Google Organization that owns the Gmail account(s) you want to index.",
-          "invalidEmail": "Must be a valid email",
-          "label": "Primary Admin Email",
-          "placeholder": "admin@yourcompany.com",
-          "required": "Required"
-        },
-        "section": {
-          "title": "Gmail Authentication"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Failed to create service account credential - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Successfully created service account credential"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2: Service account"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Upload or paste your service account JSON key"
         }
       },
       "header": {
@@ -3474,7 +3428,6 @@
         "namespace": "{source} Namespace",
         "region": "{source} Region",
         "portalId": "{source} Portal ID",
-        "oauthTokens": "{source} Oauth Tokens",
         "isSandbox": "Is Sandbox Environment",
         "serviceUserEmail": "Service User Email",
         "zuliprcContent": "Zuliprc Content",

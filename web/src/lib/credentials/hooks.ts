@@ -33,12 +33,9 @@ import {
 } from "@/lib/connectors/types/source";
 import type {
   AnyCredential,
-  Credential,
   CredentialCheckReport,
   SimilarCredential,
   CredentialSetup,
-  GmailCredentialJson,
-  GmailServiceAccountCredentialJson,
   OAuthDetails,
   SavedDraftCredential,
   SourceCredentialsResult,
@@ -81,25 +78,6 @@ export function useCredentialFieldCopy(
         ? t(`hints.${field.hint.key}`, field.hint.values)
         : undefined,
     };
-  };
-}
-
-/**
- * Every credential the admin can see, across all sources. Pass
- * `enabled: false` to skip the request on pages that do not need it.
- */
-export function useAdminCredentials({
-  enabled = true,
-}: { enabled?: boolean } = {}) {
-  const { mutate } = useSWRConfig();
-  const swrResponse = useSWR<Credential<any>[]>(
-    enabled ? SWR_KEYS.adminCredentials : null,
-    errorHandlingFetcher
-  );
-
-  return {
-    ...swrResponse,
-    refreshCredentials: () => mutate(SWR_KEYS.adminCredentials),
   };
 }
 
@@ -331,44 +309,6 @@ export function refreshSourceCredentials(
 ): Promise<AnyCredential[] | undefined> {
   return mutate(SWR_KEYS.similarCredentials(sourceType));
 }
-
-export const useGmailCredentials = (connector: string) => {
-  // Only the Gmail setup reads the admin list; other sources skip it.
-  const {
-    data: credentialsData,
-    isLoading: isCredentialsLoading,
-    error: credentialsError,
-    refreshCredentials,
-  } = useAdminCredentials({ enabled: connector === ValidSources.Gmail });
-
-  const gmailPublicCredential: Credential<GmailCredentialJson> | undefined =
-    credentialsData?.find(
-      (credential) =>
-        credential.credential_json?.google_tokens &&
-        credential.admin_public &&
-        credential.source === connector
-    );
-
-  const gmailServiceAccountCredential:
-    | Credential<GmailServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGmailCredential =
-    gmailPublicCredential || gmailServiceAccountCredential;
-
-  return {
-    liveGmailCredential: liveGmailCredential,
-  };
-};
-
-export const useGoogleCredentials = (
-  source: ValidSources.Gmail | ValidSources.GoogleDrive
-): SourceCredentialsResult => useSourceCredentials(source);
 
 /** How often the check reports refresh while a run is going. */
 const CREDENTIAL_CHECK_POLL_MS = 2000;
