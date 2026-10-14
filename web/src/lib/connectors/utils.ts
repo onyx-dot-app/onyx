@@ -303,8 +303,10 @@ export function createConnectorValidationSchema(
                     : Yup.string();
 
       if (!field.optional) {
-        const label =
-          typeof field.label === "function" ? field.label(null) : field.label;
+        const label: string =
+          (typeof field.label === "function"
+            ? field.label(null)
+            : field.label) ?? field.name;
         schema = schema.required(
           messages.required?.(label) ?? `${label} is required`
         );
