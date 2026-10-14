@@ -11,6 +11,7 @@ from onyx.agents.models import (
     ToolExecutionRecord,
 )
 from onyx.chat.models import ResponseRecord
+from onyx.context.search.models import SearchDocsResponse
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import AssistantMessage, Message, ToolResultMessage
 
@@ -91,12 +92,24 @@ def response_snapshot(record: ResponseRecord) -> RunState:
 
 
 def _saved_message[T: Message](message: T) -> T:
-    # Drop application payloads before copying potentially large tool results.
-    return message.model_copy(
-        update={"metadata": None, "details": None}
-        if isinstance(message, ToolResultMessage)
-        else {"metadata": None}
-    ).model_copy(deep=True)
+    if isinstance(message, ToolResultMessage) and isinstance(
+        message.details, SearchDocsResponse
+    ):
+        details = message.details
+        # Documents use their existing relation; staged files stay in execution state.
+        saved_details = SearchDocsResponse(
+            queries=details.queries,
+            sources=details.sources,
+            time_filter_start=details.time_filter_start,
+            time_filter_end=details.time_filter_end,
+            search_docs=[],
+            citation_mapping=details.citation_mapping,
+            displayed_docs=[] if details.displayed_docs == [] else None,
+        )
+        return message.model_copy(
+            update={"metadata": None, "details": saved_details}
+        ).model_copy(deep=True)
+    return message.model_copy(update={"metadata": None}).model_copy(deep=True)
 
 
 def _saved_step(step: StepRecord) -> StepRecord:
