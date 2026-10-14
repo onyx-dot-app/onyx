@@ -623,6 +623,27 @@ def get_connector_credential_pair_from_id_for_user(
     return result.scalar_one_or_none()
 
 
+def get_readable_connector_credential_pair_for_user(
+    cc_pair_id: int,
+    db_session: Session,
+    user: User,
+) -> ConnectorCredentialPair | None:
+    """A pair the user can see or operate, for the detail page and its
+    sub-resources. Neither filter contains the other, so both run: the read one
+    drops a creator's groupless private pair and pairs managed only through a
+    role, the operate one drops plain group membership. Operate runs second, so
+    the common case still costs one query."""
+    stmt = select(ConnectorCredentialPair).distinct()
+    stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+    for access_level in (CCPairAccessLevel.READ, CCPairAccessLevel.OPERATE):
+        cc_pair = db_session.execute(
+            _add_user_filters(stmt, user, access_level)
+        ).scalar_one_or_none()
+        if cc_pair is not None:
+            return cc_pair
+    return None
+
+
 def verify_user_has_access_to_cc_pair(
     cc_pair_id: int,
     db_session: Session,

@@ -2,12 +2,10 @@
   "allow_scope_without_gate2": {
     "DELETE /persona/{persona_id}": "Existing. No registered GATE-2 helper found. Review.",
     "GET /manage/admin/cc-pair/{cc_pair_id}/errors": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
-    "GET /manage/admin/cc-pair/{cc_pair_id}/external-group-sync-attempts": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
     "GET /manage/admin/cc-pair/{cc_pair_id}/get-docs-sync-status": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
     "GET /manage/admin/cc-pair/{cc_pair_id}/hierarchy-breakdown": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
     "GET /manage/admin/cc-pair/{cc_pair_id}/index-attempts": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
     "GET /manage/admin/cc-pair/{cc_pair_id}/last_pruned": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
-    "GET /manage/admin/cc-pair/{cc_pair_id}/permission-sync-attempts": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
     "GET /manage/admin/connector-checks/runs/{run_id}": "Existing. No registered GATE-2 helper found. Review.",
     "GET /manage/admin/indexing/targeted-reindex/{job_id}": "Existing. No registered GATE-2 helper found. Review.",
     "GET /manage/connector-group-restrictions": "Existing. No registered GATE-2 helper found. Review.",

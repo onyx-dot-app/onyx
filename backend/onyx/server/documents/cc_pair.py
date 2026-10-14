@@ -41,6 +41,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair,
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
+    get_readable_connector_credential_pair_for_user,
     remove_credential_from_connector,
     update_connector_credential_pair_from_id,
     verify_user_can_manage_all_cc_pairs,
@@ -128,18 +129,8 @@ router = APIRouter(prefix="/manage")
 def _get_readable_cc_pair(
     cc_pair_id: int, db_session: Session, user: User
 ) -> ConnectorCredentialPair | None:
-    """Fetch a cc-pair for the detail page and its sub-resources.
-
-    Neither filter contains the other, so both run: the read one drops a creator's
-    groupless private pair and pairs managed only through a role, the operate one
-    drops plain group membership. Operate runs second, so the common case still
-    costs one query.
-    """
-    return get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, CCPairAccessLevel.READ
-    ) or get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
-    )
+    """Fetch a cc-pair for the detail page and its sub-resources."""
+    return get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)
 
 
 def _get_readable_cc_pair_or_raise(
@@ -303,7 +294,15 @@ def get_cc_pair_runs(
 ) -> CCPairRunsResponse:
     """The pair's index attempts and permission syncs as one feed, newest
     first. ``since`` windows on creation time and ``q`` matches error messages."""
-    cc_pair = _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+    # Called directly: the route contract reaches the scope gate three calls deep.
+    cc_pair = get_readable_connector_credential_pair_for_user(
+        cc_pair_id, db_session, user
+    )
+    if cc_pair is None:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
     pair_kinds = _cc_pair_run_kinds(cc_pair)
     wanted = [kind for kind in pair_kinds if kinds is None or kind in kinds]
     groups = None if status_groups is None else set(status_groups)
