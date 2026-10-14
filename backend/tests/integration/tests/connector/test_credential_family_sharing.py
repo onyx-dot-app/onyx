@@ -1,6 +1,7 @@
 """A credential created for one source of a family is offered to the family's
 other sources, shown in their keys."""
 
+import json
 from typing import Any
 
 from onyx.configs.constants import DocumentSource
@@ -8,6 +9,23 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.test_models import DATestUser
+
+# Saving a Google credential checks that its key is a service-account key.
+_SERVICE_ACCOUNT_KEY = json.dumps(
+    {
+        "type": "service_account",
+        "project_id": "project",
+        "private_key_id": "key-id",
+        "private_key": "-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----\n",
+        "client_email": "indexer@project.iam.gserviceaccount.com",
+        "client_id": "123",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/indexer",
+        "universe_domain": "googleapis.com",
+    }
+)
 
 
 def _similar_credentials(
@@ -57,7 +75,7 @@ def test_gmail_credential_is_listed_for_google_drive(admin_user: DATestUser) -> 
         user_performing_action=admin_user,
         source=DocumentSource.GMAIL,
         credential_json={
-            "google_service_account_key": '{"type": "service_account"}',
+            "google_service_account_key": _SERVICE_ACCOUNT_KEY,
             "google_primary_admin": "admin@example.com",
             "authentication_method": "uploaded",
         },
