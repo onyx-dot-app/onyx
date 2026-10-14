@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import useSWR, { mutate } from "swr";
+import { mutate } from "swr";
+import useSWRInfinite from "swr/infinite";
 import { setCCPairStatus } from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
@@ -110,8 +111,6 @@ const ACTIVITY_GROUP_QUERY: Record<
 };
 
 const ACTIVITY_PAGE_SIZE = 20;
-// The runs route refuses a larger page, so a group grows up to here.
-const ACTIVITY_MAX_PAGE_SIZE = 50;
 
 export interface ActivityGroupState {
   group: ActivityGroup;
@@ -121,12 +120,12 @@ export interface ActivityGroupState {
   loaded: boolean;
   failed: boolean;
   isLoading: boolean;
-  /** More runs than shown, and room left to ask for them. */
+  /** Older runs than the pages loaded so far. */
   hasMore: boolean;
   more: () => void;
 }
 
-/** One activity group, polled while `enabled`. `more` grows it a page; a new search resets it. */
+/** One activity group, polled while `enabled`. `more` loads the next page; a new search starts over. */
 export function useActivityGroup(
   ccPairId: number,
   group: ActivityGroup,
@@ -134,40 +133,54 @@ export function useActivityGroup(
   enabled: boolean,
   pollMs: number
 ): ActivityGroupState {
-  const [limit, setLimit] = useState(ACTIVITY_PAGE_SIZE);
-  const [limitFor, setLimitFor] = useState(q);
-  if (limitFor !== q) {
-    setLimitFor(q);
-    setLimit(ACTIVITY_PAGE_SIZE);
-  }
-  const { data, error, isLoading } = useSWR<CCPairRunsResponse>(
-    enabled
-      ? SWR_KEYS.ccPairRuns(ccPairId, {
-          pageNum: 0,
-          pageSize: limit,
+  const { data, error, isLoading, size, setSize } =
+    useSWRInfinite<CCPairRunsResponse>(
+      (pageIndex, previous: CCPairRunsResponse | null) => {
+        if (!enabled) return null;
+        if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
+          return null;
+        }
+        return SWR_KEYS.ccPairRuns(ccPairId, {
+          pageNum: pageIndex,
+          pageSize: ACTIVITY_PAGE_SIZE,
           since: null,
           kinds: null,
           q,
           ...ACTIVITY_GROUP_QUERY[group],
-        })
-      : null,
-    errorHandlingFetcher,
-    { refreshInterval: pollMs, keepPreviousData: true }
-  );
+        });
+      },
+      errorHandlingFetcher,
+      { refreshInterval: pollMs, keepPreviousData: true }
+    );
+  useEffect(() => {
+    void setSize(1);
+  }, [q, setSize]);
+  // Polling shifts the offsets, so a run can land on two pages.
+  const runs = useMemo(() => {
+    const seen = new Set<string>();
+    return (data ?? []).flatMap((page) =>
+      page.items.filter((run) => {
+        const key = `${run.kind}-${run.attempt.id}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+    );
+  }, [data]);
+  const first = data?.[0];
+  const last = data?.[data.length - 1];
   return {
     group,
-    runs: data?.items ?? [],
-    total: data?.total_items ?? 0,
-    loaded: data !== undefined,
+    runs,
+    total: first?.total_items ?? 0,
+    loaded: first !== undefined,
     failed: error !== undefined,
     isLoading,
     hasMore:
-      data !== undefined &&
-      data.total_items > data.items.length &&
-      limit < ACTIVITY_MAX_PAGE_SIZE,
-    more: () =>
-      setLimit((current) =>
-        Math.min(ACTIVITY_MAX_PAGE_SIZE, current + ACTIVITY_PAGE_SIZE)
-      ),
+      first !== undefined &&
+      last !== undefined &&
+      runs.length < first.total_items &&
+      last.items.length === ACTIVITY_PAGE_SIZE,
+    more: () => void setSize(size + 1),
   };
 }

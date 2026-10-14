@@ -31,6 +31,8 @@ import {
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 
 const LOADER_ROWS = 2;
+// The runs route refuses a longer search.
+const SEARCH_MAX_LENGTH = 200;
 
 /** Which groups the filter shows. Resolved runs replace both when toggled on. */
 type Shown = "all" | "failures" | "errors";
@@ -153,6 +155,7 @@ export default function ActivityPanel({ ccPairId }: ActivityPanelProps) {
                   searchIcon
                   variant="internal"
                   placeholder={t("search.placeholder")}
+                  maxLength={SEARCH_MAX_LENGTH}
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
                 />
