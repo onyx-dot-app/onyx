@@ -30,13 +30,15 @@ Use the selected command for the remaining steps. Examples below use `"$ODS"`; r
 Start the default profile:
 
 ```bash
-"$ODS" stack up
+"$ODS" stack up --timeout 12m
 "$ODS" stack status --json
 ```
 
 Use the reported web URL for browser tests and HTTP requests. Do not assume port `3000` or call a backend port directly.
 
 `up` prepares local environment files and dependencies, starts isolated infrastructure, applies migrations, and reconciles background application services. Existing secrets stay private. Ask for a model key only when the requested test needs one.
+
+Run a slow startup in a background terminal when available. Wait for its exit and inspect status before reporting success.
 
 Read `"$ODS" stack up --help` before choosing a different profile:
 
@@ -69,6 +71,13 @@ Inspect the reported phase, failed services, and logs when startup is incomplete
 Run `"$ODS" stack logs --help` to select a service or follow logs. Follow logs in a background terminal when continued observation is needed.
 
 Successful startup requires the readiness check through the reported frontend URL. A process that exists is insufficient evidence.
+
+## Validate changes
+
+For lifecycle, concurrency, browser, or real worker validation, read [the ODS integration guide](../../../tools/ods/integration/README.md).
+Use disposable worktrees for these tests. They create accounts, change the default test LLM provider, and stop services.
+The browser smoke configuration supports an unlicensed local deployment. Its chat checks use a scripted local LLM, not a paid model key.
+Never reset a developer database to satisfy a test fixture.
 
 ## Stop
 
