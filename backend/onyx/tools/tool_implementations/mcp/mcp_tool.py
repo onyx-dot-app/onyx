@@ -3,6 +3,7 @@ import time
 from typing import Any
 
 from mcp.client.auth import OAuthClientProvider
+from pydantic import JsonValue
 
 from onyx.chat.emitter import Emitter
 from onyx.db.enums import MCPAuthenticationType, MCPTransport
@@ -54,6 +55,21 @@ _AUTH_ERROR_INDICATORS = (
 #     server_url: str
 #     tool_result: Any
 #     server_name: str
+
+
+def _reject_non_finite_number(constant: str) -> float:
+    raise ValueError(f"Non-finite JSON number: {constant}")
+
+
+def _tool_result_value(text: str) -> JsonValue:
+    """The server's text, parsed when it is a JSON object or array, so the
+    result is JSON-encoded once rather than as an escaped string inside JSON.
+    Any other text, including a JSON scalar, stays a string."""
+    try:
+        parsed = json.loads(text, parse_constant=_reject_non_finite_number)
+    except (ValueError, RecursionError):
+        return text
+    return parsed if isinstance(parsed, dict | list) else text
 
 
 def _normalize_parameters_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
@@ -257,7 +273,7 @@ class MCPTool(Tool[None]):
             logger.info("MCP tool '%s' executed successfully", self._name)
 
             # Format the tool result for response
-            tool_result_dict = {"tool_result": tool_result}
+            tool_result_dict = {"tool_result": _tool_result_value(tool_result)}
             llm_facing_response = json.dumps(tool_result_dict)
 
             # Emit CustomToolDelta packet
