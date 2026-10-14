@@ -45,6 +45,12 @@ def upgrade() -> None:
         "capability_check_run",
         ["credential_id", "connector_id", "time_created"],
     )
+    # Serves the cascade when a connector is deleted.
+    op.create_index(
+        "ix_capability_check_run_connector_id",
+        "capability_check_run",
+        ["connector_id"],
+    )
     op.add_column("sync_record", sa.Column("error_message", sa.Text(), nullable=True))
     op.add_column("connector", sa.Column("check_freq", sa.Integer(), nullable=True))
     op.add_column(
@@ -59,6 +65,9 @@ def downgrade() -> None:
     op.drop_column("connector_credential_pair", "indexing_hold_released_at")
     op.drop_column("connector", "check_freq")
     op.drop_column("sync_record", "error_message")
+    op.drop_index(
+        "ix_capability_check_run_connector_id", table_name="capability_check_run"
+    )
     op.drop_index(
         "ix_capability_check_run_scope_time", table_name="capability_check_run"
     )

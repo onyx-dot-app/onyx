@@ -26,6 +26,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     ColumnElement,
     and_,
+    delete,
     func,
     literal_column,
     or_,
@@ -529,3 +530,19 @@ def get_capability_report_rows_for_source(
         )
     )
     return list(db_session.scalars(stmt).all())
+
+
+def delete_capability_check_runs_older_than(
+    db_session: Session, retain_for: timedelta
+) -> int:
+    """Deletes finished check runs that ended more than ``retain_for`` ago and
+    returns how many. A run still going is kept whatever its age, so the sweep
+    never races its terminal write. Commits."""
+    result = db_session.execute(
+        delete(CapabilityCheckRun).where(
+            CapabilityCheckRun.status != CapabilityCheckRunStatus.RUNNING,
+            CapabilityCheckRun.time_finished < func.now() - retain_for,
+        )
+    )
+    db_session.commit()
+    return int(result.rowcount)  # ty: ignore[unresolved-attribute]

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.tasks.capability_checks import tasks as check_tasks
@@ -34,6 +35,7 @@ from onyx.db.connector import update_connector
 from onyx.db.connector_credential_pair import get_cc_pairs_with_check_schedule
 from onyx.db.credential_capability import (
     STALE_RUN_ERROR,
+    delete_capability_check_runs_older_than,
     mark_capability_report_running,
     mark_capability_run_failed,
     mark_stale_capability_runs_failed,
@@ -517,3 +519,24 @@ def test_update_request_keeps_an_omitted_check_schedule(db_session: Session) -> 
     cleared = ConnectorUpdateRequest.model_validate({**fields, "check_freq": None})
     update_connector(connector.id, cleared.to_connector_base(), db_session)
     assert connector.check_freq is None
+
+
+def test_retention_deletes_only_old_finished_check_runs(db_session: Session) -> None:
+    cc_pair = _create_cc_pair(db_session)
+    old = _check_run(db_session, cc_pair, 0, CapabilityCheckRunStatus.PASSED)
+    recent = _check_run(db_session, cc_pair, 1, CapabilityCheckRunStatus.PASSED)
+    stuck = _check_run(db_session, cc_pair, 2, CapabilityCheckRunStatus.RUNNING)
+    now = get_db_current_time(db_session)
+    old.time_finished = now - timedelta(days=100)
+    recent.time_finished = now - timedelta(days=1)
+    stuck.time_created = now - timedelta(days=100)
+    db_session.commit()
+
+    deleted = delete_capability_check_runs_older_than(
+        db_session, retain_for=timedelta(days=90)
+    )
+
+    assert deleted == 1
+    remaining = {run.id for run in db_session.scalars(select(CapabilityCheckRun)).all()}
+    assert old.id not in remaining
+    assert {recent.id, stuck.id} <= remaining

@@ -167,6 +167,20 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        # Daily: the retention window selects by age, so the cadence only bounds
+        # how far past the window a run can live.
+        "name": "cleanup-old-capability-check-runs",
+        "task": OnyxCeleryTask.CLEANUP_OLD_CAPABILITY_CHECK_RUNS,
+        "schedule": timedelta(days=1),
+        "options": {
+            "queue": OnyxCeleryQueues.PRIMARY,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-stale-capability-runs",
         "task": OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
         "schedule": timedelta(minutes=10),

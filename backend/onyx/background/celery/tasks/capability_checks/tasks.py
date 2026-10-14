@@ -19,7 +19,9 @@ from celery import Task, shared_task
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.app_configs import CONNECTOR_CHECKS_ENABLED
+from onyx.configs.app_configs import (
+    CONNECTOR_CHECKS_ENABLED,
+)
 from onyx.configs.constants import DocumentSource, OnyxCeleryTask
 from onyx.connectors.capability_checks.draft_runs import (
     DRAFT_CHECK_TIMEOUT_SECONDS,
@@ -64,6 +66,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair,
 )
 from onyx.db.credential_capability import (
+    delete_capability_check_runs_older_than,
     get_latest_capability_check_run_time,
     get_sources_with_running_capability_runs,
     mark_capability_run_failed,
@@ -488,6 +491,8 @@ def check_for_scheduled_capability_checks(
 
 # Far longer than any form session: a draft is changed on every edit.
 DRAFT_CREDENTIAL_MAX_AGE = timedelta(days=7)
+# How long a finished connector check run stays in the run history.
+CHECK_RUN_RETENTION = timedelta(days=90)
 
 
 @shared_task(
@@ -504,4 +509,22 @@ def cleanup_stale_draft_credentials(*, tenant_id: str) -> None:
     if deleted:
         task_logger.info(
             f"Deleted {deleted} stale draft credential(s) (tenant {tenant_id})."
+        )
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLEANUP_OLD_CAPABILITY_CHECK_RUNS,
+    ignore_result=True,
+    trail=False,
+)
+def cleanup_old_capability_check_runs(*, tenant_id: str) -> None:
+    """Deletes finished check runs past the retention window, so the run
+    history stays bounded. The latest-only report row is untouched."""
+    with get_session_with_current_tenant() as db_session:
+        deleted = delete_capability_check_runs_older_than(
+            db_session, retain_for=CHECK_RUN_RETENTION
+        )
+    if deleted:
+        task_logger.info(
+            f"Deleted {deleted} old capability check run(s) (tenant {tenant_id})."
         )

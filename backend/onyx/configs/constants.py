@@ -724,6 +724,7 @@ class OnyxCeleryTask:
 
     # Draft credentials of connector forms that were never submitted
     CLEANUP_STALE_DRAFT_CREDENTIALS = "cleanup_stale_draft_credentials"
+    CLEANUP_OLD_CAPABILITY_CHECK_RUNS = "cleanup_old_capability_check_runs"
 
     # Files uploaded for a connector edit that no applied plan claimed
     CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP = "check_for_staged_connector_file_cleanup"

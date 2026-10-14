@@ -2233,6 +2233,8 @@ class CapabilityCheckRun(Base):
             "connector_id",
             "time_created",
         ),
+        # Serves the cascade when a connector is deleted.
+        Index("ix_capability_check_run_connector_id", "connector_id"),
     )
 
 
