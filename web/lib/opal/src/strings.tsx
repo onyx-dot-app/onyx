@@ -15,8 +15,23 @@ export type OpalStrings = {
   copied: string;
   copyCode: string;
   clear: string;
-  attachFile: string;
   clearFile: string;
+  /** InputSingleUpload's placeholder when its caller gives none. */
+  inputUploadPlaceholder: string;
+  /** InputMultiUpload's placeholder when its caller gives none. */
+  inputMultiUploadPlaceholder: string;
+  /** InputMultiUpload's copy while files are dragged and it holds none. */
+  inputMultiUploadDropToAdd: string;
+  /** InputMultiUpload's copy while files are dragged over it and it holds some. */
+  inputMultiUploadDropToAddMore: string;
+  /** InputSingleUpload's label for a value that was pasted, not uploaded. */
+  inputUploadPasted: string;
+  /** InputSingleUpload's label for a value set from outside, such as a saved one. */
+  inputUploadAttached: string;
+  /** InputSingleUpload's copy while a file is dragged and it holds none. */
+  inputUploadDropToAdd: string;
+  /** InputSingleUpload's copy while a file is dragged over it and it holds one. */
+  inputUploadDropToReplace: string;
   clearFilter: string;
   date: string;
   dateRange: string;
@@ -121,8 +136,15 @@ export const defaultOpalStrings: OpalStrings = {
   copied: "Copied!",
   copyCode: "Copy code",
   clear: "Clear",
-  attachFile: "Attach file",
   clearFile: "Clear file",
+  inputUploadPlaceholder: "Add a file…",
+  inputMultiUploadPlaceholder: "Add files…",
+  inputMultiUploadDropToAdd: "Drop files here to add",
+  inputMultiUploadDropToAddMore: "Drop here to add more files",
+  inputUploadPasted: "Pasted text",
+  inputUploadAttached: "File attached",
+  inputUploadDropToAdd: "Drop file here to add",
+  inputUploadDropToReplace: "Drop here to replace file",
   clearFilter: "Clear filter",
   date: "Date",
   dateRange: "Date range",

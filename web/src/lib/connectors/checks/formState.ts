@@ -3,15 +3,20 @@ import type { ValidSources } from "@/lib/connectors/types/source";
 import { withoutFormOnlyFields } from "@/lib/connectors/utils";
 
 type ConfigField = ConnectionConfiguration["values"][number];
+type ConfigValueField = Exclude<ConfigField, { type: "tab" }>;
 
-/** Every config field name, tab contents included; tab selectors are form
+/** Every config field, tab contents included. Tab selectors are form
  * controls, not config. */
-function configFieldNames(fields: ConfigField[]): string[] {
+export function configFields(fields: ConfigField[]): ConfigValueField[] {
   return fields.flatMap((field) =>
     field.type === "tab"
-      ? field.tabs.flatMap((tab) => configFieldNames(tab.fields))
-      : [field.name]
+      ? field.tabs.flatMap((tab) => configFields(tab.fields))
+      : [field]
   );
+}
+
+function configFieldNames(fields: ConfigField[]): string[] {
+  return configFields(fields).map((field) => field.name);
 }
 
 /**

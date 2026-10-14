@@ -77,6 +77,7 @@ function check(
     duration_ms: null,
     from_cache: false,
     validates_binding: false,
+    findings: [],
     ...overrides,
   };
 }

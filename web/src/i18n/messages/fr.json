@@ -2507,6 +2507,14 @@
           "vectorDbWrite": {
             "description": "Écrit les segments et leurs embeddings dans l'index des documents.",
             "label": "Écriture DB vectorielle"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Attente de la limite d'embedding",
+            "description": "Temps d'attente des requêtes d'embedding pour la limite définie dans les paramètres d'index. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Attente de limitation du fournisseur",
+            "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
           }
         }
       },
@@ -2812,10 +2820,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Votre identifiant Google Drive a été créé. Gérez-le ou révoquez-le depuis la liste des identifiants.",
-          "title": "Authentification terminée"
-        },
         "authFailed": {
           "toast": "Échec de l'authentification avec Google Drive : {error}"
         },
@@ -2823,51 +2827,12 @@
           "label": "S'authentifier avec Google Drive",
           "pendingLabel": "Authentification en cours..."
         },
-        "createButton": {
-          "label": "Créer l'identifiant",
-          "pendingLabel": "Création..."
-        },
-        "credentialsLoadError": {
-          "title": "Échec du chargement des identifiants Google Drive."
-        },
-        "invalidFile": {
-          "toast": "Fichier fourni non valide : {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Fichier fourni non valide : une clé JSON de compte de service est attendue"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Téléversez une clé de compte de service avant de créer un identifiant"
-        },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer le Drive.",
-          "title": "Option 1 : application OAuth",
           "sharedScopesNote": "Google demande l'accès à Google Drive et à Gmail en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Google Drive, décochez les autorisations Gmail sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
-        },
-        "primaryAdmin": {
-          "description": "Saisissez l'e-mail d'un administrateur ou d'un propriétaire de l'organisation Google qui possède le ou les Google Drive que vous voulez indexer.",
-          "invalidEmail": "Doit être un e-mail valide",
-          "label": "E-mail de l'administrateur principal",
-          "placeholder": "admin@votreentreprise.com",
-          "required": "Obligatoire"
-        },
-        "section": {
-          "title": "Authentification Google Drive"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Échec de la création de l'identifiant du compte de service : {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Identifiant du compte de service créé avec succès"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2 : compte de service"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Téléversez ou collez la clé JSON de votre compte de service"
         }
       },
       "gmail": {
@@ -3137,6 +3102,9 @@
           "title": "Accès de gestion du connecteur"
         },
         "title": "Paramètres du connecteur"
+      },
+      "optionsListInput": {
+        "placeholder": "Choisissez {label} dans la liste ou saisissez-en"
       }
     },
     "costOverrides": {
@@ -3510,7 +3478,9 @@
         "isSandbox": "Environnement sandbox",
         "serviceUserEmail": "E-mail de l'utilisateur de service",
         "zuliprcContent": "Contenu de zuliprc",
-        "authenticationMethod": "Méthode d'authentification"
+        "authenticationMethod": "Méthode d'authentification",
+        "primaryAdminEmail": "E-mail de l’administrateur principal",
+        "serviceAccountKey": "Clé du compte de service"
       },
       "hints": {
         "boxUserEmail": "Facultatif. L'utilisateur Box à usurper.",
@@ -3519,8 +3489,9 @@
         "jiraUserEmail": "Obligatoire pour Jira Cloud.",
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
-        "pfxFile": "Un fichier PFX.",
-        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io."
+        "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
+        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "Importez ou collez la clé `.json` d’un compte de service Google avec délégation au niveau du domaine."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3500,9 @@
           "certificate": "Certificat",
           "accessKeyAndSecret": "Clé d'accès et secret",
           "iamRole": "Rôle IAM",
-          "assumeRole": "Endosser un rôle"
+          "assumeRole": "Endosser un rôle",
+          "serviceAccount": "Compte de service",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "Dans ce mode, le connecteur SharePoint s'authentifie avec un secret client. Vous devez fournir l'ID client et le secret client.",
@@ -5699,6 +5672,29 @@
         "loadError": {
           "description": "Rechargez la page pour réessayer.",
           "title": "Impossible de charger la mise à jour de l’accès par connecteur"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "Limite de requêtes d'embedding",
+        "description": "Limite le nombre de requêtes d'embedding envoyées par l'indexation dans une fenêtre de temps, pour tous les workers d'indexation. À la limite, l'indexation attend puis réessaie au lieu d'échouer, et les workers prennent moins de nouveau travail. Un lot échoue seulement s'il attend trop longtemps. Les requêtes de recherche ne sont pas limitées.",
+        "requests": {
+          "title": "Requêtes par fenêtre",
+          "description": "Laissez vide pour ne pas fixer de limite.",
+          "placeholder": "Aucune limite"
+        },
+        "period": {
+          "title": "Durée de la fenêtre",
+          "description": "Par exemple, 60 pour une limite par minute.",
+          "suffix": "(secondes)"
+        },
+        "restoreDefault": "Restaurer la valeur par défaut",
+        "validation": {
+          "requests": "Saisissez un nombre entier de 1 à {max, number}, ou laissez le champ vide pour ne pas fixer de limite.",
+          "period": "Saisissez un nombre entier de secondes de 1 à {max, number}."
+        },
+        "toasts": {
+          "saved": "Limite enregistrée.",
+          "failed": "Impossible d'enregistrer la limite."
         }
       }
     },
@@ -11867,12 +11863,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {Choisir des fichiers} other {Choisir un fichier}}"
-      },
-      "prompt": "{multiple, select, true {Ou glissez-déposez des fichiers ici.} other {Ou glissez-déposez un fichier ici.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "Ajouter"
@@ -12774,22 +12764,6 @@
         "label": "Connectez vos données"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "Fabrication de votre espace de travail...",
-        "enchanting": "Enchantement magique...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "Collecte des ressources...",
-        "miningDependencies": "Minage des dépendances...",
-        "placingBlocks": "Pose des blocs...",
-        "punchingWood": "On frappe du bois...",
-        "smeltingCode": "Fonte du code...",
-        "worldGenerated": "Génération du monde terminée..."
-      },
-      "tagline": {
-        "label": "Fabrication de votre prochaine grande idée..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "Effacer"
@@ -12879,6 +12853,12 @@
       "csv": {
         "truncated": "Aperçu limité à {rows, number} lignes, {columns, number} colonnes et {cells, number} cellules. Téléchargez le fichier original pour toutes les données.",
         "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier."
+      },
+      "imageTooLarge": {
+        "description": "Cette image est trop volumineuse pour un aperçu. Téléchargez l’original pour l’ouvrir."
+      },
+      "unsupported": {
+        "description": "Ce fichier ne peut pas être prévisualisé. Téléchargez l’original pour l’ouvrir."
       }
     },
     "filesTab": {
@@ -12895,9 +12875,37 @@
       "preparing": {
         "description": "Configuration de votre environnement de développement",
         "title": "Préparation du bac à sable..."
+      },
+      "download": {
+        "label": "Télécharger"
+      },
+      "partial": {
+        "label": "Certains dossiers n’ont pas pu être chargés. Actualisez pour réessayer."
+      },
+      "noMatches": {
+        "label": "Aucun fichier correspondant"
+      },
+      "previousPage": {
+        "label": "Page précédente"
+      },
+      "nextPage": {
+        "label": "Page suivante"
+      },
+      "page": {
+        "label": "Page {page} sur {total}"
+      },
+      "upload": {
+        "label": "Importer des fichiers",
+        "error": "Impossible d’importer les fichiers. Réessayez."
+      },
+      "emptyDirectory": {
+        "label": "Aucun fichier dans ce répertoire"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Fond contrasté"
+      },
       "error": {
         "description": "L'image n'a pas pu être affichée",
         "title": "Échec du chargement de l'image"
@@ -12907,9 +12915,6 @@
       },
       "preview": {
         "ariaLabel": "Aperçu de {name}"
-      },
-      "background": {
-        "contrast": "Fond contrasté"
       }
     },
     "inputBar": {
@@ -13067,6 +13072,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "Commandes PDF"
+      },
+      "thumbnails": {
+        "toggle": "Afficher ou masquer les miniatures",
+        "resize": "Redimensionner les miniatures",
+        "label": "Miniatures des pages"
+      },
+      "page": {
+        "previous": "Page précédente",
+        "next": "Page suivante",
+        "counter": "{current} / {total}",
+        "preview": "Aperçu de la page {page}",
+        "select": "Aller à la page {page}"
+      },
+      "zoom": {
+        "out": "Zoom arrière",
+        "in": "Zoom avant",
+        "label": "Zoom",
+        "fitWidth": "Ajuster à la largeur",
+        "fitPage": "Ajuster à la page"
+      },
       "error": {
         "description": "Le fichier PDF n'a pas pu être chargé.",
         "title": "Impossible de prévisualiser le PDF"
@@ -13079,6 +13106,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Commandes de présentation"
+      },
+      "thumbnails": {
+        "toggle": "Afficher ou masquer les miniatures des diapositives"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionner les miniatures des diapositives"
+      },
       "slides": {
         "label": "Diapositives"
       },
@@ -13089,7 +13125,7 @@
         "label": "Diapositive suivante"
       },
       "converting": {
-        "label": "Conversion de la présentation..."
+        "label": "Préparation de l’aperçu..."
       },
       "empty": {
         "label": "Aucune diapositive dans cette présentation"
@@ -13102,9 +13138,6 @@
       },
       "slide": {
         "counter": "Diapositive {current} sur {total}"
-      },
-      "resize": {
-        "ariaLabel": "Redimensionner les miniatures des diapositives"
       }
     },
     "previewTab": {
@@ -13538,7 +13571,8 @@
         "ariaLabel": "Copier l'URL : {url}"
       },
       "downloadFile": {
-        "tooltip": "Télécharger le fichier"
+        "tooltip": "Télécharger le fichier",
+        "label": "Télécharger"
       },
       "export": {
         "button": "Exporter en .docx",
@@ -13608,6 +13642,170 @@
     "welcome": {
       "input": {
         "placeholder": "Analyse mes données et crée un tableau de bord..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "Tous les fichiers"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Onglets de résultats"
+      },
+      "close": {
+        "label": "Fermer {name}"
+      },
+      "reordered": {
+        "label": "Onglet déplacé à la position {position} sur {count}"
+      },
+      "open": {
+        "label": "Ouvrir un onglet"
+      },
+      "outputs": {
+        "label": "Résultats"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Prévisualisez votre application"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Vérification des applications web"
+      },
+      "failed": {
+        "description": "Impossible de vérifier les applications web locales. Rechargez pour réessayer."
+      },
+      "unavailable": {
+        "description": "L’application web est indisponible. Restaurez le bac à sable ou rechargez pour réessayer.",
+        "label": "Indisponible"
+      },
+      "empty": {
+        "title": "Aucune application web disponible",
+        "description": "Les applications locales apparaissent ici lorsqu’elles fonctionnent."
+      },
+      "starting": {
+        "label": "Démarrage de l’application web"
+      },
+      "loading": {
+        "label": "Chargement de l’application web"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Ouvrir les résultats"
+      },
+      "close": {
+        "ariaLabel": "Fermer les résultats"
+      },
+      "expand": {
+        "ariaLabel": "Agrandir les résultats"
+      },
+      "restore": {
+        "ariaLabel": "Restaurer les résultats"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionner les résultats"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Rechercher des fichiers"
+        },
+        "location": {
+          "label": "Tous les fichiers de votre environnement"
+        }
+      },
+      "browser": {
+        "placeholder": "Applications web dans votre sandbox"
+      },
+      "reload": {
+        "file": "Recharger le fichier",
+        "files": "Actualiser les fichiers",
+        "browser": "Actualiser les applications web",
+        "unavailable": "Restaurez le bac à sable pour actualiser"
+      },
+      "export": {
+        "failed": "Impossible d’exporter ce fichier. Réessayez."
+      },
+      "empty": {
+        "title": "Choisissez une vue de l’espace de travail"
+      },
+      "status": {
+        "provisioning": "Initialisation du bac à sable",
+        "running": "Bac à sable en cours d’exécution",
+        "sleeping": "Bac à sable en veille",
+        "restoring": "Restauration de la session",
+        "terminated": "Bac à sable arrêté",
+        "failed": "Échec du bac à sable",
+        "ready": "Bac à sable prêt",
+        "loading": "Recherche du bac à sable"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Tout marquer comme vu",
+        "error": "Impossible de marquer les sorties comme vues. Réessayez."
+      },
+      "home": {
+        "description": "Fichiers créés par votre agent"
+      },
+      "empty": {
+        "description": "Les fichiers créés par votre agent apparaîtront ici."
+      },
+      "loading": {
+        "label": "Chargement des résultats…"
+      },
+      "unavailable": {
+        "description": "Les résultats apparaîtront lorsque votre environnement sera prêt."
+      },
+      "error": {
+        "description": "Impossible d’actualiser les résultats. Réessayez."
+      },
+      "incomplete": {
+        "description": "Certains résultats n’ont pas pu être chargés."
+      },
+      "filter": {
+        "label": "Type de fichier",
+        "all": "Tous",
+        "folders": "Dossiers",
+        "noExtension": "Sans extension"
+      },
+      "folders": {
+        "ariaLabel": "Dossiers de résultats",
+        "root": "Résultats"
+      },
+      "filtered": {
+        "empty": "Aucun résultat correspondant"
+      },
+      "search": {
+        "placeholder": "Rechercher des résultats"
+      },
+      "scope": {
+        "turn": "Résultats du tour {turn, number}",
+        "all": "Toutes les sorties"
+      },
+      "unseen": "Nouveau ou mis à jour"
+    },
+    "turnOutputs": {
+      "showAll": "Voir les {count} résultats",
+      "app": "Application",
+      "unavailable": "N’est plus disponible",
+      "appTitle": "Aperçu de votre application"
+    },
+    "upgrade": {
+      "title": "Craft nécessite un forfait Business",
+      "adminDescription": "Craft est disponible avec les forfaits Business et Enterprise. Il n’est pas pris en charge dans la Community Edition tant que Craft n’est pas intégré au chat principal.",
+      "userDescription": "Craft est disponible avec les forfaits Business et Enterprise. Demandez à votre administrateur de passer à un forfait supérieur pour utiliser Craft.",
+      "backToChat": {
+        "label": "Retour au chat"
+      },
+      "viewPlans": {
+        "label": "Voir les forfaits"
       }
     }
   },
@@ -13948,8 +14146,19 @@
       "year": "Année"
     },
     "inputFile": {
-      "attachFile": "Joindre un fichier",
       "clearFile": "Effacer le fichier"
+    },
+    "inputMultiUpload": {
+      "placeholder": "Ajouter des fichiers…",
+      "dropToAdd": "Déposez les fichiers ici pour les ajouter",
+      "dropToAddMore": "Déposez ici pour ajouter d’autres fichiers"
+    },
+    "inputUpload": {
+      "placeholder": "Ajouter un fichier…",
+      "pasted": "Texte collé",
+      "attached": "Fichier joint",
+      "dropToAdd": "Déposez le fichier ici pour l’ajouter",
+      "dropToReplace": "Déposez ici pour remplacer le fichier"
     },
     "inputImage": {
       "alt": "Image",
@@ -14639,7 +14848,8 @@
         "title": "Agents"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorer les agents"

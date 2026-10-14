@@ -1568,11 +1568,13 @@ def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
     assert resp.status_code == 401
 
 
+@pytest.mark.parametrize("include_web", [False, True])
 def test_output_manifest_client_and_daemon_contract(
     client: TestClient,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     keypair: tuple[Ed25519PrivateKey, str],
+    include_web: bool,
 ) -> None:
     session_id = uuid4()
     sessions_root = tmp_path / "sessions"
@@ -1606,9 +1608,15 @@ def test_output_manifest_client_and_daemon_contract(
 
     monkeypatch.setattr(sidecar.httpx, "Client", in_process_client)
     transport = sidecar.SidecarClient(host=lambda _: "sandbox.test")
-    result = transport.outputs_manifest(sandbox_id=uuid4(), session_id=session_id)
-    expected_body = {"session_id": str(session_id)}
-    assert [entry.path for entry in result.entries] == ["deck.pptx"]
+    result = transport.outputs_manifest(
+        sandbox_id=uuid4(), session_id=session_id, include_web=include_web
+    )
+    expected_body: dict[str, object] = {"session_id": str(session_id)}
+    if include_web:
+        expected_body["include_web"] = True
+    assert [entry.path for entry in result.entries] == (
+        ["deck.pptx", "web/page.tsx"] if include_web else ["deck.pptx"]
+    )
     assert result.entries[0].size == len(b"presentation")
     assert result.complete
 

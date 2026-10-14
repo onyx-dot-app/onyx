@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Generator
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import Table, create_engine
@@ -504,6 +504,53 @@ class TestOverride:
         # $1.00 = 100 cents in, $2.00 = 200 cents out.
         assert in_cents == pytest.approx(100.0)
         assert out_cents == pytest.approx(200.0)
+
+    @staticmethod
+    def _served_catalog(_provider: str, model: str) -> dict[str, Any] | None:
+        if model == "deepseek/deepseek-v4-flash":
+            return {"input": 1.0, "output": 2.0}
+        return None
+
+    def test_served_model_prices_from_catalog(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.llm.cost.find_model_cost", self._served_catalog)
+
+        in_cents, out_cents = compute_cost_cents(
+            model="openrouter/auto",
+            served_model="deepseek/deepseek-v4-flash",
+            provider="openrouter",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+            db_session=db_session,
+        )
+        assert in_cents == pytest.approx(100.0)
+        assert out_cents == pytest.approx(200.0)
+
+    def test_router_override_wins_over_served_model(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("onyx.llm.cost.find_model_cost", self._served_catalog)
+        db_session.add(
+            ModelCostOverride(
+                model="openrouter/auto",
+                provider="openrouter",
+                input_cost_per_mtok=5.0,
+                output_cost_per_mtok=6.0,
+            )
+        )
+        db_session.commit()
+
+        in_cents, out_cents = compute_cost_cents(
+            model="openrouter/auto",
+            served_model="deepseek/deepseek-v4-flash",
+            provider="openrouter",
+            prompt_tokens=1_000_000,
+            completion_tokens=1_000_000,
+            db_session=db_session,
+        )
+        assert in_cents == pytest.approx(500.0)
+        assert out_cents == pytest.approx(600.0)
 
     def test_override_counts_cache_reads_as_input(self, db_session: Session) -> None:
         db_session.add(

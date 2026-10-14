@@ -261,6 +261,7 @@ export const connectorConfigs: Record<
         query: "Enter the website URL to scrape e.g. https://docs.onyx.app/:",
         label: "Base URL",
         name: "base_url",
+        placeholder: "https://example.com",
         optional: false,
       },
       {
@@ -1534,10 +1535,10 @@ export const connectorConfigs: Record<
         query: "Enter channels to include:",
         label: "Channels",
         name: "channels",
-        description: `Specify 0 or more channels to index. For example, specifying the channel "support" will cause us to only index all content within the "#support" channel. If no channels are specified, all channels in your workspace will be indexed.`,
+        description: `Specify 0 or more channels to index. Pick a channel from the list to follow it by id, so a rename does not break indexing, or type the name of a channel the list does not show, such as a private channel the bot was invited to. If no channels are specified, all channels in your workspace will be indexed.`,
         optional: true,
-        // Slack Channels can only be lowercase
-        transform: (values) => values.map((value) => value.toLowerCase()),
+        optionsFinding: "readable_channels",
+        plainListCondition: (values) => values.channel_regex_enabled === true,
       },
       {
         type: "checkbox",
@@ -1556,8 +1557,9 @@ For example, specifying \`.*-support.*\` as a "channel" will cause the connector
         name: "exclude_channels",
         description: `Specify 0 or more channels to exclude. Exclusions are applied after the "Channels" filter above, so a channel matched by both is excluded. If no channels are specified, nothing is excluded.`,
         optional: true,
-        // Slack Channels can only be lowercase
-        transform: (values) => values.map((value) => value.toLowerCase()),
+        optionsFinding: "readable_channels",
+        plainListCondition: (values) =>
+          values.exclude_channel_regex_enabled === true,
       },
       {
         type: "checkbox",
@@ -1785,20 +1787,24 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     description: "Configure Google Sites connector",
     values: [
       {
-        type: "file",
-        query: "Enter the zip path:",
-        label: "File Locations",
-        name: "file_locations",
-        optional: false,
-        description:
-          "Upload a zip file containing the HTML of your Google Site",
-      },
-      {
         type: "text",
         query: "Enter the base URL:",
         label: "Base URL",
         name: "base_url",
         optional: false,
+        // The published site's root; each page's link is this plus its path.
+        placeholder: "https://sites.google.com/view/your-site",
+      },
+      {
+        type: "file",
+        query: "Enter the zip path:",
+        label: "Site Export",
+        name: "file_locations",
+        optional: false,
+        description:
+          "Upload a `.zip` file containing the HTML of your Google Site.",
+        multiple: false,
+        accept: ".zip",
       },
     ],
     advanced_values: [],

@@ -71,6 +71,21 @@ export function getCredentialFileType(key: string): FileTypeCategory | null {
   return FILE_FIELD_TYPES.get(key) ?? null;
 }
 
+/**
+ * Whether the chosen auth method sets the account up on its own (Google
+ * Drive's OAuth sign-in), so nothing typed is saved for it.
+ */
+export function isOwnSetupMethod(
+  spec: CredentialSpec,
+  authMethod: string | undefined
+): boolean {
+  return (
+    spec.methods?.some(
+      (method) => method.value === authMethod && method.ownSetup === true
+    ) ?? false
+  );
+}
+
 /** The value a form starts a field at. */
 export function initialFieldValue(
   field: CredentialSpecField
@@ -204,7 +219,9 @@ function fieldSchema(
       .notRequired();
   }
   const required = (s: Yup.StringSchema) =>
-    s.min(1, messages.empty(title)).required(messages.required(title));
+    field.kind === "jsonFile"
+      ? s.required(messages.fileRequired(title))
+      : s.min(1, messages.empty(title)).required(messages.required(title));
   if (!selected) return required(base);
   return base.when(AUTHENTICATION_METHOD_KEY, {
     is: selected,
@@ -304,6 +321,13 @@ function getStoredAuthMethod(
   credentialJson: Readonly<Record<string, unknown>>,
   sourceType: ValidSources
 ): string | undefined {
+  // Google stores "uploaded" for an uploaded OAuth app as well as for a
+  // service account, so its keys say which tab the account belongs to.
+  if (sourceType === ValidSources.GoogleDrive) {
+    const kind = googleCredentialKind({ credential_json: credentialJson });
+    if (kind === "service_account") return "uploaded";
+    if (kind === "oauth") return "oauth";
+  }
   const standardMethod = credentialJson[AUTHENTICATION_METHOD_KEY];
   if (typeof standardMethod === "string") {
     return standardMethod;
@@ -527,6 +551,7 @@ export function getCredentialDetails(
       const value = credentialJson[key];
       if (
         field.kind === "file" ||
+        field.kind === "jsonFile" ||
         field.kind === "toggle" ||
         field.kind === "checkbox" ||
         typeof value !== "string" ||
@@ -586,4 +611,19 @@ export function bindingCheckCredentialId(
   return "credential_id" in request && request.credential_json === undefined
     ? request.credential_id
     : null;
+}
+
+/** A file's bytes as base64 text, as an account stores a .pfx certificate. */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    // A data URL is "data:<type>;base64,<content>"; the content follows the
+    // first comma.
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }

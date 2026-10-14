@@ -1,4 +1,5 @@
 /** The schema a connector's creation form is rendered from. */
+import type { CheckFindingKey } from "@/lib/connectors/checks/types";
 import type { CredentialValues } from "@/lib/credentials/types";
 
 export type InputType =
@@ -51,6 +52,10 @@ export interface ListOption extends Option {
   type: "list";
   default?: string[];
   transform?: (values: string[]) => string[];
+  /** Discovery finding whose options the field offers: stores the value, shows the label. Typed entries stay allowed. */
+  optionsFinding?: CheckFindingKey;
+  /** When true the field takes typed entries only, such as regex patterns. */
+  plainListCondition?: (values: Record<string, unknown>) => boolean;
 }
 
 export interface StringPairListOption extends Option {
@@ -101,6 +106,10 @@ export interface BooleanOption extends Option {
 export interface FileOption extends Option {
   type: "file";
   default?: string;
+  /** Takes many files (tags) or one. @default true */
+  multiple?: boolean;
+  /** The picker's filter, as the HTML `accept` attribute, e.g. `".zip"`. */
+  accept?: string;
 }
 
 export interface StringTabOption extends Option {

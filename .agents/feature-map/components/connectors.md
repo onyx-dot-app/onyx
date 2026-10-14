@@ -69,7 +69,7 @@ shows only when an index run fails or returns nothing.
 | File | Holds |
 |---|---|
 | `web/src/lib/connectors/connectors.tsx` | `connectorConfigs`, keyed by source: the form schema (fields, types, defaults) the add-connector page renders and posts as `connector_specific_config`. |
-| `web/src/lib/sources.ts` | `SOURCE_METADATA_MAP`: icon, display name, and docs link per source, read by `getSourceMetadata`/`isValidSource`-style helpers. |
+| `web/src/lib/connectors/constants.ts` | `SOURCE_METADATA_MAP`: icon, display name, and docs link per source. `getSourceMetadata`, `isValidSource` and the other getters live in `web/src/lib/connectors/utils.ts`; `SourceMetadata` and `SourceCategory` in `web/src/lib/connectors/types/source.ts`. |
 
 `backend/onyx/connectors/README.md:96,113` names exactly these two files as the
 frontend changes a new connector requires.
@@ -90,7 +90,7 @@ frontend changes a new connector requires.
 | GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). A run applies the credential use rule (§4.9) to the config it uses. A `connector_specific_config` override needs credential visibility; only a run on the stored config of an existing pair is open to a pairing manager who cannot see the credential. |
-| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The add-connector form sends a typed account's values only with a check run or Create, and its binding check names the draft by id once a run saved the current values. The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. A run starts only when the credential use rule (§4.9) allows the form's config. |
+| POST/GET | `/admin/connector-checks/runs`, `/admin/connector-checks/runs/{run_id}`, `/admin/connector-checks/runs/{run_id}/cancel` | Draft capability-check runs on an unsaved connector form (`server/documents/capability_check_runs.py`), on a saved credential or the user's draft. A new account's `credential_json` is saved as a draft credential (`Credential.is_draft`), which only its owner sees; the snapshot's `credential_id` names it, and later requests send the values again only when they changed. The add-connector form sends a typed account's values only with a check run or Create, and its binding check names the draft by id once a run saved the current values. A Microsoft `.pfx` certificate travels in `credential_json` as base64 text, the form the private-key upload stores; `resolve_form_credential` checks it as PKCS#12 (`private_key_types.validate_pkcs12_credential_value`). The `CLEANUP_STALE_DRAFT_CREDENTIALS` beat task deletes drafts unchanged for 7 days. Cancel stops a run its starter owns; the form calls it when its credential changes. A run starts only when the credential use rule (§4.9) allows the form's config. |
 | POST | `/admin/connector-checks/plan` | The checks a draft run would hold for an unsaved form, each in its state before anything runs (pending, waiting, not applicable). Needs no credential and starts no run. |
 | GET | `/connector`, `/connector/{connector_id}`, `/indexed-sources` | Read paths, including the anonymous-ish `/connector-status` used by chat surfaces. |
 
@@ -315,7 +315,7 @@ range:
 |---|---|---|---|
 | Confluence (`confluence/connector.py:ConfluenceConnector`) | `CheckpointedConnector`, `SlimConnector`, `SlimConnectorWithPermSync`, `CredentialsConnector`, `Resolver` | `ConfluenceCheckpoint` (`next_page_url`) | No `LoadConnector`/`PollConnector`; checkpointing is mandatory, not optional. `load_credentials` deliberately raises `NotImplementedError("Use set_credentials_provider with this connector.")`. Has a `source_operations.py` gateway (`ConfluenceSourceOperations`) and registers named capability checks. |
 | Google Drive (`google_drive/connector.py:GoogleDriveConnector`) | `SlimConnector`, `SlimConnectorWithPermSync`, `CheckpointedConnectorWithPermSync`, `Resolver` | `GoogleDriveCheckpoint` (`google_drive/models.py`): a multi-stage state machine (`DriveRetrievalStage`: `START → OAUTH_FILES → USER_EMAILS → MY_DRIVE_FILES → DRIVE_IDS → SHARED_DRIVE_FILES → DONE`) plus a per-impersonated-user completion map. Not a simple cursor. | Splits source-API logic across `file_retrieval.py`, `doc_conversion.py`, `section_extraction.py` rather than a single `source_operations.py`. |
-| Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. `external_access` is assigned inline on yielded documents, not in a separate pass. |
+| Slack (`slack/connector.py:SlackConnector`) | `SlimConnectorWithPermSync`, `CredentialsConnector`, `CheckpointedConnectorWithPermSync` | `SlackCheckpoint`: `channel_ids`, per-channel completion map, `current_channel_access` (carries an in-flight channel's `ExternalAccess` across a checkpoint boundary) | Has a real `source_operations.py` (`SlackSourceOperations`), the enforced single import site for `slack_sdk`. An exact `channels` or `exclude_channels` entry is a channel id or a name (`filter_channels`); the readable-channel listing check offers ids as values with names as labels, so a picked channel survives a rename. `external_access` is assigned inline on yielded documents, not in a separate pass. |
 
 ### 4.6.1 Outlook: one document per mail thread
 
@@ -551,6 +551,16 @@ a new account's values, and disables saved accounts whose stored realm differs
 request that sends form values as connector config: Create, check runs and plans,
 and binding checks.
 
+A source's credential spec (`web/src/lib/credentials/constants.ts`) shapes the new
+account. Gmail is the one source that still sets accounts up on its own page
+(`OWN_ACCOUNT_SETUP` in `AddConnectorPage/newAccount.ts`). Google Drive types its
+account in: a "Service Account" tab (`google_primary_admin`, then
+`google_service_account_key`, a `jsonFile` field that holds the key file's text) and
+an "OAuth" tab. The OAuth method is `ownSetup`: its tab renders `DriveOAuthSetup`
+(`AddConnectorPage/form/gdrive/Credential.tsx`), whose Google sign-in saves the
+account itself, so the form saves no draft for it. `draft_credentials.py` rejects a
+Google draft whose key is not a service-account key's JSON text.
+
 A config also picks how the cc-pair status page breaks the documents down by
 hierarchy node. `hierarchy_breakdown_sections` returns the node types to list, and
 the nodes that the config names (`HierarchyBreakdownSection`). The default (`None`)
@@ -660,7 +670,7 @@ family keep the source's shape and stay usable by that source only.
 
 | If your change... | Also check |
 |---|---|
-| adds a new connector | `DocumentSource` enum, `registry.py:CONNECTOR_CLASS_MAP`, the class itself, `web/src/lib/connectors/connectors.tsx` (`connectorConfigs`), `web/src/lib/sources.ts` (`SOURCE_METADATA_MAP`), a folder under `backend/tests/daily/connectors/`, and (if attachments exist) the `include_attachments` gating on both the main and slim pass |
+| adds a new connector | `DocumentSource` enum, `registry.py:CONNECTOR_CLASS_MAP`, the class itself, `web/src/lib/connectors/connectors.tsx` (`connectorConfigs`), `web/src/lib/connectors/constants.ts` (`SOURCE_METADATA_MAP`), a folder under `backend/tests/daily/connectors/`, and (if attachments exist) the `include_attachments` gating on both the main and slim pass |
 | changes the `Document`/`Section`/`SlimDocument` model | every connector that constructs one directly (no central factory does this for them); [[indexing-pipeline]]'s consumption of the new/changed field; the dedup logic keyed on `Document.id` and `content_hash` |
 | changes `interfaces.py` (adds/renames a base class or method) | `factory.py:_validate_connector_supports_input_type` and `identify_connector_class`; `connector_runner.py`'s `isinstance` branches; every connector implementing the affected interface |
 | changes checkpoint serialization (`ConnectorCheckpoint` or a subclass) | `validate_checkpoint_json` for that connector; any in-flight, persisted checkpoint from a prior run becomes unreadable, which [[indexing-pipeline]]'s resume logic must handle |

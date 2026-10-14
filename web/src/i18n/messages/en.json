@@ -2507,6 +2507,14 @@
           "vectorDbWrite": {
             "description": "Writes the embedded chunks into the document index.",
             "label": "Vector DB write"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Embedding rate limit wait",
+            "description": "Time embedding requests waited for the embedding rate limit set on Index Settings. Part of Embedding, summed over embedding threads."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Embedding provider throttle wait",
+            "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
           }
         }
       },
@@ -2812,10 +2820,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Your Google Drive credential was created. Manage or revoke it from the credential list.",
-          "title": "Authentication Complete"
-        },
         "authFailed": {
           "toast": "Failed to authenticate with Google Drive - {error}"
         },
@@ -2823,51 +2827,12 @@
           "label": "Authenticate with Google Drive",
           "pendingLabel": "Authenticating..."
         },
-        "createButton": {
-          "label": "Create Credential",
-          "pendingLabel": "Creating..."
-        },
-        "credentialsLoadError": {
-          "title": "Failed to load Google Drive credentials."
-        },
-        "invalidFile": {
-          "toast": "Invalid file provided - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Invalid file provided - expected a Service Account JSON key"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Please upload a service account key before creating a credential"
-        },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
-          "title": "Option 1: OAuth app",
           "sharedScopesNote": "Google asks for Google Drive and Gmail access together, so one account can back both connectors. To use this account for Google Drive only, untick the Gmail scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
-        },
-        "primaryAdmin": {
-          "description": "Enter the email of an admin or owner of the Google Organization that owns the Google Drive(s) you want to index.",
-          "invalidEmail": "Must be a valid email",
-          "label": "Primary Admin Email",
-          "placeholder": "admin@yourcompany.com",
-          "required": "Required"
-        },
-        "section": {
-          "title": "Google Drive Authentication"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Failed to create service account credential - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Successfully created service account credential"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2: Service account"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Upload or paste your service account JSON key"
         }
       },
       "gmail": {
@@ -3137,6 +3102,9 @@
           "title": "Connector Manage Access"
         },
         "title": "Connector Settings"
+      },
+      "optionsListInput": {
+        "placeholder": "Pick {label} from the list, or type one"
       }
     },
     "costOverrides": {
@@ -3510,7 +3478,9 @@
         "isSandbox": "Is Sandbox Environment",
         "serviceUserEmail": "Service User Email",
         "zuliprcContent": "Zuliprc Content",
-        "authenticationMethod": "Authentication Method"
+        "authenticationMethod": "Authentication Method",
+        "primaryAdminEmail": "Primary Admin Email",
+        "serviceAccountKey": "Service Account Key"
       },
       "hints": {
         "boxUserEmail": "Optional. The Box user to impersonate.",
@@ -3519,8 +3489,9 @@
         "jiraUserEmail": "Required for Jira Cloud.",
         "lumappsServiceUser": "The user to index on behalf of.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
-        "pfxFile": "A PFX file.",
-        "testrailBaseUrl": "For example https://yourcompany.testrail.io."
+        "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
+        "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "Upload or paste the `.json` key of a Google service account with domain-wide delegation."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3500,9 @@
           "certificate": "Certificate",
           "accessKeyAndSecret": "Access Key and Secret",
           "iamRole": "IAM Role",
-          "assumeRole": "Assume Role"
+          "assumeRole": "Assume Role",
+          "serviceAccount": "Service Account",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",
@@ -5699,6 +5672,29 @@
         "loadError": {
           "description": "Reload the page to try again.",
           "title": "Could not load the connector access update"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "Embedding rate limit",
+        "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again instead of failing, so workers take less new work. A batch fails only if it waits too long. Search queries are not limited.",
+        "requests": {
+          "title": "Requests per window",
+          "description": "Leave empty for no limit.",
+          "placeholder": "No limit"
+        },
+        "period": {
+          "title": "Window length",
+          "description": "For example, 60 for a limit per minute.",
+          "suffix": "(seconds)"
+        },
+        "restoreDefault": "Restore default",
+        "validation": {
+          "requests": "Enter a whole number from 1 to {max, number}, or leave the field empty for no limit.",
+          "period": "Enter a whole number of seconds from 1 to {max, number}."
+        },
+        "toasts": {
+          "saved": "Rate limit saved.",
+          "failed": "Could not save the rate limit."
         }
       }
     },
@@ -11867,12 +11863,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {Choose files} other {Choose a file}}"
-      },
-      "prompt": "{multiple, select, true {Or drag and drop files here.} other {Or drag and drop a file here.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "Add New"
@@ -12774,22 +12764,6 @@
         "label": "Connect your data"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "Crafting your workspace...",
-        "enchanting": "Enchanting with magic...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "Gathering resources...",
-        "miningDependencies": "Mining for dependencies...",
-        "placingBlocks": "Placing blocks...",
-        "punchingWood": "Punching wood...",
-        "smeltingCode": "Smelting the code...",
-        "worldGenerated": "World generation complete..."
-      },
-      "tagline": {
-        "label": "Crafting your next great idea..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "Clear"
@@ -12879,6 +12853,12 @@
       "csv": {
         "truncated": "Preview limited to {rows, number} rows, {columns, number} columns, and {cells, number} cells. Download the original for all data.",
         "malformed": "This CSV contains an invalid quoted field. Download the original to inspect it."
+      },
+      "imageTooLarge": {
+        "description": "This image is too large to preview. Download the original to open it."
+      },
+      "unsupported": {
+        "description": "Download the original to open it."
       }
     },
     "filesTab": {
@@ -12895,9 +12875,37 @@
       "preparing": {
         "description": "Setting up your development environment",
         "title": "Preparing sandbox..."
+      },
+      "download": {
+        "label": "Download"
+      },
+      "partial": {
+        "label": "Some folders could not be loaded. Refresh to try again."
+      },
+      "noMatches": {
+        "label": "No matching files"
+      },
+      "previousPage": {
+        "label": "Previous page"
+      },
+      "nextPage": {
+        "label": "Next page"
+      },
+      "page": {
+        "label": "Page {page} of {total}"
+      },
+      "upload": {
+        "label": "Upload files",
+        "error": "Could not upload files. Try again."
+      },
+      "emptyDirectory": {
+        "label": "No files in this directory"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Contrast background"
+      },
       "error": {
         "description": "The image could not be displayed",
         "title": "Failed to load image"
@@ -12907,9 +12915,6 @@
       },
       "preview": {
         "ariaLabel": "Preview of {name}"
-      },
-      "background": {
-        "contrast": "Contrast background"
       }
     },
     "inputBar": {
@@ -13067,6 +13072,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF controls"
+      },
+      "thumbnails": {
+        "toggle": "Toggle page thumbnails",
+        "resize": "Resize page thumbnails",
+        "label": "Page thumbnails"
+      },
+      "page": {
+        "previous": "Previous page",
+        "next": "Next page",
+        "counter": "{current} / {total}",
+        "preview": "Page {page} preview",
+        "select": "Go to page {page}"
+      },
+      "zoom": {
+        "out": "Zoom out",
+        "in": "Zoom in",
+        "label": "Zoom",
+        "fitWidth": "Fit width",
+        "fitPage": "Fit page"
+      },
       "error": {
         "description": "The PDF file could not be loaded.",
         "title": "Cannot preview PDF"
@@ -13079,6 +13106,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Presentation controls"
+      },
+      "thumbnails": {
+        "toggle": "Toggle slide thumbnails"
+      },
+      "resize": {
+        "ariaLabel": "Resize slide thumbnails"
+      },
       "slides": {
         "label": "Slides"
       },
@@ -13089,7 +13125,7 @@
         "label": "Next slide"
       },
       "converting": {
-        "label": "Converting presentation..."
+        "label": "Preparing preview..."
       },
       "empty": {
         "label": "No slides in this presentation"
@@ -13102,9 +13138,6 @@
       },
       "slide": {
         "counter": "Slide {current} of {total}"
-      },
-      "resize": {
-        "ariaLabel": "Resize slide thumbnails"
       }
     },
     "previewTab": {
@@ -13538,7 +13571,8 @@
         "ariaLabel": "Copy URL: {url}"
       },
       "downloadFile": {
-        "tooltip": "Download file"
+        "tooltip": "Download file",
+        "label": "Download"
       },
       "export": {
         "button": "Export to .docx",
@@ -13608,6 +13642,170 @@
     "welcome": {
       "input": {
         "placeholder": "Analyze my data and create a dashboard..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "All Files"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Output tabs"
+      },
+      "close": {
+        "label": "Close {name}"
+      },
+      "reordered": {
+        "label": "Tab moved to position {position} of {count}"
+      },
+      "open": {
+        "label": "Open a tab"
+      },
+      "outputs": {
+        "label": "Outputs"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Preview Your App"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Checking webapps"
+      },
+      "failed": {
+        "description": "Could not check local webapps. Reload to try again."
+      },
+      "unavailable": {
+        "description": "The webapp is unavailable. Restore the sandbox or reload to try again.",
+        "label": "Unavailable"
+      },
+      "empty": {
+        "title": "No webapps available",
+        "description": "Local apps appear here when they are running."
+      },
+      "starting": {
+        "label": "Starting webapp"
+      },
+      "loading": {
+        "label": "Loading webapp"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Open outputs"
+      },
+      "close": {
+        "ariaLabel": "Close outputs"
+      },
+      "expand": {
+        "ariaLabel": "Expand outputs"
+      },
+      "restore": {
+        "ariaLabel": "Restore outputs"
+      },
+      "resize": {
+        "ariaLabel": "Resize outputs"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Search files"
+        },
+        "location": {
+          "label": "All files on your sandbox"
+        }
+      },
+      "browser": {
+        "placeholder": "Webapps on your sandbox"
+      },
+      "reload": {
+        "file": "Reload file",
+        "files": "Refresh files",
+        "browser": "Refresh webapps",
+        "unavailable": "Restore the sandbox to refresh"
+      },
+      "export": {
+        "failed": "Could not export this file. Try again."
+      },
+      "empty": {
+        "title": "Choose a workspace view"
+      },
+      "status": {
+        "provisioning": "Initializing sandbox",
+        "running": "Sandbox running",
+        "sleeping": "Sandbox sleeping",
+        "restoring": "Restoring session",
+        "terminated": "Sandbox terminated",
+        "failed": "Sandbox failed",
+        "ready": "Sandbox ready",
+        "loading": "Finding sandbox"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Mark all viewed",
+        "error": "Could not mark outputs as viewed. Try again."
+      },
+      "home": {
+        "description": "Files created by your agent"
+      },
+      "empty": {
+        "description": "Files your agent creates will appear here."
+      },
+      "loading": {
+        "label": "Loading outputs…"
+      },
+      "unavailable": {
+        "description": "Outputs will appear when your sandbox is ready."
+      },
+      "error": {
+        "description": "Could not refresh outputs. Try again."
+      },
+      "incomplete": {
+        "description": "Some outputs could not be loaded."
+      },
+      "filter": {
+        "label": "File type",
+        "all": "All",
+        "folders": "Folders",
+        "noExtension": "No extension"
+      },
+      "folders": {
+        "ariaLabel": "Output folders",
+        "root": "Outputs"
+      },
+      "filtered": {
+        "empty": "No matching outputs"
+      },
+      "search": {
+        "placeholder": "Search outputs"
+      },
+      "scope": {
+        "turn": "Turn {turn, number} outputs",
+        "all": "All outputs"
+      },
+      "unseen": "New or updated"
+    },
+    "turnOutputs": {
+      "showAll": "View all {count} outputs",
+      "app": "App",
+      "unavailable": "No longer available",
+      "appTitle": "Preview your app"
+    },
+    "upgrade": {
+      "title": "Craft requires a Business plan",
+      "adminDescription": "Craft is available on the Business and Enterprise plans. It is not supported on the Community Edition until Craft merges into the main chat.",
+      "userDescription": "Craft is available on the Business and Enterprise plans. Ask your admin to upgrade to use Craft.",
+      "backToChat": {
+        "label": "Back to chat"
+      },
+      "viewPlans": {
+        "label": "View plans"
       }
     }
   },
@@ -13948,8 +14146,19 @@
       "year": "Year"
     },
     "inputFile": {
-      "attachFile": "Attach file",
       "clearFile": "Clear file"
+    },
+    "inputMultiUpload": {
+      "placeholder": "Add files…",
+      "dropToAdd": "Drop files here to add",
+      "dropToAddMore": "Drop here to add more files"
+    },
+    "inputUpload": {
+      "placeholder": "Add a file…",
+      "pasted": "Pasted text",
+      "attached": "File attached",
+      "dropToAdd": "Drop file here to add",
+      "dropToReplace": "Drop here to replace file"
     },
     "inputImage": {
       "alt": "Image",
@@ -14639,7 +14848,8 @@
         "title": "Agents"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explore Agents"

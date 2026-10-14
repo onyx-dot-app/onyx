@@ -1,6 +1,10 @@
 "use client";
 
 import { AccessType } from "@/lib/types";
+import {
+  getSourceDisplayName,
+  buildCCPairInfoUrl,
+} from "@/lib/connectors/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -15,8 +19,6 @@ import {
 import { Section, toast } from "@opal/layouts";
 import type { CCPairFullInfo } from "@/lib/connectors/types";
 import { Button, Card, Modal, Text } from "@opal/components";
-import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
-import { getSourceDisplayName } from "@/lib/sources";
 import type { Credential } from "@/lib/credentials/types";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
 import { useCredentialSetup } from "@/lib/credentials/hooks";

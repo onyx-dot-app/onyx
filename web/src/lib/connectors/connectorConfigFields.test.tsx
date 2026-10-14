@@ -26,6 +26,11 @@ function renderDriveFields(currentCredential: Credential<unknown> | null) {
         values={values}
         connector={ValidSources.GoogleDrive}
         currentCredential={currentCredential}
+        reportScope={
+          currentCredential
+            ? { credentialId: currentCredential.id, connectorId: null }
+            : null
+        }
       />
     </Formik>
   );

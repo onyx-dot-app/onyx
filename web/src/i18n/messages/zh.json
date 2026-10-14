@@ -2507,6 +2507,14 @@
           "vectorDbWrite": {
             "description": "将已生成 embedding 的文本块写入文档索引。",
             "label": "向量数据库写入"
+          },
+          "embeddingRateLimitWait": {
+            "label": "嵌入速率限制等待",
+            "description": "嵌入请求因索引设置中的嵌入速率限制而等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "提供商限流等待",
+            "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
           }
         }
       },
@@ -2812,10 +2820,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "已创建您的 Google Drive 凭据。您可以在凭据列表中管理或撤销它。",
-          "title": "认证完成"
-        },
         "authFailed": {
           "toast": "使用 Google Drive 认证失败 - {error}"
         },
@@ -2823,51 +2827,12 @@
           "label": "使用 Google Drive 认证",
           "pendingLabel": "正在认证…"
         },
-        "createButton": {
-          "label": "创建凭据",
-          "pendingLabel": "正在创建…"
-        },
-        "credentialsLoadError": {
-          "title": "加载 Google Drive 凭据失败。"
-        },
-        "invalidFile": {
-          "toast": "提供的文件无效 - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "提供的文件无效 - 需要服务账号 JSON 密钥"
-        },
-        "missingServiceAccountKey": {
-          "toast": "请先上传服务账号密钥，然后再创建凭据"
-        },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Drive 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用",
           "sharedScopesNote": "Google 会同时请求 Google Drive 和 Gmail 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Google Drive，请在同意屏幕上取消勾选 Gmail 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
-        },
-        "primaryAdmin": {
-          "description": "输入拥有目标 Google Drive 的 Google 组织的管理员或所有者邮箱。",
-          "invalidEmail": "必须是有效的邮箱地址",
-          "label": "主管理员邮箱",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必填"
-        },
-        "section": {
-          "title": "Google Drive 认证"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "创建服务账号凭据失败 - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "已成功创建服务账号凭据"
-        },
-        "serviceAccountOption": {
-          "title": "选项 2：服务账号"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "上传或粘贴您的服务账号 JSON 密钥"
         }
       },
       "gmail": {
@@ -3137,6 +3102,9 @@
           "title": "连接器管理权限"
         },
         "title": "连接器设置"
+      },
+      "optionsListInput": {
+        "placeholder": "从列表中选择{label}或输入"
       }
     },
     "costOverrides": {
@@ -3510,7 +3478,9 @@
         "isSandbox": "是否为沙盒环境",
         "serviceUserEmail": "服务用户邮箱",
         "zuliprcContent": "Zuliprc 内容",
-        "authenticationMethod": "身份验证方式"
+        "authenticationMethod": "身份验证方式",
+        "primaryAdminEmail": "主管理员邮箱",
+        "serviceAccountKey": "服务账号密钥"
       },
       "hints": {
         "boxUserEmail": "可选。要模拟的 Box 用户。",
@@ -3519,8 +3489,9 @@
         "jiraUserEmail": "Jira Cloud 必填。",
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
-        "pfxFile": "PFX 文件。",
-        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。"
+        "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
+        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
+        "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。"
       },
       "methods": {
         "labels": {
@@ -3529,7 +3500,9 @@
           "certificate": "证书",
           "accessKeyAndSecret": "访问密钥和 Secret",
           "iamRole": "IAM 角色",
-          "assumeRole": "代入角色"
+          "assumeRole": "代入角色",
+          "serviceAccount": "服务账号",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "选择此模式后，SharePoint 连接器将使用客户端密钥进行身份验证。你需要提供客户端 ID 和客户端密钥。",
@@ -5699,6 +5672,29 @@
         "loadError": {
           "description": "请重新加载页面后重试。",
           "title": "无法加载连接器访问更新"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "嵌入请求速率限制",
+        "description": "限制索引在一个时间窗口内发送的嵌入请求数量，覆盖所有索引工作进程。达到限制时，索引会等待后重试而不是失败，因此工作进程会少接新任务。只有等待时间过长时，批次才会失败。搜索查询不受限制。",
+        "requests": {
+          "title": "每个窗口的请求数",
+          "description": "留空表示不限制。",
+          "placeholder": "不限制"
+        },
+        "period": {
+          "title": "窗口长度",
+          "description": "例如，每分钟限制填 60。",
+          "suffix": "（秒）"
+        },
+        "restoreDefault": "恢复默认值",
+        "validation": {
+          "requests": "请输入 1 到 {max, number} 之间的整数，或留空表示不限制。",
+          "period": "请输入 1 到 {max, number} 之间的整数秒数。"
+        },
+        "toasts": {
+          "saved": "速率限制已保存。",
+          "failed": "无法保存速率限制。"
         }
       }
     },
@@ -11867,12 +11863,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {选择文件} other {选择文件}}"
-      },
-      "prompt": "{multiple, select, true {或将文件拖放到此处。} other {或将文件拖放到此处。}}"
-    },
     "textListField": {
       "addButton": {
         "label": "新增"
@@ -12774,22 +12764,6 @@
         "label": "连接您的数据"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "正在打造您的工作区...",
-        "enchanting": "正在施加魔法附魔...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "正在收集资源...",
-        "miningDependencies": "正在挖掘依赖项...",
-        "placingBlocks": "正在放置方块...",
-        "punchingWood": "正在撸树...",
-        "smeltingCode": "正在熔炼代码...",
-        "worldGenerated": "世界生成完成..."
-      },
-      "tagline": {
-        "label": "正在打造您的下一个好点子..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "清空"
@@ -12879,6 +12853,12 @@
       "csv": {
         "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
         "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
+      },
+      "imageTooLarge": {
+        "description": "此图片过大，无法预览。请下载原始文件以打开它。"
+      },
+      "unsupported": {
+        "description": "此文件无法预览。请下载原文件后打开。"
       }
     },
     "filesTab": {
@@ -12895,9 +12875,37 @@
       "preparing": {
         "description": "正在设置您的开发环境",
         "title": "正在准备沙箱..."
+      },
+      "download": {
+        "label": "下载"
+      },
+      "partial": {
+        "label": "部分文件夹无法加载。请刷新后重试。"
+      },
+      "noMatches": {
+        "label": "没有匹配的文件"
+      },
+      "previousPage": {
+        "label": "上一页"
+      },
+      "nextPage": {
+        "label": "下一页"
+      },
+      "page": {
+        "label": "第{page}页，共{total}页"
+      },
+      "upload": {
+        "label": "上传文件",
+        "error": "无法上传文件。请重试。"
+      },
+      "emptyDirectory": {
+        "label": "此目录中没有文件"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "对比背景"
+      },
       "error": {
         "description": "无法显示该图片",
         "title": "图片加载失败"
@@ -12907,9 +12915,6 @@
       },
       "preview": {
         "ariaLabel": "{name} 的预览"
-      },
-      "background": {
-        "contrast": "对比背景"
       }
     },
     "inputBar": {
@@ -13067,6 +13072,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF 控件"
+      },
+      "thumbnails": {
+        "toggle": "显示或隐藏页面缩略图",
+        "resize": "调整页面缩略图宽度",
+        "label": "页面缩略图"
+      },
+      "page": {
+        "previous": "上一页",
+        "next": "下一页",
+        "counter": "{current} / {total}",
+        "preview": "第 {page} 页预览",
+        "select": "转到第 {page} 页"
+      },
+      "zoom": {
+        "out": "缩小",
+        "in": "放大",
+        "label": "缩放",
+        "fitWidth": "适合宽度",
+        "fitPage": "适合页面"
+      },
       "error": {
         "description": "无法加载该 PDF 文件。",
         "title": "无法预览 PDF"
@@ -13079,6 +13106,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "演示文稿控件"
+      },
+      "thumbnails": {
+        "toggle": "显示或隐藏幻灯片缩略图"
+      },
+      "resize": {
+        "ariaLabel": "调整幻灯片缩略图宽度"
+      },
       "slides": {
         "label": "幻灯片"
       },
@@ -13089,7 +13125,7 @@
         "label": "下一张幻灯片"
       },
       "converting": {
-        "label": "正在转换演示文稿..."
+        "label": "正在准备预览..."
       },
       "empty": {
         "label": "此演示文稿中没有幻灯片"
@@ -13102,9 +13138,6 @@
       },
       "slide": {
         "counter": "幻灯片 {current} / {total}"
-      },
-      "resize": {
-        "ariaLabel": "调整幻灯片缩略图宽度"
       }
     },
     "previewTab": {
@@ -13538,7 +13571,8 @@
         "ariaLabel": "复制 URL：{url}"
       },
       "downloadFile": {
-        "tooltip": "下载文件"
+        "tooltip": "下载文件",
+        "label": "下载"
       },
       "export": {
         "button": "导出为 .docx",
@@ -13608,6 +13642,170 @@
     "welcome": {
       "input": {
         "placeholder": "分析我的数据并创建仪表板..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "所有文件"
+      },
+      "browser": {
+        "label": "应用"
+      },
+      "list": {
+        "label": "输出标签页"
+      },
+      "close": {
+        "label": "关闭{name}"
+      },
+      "reordered": {
+        "label": "标签页已移至第{position}个，共{count}个"
+      },
+      "open": {
+        "label": "打开标签页"
+      },
+      "outputs": {
+        "label": "输出"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "预览你的应用"
+      },
+      "home": {
+        "title": "应用",
+        "action": "应用"
+      },
+      "checking": {
+        "label": "正在检查网页应用"
+      },
+      "failed": {
+        "description": "无法检查本地网页应用。请重新加载后重试。"
+      },
+      "unavailable": {
+        "description": "网页应用不可用。请恢复沙盒或重新加载后重试。",
+        "label": "不可用"
+      },
+      "empty": {
+        "title": "没有可用的网页应用",
+        "description": "本地应用运行后会显示在这里。"
+      },
+      "starting": {
+        "label": "正在启动网页应用"
+      },
+      "loading": {
+        "label": "正在加载网页应用"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "打开输出"
+      },
+      "close": {
+        "ariaLabel": "关闭输出"
+      },
+      "expand": {
+        "ariaLabel": "展开输出"
+      },
+      "restore": {
+        "ariaLabel": "还原输出"
+      },
+      "resize": {
+        "ariaLabel": "调整输出大小"
+      },
+      "files": {
+        "search": {
+          "placeholder": "搜索文件"
+        },
+        "location": {
+          "label": "沙盒中的所有文件"
+        }
+      },
+      "browser": {
+        "placeholder": "沙箱中的网页应用"
+      },
+      "reload": {
+        "file": "重新加载文件",
+        "files": "刷新文件",
+        "browser": "刷新网页应用",
+        "unavailable": "请恢复沙盒以刷新"
+      },
+      "export": {
+        "failed": "无法导出此文件。请重试。"
+      },
+      "empty": {
+        "title": "选择工作区视图"
+      },
+      "status": {
+        "provisioning": "正在初始化沙盒",
+        "running": "沙盒正在运行",
+        "sleeping": "沙盒正在休眠",
+        "restoring": "正在恢复会话",
+        "terminated": "沙盒已终止",
+        "failed": "沙盒发生故障",
+        "ready": "沙盒已就绪",
+        "loading": "正在查找沙盒"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "全部标为已查看",
+        "error": "无法将输出标为已查看。请重试。"
+      },
+      "home": {
+        "description": "智能体创建的文件"
+      },
+      "empty": {
+        "description": "智能体创建的文件将显示在这里。"
+      },
+      "loading": {
+        "label": "正在加载输出…"
+      },
+      "unavailable": {
+        "description": "沙盒准备就绪后将显示输出。"
+      },
+      "error": {
+        "description": "无法刷新输出，请重试。"
+      },
+      "incomplete": {
+        "description": "部分输出无法加载。"
+      },
+      "filter": {
+        "label": "文件类型",
+        "all": "全部",
+        "folders": "文件夹",
+        "noExtension": "无扩展名"
+      },
+      "folders": {
+        "ariaLabel": "输出文件夹",
+        "root": "输出"
+      },
+      "filtered": {
+        "empty": "没有匹配的输出"
+      },
+      "search": {
+        "placeholder": "搜索输出"
+      },
+      "scope": {
+        "turn": "第 {turn, number} 轮输出",
+        "all": "所有输出"
+      },
+      "unseen": "新增或已更新"
+    },
+    "turnOutputs": {
+      "showAll": "查看全部 {count} 个输出",
+      "app": "应用",
+      "unavailable": "已不可用",
+      "appTitle": "预览你的应用"
+    },
+    "upgrade": {
+      "title": "Craft 需要商业版套餐",
+      "adminDescription": "Craft 适用于商业版和企业版套餐。在 Craft 并入主聊天之前，社区版不支持 Craft。",
+      "userDescription": "Craft 适用于商业版和企业版套餐。请联系管理员升级以使用 Craft。",
+      "backToChat": {
+        "label": "返回聊天"
+      },
+      "viewPlans": {
+        "label": "查看套餐"
       }
     }
   },
@@ -13948,8 +14146,19 @@
       "year": "年"
     },
     "inputFile": {
-      "attachFile": "附加文件",
       "clearFile": "清除文件"
+    },
+    "inputMultiUpload": {
+      "placeholder": "添加文件…",
+      "dropToAdd": "将文件拖放到此处以添加",
+      "dropToAddMore": "拖放到此处以添加更多文件"
+    },
+    "inputUpload": {
+      "placeholder": "添加文件…",
+      "pasted": "已粘贴的文本",
+      "attached": "已附加文件",
+      "dropToAdd": "将文件拖放到此处以添加",
+      "dropToReplace": "拖放到此处以替换文件"
     },
     "inputImage": {
       "alt": "图片",
@@ -14639,7 +14848,8 @@
         "title": "智能体"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "商业版"
       },
       "exploreAgents": {
         "label": "探索智能体"

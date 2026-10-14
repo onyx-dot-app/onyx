@@ -337,7 +337,10 @@ these validated entries directly.
 The outputs manifest scans visible regular files under `outputs/` without reading file contents.
 It shares file browsing's hidden-name rules through `sandbox_daemon/models.py`.
 The scan excludes dotfiles, dependencies, caches, runtime logs, symlinks, and special files.
-It also skips the root web subtree within outputs before descent. Nested directories named `web` remain visible.
+Ordinary file inventories skip the root web subtree before descent. Nested directories named `web` remain visible.
+Turn attribution requests `include_web=True` to scan app sources too. Generated `dist`, `build`, `coverage`, and `out` entries at the web root remain excluded.
+The scan also ignores root next-env.d.ts and tsconfig.tsbuildinfo; similarly named nested source paths remain visible.
+Both modes share the same traversal limits and symlink protections. The extended request requires a matching sandbox daemon image.
 All examined entries count toward one scan budget, including ignored names and directories.
 A depth limit bounds recursion. Descriptor-relative descent refuses symlinks at every workspace component.
 
@@ -375,7 +378,7 @@ that migration is complete; verify against the manager methods you're touching.
 `session_workspace.py:19` on the api-server side and
 `image/sandbox_daemon/snapshot.py:18` inside the image, kept as two literal
 copies because the daemon can't import the api-server package at runtime,
-per `base.py:62-67`'s comment). Session directories live directly under it:
+per `backend/onyx/server/features/build/configs.py`'s comment). Session directories live directly under it:
 `/workspace/sessions/$session_id/{outputs,attachments,venv,.opencode/skills,AGENTS.md,
 start-webapp.sh}` (`kubernetes_sandbox_manager.py` builds `{SESSIONS_ROOT}/{session_id}`;
 `base.py` class docstring, "Directory Structure", shows the generic layout). `emptyDir`
@@ -740,25 +743,22 @@ push API. This bundle is independent of enabled agent skills.
 The converter checks session workspace confinement. The 20 MiB thumbnail size
 check is advisory preflight. Concurrent edits can change input during rendering.
 A 30-second thumbnail deadline and 120-second full-slide deadline bound lock waiting
-and conversion time. The lock opens without blocking and must be a regular file.
+and conversion time. All conversions use the same bounded subprocess executor.
+The lock opens without blocking and must be a regular file.
 
 Finished JPEGs replace cached files atomically. Failed conversion retains the last
 complete image. Source revision checks reject changed input; cache metadata records
 the rendered revision. Missing, invalid, or non-regular metadata causes regeneration. Metadata opens do not block on special files or follow symlinks.
 Both providers validate conversion status and session-relative JPEG paths with one parser.
+Conversion failures return a protocol error handled as an HTTP 400 client error.
 
 Thumbnails live under `outputs/.document-thumbnails`, which inventory rules hide.
 Both providers exclude this root cache from snapshots. Nested user directories
 with the same name remain in snapshots.
 
-A complete-file probe avoids repeated deployment. Failed pushes cannot become ready bundles.
-Deployment uses the existing managed-content push retry policy.
-Docker classifies transport and Engine server errors as retriable writes.
-Rejected requests and failed extraction are permanent errors.
-Docker publishes bundles with a symlink swap, matching Kubernetes.
+A complete-file probe reuses deployed bundles. Failed pushes cannot publish a ready bundle.
+Docker and Kubernetes publish through symlink swaps and the shared managed-content retry policy.
 Updates to an existing symlink are atomic. Replacing a legacy directory first removes that directory.
-Previous directories remain available for 60 seconds so active readers can finish.
-Cleanup accepts only direct bundle children, not paths with nested components.
-Container lookup uses the same retry classification as archive transfer.
-Concurrent publications can leave an unused bundle until the container is removed;
-publication remains atomic, but cleanup is best effort.
+Container lookup and archive transfer retry transport and Engine server failures; rejected requests and extraction failures do not retry.
+Previous bundles remain available for 60 seconds so readers can finish.
+Cleanup accepts only direct bundle children and remains best effort under concurrent publication.

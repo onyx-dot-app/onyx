@@ -2507,6 +2507,14 @@
           "vectorDbWrite": {
             "description": "يكتب الأجزاء المضمَّنة في فهرس المستندات.",
             "label": "الكتابة في قاعدة المتجهات"
+          },
+          "embeddingRateLimitWait": {
+            "label": "انتظار حد معدل التضمين",
+            "description": "الوقت الذي انتظرته طلبات التضمين بسبب حد المعدل المحدد في إعدادات الفهرس. جزء من التضمين، ومجموع عبر خيوط التضمين."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "انتظار تقييد المزوّد",
+            "description": "الوقت الذي انتظرته طلبات التضمين بعد أن قيّدها مزوّد التضمين. جزء من التضمين، ومجموع عبر خيوط التضمين."
           }
         }
       },
@@ -2812,10 +2820,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "تم إنشاء بيانات اعتماد Google Drive. أدرها أو ألغها من قائمة بيانات الاعتماد.",
-          "title": "اكتملت المصادقة"
-        },
         "authFailed": {
           "toast": "فشلت المصادقة مع Google Drive - {error}"
         },
@@ -2823,51 +2827,12 @@
           "label": "المصادقة عبر Google Drive",
           "pendingLabel": "جارٍ المصادقة..."
         },
-        "createButton": {
-          "label": "إنشاء بيانات اعتماد",
-          "pendingLabel": "جارٍ الإنشاء..."
-        },
-        "credentialsLoadError": {
-          "title": "فشل تحميل بيانات اعتماد Google Drive."
-        },
-        "invalidFile": {
-          "toast": "ملف غير صالح - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "ملف غير صالح - كان المتوقع مفتاح JSON لحساب خدمة"
-        },
-        "missingServiceAccountKey": {
-          "toast": "يرجى رفع مفتاح حساب خدمة قبل إنشاء بيانات الاعتماد"
-        },
         "oauthOption": {
           "description": "ارفع ملف JSON لتطبيق OAuth من Google Cloud Console ([تعليمات الإعداد]({docsUrl}))، ثم صادق بحساب Google الذي تريد فهرسة Drive الخاص به.",
-          "title": "الخيار 1: تطبيق OAuth",
           "sharedScopesNote": "يطلب Google الوصول إلى Google Drive وGmail معًا، حتى يخدم حساب واحد كلا الموصلين. لاستخدام هذا الحساب مع Google Drive فقط، ألغِ تحديد نطاقات Gmail في شاشة الموافقة ([لماذا نطلب ذلك]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "ارفع أو الصق ملف JSON لتطبيق OAuth"
-        },
-        "primaryAdmin": {
-          "description": "أدخل بريد مسؤول أو مالك مؤسسة Google التي تملك حسابات Google Drive المراد فهرستها.",
-          "invalidEmail": "يجب أن يكون بريدًا إلكترونيًا صالحًا",
-          "label": "بريد المسؤول الرئيسي",
-          "placeholder": "admin@yourcompany.com",
-          "required": "مطلوب"
-        },
-        "section": {
-          "title": "مصادقة Google Drive"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "فشل إنشاء بيانات اعتماد حساب الخدمة - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "تم إنشاء بيانات اعتماد حساب الخدمة بنجاح"
-        },
-        "serviceAccountOption": {
-          "title": "الخيار 2: حساب خدمة"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "ارفع أو الصق مفتاح JSON لحساب الخدمة"
         }
       },
       "gmail": {
@@ -3137,6 +3102,9 @@
           "title": "صلاحيات إدارة الموصل"
         },
         "title": "إعدادات الموصل"
+      },
+      "optionsListInput": {
+        "placeholder": "اختر {label} من القائمة أو أدخله"
       }
     },
     "costOverrides": {
@@ -3510,7 +3478,9 @@
         "isSandbox": "بيئة تجريبية (Sandbox)",
         "serviceUserEmail": "بريد مستخدم الخدمة الإلكتروني",
         "zuliprcContent": "محتوى Zuliprc",
-        "authenticationMethod": "طريقة المصادقة"
+        "authenticationMethod": "طريقة المصادقة",
+        "primaryAdminEmail": "البريد الإلكتروني للمسؤول الرئيسي",
+        "serviceAccountKey": "مفتاح حساب الخدمة"
       },
       "hints": {
         "boxUserEmail": "اختياري. مستخدم Box الذي يتم انتحال هويته.",
@@ -3519,8 +3489,9 @@
         "jiraUserEmail": "مطلوب لـ Jira Cloud.",
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
-        "pfxFile": "ملف PFX.",
-        "testrailBaseUrl": "مثل https://yourcompany.testrail.io."
+        "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",
+        "testrailBaseUrl": "مثل https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "ارفع أو الصق مفتاح `.json` لحساب خدمة Google مع التفويض على مستوى النطاق."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3500,9 @@
           "certificate": "الشهادة",
           "accessKeyAndSecret": "مفتاح الوصول والسر",
           "iamRole": "دور IAM",
-          "assumeRole": "تولّي الدور"
+          "assumeRole": "تولّي الدور",
+          "serviceAccount": "حساب الخدمة",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "إذا اخترت هذا الوضع، فسيستخدم موصل SharePoint سر العميل للمصادقة. ستحتاج إلى تقديم معرّف العميل وسر العميل.",
@@ -5699,6 +5672,29 @@
         "loadError": {
           "description": "أعد تحميل الصفحة للمحاولة مرة أخرى.",
           "title": "تعذّر تحميل تحديث الوصول حسب الموصل"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "حد معدل طلبات التضمين",
+        "description": "يحدّ عدد طلبات التضمين التي ترسلها الفهرسة خلال نافذة زمنية، عبر جميع عمّال الفهرسة. عند بلوغ الحد، تنتظر الفهرسة ثم تحاول مرة أخرى بدلًا من الفشل، فيأخذ العمّال عملًا جديدًا أقل. لا تفشل الدفعة إلا إذا طال انتظارها. لا تخضع استعلامات البحث للحد.",
+        "requests": {
+          "title": "الطلبات لكل نافذة",
+          "description": "اتركه فارغًا لعدم وضع حد.",
+          "placeholder": "بلا حد"
+        },
+        "period": {
+          "title": "طول النافذة",
+          "description": "مثلًا، 60 لحد في الدقيقة.",
+          "suffix": "(ثوانٍ)"
+        },
+        "restoreDefault": "استعادة الافتراضي",
+        "validation": {
+          "requests": "أدخل عددًا صحيحًا من 1 إلى {max, number}، أو اترك الحقل فارغًا لعدم وضع حد.",
+          "period": "أدخل عددًا صحيحًا من الثواني من 1 إلى {max, number}."
+        },
+        "toasts": {
+          "saved": "تم حفظ حد المعدل.",
+          "failed": "تعذّر حفظ حد المعدل."
         }
       }
     },
@@ -11867,12 +11863,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {اختر ملفات} other {اختر ملفًا}}"
-      },
-      "prompt": "{multiple, select, true {أو اسحب الملفات وأفلتها هنا.} other {أو اسحب ملفًا وأفلته هنا.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "إضافة جديد"
@@ -12774,22 +12764,6 @@
         "label": "اربط بياناتك"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "جارٍ صنع مساحة عملك...",
-        "enchanting": "جارٍ السحر بالتعويذات...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "جارٍ جمع الموارد...",
-        "miningDependencies": "جارٍ التنقيب عن التبعيات...",
-        "placingBlocks": "جارٍ وضع المكعبات...",
-        "punchingWood": "جارٍ تكسير الخشب...",
-        "smeltingCode": "جارٍ صهر الشيفرة...",
-        "worldGenerated": "اكتمل إنشاء العالم..."
-      },
-      "tagline": {
-        "label": "جارٍ صنع فكرتك الرائعة التالية..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "مسح"
@@ -12879,6 +12853,12 @@
       "csv": {
         "truncated": "المعاينة محدودة بـ {rows, number} صف و{columns, number} عمود و{cells, number} خلية. نزّل الملف الأصلي للحصول على جميع البيانات.",
         "malformed": "يحتوي ملف CSV هذا على حقل غير صالح بين علامتي اقتباس. نزّل الملف الأصلي لفحصه."
+      },
+      "imageTooLarge": {
+        "description": "هذه الصورة كبيرة جدًا للمعاينة. نزّل الملف الأصلي لفتحه."
+      },
+      "unsupported": {
+        "description": "لا يمكن معاينة هذا الملف. نزّل الملف الأصلي لفتحه."
       }
     },
     "filesTab": {
@@ -12895,9 +12875,37 @@
       "preparing": {
         "description": "جارٍ إعداد بيئة التطوير الخاصة بك",
         "title": "جارٍ تجهيز بيئة الاختبار..."
+      },
+      "download": {
+        "label": "تنزيل"
+      },
+      "partial": {
+        "label": "تعذر تحميل بعض المجلدات. حدّث للمحاولة مرة أخرى."
+      },
+      "noMatches": {
+        "label": "لا توجد ملفات مطابقة"
+      },
+      "previousPage": {
+        "label": "الصفحة السابقة"
+      },
+      "nextPage": {
+        "label": "الصفحة التالية"
+      },
+      "page": {
+        "label": "الصفحة {page} من {total}"
+      },
+      "upload": {
+        "label": "رفع ملفات",
+        "error": "تعذر رفع الملفات. حاول مرة أخرى."
+      },
+      "emptyDirectory": {
+        "label": "لا توجد ملفات في هذا المجلد"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "خلفية متباينة"
+      },
       "error": {
         "description": "تعذّر عرض الصورة",
         "title": "فشل تحميل الصورة"
@@ -12907,9 +12915,6 @@
       },
       "preview": {
         "ariaLabel": "معاينة {name}"
-      },
-      "background": {
-        "contrast": "خلفية متباينة"
       }
     },
     "inputBar": {
@@ -13067,6 +13072,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "عناصر التحكم في PDF"
+      },
+      "thumbnails": {
+        "toggle": "إظهار الصور المصغّرة للصفحات أو إخفاؤها",
+        "resize": "تغيير حجم الصور المصغّرة للصفحات",
+        "label": "الصور المصغّرة للصفحات"
+      },
+      "page": {
+        "previous": "الصفحة السابقة",
+        "next": "الصفحة التالية",
+        "counter": "{current} / {total}",
+        "preview": "معاينة الصفحة {page}",
+        "select": "الانتقال إلى الصفحة {page}"
+      },
+      "zoom": {
+        "out": "تصغير",
+        "in": "تكبير",
+        "label": "التكبير",
+        "fitWidth": "ملاءمة العرض",
+        "fitPage": "ملاءمة الصفحة"
+      },
       "error": {
         "description": "تعذّر تحميل ملف PDF.",
         "title": "تعذّرت معاينة ملف PDF"
@@ -13079,6 +13106,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "عناصر التحكم في العرض التقديمي"
+      },
+      "thumbnails": {
+        "toggle": "إظهار الصور المصغّرة للشرائح أو إخفاؤها"
+      },
+      "resize": {
+        "ariaLabel": "تغيير حجم الصور المصغّرة للشرائح"
+      },
       "slides": {
         "label": "الشرائح"
       },
@@ -13089,7 +13125,7 @@
         "label": "الشريحة التالية"
       },
       "converting": {
-        "label": "جارٍ تحويل العرض التقديمي..."
+        "label": "جارٍ إعداد المعاينة..."
       },
       "empty": {
         "label": "لا توجد شرائح في هذا العرض التقديمي"
@@ -13102,9 +13138,6 @@
       },
       "slide": {
         "counter": "الشريحة {current} من {total}"
-      },
-      "resize": {
-        "ariaLabel": "تغيير حجم الصور المصغّرة للشرائح"
       }
     },
     "previewTab": {
@@ -13538,7 +13571,8 @@
         "ariaLabel": "نسخ الرابط: {url}"
       },
       "downloadFile": {
-        "tooltip": "تنزيل الملف"
+        "tooltip": "تنزيل الملف",
+        "label": "تنزيل"
       },
       "export": {
         "button": "تصدير إلى ‎.docx",
@@ -13608,6 +13642,170 @@
     "welcome": {
       "input": {
         "placeholder": "حلّل بياناتي وأنشئ لوحة معلومات..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "كل الملفات"
+      },
+      "browser": {
+        "label": "التطبيقات"
+      },
+      "list": {
+        "label": "علامات تبويب المخرجات"
+      },
+      "close": {
+        "label": "إغلاق {name}"
+      },
+      "reordered": {
+        "label": "نُقلت علامة التبويب إلى الموضع {position} من {count}"
+      },
+      "open": {
+        "label": "فتح علامة تبويب"
+      },
+      "outputs": {
+        "label": "المخرجات"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "عاين تطبيقك"
+      },
+      "home": {
+        "title": "التطبيقات",
+        "action": "التطبيقات"
+      },
+      "checking": {
+        "label": "جارٍ التحقق من تطبيقات الويب"
+      },
+      "failed": {
+        "description": "تعذر التحقق من تطبيقات الويب المحلية. أعد التحميل للمحاولة مرة أخرى."
+      },
+      "unavailable": {
+        "description": "تطبيق الويب غير متاح. استعد البيئة المعزولة أو أعد التحميل للمحاولة مرة أخرى.",
+        "label": "غير متاح"
+      },
+      "empty": {
+        "title": "لا توجد تطبيقات ويب متاحة",
+        "description": "تظهر التطبيقات المحلية هنا عند تشغيلها."
+      },
+      "starting": {
+        "label": "جارٍ بدء تطبيق الويب"
+      },
+      "loading": {
+        "label": "جارٍ تحميل تطبيق الويب"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "فتح المخرجات"
+      },
+      "close": {
+        "ariaLabel": "إغلاق المخرجات"
+      },
+      "expand": {
+        "ariaLabel": "توسيع المخرجات"
+      },
+      "restore": {
+        "ariaLabel": "استعادة حجم المخرجات"
+      },
+      "resize": {
+        "ariaLabel": "تغيير حجم المخرجات"
+      },
+      "files": {
+        "search": {
+          "placeholder": "البحث عن ملفات"
+        },
+        "location": {
+          "label": "كل الملفات في بيئة الاختبار"
+        }
+      },
+      "browser": {
+        "placeholder": "تطبيقات الويب في مساحة الاختبار"
+      },
+      "reload": {
+        "file": "إعادة تحميل الملف",
+        "files": "تحديث الملفات",
+        "browser": "تحديث تطبيقات الويب",
+        "unavailable": "استعد البيئة المعزولة للتحديث"
+      },
+      "export": {
+        "failed": "تعذر تصدير هذا الملف. حاول مرة أخرى."
+      },
+      "empty": {
+        "title": "اختر عرض مساحة العمل"
+      },
+      "status": {
+        "provisioning": "جارٍ تهيئة البيئة المعزولة",
+        "running": "البيئة المعزولة قيد التشغيل",
+        "sleeping": "البيئة المعزولة في وضع السكون",
+        "restoring": "جارٍ استعادة الجلسة",
+        "terminated": "انتهت البيئة المعزولة",
+        "failed": "فشلت البيئة المعزولة",
+        "ready": "البيئة المعزولة جاهزة",
+        "loading": "جارٍ البحث عن البيئة المعزولة"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "وضع علامة تمت المشاهدة على الكل",
+        "error": "تعذّر وضع علامة تمت المشاهدة على المخرجات. حاول مرة أخرى."
+      },
+      "home": {
+        "description": "الملفات التي أنشأها وكيلك"
+      },
+      "empty": {
+        "description": "ستظهر هنا الملفات التي ينشئها وكيلك."
+      },
+      "loading": {
+        "label": "جارٍ تحميل المخرجات…"
+      },
+      "unavailable": {
+        "description": "ستظهر المخرجات عندما تصبح بيئة الاختبار جاهزة."
+      },
+      "error": {
+        "description": "تعذر تحديث المخرجات. حاول مرة أخرى."
+      },
+      "incomplete": {
+        "description": "تعذر تحميل بعض المخرجات."
+      },
+      "filter": {
+        "label": "نوع الملف",
+        "all": "الكل",
+        "folders": "المجلدات",
+        "noExtension": "بدون امتداد"
+      },
+      "folders": {
+        "ariaLabel": "مجلدات المخرجات",
+        "root": "المخرجات"
+      },
+      "filtered": {
+        "empty": "لا توجد مخرجات مطابقة"
+      },
+      "search": {
+        "placeholder": "البحث في المخرجات"
+      },
+      "scope": {
+        "turn": "مخرجات الجولة {turn, number}",
+        "all": "جميع المخرجات"
+      },
+      "unseen": "جديد أو محدّث"
+    },
+    "turnOutputs": {
+      "showAll": "عرض كل المخرجات ({count})",
+      "app": "تطبيق",
+      "unavailable": "لم يعد متاحًا",
+      "appTitle": "معاينة تطبيقك"
+    },
+    "upgrade": {
+      "title": "يتطلب Craft خطة الأعمال",
+      "adminDescription": "يتوفر Craft في خطتي الأعمال والمؤسسات. لا يتم دعمه في إصدار المجتمع حتى يتم دمج Craft في الدردشة الرئيسية.",
+      "userDescription": "يتوفر Craft في خطتي الأعمال والمؤسسات. اطلب من المسؤول الترقية لاستخدام Craft.",
+      "backToChat": {
+        "label": "العودة إلى الدردشة"
+      },
+      "viewPlans": {
+        "label": "عرض الخطط"
       }
     }
   },
@@ -13948,8 +14146,19 @@
       "year": "السنة"
     },
     "inputFile": {
-      "attachFile": "إرفاق ملف",
       "clearFile": "مسح الملف"
+    },
+    "inputMultiUpload": {
+      "placeholder": "أضف ملفات…",
+      "dropToAdd": "أفلت الملفات هنا لإضافتها",
+      "dropToAddMore": "أفلت هنا لإضافة مزيد من الملفات"
+    },
+    "inputUpload": {
+      "placeholder": "أضف ملفًا…",
+      "pasted": "نص ملصق",
+      "attached": "تم إرفاق ملف",
+      "dropToAdd": "أفلت الملف هنا لإضافته",
+      "dropToReplace": "أفلت هنا لاستبدال الملف"
     },
     "inputImage": {
       "alt": "صورة",
@@ -14639,7 +14848,8 @@
         "title": "الوكلاء"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "الأعمال"
       },
       "exploreAgents": {
         "label": "استكشاف الوكلاء"

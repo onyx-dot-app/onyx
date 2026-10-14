@@ -6,6 +6,8 @@
  * nothing outside the connector surface defines a source.
  */
 
+import type { FC } from "react";
+
 export enum ValidSources {
   Web = "web",
   GitHub = "github",
@@ -124,3 +126,31 @@ export const oauthSupportedSources: ConfigurableSources[] = [
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
+
+/** The catalog section a source is listed under. */
+export enum SourceCategory {
+  Wiki = "Knowledge Base & Wikis",
+  Storage = "Cloud Storage",
+  TicketingAndTaskManagement = "Ticketing & Task Management",
+  Messaging = "Messaging",
+  Sales = "Sales",
+  CodeRepository = "Code Repository",
+  AiObservability = "AI & Observability",
+  Other = "Other",
+}
+
+export interface SourceMetadata {
+  icon: FC<{ size?: number; className?: string }>;
+  displayName: string;
+  category: SourceCategory;
+  shortDescription?: string;
+  internalName: ValidSources;
+  adminUrl: string;
+  isPopular?: boolean;
+  oauthSupported?: boolean;
+  federated?: boolean;
+  federatedTooltip?: string;
+  uniqueKey?: string;
+  // For federated connectors, this stores the base source type for the icon
+  baseSourceType?: ValidSources;
+}

@@ -7,6 +7,18 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  getSourceDisplayName,
+  getSourceDocLink,
+  getSourceMetadata,
+  isValidSource,
+  connectorConfigFromForm,
+  connectorFormControlFieldNames,
+  createConnectorInitialValues,
+  createConnectorValidationSchema,
+  isLoadState,
+  splitCredentialBoundFields,
+} from "@/lib/connectors/utils";
 import { Formik, type FormikErrors } from "formik";
 import * as Yup from "yup";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -27,12 +39,6 @@ import { SvgAlertCircle, SvgArrowExchange } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import {
-  getSourceDisplayName,
-  getSourceDocLink,
-  getSourceMetadata,
-  isValidSource,
-} from "@/lib/sources";
 import { Logo } from "@/lib/app/components";
 import {
   createConnectorWithCredential,
@@ -59,14 +65,6 @@ import {
   defaultRefreshFreqMinutes,
   useConnectorConfiguration,
 } from "@/lib/connectors/connectors";
-import {
-  connectorConfigFromForm,
-  connectorFormControlFieldNames,
-  createConnectorInitialValues,
-  createConnectorValidationSchema,
-  isLoadState,
-  splitCredentialBoundFields,
-} from "@/lib/connectors/utils";
 import type {
   ConnectionConfiguration,
   Connector,
@@ -77,7 +75,6 @@ import {
   useCredentialFieldCopy,
   useGmailCredentials,
   useCredentialLoad,
-  useGoogleDriveCredentials,
   useResetSavedDraftCredential,
   useSavedDraftCredential,
   refreshSourceCredentials,
@@ -357,7 +354,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   }, []);
 
   // Hooks for Google Drive and Gmail credentials
-  const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
   const { liveGmailCredential } = useGmailCredentials(connector);
 
   // Sources without a credential spec skip the credential section.
@@ -381,14 +377,13 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   /**
    * The chosen account for these form values: the saved pick; else the typed
-   * one when its values are valid (or Google's live account).
+   * one when its values are valid (or Gmail's live account).
    */
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
     currentCredential ||
     typedDraft(connector, accountSchema, values) ||
-    liveGDriveCredential ||
     liveGmailCredential ||
     null;
 
@@ -707,6 +702,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
       {(formikProps) => {
         const busy = uploading || creatingConnector || planning;
         const formCredential = accountFor(formikProps.values);
+        const formCredentialId: number | null =
+          formCredential !== null && !isDraftCredential(formCredential)
+            ? formCredential.id
+            : null;
         const canCreate = noCredentials || formCredential !== null;
         const newAccountReady =
           typedDraft(connector, accountSchema, formikProps.values) !== null;
@@ -730,10 +729,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         const credentialSwapped: boolean =
           edit !== undefined &&
           formCredential !== null &&
-          !(
-            "id" in formCredential &&
-            formCredential.id === edit.ccPair.credential.id
-          );
+          formCredentialId !== edit.ccPair.credential.id;
         return (
           <ConnectorChecksGate
             source={connector}
@@ -944,6 +940,9 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           <Disabled
                             disabled={!formUnlocked}
                             tooltip={formLockReason}
+                            // The locked form is page-tall: the tooltip stays
+                            // level with the pointer, not the form's middle.
+                            tooltipAlign="follow"
                             data-testid="connector-form"
                           >
                             <Section gap={6} alignItems="stretch" width="full">
@@ -952,6 +951,15 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 values={formikProps.values}
                                 connector={connector}
                                 currentCredential={formCredential}
+                                reportScope={
+                                  formCredentialId === null
+                                    ? null
+                                    : {
+                                        credentialId: formCredentialId,
+                                        connectorId:
+                                          edit?.ccPair.connector.id ?? null,
+                                      }
+                                }
                                 disabled={!formUnlocked}
                               >
                                 {edit && editsFileList && (

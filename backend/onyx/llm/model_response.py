@@ -75,6 +75,9 @@ class ModelResponseStream(BaseModel):
     created: str
     choice: StreamingChoice
     usage: Usage | None = None
+    # Model the provider reports serving the request; differs from the requested
+    # name behind routers (openrouter/auto).
+    model: str | None = None
 
 
 if TYPE_CHECKING:
@@ -100,6 +103,7 @@ class ModelResponse(BaseModel):
     created: str
     choice: Choice
     usage: Usage | None = None
+    model: str | None = None
 
 
 if TYPE_CHECKING:
@@ -282,6 +286,20 @@ def _usage_from_usage_data(usage_data: dict[str, Any]) -> Usage:
     )
 
 
+def served_model_from_litellm_response(response_data: dict[str, Any]) -> str | None:
+    """Model name the provider served, from a dumped LiteLLM response or chunk.
+
+    LiteLLM's stream wrapper overwrites each chunk's model with the requested
+    name; the OpenRouter chunk_parser patch keeps the served one in
+    provider_specific_fields.
+    """
+    provider_fields: dict[str, Any] = (
+        response_data.get("provider_specific_fields") or {}
+    )
+    model: Any = provider_fields.get("routed_model") or response_data.get("model")
+    return model if isinstance(model, str) and model else None
+
+
 def from_litellm_model_response_stream(
     response: "LiteLLMModelResponseStream",
 ) -> ModelResponseStream:
@@ -319,6 +337,7 @@ def from_litellm_model_response_stream(
         created=created,
         choice=streaming_choice,
         usage=(_usage_from_usage_data(usage_data) if usage_data else None),
+        model=served_model_from_litellm_response(response_data),
     )
 
 
@@ -355,6 +374,7 @@ def from_litellm_model_response(
         created=created,
         choice=choice,
         usage=(_usage_from_usage_data(usage_data) if usage_data else None),
+        model=served_model_from_litellm_response(response_data),
     )
 
 

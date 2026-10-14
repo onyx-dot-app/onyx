@@ -2507,6 +2507,14 @@
           "vectorDbWrite": {
             "description": "Escribe en el índice de documentos los fragmentos convertidos en embeddings.",
             "label": "Escritura en la BD vectorial"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Espera por límite de embeddings",
+            "description": "Tiempo que las solicitudes de embedding esperaron por el límite configurado en Configuración de índice. Forma parte de Embedding y se suma entre los hilos de embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Espera por límite del proveedor",
+            "description": "Tiempo que las solicitudes de embedding esperaron después de que el proveedor de embeddings las limitara. Forma parte de Embedding y se suma entre los hilos de embedding."
           }
         }
       },
@@ -2812,10 +2820,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Se creó tu credencial de Google Drive. Puedes gestionarla o revocarla desde la lista de credenciales.",
-          "title": "Autenticación completada"
-        },
         "authFailed": {
           "toast": "No se pudo autenticar con Google Drive: {error}"
         },
@@ -2823,51 +2827,12 @@
           "label": "Autenticar con Google Drive",
           "pendingLabel": "Autenticando..."
         },
-        "createButton": {
-          "label": "Crear la credencial",
-          "pendingLabel": "Creando..."
-        },
-        "credentialsLoadError": {
-          "title": "No se pudieron cargar las credenciales de Google Drive."
-        },
-        "invalidFile": {
-          "toast": "El archivo no es válido: {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "El archivo no es válido: se esperaba una clave JSON de cuenta de servicio"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Sube una clave de cuenta de servicio antes de crear una credencial"
-        },
         "oauthOption": {
           "description": "Sube el JSON de la app de OAuth desde la consola de Google Cloud ([instrucciones de configuración]({docsUrl})) y luego autentícate con la cuenta de Google cuyo Drive quieres indexar.",
-          "title": "Opción 1: app de OAuth",
           "sharedScopesNote": "Google solicita acceso a Google Drive y a Gmail a la vez, para que una sola cuenta sirva a ambos conectores. Para usar esta cuenta solo con Google Drive, desmarca los permisos de Gmail en la pantalla de consentimiento ([por qué lo pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Sube o pega el JSON de tu app de OAuth"
-        },
-        "primaryAdmin": {
-          "description": "Introduce el correo de un administrador o propietario de la organización de Google que posee los Google Drive que quieres indexar.",
-          "invalidEmail": "Debe ser un correo válido",
-          "label": "Correo del administrador principal",
-          "placeholder": "admin@tuempresa.com",
-          "required": "Obligatorio"
-        },
-        "section": {
-          "title": "Autenticación de Google Drive"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "No se pudo crear la credencial de cuenta de servicio: {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "La credencial de cuenta de servicio se creó correctamente"
-        },
-        "serviceAccountOption": {
-          "title": "Opción 2: cuenta de servicio"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Sube o pega la clave JSON de tu cuenta de servicio"
         }
       },
       "gmail": {
@@ -3137,6 +3102,9 @@
           "title": "Acceso de gestión del conector"
         },
         "title": "Configuración del conector"
+      },
+      "optionsListInput": {
+        "placeholder": "Elige {label} de la lista o escríbelo"
       }
     },
     "costOverrides": {
@@ -3510,7 +3478,9 @@
         "isSandbox": "Es un entorno de sandbox",
         "serviceUserEmail": "Correo del usuario de servicio",
         "zuliprcContent": "Contenido de zuliprc",
-        "authenticationMethod": "Método de autenticación"
+        "authenticationMethod": "Método de autenticación",
+        "primaryAdminEmail": "Correo del administrador principal",
+        "serviceAccountKey": "Clave de la cuenta de servicio"
       },
       "hints": {
         "boxUserEmail": "Opcional. El usuario de Box al que suplantar.",
@@ -3519,8 +3489,9 @@
         "jiraUserEmail": "Obligatorio para Jira Cloud.",
         "lumappsServiceUser": "El usuario en cuyo nombre se indexa.",
         "outlineBaseUrl": "Por ejemplo, https://app.getoutline.com, o tu URL autoalojada.",
-        "pfxFile": "Un archivo PFX.",
-        "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io."
+        "pfxFile": "Sube el archivo `.pfx` que contiene la clave privada del registro de la aplicación. Debe ocupar menos de 10 KB.",
+        "testrailBaseUrl": "Por ejemplo, https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "Sube o pega la clave `.json` de una cuenta de servicio de Google con delegación de todo el dominio."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3500,9 @@
           "certificate": "Certificado",
           "accessKeyAndSecret": "Clave de acceso y secreto",
           "iamRole": "Rol de IAM",
-          "assumeRole": "Asumir rol"
+          "assumeRole": "Asumir rol",
+          "serviceAccount": "Cuenta de servicio",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "Si seleccionas este modo, el conector de SharePoint usará un secreto de cliente para autenticarse. Deberás proporcionar el ID de cliente y el secreto de cliente.",
@@ -5699,6 +5672,29 @@
         "loadError": {
           "description": "Recarga la página para intentarlo de nuevo.",
           "title": "No se pudo cargar la actualización del acceso por conector"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "Límite de solicitudes de embeddings",
+        "description": "Limita cuántas solicitudes de embedding envía la indexación en una ventana de tiempo, entre todos los workers de indexación. Al llegar al límite, la indexación espera y vuelve a intentarlo en lugar de fallar, así los workers toman menos trabajo nuevo. Un lote solo falla si espera demasiado. Las consultas de búsqueda no tienen límite.",
+        "requests": {
+          "title": "Solicitudes por ventana",
+          "description": "Déjalo vacío para no tener límite.",
+          "placeholder": "Sin límite"
+        },
+        "period": {
+          "title": "Duración de la ventana",
+          "description": "Por ejemplo, 60 para un límite por minuto.",
+          "suffix": "(segundos)"
+        },
+        "restoreDefault": "Restaurar valor predeterminado",
+        "validation": {
+          "requests": "Introduce un número entero de 1 a {max, number}, o deja el campo vacío para no tener límite.",
+          "period": "Introduce un número entero de segundos de 1 a {max, number}."
+        },
+        "toasts": {
+          "saved": "Límite guardado.",
+          "failed": "No se pudo guardar el límite."
         }
       }
     },
@@ -11867,12 +11863,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {Elegir archivos} other {Elegir un archivo}}"
-      },
-      "prompt": "{multiple, select, true {O arrastra y suelta archivos aquí.} other {O arrastra y suelta un archivo aquí.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "Añadir uno nuevo"
@@ -12774,22 +12764,6 @@
         "label": "Conecta tus datos"
       }
     },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "Creando tu espacio de trabajo...",
-        "enchanting": "Encantando con magia...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "Recolectando recursos...",
-        "miningDependencies": "Minando dependencias...",
-        "placingBlocks": "Colocando bloques...",
-        "punchingWood": "Golpeando madera...",
-        "smeltingCode": "Fundiendo el código...",
-        "worldGenerated": "Generación del mundo completada..."
-      },
-      "tagline": {
-        "label": "Creando tu próxima gran idea..."
-      }
-    },
     "debugLogs": {
       "clear": {
         "tooltip": "Limpiar"
@@ -12879,6 +12853,12 @@
       "csv": {
         "truncated": "Vista previa limitada a {rows, number} filas, {columns, number} columnas y {cells, number} celdas. Descarga el original para ver todos los datos.",
         "malformed": "Este CSV contiene un campo entre comillas no válido. Descarga el original para revisarlo."
+      },
+      "imageTooLarge": {
+        "description": "Esta imagen es demasiado grande para la vista previa. Descarga el original para abrirla."
+      },
+      "unsupported": {
+        "description": "Este archivo no se puede previsualizar. Descarga el original para abrirlo."
       }
     },
     "filesTab": {
@@ -12895,9 +12875,37 @@
       "preparing": {
         "description": "Configurando tu entorno de desarrollo",
         "title": "Preparando sandbox..."
+      },
+      "download": {
+        "label": "Descargar"
+      },
+      "partial": {
+        "label": "No se pudieron cargar algunas carpetas. Actualiza para volver a intentarlo."
+      },
+      "noMatches": {
+        "label": "No hay archivos coincidentes"
+      },
+      "previousPage": {
+        "label": "Página anterior"
+      },
+      "nextPage": {
+        "label": "Página siguiente"
+      },
+      "page": {
+        "label": "Página {page} de {total}"
+      },
+      "upload": {
+        "label": "Subir archivos",
+        "error": "No se pudieron subir los archivos. Vuelve a intentarlo."
+      },
+      "emptyDirectory": {
+        "label": "No hay archivos en este directorio"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Fondo de contraste"
+      },
       "error": {
         "description": "No se pudo mostrar la imagen",
         "title": "No se pudo cargar la imagen"
@@ -12907,9 +12915,6 @@
       },
       "preview": {
         "ariaLabel": "Vista previa de {name}"
-      },
-      "background": {
-        "contrast": "Fondo de contraste"
       }
     },
     "inputBar": {
@@ -13067,6 +13072,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "Controles de PDF"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar u ocultar miniaturas",
+        "resize": "Cambiar el tamaño de las miniaturas",
+        "label": "Miniaturas de páginas"
+      },
+      "page": {
+        "previous": "Página anterior",
+        "next": "Página siguiente",
+        "counter": "{current} / {total}",
+        "preview": "Vista previa de la página {page}",
+        "select": "Ir a la página {page}"
+      },
+      "zoom": {
+        "out": "Alejar",
+        "in": "Acercar",
+        "label": "Zoom",
+        "fitWidth": "Ajustar al ancho",
+        "fitPage": "Ajustar a la página"
+      },
       "error": {
         "description": "No se pudo cargar el archivo PDF.",
         "title": "No se puede previsualizar el PDF"
@@ -13079,6 +13106,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Controles de presentación"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar u ocultar miniaturas de diapositivas"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar el tamaño de las miniaturas"
+      },
       "slides": {
         "label": "Diapositivas"
       },
@@ -13089,7 +13125,7 @@
         "label": "Diapositiva siguiente"
       },
       "converting": {
-        "label": "Convirtiendo presentación..."
+        "label": "Preparando la vista previa..."
       },
       "empty": {
         "label": "Esta presentación no tiene diapositivas"
@@ -13102,9 +13138,6 @@
       },
       "slide": {
         "counter": "Diapositiva {current} de {total}"
-      },
-      "resize": {
-        "ariaLabel": "Cambiar el tamaño de las miniaturas"
       }
     },
     "previewTab": {
@@ -13538,7 +13571,8 @@
         "ariaLabel": "Copiar URL: {url}"
       },
       "downloadFile": {
-        "tooltip": "Descargar archivo"
+        "tooltip": "Descargar archivo",
+        "label": "Descargar"
       },
       "export": {
         "button": "Exportar a .docx",
@@ -13608,6 +13642,170 @@
     "welcome": {
       "input": {
         "placeholder": "Analiza mis datos y crea un panel..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "Todos los archivos"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Pestañas de resultados"
+      },
+      "close": {
+        "label": "Cerrar {name}"
+      },
+      "reordered": {
+        "label": "Pestaña movida a la posición {position} de {count}"
+      },
+      "open": {
+        "label": "Abrir una pestaña"
+      },
+      "outputs": {
+        "label": "Resultados"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Previsualiza tu app"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Comprobando aplicaciones web"
+      },
+      "failed": {
+        "description": "No se pudieron comprobar las aplicaciones web locales. Recarga para volver a intentarlo."
+      },
+      "unavailable": {
+        "description": "La aplicación web no está disponible. Restaura el entorno aislado o recarga para volver a intentarlo.",
+        "label": "No disponible"
+      },
+      "empty": {
+        "title": "No hay aplicaciones web disponibles",
+        "description": "Las aplicaciones locales aparecen aquí cuando están en ejecución."
+      },
+      "starting": {
+        "label": "Iniciando aplicación web"
+      },
+      "loading": {
+        "label": "Cargando aplicación web"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Abrir resultados"
+      },
+      "close": {
+        "ariaLabel": "Cerrar resultados"
+      },
+      "expand": {
+        "ariaLabel": "Ampliar resultados"
+      },
+      "restore": {
+        "ariaLabel": "Restaurar resultados"
+      },
+      "resize": {
+        "ariaLabel": "Cambiar tamaño de resultados"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Buscar archivos"
+        },
+        "location": {
+          "label": "Todos los archivos de tu entorno"
+        }
+      },
+      "browser": {
+        "placeholder": "Aplicaciones web en tu sandbox"
+      },
+      "reload": {
+        "file": "Recargar archivo",
+        "files": "Actualizar archivos",
+        "browser": "Actualizar aplicaciones web",
+        "unavailable": "Restaura el entorno aislado para actualizar"
+      },
+      "export": {
+        "failed": "No se pudo exportar este archivo. Vuelve a intentarlo."
+      },
+      "empty": {
+        "title": "Elige una vista del espacio de trabajo"
+      },
+      "status": {
+        "provisioning": "Inicializando entorno aislado",
+        "running": "Entorno aislado en ejecución",
+        "sleeping": "Entorno aislado en reposo",
+        "restoring": "Restaurando sesión",
+        "terminated": "Entorno aislado terminado",
+        "failed": "Error en el entorno aislado",
+        "ready": "Entorno aislado listo",
+        "loading": "Buscando entorno aislado"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Marcar todos como vistos",
+        "error": "No se pudieron marcar los resultados como vistos. Inténtalo de nuevo."
+      },
+      "home": {
+        "description": "Archivos creados por tu agente"
+      },
+      "empty": {
+        "description": "Los archivos que cree tu agente aparecerán aquí."
+      },
+      "loading": {
+        "label": "Cargando resultados…"
+      },
+      "unavailable": {
+        "description": "Los resultados aparecerán cuando tu entorno esté listo."
+      },
+      "error": {
+        "description": "No se pudieron actualizar los resultados. Inténtalo de nuevo."
+      },
+      "incomplete": {
+        "description": "No se pudieron cargar algunos resultados."
+      },
+      "filter": {
+        "label": "Tipo de archivo",
+        "all": "Todos",
+        "folders": "Carpetas",
+        "noExtension": "Sin extensión"
+      },
+      "folders": {
+        "ariaLabel": "Carpetas de resultados",
+        "root": "Resultados"
+      },
+      "filtered": {
+        "empty": "No hay resultados coincidentes"
+      },
+      "search": {
+        "placeholder": "Buscar resultados"
+      },
+      "scope": {
+        "turn": "Resultados del turno {turn, number}",
+        "all": "Todos los resultados"
+      },
+      "unseen": "Nuevo o actualizado"
+    },
+    "turnOutputs": {
+      "showAll": "Ver los {count} resultados",
+      "app": "Aplicación",
+      "unavailable": "Ya no está disponible",
+      "appTitle": "Vista previa de tu aplicación"
+    },
+    "upgrade": {
+      "title": "Craft requiere un plan Business",
+      "adminDescription": "Craft está disponible en los planes Business y Enterprise. No es compatible con Community Edition hasta que Craft se integre en el chat principal.",
+      "userDescription": "Craft está disponible en los planes Business y Enterprise. Pide a tu administrador que actualice el plan para usar Craft.",
+      "backToChat": {
+        "label": "Volver al chat"
+      },
+      "viewPlans": {
+        "label": "Ver planes"
       }
     }
   },
@@ -13948,8 +14146,19 @@
       "year": "Año"
     },
     "inputFile": {
-      "attachFile": "Adjuntar archivo",
       "clearFile": "Quitar archivo"
+    },
+    "inputMultiUpload": {
+      "placeholder": "Añadir archivos…",
+      "dropToAdd": "Suelta los archivos aquí para añadirlos",
+      "dropToAddMore": "Suelta aquí para añadir más archivos"
+    },
+    "inputUpload": {
+      "placeholder": "Añadir un archivo…",
+      "pasted": "Texto pegado",
+      "attached": "Archivo adjunto",
+      "dropToAdd": "Suelta el archivo aquí para añadirlo",
+      "dropToReplace": "Suelta aquí para reemplazar el archivo"
     },
     "inputImage": {
       "alt": "Imagen",
@@ -14639,7 +14848,8 @@
         "title": "Agentes"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorar agentes"

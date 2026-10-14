@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  getSourceDisplayName,
+  getSourceMetadata,
+} from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
@@ -17,7 +21,6 @@ import {
   shouldRedirectToOAuth,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
 import {
   EE_ENABLED,
@@ -36,8 +39,6 @@ import type {
   CredentialSetup,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
-  GoogleDriveCredentialJson,
-  GoogleDriveServiceAccountCredentialJson,
   OAuthDetails,
   SavedDraftCredential,
   SourceCredentialsResult,
@@ -365,38 +366,6 @@ export const useGmailCredentials = (connector: string) => {
   };
 };
 
-export const useGoogleDriveCredentials = (connector: string) => {
-  // Only the Google Drive setup reads the admin list; other sources skip it.
-  const { data: credentialsData } = useAdminCredentials({
-    enabled: connector === ValidSources.GoogleDrive,
-  });
-
-  const googleDrivePublicCredential:
-    | Credential<GoogleDriveCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_tokens &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const googleDriveServiceAccountCredential:
-    | Credential<GoogleDriveServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGDriveCredential =
-    googleDrivePublicCredential || googleDriveServiceAccountCredential;
-
-  return {
-    liveGDriveCredential: liveGDriveCredential,
-  };
-};
-
 export const useGoogleCredentials = (
   source: ValidSources.Gmail | ValidSources.GoogleDrive
 ): SourceCredentialsResult => useSourceCredentials(source);
@@ -406,8 +375,11 @@ const CREDENTIAL_CHECK_POLL_MS = 2000;
 
 /** What `useCredentialCheckReports` returns. */
 export interface CredentialCheckReports {
-  /** A credential's own report (not a connector's), or null if it has none. */
-  reportFor: (credentialId: number) => CredentialCheckReport | null;
+  /** The credential's report for `connectorId`, or its own for null. */
+  reportFor: (
+    credentialId: number,
+    connectorId?: number | null
+  ) => CredentialCheckReport | null;
   /** Starts the checks on one credential; resolves once the run is queued. */
   rerun: (credentialId: number) => Promise<void>;
 }
@@ -431,12 +403,18 @@ export function useCredentialCheckReports(
     }
   );
 
-  return {
-    reportFor: (credentialId) =>
+  // Stable per load, so a consumer can memoize on it.
+  const reportFor = useCallback(
+    (credentialId: number, connectorId: number | null = null) =>
       data?.find(
         (report) =>
-          report.credential_id === credentialId && report.connector_id === null
+          report.credential_id === credentialId &&
+          report.connector_id === connectorId
       ) ?? null,
+    [data]
+  );
+  return {
+    reportFor,
     rerun: async (credentialId) => {
       await startCredentialCheckRun(credentialId);
       await refresh();
