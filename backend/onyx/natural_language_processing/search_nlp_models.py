@@ -147,10 +147,11 @@ class EmbeddingRequestPolicy:
         """Sends one provider request under this policy. The rate limit and
         provider throttling share one wait time limit per request."""
         started_at = time.monotonic()
+        throttle_attempt = 0
         while True:
             if self.rate_limiter is not None:
-                self._add_rate_limit_wait(
-                    self.rate_limiter.acquire(self.should_stop, started_at)
+                self.rate_limiter.acquire(
+                    self.should_stop, started_at, self._add_rate_limit_wait
                 )
             try:
                 return request()
@@ -158,18 +159,24 @@ class EmbeddingRequestPolicy:
                 if not (self.block_on_provider_rate_limit and is_rate_limit_error(e)):
                     raise
                 start = time.monotonic()
-                for sleep_seconds in self._throttle_sleeps(started_at):
-                    time.sleep(sleep_seconds)
-                self._add_provider_throttle_wait(time.monotonic() - start)
+                try:
+                    for sleep_seconds in self._throttle_sleeps(
+                        throttle_attempt, started_at
+                    ):
+                        time.sleep(sleep_seconds)
+                finally:
+                    self._add_provider_throttle_wait(time.monotonic() - start)
+                throttle_attempt += 1
 
     async def send_async(self, request: Callable[[], Awaitable[_T]]) -> _T:
         """Sends one provider request under this policy. The rate limit and
         provider throttling share one wait time limit per request."""
         started_at = time.monotonic()
+        throttle_attempt = 0
         while True:
             if self.rate_limiter is not None:
-                self._add_rate_limit_wait(
-                    await self.rate_limiter.acquire_async(self.should_stop, started_at)
+                await self.rate_limiter.acquire_async(
+                    self.should_stop, started_at, self._add_rate_limit_wait
                 )
             try:
                 return await request()
@@ -177,19 +184,31 @@ class EmbeddingRequestPolicy:
                 if not (self.block_on_provider_rate_limit and is_rate_limit_error(e)):
                     raise
                 start = time.monotonic()
-                for sleep_seconds in self._throttle_sleeps(started_at):
-                    await asyncio.sleep(sleep_seconds)
-                self._add_provider_throttle_wait(time.monotonic() - start)
+                try:
+                    for sleep_seconds in self._throttle_sleeps(
+                        throttle_attempt, started_at
+                    ):
+                        await asyncio.sleep(sleep_seconds)
+                finally:
+                    self._add_provider_throttle_wait(time.monotonic() - start)
+                throttle_attempt += 1
 
-    def _throttle_sleeps(self, started_at: float) -> Iterator[float]:
+    def _throttle_sleeps(self, attempt: int, started_at: float) -> Iterator[float]:
         return wait_sleeps(
             "The embedding provider rate-limited the request",
+            attempt,
             started_at,
             self.should_stop,
         )
 
+    @property
+    def counts_every_request(self) -> bool:
+        """Whether this policy sees each HTTP request, so provider SDKs must
+        not retry on their own."""
+        return self.rate_limiter is not None or self.block_on_provider_rate_limit
+
     def _add_rate_limit_wait(self, seconds: float) -> None:
-        if self.wait_totals is not None and seconds > 0:
+        if self.wait_totals is not None:
             self.wait_totals.add_rate_limit_wait(seconds)
 
     def _add_provider_throttle_wait(self, seconds: float) -> None:
@@ -551,7 +570,11 @@ class CloudEmbedding:
 
         # Use the OpenAI specific timeout for this one
         client = openai.AsyncOpenAI(
-            api_key=self._resolve_api_key(), timeout=OPENAI_EMBEDDING_TIMEOUT
+            api_key=self._resolve_api_key(),
+            timeout=OPENAI_EMBEDDING_TIMEOUT,
+            max_retries=(
+                0 if self.policy.counts_every_request else openai.DEFAULT_MAX_RETRIES
+            ),
         )
 
         final_embeddings: list[Embedding] = []
@@ -576,7 +599,10 @@ class CloudEmbedding:
         if not model:
             model = DEFAULT_COHERE_MODEL
 
-        client = CohereAsyncClient(api_key=self._resolve_api_key())
+        client = CohereAsyncClient(
+            api_key=self._resolve_api_key(),
+            max_retries=0 if self.policy.counts_every_request else None,
+        )
 
         final_embeddings: list[Embedding] = []
         for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):

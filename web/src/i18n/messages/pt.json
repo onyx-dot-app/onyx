@@ -5708,7 +5708,7 @@
       },
       "embeddingRateLimit": {
         "title": "Limite de requisições de embedding",
-        "description": "Limita quantas requisições de embedding a indexação envia em uma janela de tempo, entre todos os workers de indexação. No limite, a indexação espera e tenta novamente com esperas cada vez maiores, então os workers pegam menos trabalho novo. Consultas de pesquisa não têm limite.",
+        "description": "Limita quantas requisições de embedding a indexação envia em uma janela de tempo, entre todos os workers de indexação. No limite, a indexação espera e tenta novamente em vez de falhar, então os workers pegam menos trabalho novo. Um lote só falha se esperar demais. Consultas de pesquisa não têm limite.",
         "requests": {
           "title": "Requisições por janela",
           "description": "Deixe vazio para não ter limite.",

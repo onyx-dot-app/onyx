@@ -822,3 +822,33 @@ def test_query_embeddings_never_wait_for_the_rate_limit() -> None:
         model.encode(texts=["text_0"], text_type=EmbedTextType.QUERY)
 
     load_limiter.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("block_on_provider_rate_limit", "expected_retries"),
+    [(True, 0), (False, 2)],
+)
+async def test_openai_sdk_retries_are_off_when_the_policy_counts_requests(
+    block_on_provider_rate_limit: bool, expected_retries: int
+) -> None:
+    """SDK retries would send requests that take no rate limit slot."""
+    import openai
+
+    policy = EmbeddingRequestPolicy(
+        retry_backoff=EmbeddingRetryBackoff(scale_seconds=0, max_seconds=0),
+        retry_tries=1,
+        block_on_provider_rate_limit=block_on_provider_rate_limit,
+    )
+    created = MagicMock()
+    created.data = [MagicMock(embedding=[0.1])]
+    client = MagicMock()
+    client.embeddings.create = AsyncMock(return_value=created)
+
+    with patch.object(openai, "AsyncOpenAI", return_value=client) as make_client:
+        async with CloudEmbedding(
+            "fake-key", EmbeddingProvider.OPENAI, policy=policy
+        ) as embedding:
+            await embedding._embed_openai(["a"], "text-embedding-3-small", None)
+
+    assert make_client.call_args.kwargs["max_retries"] == expected_retries

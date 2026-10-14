@@ -57,7 +57,6 @@ function LimitField({
   onCommit,
 }: LimitFieldProps) {
   const t = useTranslations("admin.indexSettings.embeddingRateLimit");
-  const restoringRef = useRef(false);
 
   return (
     <div className="w-48">
@@ -76,22 +75,12 @@ function LimitField({
                   tooltip={t("restoreDefault")}
                   prominence="internal"
                   size="sm"
-                  onClick={() => {
-                    restoringRef.current = true;
-                    onCommit(defaultValue);
-                  }}
+                  onClick={() => onCommit(defaultValue)}
                 />
               </Hoverable.Item>
             ) : undefined
           }
-          onBlur={() => {
-            // The restore button blurs the input; it already committed.
-            if (restoringRef.current) {
-              restoringRef.current = false;
-              return;
-            }
-            onCommit(value);
-          }}
+          onBlur={() => onCommit(value)}
         />
       </Hoverable.Root>
     </div>
@@ -116,7 +105,13 @@ export default function EmbeddingRateLimitCard() {
     savedRequests === null ? "" : String(savedRequests)
   );
   const [period, setPeriod] = useState(String(savedPeriod));
-  const savedRef = useRef({ requests: savedRequests, period: savedPeriod });
+  // The values of the last save sent. Saves run one at a time, in order, so
+  // the last one sent is the one that sticks.
+  const lastSentRef = useRef<{
+    requests: number | null;
+    period: number;
+  } | null>({ requests: savedRequests, period: savedPeriod });
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // An empty request count means no limit.
   const requestsValid =
@@ -125,7 +120,7 @@ export default function EmbeddingRateLimitCard() {
   const periodValid =
     parseWholeNumber(period, MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS) !== null;
 
-  async function commit(nextRequests: string, nextPeriod: string) {
+  function commit(nextRequests: string, nextPeriod: string) {
     setRequests(nextRequests);
     setPeriod(nextPeriod);
     const requestLimit =
@@ -142,26 +137,34 @@ export default function EmbeddingRateLimitCard() {
     ) {
       return;
     }
-    const saved = savedRef.current;
-    if (requestLimit === saved.requests && periodSeconds === saved.period) {
+    const lastSent = lastSentRef.current;
+    if (
+      lastSent !== null &&
+      requestLimit === lastSent.requests &&
+      periodSeconds === lastSent.period
+    ) {
       return;
     }
-    try {
-      await patchSettings({
-        embedding_rate_limit_requests: requestLimit,
-        embedding_rate_limit_period_seconds: periodSeconds,
-      });
-      savedRef.current = { requests: requestLimit, period: periodSeconds };
-      router.refresh();
-      await mutate(SWR_KEYS.settings);
-      toast.success(t("toasts.saved"));
-    } catch (error) {
-      toast.error(
-        error instanceof Error && error.message
-          ? error.message
-          : t("toasts.failed")
-      );
-    }
+    lastSentRef.current = { requests: requestLimit, period: periodSeconds };
+    saveQueueRef.current = saveQueueRef.current.then(async () => {
+      try {
+        await patchSettings({
+          embedding_rate_limit_requests: requestLimit,
+          embedding_rate_limit_period_seconds: periodSeconds,
+        });
+        router.refresh();
+        await mutate(SWR_KEYS.settings);
+        toast.success(t("toasts.saved"));
+      } catch (error) {
+        // The stored values are unknown now, so the next commit always saves.
+        lastSentRef.current = null;
+        toast.error(
+          error instanceof Error && error.message
+            ? error.message
+            : t("toasts.failed")
+        );
+      }
+    });
   }
 
   return (
@@ -191,7 +194,7 @@ export default function EmbeddingRateLimitCard() {
               placeholder={t("requests.placeholder")}
               error={!requestsValid}
               onChange={setRequests}
-              onCommit={(value) => void commit(value, period)}
+              onCommit={(value) => commit(value, period)}
             />
           </InputHorizontal>
           <InputHorizontal
@@ -207,7 +210,7 @@ export default function EmbeddingRateLimitCard() {
               placeholder={String(DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS)}
               error={!periodValid}
               onChange={setPeriod}
-              onCommit={(value) => void commit(requests, value)}
+              onCommit={(value) => commit(requests, value)}
             />
           </InputHorizontal>
           {!requestsValid && (

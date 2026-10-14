@@ -5708,7 +5708,7 @@
       },
       "embeddingRateLimit": {
         "title": "Embedding rate limit",
-        "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again with longer waits each time, so workers take less new work. Search queries are not limited.",
+        "description": "Limits how many embedding requests indexing sends in a time window, across all indexing workers. At the limit, indexing waits and tries again instead of failing, so workers take less new work. A batch fails only if it waits too long. Search queries are not limited.",
         "requests": {
           "title": "Requests per window",
           "description": "Leave empty for no limit.",

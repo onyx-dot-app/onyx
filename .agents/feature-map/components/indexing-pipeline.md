@@ -342,10 +342,13 @@ The admin can set a global rate limit on passage requests on the Index Settings
 page (`embedding_rate_limit_*` in workspace `Settings`). Every outgoing request,
 retries included, takes a slot in a per-tenant sliding window in Redis
 (`embedding_rate_limit.py`). When the window is full, or a provider answers
-429, the worker thread blocks and tries again about once a minute (jittered)
-instead of failing, so the thread takes no new Celery task. After six hours of
-waiting the request fails, and every remaining document of the batch fails
-without per-document retries. The wait time is
+429, the worker thread blocks and tries again instead of failing, so the
+thread takes no new Celery task. Self-hosted retries about once a minute
+(jittered) for up to six hours; cloud (`MULTI_TENANT`), whose workers all
+tenants share, backs off exponentially for up to one minute. When the wait runs
+out the request fails, and every remaining document of the batch fails without
+per-document retries. The Celery broker's `visibility_timeout` is the maximum
+wait plus an hour, so a waiting batch is not redelivered to another worker. The wait time is
 recorded as the `EMBEDDING_RATE_LIMIT_WAIT` and `EMBEDDING_PROVIDER_THROTTLE_WAIT`
 stage metrics, which are parts of `EMBEDDING`. `encode` reads the limit once
 per call, so a change applies to the next batch. Query embeddings are never

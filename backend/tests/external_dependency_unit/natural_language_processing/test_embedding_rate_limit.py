@@ -81,14 +81,17 @@ def test_wait_gives_up_at_the_time_limit(tenant_id: str) -> None:
     limiter = EmbeddingRateLimiter(tenant_id, max_requests=1, period_seconds=60)
     limiter.acquire()
 
+    waits: list[float] = []
     start = time.monotonic()
     with (
         patch(f"{_MODULE}._MAX_TOTAL_WAIT_SECONDS", 1.2),
         pytest.raises(EmbeddingWaitTimeoutError),
     ):
-        limiter.acquire()
-    # Three 0.5s retries, then the limit check fails.
+        limiter.acquire(on_wait=waits.append)
+    # 0.5s retries up to the limit, then the limit check fails.
     assert 1.2 <= time.monotonic() - start <= 2.5
+    # The wait is reported even though it ended in a timeout.
+    assert len(waits) == 1 and waits[0] >= 1.2
 
 
 def test_stop_signal_ends_the_wait(tenant_id: str) -> None:

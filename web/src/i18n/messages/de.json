@@ -5708,7 +5708,7 @@
       },
       "embeddingRateLimit": {
         "title": "Embedding-Ratenlimit",
-        "description": "Begrenzt, wie viele Embedding-Anfragen die Indexierung in einem Zeitfenster sendet, über alle Indexierungs-Worker hinweg. Beim Erreichen des Limits wartet die Indexierung und versucht es mit jedes Mal längeren Wartezeiten erneut, sodass Worker weniger neue Arbeit annehmen. Suchanfragen sind nicht begrenzt.",
+        "description": "Begrenzt, wie viele Embedding-Anfragen die Indexierung in einem Zeitfenster sendet, über alle Indexierungs-Worker hinweg. Beim Erreichen des Limits wartet die Indexierung und versucht es erneut, statt fehlzuschlagen, sodass Worker weniger neue Arbeit annehmen. Ein Batch schlägt nur fehl, wenn er zu lange wartet. Suchanfragen sind nicht begrenzt.",
         "requests": {
           "title": "Anfragen pro Zeitfenster",
           "description": "Leer lassen für kein Limit.",

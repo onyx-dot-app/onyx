@@ -1955,6 +1955,10 @@ DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
 # The window is stored in Redis, one entry per request, so the request count
 # is capped. Gemini Embedding 2 on Vertex allows 60,000 requests per minute.
 DEFAULT_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 60
+# How long one indexing embedding request may wait for the rate limit or a
+# provider's rate limit before its batch fails. Cloud workers are shared by all
+# tenants, so they give up quickly.
+EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS = 60 if MULTI_TENANT else 6 * 60 * 60
 MAX_EMBEDDING_RATE_LIMIT_REQUESTS = 100_000
 MAX_EMBEDDING_RATE_LIMIT_PERIOD_SECONDS = 24 * 60 * 60
 
