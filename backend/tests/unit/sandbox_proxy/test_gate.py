@@ -1,6 +1,6 @@
 """Unit tests for the GateAddon mitmproxy addon.
 
-External dependencies (`_IdentityResolver`, `RequestEvaluator`, `CacheFactory`)
+External dependencies (`SandboxIdentityResolver`, `RequestEvaluator`, `CacheFactory`)
 are stubbed via small Protocol implementations; `get_session_with_tenant` is
 patched per test.
 
@@ -1060,7 +1060,7 @@ async def test_http_connect_caches_tag_and_client_disconnected_evicts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        gate, "resolve_sandbox_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
+        gate, "resolve_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
     )
     addon = _build(
         resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=_StubMatcher()
@@ -1079,7 +1079,7 @@ async def test_http_connect_ignores_missing_or_garbled_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        gate, "resolve_sandbox_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
+        gate, "resolve_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
     )
     addon = _build(
         resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=_StubMatcher()
@@ -1095,7 +1095,7 @@ async def test_http_connect_rejects_unknown_peer(
     monkeypatch: pytest.MonkeyPatch, peer_ip: str
 ) -> None:
     monkeypatch.setattr(
-        gate, "resolve_sandbox_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
+        gate, "resolve_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
     )
     addon: GateAddon = _build(resolver=StubResolver(), matcher=_StubMatcher())
     flow: http.HTTPFlow = make_flow(
@@ -1114,7 +1114,7 @@ async def test_http_connect_rejects_missing_peer(
     monkeypatch: pytest.MonkeyPatch, peer: tuple[str, int] | None
 ) -> None:
     monkeypatch.setattr(
-        gate, "resolve_sandbox_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
+        gate, "resolve_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
     )
     resolver: StubResolver = StubResolver(sandbox=make_resolved_sandbox())
     addon: GateAddon = _build(resolver=resolver, matcher=_StubMatcher())
@@ -1131,7 +1131,7 @@ async def test_http_connect_rejects_identity_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        gate, "resolve_sandbox_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
+        gate, "resolve_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
     )
     addon: GateAddon = _build(
         resolver=StubResolver(sandbox_exc=RuntimeError("database unavailable")),
@@ -1276,7 +1276,7 @@ async def test_resolve_and_match_exact_tag_on_https_connect(
     """HTTPS: the tag rode on the CONNECT (captured via http_connect)
     and is read back off the connection, not the MITM'd request."""
     monkeypatch.setattr(
-        gate, "resolve_sandbox_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
+        gate, "resolve_destination", lambda *_args, **_kwargs: ("8.8.8.8",)
     )
     user_id = uuid4()
     tagged_id = UUID(_TAG_UUID)

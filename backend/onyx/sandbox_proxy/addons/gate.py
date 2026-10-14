@@ -10,12 +10,10 @@ import binascii
 import operator
 import threading
 from collections.abc import Callable
-from functools import partial
-from typing import Protocol
 from uuid import UUID
 
 from cachetools import TTLCache, cachedmethod
-from mitmproxy import http
+from mitmproxy import connection, http
 from mitmproxy.proxy import server_hooks
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
@@ -36,7 +34,7 @@ from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatche
 from onyx.sandbox_proxy.destination_policy import (
     clear_destination,
     pin_destination,
-    resolve_sandbox_destination,
+    resolve_destination,
 )
 from onyx.sandbox_proxy.errors import SandboxProxyError, http_403
 from onyx.sandbox_proxy.logging_utils import (
@@ -63,7 +61,10 @@ from onyx.sandbox_proxy.models import (
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
-from onyx.sandbox_proxy.sandbox_identity.resolution import source_ip
+from onyx.sandbox_proxy.sandbox_identity.resolution import (
+    SandboxIdentityResolver,
+    source_ip,
+)
 from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
@@ -78,16 +79,6 @@ logger = setup_logger()
 # the false blocker: anything the upstream would accept passes through, and a
 # genuinely oversized request gets the upstream's own 413, not an opaque 403.
 PARSER_MAX_BODY_BYTES = 32 * 1024 * 1024
-
-
-class _IdentityResolver(Protocol):
-    """Subset of `IdentityResolver` the gate uses."""
-
-    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
-
-    def resolve_session_by_id(
-        self, session_id: UUID, user_id: UUID, tenant_id: str
-    ) -> UUID | None: ...
 
 
 CacheFactory = Callable[[str], CacheBackend]
@@ -149,7 +140,7 @@ class GateAddon:
 
     def __init__(
         self,
-        identity: _IdentityResolver,
+        identity: SandboxIdentityResolver,
         request_evaluator: RequestEvaluator,
         cache_factory: CacheFactory,
         proxy_instance_id: str,
@@ -158,12 +149,8 @@ class GateAddon:
         stream_responses: bool = True,
         mcp_resolver: MCPServerResolver | None = None,
     ) -> None:
-        self._resolve_destination = partial(
-            resolve_sandbox_destination,
-            config=destination_policy,
-            resolve_sandbox=identity.resolve_sandbox,
-            mcp_resolver=mcp_resolver,
-        )
+        self._destination_policy = destination_policy
+        self._mcp_resolver = mcp_resolver
         self._identity = identity
         self._request_evaluator = request_evaluator
         self._cache_factory = cache_factory
@@ -179,6 +166,10 @@ class GateAddon:
         self._conn_session_tags: dict[str, str] = {}
         # Eager CONNECT opens TCP before mitmproxy marks the server as TLS.
         self._conn_connect_origins: dict[str, tuple[str, int]] = {}
+        # Pool selection follows request(); include pending and open upstream addresses.
+        self._upstream_addresses: dict[
+            str, dict[connection.Server, tuple[str, ...]]
+        ] = {}
         # Tracks running `request()` coroutines so the drain can `asyncio.wait`
         # on real completion instead of sleeping. Self-cleaning.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
@@ -208,11 +199,14 @@ class GateAddon:
         # can do a blocking DNS lookup, so run it off the event loop.
         if (
             await asyncio.to_thread(
-                self._resolve_destination,
-                flow.client_conn.peername,
-                "https",
+                resolve_destination,
+                self._destination_policy,
                 flow.request.host,
                 flow.request.port,
+                scheme="https",
+                peer=flow.client_conn.peername,
+                identity=self._identity,
+                mcp_resolver=self._mcp_resolver,
             )
             is None
         ):
@@ -252,6 +246,7 @@ class GateAddon:
         if conn_id is not None:
             self._conn_session_tags.pop(conn_id, None)
             self._conn_connect_origins.pop(conn_id, None)
+            self._upstream_addresses.pop(conn_id, None)
 
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
         """Validate the final addresses and pin them while preserving TLS SNI."""
@@ -259,15 +254,21 @@ class GateAddon:
         if server.error or not server.address:
             return
         host, port = server.address[0], server.address[1]
-        addresses = await asyncio.to_thread(
-            self._resolve_destination,
-            data.client.peername,
+        scheme = (
             "https"
             if server.tls
             or self._conn_connect_origins.get(data.client.id) == (host, port)
-            else "http",
+            else "http"
+        )
+        addresses = await asyncio.to_thread(
+            resolve_destination,
+            self._destination_policy,
             host,
             port,
+            scheme=scheme,
+            peer=data.client.peername,
+            identity=self._identity,
+            mcp_resolver=self._mcp_resolver,
         )
         if addresses is None:
             logger.info(
@@ -284,12 +285,25 @@ class GateAddon:
             pin_destination(host, port, addresses)
         except RuntimeError:
             server.error = "destination_blocked: upstream resolver unavailable"
+            return
+        self._upstream_addresses.setdefault(data.client.id, {})[server] = addresses
 
-    def server_connected(self, data: server_hooks.ServerConnectionHookData) -> None:  # noqa: ARG002
+    def server_connected(self, data: server_hooks.ServerConnectionHookData) -> None:
         clear_destination()
+        upstreams = self._upstream_addresses.get(data.client.id)
+        if upstreams is not None and data.server in upstreams and data.server.peername:
+            upstreams[data.server] = (data.server.peername[0],)
 
-    def server_connect_error(self, data: server_hooks.ServerConnectionHookData) -> None:  # noqa: ARG002
+    def server_connect_error(self, data: server_hooks.ServerConnectionHookData) -> None:
         clear_destination()
+        self.server_disconnected(data)
+
+    def server_disconnected(self, data: server_hooks.ServerConnectionHookData) -> None:
+        upstreams = self._upstream_addresses.get(data.client.id)
+        if upstreams is not None:
+            upstreams.pop(data.server, None)
+            if not upstreams:
+                self._upstream_addresses.pop(data.client.id, None)
 
     def responseheaders(self, flow: http.HTTPFlow) -> None:
         """
@@ -308,6 +322,15 @@ class GateAddon:
             self._inflight_tasks.add(task)
             task.add_done_callback(self._inflight_tasks.discard)
 
+        upstream_addresses = tuple(
+            address
+            for server, addresses in self._upstream_addresses.get(
+                flow.client_conn.id, {}
+            ).items()
+            if server.address == (flow.request.host, flow.request.port)
+            and server.tls == (flow.request.scheme == "https")
+            for address in addresses
+        )
         # Deny forwards to internal addresses with a clear 403 — both plain-HTTP
         # (GET http://internal/...) and the decrypted inner request of a MITM'd
         # HTTPS tunnel, so the structured error reaches the agent regardless of
@@ -315,11 +338,15 @@ class GateAddon:
         # pin. Resolution can block, so run it off the event loop.
         if (
             await asyncio.to_thread(
-                self._resolve_destination,
-                flow.client_conn.peername,
-                flow.request.scheme,
+                resolve_destination,
+                self._destination_policy,
                 flow.request.host,
                 flow.request.port,
+                scheme=flow.request.scheme,
+                peer=flow.client_conn.peername,
+                identity=self._identity,
+                mcp_resolver=self._mcp_resolver,
+                upstream_addresses=upstream_addresses,
             )
             is None
         ):

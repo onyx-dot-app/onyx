@@ -1,6 +1,5 @@
 """Private MCP origins stay scoped to the sandbox user and exact origin."""
 
-from functools import partial
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,7 +10,7 @@ from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import (
     parse_destination_policy,
-    resolve_sandbox_destination,
+    resolve_destination,
 )
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
@@ -137,11 +136,11 @@ def test_mcp_validates_resolved_addresses(
     permissive_allowed: bool,
     level: SSRFProtectionLevel,
     mixed: bool,
+    mcp_ssrf_settings: MagicMock,
 ) -> None:
     import socket
 
     from onyx.sandbox_proxy.destination_policy import resolve_destination
-    from onyx.server.security.models import outbound_ssrf_params
 
     dns = MagicMock(
         return_value=[
@@ -166,11 +165,17 @@ def test_mcp_validates_resolved_addresses(
             ),
         )
     monkeypatch.setattr(socket, "getaddrinfo", dns)
+    mcp_ssrf_settings.ssrf_protection_level = level
+    resolver = MCPServerResolver()
+    monkeypatch.setattr(resolver, "allows_destination", lambda *_args: True)
     result = resolve_destination(
         parse_destination_policy("https://onyx.test"),
         "private-mcp.test",
         8443,
-        authorize_internal=lambda: outbound_ssrf_params(level),
+        scheme="https",
+        peer=("10.0.0.1", 1234),
+        identity=StubResolver(sandbox=make_resolved_sandbox()),
+        mcp_resolver=resolver,
     )
     allowed = level in {
         SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK,
@@ -219,12 +224,8 @@ def test_mcp_rechecks_tenant_ssrf_settings(
     monkeypatch.setattr(
         "onyx.sandbox_proxy.destination_policy.get_security_settings", settings
     )
-    resolve = partial(
-        resolve_sandbox_destination,
-        config=parse_destination_policy("https://onyx.test"),
-        resolve_sandbox=StubResolver(sandbox=sandbox).resolve_sandbox,
-        mcp_resolver=resolver,
-    )
+    policy = parse_destination_policy("https://onyx.test")
+    identity = StubResolver(sandbox=sandbox)
     previous = CURRENT_TENANT_ID_CONTEXTVAR.get()
     for level, expected in [
         (SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK, ("10.1.2.3",)),
@@ -232,13 +233,35 @@ def test_mcp_rechecks_tenant_ssrf_settings(
         (SSRFProtectionLevel.DISABLED, ("10.1.2.3",)),
     ]:
         mcp_ssrf_settings.ssrf_protection_level = level
-        assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) == expected
+        assert (
+            resolve_destination(
+                policy,
+                "10.1.2.3",
+                443,
+                scheme="https",
+                peer=("10.0.0.1", 1234),
+                identity=identity,
+                mcp_resolver=resolver,
+            )
+            == expected
+        )
         assert CURRENT_TENANT_ID_CONTEXTVAR.get() == previous
     monkeypatch.setattr(
         "onyx.sandbox_proxy.destination_policy.get_security_settings",
         MagicMock(side_effect=RuntimeError("settings unavailable")),
     )
-    assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
+    assert (
+        resolve_destination(
+            policy,
+            "10.1.2.3",
+            443,
+            scheme="https",
+            peer=("10.0.0.1", 1234),
+            identity=identity,
+            mcp_resolver=resolver,
+        )
+        is None
+    )
     assert CURRENT_TENANT_ID_CONTEXTVAR.get() == previous
 
 
@@ -283,15 +306,22 @@ def test_private_mcp_denies_real_settings_read_failure(
         )
     )
     monkeypatch.setattr(store, "_db_load_overrides", db_read)
-    resolve = partial(
-        resolve_sandbox_destination,
-        config=parse_destination_policy("https://onyx.test"),
-        resolve_sandbox=StubResolver(sandbox=sandbox).resolve_sandbox,
-        mcp_resolver=resolver,
-    )
+    policy = parse_destination_policy("https://onyx.test")
+    identity = StubResolver(sandbox=sandbox)
 
     # Populate MCP access and strict tenant settings through the actual reader.
-    assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
+    assert (
+        resolve_destination(
+            policy,
+            "10.1.2.3",
+            443,
+            scheme="https",
+            peer=("10.0.0.1", 1234),
+            identity=identity,
+            mcp_resolver=resolver,
+        )
+        is None
+    )
     store.invalidate_security_cache(sandbox.tenant_id)
     if failure == "database":
         db_read.side_effect = RuntimeError("database unavailable")
@@ -304,7 +334,18 @@ def test_private_mcp_denies_real_settings_read_failure(
             store.get_security_settings().ssrf_protection_level
             == SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK
         )
-        assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
+        assert (
+            resolve_destination(
+                policy,
+                "10.1.2.3",
+                443,
+                scheme="https",
+                peer=("10.0.0.1", 1234),
+                identity=identity,
+                mcp_resolver=resolver,
+            )
+            is None
+        )
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
     targets.assert_called_once()
@@ -315,7 +356,15 @@ def test_private_mcp_denies_real_settings_read_failure(
     db_read.side_effect = None
     kv_store.load.side_effect = None
     db_read.return_value = SecuritySettingsOverrides()
-    assert resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) == ("10.1.2.3",)
+    assert resolve_destination(
+        policy,
+        "10.1.2.3",
+        443,
+        scheme="https",
+        peer=("10.0.0.1", 1234),
+        identity=identity,
+        mcp_resolver=resolver,
+    ) == ("10.1.2.3",)
 
 
 @pytest.mark.parametrize(
@@ -328,16 +377,18 @@ def test_private_mcp_denies_real_settings_read_failure(
     ],
 )
 def test_disabled_ssrf_matches_backend_mcp_hostname_policy(
-    monkeypatch: pytest.MonkeyPatch, host: str, allowed: bool
+    monkeypatch: pytest.MonkeyPatch,
+    host: str,
+    allowed: bool,
+    mcp_ssrf_settings: MagicMock,
 ) -> None:
     import socket
 
     from onyx.sandbox_proxy.destination_policy import resolve_destination
     from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
-    from onyx.server.security.models import outbound_ssrf_params
     from onyx.utils.url import SSRFException
 
-    settings = MagicMock(ssrf_protection_level=SSRFProtectionLevel.DISABLED)
+    settings = mcp_ssrf_settings
     monkeypatch.setattr(
         "onyx.server.features.mcp.ssrf.get_security_settings", lambda: settings
     )
@@ -363,11 +414,16 @@ def test_disabled_ssrf_matches_backend_mcp_hostname_policy(
     else:
         with pytest.raises(SSRFException):
             validate_mcp_outbound_url(url)
+    resolver = MCPServerResolver()
+    monkeypatch.setattr(resolver, "allows_destination", lambda *_args: True)
     addresses = resolve_destination(
         parse_destination_policy("https://onyx.test"),
         host,
         8000,
-        authorize_internal=lambda: outbound_ssrf_params(SSRFProtectionLevel.DISABLED),
+        scheme="http",
+        peer=("10.0.0.1", 1234),
+        identity=StubResolver(sandbox=make_resolved_sandbox()),
+        mcp_resolver=resolver,
     )
     assert (addresses is not None) == allowed
 
@@ -394,7 +450,9 @@ def test_destination_resolver_uses_one_dns_snapshot(
     import socket
 
     sandbox = make_resolved_sandbox()
-    identity = MagicMock(return_value=sandbox)
+    identity = StubResolver(sandbox=sandbox)
+    lookup = MagicMock(return_value=sandbox)
+    monkeypatch.setattr(identity, "resolve_sandbox", lookup)
     mcp = MCPServerResolver()
     access = MagicMock(return_value=True)
     monkeypatch.setattr(mcp, "allows_destination", access)
@@ -409,21 +467,122 @@ def test_destination_resolver_uses_one_dns_snapshot(
         ]
     )
     monkeypatch.setattr(socket, "getaddrinfo", dns)
-    result = resolve_sandbox_destination(
-        ("::ffff:10.0.0.1", 1234),
-        "https",
+    result = resolve_destination(
+        parse_destination_policy(api_url),
         "private-mcp.test",
         443,
-        config=parse_destination_policy(api_url),
-        resolve_sandbox=identity,
+        scheme="https",
+        peer=("::ffff:10.0.0.1", 1234),
+        identity=identity,
         mcp_resolver=mcp,
     )
 
     assert result == (tuple(addresses) if allowed else None)
     dns.assert_called_once()
     if needs_mcp:
-        identity.assert_called_once_with("10.0.0.1")
+        lookup.assert_called_once_with("10.0.0.1")
         access.assert_called_once_with(sandbox, "https", "private-mcp.test", 443)
     else:
-        identity.assert_not_called()
+        lookup.assert_not_called()
         access.assert_not_called()
+
+
+@pytest.mark.parametrize("missing", ["scheme", "peer", "identity", "mcp_resolver"])
+def test_internal_destination_requires_authorization_context(
+    monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    identity = StubResolver(sandbox=make_resolved_sandbox())
+    mcp = MCPServerResolver()
+    access = MagicMock(return_value=True)
+    monkeypatch.setattr(mcp, "allows_destination", access)
+
+    assert (
+        resolve_destination(
+            parse_destination_policy("https://onyx.test"),
+            "10.1.2.3",
+            443,
+            scheme="" if missing == "scheme" else "https",
+            peer=None if missing == "peer" else ("10.0.0.1", 1234),
+            identity=None if missing == "identity" else identity,
+            mcp_resolver=None if missing == "mcp_resolver" else mcp,
+        )
+        is None
+    )
+    assert identity.resolve_sandbox_calls == 0
+    access.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "cleanup", ["failure", "server_disconnect", "client_disconnect"]
+)
+async def test_request_checks_pending_and_connected_addresses(
+    monkeypatch: pytest.MonkeyPatch,
+    mcp_ssrf_settings: MagicMock,
+    cleanup: str,
+) -> None:
+    import socket
+
+    host = "private-mcp.test"
+    port = 8443
+    resolver = MCPServerResolver()
+    monkeypatch.setattr(resolver, "allows_destination", lambda *_args: True)
+    pin = MagicMock()
+    monkeypatch.setattr("onyx.sandbox_proxy.addons.gate.pin_destination", pin)
+    dns = MagicMock(
+        return_value=[
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, port))
+            for ip in ("10.1.2.3", "10.1.2.4")
+        ]
+    )
+    monkeypatch.setattr(socket, "getaddrinfo", dns)
+    addon = GateAddon(
+        identity=StubResolver(sandbox=make_resolved_sandbox()),
+        request_evaluator=NoMatchedRequest(),
+        cache_factory=unused_cache,
+        proxy_instance_id="test",
+        credential_dispatcher=CredentialInjectionDispatcher([]),
+        destination_policy=parse_destination_policy("https://onyx.test"),
+        mcp_resolver=resolver,
+    )
+    flow = make_flow(host=host, port=port)
+    flow.request.scheme = "http"
+    server = connection.Server(address=(host, port))
+    data = server_hooks.ServerConnectionHookData(server=server, client=flow.client_conn)
+
+    await addon.server_connect(data)
+    pin.assert_called_once_with(host, port, ("10.1.2.3", "10.1.2.4"))
+    assert addon._upstream_addresses[flow.client_conn.id][server] == (
+        "10.1.2.3",
+        "10.1.2.4",
+    )
+    dns.return_value = [
+        (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("8.8.8.8", port))
+    ]
+    dns.reset_mock()
+    mcp_ssrf_settings.ssrf_protection_level = SSRFProtectionLevel.VALIDATE_ALL
+
+    # Mitmproxy can select this connection while it is still opening.
+    await addon.request(flow)
+    assert flow.response is not None and flow.response.status_code == 403
+    dns.assert_not_called()
+
+    server.peername = ("10.1.2.4", port)
+    addon.server_connected(data)
+    assert addon._upstream_addresses[flow.client_conn.id][server] == ("10.1.2.4",)
+    flow.response = None
+    await addon.request(flow)
+    assert flow.response is not None and flow.response.status_code == 403
+    dns.assert_not_called()
+
+    if cleanup == "failure":
+        addon.server_connect_error(data)
+    elif cleanup == "server_disconnect":
+        addon.server_disconnected(data)
+    else:
+        addon.client_disconnected(flow.client_conn)
+    assert not addon._upstream_addresses
+    flow.response = None
+    await addon.request(flow)
+    assert flow.response is None
+    dns.assert_called_once()

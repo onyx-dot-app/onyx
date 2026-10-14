@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
 from mitmproxy.proxy import server_hooks
@@ -25,6 +26,7 @@ from onyx.sandbox_proxy.destination_policy import (
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.server.security.models import SSRFProtectionLevel
 from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
     StubResolver,
@@ -521,5 +523,138 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
                 )
                 assert not any(requests)
                 credentials.assert_not_called()
+
+    asyncio.run(exercise(), loop_factory=UpstreamEventLoop)
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "::1"])
+@pytest.mark.parametrize("connection_strategy", ["eager", "lazy"])
+@pytest.mark.parametrize("use_tls", [False, True])
+def test_private_mcp_keepalive_rechecks_actual_peer(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    address: str,
+    connection_strategy: str,
+    use_tls: bool,
+    mcp_ssrf_settings: MagicMock,
+) -> None:
+    context, ca = make_tls_context(tmp_path, _HOST)
+    monkeypatch.setattr(server, "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", str(ca))
+    scheme = "https" if use_tls else "http"
+
+    async def exercise() -> None:
+        connections: list[list[bytes]] = []
+
+        async def serve(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+        ) -> None:
+            requests: list[bytes] = []
+            connections.append(requests)
+            try:
+                while True:
+                    try:
+                        request = await reader.readuntil(b"\r\n\r\n")
+                    except asyncio.IncompleteReadError as exc:
+                        assert not exc.partial
+                        return
+                    requests.append(request)
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n"
+                        b"Connection: keep-alive\r\n\r\nok"
+                    )
+                    await writer.drain()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+        upstream = await asyncio.start_server(
+            serve, address, 0, ssl=context if use_tls else None
+        )
+        port = upstream.sockets[0].getsockname()[1]
+        resolver = MCPServerResolver()
+        monkeypatch.setattr(
+            resolver,
+            "_load_targets",
+            lambda _tenant: (
+                CraftMCPTarget(
+                    server_id=1,
+                    scheme=scheme,
+                    host=_HOST,
+                    port=port,
+                    path_prefix="/mcp",
+                ),
+            ),
+        )
+        monkeypatch.setattr(
+            resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+        )
+        dns_answers = (address,)
+        unpinned = _dns(monkeypatch, lambda _port: dns_answers, lambda _port: ())
+        try:
+            async with _proxy(
+                monkeypatch,
+                tmp_path,
+                address,
+                1,
+                mcp_resolver=resolver,
+                connection_strategy=connection_strategy,
+            ) as proxy_port:
+                reader, writer = await asyncio.open_connection(address, proxy_port)
+                try:
+                    if use_tls:
+                        writer.write(
+                            f"CONNECT {_HOST}:{port} HTTP/1.1\r\n"
+                            f"Host: {_HOST}:{port}\r\n\r\n".encode()
+                        )
+                        await writer.drain()
+                        response = await asyncio.wait_for(
+                            reader.readuntil(b"\r\n\r\n"), 10
+                        )
+                        assert response.startswith(b"HTTP/1.1 200")
+                        client_context = ssl.create_default_context(
+                            cafile=str(tmp_path / "mitm-1" / "mitmproxy-ca-cert.pem")
+                        )
+                        await asyncio.wait_for(
+                            writer.start_tls(client_context, server_hostname=_HOST), 10
+                        )
+
+                    for index in range(3):
+                        if index == 1:
+                            # DNS changes, but the existing socket remains private.
+                            dns_answers = ("8.8.8.8",)
+                        elif index == 2:
+                            mcp_ssrf_settings.ssrf_protection_level = (
+                                SSRFProtectionLevel.VALIDATE_ALL
+                            )
+                        target = "/mcp" if use_tls else f"http://{_HOST}:{port}/mcp"
+                        writer.write(
+                            f"GET {target} HTTP/1.1\r\nHost: {_HOST}:{port}\r\n"
+                            "Connection: keep-alive\r\n\r\n".encode()
+                        )
+                        await writer.drain()
+                        headers = await asyncio.wait_for(
+                            reader.readuntil(b"\r\n\r\n"), 10
+                        )
+                        length = next(
+                            int(line.split(b":", 1)[1])
+                            for line in headers.split(b"\r\n")
+                            if line.lower().startswith(b"content-length:")
+                        )
+                        body = await asyncio.wait_for(reader.readexactly(length), 10)
+                        if index < 2:
+                            assert headers.startswith(b"HTTP/1.1 200")
+                            assert body == b"ok"
+                        else:
+                            assert headers.startswith(b"HTTP/1.1 403")
+                            assert b"destination_blocked" in body
+                        assert len(connections) == 1
+                        assert len(connections[0]) == min(index + 1, 2)
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+        finally:
+            upstream.close()
+            await upstream.wait_closed()
+        assert unpinned == []
 
     asyncio.run(exercise(), loop_factory=UpstreamEventLoop)

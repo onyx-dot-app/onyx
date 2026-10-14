@@ -62,7 +62,17 @@ class SandboxIPLookup(Protocol):
     def stop(self) -> None: ...
 
 
-class IdentityResolver:
+class SandboxIdentityResolver(Protocol):
+    """Resolve sandbox ownership and verify session attribution."""
+
+    def resolve_sandbox(self, src_ip: str) -> ResolvedSandbox | None: ...
+
+    def resolve_session_by_id(
+        self, session_id: UUID, user_id: UUID, tenant_id: str
+    ) -> UUID | None: ...
+
+
+class IdentityResolver(SandboxIdentityResolver):
     def __init__(self, ip_lookup: SandboxIPLookup) -> None:
         self._ip_lookup = ip_lookup
 

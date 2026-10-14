@@ -188,20 +188,25 @@ sandbox process (opencode / a tool call)
      sandbox_proxy/addons/gate.py:GateAddon.http_connect
   │
 2. Destination checks and address pinning
-     resolve_sandbox_destination applies one policy across all three hooks.
-     resolve_destination rejects non-global addresses and configured internal CIDRs,
-     except ONYX_SERVER_URL's exact host:port. For blocked addresses, it invokes
-     an authorization callback without repeating the DNS lookup.
+     resolve_destination applies one policy across all three hooks.
+     For new connections, it resolves DNS once. For reused connections, it checks
+     their addresses. Public addresses and ONYX_SERVER_URL's exact host:port pass.
+     Other addresses require an accessible Craft MCP origin.
      CONNECT checks HTTPS; requests check their scheme. Upstream sockets check TLS
      or the accepted CONNECT origin before allowing internal MCP addresses.
-     resolve_sandbox_destination authorizes the exact MCP origin for the source sandbox,
-     then reads that tenant's SSRF settings with fallback disabled.
+     For internal addresses, resolve_destination identifies the source sandbox,
+     checks exact MCP origin access, and reads tenant SSRF settings without fallback.
      resolve_destination applies these settings to the original DNS answers,
      including embedded IPv4, with the shared URL validator.
      Public and Onyx destinations do not require MCP or tenant-settings reads.
      Only these validated addresses are pinned.
      Raw TCP forwarding is disabled, so CONNECT payloads must pass HTTP checks.
      http_connect and request check destinations before processing traffic.
+     The gate records approved addresses for pending upstream connections, then
+     replaces them with the actual peer address when connected. Each request checks
+     matching pool candidates because mitmproxy selects the connection after request().
+     Disconnects and connection failures remove these records. This stores connection
+     facts, not access decisions, so policy changes apply to reused sockets.
      server_connect resolves and validates all answers again, then pins the
      upstream TCP connection to those addresses through UpstreamEventLoop.
      No new hostname lookup occurs between validation and connection.
@@ -378,7 +383,7 @@ process's memory and the encrypted DB columns
 `Sandbox.encrypted_pat`, all `EncryptedJson`/`SensitiveValue`). A sandbox
 attempting to curl the credential-issuing DB or the proxy's own control
 plane directly, rather than through a matched app request, would be a
-request to an internal address and blocked by `is_destination_blocked`
+request to an internal address and blocked by `resolve_destination`
 (§4.1 step 2) before it ever reached anything that could answer.
 
 ### 4.5 Approvals
@@ -536,6 +541,7 @@ they can never disagree about which server owns a request; see
    (`request_evaluator.py:_mcp_tool_actions`), never a silent pass-through.
 7. **The upstream socket must use only validated destination addresses.**
    `http_connect` and `request` reject forbidden destinations early.
+   Requests recheck pending and connected upstream addresses under current policy.
    `server_connect` calls `resolve_destination` and rejects the entire answer
    set if any address is forbidden. `pin_destination` and `UpstreamEventLoop`
    use those approved addresses for the TCP connection without another DNS
