@@ -486,19 +486,23 @@ export default function AuthenticationAccountSection({
                 width="fit"
               />
             </Section>
-            <Button
-              icon={accountsExpanded ? SvgFold : SvgExpand}
-              prominence="tertiary"
-              aria-label={
-                accountsExpanded
-                  ? t("add.savedAccounts.collapseButton.ariaLabel")
-                  : t("add.savedAccounts.expandButton.ariaLabel")
-              }
-              aria-expanded={accountsExpanded}
-              onClick={() =>
-                accountsExpanded ? foldAccounts() : setAccountsExpanded(true)
-              }
-            />
+            {/* Folding hides the saved accounts that are not the pick; with
+            none, it would do nothing, so the button is left out. */}
+            {(credentials?.length ?? 0) > 0 && (
+              <Button
+                icon={accountsExpanded ? SvgFold : SvgExpand}
+                prominence="tertiary"
+                aria-label={
+                  accountsExpanded
+                    ? t("add.savedAccounts.collapseButton.ariaLabel")
+                    : t("add.savedAccounts.expandButton.ariaLabel")
+                }
+                aria-expanded={accountsExpanded}
+                onClick={() =>
+                  accountsExpanded ? foldAccounts() : setAccountsExpanded(true)
+                }
+              />
+            )}
           </Section>
         }
       />
