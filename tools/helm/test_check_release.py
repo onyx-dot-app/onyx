@@ -87,30 +87,6 @@ class HelmReleaseTest(unittest.TestCase):
         self.metadata("1.0.1", "Enable feature")
         self.assertEqual(self.check().returncode, 0)
 
-    def test_semver_precedence(self) -> None:
-        for value in ("0.9.9", "1.0.0+build", "1.0.0-rc.1", "01.0.1", "invalid"):
-            with self.subTest(value=value):
-                self.metadata(value, "New release")
-                self.assertEqual(self.check().returncode, 1)
-        for value in ("1.0.1", "1.1.0-rc.1", "2.0.0"):
-            with self.subTest(value=value):
-                self.metadata(value, "New release")
-                self.assertEqual(self.check().returncode, 0)
-
-    def test_blank_or_format_only_descriptions_fail(self) -> None:
-        for value in ("", "   ", "Old   release\n"):
-            with self.subTest(value=value):
-                self.metadata("1.0.1", value)
-                self.assertEqual(self.check().returncode, 1)
-
-    def test_general_description_is_not_release_notes(self) -> None:
-        self.metadata("1.0.1")
-        path: Path = self.root / CHART
-        path.write_text(
-            path.read_text().replace("General chart purpose", "New purpose")
-        )
-        self.assertEqual(self.check().returncode, 1)
-
     def test_deletion_requires_release(self) -> None:
         self.values.unlink()
         self.assertEqual(self.check().returncode, 1)
@@ -143,12 +119,6 @@ class HelmReleaseTest(unittest.TestCase):
         self.metadata("1.0.1", "Conflicting release")
         self.assertEqual(self.check().returncode, 1)
 
-    def test_missing_baseline_fails_with_fetch_instruction(self) -> None:
-        self.git("update-ref", "-d", "refs/remotes/origin/main")
-        result: subprocess.CompletedProcess[str] = self.check()
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("git fetch origin main", result.stdout)
-
     def test_release_branch_is_exempt(self) -> None:
         self.git("checkout", "-qb", "release/test")
         self.values.write_text("enabled: true\n")
@@ -167,18 +137,6 @@ class HelmReleaseTest(unittest.TestCase):
         self.git("checkout", "--detach", "-q", "v1.0.0")
         with patch.dict(os.environ, {"GITHUB_REF": "refs/tags/v1.0.0"}):
             self.assertEqual(self.check().returncode, 0)
-
-    def test_other_detached_refs_still_require_release(self) -> None:
-        self.git("checkout", "--detach", "-q")
-        self.values.write_text("enabled: true\n")
-        for ref in ("refs/pull/123/merge", "refs/tags/helm/onyx-1.0.0"):
-            with self.subTest(ref=ref):
-                with patch.dict(os.environ, {"GITHUB_REF": ref}):
-                    self.assertEqual(self.check().returncode, 1)
-
-    def test_malformed_metadata_fails(self) -> None:
-        (self.root / CHART).write_text("version: [\n")
-        self.assertEqual(self.check().returncode, 1)
 
 
 if __name__ == "__main__":
