@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.chat.chat_utils import load_all_chat_files, load_chat_file
+from onyx.chat.chat_utils import load_all_chat_files
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatMessage, UserFile
 from onyx.file_store.models import ChatFileType, FileDescriptor
@@ -59,9 +59,8 @@ def test_attachment_metadata_is_read_before_workers() -> None:
 
 
 @pytest.mark.parametrize("status", [None, *UserFileStatus])
-@pytest.mark.parametrize("history", [False, True])
 def test_loading_preserves_processing_plaintext_guard(
-    status: UserFileStatus | None, history: bool
+    status: UserFileStatus | None,
 ) -> None:
     user_file_id = str(uuid4())
     descriptor: FileDescriptor = {
@@ -78,11 +77,7 @@ def test_loading_preserves_processing_plaintext_guard(
             "onyx.chat.chat_utils._get_or_extract_plaintext", return_value="text"
         ) as plaintext,
     ):
-        loaded = (
-            load_all_chat_files([ChatMessage(files=[descriptor])], session)[0]
-            if history
-            else load_chat_file(descriptor, session)
-        )
+        loaded = load_all_chat_files([ChatMessage(files=[descriptor])], session)[0]
     assert loaded.token_count == 0
     assert loaded.content_pending is pending
     assert plaintext.call_args.args[0] == user_file_id

@@ -319,18 +319,8 @@ def _get_chat_file_processing_info(
     return token_count, content_pending
 
 
-def load_chat_file(
-    file_descriptor: FileDescriptor, db_session: Session
-) -> ChatLoadedFile:
-    """Capture file metadata and build a lazy attachment on the caller thread."""
-    token_count, content_pending = _get_chat_file_processing_info(
-        file_descriptor, db_session
-    )
-    return _load_chat_file(file_descriptor, token_count, content_pending)
-
-
 @log_function_time()
-def _load_chat_file(
+def load_chat_file(
     file_descriptor: FileDescriptor, token_count: int, content_pending: bool
 ) -> ChatLoadedFile:
     """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
@@ -449,7 +439,7 @@ def load_all_chat_files(
         run_functions_tuples_in_parallel(
             [
                 (
-                    _load_chat_file,
+                    load_chat_file,
                     (file, *_get_chat_file_processing_info(file, db_session)),
                 )
                 for file in file_descriptors_for_history
