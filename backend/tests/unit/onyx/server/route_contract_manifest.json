@@ -234,6 +234,7 @@
   "GET /manage/admin/cc-pair/{cc_pair_id}/runs": "read:connectors +scope",
   "GET /manage/admin/cc-pair/{cc_pair_id}/sync-groups": "read:connectors +scope",
   "GET /manage/admin/cc-pair/{cc_pair_id}/sync-permissions": "read:connectors +scope",
+  "GET /manage/admin/cc-pair/{cc_pair_id}/throughput": "read:connectors +scope",
   "GET /manage/admin/connector": "manage:connectors",
   "GET /manage/admin/connector-checks/runs/{run_id}": "manage:connectors +scope",
   "GET /manage/admin/connector/failed-indexing-status": "manage:connectors",

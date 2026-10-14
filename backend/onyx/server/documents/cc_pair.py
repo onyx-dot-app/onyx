@@ -358,7 +358,15 @@ def get_cc_pair_throughput(
 ) -> CCPairThroughputResponse:
     """Counts the documents the pair indexed in each equal slice of the window,
     and lists when each run in it started."""
-    _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+    # Called directly: the route contract reaches the scope gate three calls deep.
+    if (
+        get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)
+        is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
     window_end = datetime.now(timezone.utc)
     window_start = window_end - window.duration()
     attempts = get_index_runs_since(db_session, cc_pair_id, window_start)
