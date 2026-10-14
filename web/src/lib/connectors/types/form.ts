@@ -23,7 +23,6 @@ export interface Option {
   description?:
     | string
     | ((currentCredential: CredentialValues | null) => string);
-  query?: string;
   optional?: boolean;
   hidden?: boolean;
   visibleCondition?: (

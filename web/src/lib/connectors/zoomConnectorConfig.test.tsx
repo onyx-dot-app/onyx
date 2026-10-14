@@ -2,7 +2,10 @@ import userEvent from "@testing-library/user-event";
 import { render, screen } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import { RenderField } from "@/views/admin/connectors/AddConnectorPage/form/FieldRendering";
-import { connectorConfigs } from "@/lib/connectors/connectors";
+import {
+  connectorConfigs,
+  useConnectorConfiguration,
+} from "@/lib/connectors/connectors";
 import {
   createConnectorInitialValues,
   createConnectorValidationSchema,
@@ -17,7 +20,8 @@ jest.mock("react-markdown", () => ({
 }));
 
 function ZoomForm() {
-  const config = connectorConfigs.zoom;
+  // The form shows the translated config, as the add-connector page does.
+  const config = useConnectorConfiguration(ValidSources.Zoom);
   return (
     <Formik
       initialValues={createConnectorInitialValues(ValidSources.Zoom)}

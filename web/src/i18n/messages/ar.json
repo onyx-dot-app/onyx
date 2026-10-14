@@ -3094,6 +3094,1088 @@
       },
       "optionsListInput": {
         "placeholder": "اختر {label} من القائمة أو أدخله"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "تفعيل معالجة مرفقات الصفحات بما فيها الصور والمستندات",
+              "label": "تضمين المرفقات"
+            },
+            "scoped_token": {
+              "label": "هذا رمز API ذو نطاقات",
+              "description": "تتطلب الرموز ذات النطاقات التوجيه عبر بوابة API الخاصة بـ Atlassian. اتركه معطلاً للرموز التقليدية."
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "معرّفات الاجتماعات",
+              "description": "تتم فهرسة كل اجتماع متكرر حسب كل موعد على حدة. يعيد Zoom المواعيد خلال آخر 15 شهرًا فقط، لذلك لا يمكن الوصول إلى المواعيد الأقدم عبر معرّف الاجتماع. لفهرسة سجل أقدم، حدّد النطاق بالبريد الإلكتروني للمضيف أو بمجموعة Zoom بدلاً من ذلك، فكلاهما بلا هذا الحد."
+            },
+            "webinar_ids": {
+              "label": "معرّفات الندوات عبر الإنترنت",
+              "description": "تتطلب الندوات عبر الإنترنت أيضًا الإضافة Webinar مفعّلة للمضيف. وعلى عكس معرّفات الاجتماعات، لا يوجد حد 15 شهرًا لسجل الندوات."
+            },
+            "host_emails": {
+              "label": "البريد الإلكتروني للمضيفين",
+              "description": "فهرسة كل جلسة يستضيفها هؤلاء الأشخاص، من الأنواع المحددة أدناه. يُبلَّغ عن البريد الإلكتروني الذي لا يطابق أي مستخدم Zoom كخطأ فهرسة بدلاً من تجاهله بصمت."
+            },
+            "group_id": {
+              "label": "معرّف مجموعة Zoom",
+              "description": "فهرسة كل جلسة يستضيفها أعضاء مجموعة Zoom واحدة، من الأنواع المحددة أدناه. يعيد Zoom قراءة قائمة الأعضاء عند كل تشغيل، لذلك يُلتقط المنضمون والمغادرون دون تعديل هذا الموصل."
+            },
+            "include_meetings": {
+              "label": "تضمين الاجتماعات",
+              "description": "ينطبق على البريد الإلكتروني للمضيفين ومجموعة Zoom. قوائم المعرّفات أعلاه تحدد بالفعل نوع كل معرّف."
+            },
+            "include_webinars": {
+              "label": "تضمين الندوات عبر الإنترنت",
+              "description": "ينطبق على البريد الإلكتروني للمضيفين ومجموعة Zoom. تتطلب الندوات عبر الإنترنت أيضًا الإضافة Webinar مفعّلة للمضيف."
+            },
+            "treat_link_access_as_public": {
+              "label": "اعتبار الوصول عبر الرابط عامًا",
+              "description": "يهم فقط مع مزامنة الأذونات. عند التفعيل، يكون التسجيل الذي وصول الرابط فيه \"أي شخص لديه الرابط\" أو قاعدة تسجيل الدخول مرئيًا لجميع مستخدمي Onyx، وقاعدة النطاق مرئية لمستخدمي تلك النطاقات. عند التعطيل، يكون كل نص مرئيًا لمالك التسجيل وحده، لأن Zoom لا يستطيع تحديد من ضمن \"الأشخاص الذين لديهم حق الوصول\"."
+            },
+            "plan_tier": {
+              "label": "خطة Zoom",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "يحدد سرعة استدعاء هذا الموصل لـ Zoom. اختر `pro` لحساب Pro، و`business_plus` لحسابات Business وEducation وEnterprise وPartner."
+            },
+            "rate_limit_percent": {
+              "label": "حد معدل طلبات Zoom API",
+              "description": "نسبة مئوية صحيحة من 1 إلى 100 من حد معدل Zoom للحساب يمكن لهذا الموصل استهلاكها. القيمة الفارغة تعني 50، مما يترك مجالاً لتكاملات Zoom الأخرى لدى العميل. كل موصل Zoom ينظم وتيرته بنفسه ولا يرى الموصلات الأخرى، لذلك يستهلك موصلان على حساب Zoom واحد هذه النسبة لكل منهما، فقسّمها إذا شغّلت عدة موصلات."
+            }
+          },
+          "description": "تهيئة موصل Zoom",
+          "subtext": "يفهرس نص التسجيل السحابي لكل جلسة Zoom، ضمن خطة Zoom Pro أو أعلى. تُتخطى الجلسة التي لم تُسجَّل سحابيًا قط. حدّد تاريخ بدء الفهرسة ضمن خيارات متقدمة. يسرد Zoom التسجيلات شهرًا واحدًا لكل طلب، لذلك بدونه يطلب الزحف الأول كل شهر وصولاً إلى 2013 ويستهلك حصة API لحسابك على سنوات لا تحتوي شيئًا."
+        },
+        "web": {
+          "description": "تهيئة موصل الويب",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي"
+            },
+            "web_connector_type": {
+              "label": "طريقة الاستخراج",
+              "options": {
+                "recursive": "تكراري",
+                "single": "صفحة واحدة",
+                "sitemap": "خريطة الموقع"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "التمرير قبل الاستخراج",
+              "description": "فعّله إذا كان الموقع يتطلب التمرير لتحميل المحتوى المطلوب"
+            },
+            "url_rewrites": {
+              "label": "إعادة كتابة عناوين URL",
+              "description": "أعد كتابة عناوين URL للمستندات قبل التخزين. مفيد عند الزحف عبر نسخة داخلية مع تخزين الروابط العامة الأصلية، مثلاً https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "بادئة URL المصدر",
+              "rightLabel": "بادئة الاستبدال"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "تهيئة موصل LumApps",
+          "fields": {
+            "base_url": {
+              "label": "عنوان API الأساسي (مضيف الخلية)",
+              "description": "مضيف الخلية/API في LumApps لديك، مثل https://go-cell-005.api.lumapps.com (وليس موقع المستندات api.lumapps.com)."
+            },
+            "organization_id": {
+              "label": "معرّف المؤسسة",
+              "description": "معرّف مؤسسة LumApps لديك (رقمي)."
+            },
+            "instance_ids": {
+              "label": "معرّفات النُّسخ (المواقع)",
+              "description": "قصر الفهرسة على معرّفات نُسخ/مواقع محددة. اتركه فارغًا لفهرسة كل المحتوى المرئي لمستخدم الخدمة."
+            },
+            "custom_content_types": {
+              "label": "معرّفات أنواع المحتوى المخصصة",
+              "description": "قصر الفهرسة على معرّفات أنواع محتوى مخصصة محددة. اتركه فارغًا لفهرسة جميع أنواع المحتوى."
+            },
+            "lang": {
+              "label": "اللغة",
+              "description": "اللغة المستخدمة لعنوان المحتوى ونصه وتسميات البيانات الوصفية (ISO 639-1، مثل en وfr)."
+            }
+          }
+        },
+        "github": {
+          "description": "تهيئة موصل GitHub",
+          "fields": {
+            "github_base_url": {
+              "label": "عنوان URL لخادم GitHub Enterprise",
+              "description": "اتركه فارغًا لـ github.com."
+            },
+            "repo_owner": {
+              "label": "مالك المستودع"
+            },
+            "github_mode": {
+              "label": "محتوى GitHub المراد فهرسته",
+              "tabs": {
+                "repo": {
+                  "label": "مستودع محدد"
+                },
+                "everything": {
+                  "label": "كل شيء"
+                }
+              }
+            },
+            "repositories": {
+              "label": "اسم المستودع (أو أسماؤها)",
+              "description": "لعدة مستودعات، أدخل الأسماء مفصولة بفواصل (مثل repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع المستودعات التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "include_prs": {
+              "label": "تضمين طلبات السحب",
+              "description": "فهرسة طلبات السحب من المستودعات"
+            },
+            "include_issues": {
+              "label": "تضمين المشكلات",
+              "description": "فهرسة المشكلات من المستودعات"
+            },
+            "include_files": {
+              "label": "تضمين المستندات",
+              "description": "فهرسة المستندات النصية (markdown والنصوص وغيرها) من المستودعات"
+            },
+            "branch": {
+              "label": "الفرع",
+              "description": "الفرع الذي تُفهرس منه المستندات (مثل gh-pages). اتركه فارغًا لاستخدام الفرع الافتراضي لكل مستودع. ينطبق فقط عند تفعيل \"تضمين المستندات\". بعد تغييره في موصل موجود، شغّل إعادة فهرسة لالتقاط الفرع الجديد فورًا."
+            }
+          }
+        },
+        "testrail": {
+          "description": "تهيئة موصل TestRail",
+          "fields": {
+            "testrail_base_url": {
+              "label": "عنوان URL الأساسي لـ TestRail"
+            },
+            "project_ids": {
+              "label": "معرّفات المشاريع",
+              "description": "قائمة مفصولة بفواصل بمعرّفات مشاريع TestRail المراد فهرستها (مثل 1 أو 1,2,3). اتركها فارغة لفهرسة جميع المشاريع."
+            },
+            "cases_page_size": {
+              "label": "حجم صفحة الحالات",
+              "description": "عدد حالات الاختبار المراد جلبها في كل صفحة من TestRail API (الافتراضي: 250)"
+            },
+            "max_pages": {
+              "label": "الحد الأقصى للصفحات",
+              "description": "الحد الأقصى لعدد الصفحات المجلوبة لمنع الحلقات اللانهائية (الافتراضي: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "حد أحرف المستند للتخطي",
+              "description": "تخطي فهرسة حالات الاختبار التي تتجاوز حد الأحرف هذا (الافتراضي: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "تهيئة موصل GitLab",
+          "fields": {
+            "gitlab_url": {
+              "label": "عنوان URL لـ GitLab"
+            },
+            "project_owner": {
+              "label": "مالك المشروع"
+            },
+            "project_name": {
+              "label": "اسم المشروع"
+            },
+            "include_mrs": {
+              "label": "تضمين طلبات الدمج",
+              "description": "فهرسة طلبات الدمج من المستودعات"
+            },
+            "include_issues": {
+              "label": "تضمين المشكلات",
+              "description": "فهرسة المشكلات من المستودعات"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "تهيئة موصل Bitbucket",
+          "subtext": "تهيئة موصل Bitbucket (السحابة فقط). يمكنك فهرسة مساحة عمل أو مشاريع أو مستودعات محددة.",
+          "fields": {
+            "workspace": {
+              "label": "مساحة العمل",
+              "description": "مساحة عمل Bitbucket المراد فهرستها (مثل \"atlassian\" من https://bitbucket.org/atlassian/workspace )."
+            },
+            "bitbucket_mode": {
+              "label": "محتوى Bitbucket المراد فهرسته",
+              "tabs": {
+                "repo": {
+                  "label": "مستودعات محددة"
+                },
+                "project": {
+                  "label": "المشروع (أو المشاريع)"
+                },
+                "workspace": {
+                  "label": "مساحة العمل"
+                }
+              }
+            },
+            "repositories": {
+              "label": "معرّفات المستودعات (Slugs)",
+              "description": "لعدة مستودعات، أدخل المعرّفات مفصولة بفواصل (مثل repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "مفتاح المشروع (أو مفاتيحها)",
+              "description": "مفتاح مشروع Bitbucket واحد أو أكثر (مفصولة بفواصل) لفهرسة جميع المستودعات في تلك المشاريع (مثل PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "مساحة العمل",
+              "description": "سيفهرس هذا الموصل جميع المستودعات في مساحة العمل."
+            }
+          }
+        },
+        "gitbook": {
+          "description": "تهيئة موصل GitBook",
+          "fields": {
+            "space_id": {
+              "label": "معرّف المساحة",
+              "description": "معرّف مساحة GitBook المراد فهرستها. يمكن العثور عليه في عنوان URL لصفحة داخل المساحة. مثلاً، إذا كان عنوانك `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`، فمعرّف مساحتك هو `8JkzVx8QCIGRrmxhGHU8`."
+            }
+          }
+        },
+        "google_drive": {
+          "description": "تهيئة موصل Google Drive",
+          "fields": {
+            "credential_kind": {
+              "label": "نوع بيانات الاعتماد"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "عام"
+                },
+                "Specific": {
+                  "label": "محدد"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "تضمين المحركات المشتركة",
+              "description": {
+                "oauth": "سيتيح هذا لـ Onyx فهرسة كل شيء في المحركات المشتركة التي يمكنك الوصول إليها.",
+                "serviceAccount": "سيتيح هذا لـ Onyx فهرسة كل شيء في المحركات المشتركة لمؤسستك."
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "تضمين My Drive",
+                "serviceAccount": "تضمين My Drive لدى الجميع"
+              },
+              "description": {
+                "oauth": "سيتيح هذا لـ Onyx فهرسة كل شيء في My Drive الخاص بك.",
+                "serviceAccount": "سيتيح هذا لـ Onyx فهرسة كل شيء في My Drive لدى الجميع."
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "سيتيح هذا لـ Onyx فهرسة جميع الملفات المشتركة معك.",
+              "label": "تضمين كل الملفات المشتركة معك"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "أدخل قائمة مفصولة بفواصل بعناوين URL للمحرك المشترك الذي تريد فهرسته. يجب أن تملك حق الوصول إلى هذه المحركات المشتركة.",
+                "serviceAccount": "أدخل قائمة مفصولة بفواصل بعناوين URL للمحرك المشترك الذي تريد فهرسته."
+              },
+              "label": "عناوين URL للمحركات المشتركة"
+            },
+            "shared_folder_urls": {
+              "description": "أدخل قائمة مفصولة بفواصل بعناوين URL لأي مجلدات تريد فهرستها. ستُفهرس الملفات الموجودة في هذه المجلدات (وجميع المجلدات الفرعية).",
+              "label": "عناوين URL للمجلدات"
+            },
+            "my_drive_emails": {
+              "description": "أدخل قائمة مفصولة بفواصل بالبريد الإلكتروني للمستخدمين الذين تريد فهرسة MyDrive الخاص بهم.",
+              "label": "البريد الإلكتروني لـ My Drive"
+            },
+            "specific_user_emails": {
+              "description": "أدخل قائمة مفصولة بفواصل بالبريد الإلكتروني لمستخدمين محددين للفهرسة. سيُفهرس هذا الملفات التي يمكن لهؤلاء المستخدمين الوصول إليها فقط.",
+              "label": "البريد الإلكتروني لمستخدمين محددين"
+            },
+            "exclude_domain_link_only": {
+              "label": "إخفاء الملفات المتاحة عبر رابط النطاق فقط",
+              "description": "عند التفعيل، يتخطى Onyx الملفات المشتركة على نطاق واسع (النطاق أو العامة) لكنها تتطلب الرابط للوصول."
+            }
+          }
+        },
+        "gmail": {
+          "description": "تهيئة موصل Gmail"
+        },
+        "bookstack": {
+          "description": "تهيئة موصل Bookstack",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "عنوان URL الأساسي لـ BookStack"
+            }
+          }
+        },
+        "outline": {
+          "description": "تهيئة موصل Outline",
+          "fields": {
+            "outline_base_url": {
+              "label": "عنوان URL الأساسي لـ Outline"
+            }
+          }
+        },
+        "confluence": {
+          "description": "تهيئة موصل Confluence",
+          "fields": {
+            "is_cloud": {
+              "label": "سحابي",
+              "description": "اختر Confluence Cloud لموقع على atlassian.net، أو Confluence Data Center لموقع Confluence Server أو Data Center مستضاف ذاتيًا."
+            },
+            "wiki_base": {
+              "label": "عنوان URL للموقع"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "space": {
+                  "label": "مساحة"
+                },
+                "page": {
+                  "label": "صفحة"
+                },
+                "cql": {
+                  "label": "استعلام CQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع الصفحات التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "space": {
+              "label": "مفتاح المساحة",
+              "description": "مفتاح مساحة Confluence المراد فهرستها (مثل `KB`)."
+            },
+            "page_id": {
+              "label": "معرّف الصفحة",
+              "description": "معرّف صفحة محددة للفهرسة (مثل `131368`)"
+            },
+            "index_recursively": {
+              "label": "فهرسة تكرارية",
+              "description": "عند تفعيل هذا الخيار، سنفهرس الصفحة المحددة بمعرّف الصفحة وجميع صفحاتها الفرعية."
+            },
+            "cql_query": {
+              "label": "استعلام CQL",
+              "description": "مهم: ندعم حاليًا فقط استعلامات CQL التي تعيد كائنات من النوع \"page\". هذا يعني أن كل استعلام CQL يجب أن يحتوي على \"type=page\" كمرشح النوع الوحيد. ومن المهم أيضًا ألا تُستخدم مرشحات \"lastModified\" لأنها تسبب مشكلات في منطق استطلاع الموصل. لا تستخدم ORDER BY لأن الموصل يحدد ترتيب الفرز بنفسه. سنجلب مع ذلك جميع المرفقات والتعليقات للصفحات التي يعيدها استعلام CQL. ستُستبدل أي مرشحات \"lastmodified\". راجع [توثيق CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) من Atlassian لمزيد من التفاصيل."
+            }
+          }
+        },
+        "jira": {
+          "description": "تهيئة موصل Jira",
+          "subtext": "حدّد محتوى Jira المراد فهرسته. يمكنك فهرسة كل شيء أو تحديد مشروع معين.",
+          "fields": {
+            "jira_base_url": {
+              "label": "عنوان URL للموقع"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "project": {
+                  "label": "مشروع"
+                },
+                "jql": {
+                  "label": "استعلام JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع المسائل التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع محدد للفهرسة (مثل \"PROJ\")."
+            },
+            "jql_query": {
+              "label": "استعلام JQL",
+              "description": "استعلام JQL مخصص لتصفية مسائل Jira.\n\nمهم: لا تضمّن أي مرشحات زمنية في استعلام JQL لأنها تتعارض مع منطق الموصل. كذلك لا تضمّن عبارات ORDER BY.\n\nراجع [توثيق JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) من Atlassian لمزيد من التفاصيل حول الصيغة."
+            },
+            "comment_email_blacklist": {
+              "label": "قائمة حظر البريد الإلكتروني للتعليقات",
+              "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "salesforce": {
+          "description": "تهيئة موصل Salesforce",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "نوع التهيئة",
+              "tabs": {
+                "simple": {
+                  "label": "بسيط"
+                },
+                "advanced": {
+                  "label": "متقدم"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "الكائنات المطلوبة",
+              "description": "حدّد أنواع كائنات Salesforce التي تريد فهرستها. إذا لم تكن متأكدًا، فلا تحدد أي كائنات وسيفهرس Onyx افتراضيًا حسب \"Account\".\n\nتلميح: استخدم صيغة المفرد لاسم الكائن (مثل \"Opportunity\" بدلاً من \"Opportunities\")."
+            },
+            "custom_query_config": {
+              "label": "تهيئة الاستعلام المخصص",
+              "description": "أدخل تهيئة JSON تحدد بدقة الحقول والكائنات الفرعية المراد فهرستها. يمنحك هذا تحكمًا كاملاً في بنية البيانات.\n\nمثال: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n[اطّلع على مستنداتنا]({docsAdminsPath}/connectors/official/salesforce) لمزيد من التفاصيل."
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "تهيئة موصل SharePoint",
+          "fields": {
+            "sites": {
+              "label": "المواقع",
+              "description": "- إذا لم تُحدد مواقع، فستُفهرس جميع المواقع في مؤسستك (يتطلب الإذن `Sites.Read.All`).\n- تحديد `https://onyxai.sharepoint.com/sites/support` مثلاً يفهرس هذا الموقع فقط.\n- تحديد `https://onyxai.sharepoint.com/sites/support/subfolder` مثلاً يفهرس هذا المجلد فقط.\n- لفهرسة المواقع الشخصية للمستخدمين، استخدم [موصل OneDrive]({docsAdminsPath}/connectors/official/onedrive).\n- يعمل تحديد المواقع حاليًا مع نُسخ SharePoint التي تستخدم الإنجليزية أو الإسبانية أو الألمانية. تواصل مع فريق Onyx إذا احتجت إلى دعم لغة أخرى."
+            },
+            "include_site_documents": {
+              "label": "فهرسة المستندات",
+              "description": "فهرسة مستندات جميع مكتبات SharePoint أو مجلداتها المحددة أعلاه."
+            },
+            "include_site_pages": {
+              "label": "فهرسة مواقع ASPX",
+              "description": "فهرسة صفحات aspx لجميع مواقع SharePoint المحددة أعلاه، حتى إذا حُددت مكتبة أو مجلد."
+            },
+            "treat_sharing_link_as_public": {
+              "label": "اعتبار روابط المشاركة عامة",
+              "description": "عند التفعيل، تُعامل المستندات التي لها رابط مشاركة (مجهول أو على مستوى المؤسسة) على أنها عامة (مرئية لجميع مستخدمي Onyx). عند التعطيل، لا يرى المستند إلا المستخدمون والمجموعات الذين لديهم تعيينات أدوار صريحة."
+            },
+            "excluded_sites": {
+              "label": "المواقع المستبعدة",
+              "description": "عناوين URL للمواقع أو أنماط glob المراد استبعادها من الفهرسة. لن تُفهرس المواقع المطابقة أبدًا، حتى لو ظهرت في قائمة المواقع أعلاه. أمثلة: `https://contoso.sharepoint.com/sites/archive` (مطابقة تامة)، `*://*/sites/archive-*` (نمط glob)."
+            },
+            "excluded_paths": {
+              "label": "المسارات المستبعدة",
+              "description": "أنماط glob لمسارات الملفات المراد استبعادها من الفهرسة داخل مكتبات المستندات. تُطابق الأنماط مع المسار النسبي الكامل واسم الملف معًا. أمثلة: `*.tmp` (ملفات مؤقتة)، `~$*` (ملفات قفل Office)، `Archive/*` (مجلد)."
+            },
+            "authority_host": {
+              "label": "مضيف جهة المصادقة",
+              "description": "مضيف جهة هوية Microsoft المستخدم للمصادقة. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "مضيف Graph API",
+              "description": "مضيف Microsoft Graph API. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://graph.microsoft.us"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "لاحقة نطاق SharePoint",
+              "description": "لاحقة النطاق لمواقع SharePoint (مثل sharepoint.com). في معظم عمليات النشر، اتركها على الإعداد الافتراضي. لـ GCC High، استخدم sharepoint.us"
+            }
+          }
+        },
+        "teams": {
+          "description": "تهيئة موصل Teams",
+          "fields": {
+            "teams": {
+              "label": "الفرق",
+              "description": "حدّد 0 أو أكثر من الفرق للفهرسة. مثلاً، تحديد الفريق \"Support\" للمؤسسة \"onyxai\" يجعلنا نفهرس فقط الرسائل المرسلة في القنوات التابعة للفريق \"Support\". إذا لم تُحدد فرق، فستُفهرس جميع الفرق في مؤسستك."
+            },
+            "include_attachments": {
+              "description": "فهرسة الملفات في تبويب الملفات لكل قناة كمستندات مستقلة، مع القرّاء الذين يمنحهم SharePoint حق الوصول إليها. يتطلب بيانات اعتماد شهادة، وFiles.Read.All أو Sites.Read.All على Graph، وSites.FullControl.All على SharePoint API لقراءة قرّاء كل ملف. مع Sites.Selected، امنح التطبيق تحكمًا كاملاً في موقع كل قناة."
+            },
+            "include_inline_images": {
+              "label": "تضمين الصور المضمّنة",
+              "description": "فهرسة الصور الملصقة في رسائل القناة مع سلسلتها. لا يتطلب أي إذن إضافي. لا يُنزَّل شيء ما دام استخراج الصور وتحليلها معطلاً في إعدادات البحث."
+            },
+            "include_meeting_transcripts": {
+              "label": "تضمين نصوص الاجتماعات",
+              "description": "فهرسة نصوص الاجتماعات المجدولة كمستندات مستقلة، يمكن للمنظّم والحاضرين قراءتها. يتطلب أذونات التطبيق OnlineMeetingTranscript.Read.All وOnlineMeetings.Read.All وUser.Read.All، وإعداد المستأجر الذي يسمح لـ Graph API بالوصول إلى النصوص، وسياسة وصول للتطبيق ممنوحة للمنظّمين. اجتماعات القنوات غير مشمولة. تُفهرس نصوص آخر ستة أشهر، ويغادر النص الفهرس حين يصبح أقدم من ذلك."
+            },
+            "include_meeting_chats": {
+              "label": "تضمين محادثات الاجتماعات",
+              "description": "فهرسة ما يكتبه الأشخاص في محادثة اجتماع مجدول، بمستند لكل يوم، يمكن لأعضاء المحادثة قراءته. يتطلب أذونات التطبيق Chat.Read.All وUser.Read.All. يشمل الاجتماعات المنظَّمة في هذا المستأجر: لا تتيح Microsoft محادثة اجتماع نظّمته مؤسسة أخرى."
+            },
+            "meeting_organizers": {
+              "label": "منظّمو الاجتماعات",
+              "description": "أسماء المستخدمين الأساسية (UPN) للمنظّمين الذين تُفهرس نصوص اجتماعاتهم ومحادثاتها. اتركه فارغًا لتضمين كل مستخدم مفعّل لديه ترخيص Teams."
+            },
+            "authority_host": {
+              "label": "مضيف جهة المصادقة",
+              "description": "مضيف جهة هوية Microsoft المستخدم للمصادقة. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "مضيف Graph API",
+              "description": "مضيف Microsoft Graph API. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://graph.microsoft.us"
+            }
+          }
+        },
+        "outlook": {
+          "description": "تهيئة موصل Outlook",
+          "fields": {
+            "mailboxes": {
+              "label": "صناديق البريد",
+              "description": "أسماء المستخدمين الأساسية أو عناوين البريد الإلكتروني الأساسية لصناديق البريد المراد فهرستها. اترك هذا الحقل ومجموعات صناديق البريد فارغين لفهرسة كل صندوق بريد يمكن لتسجيل التطبيق فتحه. لا تُلتقط صناديق البريد المشتركة تلقائيًا أبدًا ويجب إدراجها هنا."
+            },
+            "mailbox_groups": {
+              "label": "مجموعات صناديق البريد",
+              "description": "الأسماء المعروضة أو معرّفات الكائنات لمجموعات Entra. يُفهرس صندوق بريد كل عضو، بما في ذلك أعضاء المجموعات المتداخلة، بحيث يمكن حصر المستأجر في الأشخاص الذين يستخدمون Onyx. يتطلب إذن التطبيق GroupMember.Read.All."
+            },
+            "include_attachments": {
+              "description": "فهرسة نص مرفقات الملفات. تُتخطى الصور المضمّنة والعناصر المتداخلة وروابط السحابة."
+            },
+            "include_calendar": {
+              "label": "تضمين التقويم",
+              "description": "فهرسة تقويم كل صندوق بريد إضافة إلى بريده. يتطلب إذن التطبيق Calendars.Read."
+            },
+            "excluded_folders": {
+              "label": "المجلدات المستبعدة",
+              "description": "أسماء المجلدات المراد تخطيها في كل صندوق بريد، إضافة إلى Junk Email وDeleted Items وDrafts وOutbox التي تُتخطى دائمًا."
+            },
+            "calendar_past_days": {
+              "label": "أيام التقويم الماضية",
+              "description": "يُستخدم عند تفعيل تضمين التقويم. إلى أي مدى يمتد نطاق التقويم إلى الماضي. تغادر الأحداث الأقدم من ذلك الفهرس عند التنقية التالية مع تقدم النطاق. يتطلب توسيعه لاحقًا إعادة فهرسة، لأن الأحداث غير المتغيرة لا تعود إلى الفهرس من تلقاء نفسها."
+            },
+            "calendar_future_days": {
+              "label": "أيام التقويم المستقبلية",
+              "description": "يُستخدم عند تفعيل تضمين التقويم. إلى أي مدى يمتد نطاق التقويم إلى المستقبل. يتطلب توسيعه لاحقًا إعادة فهرسة، لأن الأحداث غير المتغيرة لا تعود إلى الفهرس من تلقاء نفسها."
+            },
+            "authority_host": {
+              "label": "مضيف جهة المصادقة",
+              "description": "مضيف جهة هوية Microsoft المستخدم للمصادقة. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "مضيف Graph API",
+              "description": "مضيف Microsoft Graph API. في معظم عمليات النشر، اتركه على الإعداد الافتراضي. لـ GCC High / DoD، استخدم https://graph.microsoft.us"
+            }
+          }
+        },
+        "discourse": {
+          "description": "تهيئة موصل Discourse",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي"
+            },
+            "categories": {
+              "label": "الفئات"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "تهيئة موصل Drupal Wiki",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي",
+              "description": "عنوان URL الأساسي لنسخة Drupal Wiki لديك (مثل https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "محتوى Drupal Wiki المراد فهرسته",
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "specific": {
+                  "label": "مساحات/صفحات محددة"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع المساحات التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            },
+            "spaces": {
+              "label": "معرّفات المساحات",
+              "description": "حدّد معرّف مساحة واحدًا أو أكثر للفهرسة. القيم الرقمية فقط مسموحة."
+            },
+            "pages": {
+              "label": "معرّفات الصفحات",
+              "description": "حدّد معرّف صفحة واحدًا أو أكثر للفهرسة. القيم الرقمية فقط مسموحة."
+            }
+          }
+        },
+        "axero": {
+          "description": "تهيئة موصل Axero",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي لـ Axero"
+            },
+            "spaces": {
+              "label": "المساحات",
+              "description": "حدّد صفر مساحة أو أكثر للفهرسة (بمعرّفات المساحات). إذا لم تُحدد معرّفات مساحات، فستُفهرس جميع المساحات."
+            }
+          }
+        },
+        "productboard": {
+          "description": "تهيئة موصل Productboard"
+        },
+        "slack": {
+          "description": "تهيئة موصل Slack",
+          "fields": {
+            "channels": {
+              "label": "القنوات",
+              "description": "حدّد 0 أو أكثر من القنوات للفهرسة. اختر قناة من القائمة لتتبعها بالمعرّف حتى لا تكسر إعادة التسمية الفهرسة، أو اكتب اسم قناة لا تعرضها القائمة، مثل قناة خاصة دُعي إليها الروبوت. إذا لم تُحدد قنوات، فستُفهرس جميع القنوات في مساحة عملك."
+            },
+            "channel_regex_enabled": {
+              "label": "تفعيل Regex للقنوات",
+              "description": "عند التفعيل، سنعامل \"القنوات\" المحددة أعلاه كتعبيرات نمطية. ستُجلب رسائل القناة بواسطة الموصل إذا طابق اسم القناة بالكامل أيًا من التعبيرات النمطية المحددة.\n\nمثلاً، تحديد `.*-support.*` كـ \"قناة\" يجعل الموصل يضمّن أي قنوات يحتوي اسمها على \"-support\"."
+            },
+            "exclude_channels": {
+              "label": "القنوات المراد استبعادها",
+              "description": "حدّد 0 أو أكثر من القنوات للاستبعاد. يُطبَّق الاستبعاد بعد مرشح \"القنوات\" أعلاه، لذلك تُستبعد القناة المطابقة لكليهما. إذا لم تُحدد قنوات، فلا يُستبعد شيء."
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "تفعيل Regex لاستبعاد القنوات",
+              "description": "عند التفعيل، سنعامل \"القنوات المراد استبعادها\" المحددة أعلاه كتعبيرات نمطية. تُستبعد القناة إذا طابق اسمها بالكامل أيًا من التعبيرات النمطية المحددة.\n\nمثلاً، تحديد `.*-alerts` كـ \"قناة مستبعدة\" يجعل الموصل يتخطى أي قنوات ينتهي اسمها بـ \"-alerts\"."
+            },
+            "include_bot_messages": {
+              "label": "تضمين رسائل الروبوتات",
+              "description": "عند التفعيل، تُفهرس رسائل الروبوتات والتطبيقات. مفيد للقنوات التي تعتمد أساسًا على الروبوتات (مثل تحديثات CRM والملاحظات الآلية)."
+            }
+          }
+        },
+        "slab": {
+          "description": "تهيئة موصل Slab",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي",
+              "description": "حدّد عنوان URL الأساسي لفريق Slab لديك. سيبدو شيئًا مثل: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "تهيئة موصل Guru"
+        },
+        "gong": {
+          "description": "تهيئة موصل Gong",
+          "fields": {
+            "gong_base_url": {
+              "label": "عنوان URL الأساسي لـ Gong API",
+              "description": "القيمة الافتراضية `https://api.gong.io`."
+            },
+            "workspaces": {
+              "label": "مساحات العمل",
+              "description": "حدّد 0 أو أكثر من مساحات العمل للفهرسة. أدخل معرّف مساحة العمل أو اسمها الدقيق من Gong. إذا لم تُحدد مساحات عمل، فستُفهرس نصوص جميع مساحات العمل."
+            }
+          }
+        },
+        "loopio": {
+          "description": "تهيئة موصل Loopio",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "النطاق الفرعي لـ Loopio",
+              "description": "النطاق الفرعي لموقع Loopio لديك، مثل `acme` في `acme.loopio.com`."
+            },
+            "loopio_stack_name": {
+              "label": "اسم مكدّس Loopio",
+              "description": "يجب أن يطابق الاسم في Library Management تمامًا. اتركه فارغًا إذا أردت فهرسة جميع المكدّسات"
+            }
+          }
+        },
+        "file": {
+          "description": "تهيئة موصل الملفات",
+          "fields": {
+            "file_locations": {
+              "label": "الملفات"
+            }
+          }
+        },
+        "zulip": {
+          "description": "تهيئة موصل Zulip",
+          "fields": {
+            "realm_name": {
+              "label": "اسم النطاق (Realm)"
+            },
+            "realm_url": {
+              "label": "عنوان URL للنطاق (Realm)"
+            }
+          }
+        },
+        "coda": {
+          "description": "تهيئة موصل Coda"
+        },
+        "notion": {
+          "description": "تهيئة موصل Notion",
+          "fields": {
+            "root_page_id": {
+              "label": "معرّف الصفحة الجذر",
+              "description": "إذا حُدد، فستُفهرس الصفحة المحددة مع جميع صفحاتها الفرعية فقط. إذا تُرك فارغًا، فستُفهرس جميع الصفحات التي مُنح التكامل حق الوصول إليها."
+            }
+          }
+        },
+        "hubspot": {
+          "description": "تهيئة موصل HubSpot",
+          "fields": {
+            "object_types": {
+              "label": "أنواع الكائنات",
+              "options": {
+                "tickets": "التذاكر",
+                "companies": "الشركات",
+                "deals": "الصفقات",
+                "contacts": "جهات الاتصال"
+              },
+              "description": "اختر أنواع كائنات HubSpot المراد فهرستها. تُحدد جميع الأنواع افتراضيًا."
+            }
+          }
+        },
+        "document360": {
+          "description": "تهيئة موصل Document360",
+          "fields": {
+            "workspace": {
+              "label": "مساحة العمل"
+            },
+            "categories": {
+              "label": "الفئات",
+              "description": "حدّد 0 أو أكثر من الفئات للفهرسة. مثلاً، تحديد الفئة \"Help\" يجعلنا نفهرس فقط كل المحتوى داخل الفئة \"Help\". إذا لم تُحدد فئات، فستُفهرس جميع الفئات في مساحة عملك."
+            }
+          }
+        },
+        "clickup": {
+          "description": "تهيئة موصل ClickUp",
+          "fields": {
+            "connector_type": {
+              "label": "نوع الموصل",
+              "options": {
+                "list": "قائمة",
+                "folder": "مجلد",
+                "space": "مساحة",
+                "workspace": "مساحة عمل"
+              }
+            },
+            "connector_ids": {
+              "label": "معرّفات الموصل",
+              "description": "حدّد 0 أو أكثر من المعرّفات للفهرسة منها."
+            },
+            "retrieve_task_comments": {
+              "label": "جلب تعليقات المهام",
+              "description": "عند التحديد، ستُجلب أيضًا جميع تعليقات كل مهمة وتُفهرس."
+            }
+          }
+        },
+        "google_sites": {
+          "description": "تهيئة موصل Google Sites",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL الأساسي"
+            },
+            "file_locations": {
+              "label": "تصدير الموقع",
+              "description": "ارفع ملف `.zip` يحتوي على HTML لموقع Google Site الخاص بك."
+            }
+          }
+        },
+        "zendesk": {
+          "description": "تهيئة موصل Zendesk",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "النطاق الفرعي لـ Zendesk",
+              "description": "النطاق الفرعي لموقع Zendesk لديك، مثل `acme` في `acme.zendesk.com`."
+            },
+            "content_type": {
+              "label": "نوع المحتوى",
+              "options": {
+                "articles": "المقالات",
+                "tickets": "التذاكر"
+              }
+            },
+            "calls_per_minute": {
+              "label": "استدعاءات API في الدقيقة",
+              "description": "يحدد عدد استدعاءات Zendesk API التي يمكن لهذا الموصل إجراؤها في الدقيقة (ينطبق على هذا الموصل فقط). راجع القيم الافتراضية: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "تهيئة موصل Box",
+          "fields": {
+            "folder_ids": {
+              "label": "المجلدات",
+              "description": "معرّفات مجلدات Box أو عناوين URL للمجلدات (مثل https://app.box.com/folder/123456789) المراد فهرستها. اتركه فارغًا لفهرسة كل ما يراه المستخدم المصادَق."
+            },
+            "include_web_links": {
+              "label": "تضمين روابط الويب",
+              "description": "فهرسة روابط الويب في Box (الإشارات المرجعية) أيضًا كمستندات خفيفة."
+            }
+          }
+        },
+        "dropbox": {
+          "description": "تهيئة موصل Dropbox"
+        },
+        "s3": {
+          "description": "تهيئة موصل S3",
+          "fields": {
+            "bucket_name": {
+              "label": "اسم الحاوية"
+            },
+            "prefix": {
+              "label": "البادئة"
+            },
+            "region_name": {
+              "label": "منطقة AWS",
+              "description": "منطقة AWS للحاوية (مثل us-east-1). مطلوبة للحاويات في أقسام غير افتراضية مثل GovCloud (us-gov-west-1)؛ وإلا يُستخدم تحديد المنطقة الافتراضي."
+            },
+            "bucket_type": {
+              "label": "نوع الحاوية"
+            }
+          }
+        },
+        "r2": {
+          "description": "تهيئة موصل R2",
+          "fields": {
+            "bucket_name": {
+              "label": "اسم الحاوية"
+            },
+            "prefix": {
+              "label": "البادئة"
+            },
+            "european_residency": {
+              "label": "إقامة البيانات في الاتحاد الأوروبي",
+              "description": "حدّد هذا المربع إذا كانت إقامة البيانات في الاتحاد الأوروبي مفعّلة لحاويتك."
+            },
+            "bucket_type": {
+              "label": "نوع الحاوية"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "تهيئة موصل Google Cloud Storage",
+          "fields": {
+            "bucket_name": {
+              "label": "اسم الحاوية",
+              "description": "اسم حاوية GCS المراد فهرستها، مثل my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "بادئة المسار"
+            },
+            "bucket_type": {
+              "label": "نوع الحاوية"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "تهيئة موصل OCI Storage",
+          "fields": {
+            "bucket_name": {
+              "label": "اسم الحاوية"
+            },
+            "prefix": {
+              "label": "البادئة"
+            },
+            "bucket_type": {
+              "label": "نوع الحاوية"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "تهيئة موصل Wikipedia",
+          "fields": {
+            "language_code": {
+              "label": "رمز اللغة",
+              "description": "أدخل رمز لغة Wikipedia صالحًا (مثل \"en\" و\"es\")"
+            },
+            "categories": {
+              "label": "الفئات المراد فهرستها",
+              "description": "حدّد 0 أو أكثر من أسماء الفئات للفهرسة. في معظم مواقع Wikipedia، هذه صفحات باسم بالصيغة \"Category: XYZ\" وهي قوائم لصفحات/فئات أخرى. حدّد اسم الفئة فقط، وليس عنوان URL الخاص بها."
+            },
+            "pages": {
+              "label": "الصفحات",
+              "description": "حدّد 0 أو أكثر من أسماء الصفحات للفهرسة."
+            },
+            "recurse_depth": {
+              "label": "عمق التكرار",
+              "description": "عند فهرسة فئات لها فئات فرعية، يحدد هذا عدد المستويات المراد فهرستها. حدّد 0 لفهرسة الفئة نفسها فقط (أي بلا تكرار). حدّد -1 لعمق تكرار غير محدود. لاحظ أن الفئة قد تحتوي نفسها ضمن تبعياتها في حالات نادرة، مما يسبب حلقة لا نهائية. استخدم -1 فقط إذا كنت واثقًا من أن هذا لن يحدث."
+            }
+          }
+        },
+        "xenforo": {
+          "description": "تهيئة موصل Xenforo",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL",
+              "description": "عنوان URL لمنتدى XenForo v2.2 المراد فهرسته. يمكن أن يكون لوحة أو موضوعًا."
+            }
+          }
+        },
+        "asana": {
+          "description": "تهيئة موصل Asana",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "معرّف مساحة العمل",
+              "description": "معرّف مساحة عمل Asana المراد فهرستها. يمكنك العثور عليه في https://app.asana.com/api/1.0/workspaces. وهو رقم يشبه 1234567890123456."
+            },
+            "asana_project_ids": {
+              "label": "معرّفات المشاريع",
+              "description": "معرّفات مشاريع Asana محددة للفهرسة، مفصولة بفواصل. اتركها فارغة لفهرسة جميع المشاريع في مساحة العمل. مثال: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "معرّف الفريق",
+              "description": "معرّف فريق يُستخدم للوصول إلى المهام المرئية للفريق. يتيح هذا فهرسة المهام المرئية للفريق إضافة إلى المهام العامة. اتركه فارغًا إذا لم ترغب في استخدام هذه الميزة."
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "تهيئة موصل MediaWiki",
+          "fields": {
+            "language_code": {
+              "label": "رمز اللغة",
+              "description": "أدخل رمز لغة MediaWiki صالحًا (مثل \"en\" و\"es\")"
+            },
+            "hostname": {
+              "label": "عنوان URL لموقع MediaWiki"
+            },
+            "categories": {
+              "label": "الفئات المراد فهرستها",
+              "description": "حدّد 0 أو أكثر من أسماء الفئات للفهرسة. في معظم مواقع MediaWiki، هذه صفحات باسم بالصيغة \"Category: XYZ\" وهي قوائم لصفحات/فئات أخرى. حدّد اسم الفئة فقط، وليس عنوان URL الخاص بها."
+            },
+            "pages": {
+              "label": "الصفحات",
+              "description": "حدّد 0 أو أكثر من أسماء الصفحات للفهرسة. حدّد اسم الصفحة فقط، وليس عنوان URL الخاص بها."
+            },
+            "recurse_depth": {
+              "label": "عمق التكرار",
+              "description": "عند فهرسة فئات لها فئات فرعية، يحدد هذا عدد المستويات المراد فهرستها. حدّد 0 لفهرسة الفئة نفسها فقط (أي بلا تكرار). حدّد -1 لعمق تكرار غير محدود. لاحظ أن الفئة قد تحتوي نفسها ضمن تبعياتها في حالات نادرة، مما يسبب حلقة لا نهائية. استخدم -1 فقط إذا كنت واثقًا من أن هذا لن يحدث."
+            }
+          }
+        },
+        "discord": {
+          "description": "تهيئة موصل Discord",
+          "fields": {
+            "server_ids": {
+              "label": "معرّفات الخوادم",
+              "description": "حدّد 0 أو أكثر من معرّفات الخوادم لتضمينها. ستُستخدم القنوات داخلها فقط للفهرسة"
+            },
+            "channel_names": {
+              "label": "القنوات",
+              "description": "حدّد 0 أو أكثر من القنوات للفهرسة. مثلاً، تحديد القناة \"support\" يجعلنا نفهرس فقط كل المحتوى داخل القناة \"#support\". إذا لم تُحدد قنوات، فستُفهرس جميع القنوات التي يملك الروبوت حق الوصول إليها."
+            },
+            "start_date": {
+              "label": "تاريخ البدء",
+              "description": "ستُفهرس الرسائل بعد هذا التاريخ فقط. الصيغة: YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "تهيئة موصل Freshdesk",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "نطاق Freshdesk",
+              "description": "النطاق الفرعي لموقع Freshdesk لديك، مثل `acme` في `acme.freshdesk.com`."
+            }
+          }
+        },
+        "fireflies": {
+          "description": "تهيئة موصل Fireflies"
+        },
+        "braintrust": {
+          "description": "تهيئة موصل Braintrust",
+          "fields": {
+            "project_name": {
+              "label": "اسم المشروع",
+              "description": "فهرسة المطالبات ومجموعات البيانات والتجارب من هذا المشروع فقط. اتركه فارغًا لفهرسة المؤسسة بأكملها."
+            },
+            "experiment_row_lookback_days": {
+              "label": "فترة الرجوع لصفوف التجارب (بالأيام)",
+              "description": "فهرسة نتائج كل صف للتجارب المنشأة خلال هذا العدد من الأيام فقط. تُفهرس ملخصات التجارب دائمًا. حدّد 0 لفهرسة الصفوف لجميع التجارب."
+            }
+          }
+        },
+        "canvas": {
+          "description": "تهيئة موصل Canvas",
+          "fields": {
+            "canvas_base_url": {
+              "label": "عنوان URL الأساسي لـ Canvas",
+              "description": "مثل https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "تهيئة موصل Egnyte",
+          "fields": {
+            "domain": {
+              "label": "نطاق Egnyte",
+              "description": "النطاق الفرعي لموقع Egnyte لديك، مثل `acme` في `acme.egnyte.com`."
+            },
+            "folder_path": {
+              "label": "مسار المجلد",
+              "description": "مسار المجلد المراد فهرسته (مثل \"/Shared/Documents\"). اتركه فارغًا لفهرسة كل شيء."
+            }
+          }
+        },
+        "airtable": {
+          "description": "تهيئة موصل Airtable",
+          "fields": {
+            "airtable_scope": {
+              "label": "محتوى Airtable المراد فهرسته",
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "specific": {
+                  "label": "جدول محدد"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "كل شيء",
+              "description": "سيكتشف هذا الموصل تلقائيًا جميع القواعد والجداول التي يمكن لرمز API الخاص بك الوصول إليها ويفهرسها."
+            },
+            "airtable_url": {
+              "label": "عنوان URL لـ Airtable",
+              "description": "الصق عنوان URL من متصفحك أثناء عرض الجدول، مثل https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "معرّف المشاركة",
+              "description": "اختياري. إذا أردت أن تستخدم روابط السجلات عنوان URL لعرض مشترك، فضع معرّف المشاركة هنا، مثل shrkfjEzDmLaDtK83."
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "اعتبار جميع الحقول عدا المرفقات بيانات وصفية",
+              "description": "اختر هذا إذا كان المحتوى الأساسي للفهرسة هو المرفقات وكانت جميع الأعمدة الأخرى بيانات وصفية لهذه المرفقات."
+            }
+          }
+        },
+        "highspot": {
+          "description": "تهيئة موصل Highspot",
+          "fields": {
+            "highspot_url": {
+              "label": "عنوان URL لـ Highspot"
+            },
+            "highspot_scope": {
+              "label": "محتوى Highspot المراد فهرسته",
+              "tabs": {
+                "spots": {
+                  "label": "Spots محددة"
+                },
+                "everything": {
+                  "label": "كل شيء"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "اسم Spot (أو أسماؤها)",
+              "description": "لعدة Spots، أدخل كل Spot على حدة."
+            },
+            "everything": {
+              "label": "كل شيء",
+              "description": "سيفهرس هذا الموصل جميع الـ Spots التي تملك بيانات الاعتماد المقدمة حق الوصول إليها!"
+            }
+          }
+        },
+        "imap": {
+          "description": "تهيئة موصل البريد الإلكتروني",
+          "fields": {
+            "host": {
+              "label": "مضيف خادم IMAP",
+              "description": "اسم مضيف خادم IMAP (مثل imap.gmail.com وoutlook.office365.com)"
+            },
+            "port": {
+              "label": "منفذ خادم IMAP",
+              "description": "منفذ خادم IMAP (الافتراضي: 993 لـ SSL)"
+            },
+            "mailboxes": {
+              "label": "صناديق البريد",
+              "description": "حدّد صناديق البريد المراد فهرستها (مثل INBOX وSent وDrafts). اتركه فارغًا لفهرسة جميع صناديق البريد."
+            }
+          }
+        }
       }
     },
     "costOverrides": {

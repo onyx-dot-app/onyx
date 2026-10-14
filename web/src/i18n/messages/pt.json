@@ -3094,6 +3094,1088 @@
       },
       "optionsListInput": {
         "placeholder": "Escolha {label} na lista ou digite"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "Ative o processamento de anexos de páginas, incluindo imagens e documentos",
+              "label": "Incluir anexos"
+            },
+            "scoped_token": {
+              "label": "Este é um token de API com escopos",
+              "description": "Tokens com escopos exigem roteamento pelo gateway de API da Atlassian. Deixe desativado para tokens clássicos."
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "IDs de reuniões",
+              "description": "Cada reunião recorrente é indexada ocorrência por ocorrência. O Zoom retorna apenas as ocorrências dos últimos 15 meses, então as mais antigas ficam fora do alcance de um ID de reunião. Para indexar um histórico mais antigo, filtre por e-mail do anfitrião ou por Grupo do Zoom, pois nenhum dos dois tem esse limite."
+            },
+            "webinar_ids": {
+              "label": "IDs de webinars",
+              "description": "Webinars também exigem o complemento Webinar, ativado para o anfitrião. Ao contrário dos IDs de reunião, o histórico de webinars não tem limite de 15 meses."
+            },
+            "host_emails": {
+              "label": "E-mails dos anfitriões",
+              "description": "Indexa todas as sessões que essas pessoas hospedam, dos tipos marcados abaixo. Um e-mail que não corresponde a nenhum usuário do Zoom é relatado como erro de indexação, e não ignorado em silêncio."
+            },
+            "group_id": {
+              "label": "ID do Grupo do Zoom",
+              "description": "Indexa todas as sessões hospedadas pelos membros de um Grupo do Zoom, dos tipos marcados abaixo. O Zoom relê a lista de membros a cada execução, então quem entra ou sai é identificado sem editar este conector."
+            },
+            "include_meetings": {
+              "label": "Incluir reuniões",
+              "description": "Aplica-se a E-mails dos anfitriões e a Grupo do Zoom. As listas de IDs acima já indicam o tipo de cada ID."
+            },
+            "include_webinars": {
+              "label": "Incluir webinars",
+              "description": "Aplica-se a E-mails dos anfitriões e a Grupo do Zoom. Webinars também exigem o complemento Webinar, ativado para o anfitrião."
+            },
+            "treat_link_access_as_public": {
+              "label": "Tratar acesso por link como público",
+              "description": "Só importa com a sincronização de permissões. Quando ativado, uma gravação cujo Acesso por link é \"Qualquer pessoa com o link\" ou uma regra de login fica visível para todos os usuários do Onyx, e uma regra de domínio para os usuários desses domínios. Quando desativado, cada transcrição fica visível somente para o proprietário da gravação, pois o Zoom não informa quem está em \"Pessoas com acesso\"."
+            },
+            "plan_tier": {
+              "label": "Plano do Zoom",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "Define a velocidade com que este conector pode chamar o Zoom. Escolha `pro` em uma conta Pro e `business_plus` em Business, Education, Enterprise ou Partner."
+            },
+            "rate_limit_percent": {
+              "label": "Limite de taxa da API do Zoom",
+              "description": "Porcentagem inteira, de 1 a 100, do limite de taxa do Zoom da conta que este conector pode usar. Em branco significa 50, o que deixa margem para as outras integrações do Zoom do cliente. Cada conector do Zoom controla seu próprio ritmo e não enxerga os outros, então dois conectores na mesma conta do Zoom usam essa porcentagem cada um. Divida o valor se você executar vários."
+            }
+          },
+          "description": "Configurar conector do Zoom",
+          "subtext": "Indexa a transcrição da Gravação na Nuvem de cada sessão do Zoom, em um plano Zoom Pro ou superior. Uma sessão que nunca foi gravada na nuvem é ignorada. Defina uma data de Início da indexação em Avançado. O Zoom lista as gravações um mês por solicitação, então, sem essa data, a primeira varredura pede todos os meses até 2013 e gasta a cota de API da sua conta em anos que não têm nada."
+        },
+        "web": {
+          "description": "Configurar conector da Web",
+          "fields": {
+            "base_url": {
+              "label": "URL base"
+            },
+            "web_connector_type": {
+              "label": "Método de rastreamento",
+              "options": {
+                "recursive": "recursivo",
+                "single": "único",
+                "sitemap": "sitemap"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "Rolar antes de rastrear",
+              "description": "Ative se o site exigir rolagem para carregar o conteúdo desejado"
+            },
+            "url_rewrites": {
+              "label": "Reescritas de URL",
+              "description": "Reescreve as URLs dos documentos antes de armazenar. Útil ao rastrear por um espelho interno e armazenar os links públicos canônicos, por exemplo https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "Prefixo da URL de origem",
+              "rightLabel": "Prefixo de substituição"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "Configurar conector do LumApps",
+          "fields": {
+            "base_url": {
+              "label": "URL base da API (host da célula)",
+              "description": "O host da célula/API do seu LumApps, por exemplo https://go-cell-005.api.lumapps.com (não o site de documentação api.lumapps.com)."
+            },
+            "organization_id": {
+              "label": "ID da organização",
+              "description": "O ID da sua organização no LumApps (numérico)."
+            },
+            "instance_ids": {
+              "label": "IDs de instâncias (sites)",
+              "description": "Restringe a indexação a IDs específicos de instância/site. Deixe vazio para indexar todo o conteúdo visível para o usuário de serviço."
+            },
+            "custom_content_types": {
+              "label": "IDs de tipos de conteúdo personalizados",
+              "description": "Restringe a IDs específicos de tipos de conteúdo personalizados. Deixe vazio para indexar todos os tipos de conteúdo."
+            },
+            "lang": {
+              "label": "Idioma",
+              "description": "Idioma usado no título/corpo do conteúdo e nos rótulos de metadados (ISO 639-1, por exemplo en, fr)."
+            }
+          }
+        },
+        "github": {
+          "description": "Configurar conector do GitHub",
+          "fields": {
+            "github_base_url": {
+              "label": "URL do GitHub Enterprise Server",
+              "description": "Deixe em branco para github.com."
+            },
+            "repo_owner": {
+              "label": "Proprietário do repositório"
+            },
+            "github_mode": {
+              "label": "Conteúdo do GitHub a indexar",
+              "tabs": {
+                "repo": {
+                  "label": "Repositório específico"
+                },
+                "everything": {
+                  "label": "Tudo"
+                }
+              }
+            },
+            "repositories": {
+              "label": "Nome(s) do repositório",
+              "description": "Para vários repositórios, informe os nomes separados por vírgula (por exemplo, repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "Tudo",
+              "description": "Este conector indexará todos os repositórios aos quais as credenciais fornecidas têm acesso!"
+            },
+            "include_prs": {
+              "label": "Incluir pull requests",
+              "description": "Indexa os pull requests dos repositórios"
+            },
+            "include_issues": {
+              "label": "Incluir issues",
+              "description": "Indexa as issues dos repositórios"
+            },
+            "include_files": {
+              "label": "Incluir documentos",
+              "description": "Indexa documentos baseados em texto (markdown, texto etc.) dos repositórios"
+            },
+            "branch": {
+              "label": "Branch",
+              "description": "Branch de onde indexar os documentos (por exemplo, gh-pages). Deixe em branco para usar a branch padrão de cada repositório. Só se aplica quando \"Incluir documentos\" está ativado. Depois de alterar isso em um conector existente, acione uma reindexação para aplicar a nova branch imediatamente."
+            }
+          }
+        },
+        "testrail": {
+          "description": "Configurar conector do TestRail",
+          "fields": {
+            "testrail_base_url": {
+              "label": "URL base do TestRail"
+            },
+            "project_ids": {
+              "label": "IDs de projetos",
+              "description": "Lista separada por vírgulas de IDs de projetos do TestRail a indexar (por exemplo, 1 ou 1,2,3). Deixe vazio para indexar todos os projetos."
+            },
+            "cases_page_size": {
+              "label": "Tamanho da página de casos",
+              "description": "Número de casos de teste a buscar por página na API do TestRail (padrão: 250)"
+            },
+            "max_pages": {
+              "label": "Máximo de páginas",
+              "description": "Número máximo de páginas a buscar, para evitar loops infinitos (padrão: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "Limite de caracteres para ignorar documento",
+              "description": "Ignora a indexação de casos de teste que excedem este limite de caracteres (padrão: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "Configurar conector do GitLab",
+          "fields": {
+            "gitlab_url": {
+              "label": "URL do GitLab"
+            },
+            "project_owner": {
+              "label": "Proprietário do projeto"
+            },
+            "project_name": {
+              "label": "Nome do projeto"
+            },
+            "include_mrs": {
+              "label": "Incluir MRs",
+              "description": "Indexa os merge requests dos repositórios"
+            },
+            "include_issues": {
+              "label": "Incluir issues",
+              "description": "Indexa as issues dos repositórios"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "Configurar conector do Bitbucket",
+          "subtext": "Configurar conector do Bitbucket (somente Cloud). Você pode indexar um workspace, projetos específicos ou repositórios.",
+          "fields": {
+            "workspace": {
+              "label": "Workspace",
+              "description": "O workspace do Bitbucket a indexar (por exemplo, \"atlassian\" em https://bitbucket.org/atlassian/workspace )."
+            },
+            "bitbucket_mode": {
+              "label": "Conteúdo do Bitbucket a indexar",
+              "tabs": {
+                "repo": {
+                  "label": "Repositórios específicos"
+                },
+                "project": {
+                  "label": "Projeto(s)"
+                },
+                "workspace": {
+                  "label": "Workspace"
+                }
+              }
+            },
+            "repositories": {
+              "label": "Slugs dos repositórios",
+              "description": "Para vários repositórios, informe os slugs separados por vírgula (por exemplo, repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "Chave(s) do projeto",
+              "description": "Uma ou mais chaves de projeto do Bitbucket (separadas por vírgula) para indexar todos os repositórios desses projetos (por exemplo, PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "Workspace",
+              "description": "Este conector indexará todos os repositórios do workspace."
+            }
+          }
+        },
+        "gitbook": {
+          "description": "Configurar conector do GitBook",
+          "fields": {
+            "space_id": {
+              "label": "ID do space",
+              "description": "O ID do space do GitBook a indexar. Ele pode ser encontrado na URL de uma página do space. Por exemplo, se a sua URL for `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, o ID do seu space será `8JkzVx8QCIGRrmxhGHU8`."
+            }
+          }
+        },
+        "google_drive": {
+          "description": "Configurar conector do Google Drive",
+          "fields": {
+            "credential_kind": {
+              "label": "Tipo de credencial"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "Geral"
+                },
+                "Specific": {
+                  "label": "Específico"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "Incluir drives compartilhados",
+              "description": {
+                "oauth": "Isso permite que o Onyx indexe tudo nos drives compartilhados aos quais você tem acesso.",
+                "serviceAccount": "Isso permite que o Onyx indexe tudo nos drives compartilhados da sua organização."
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "Incluir Meu Drive",
+                "serviceAccount": "Incluir o Meu Drive de todos"
+              },
+              "description": {
+                "oauth": "Isso permite que o Onyx indexe tudo no seu Meu Drive.",
+                "serviceAccount": "Isso permite que o Onyx indexe tudo no Meu Drive de todos."
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "Isso permite que o Onyx indexe todos os arquivos compartilhados com você.",
+              "label": "Incluir todos os arquivos compartilhados com você"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "Informe uma lista, separada por vírgulas, das URLs dos drives compartilhados que você deseja indexar. Você precisa ter acesso a esses drives compartilhados.",
+                "serviceAccount": "Informe uma lista, separada por vírgulas, das URLs dos drives compartilhados que você deseja indexar."
+              },
+              "label": "URLs dos drives compartilhados"
+            },
+            "shared_folder_urls": {
+              "description": "Informe uma lista, separada por vírgulas, das URLs das pastas que você deseja indexar. Os arquivos dessas pastas (e de todas as subpastas) serão indexados.",
+              "label": "URLs das pastas"
+            },
+            "my_drive_emails": {
+              "description": "Informe uma lista, separada por vírgulas, dos e-mails dos usuários cujo Meu Drive você deseja indexar.",
+              "label": "E-mails do Meu Drive"
+            },
+            "specific_user_emails": {
+              "description": "Informe uma lista, separada por vírgulas, de e-mails de usuários específicos a indexar. Isso indexará apenas os arquivos acessíveis a esses usuários.",
+              "label": "E-mails de usuários específicos"
+            },
+            "exclude_domain_link_only": {
+              "label": "Ocultar arquivos acessíveis só por link de domínio",
+              "description": "Quando ativado, o Onyx ignora arquivos compartilhados de forma ampla (domínio ou público), mas que exigem o link para acesso."
+            }
+          }
+        },
+        "gmail": {
+          "description": "Configurar conector do Gmail"
+        },
+        "bookstack": {
+          "description": "Configurar conector do Bookstack",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "URL base do BookStack"
+            }
+          }
+        },
+        "outline": {
+          "description": "Configurar conector do Outline",
+          "fields": {
+            "outline_base_url": {
+              "label": "URL base do Outline"
+            }
+          }
+        },
+        "confluence": {
+          "description": "Configurar conector do Confluence",
+          "fields": {
+            "is_cloud": {
+              "label": "É Cloud",
+              "description": "Escolha Confluence Cloud para um site em atlassian.net, ou Confluence Data Center para um site Confluence Server ou Data Center hospedado por conta própria."
+            },
+            "wiki_base": {
+              "label": "URL do site"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "space": {
+                  "label": "Space"
+                },
+                "page": {
+                  "label": "Página"
+                },
+                "cql": {
+                  "label": "Consulta CQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Tudo",
+              "description": "Este conector indexará todas as páginas às quais as credenciais fornecidas têm acesso!"
+            },
+            "space": {
+              "label": "Chave do space",
+              "description": "A chave do space do Confluence a indexar (por exemplo, `KB`)."
+            },
+            "page_id": {
+              "label": "ID da página",
+              "description": "ID de uma página específica a indexar (por exemplo, `131368`)"
+            },
+            "index_recursively": {
+              "label": "Indexar recursivamente",
+              "description": "Se ativado, indexaremos a página indicada pelo ID da página, bem como todas as suas páginas filhas."
+            },
+            "cql_query": {
+              "label": "Consulta CQL",
+              "description": "IMPORTANTE: No momento, só oferecemos suporte a consultas CQL que retornam objetos do tipo 'page'. Isso significa que toda consulta CQL deve conter 'type=page' como único filtro de tipo. Também é importante não usar filtros de 'lastModified', pois eles causam problemas na lógica de sondagem do conector. Não use ORDER BY, porque o conector define sua própria ordenação. Ainda assim, obteremos todos os anexos e comentários das páginas retornadas pela consulta CQL. Qualquer filtro de 'lastmodified' será sobrescrito. Consulte a [documentação de CQL](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) da Atlassian para mais detalhes."
+            }
+          }
+        },
+        "jira": {
+          "description": "Configurar conector do Jira",
+          "subtext": "Configure qual conteúdo do Jira indexar. Você pode indexar tudo ou especificar um projeto.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL do site"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "project": {
+                  "label": "Projeto"
+                },
+                "jql": {
+                  "label": "Consulta JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Tudo",
+              "description": "Este conector indexará todas as issues às quais as credenciais fornecidas têm acesso!"
+            },
+            "project_key": {
+              "label": "Chave do projeto",
+              "description": "A chave de um projeto específico a indexar (por exemplo, 'PROJ')."
+            },
+            "jql_query": {
+              "label": "Consulta JQL",
+              "description": "Uma consulta JQL personalizada para filtrar as issues do Jira.\n\nIMPORTANTE: Não inclua filtros baseados em tempo na consulta JQL, pois eles entram em conflito com a lógica do conector. Além disso, não inclua cláusulas ORDER BY.\n\nConsulte a [documentação de JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) da Atlassian para mais detalhes sobre a sintaxe."
+            },
+            "comment_email_blacklist": {
+              "label": "Lista de bloqueio de e-mails de comentários",
+              "description": "Em geral é útil para ignorar determinados bots. Adicione os e-mails dos usuários cujos comentários NÃO devem ser indexados."
+            }
+          }
+        },
+        "salesforce": {
+          "description": "Configurar conector do Salesforce",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "Tipo de configuração",
+              "tabs": {
+                "simple": {
+                  "label": "Simples"
+                },
+                "advanced": {
+                  "label": "Avançado"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "Objetos solicitados",
+              "description": "Especifique os tipos de objeto do Salesforce que você quer indexar. Se não tiver certeza, não especifique nenhum objeto e o Onyx indexará 'Account' por padrão.\n\nDica: Use a forma singular do nome do objeto (por exemplo, 'Opportunity' em vez de 'Opportunities')."
+            },
+            "custom_query_config": {
+              "label": "Configuração de consulta personalizada",
+              "description": "Informe uma configuração JSON que defina com precisão quais campos e objetos filhos indexar. Isso dá a você controle total sobre a estrutura dos dados.\n\nExemplo: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n[Veja nossa documentação]({docsAdminsPath}/connectors/official/salesforce) para mais detalhes."
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "Configurar conector do SharePoint",
+          "fields": {
+            "sites": {
+              "label": "Sites",
+              "description": "- Se nenhum site for especificado, todos os sites da sua organização serão indexados (permissão `Sites.Read.All` necessária).\n- Especificar `https://onyxai.sharepoint.com/sites/support`, por exemplo, indexa somente este site.\n- Especificar `https://onyxai.sharepoint.com/sites/support/subfolder`, por exemplo, indexa somente esta pasta.\n- Para indexar os sites pessoais dos usuários, use o [conector do OneDrive]({docsAdminsPath}/connectors/official/onedrive).\n- Especificar sites funciona atualmente para instâncias do SharePoint em inglês, espanhol ou alemão. Fale com a equipe do Onyx se precisar de suporte a outro idioma."
+            },
+            "include_site_documents": {
+              "label": "Indexar documentos",
+              "description": "Indexa os documentos de todas as bibliotecas ou pastas do SharePoint definidas acima."
+            },
+            "include_site_pages": {
+              "label": "Indexar sites ASPX",
+              "description": "Indexa as páginas aspx de todos os sites do SharePoint definidos acima, mesmo que uma biblioteca ou pasta seja especificada."
+            },
+            "treat_sharing_link_as_public": {
+              "label": "Tratar links de compartilhamento como públicos",
+              "description": "Quando ativado, documentos com um link de compartilhamento (anônimo ou para toda a organização) são tratados como públicos (visíveis para todos os usuários do Onyx). Quando desativado, somente usuários e grupos com atribuições de função explícitas podem ver o documento."
+            },
+            "excluded_sites": {
+              "label": "Sites excluídos",
+              "description": "URLs de sites ou padrões glob a excluir da indexação. Os sites correspondentes nunca serão indexados, mesmo que apareçam na lista de sites acima. Exemplos: `https://contoso.sharepoint.com/sites/archive` (exato), `*://*/sites/archive-*` (padrão glob)."
+            },
+            "excluded_paths": {
+              "label": "Caminhos excluídos",
+              "description": "Padrões glob de caminhos de arquivo a excluir da indexação dentro das bibliotecas de documentos. Os padrões são comparados com o caminho relativo completo e com o nome do arquivo. Exemplos: `*.tmp` (arquivos temporários), `~$*` (arquivos de bloqueio do Office), `Archive/*` (pasta)."
+            },
+            "authority_host": {
+              "label": "Host de autoridade",
+              "description": "O host de autoridade de identidade da Microsoft usado na autenticação. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Host da API do Graph",
+              "description": "O host da API do Microsoft Graph. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://graph.microsoft.us"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "Sufixo de domínio do SharePoint",
+              "description": "O sufixo de domínio dos sites do SharePoint (por exemplo, sharepoint.com). Na maioria das implantações, mantenha o padrão. Para GCC High, use sharepoint.us"
+            }
+          }
+        },
+        "teams": {
+          "description": "Configurar conector do Teams",
+          "fields": {
+            "teams": {
+              "label": "Teams",
+              "description": "Especifique 0 ou mais Teams a indexar. Por exemplo, especificar o Team 'Support' da organização 'onyxai' fará com que indexemos apenas as mensagens enviadas em canais pertencentes ao Team 'Support'. Se nenhum Team for especificado, todos os Teams da sua organização serão indexados."
+            },
+            "include_attachments": {
+              "description": "Indexa os arquivos da guia Arquivos de cada canal como documentos próprios, com os leitores que o SharePoint concede a eles. Exige uma credencial de certificado, Files.Read.All ou Sites.Read.All no Graph, e Sites.FullControl.All na API do SharePoint para ler os leitores de cada arquivo. Com Sites.Selected, conceda ao aplicativo controle total em cada site de canal."
+            },
+            "include_inline_images": {
+              "label": "Incluir imagens embutidas",
+              "description": "Indexa as imagens coladas nas mensagens do canal junto com a respectiva conversa. Não exige nenhuma permissão extra. Nada é baixado enquanto a extração e a análise de imagens estiverem desativadas nas configurações de busca."
+            },
+            "include_meeting_transcripts": {
+              "label": "Incluir transcrições de reuniões",
+              "description": "Indexa as transcrições de reuniões agendadas como documentos próprios, legíveis pelo organizador e pelos participantes. Exige as permissões de aplicativo OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All e User.Read.All, a configuração do tenant que permite o acesso da API do Graph às transcrições e uma política de acesso de aplicativo concedida aos organizadores. Reuniões de canal não são cobertas. As transcrições dos últimos seis meses são indexadas, e uma transcrição sai do índice quando passa disso."
+            },
+            "include_meeting_chats": {
+              "label": "Incluir chats de reuniões",
+              "description": "Indexa o que as pessoas escrevem no chat de uma reunião agendada, um documento por dia, legível pelos membros do chat. Exige as permissões de aplicativo Chat.Read.All e User.Read.All. Cobre reuniões organizadas neste tenant: a Microsoft não fornece o chat de uma reunião criada por outra organização."
+            },
+            "meeting_organizers": {
+              "label": "Organizadores de reuniões",
+              "description": "Nomes de usuário principal (UPN) dos organizadores cujas transcrições e chats de reuniões serão indexados. Deixe vazio para incluir todos os usuários ativos com licença do Teams."
+            },
+            "authority_host": {
+              "label": "Host de autoridade",
+              "description": "O host de autoridade de identidade da Microsoft usado na autenticação. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Host da API do Graph",
+              "description": "O host da API do Microsoft Graph. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://graph.microsoft.us"
+            }
+          }
+        },
+        "outlook": {
+          "description": "Configurar conector do Outlook",
+          "fields": {
+            "mailboxes": {
+              "label": "Caixas de correio",
+              "description": "Nomes de usuário principal ou endereços de e-mail principais das caixas de correio a indexar. Deixe este campo e Grupos de caixas de correio vazios para indexar todas as caixas de correio que o registro do aplicativo pode abrir. Caixas de correio compartilhadas nunca são incluídas automaticamente e devem ser listadas aqui."
+            },
+            "mailbox_groups": {
+              "label": "Grupos de caixas de correio",
+              "description": "Nomes de exibição ou IDs de objeto de grupos do Entra. A caixa de correio de cada membro é indexada, incluindo membros de grupos aninhados, de modo que um tenant possa ser limitado às pessoas que usam o Onyx. Exige a permissão de aplicativo GroupMember.Read.All."
+            },
+            "include_attachments": {
+              "description": "Indexa o texto dos anexos de arquivo. Imagens embutidas, itens aninhados e links da nuvem são ignorados."
+            },
+            "include_calendar": {
+              "label": "Incluir calendário",
+              "description": "Indexa o calendário de cada caixa de correio, além dos e-mails. Exige a permissão de aplicativo Calendars.Read."
+            },
+            "excluded_folders": {
+              "label": "Pastas excluídas",
+              "description": "Nomes de pastas a ignorar em todas as caixas de correio, além de Lixo Eletrônico, Itens Excluídos, Rascunhos e Caixa de Saída, que sempre são ignoradas."
+            },
+            "calendar_past_days": {
+              "label": "Dias passados do calendário",
+              "description": "Usado quando Incluir calendário está ativado. Define até quanto tempo atrás a janela do calendário alcança. Eventos mais antigos saem do índice na próxima limpeza, conforme a janela avança. Ampliá-la depois exige uma reindexação, pois eventos sem alterações não voltam sozinhos."
+            },
+            "calendar_future_days": {
+              "label": "Dias futuros do calendário",
+              "description": "Usado quando Incluir calendário está ativado. Define até quanto tempo à frente a janela do calendário alcança. Ampliá-la depois exige uma reindexação, pois eventos sem alterações não voltam sozinhos."
+            },
+            "authority_host": {
+              "label": "Host de autoridade",
+              "description": "O host de autoridade de identidade da Microsoft usado na autenticação. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Host da API do Graph",
+              "description": "O host da API do Microsoft Graph. Na maioria das implantações, mantenha o padrão. Para GCC High / DoD, use https://graph.microsoft.us"
+            }
+          }
+        },
+        "discourse": {
+          "description": "Configurar conector do Discourse",
+          "fields": {
+            "base_url": {
+              "label": "URL base"
+            },
+            "categories": {
+              "label": "Categorias"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "Configurar conector do Drupal Wiki",
+          "fields": {
+            "base_url": {
+              "label": "URL base",
+              "description": "A URL base da sua instância do Drupal Wiki (por exemplo, https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "Conteúdo do Drupal Wiki a indexar",
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "specific": {
+                  "label": "Spaces/páginas específicos"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "Tudo",
+              "description": "Este conector indexará todos os spaces aos quais as credenciais fornecidas têm acesso!"
+            },
+            "spaces": {
+              "label": "IDs de spaces",
+              "description": "Especifique um ou mais IDs de spaces a indexar. Somente valores numéricos são permitidos."
+            },
+            "pages": {
+              "label": "IDs de páginas",
+              "description": "Especifique um ou mais IDs de páginas a indexar. Somente valores numéricos são permitidos."
+            }
+          }
+        },
+        "axero": {
+          "description": "Configurar conector do Axero",
+          "fields": {
+            "base_url": {
+              "label": "URL base do Axero"
+            },
+            "spaces": {
+              "label": "Spaces",
+              "description": "Especifique zero ou mais Spaces a indexar (pelos IDs dos Spaces). Se nenhum ID de Space for especificado, todos os Spaces serão indexados."
+            }
+          }
+        },
+        "productboard": {
+          "description": "Configurar conector do Productboard"
+        },
+        "slack": {
+          "description": "Configurar conector do Slack",
+          "fields": {
+            "channels": {
+              "label": "Canais",
+              "description": "Especifique 0 ou mais canais a indexar. Escolha um canal na lista para acompanhá-lo pelo ID, de modo que uma renomeação não interrompa a indexação, ou digite o nome de um canal que a lista não mostra, como um canal privado ao qual o bot foi convidado. Se nenhum canal for especificado, todos os canais do seu workspace serão indexados."
+            },
+            "channel_regex_enabled": {
+              "label": "Ativar regex de canais",
+              "description": "Se ativado, trataremos os \"canais\" especificados acima como expressões regulares. As mensagens de um canal serão importadas pelo conector se o nome do canal corresponder por completo a qualquer uma das expressões regulares especificadas.\n\nPor exemplo, especificar `.*-support.*` como \"canal\" fará o conector incluir todos os canais com \"-support\" no nome."
+            },
+            "exclude_channels": {
+              "label": "Canais a excluir",
+              "description": "Especifique 0 ou mais canais a excluir. As exclusões são aplicadas depois do filtro \"Canais\" acima, então um canal que corresponde a ambos é excluído. Se nenhum canal for especificado, nada é excluído."
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "Ativar regex de canais excluídos",
+              "description": "Se ativado, trataremos os \"canais a excluir\" especificados acima como expressões regulares. Um canal será excluído se o nome dele corresponder por completo a qualquer uma das expressões regulares especificadas.\n\nPor exemplo, especificar `.*-alerts` como \"canal a excluir\" fará o conector ignorar todos os canais cujo nome termina em \"-alerts\"."
+            },
+            "include_bot_messages": {
+              "label": "Incluir mensagens de bots",
+              "description": "Se ativado, as mensagens de bots e aplicativos serão indexadas. Útil para canais que são principalmente feeds de bots (por exemplo, atualizações de CRM, notas automatizadas)."
+            }
+          }
+        },
+        "slab": {
+          "description": "Configurar conector do Slab",
+          "fields": {
+            "base_url": {
+              "label": "URL base",
+              "description": "Especifique a URL base da sua equipe no Slab. Será algo como: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "Configurar conector do Guru"
+        },
+        "gong": {
+          "description": "Configurar conector do Gong",
+          "fields": {
+            "gong_base_url": {
+              "label": "URL base da API do Gong",
+              "description": "O padrão é `https://api.gong.io`."
+            },
+            "workspaces": {
+              "label": "Workspaces",
+              "description": "Especifique 0 ou mais workspaces a indexar. Informe o ID do workspace ou o nome EXATO do workspace no Gong. Se nenhum workspace for especificado, as transcrições de todos os workspaces serão indexadas."
+            }
+          }
+        },
+        "loopio": {
+          "description": "Configurar conector do Loopio",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Subdomínio do Loopio",
+              "description": "O subdomínio do seu site do Loopio, como `acme` em `acme.loopio.com`."
+            },
+            "loopio_stack_name": {
+              "label": "Nome do Stack do Loopio",
+              "description": "Deve ser idêntico ao nome em Library Management. Deixe em branco se quiser indexar todos os Stacks"
+            }
+          }
+        },
+        "file": {
+          "description": "Configurar conector de arquivos",
+          "fields": {
+            "file_locations": {
+              "label": "Arquivos"
+            }
+          }
+        },
+        "zulip": {
+          "description": "Configurar conector do Zulip",
+          "fields": {
+            "realm_name": {
+              "label": "Nome do realm"
+            },
+            "realm_url": {
+              "label": "URL do realm"
+            }
+          }
+        },
+        "coda": {
+          "description": "Configurar conector do Coda"
+        },
+        "notion": {
+          "description": "Configurar conector do Notion",
+          "fields": {
+            "root_page_id": {
+              "label": "ID da página raiz",
+              "description": "Se especificado, indexará somente a página indicada e todas as suas páginas filhas. Se deixado em branco, indexará todas as páginas às quais a integração recebeu acesso."
+            }
+          }
+        },
+        "hubspot": {
+          "description": "Configurar conector do HubSpot",
+          "fields": {
+            "object_types": {
+              "label": "Tipos de objeto",
+              "options": {
+                "tickets": "Tickets",
+                "companies": "Empresas",
+                "deals": "Negócios",
+                "contacts": "Contatos"
+              },
+              "description": "Escolha quais tipos de objeto do HubSpot indexar. Todos os tipos são selecionados por padrão."
+            }
+          }
+        },
+        "document360": {
+          "description": "Configurar conector do Document360",
+          "fields": {
+            "workspace": {
+              "label": "Workspace"
+            },
+            "categories": {
+              "label": "Categorias",
+              "description": "Especifique 0 ou mais categorias a indexar. Por exemplo, especificar a categoria 'Help' fará com que indexemos apenas o conteúdo da categoria 'Help'. Se nenhuma categoria for especificada, todas as categorias do seu workspace serão indexadas."
+            }
+          }
+        },
+        "clickup": {
+          "description": "Configurar conector do ClickUp",
+          "fields": {
+            "connector_type": {
+              "label": "Tipo de conector",
+              "options": {
+                "list": "lista",
+                "folder": "pasta",
+                "space": "space",
+                "workspace": "workspace"
+              }
+            },
+            "connector_ids": {
+              "label": "IDs do conector",
+              "description": "Especifique 0 ou mais IDs de onde indexar."
+            },
+            "retrieve_task_comments": {
+              "label": "Recuperar comentários de tarefas",
+              "description": "Se marcado, todos os comentários de cada tarefa também serão recuperados e indexados."
+            }
+          }
+        },
+        "google_sites": {
+          "description": "Configurar conector do Google Sites",
+          "fields": {
+            "base_url": {
+              "label": "URL base"
+            },
+            "file_locations": {
+              "label": "Exportação do site",
+              "description": "Envie um arquivo `.zip` com o HTML do seu Google Site."
+            }
+          }
+        },
+        "zendesk": {
+          "description": "Configurar conector do Zendesk",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Subdomínio do Zendesk",
+              "description": "O subdomínio do seu site do Zendesk, como `acme` em `acme.zendesk.com`."
+            },
+            "content_type": {
+              "label": "Tipo de conteúdo",
+              "options": {
+                "articles": "artigos",
+                "tickets": "tickets"
+              }
+            },
+            "calls_per_minute": {
+              "label": "Chamadas de API por minuto",
+              "description": "Restringe quantas chamadas à API do Zendesk este conector pode fazer por minuto (aplica-se somente a este conector). Veja os padrões: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "Configurar conector do Box",
+          "fields": {
+            "folder_ids": {
+              "label": "Pastas",
+              "description": "IDs ou URLs de pastas do Box (por exemplo, https://app.box.com/folder/123456789) a indexar. Deixe vazio para indexar tudo o que é visível para o usuário autenticado."
+            },
+            "include_web_links": {
+              "label": "Incluir links da web",
+              "description": "Indexa também os links da web (favoritos) do Box como documentos leves."
+            }
+          }
+        },
+        "dropbox": {
+          "description": "Configurar conector do Dropbox"
+        },
+        "s3": {
+          "description": "Configurar conector do S3",
+          "fields": {
+            "bucket_name": {
+              "label": "Nome do bucket"
+            },
+            "prefix": {
+              "label": "Prefixo"
+            },
+            "region_name": {
+              "label": "Região da AWS",
+              "description": "A região da AWS do bucket (por exemplo, us-east-1). Obrigatória para buckets em partições fora do padrão, como GovCloud (us-gov-west-1); caso contrário, a resolução de região padrão é usada."
+            },
+            "bucket_type": {
+              "label": "Tipo de bucket"
+            }
+          }
+        },
+        "r2": {
+          "description": "Configurar conector do R2",
+          "fields": {
+            "bucket_name": {
+              "label": "Nome do bucket"
+            },
+            "prefix": {
+              "label": "Prefixo"
+            },
+            "european_residency": {
+              "label": "Residência de dados na UE",
+              "description": "Marque esta opção se o seu bucket tem residência de dados na UE ativada."
+            },
+            "bucket_type": {
+              "label": "Tipo de bucket"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "Configurar conector do Google Cloud Storage",
+          "fields": {
+            "bucket_name": {
+              "label": "Nome do bucket",
+              "description": "Nome do bucket do GCS a indexar, por exemplo my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "Prefixo do caminho"
+            },
+            "bucket_type": {
+              "label": "Tipo de bucket"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "Configurar conector do OCI Storage",
+          "fields": {
+            "bucket_name": {
+              "label": "Nome do bucket"
+            },
+            "prefix": {
+              "label": "Prefixo"
+            },
+            "bucket_type": {
+              "label": "Tipo de bucket"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "Configurar conector da Wikipedia",
+          "fields": {
+            "language_code": {
+              "label": "Código do idioma",
+              "description": "Informe um código de idioma válido da Wikipedia (por exemplo, 'en', 'es')"
+            },
+            "categories": {
+              "label": "Categorias a indexar",
+              "description": "Especifique 0 ou mais nomes de categorias a indexar. Na maioria dos sites da Wikipedia, são páginas com nome no formato 'Category: XYZ', que listam outras páginas/categorias. Especifique apenas o nome da categoria, não a URL."
+            },
+            "pages": {
+              "label": "Páginas",
+              "description": "Especifique 0 ou mais nomes de páginas a indexar."
+            },
+            "recurse_depth": {
+              "label": "Profundidade de recursão",
+              "description": "Ao indexar categorias que têm subcategorias, define quantos níveis indexar. Especifique 0 para indexar somente a própria categoria (ou seja, sem recursão). Especifique -1 para profundidade de recursão ilimitada. Observe que, em raros casos, uma categoria pode conter a si mesma em suas dependências, o que causa um loop infinito. Use -1 somente se tiver certeza de que isso não acontecerá."
+            }
+          }
+        },
+        "xenforo": {
+          "description": "Configurar conector do Xenforo",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "A URL do fórum XenForo v2.2 a indexar. Pode ser um quadro ou um tópico."
+            }
+          }
+        },
+        "asana": {
+          "description": "Configurar conector do Asana",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "ID do workspace",
+              "description": "O ID do workspace do Asana a indexar. Você o encontra em https://app.asana.com/api/1.0/workspaces. É um número parecido com 1234567890123456."
+            },
+            "asana_project_ids": {
+              "label": "IDs de projetos",
+              "description": "IDs de projetos específicos do Asana a indexar, separados por vírgulas. Deixe vazio para indexar todos os projetos do workspace. Exemplo: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "ID da equipe",
+              "description": "ID de uma equipe a usar para acessar tarefas visíveis para a equipe. Isso permite indexar tarefas visíveis para a equipe, além das tarefas públicas. Deixe vazio se você não quiser usar este recurso."
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "Configurar conector do MediaWiki",
+          "fields": {
+            "language_code": {
+              "label": "Código do idioma",
+              "description": "Informe um código de idioma válido do MediaWiki (por exemplo, 'en', 'es')"
+            },
+            "hostname": {
+              "label": "URL do site MediaWiki"
+            },
+            "categories": {
+              "label": "Categorias a indexar",
+              "description": "Especifique 0 ou mais nomes de categorias a indexar. Na maioria dos sites MediaWiki, são páginas com nome no formato 'Category: XYZ', que listam outras páginas/categorias. Especifique apenas o nome da categoria, não a URL."
+            },
+            "pages": {
+              "label": "Páginas",
+              "description": "Especifique 0 ou mais nomes de páginas a indexar. Especifique apenas o nome da página, não a URL."
+            },
+            "recurse_depth": {
+              "label": "Profundidade de recursão",
+              "description": "Ao indexar categorias que têm subcategorias, define quantos níveis indexar. Especifique 0 para indexar somente a própria categoria (ou seja, sem recursão). Especifique -1 para profundidade de recursão ilimitada. Observe que, em raros casos, uma categoria pode conter a si mesma em suas dependências, o que causa um loop infinito. Use -1 somente se tiver certeza de que isso não acontecerá."
+            }
+          }
+        },
+        "discord": {
+          "description": "Configurar conector do Discord",
+          "fields": {
+            "server_ids": {
+              "label": "IDs de servidores",
+              "description": "Especifique 0 ou mais IDs de servidores a incluir. Somente os canais dentro deles serão usados na indexação"
+            },
+            "channel_names": {
+              "label": "Canais",
+              "description": "Especifique 0 ou mais canais a indexar. Por exemplo, especificar o canal \"support\" fará com que indexemos apenas o conteúdo do canal \"#support\". Se nenhum canal for especificado, todos os canais aos quais o bot tem acesso serão indexados."
+            },
+            "start_date": {
+              "label": "Data de início",
+              "description": "Somente mensagens posteriores a esta data serão indexadas. Formato: AAAA-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "Configurar conector do Freshdesk",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Domínio do Freshdesk",
+              "description": "O subdomínio do seu site do Freshdesk, como `acme` em `acme.freshdesk.com`."
+            }
+          }
+        },
+        "fireflies": {
+          "description": "Configurar conector do Fireflies"
+        },
+        "braintrust": {
+          "description": "Configurar conector do Braintrust",
+          "fields": {
+            "project_name": {
+              "label": "Nome do projeto",
+              "description": "Indexa somente prompts, datasets e experimentos deste projeto. Deixe vazio para indexar toda a organização."
+            },
+            "experiment_row_lookback_days": {
+              "label": "Retrospectiva de linhas de experimentos (dias)",
+              "description": "Indexa os resultados por linha somente de experimentos criados dentro deste número de dias. Os resumos dos experimentos são sempre indexados. Defina 0 para indexar as linhas de todos os experimentos."
+            }
+          }
+        },
+        "canvas": {
+          "description": "Configurar conector do Canvas",
+          "fields": {
+            "canvas_base_url": {
+              "label": "URL base do Canvas",
+              "description": "por exemplo, https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "Configurar conector do Egnyte",
+          "fields": {
+            "domain": {
+              "label": "Domínio do Egnyte",
+              "description": "O subdomínio do seu site do Egnyte, como `acme` em `acme.egnyte.com`."
+            },
+            "folder_path": {
+              "label": "Caminho da pasta",
+              "description": "O caminho da pasta a indexar (por exemplo, '/Shared/Documents'). Deixe vazio para indexar tudo."
+            }
+          }
+        },
+        "airtable": {
+          "description": "Configurar conector do Airtable",
+          "fields": {
+            "airtable_scope": {
+              "label": "Conteúdo do Airtable a indexar",
+              "tabs": {
+                "everything": {
+                  "label": "Tudo"
+                },
+                "specific": {
+                  "label": "Tabela específica"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "Tudo",
+              "description": "Este conector descobrirá e indexará automaticamente todas as bases e tabelas acessíveis pelo seu token de API."
+            },
+            "airtable_url": {
+              "label": "URL do Airtable",
+              "description": "Cole a URL do navegador ao visualizar a tabela, por exemplo https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "ID de compartilhamento",
+              "description": "Opcional. Se quiser que os links de registros usem a URL de uma visualização compartilhada, informe aqui o ID de compartilhamento, por exemplo shrkfjEzDmLaDtK83."
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "Tratar todos os campos, exceto anexos, como metadados",
+              "description": "Escolha esta opção se o conteúdo principal a indexar são os anexos e todas as outras colunas são metadados desses anexos."
+            }
+          }
+        },
+        "highspot": {
+          "description": "Configurar conector do Highspot",
+          "fields": {
+            "highspot_url": {
+              "label": "URL do Highspot"
+            },
+            "highspot_scope": {
+              "label": "Conteúdo do Highspot a indexar",
+              "tabs": {
+                "spots": {
+                  "label": "Spots específicos"
+                },
+                "everything": {
+                  "label": "Tudo"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "Nome(s) do spot",
+              "description": "Para vários spots, informe os spots um por um."
+            },
+            "everything": {
+              "label": "Tudo",
+              "description": "Este conector indexará todos os spots aos quais as credenciais fornecidas têm acesso!"
+            }
+          }
+        },
+        "imap": {
+          "description": "Configurar conector de e-mail",
+          "fields": {
+            "host": {
+              "label": "Host do servidor IMAP",
+              "description": "O nome do host do servidor IMAP (por exemplo, imap.gmail.com, outlook.office365.com)"
+            },
+            "port": {
+              "label": "Porta do servidor IMAP",
+              "description": "A porta do servidor IMAP (padrão: 993 para SSL)"
+            },
+            "mailboxes": {
+              "label": "Caixas de correio",
+              "description": "Especifique as caixas de correio a indexar (por exemplo, INBOX, Sent, Drafts). Deixe vazio para indexar todas as caixas de correio."
+            }
+          }
+        }
       }
     },
     "costOverrides": {

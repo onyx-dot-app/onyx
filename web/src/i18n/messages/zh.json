@@ -3094,6 +3094,1088 @@
       },
       "optionsListInput": {
         "placeholder": "从列表中选择{label}或输入"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "启用对页面附件（包括图片和文档）的处理",
+              "label": "包含附件"
+            },
+            "scoped_token": {
+              "label": "这是带作用域的 API 令牌",
+              "description": "带作用域的令牌需要通过 Atlassian 的 API 网关路由。使用经典令牌时请保持关闭。"
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "会议 ID",
+              "description": "每个周期性会议会按场次逐一索引。Zoom 仅返回最近 15 个月的场次，因此更早的场次无法通过会议 ID 获取。若要索引更早的历史记录，请改为按主持人邮箱或 Zoom 群组限定范围，这两种方式都没有此限制。"
+            },
+            "webinar_ids": {
+              "label": "网络研讨会 ID",
+              "description": "网络研讨会还需要为主持人启用 Webinar 附加组件。与会议 ID 不同，网络研讨会的历史记录没有 15 个月的限制。"
+            },
+            "host_emails": {
+              "label": "主持人邮箱",
+              "description": "索引这些人主持的所有会话，类型以下方勾选为准。与任何 Zoom 用户都不匹配的邮箱会作为索引错误报告，而不会被静默忽略。"
+            },
+            "group_id": {
+              "label": "Zoom 群组 ID",
+              "description": "索引某个 Zoom 群组的成员主持的所有会话，类型以下方勾选为准。Zoom 每次运行都会重新读取成员列表，因此无需编辑此连接器即可纳入新加入或已离开的成员。"
+            },
+            "include_meetings": {
+              "label": "包含会议",
+              "description": "适用于主持人邮箱和 Zoom 群组。上方的 ID 列表已经说明了每个 ID 的类型。"
+            },
+            "include_webinars": {
+              "label": "包含网络研讨会",
+              "description": "适用于主持人邮箱和 Zoom 群组。网络研讨会还需要为主持人启用 Webinar 附加组件。"
+            },
+            "treat_link_access_as_public": {
+              "label": "将链接访问视为公开",
+              "description": "仅在启用权限同步时有效。开启后，链接访问权限为“任何拥有链接的人”或需登录规则的录制内容对所有 Onyx 用户可见，域规则则对这些域的用户可见。关闭后，每份转录文本仅对录制所有者可见，因为 Zoom 无法提供“有权访问的人员”中包含哪些人。"
+            },
+            "plan_tier": {
+              "label": "Zoom 套餐",
+              "options": {
+                "pro": "专业版",
+                "business_plus": "商务版及以上"
+              },
+              "description": "设置此连接器调用 Zoom 的速度上限。Pro 账户请选择 `pro`，Business、Education、Enterprise 或 Partner 账户请选择 `business_plus`。"
+            },
+            "rate_limit_percent": {
+              "label": "Zoom API 速率限制",
+              "description": "此连接器可使用的账户 Zoom 速率限制的百分比，取 1 到 100 的整数。留空表示 50，为客户的其他 Zoom 集成留出余量。每个 Zoom 连接器各自控制节奏，彼此不可见，因此同一 Zoom 账户上的两个连接器各自占用该百分比。如果运行多个连接器，请将其平分。"
+            }
+          },
+          "description": "配置 Zoom 连接器",
+          "subtext": "索引每个 Zoom 会话的云录制转录文本，需 Zoom Pro 或更高版本套餐。从未进行云录制的会话会被跳过。请在“高级”下设置索引起始日期。Zoom 每次请求只列出一个月的录制内容，因此若不设置，首次抓取会请求一直回溯到 2013 年的每个月份，并把账户的 API 额度浪费在没有内容的年份上。"
+        },
+        "web": {
+          "description": "配置 Web 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL"
+            },
+            "web_connector_type": {
+              "label": "抓取方式",
+              "options": {
+                "recursive": "递归",
+                "single": "单页",
+                "sitemap": "站点地图"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "抓取前滚动页面",
+              "description": "如果网站需要滚动才能加载所需内容，请启用"
+            },
+            "url_rewrites": {
+              "label": "URL 重写",
+              "description": "在存储前重写文档 URL。适用于通过内部镜像抓取、同时存储规范的公开链接的场景，例如 https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "源 URL 前缀",
+              "rightLabel": "替换前缀"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "配置 LumApps 连接器",
+          "fields": {
+            "base_url": {
+              "label": "API 基础 URL（cell 主机）",
+              "description": "您的 LumApps cell/API 主机，例如 https://go-cell-005.api.lumapps.com（不是文档站点 api.lumapps.com）。"
+            },
+            "organization_id": {
+              "label": "组织 ID",
+              "description": "您的 LumApps 组织 ID（数字）。"
+            },
+            "instance_ids": {
+              "label": "实例（站点）ID",
+              "description": "将索引限定在特定的实例/站点 ID。留空则索引服务用户可见的所有内容。"
+            },
+            "custom_content_types": {
+              "label": "自定义内容类型 ID",
+              "description": "限定为特定的自定义内容类型 ID。留空则索引所有内容类型。"
+            },
+            "lang": {
+              "label": "语言",
+              "description": "用于内容标题/正文和元数据标签的语言（ISO 639-1，例如 en、fr）。"
+            }
+          }
+        },
+        "github": {
+          "description": "配置 GitHub 连接器",
+          "fields": {
+            "github_base_url": {
+              "label": "GitHub Enterprise Server URL",
+              "description": "使用 github.com 时请留空。"
+            },
+            "repo_owner": {
+              "label": "仓库所有者"
+            },
+            "github_mode": {
+              "label": "要索引的 GitHub 内容",
+              "tabs": {
+                "repo": {
+                  "label": "指定仓库"
+                },
+                "everything": {
+                  "label": "全部"
+                }
+              }
+            },
+            "repositories": {
+              "label": "仓库名称",
+              "description": "如有多个仓库，请输入以逗号分隔的名称（例如 repo1,repo2,repo3）"
+            },
+            "everything": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有仓库！"
+            },
+            "include_prs": {
+              "label": "包含拉取请求",
+              "description": "索引仓库中的拉取请求"
+            },
+            "include_issues": {
+              "label": "包含议题",
+              "description": "索引仓库中的议题"
+            },
+            "include_files": {
+              "label": "包含文档",
+              "description": "索引仓库中的文本类文档（Markdown、文本等）"
+            },
+            "branch": {
+              "label": "分支",
+              "description": "要索引文档的分支（例如 gh-pages）。留空则使用各仓库的默认分支。仅在启用“包含文档”时适用。在现有连接器上更改此项后，请触发重新索引以立即应用新分支。"
+            }
+          }
+        },
+        "testrail": {
+          "description": "配置 TestRail 连接器",
+          "fields": {
+            "testrail_base_url": {
+              "label": "TestRail 基础 URL"
+            },
+            "project_ids": {
+              "label": "项目 ID",
+              "description": "要索引的 TestRail 项目 ID，以逗号分隔（例如 1 或 1,2,3）。留空则索引所有项目。"
+            },
+            "cases_page_size": {
+              "label": "用例分页大小",
+              "description": "从 TestRail API 每页获取的测试用例数量（默认：250）"
+            },
+            "max_pages": {
+              "label": "最大页数",
+              "description": "为防止无限循环而设置的最大获取页数（默认：10000）"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "跳过文档字符数上限",
+              "description": "跳过超出此字符数上限的测试用例（默认：200000）"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "配置 GitLab 连接器",
+          "fields": {
+            "gitlab_url": {
+              "label": "GitLab URL"
+            },
+            "project_owner": {
+              "label": "项目所有者"
+            },
+            "project_name": {
+              "label": "项目名称"
+            },
+            "include_mrs": {
+              "label": "包含合并请求",
+              "description": "索引仓库中的合并请求"
+            },
+            "include_issues": {
+              "label": "包含议题",
+              "description": "索引仓库中的议题"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "配置 Bitbucket 连接器",
+          "subtext": "配置 Bitbucket 连接器（仅限 Cloud）。您可以索引整个工作区、指定项目或仓库。",
+          "fields": {
+            "workspace": {
+              "label": "工作区",
+              "description": "要索引的 Bitbucket 工作区（例如，来自 https://bitbucket.org/atlassian/workspace 的 \"atlassian\"）。"
+            },
+            "bitbucket_mode": {
+              "label": "要索引的 Bitbucket 内容",
+              "tabs": {
+                "repo": {
+                  "label": "指定仓库"
+                },
+                "project": {
+                  "label": "项目"
+                },
+                "workspace": {
+                  "label": "工作区"
+                }
+              }
+            },
+            "repositories": {
+              "label": "仓库 Slug",
+              "description": "如有多个仓库，请输入以逗号分隔的 Slug（例如 repo1,repo2,repo3）"
+            },
+            "projects": {
+              "label": "项目键",
+              "description": "一个或多个 Bitbucket 项目键（以逗号分隔），用于索引这些项目中的所有仓库（例如 PROJ1,PROJ2）"
+            },
+            "workspace_tab": {
+              "label": "工作区",
+              "description": "此连接器将索引工作区中的所有仓库。"
+            }
+          }
+        },
+        "gitbook": {
+          "description": "配置 GitBook 连接器",
+          "fields": {
+            "space_id": {
+              "label": "空间 ID",
+              "description": "要索引的 GitBook 空间的 ID。可在该空间内任意页面的 URL 中找到。例如，如果您的 URL 为 `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`，则您的空间 ID 为 `8JkzVx8QCIGRrmxhGHU8`。"
+            }
+          }
+        },
+        "google_drive": {
+          "description": "配置 Google Drive 连接器",
+          "fields": {
+            "credential_kind": {
+              "label": "凭据类型"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "常规"
+                },
+                "Specific": {
+                  "label": "指定"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "包含共享云端硬盘",
+              "description": {
+                "oauth": "这将允许 Onyx 索引您有权访问的共享云端硬盘中的所有内容。",
+                "serviceAccount": "这将允许 Onyx 索引贵组织共享云端硬盘中的所有内容。"
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "包含我的云端硬盘",
+                "serviceAccount": "包含所有人的我的云端硬盘"
+              },
+              "description": {
+                "oauth": "这将允许 Onyx 索引您的我的云端硬盘中的所有内容。",
+                "serviceAccount": "这将允许 Onyx 索引所有人的我的云端硬盘中的所有内容。"
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "这将允许 Onyx 索引与您共享的所有文件。",
+              "label": "包含与您共享的所有文件"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "输入要索引的共享云端硬盘的 URL，以逗号分隔。您必须有权访问这些共享云端硬盘。",
+                "serviceAccount": "输入要索引的共享云端硬盘的 URL，以逗号分隔。"
+              },
+              "label": "共享云端硬盘 URL"
+            },
+            "shared_folder_urls": {
+              "description": "输入要索引的文件夹的 URL，以逗号分隔。这些文件夹（及其所有子文件夹）中的文件都会被索引。",
+              "label": "文件夹 URL"
+            },
+            "my_drive_emails": {
+              "description": "输入要索引其“我的云端硬盘”的用户的邮箱，以逗号分隔。",
+              "label": "我的云端硬盘邮箱"
+            },
+            "specific_user_emails": {
+              "description": "输入要索引的特定用户邮箱，以逗号分隔。这将只索引这些用户可访问的文件。",
+              "label": "指定用户邮箱"
+            },
+            "exclude_domain_link_only": {
+              "label": "隐藏仅限域链接的文件",
+              "description": "启用后，Onyx 会跳过广泛共享（域内或公开）但需要通过链接访问的文件。"
+            }
+          }
+        },
+        "gmail": {
+          "description": "配置 Gmail 连接器"
+        },
+        "bookstack": {
+          "description": "配置 Bookstack 连接器",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "BookStack 基础 URL"
+            }
+          }
+        },
+        "outline": {
+          "description": "配置 Outline 连接器",
+          "fields": {
+            "outline_base_url": {
+              "label": "Outline 基础 URL"
+            }
+          }
+        },
+        "confluence": {
+          "description": "配置 Confluence 连接器",
+          "fields": {
+            "is_cloud": {
+              "label": "是否为云端版",
+              "description": "对于 atlassian.net 上的站点，请选择 Confluence Cloud；对于自托管的 Confluence Server 或 Data Center 站点，请选择 Confluence Data Center。"
+            },
+            "wiki_base": {
+              "label": "站点 URL"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "space": {
+                  "label": "空间"
+                },
+                "page": {
+                  "label": "页面"
+                },
+                "cql": {
+                  "label": "CQL 查询"
+                }
+              }
+            },
+            "everything": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有页面！"
+            },
+            "space": {
+              "label": "空间键",
+              "description": "要索引的 Confluence 空间键（例如 `KB`）。"
+            },
+            "page_id": {
+              "label": "页面 ID",
+              "description": "要索引的特定页面 ID（例如 `131368`）"
+            },
+            "index_recursively": {
+              "label": "递归索引",
+              "description": "设置后，将索引页面 ID 所指定的页面及其所有子页面。"
+            },
+            "cql_query": {
+              "label": "CQL 查询",
+              "description": "重要提示：目前仅支持返回“page”类型对象的 CQL 查询。这意味着所有 CQL 查询都必须包含“type=page”作为唯一的类型过滤条件。同时请勿使用“lastModified”过滤条件，否则会影响连接器的轮询逻辑。请勿使用 ORDER BY，因为连接器会设置自己的排序方式。我们仍会获取 CQL 查询所返回页面的所有附件和评论。任何“lastmodified”过滤条件都将被覆盖。更多详情请参阅 Atlassian 的 [CQL 文档](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)。"
+            }
+          }
+        },
+        "jira": {
+          "description": "配置 Jira 连接器",
+          "subtext": "配置要索引的 Jira 内容。您可以索引全部内容，也可以指定某个项目。",
+          "fields": {
+            "jira_base_url": {
+              "label": "站点 URL"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "project": {
+                  "label": "项目"
+                },
+                "jql": {
+                  "label": "JQL 查询"
+                }
+              }
+            },
+            "everything": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有议题！"
+            },
+            "project_key": {
+              "label": "项目键",
+              "description": "要索引的特定项目的键（例如 “PROJ”）。"
+            },
+            "jql_query": {
+              "label": "JQL 查询",
+              "description": "用于筛选 Jira 议题的自定义 JQL 查询。\n\n重要提示：请勿在 JQL 查询中包含任何基于时间的过滤条件，否则会与连接器的逻辑冲突。此外，请勿包含 ORDER BY 子句。\n\n有关语法的更多详情，请参阅 Atlassian 的 [JQL 文档](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)。"
+            },
+            "comment_email_blacklist": {
+              "label": "评论邮箱黑名单",
+              "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "salesforce": {
+          "description": "配置 Salesforce 连接器",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "配置类型",
+              "tabs": {
+                "simple": {
+                  "label": "简单"
+                },
+                "advanced": {
+                  "label": "高级"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "请求的对象",
+              "description": "指定要索引的 Salesforce 对象类型。如果不确定，请不要指定任何对象，Onyx 将默认按“Account”索引。\n\n提示：请使用对象名称的单数形式（例如使用“Opportunity”而不是“Opportunities”）。"
+            },
+            "custom_query_config": {
+              "label": "自定义查询配置",
+              "description": "输入一个 JSON 配置，精确定义要索引的字段和子对象。这样您可以完全控制数据结构。\n\n示例：`'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n更多详情请[查看我们的文档]({docsAdminsPath}/connectors/official/salesforce)。"
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "配置 SharePoint 连接器",
+          "fields": {
+            "sites": {
+              "label": "站点",
+              "description": "- 如果未指定站点，将索引您组织中的所有站点（需要 `Sites.Read.All` 权限）。\n- 例如，指定 `https://onyxai.sharepoint.com/sites/support` 只会索引该站点。\n- 例如，指定 `https://onyxai.sharepoint.com/sites/support/subfolder` 只会索引该文件夹。\n- 如需索引用户的个人站点，请使用 [OneDrive 连接器]({docsAdminsPath}/connectors/official/onedrive)。\n- 目前，指定站点适用于使用英语、西班牙语或德语的 SharePoint 实例。如需支持其他语言，请联系 Onyx 团队。"
+            },
+            "include_site_documents": {
+              "label": "索引文档",
+              "description": "索引上方所定义的所有 SharePoint 文档库或文件夹中的文档。"
+            },
+            "include_site_pages": {
+              "label": "索引 ASPX 站点",
+              "description": "索引上方所定义的所有 SharePoint 站点的 aspx 页面，即使已指定文档库或文件夹也会索引。"
+            },
+            "treat_sharing_link_as_public": {
+              "label": "将共享链接视为公开",
+              "description": "启用后，带有共享链接（匿名或全组织范围）的文档将被视为公开（对所有 Onyx 用户可见）。禁用后，只有被明确分配角色的用户和群组才能查看该文档。"
+            },
+            "excluded_sites": {
+              "label": "排除的站点",
+              "description": "要排除在索引之外的站点 URL 或 glob 模式。匹配的站点永远不会被索引，即使它们出现在上方的站点列表中。示例：`https://contoso.sharepoint.com/sites/archive`（精确匹配）、`*://*/sites/archive-*`（glob 模式）。"
+            },
+            "excluded_paths": {
+              "label": "排除的路径",
+              "description": "用于在文档库内将文件路径排除在索引之外的 glob 模式。模式会同时与完整相对路径和文件名进行匹配。示例：`*.tmp`（临时文件）、`~$*`（Office 锁定文件）、`Archive/*`（文件夹）。"
+            },
+            "authority_host": {
+              "label": "授权主机",
+              "description": "用于身份验证的 Microsoft 标识授权主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API 主机",
+              "description": "Microsoft Graph API 主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://graph.microsoft.us"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "SharePoint 域名后缀",
+              "description": "SharePoint 站点的域名后缀（例如 sharepoint.com）。大多数部署请保持默认。对于 GCC High，请使用 sharepoint.us"
+            }
+          }
+        },
+        "teams": {
+          "description": "配置 Teams 连接器",
+          "fields": {
+            "teams": {
+              "label": "团队",
+              "description": "指定 0 个或多个要索引的团队。例如，为“onyxai”组织指定团队“Support”，将只索引发送到属于“Support”团队的频道中的消息。如果未指定团队，将索引您组织中的所有团队。"
+            },
+            "include_attachments": {
+              "description": "将每个频道“文件”选项卡中的文件作为独立文档进行索引，并沿用 SharePoint 授予的读取者。需要证书凭据、Graph 上的 Files.Read.All 或 Sites.Read.All，以及 SharePoint API 上的 Sites.FullControl.All，以读取每个文件的读取者。使用 Sites.Selected 时，请为每个频道站点授予该应用完全控制权限。"
+            },
+            "include_inline_images": {
+              "label": "包含内嵌图片",
+              "description": "将粘贴到频道消息中的图片连同其会话串一起索引。无需额外权限。当搜索设置中关闭了图片提取和分析时，不会下载任何内容。"
+            },
+            "include_meeting_transcripts": {
+              "label": "包含会议转录文本",
+              "description": "将已安排会议的转录文本作为独立文档进行索引，组织者和参会者可读取。需要 OnlineMeetingTranscript.Read.All、OnlineMeetings.Read.All 和 User.Read.All 应用程序权限、允许通过 Graph API 访问转录文本的租户设置，以及授予组织者的应用程序访问策略。不包括频道会议。仅索引最近六个月的转录文本，超过该期限的转录文本将从索引中移除。"
+            },
+            "include_meeting_chats": {
+              "label": "包含会议聊天",
+              "description": "索引人们在已安排会议的聊天中所写的内容，每天一份文档，聊天成员可读取。需要 Chat.Read.All 和 User.Read.All 应用程序权限。涵盖在此租户中组织的会议：Microsoft 不提供由其他组织创建的会议的聊天内容。"
+            },
+            "meeting_organizers": {
+              "label": "会议组织者",
+              "description": "要索引其会议转录文本和聊天的组织者的用户主体名称。留空则包含所有拥有 Teams 许可证的已启用用户。"
+            },
+            "authority_host": {
+              "label": "授权主机",
+              "description": "用于身份验证的 Microsoft 标识授权主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API 主机",
+              "description": "Microsoft Graph API 主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://graph.microsoft.us"
+            }
+          }
+        },
+        "outlook": {
+          "description": "配置 Outlook 连接器",
+          "fields": {
+            "mailboxes": {
+              "label": "邮箱",
+              "description": "要索引的邮箱的用户主体名称或主要邮箱地址。将此项和“邮箱组”都留空，则索引应用注册可访问的所有邮箱。共享邮箱不会被自动纳入，必须在此列出。"
+            },
+            "mailbox_groups": {
+              "label": "邮箱组",
+              "description": "Entra 组的显示名称或对象 ID。将索引每位成员的邮箱，包括嵌套组的成员，因此可将租户限定为使用 Onyx 的人员。需要 GroupMember.Read.All 应用程序权限。"
+            },
+            "include_attachments": {
+              "description": "索引文件附件中的文本。内嵌图片、嵌套项目和云链接会被跳过。"
+            },
+            "include_calendar": {
+              "label": "包含日历",
+              "description": "除邮件外，同时索引每个邮箱的日历。需要 Calendars.Read 应用程序权限。"
+            },
+            "excluded_folders": {
+              "label": "排除的文件夹",
+              "description": "在每个邮箱中要跳过的文件夹名称。垃圾邮件、已删除邮件、草稿和发件箱始终会被跳过，无需在此添加。"
+            },
+            "calendar_past_days": {
+              "label": "日历过去天数",
+              "description": "在“包含日历”开启时使用。日历窗口向过去回溯的范围。随着窗口向前移动，早于此范围的事件将在下次清理时从索引中移除。之后若要扩大范围，需要重新索引，因为未变更的事件不会自行重新进入索引。"
+            },
+            "calendar_future_days": {
+              "label": "日历未来天数",
+              "description": "在“包含日历”开启时使用。日历窗口向未来延伸的范围。之后若要扩大范围，需要重新索引，因为未变更的事件不会自行重新进入索引。"
+            },
+            "authority_host": {
+              "label": "授权主机",
+              "description": "用于身份验证的 Microsoft 标识授权主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API 主机",
+              "description": "Microsoft Graph API 主机。大多数部署请保持默认。对于 GCC High / DoD，请使用 https://graph.microsoft.us"
+            }
+          }
+        },
+        "discourse": {
+          "description": "配置 Discourse 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL"
+            },
+            "categories": {
+              "label": "分类"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "配置 Drupal Wiki 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL",
+              "description": "您的 Drupal Wiki 实例的基础 URL（例如 https://help.drupal-wiki.com ）"
+            },
+            "indexing_scope": {
+              "label": "要索引的 Drupal Wiki 内容",
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "specific": {
+                  "label": "指定空间/页面"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有空间！"
+            },
+            "spaces": {
+              "label": "空间 ID",
+              "description": "指定一个或多个要索引的空间 ID。仅允许数字。"
+            },
+            "pages": {
+              "label": "页面 ID",
+              "description": "指定一个或多个要索引的页面 ID。仅允许数字。"
+            }
+          }
+        },
+        "axero": {
+          "description": "配置 Axero 连接器",
+          "fields": {
+            "base_url": {
+              "label": "Axero 基础 URL"
+            },
+            "spaces": {
+              "label": "空间",
+              "description": "指定 0 个或多个要索引的空间（按空间 ID）。如果未指定空间 ID，将索引所有空间。"
+            }
+          }
+        },
+        "productboard": {
+          "description": "配置 Productboard 连接器"
+        },
+        "slack": {
+          "description": "配置 Slack 连接器",
+          "fields": {
+            "channels": {
+              "label": "频道",
+              "description": "指定 0 个或多个要索引的频道。从列表中选择频道即可按 ID 跟踪该频道，这样重命名不会导致索引中断；也可以输入列表中未显示的频道名称，例如机器人已被邀请加入的私有频道。如果未指定频道，将索引您工作区中的所有频道。"
+            },
+            "channel_regex_enabled": {
+              "label": "启用频道正则表达式",
+              "description": "启用后，上方指定的“频道”将被视为正则表达式。如果频道名称与任一指定的正则表达式完全匹配，连接器就会拉取该频道的消息。\n\n例如，将 `.*-support.*` 指定为“频道”，连接器会包含名称中带有“-support”的所有频道。"
+            },
+            "exclude_channels": {
+              "label": "要排除的频道",
+              "description": "指定 0 个或多个要排除的频道。排除规则在上方“频道”筛选之后应用，因此同时被两者匹配的频道会被排除。如果未指定频道，则不排除任何频道。"
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "启用排除频道正则表达式",
+              "description": "启用后，上方指定的“要排除的频道”将被视为正则表达式。如果频道名称与任一指定的正则表达式完全匹配，该频道将被排除。\n\n例如，将 `.*-alerts` 指定为“要排除的频道”，连接器会跳过所有以“-alerts”结尾的频道。"
+            },
+            "include_bot_messages": {
+              "label": "包含机器人消息",
+              "description": "启用后，将索引来自机器人和应用的消息。适用于主要由机器人推送的频道（例如 CRM 更新、自动笔记）。"
+            }
+          }
+        },
+        "slab": {
+          "description": "配置 Slab 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL",
+              "description": "指定您的 Slab 团队的基础 URL，格式类似：https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "配置 Guru 连接器"
+        },
+        "gong": {
+          "description": "配置 Gong 连接器",
+          "fields": {
+            "gong_base_url": {
+              "label": "Gong API 基础 URL",
+              "description": "默认为 `https://api.gong.io`。"
+            },
+            "workspaces": {
+              "label": "工作区",
+              "description": "指定 0 个或多个要索引的工作区。请提供工作区 ID 或 Gong 中完全一致的工作区名称。如果未指定工作区，将索引所有工作区的转录文本。"
+            }
+          }
+        },
+        "loopio": {
+          "description": "配置 Loopio 连接器",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Loopio 子域名",
+              "description": "您的 Loopio 站点的子域名，例如 `acme.loopio.com` 中的 `acme`。"
+            },
+            "loopio_stack_name": {
+              "label": "Loopio Stack 名称",
+              "description": "必须与“资料库管理”中的名称完全一致；如需索引所有 Stack，请留空"
+            }
+          }
+        },
+        "file": {
+          "description": "配置文件连接器",
+          "fields": {
+            "file_locations": {
+              "label": "文件"
+            }
+          }
+        },
+        "zulip": {
+          "description": "配置 Zulip 连接器",
+          "fields": {
+            "realm_name": {
+              "label": "Realm 名称"
+            },
+            "realm_url": {
+              "label": "Realm URL"
+            }
+          }
+        },
+        "coda": {
+          "description": "配置 Coda 连接器"
+        },
+        "notion": {
+          "description": "配置 Notion 连接器",
+          "fields": {
+            "root_page_id": {
+              "label": "根页面 ID",
+              "description": "如果指定，则只索引该页面及其所有子页面。如果留空，则索引该集成有权访问的所有页面。"
+            }
+          }
+        },
+        "hubspot": {
+          "description": "配置 HubSpot 连接器",
+          "fields": {
+            "object_types": {
+              "label": "对象类型",
+              "options": {
+                "tickets": "工单",
+                "companies": "公司",
+                "deals": "交易",
+                "contacts": "联系人"
+              },
+              "description": "选择要索引的 HubSpot 对象类型。默认选中所有类型。"
+            }
+          }
+        },
+        "document360": {
+          "description": "配置 Document360 连接器",
+          "fields": {
+            "workspace": {
+              "label": "工作区"
+            },
+            "categories": {
+              "label": "分类",
+              "description": "指定 0 个或多个要索引的分类。例如，指定分类“Help”将只索引“Help”分类下的所有内容。如果未指定分类，将索引您工作区中的所有分类。"
+            }
+          }
+        },
+        "clickup": {
+          "description": "配置 ClickUp 连接器",
+          "fields": {
+            "connector_type": {
+              "label": "连接器类型",
+              "options": {
+                "list": "列表",
+                "folder": "文件夹",
+                "space": "空间",
+                "workspace": "工作区"
+              }
+            },
+            "connector_ids": {
+              "label": "连接器 ID",
+              "description": "指定 0 个或多个要索引的 ID。"
+            },
+            "retrieve_task_comments": {
+              "label": "获取任务评论",
+              "description": "勾选后，还会获取并索引每个任务的所有评论。"
+            }
+          }
+        },
+        "google_sites": {
+          "description": "配置 Google Sites 连接器",
+          "fields": {
+            "base_url": {
+              "label": "基础 URL"
+            },
+            "file_locations": {
+              "label": "站点导出文件",
+              "description": "上传包含您的 Google 站点 HTML 的 `.zip` 文件。"
+            }
+          }
+        },
+        "zendesk": {
+          "description": "配置 Zendesk 连接器",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Zendesk 子域名",
+              "description": "您的 Zendesk 站点的子域名，例如 `acme.zendesk.com` 中的 `acme`。"
+            },
+            "content_type": {
+              "label": "内容类型",
+              "options": {
+                "articles": "文章",
+                "tickets": "工单"
+              }
+            },
+            "calls_per_minute": {
+              "label": "每分钟 API 调用次数",
+              "description": "限制此连接器每分钟可发起的 Zendesk API 调用次数（仅适用于此连接器）。默认值请参阅：https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "配置 Box 连接器",
+          "fields": {
+            "folder_ids": {
+              "label": "文件夹",
+              "description": "要索引的 Box 文件夹 ID 或文件夹 URL（例如 https://app.box.com/folder/123456789）。留空则索引已认证用户可见的所有内容。"
+            },
+            "include_web_links": {
+              "label": "包含网页链接",
+              "description": "同时将 Box 网页链接（书签）作为轻量级文档进行索引。"
+            }
+          }
+        },
+        "dropbox": {
+          "description": "配置 Dropbox 连接器"
+        },
+        "s3": {
+          "description": "配置 S3 连接器",
+          "fields": {
+            "bucket_name": {
+              "label": "存储桶名称"
+            },
+            "prefix": {
+              "label": "前缀"
+            },
+            "region_name": {
+              "label": "AWS 区域",
+              "description": "存储桶所在的 AWS 区域（例如 us-east-1）。对于位于非默认分区（如 GovCloud，us-gov-west-1）的存储桶，此项为必填；否则将使用默认区域解析。"
+            },
+            "bucket_type": {
+              "label": "存储桶类型"
+            }
+          }
+        },
+        "r2": {
+          "description": "配置 R2 连接器",
+          "fields": {
+            "bucket_name": {
+              "label": "存储桶名称"
+            },
+            "prefix": {
+              "label": "前缀"
+            },
+            "european_residency": {
+              "label": "欧盟数据驻留",
+              "description": "如果您的存储桶已启用欧盟数据驻留，请勾选此框。"
+            },
+            "bucket_type": {
+              "label": "存储桶类型"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "配置 Google Cloud Storage 连接器",
+          "fields": {
+            "bucket_name": {
+              "label": "存储桶名称",
+              "description": "要索引的 GCS 存储桶名称，例如 my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "路径前缀"
+            },
+            "bucket_type": {
+              "label": "存储桶类型"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "配置 OCI Storage 连接器",
+          "fields": {
+            "bucket_name": {
+              "label": "存储桶名称"
+            },
+            "prefix": {
+              "label": "前缀"
+            },
+            "bucket_type": {
+              "label": "存储桶类型"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "配置 Wikipedia 连接器",
+          "fields": {
+            "language_code": {
+              "label": "语言代码",
+              "description": "输入有效的 Wikipedia 语言代码（例如 “en”、“es”）"
+            },
+            "categories": {
+              "label": "要索引的分类",
+              "description": "指定 0 个或多个要索引的分类名称。在大多数 Wikipedia 站点中，这些分类是名称形如“Category: XYZ”的页面，其内容是其他页面/分类的列表。只需指定分类名称，不要填写其 URL。"
+            },
+            "pages": {
+              "label": "页面",
+              "description": "指定 0 个或多个要索引的页面名称。"
+            },
+            "recurse_depth": {
+              "label": "递归深度",
+              "description": "在索引含有子分类的分类时，此项决定索引的层级数。指定 0 表示只索引该分类本身（即不递归）。指定 -1 表示递归深度不限。注意，在极少数情况下，某个分类可能在其依赖关系中包含自身，从而导致无限循环。仅在确信不会发生这种情况时才使用 -1。"
+            }
+          }
+        },
+        "xenforo": {
+          "description": "配置 Xenforo 连接器",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "要索引的 XenForo v2.2 论坛 URL。可以是版块或主题帖。"
+            }
+          }
+        },
+        "asana": {
+          "description": "配置 Asana 连接器",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "工作区 ID",
+              "description": "要索引的 Asana 工作区的 ID。可在 https://app.asana.com/api/1.0/workspaces 找到。它是形如 1234567890123456 的数字。"
+            },
+            "asana_project_ids": {
+              "label": "项目 ID",
+              "description": "要索引的特定 Asana 项目的 ID，以逗号分隔。留空则索引工作区中的所有项目。示例：1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "团队 ID",
+              "description": "用于访问团队可见任务的团队 ID。这样除公开任务外，还可以索引团队可见的任务。如果不想使用此功能，请留空。"
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "配置 MediaWiki 连接器",
+          "fields": {
+            "language_code": {
+              "label": "语言代码",
+              "description": "输入有效的 MediaWiki 语言代码（例如 “en”、“es”）"
+            },
+            "hostname": {
+              "label": "MediaWiki 站点 URL"
+            },
+            "categories": {
+              "label": "要索引的分类",
+              "description": "指定 0 个或多个要索引的分类名称。在大多数 MediaWiki 站点中，这些分类是名称形如“Category: XYZ”的页面，其内容是其他页面/分类的列表。只需指定分类名称，不要填写其 URL。"
+            },
+            "pages": {
+              "label": "页面",
+              "description": "指定 0 个或多个要索引的页面名称。只需指定页面名称，不要填写其 URL。"
+            },
+            "recurse_depth": {
+              "label": "递归深度",
+              "description": "在索引含有子分类的分类时，此项决定索引的层级数。指定 0 表示只索引该分类本身（即不递归）。指定 -1 表示递归深度不限。注意，在极少数情况下，某个分类可能在其依赖关系中包含自身，从而导致无限循环。仅在确信不会发生这种情况时才使用 -1。"
+            }
+          }
+        },
+        "discord": {
+          "description": "配置 Discord 连接器",
+          "fields": {
+            "server_ids": {
+              "label": "服务器 ID",
+              "description": "指定 0 个或多个要包含的服务器 ID。仅会索引其中的频道"
+            },
+            "channel_names": {
+              "label": "频道",
+              "description": "指定 0 个或多个要索引的频道。例如，指定频道“support”将只索引“#support”频道中的所有内容。如果未指定频道，将索引机器人有权访问的所有频道。"
+            },
+            "start_date": {
+              "label": "开始日期",
+              "description": "仅索引此日期之后的消息。格式：YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "配置 Freshdesk 连接器",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Freshdesk 域名",
+              "description": "您的 Freshdesk 站点的子域名，例如 `acme.freshdesk.com` 中的 `acme`。"
+            }
+          }
+        },
+        "fireflies": {
+          "description": "配置 Fireflies 连接器"
+        },
+        "braintrust": {
+          "description": "配置 Braintrust 连接器",
+          "fields": {
+            "project_name": {
+              "label": "项目名称",
+              "description": "仅索引此项目中的提示词、数据集和实验。留空则索引整个组织。"
+            },
+            "experiment_row_lookback_days": {
+              "label": "实验行回溯天数",
+              "description": "仅索引在此天数内创建的实验的逐行结果。实验摘要始终会被索引。设为 0 则索引所有实验的行。"
+            }
+          }
+        },
+        "canvas": {
+          "description": "配置 Canvas 连接器",
+          "fields": {
+            "canvas_base_url": {
+              "label": "Canvas 基础 URL",
+              "description": "例如 https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "配置 Egnyte 连接器",
+          "fields": {
+            "domain": {
+              "label": "Egnyte 域名",
+              "description": "您的 Egnyte 站点的子域名，例如 `acme.egnyte.com` 中的 `acme`。"
+            },
+            "folder_path": {
+              "label": "文件夹路径",
+              "description": "要索引的文件夹路径（例如 “/Shared/Documents”）。留空则索引所有内容。"
+            }
+          }
+        },
+        "airtable": {
+          "description": "配置 Airtable 连接器",
+          "fields": {
+            "airtable_scope": {
+              "label": "要索引的 Airtable 内容",
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "specific": {
+                  "label": "指定数据表"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "全部",
+              "description": "此连接器将自动发现并索引您的 API 令牌可访问的所有基础和数据表。"
+            },
+            "airtable_url": {
+              "label": "Airtable URL",
+              "description": "粘贴在浏览器中查看该数据表时的 URL，例如 https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "共享 ID",
+              "description": "可选。如果希望记录链接使用共享视图 URL，请在此填写共享 ID，例如 shrkfjEzDmLaDtK83。"
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "将附件以外的所有字段视为元数据",
+              "description": "当要索引的主要内容是附件、其他所有列都是这些附件的元数据时，请选择此项。"
+            }
+          }
+        },
+        "highspot": {
+          "description": "配置 Highspot 连接器",
+          "fields": {
+            "highspot_url": {
+              "label": "Highspot URL"
+            },
+            "highspot_scope": {
+              "label": "要索引的 Highspot 内容",
+              "tabs": {
+                "spots": {
+                  "label": "指定 Spot"
+                },
+                "everything": {
+                  "label": "全部"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "Spot 名称",
+              "description": "如有多个 Spot，请逐个输入。"
+            },
+            "everything": {
+              "label": "全部",
+              "description": "此连接器将索引所提供凭据有权访问的所有 Spot！"
+            }
+          }
+        },
+        "imap": {
+          "description": "配置邮件连接器",
+          "fields": {
+            "host": {
+              "label": "IMAP 服务器主机",
+              "description": "IMAP 服务器主机名（例如 imap.gmail.com、outlook.office365.com）"
+            },
+            "port": {
+              "label": "IMAP 服务器端口",
+              "description": "IMAP 服务器端口（默认：SSL 使用 993）"
+            },
+            "mailboxes": {
+              "label": "邮箱",
+              "description": "指定要索引的邮箱（例如 INBOX、Sent、Drafts）。留空则索引所有邮箱。"
+            }
+          }
+        }
       }
     },
     "costOverrides": {
