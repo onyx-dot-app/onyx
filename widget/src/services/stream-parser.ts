@@ -4,6 +4,7 @@
 
 import { Packet, Message, SearchDocument } from "@/types/api-types";
 import { ChatMessage } from "@/types/widget-types";
+import { translations, type Translations } from "../locales";
 
 export interface ParsedMessage {
   message: ChatMessage;
@@ -21,7 +22,8 @@ export interface MessageIDs {
  */
 export function processPacket(
   packet: Packet,
-  currentMessage: ChatMessage | null
+  currentMessage: ChatMessage | null,
+  strings: Translations = translations.en
 ): {
   message: ChatMessage | null;
   citation?: { citation_number: number; document_id: string };
@@ -94,15 +96,15 @@ export function processPacket(
       return {
         message: currentMessage,
         status: obj.is_internet_search
-          ? "Searching the web..."
-          : "Searching internally...",
+          ? strings.searchingWeb
+          : strings.searchingInternally,
       };
 
     case "search_tool_queries_delta":
       // Queries being generated
       return {
         message: currentMessage,
-        status: "Generating search queries...",
+        status: strings.generatingQueries,
       };
 
     case "search_tool_documents_delta":
@@ -110,19 +112,19 @@ export function processPacket(
       return {
         message: currentMessage,
         documents: obj.documents,
-        status: "Reading documents...",
+        status: strings.readingDocuments,
       };
 
     case "open_url_start":
       return {
         message: currentMessage,
-        status: "Opening URLs...",
+        status: strings.openingUrls,
       };
 
     case "open_url_urls":
       return {
         message: currentMessage,
-        status: "Fetching web pages...",
+        status: strings.fetchingPages,
       };
 
     case "open_url_documents":
@@ -130,67 +132,67 @@ export function processPacket(
       return {
         message: currentMessage,
         documents: obj.documents,
-        status: "Processing web content...",
+        status: strings.processingContent,
       };
 
     case "image_generation_start":
       return {
         message: currentMessage,
-        status: "Generating image...",
+        status: strings.generatingImage,
       };
 
     case "image_generation_heartbeat":
       return {
         message: currentMessage,
-        status: "Generating image...",
+        status: strings.generatingImage,
       };
 
     case "python_tool_start":
       return {
         message: currentMessage,
-        status: "Running Python code...",
+        status: strings.runningPython,
       };
 
     case "python_tool_delta":
       return {
         message: currentMessage,
-        status: "Running Python code...",
+        status: strings.runningPython,
       };
 
     case "custom_tool_start":
       return {
         message: currentMessage,
-        status: "Running custom tool...",
+        status: strings.runningTool,
       };
 
     case "reasoning_start":
       return {
         message: currentMessage,
-        status: "Thinking...",
+        status: strings.thinking,
       };
 
     case "reasoning_delta":
       return {
         message: currentMessage,
-        status: "Thinking...",
+        status: strings.thinking,
       };
 
     case "deep_research_plan_start":
       return {
         message: currentMessage,
-        status: "Planning research...",
+        status: strings.planningResearch,
       };
 
     case "research_agent_start":
       return {
         message: currentMessage,
-        status: "Researching...",
+        status: strings.researching,
       };
 
     case "intermediate_report_start":
       return {
         message: currentMessage,
-        status: "Generating report...",
+        status: strings.generatingReport,
       };
 
     case "stop":

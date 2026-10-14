@@ -42,6 +42,17 @@ Add these two lines to your website:
 
 That's it! The widget will appear as a floating button in the bottom-right corner.
 
+## Language
+
+The widget supports English and Czech. It selects the first supported language
+from the browser's language preferences (`navigator.languages`), including regional
+variants such as `en-US` and `cs-CZ`. If none match, it defaults to English.
+Changes to browser language preferences are applied when the browser emits a
+`languagechange` event.
+
+Labels, placeholders, and streaming status messages are translated. Custom agent
+names, conversation content, and error details returned by the backend are unchanged.
+
 ## How It Works
 
 ### Architecture Overview
