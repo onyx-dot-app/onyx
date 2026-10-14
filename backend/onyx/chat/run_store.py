@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from uuid import UUID, uuid4
 
@@ -21,9 +21,10 @@ from onyx.agents.runtime import Agent, Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
-from onyx.chat.models import CheckpointBinding, ResponseRecord, SavedAgentContext
+from onyx.chat.models import CheckpointBinding, ResponseRecord
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files
+from onyx.configs.constants import MessageType
 from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     claim_checkpoint__no_commit,
@@ -34,17 +35,20 @@ from onyx.db.chat_checkpoint import (
 from onyx.db.chat_response import (
     ResponseStatus,
     SavedResponse,
+    abort_response_start__no_commit,
+    find_response__no_commit,
     finish_checkpoint__no_commit,
     read_response__no_commit,
     read_response_status__no_commit,
+    reserve_child_response__no_commit,
     save_response_record__no_commit,
 )
 from onyx.db.chat_subagents import (
-    load_agent_history,
     load_session_agent_metadata,
     lookup_session_agent,
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.llm.models import Message, UserMessage
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -61,7 +65,6 @@ STOP_TTL_SECONDS = 600
 
 class ResponseOwner(BaseModel):
     token: UUID
-    message_id: int
     root_message_id: int
     ownership_version: int | None = None
 
@@ -118,8 +121,8 @@ class ChatRunStore(RunStore, RunOwnership):
         )
         self._root_response = root_response
         self._lock = threading.Lock()
-        self._owned: dict[str, _OwnedRun] = {}
-        self._leases: dict[str, _OwnerLease] = {}
+        self._owned: dict[int, _OwnedRun] = {}
+        self._leases: dict[int, _OwnerLease] = {}
         self._coordinator: AgentCoordinator | None = None
         self._build_agent: Callable[[ExecutionCheckpoint], Agent] | None = None
 
@@ -130,16 +133,16 @@ class ChatRunStore(RunStore, RunOwnership):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-    def _owner_key(self, run_id: str) -> str:
-        return f"chat_response_owner:{run_id}"
+    def _owner_key(self, response_id: int) -> str:
+        return f"chat_response_owner:{response_id}"
 
-    def _stop_key(self, run_id: str) -> str:
-        return f"chat_response_stop:{run_id}"
+    def _stop_key(self, response_id: int) -> str:
+        return f"chat_response_stop:{response_id}"
 
     @contextmanager
-    def _ownership_lock(self, run_id: str) -> Iterator[None]:
+    def _ownership_lock(self, response_id: int) -> Iterator[None]:
         lock = self.cache.lock(
-            f"chat_response_lock:{run_id}", timeout=OWNER_LOCK_SECONDS
+            f"chat_response_lock:{response_id}", timeout=OWNER_LOCK_SECONDS
         )
         if not lock.acquire(blocking_timeout=OWNER_LOCK_WAIT_SECONDS):
             raise TimeoutError("Response ownership is busy")
@@ -148,18 +151,18 @@ class ChatRunStore(RunStore, RunOwnership):
         finally:
             lock.release()
 
-    def _owner(self, run_id: str) -> ResponseOwner | None:
-        value = self.cache.get(self._owner_key(run_id))
+    def _owner(self, response_id: int) -> ResponseOwner | None:
+        value = self.cache.get(self._owner_key(response_id))
         return ResponseOwner.model_validate_json(value) if value is not None else None
 
     def _require_owner(self, owned: _OwnedRun) -> None:
-        if self._owner(owned.run.id) != owned.owner:
+        if self._owner(int(owned.run.id)) != owned.owner:
             raise RuntimeError("Response ownership was lost")
 
-    def _binding(self, message_id: int) -> CheckpointBinding:
+    def _binding(self, response_id: int) -> CheckpointBinding:
         return CheckpointBinding(
             tenant_id=self.tenant_id,
-            branch_id=str(message_id),
+            response_id=str(response_id),
         )
 
     def bind(
@@ -177,9 +180,11 @@ class ChatRunStore(RunStore, RunOwnership):
         )
         return self._coordinator
 
-    def _load_status(self, run_id: str, parent_id: str | None = None) -> ResponseStatus:
+    def _load_status(
+        self, response_id: int, parent_id: str | None = None
+    ) -> ResponseStatus:
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-            saved = read_response_status__no_commit(session, run_id)
+            saved = read_response_status__no_commit(session, response_id)
         if saved is None:
             raise LookupError("Response is unavailable")
         if (
@@ -190,21 +195,23 @@ class ChatRunStore(RunStore, RunOwnership):
         if parent_id is not None and saved.parent_agent_id != (parent_id or None):
             raise ValueError("Response is unavailable to this parent")
         if saved.status == RunStatus.RUNNING:
-            with self._ownership_lock(saved.run_id):
-                if self._owner(saved.run_id) is None:
+            with self._ownership_lock(saved.message_id):
+                if self._owner(saved.message_id) is None:
                     with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                         interrupt_response__no_commit(session, saved.message_id)
                         session.commit()
-                        current = read_response_status__no_commit(session, saved.run_id)
+                        current = read_response_status__no_commit(
+                            session, saved.message_id
+                        )
                     if current is None:
                         raise LookupError("Response was removed")
                     saved = current
         return saved
 
-    def _load(self, run_id: str, parent_id: str | None = None) -> SavedResponse:
-        self._load_status(run_id, parent_id)
+    def _load(self, response_id: int, parent_id: str | None = None) -> SavedResponse:
+        self._load_status(response_id, parent_id)
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-            saved = read_response__no_commit(session, run_id)
+            saved = read_response__no_commit(session, response_id)
         if saved is None:
             raise LookupError("Response is unavailable")
         return saved
@@ -218,32 +225,31 @@ class ChatRunStore(RunStore, RunOwnership):
         )
 
     def read_run(self, run_id: str, parent_id: str) -> RunState | None:
+        if not run_id.isdecimal():
+            return None
+        response_id = int(run_id)
         try:
-            saved = self._load(run_id, parent_id)
+            saved = self._load(response_id, parent_id)
         except LookupError:
             return None
-        snapshot = response_snapshot(saved.response)
-        snapshot.run_id = run_id
-        return snapshot
+        return response_snapshot(saved.response)
 
     def read_run_status(self, run_id: str, parent_id: str) -> RunStatus:
-        return self._load_status(run_id, parent_id).status
-
-    def load_history(self, run_id: str, parent_id: str) -> SavedAgentContext:
-        saved = self._load(run_id, parent_id)
-        if not saved.response.status.is_terminal:
-            raise ValueError("Response must finish before another run starts")
-        return self._with_tenant(
-            lambda: load_agent_history(self.response_id, saved.agent.id)
-        )
+        if not run_id.isdecimal():
+            raise LookupError("Response is unavailable")
+        response_id = int(run_id)
+        return self._load_status(response_id, parent_id).status
 
     def cancel_run(self, run_id: str, parent_id: str) -> None:
-        saved = self._load(run_id, parent_id)
-        if saved.response.status.is_terminal:
+        if not run_id.isdecimal():
+            raise LookupError("Response is unavailable")
+        response_id = int(run_id)
+        saved = self._load_status(response_id, parent_id)
+        if saved.status.is_terminal:
             return
-        self.cache.set(self._stop_key(saved.response.run_id), 1, ex=STOP_TTL_SECONDS)
-        with self._ownership_lock(saved.response.run_id):
-            if self._owner(saved.response.run_id) is None:
+        self.cache.set(self._stop_key(saved.message_id), 1, ex=STOP_TTL_SECONDS)
+        with self._ownership_lock(saved.message_id):
+            if self._owner(saved.message_id) is None:
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                     interrupt_response__no_commit(
                         session, saved.message_id, cancelled=True
@@ -256,49 +262,112 @@ class ChatRunStore(RunStore, RunOwnership):
             snapshot.model_copy(update={"child_runs": []}), registrations
         )
 
-    def _save_output(self, owned: _OwnedRun, snapshot: RunState) -> int:
+    def _save_output(self, owned: _OwnedRun, snapshot: RunState) -> None:
+        response_id = int(owned.run.id)
         record = self._record(snapshot)
-        with self._ownership_lock(owned.run.id):
+        with self._ownership_lock(response_id):
             self._require_owner(owned)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 check_checkpoint_owner__no_commit(
-                    session, owned.owner.message_id, owned.owner.ownership_version
+                    session, response_id, owned.owner.ownership_version
                 )
-                message_id = save_response_record__no_commit(
+                save_response_record__no_commit(
                     session, owned.owner.root_message_id, record
                 )
                 if snapshot.status.is_terminal:
-                    finish_checkpoint__no_commit(session, message_id)
+                    finish_checkpoint__no_commit(session, response_id)
                 session.commit()
-            return message_id
+
+    def reserve_run_id(
+        self,
+        *,
+        agent: AgentInfo,
+        messages: Sequence[Message],
+        previous_run_id: str | None,
+        parent_run_id: str | None,
+        parent_message_id: str | None,
+        parent_tool_call_id: str | None,
+    ) -> str:
+        if len(messages) != 1 or not isinstance(messages[0], UserMessage):
+            raise ValueError("A saved chat response requires one user instruction")
+        if parent_run_id is None:
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                response = find_response__no_commit(session, self.response_id)
+                if (
+                    response is None
+                    or response.chat_session_id != self.chat_session_id
+                    or agent.id != str(self.chat_session_id)
+                    or response.message_type != MessageType.ASSISTANT
+                    or response.response_status is not None
+                ):
+                    raise ValueError("Response is unavailable for a new run")
+            return str(self.response_id)
+        if parent_message_id is None or parent_tool_call_id is None:
+            raise ValueError("Child instruction has no parent invocation")
+        parent_response_id = int(parent_run_id)
+        with self._lock:
+            parent = self._owned.get(parent_response_id)
+        if parent is None:
+            raise ValueError("Parent response has no execution ownership")
+        self._save_output(parent, parent.run.snapshot(include_children=False))
+        with self._ownership_lock(parent_response_id):
+            self._require_owner(parent)
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                check_checkpoint_owner__no_commit(
+                    session, parent_response_id, parent.owner.ownership_version
+                )
+                message_id = reserve_child_response__no_commit(
+                    session,
+                    parent.owner.root_message_id,
+                    agent=agent,
+                    instruction=messages[0],
+                    previous_response_id=int(previous_run_id)
+                    if previous_run_id is not None
+                    else None,
+                    parent_response_id=parent_response_id,
+                    parent_message_id=parent_message_id,
+                    parent_tool_call_id=parent_tool_call_id,
+                )
+                session.commit()
+        return str(message_id)
 
     def register(self, run: Run) -> None:
+        response_id = int(run.id)
         snapshot = run.snapshot(include_children=False)
         with self._lock:
-            lease = self._leases.get(run.id)
+            lease = self._leases.get(response_id)
             claimed = lease.owner if lease is not None else None
-            parent = self._owned.get(snapshot.parent_run_id or "")
-        if parent is not None:
-            self._save_output(parent, parent.run.snapshot(include_children=False))
+            parent = (
+                self._owned.get(int(snapshot.parent_run_id))
+                if snapshot.parent_run_id is not None
+                else None
+            )
         if claimed is None:
-            with self._ownership_lock(run.id):
-                if self._owner(run.id) is not None:
+            if snapshot.parent_run_id is not None and parent is None:
+                raise ValueError("Parent response has no execution ownership")
+            root_message_id = (
+                parent.owner.root_message_id if parent else self.response_id
+            )
+            with self._ownership_lock(response_id):
+                if self._owner(response_id) is not None:
                     raise ValueError("Response already has an owner")
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                    message_id = save_response_record__no_commit(
-                        session, self.response_id, self._record(snapshot)
+                    response = find_response__no_commit(session, response_id)
+                    if response is None or response.response_status is not None:
+                        raise ValueError("Response is unavailable for a new run")
+                    save_response_record__no_commit(
+                        session, root_message_id, self._record(snapshot)
                     )
                     session.commit()
                 claimed = ResponseOwner(
                     token=uuid4(),
-                    message_id=message_id,
-                    root_message_id=self.response_id,
+                    root_message_id=root_message_id,
                 )
                 lease = _OwnerLease(claimed)
                 with self._lock:
-                    self._leases[run.id] = lease
+                    self._leases[response_id] = lease
                 self.cache.set(
-                    self._owner_key(run.id),
+                    self._owner_key(response_id),
                     claimed.model_dump_json(),
                     ex=OWNER_TTL_SECONDS,
                 )
@@ -310,7 +379,7 @@ class ChatRunStore(RunStore, RunOwnership):
                     "Response ownership failed during restoration"
                 ) from lease.error
             started = time.monotonic()
-            self._refresh_owner(run.id, lease.owner)
+            self._refresh_owner(response_id, lease.owner)
             if (
                 time.monotonic() - started
                 >= OWNER_TTL_SECONDS - OWNER_EXPIRY_MARGIN_SECONDS
@@ -318,79 +387,102 @@ class ChatRunStore(RunStore, RunOwnership):
                 raise TimeoutError("Response ownership renewal took too long")
             lease.refreshed = started
         with self._lock:
-            self._owned[run.id] = _OwnedRun(run, lease)
+            self._owned[response_id] = _OwnedRun(run, lease)
 
     def abort_start(self, run_id: str) -> None:
+        response_id = int(run_id)
         with self._lock:
-            lease = self._leases.get(run_id)
+            lease = self._leases.get(response_id)
         if lease is None:
+            with self._ownership_lock(response_id):
+                if self._owner(response_id) is not None:
+                    return
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    abort_response_start__no_commit(
+                        session, self.response_id, response_id
+                    )
+                    session.commit()
             return
         with lease.lock:
             lease.released = True
         try:
-            with self._ownership_lock(run_id):
-                if self._owner(run_id) != lease.owner:
+            with self._ownership_lock(response_id):
+                owner = self._owner(response_id)
+                if owner is not None and owner != lease.owner:
                     return
                 if lease.owner.ownership_version is not None:
+                    if owner is None:
+                        return
                     with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                         release_checkpoint_claim__no_commit(
                             session,
-                            lease.owner.message_id,
+                            response_id,
                             lease.owner.ownership_version,
                         )
                         session.commit()
-                self.cache.delete(self._owner_key(run_id))
+                else:
+                    with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                        abort_response_start__no_commit(
+                            session, self.response_id, response_id
+                        )
+                        session.commit()
+                if owner is not None:
+                    self.cache.delete(self._owner_key(response_id))
         finally:
             with self._lock:
-                self._leases.pop(run_id, None)
-                self._owned.pop(run_id, None)
+                self._leases.pop(response_id, None)
+                self._owned.pop(response_id, None)
 
     @property
     def has_owned_work(self) -> bool:
         with self._lock:
             return bool(self._leases)
 
-    def _release_owner(self, run_id: str, lease: _OwnerLease) -> None:
+    def _release_owner(self, response_id: int, lease: _OwnerLease) -> None:
         with lease.lock:
             lease.released = True
         try:
-            with self._ownership_lock(run_id):
-                if self._owner(run_id) == lease.owner:
-                    self.cache.delete(self._owner_key(run_id))
+            with self._ownership_lock(response_id):
+                if self._owner(response_id) == lease.owner:
+                    self.cache.delete(self._owner_key(response_id))
         finally:
             with self._lock:
-                self._leases.pop(run_id, None)
+                self._leases.pop(response_id, None)
 
     def save(self, run: Run) -> None:
+        response_id = int(run.id)
         with self._lock:
-            owned = self._owned.get(run.id)
+            owned = self._owned.get(response_id)
         if owned is None:
             raise ValueError("Run has no storage ownership")
-        if owned.owner.message_id != self.response_id or self._root_response is None:
+        if response_id != self.response_id or self._root_response is None:
             self._save_output(owned, run.snapshot(include_children=False))
             return
-        with self._ownership_lock(run.id):
+        with self._ownership_lock(response_id):
             self._require_owner(owned)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 check_checkpoint_owner__no_commit(
-                    session, owned.owner.message_id, owned.owner.ownership_version
+                    session, response_id, owned.owner.ownership_version
                 )
             self._root_response.save(run)
 
     def release(self, run_id: str) -> None:
+        response_id = int(run_id)
         with self._lock:
-            owned = self._owned.get(run_id)
+            owned = self._owned.get(response_id)
         if owned is None:
             return
         try:
-            self._release_owner(run_id, owned.lease)
+            self._release_owner(response_id, owned.lease)
         finally:
             with self._lock:
-                self._owned.pop(run_id, None)
+                self._owned.pop(response_id, None)
 
-    def _refresh_owner(self, run_id: str, owner: ResponseOwner) -> None:
+    def _refresh_owner(self, response_id: int, owner: ResponseOwner) -> None:
         if not self.control_cache.renew_if_value(
-            self._owner_key(run_id), owner.model_dump_json().encode(), OWNER_TTL_SECONDS
+            self._owner_key(response_id),
+            owner.model_dump_json().encode(),
+            OWNER_TTL_SECONDS,
         ):
             raise _OwnershipLost("Response ownership was lost")
 
@@ -398,7 +490,7 @@ class ChatRunStore(RunStore, RunOwnership):
         """Renew ownership and read Stop requests on the caller's control thread."""
         with self._lock:
             leases = list(self._leases.items())
-        for run_id, lease in leases:
+        for response_id, lease in leases:
             if not lease.lock.acquire(blocking=False):
                 continue
             stopped = False
@@ -413,7 +505,7 @@ class ChatRunStore(RunStore, RunOwnership):
                     and now - lease.refreshed >= OWNER_REFRESH_SECONDS
                 ):
                     try:
-                        self._refresh_owner(run_id, lease.owner)
+                        self._refresh_owner(response_id, lease.owner)
                     except _OwnershipLost as error:
                         lease.error = error
                     except Exception:
@@ -429,7 +521,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 lease.expire_if_due()
                 if lease.error is None:
                     try:
-                        stopped = self.control_cache.exists(self._stop_key(run_id))
+                        stopped = self.control_cache.exists(self._stop_key(response_id))
                     except Exception:
                         logger.exception(
                             "Failed to read agent Stop request; will retry"
@@ -441,14 +533,15 @@ class ChatRunStore(RunStore, RunOwnership):
             if not stopped:
                 continue
             with self._lock:
-                owned = self._owned.get(run_id)
+                owned = self._owned.get(response_id)
             if owned is not None:
                 owned.run.cancel()
 
     def handoff(self, run_id: str) -> None:
         """Save a paused run before releasing ownership for another API pod."""
+        response_id = int(run_id)
         with self._lock:
-            owned = self._owned[run_id]
+            owned = self._owned[response_id]
         if owned.run.status != RunStatus.SUSPENDED or not owned.run.wait_for_idle(
             timeout=OPERATION_TIMEOUT_SECONDS
         ):
@@ -466,36 +559,34 @@ class ChatRunStore(RunStore, RunOwnership):
             lambda: persist_checkpoint_files(captured, session_id=self.chat_session_id)
         )
         record = self._record(captured.run_state)
-        data = serialize_checkpoint(
-            captured, record, self._binding(owned.owner.message_id)
-        )
+        data = serialize_checkpoint(captured, record, self._binding(response_id))
         published = False
 
         def save(_checkpoint: ExecutionCheckpoint) -> None:
             nonlocal published
-            with self._ownership_lock(run_id):
+            with self._ownership_lock(response_id):
                 self._require_owner(owned)
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                     check_checkpoint_owner__no_commit(
-                        session, owned.owner.message_id, owned.owner.ownership_version
+                        session, response_id, owned.owner.ownership_version
                     )
                     save_response_record__no_commit(
                         session,
                         owned.owner.root_message_id,
                         record.model_copy(update={"status": RunStatus.RUNNING}),
                     )
-                    saved = read_response__no_commit(session, run_id)
+                    saved = read_response__no_commit(session, response_id)
                     if saved is None:
                         raise ValueError("Response is unavailable")
                     deserialize_checkpoint(
                         data,
                         saved.response,
                         captured.agent_state,
-                        self._binding(owned.owner.message_id),
+                        self._binding(response_id),
                     )
                     publish_checkpoint__no_commit(
                         session,
-                        owned.owner.message_id,
+                        response_id,
                         data,
                         expected_ownership_version=owned.owner.ownership_version,
                     )
@@ -507,20 +598,22 @@ class ChatRunStore(RunStore, RunOwnership):
         finally:
             if published:
                 try:
-                    self._release_owner(run_id, owned.lease)
+                    self._release_owner(response_id, owned.lease)
                 finally:
                     with self._lock:
-                        self._owned.pop(run_id, None)
+                        self._owned.pop(response_id, None)
 
     def resume(self, run_id: str, *, context: AgentState) -> Run | None:
         """Resume with authorized, rehydrated history; never reconstruct a live owner."""
+        if not run_id.isdecimal():
+            raise LookupError("Response is unavailable")
+        response_id = int(run_id)
         build_agent = self._build_agent
         if self._coordinator is None or build_agent is None:
             raise ValueError("Bind feature reconstruction before resuming")
-        saved = self._load(run_id)
-        run_id = saved.response.run_id
-        with self._ownership_lock(run_id):
-            if self._owner(run_id) is not None:
+        saved = self._load(response_id)
+        with self._ownership_lock(response_id):
+            if self._owner(response_id) is not None:
                 return None
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 checkpoint = claim_checkpoint__no_commit(session, saved.message_id)
@@ -529,14 +622,13 @@ class ChatRunStore(RunStore, RunOwnership):
                 return None
             owner = ResponseOwner(
                 token=uuid4(),
-                message_id=saved.message_id,
                 root_message_id=saved.root_message_id,
                 ownership_version=checkpoint.ownership_version,
             )
             lease = _OwnerLease(owner)
             try:
                 self.cache.set(
-                    self._owner_key(run_id),
+                    self._owner_key(response_id),
                     owner.model_dump_json(),
                     ex=OWNER_TTL_SECONDS,
                 )
@@ -548,7 +640,7 @@ class ChatRunStore(RunStore, RunOwnership):
                     session.commit()
                 raise
         with self._lock:
-            self._leases[run_id] = lease
+            self._leases[response_id] = lease
         try:
             captured = deserialize_checkpoint(
                 checkpoint.data,
@@ -565,7 +657,7 @@ class ChatRunStore(RunStore, RunOwnership):
             )
         except BaseException:
             try:
-                self.abort_start(run_id)
+                self.abort_start(str(response_id))
             except Exception:
                 logger.exception("Response reconstruction rollback failed")
             raise

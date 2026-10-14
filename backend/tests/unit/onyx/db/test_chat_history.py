@@ -207,7 +207,7 @@ def test_saved_response_history_preserves_generation_content() -> None:
 
     history = capture_chat_history([response], {}, len)
 
-    assert history[0].agent_run_id == "42"
+    assert history[0].id == 42
     assert len(history[0].response_messages) == 1
     assistant = history[0].response_messages[0]
     assert isinstance(assistant, AssistantMessage)
