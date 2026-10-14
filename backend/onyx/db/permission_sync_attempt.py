@@ -4,6 +4,7 @@ This module contains all CRUD operations for both DocPermissionSyncAttempt
 and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
+from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import delete, func, select
@@ -11,6 +12,7 @@ from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.connector_edit_requests import request_retry_delay
 from onyx.db.enums import PermissionSyncStatus
 from onyx.db.models import (
     Connector,
@@ -22,6 +24,9 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
+
+# Enough consecutive failures to reach the longest retry delay.
+_GROUP_SYNC_BACKOFF_LOOKBACK = 8
 
 
 # =============================================================================
@@ -317,6 +322,37 @@ def get_recent_external_group_sync_attempts_for_cc_pair(
             )
         ).scalars()
     )
+
+
+def get_external_group_sync_retry_after(
+    cc_pair_id: int,
+    failures_since: datetime,
+    db_session: Session,
+) -> datetime | None:
+    """The time before which the pair's group sync must not run again, from
+    its consecutive FAILED attempts created after ``failures_since``. None
+    when the latest finished attempt did not fail."""
+    attempts = get_recent_external_group_sync_attempts_for_cc_pair(
+        cc_pair_id=cc_pair_id,
+        limit=_GROUP_SYNC_BACKOFF_LOOKBACK,
+        db_session=db_session,
+    )
+    failure_count = 0
+    last_failed_at: datetime | None = None
+    for attempt in attempts:
+        if attempt.time_created < failures_since:
+            break
+        if not attempt.status.is_terminal():
+            continue
+        if attempt.status != PermissionSyncStatus.FAILED:
+            break
+        failure_count += 1
+        if last_failed_at is None:
+            last_failed_at = attempt.time_finished or attempt.time_created
+
+    if last_failed_at is None:
+        return None
+    return last_failed_at + request_retry_delay(failure_count)
 
 
 def get_relevant_external_group_sync_attempts_for_cc_pair(
