@@ -249,6 +249,22 @@ const zoomWebinarIdsOption: ListOption = {
     "meeting IDs, webinar history has no 15-month limit.",
 };
 
+/**
+ * Whether an Atlassian API token (Confluence, Jira) has scopes. It sits below
+ * the site URL in both connectors.
+ */
+const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
+  type: "checkbox",
+  query: "Using scoped token?",
+  label: "This is an API token with scopes",
+  description:
+    "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens.",
+  name: "scoped_token",
+  optional: true,
+  default: false,
+  asCheckbox: true,
+};
+
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -828,17 +844,7 @@ export const connectorConfigs: Record<
         placeholder: "https://your-domain.atlassian.net/wiki",
         subDescription: "siteUrl",
       },
-      {
-        type: "checkbox",
-        query: "Using scoped token?",
-        label: "This is an API token with scopes",
-        description:
-          "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens.",
-        name: "scoped_token",
-        optional: true,
-        default: false,
-        asCheckbox: true,
-      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
       {
         type: "tab",
         name: "indexing_scope",
@@ -924,20 +930,13 @@ export const connectorConfigs: Record<
       {
         type: "text",
         query: "Enter the Jira base URL:",
-        label: "Jira Base URL",
+        label: "Site URL",
         name: "jira_base_url",
         optional: false,
-        description:
-          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+        placeholder: "https://your-domain.atlassian.net",
+        subDescription: "siteUrl",
       },
-      {
-        type: "checkbox",
-        query: "Using scoped token?",
-        label: "Using scoped token",
-        name: "scoped_token",
-        optional: true,
-        default: false,
-      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
       {
         type: "tab",
         name: "indexing_scope",
