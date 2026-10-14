@@ -1166,7 +1166,7 @@ class GateAddon:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
             try:
                 params = outbound_ssrf_params(
-                    get_security_settings().ssrf_protection_level
+                    get_security_settings(allow_fallback=False).ssrf_protection_level
                 )
                 return resolve_destination(
                     self._destination_policy, host, port, mcp_ssrf_params=params

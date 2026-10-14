@@ -267,7 +267,12 @@ def mcp_ssrf_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     from onyx.server.security.models import SSRFProtectionLevel
 
     settings = MagicMock(ssrf_protection_level=SSRFProtectionLevel.DISABLED)
+
+    def read_settings(*, allow_fallback: bool = True) -> MagicMock:
+        assert not allow_fallback
+        return settings
+
     monkeypatch.setattr(
-        "onyx.sandbox_proxy.addons.gate.get_security_settings", lambda: settings
+        "onyx.sandbox_proxy.addons.gate.get_security_settings", read_settings
     )
     return settings

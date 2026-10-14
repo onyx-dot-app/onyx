@@ -105,6 +105,7 @@ Internal destinations remain blocked for HTTP and CONNECT. The exact
 Craft-enabled MCP servers also permit their exact scheme, host, and port for
 users with access in the sandbox tenant. The resolver caches access for 30 seconds.
 Lookup failures deny access. The tenant’s SSRF Protection setting applies to the addresses used for the connection.
+This exception uses `get_security_settings(allow_fallback=False)`; failed reads cannot substitute environment defaults.
 Raw TCP forwarding is disabled. Path, credential, and action checks still apply.
 Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
 Use listeners and Services in that address family: IPv4 remains the default;

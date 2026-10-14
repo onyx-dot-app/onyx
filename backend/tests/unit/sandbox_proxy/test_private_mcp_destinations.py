@@ -207,7 +207,8 @@ def test_mcp_rechecks_tenant_ssrf_settings(
         resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
     )
 
-    def settings() -> MagicMock:
+    def settings(*, allow_fallback: bool = True) -> MagicMock:
+        assert not allow_fallback
         assert CURRENT_TENANT_ID_CONTEXTVAR.get() == sandbox.tenant_id
         return mcp_ssrf_settings
 
@@ -244,3 +245,144 @@ def test_mcp_rechecks_tenant_ssrf_settings(
         is None
     )
     assert CURRENT_TENANT_ID_CONTEXTVAR.get() == previous
+
+
+@pytest.mark.parametrize("failure", ["database", "key_value_store"])
+def test_private_mcp_denies_real_settings_read_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    from cachetools import TTLCache
+
+    from onyx.server.security import store
+    from onyx.server.security.models import SecuritySettingsOverrides
+    from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+
+    sandbox = make_resolved_sandbox(tenant_id="tenant-strict")
+    resolver = MCPServerResolver()
+    targets = MagicMock(
+        return_value=(
+            CraftMCPTarget(
+                server_id=1,
+                scheme="https",
+                host="10.1.2.3",
+                port=443,
+                path_prefix="/mcp",
+            ),
+        )
+    )
+    access = MagicMock(return_value=frozenset({1}))
+    monkeypatch.setattr(resolver, "_load_targets", targets)
+    monkeypatch.setattr(resolver, "_load_accessible_ids", access)
+    monkeypatch.setattr(store, "_CACHE", TTLCache(maxsize=100, ttl=10))
+    monkeypatch.setattr(store, "MULTI_TENANT", False)
+    monkeypatch.setattr(store._cfg, "MCP_SERVER_ALLOW_PRIVATE_NETWORK", True)
+    monkeypatch.setattr(store._cfg, "MCP_SERVER_ALLOW_LOOPBACK", False)
+    monkeypatch.setattr(store._cfg, "OPEN_URL_VALIDATE_SSRF", True)
+    monkeypatch.setattr(store, "get_session_with_current_tenant", MagicMock())
+    kv_store = MagicMock()
+    monkeypatch.setattr(store, "get_kv_store", lambda: kv_store)
+    db_read = MagicMock(
+        return_value=SecuritySettingsOverrides(
+            ssrf_protection_level=SSRFProtectionLevel.VALIDATE_ALL
+        )
+    )
+    monkeypatch.setattr(store, "_db_load_overrides", db_read)
+    addon = GateAddon(
+        identity=StubResolver(sandbox=sandbox),
+        request_evaluator=NoMatchedRequest(),
+        cache_factory=unused_cache,
+        proxy_instance_id="test",
+        credential_dispatcher=CredentialInjectionDispatcher([]),
+        destination_policy=parse_destination_policy("https://onyx.test"),
+        mcp_resolver=resolver,
+    )
+
+    # Populate MCP access and strict tenant settings through the actual reader.
+    assert (
+        addon._resolve_mcp_destination(("10.0.0.1", 1234), "https", "10.1.2.3", 443)
+        is None
+    )
+    store.invalidate_security_cache(sandbox.tenant_id)
+    if failure == "database":
+        db_read.side_effect = RuntimeError("database unavailable")
+    else:
+        kv_store.load.side_effect = RuntimeError("key-value store unavailable")
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
+    try:
+        # Auth's legacy reader falls back, but cannot populate the strict cache.
+        assert (
+            store.get_security_settings().ssrf_protection_level
+            == SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK
+        )
+        assert (
+            addon._resolve_mcp_destination(("10.0.0.1", 1234), "https", "10.1.2.3", 443)
+            is None
+        )
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    targets.assert_called_once()
+    access.assert_called_once()
+    assert db_read.call_count == 3
+
+    # A successful read with no overrides may use the operator's env settings.
+    db_read.side_effect = None
+    kv_store.load.side_effect = None
+    db_read.return_value = SecuritySettingsOverrides()
+    assert addon._resolve_mcp_destination(
+        ("10.0.0.1", 1234), "https", "10.1.2.3", 443
+    ) == ("10.1.2.3",)
+
+
+@pytest.mark.parametrize(
+    "host,allowed",
+    [
+        ("localhost", False),
+        ("127.0.0.1", True),
+        ("::1", True),
+        ("metadata.google.internal", False),
+    ],
+)
+def test_disabled_ssrf_matches_backend_mcp_hostname_policy(
+    monkeypatch: pytest.MonkeyPatch, host: str, allowed: bool
+) -> None:
+    import socket
+
+    from onyx.sandbox_proxy.destination_policy import resolve_destination
+    from onyx.server.features.mcp.ssrf import validate_mcp_outbound_url
+    from onyx.server.security.models import outbound_ssrf_params
+    from onyx.utils.url import SSRFException
+
+    settings = MagicMock(ssrf_protection_level=SSRFProtectionLevel.DISABLED)
+    monkeypatch.setattr(
+        "onyx.server.features.mcp.ssrf.get_security_settings", lambda: settings
+    )
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        MagicMock(
+            return_value=[
+                (
+                    socket.AF_INET,
+                    socket.SOCK_STREAM,
+                    socket.IPPROTO_TCP,
+                    "",
+                    ("127.0.0.1", 8000),
+                )
+            ]
+        ),
+    )
+    authority = f"[{host}]" if ":" in host else host
+    url = f"http://{authority}:8000/mcp"
+    if allowed:
+        assert validate_mcp_outbound_url(url) == url
+    else:
+        with pytest.raises(SSRFException):
+            validate_mcp_outbound_url(url)
+    addresses = resolve_destination(
+        parse_destination_policy("https://onyx.test"),
+        host,
+        8000,
+        mcp_ssrf_params=outbound_ssrf_params(SSRFProtectionLevel.DISABLED),
+    )
+    assert (addresses is not None) == allowed
