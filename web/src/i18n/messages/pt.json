@@ -4348,8 +4348,8 @@
         "unknownError": "Erro desconhecido"
       },
       "placeholders": {
-        "inputCost": "3,00",
-        "outputCost": "15,00"
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
