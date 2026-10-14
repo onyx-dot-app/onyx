@@ -192,6 +192,15 @@ def update_connector(
     return connector
 
 
+def set_connector_check_frequency(
+    db_session: Session, connector: Connector, seconds: int | None
+) -> None:
+    """Schedules the connector's checks every ``seconds``, or None for on request only. Commits."""
+    connector.check_freq = seconds
+    connector.validate_check_freq()
+    db_session.commit()
+
+
 def delete_connector(
     db_session: Session,
     connector_id: int,

@@ -3,14 +3,14 @@ const SvgFilePlus = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 12 12"
+    viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     stroke="currentColor"
     {...props}
   >
     <path
-      d="M10 4L7 1H3C2.45533 1 2 1.45533 2 2V10C2 10.5447 2.45533 11 3 11H9C9.54467 11 10 10.5447 10 10V4ZM7 1L7 4L10 4M6 9V6M4.5 7.5H7.5"
+      d="M13.33333 5.33333L9.33333 1.33333H4C3.27377 1.33333 2.66667 1.94044 2.66667 2.66667V13.33333C2.66667 14.0596 3.27377 14.66667 4 14.66667H12C12.72623 14.66667 13.33333 14.0596 13.33333 13.33333V5.33333ZM9.33333 1.33333L9.33333 5.33333L13.33333 5.33333M8 12V8M6 10H10"
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"

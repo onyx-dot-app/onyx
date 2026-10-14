@@ -16,6 +16,7 @@ from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.credentials import fetch_credential_by_id, fetch_credential_by_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
@@ -642,6 +643,14 @@ def get_readable_connector_credential_pair_for_user(
         if cc_pair is not None:
             return cc_pair
     return None
+
+
+def stamp_indexing_hold_release(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """Records that an admin released the pair's first-run hold now. Commits."""
+    cc_pair.indexing_hold_released_at = get_db_current_time(db_session)
+    db_session.commit()
 
 
 def verify_user_has_access_to_cc_pair(

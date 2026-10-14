@@ -35,7 +35,7 @@ from onyx.db.cc_pair_runs import (
     get_index_runs_since,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
-from onyx.db.connector import fetch_connector_by_id
+from onyx.db.connector import fetch_connector_by_id, set_connector_check_frequency
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     add_credential_to_connector,
@@ -46,6 +46,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id_for_user,
     get_readable_connector_credential_pair_for_user,
     remove_credential_from_connector,
+    stamp_indexing_hold_release,
     update_connector_credential_pair_from_id,
     verify_user_can_manage_all_cc_pairs,
     verify_user_has_access_to_cc_pair,
@@ -53,7 +54,6 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
     AccessType,
     CCPairRunErrors,
@@ -64,6 +64,7 @@ from onyx.db.enums import (
     IndexingStatus,
     Permission,
     PermissionSyncStatus,
+    SyncType,
 )
 from onyx.db.index_attempt import (
     cancel_waiting_index_attempt__no_commit,
@@ -89,6 +90,7 @@ from onyx.db.permission_sync_attempt import (
     get_latest_doc_permission_sync_attempt_for_cc_pair,
 )
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.sync_record import fetch_latest_sync_record
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
@@ -255,10 +257,12 @@ def get_index_attempt_stage_metrics(
 _RUNS_MAX_PAGE_SIZE = 50
 
 
-def _cc_pair_run_kinds(cc_pair: ConnectorCredentialPair) -> list[CCPairRunKind]:
+def _cc_pair_run_kinds(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> list[CCPairRunKind]:
     """Indexing always, the permission syncs a perm-synced pair's source runs,
-    pruning when the pair has a prune schedule, and the checks of a source that
-    names some."""
+    pruning when the pair has a prune schedule or has ever pruned, and the
+    checks of a source that names some."""
     source = cc_pair.connector.source
     kinds = [CCPairRunKind.INDEXING]
     if cc_pair.access_type.is_perm_synced():
@@ -267,8 +271,12 @@ def _cc_pair_run_kinds(cc_pair: ConnectorCredentialPair) -> list[CCPairRunKind]:
             kinds.append(CCPairRunKind.DOC_PERMISSION_SYNC)
         if CredentialCapability.EXTERNAL_GROUP_SYNC in capabilities:
             kinds.append(CCPairRunKind.GROUP_SYNC)
-    # The same gate as the pruning beat: a file connector never prunes.
-    if cc_pair.connector.prune_freq:
+    # The pruning beat's gate, plus a manual prune: a file connector never prunes.
+    if (
+        cc_pair.connector.prune_freq
+        or fetch_latest_sync_record(db_session, cc_pair.id, SyncType.PRUNING)
+        is not None
+    ):
         kinds.append(CCPairRunKind.PRUNING)
     if has_named_capability_checks(source):
         kinds.append(CCPairRunKind.CHECKS)
@@ -351,7 +359,7 @@ def get_cc_pair_runs(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "CC Pair not found for current user permissions",
         )
-    pair_kinds = _cc_pair_run_kinds(cc_pair)
+    pair_kinds = _cc_pair_run_kinds(db_session, cc_pair)
     wanted = [kind for kind in pair_kinds if kinds is None or kind in kinds]
     groups = None if status_groups is None else set(status_groups)
     run_filter = CCPairRunFilter(
@@ -863,11 +871,11 @@ def update_cc_pair_property(
                 "This connector's source has no checks to schedule.",
             )
         # Blank clears the schedule: the checks then run only on request.
-        cc_pair.connector.check_freq = (
-            int(update_request.value) if update_request.value else None
+        set_connector_check_frequency(
+            db_session,
+            cc_pair.connector,
+            int(update_request.value) if update_request.value else None,
         )
-        cc_pair.connector.validate_check_freq()
-        db_session.commit()
 
         msg = "Check frequency updated successfully"
     else:
@@ -903,8 +911,7 @@ def release_indexing_hold(
         )
     if get_first_indexing_hold(db_session, cc_pair) is None:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Indexing is not held.")
-    cc_pair.indexing_hold_released_at = get_db_current_time(db_session)
-    db_session.commit()
+    stamp_indexing_hold_release(db_session, cc_pair)
     emit_audit_event(
         AuditAction.CC_PAIR_UPDATE,
         AuditOutcome.SUCCESS,
