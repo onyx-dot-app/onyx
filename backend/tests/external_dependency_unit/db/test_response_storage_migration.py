@@ -179,7 +179,11 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
             )
             summary_revision = scripts.get_revision("e22aca06966a")
             assert summary_revision is not None
-            revision = scripts.get_revision("7a03b6e90c12")
+            items_revision = scripts.get_revision("7a03b6e90c12")
+            checkpoint_revision = scripts.get_revision("6b4e821c0a93")
+            revision = scripts.get_revision("9d8f310ac672")
+            assert items_revision is not None
+            assert checkpoint_revision is not None
             assert revision is not None
             with Operations.context(MigrationContext.configure(connection)):
                 summary_revision.module.upgrade()
@@ -191,6 +195,8 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                     )
                     == "chat:42"
                 )
+                items_revision.module.upgrade()
+                checkpoint_revision.module.upgrade()
                 revision.module.upgrade()
                 _assert_response_schema_contract(connection, schema)
                 assert connection.execute(
@@ -311,6 +317,8 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                     {"root": root_id, "child": child_id, "grandchild": grandchild_id},
                 )
                 revision.module.downgrade()
+                checkpoint_revision.module.downgrade()
+                items_revision.module.downgrade()
                 assert (
                     connection.scalar(
                         text("SELECT message_type FROM chat_message WHERE id=43")
@@ -391,6 +399,8 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                     == "Existing result"
                 )
                 summary_revision.module.upgrade()
+                items_revision.module.upgrade()
+                checkpoint_revision.module.upgrade()
                 revision.module.upgrade()
                 assert connection.execute(
                     text("""

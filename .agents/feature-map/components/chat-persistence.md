@@ -90,6 +90,11 @@ data being gone.
 
 ## 3. Data model
 
+Three migrations prepare SDK storage: `7a03b6e90c12` adds response items,
+`6b4e821c0a93` adds checkpoints, and `9d8f310ac672` adds execution fields to existing tables.
+The first two run transactionally. The third builds indexes concurrently on existing chat tables
+and supports rerunning after an interrupted index build.
+
 `chat_response_item.message` stores one complete or partial model message; alternative rows reference tool results.
 `generation_status` records the model generation outcome, independently of the whole response or tool outcome.
 `is_answer` identifies the step the runtime accepted as its answer. Partial output need not be an accepted answer.
