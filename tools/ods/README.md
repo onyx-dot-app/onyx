@@ -298,10 +298,17 @@ the stack never leases 8000 and skips the bot when the port is taken.
 `status --json` reports the project, profile, phase (`preparing`, `infra`,
 `migrating`, `starting`, `ready`, `degraded`, `stopped`, `failed`), the leased
 ports, the URLs, each service with its state (`running`, `exited`, `skipped`),
-pid, health and log path, and any errors. Its exit code is 0 when the stack is
-ready, 2 when it is not, and 1 when the worktree has no stack. `up` exits 2
-when the services started but did not become healthy in time, with the status
-printed.
+pid, health and log path, and any errors. A service that exited or is
+unhealthy also carries `log_tail`, the last lines of its log, so an agent can
+read the failure from the status alone. Its exit code is 0 when the stack is
+ready, 2 when it is not, and 1 when the worktree has no stack.
+
+`up`, `start` and `restart` always print the status, also on failure. They
+exit 1 when startup fails, including a missing tool, dependency installation,
+Compose, migrations, or an exited required service. Migration diagnostics appear in `errors`.
+They exit 2 when running services do not become healthy within `--timeout`.
+A service without a health check must stay alive for five seconds before the
+stack counts as ready, so a crash on startup is reported rather than hidden.
 
 **Examples:**
 

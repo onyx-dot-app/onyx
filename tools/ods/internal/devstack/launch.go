@@ -231,6 +231,9 @@ func Translate(root string, c LaunchConfig, ports map[string]int, env Env) (Spec
 	}
 
 	sp := Spec{Name: c.Name, Slug: slug, Dir: dir, Env: env.With(fileEnv, mapToEnv(launchEnv))}
+	if port := ports[slug+"-metrics"]; port > 0 {
+		sp.Env = MergeEnv(sp.Env, []string{"PROMETHEUS_METRICS_PORT=" + fmt.Sprint(port)})
+	}
 	switch slug {
 	case "web":
 		sp.Port = ports["web"]
@@ -314,6 +317,22 @@ func AppPortRequests(opts Options) []PortRequest {
 	}
 	if opts.LocalModelServer {
 		reqs = append(reqs, PortRequest{Name: "model", Preferred: 9000})
+	}
+	for _, worker := range []struct {
+		name string
+		port int
+		full bool
+	}{
+		{"Celery primary", 9097, false},
+		{"Celery light", 9095, false},
+		{"Celery docfetching", 9092, false},
+		{"Celery docprocessing", 9093, false},
+		{"Celery heavy", 9094, true},
+		{"Celery scheduled_tasks", 9098, true},
+	} {
+		if opts.Profile == ProfileFull || opts.Profile == ProfileDefault && !worker.full {
+			reqs = append(reqs, PortRequest{Name: Slugify(worker.name) + "-metrics", Preferred: worker.port})
+		}
 	}
 	return reqs
 }

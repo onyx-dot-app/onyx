@@ -48,14 +48,34 @@ func TestStackLiveLifecycle(t *testing.T) {
 		})
 	}
 
-	sa := a.up(t)
-	sb := b.up(t)
+	stacks := []liveStack{a, b}
+	results := make([][]byte, len(stacks))
+	startupErrors := make([]error, len(stacks))
+	var startup sync.WaitGroup
+	for i, stack := range stacks {
+		startup.Go(func() {
+			results[i], startupErrors[i] = stack.command("stack", "up", "--profile", "minimal", "--timeout", "12m", "--json")
+		})
+	}
+	startup.Wait()
+	states := make([]devstack.Status, len(stacks))
+	for i := range stacks {
+		if startupErrors[i] != nil {
+			t.Fatal(startupErrors[i])
+		}
+		if err := json.Unmarshal(results[i], &states[i]); err != nil || !states[i].Ready {
+			t.Fatalf("worktree %s did not become ready: parse=%v status=%+v", stacks[i].root, err, states[i])
+		}
+	}
+	sa, sb := &states[0], &states[1]
 	if sa.Project == sb.Project {
 		t.Fatal("worktrees share a Compose project")
 	}
 	for name, port := range sa.Ports {
-		if sb.Ports[name] == port {
-			t.Errorf("worktrees share %s port %d", name, port)
+		for otherName, otherPort := range sb.Ports {
+			if port > 0 && port == otherPort {
+				t.Errorf("worktrees share %s/%s port %d", name, otherName, port)
+			}
 		}
 	}
 	a.ready(t, sa)
@@ -69,7 +89,7 @@ func TestStackLiveLifecycle(t *testing.T) {
 			stack.stack.register(t, stack.state, "admin_user@example.com")
 		}
 		a.register(t, sa, "ods-stack-a@example.com")
-		if status := a.login(t, sa, "ods-stack-a@example.com"); status != http.StatusOK {
+		if status := a.login(t, sa, "ods-stack-a@example.com"); status != http.StatusNoContent {
 			t.Fatalf("login on owning stack: HTTP %d", status)
 		}
 		if status := b.login(t, sb, "ods-stack-a@example.com"); status < 400 || status >= 500 {
@@ -116,7 +136,7 @@ func TestStackLiveLifecycle(t *testing.T) {
 		if !reflect.DeepEqual(before.Ports, after.Ports) {
 			t.Fatal("restart did not reuse durable ports")
 		}
-		if status := a.login(t, after, "ods-stack-a@example.com"); status != http.StatusOK {
+		if status := a.login(t, after, "ods-stack-a@example.com"); status != http.StatusNoContent {
 			t.Fatalf("restart lost database data: HTTP %d", status)
 		}
 	})
@@ -160,7 +180,7 @@ func TestStackLiveLifecycle(t *testing.T) {
 		if !reflect.DeepEqual(before.Ports, after.Ports) {
 			t.Fatal("down/up did not reuse assigned ports")
 		}
-		if status := a.login(t, after, "ods-stack-a@example.com"); status != http.StatusOK {
+		if status := a.login(t, after, "ods-stack-a@example.com"); status != http.StatusNoContent {
 			t.Fatalf("down/up lost database data: HTTP %d", status)
 		}
 	})

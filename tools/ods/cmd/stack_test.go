@@ -49,6 +49,7 @@ func stackTestRepo(t *testing.T) (root string, calls map[string]string) {
 if [ "$1" = port ]; then
   case "$2" in *relational_db*) echo "0.0.0.0:5555"; exit 0;; *) exit 1;; esac
 fi
+if [ "$1" = ps ]; then echo owned-inference-container; fi
 exit 0
 `)
 	for _, tool := range []string{"uv", "bun", "tail"} {
@@ -96,7 +97,7 @@ func TestStackProvider_infraPortsAndEnv(t *testing.T) {
 	for _, r := range app {
 		names = append(names, r.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"web", "api", "mcp", "model"}) {
+	if !reflect.DeepEqual(names, []string{"web", "api", "mcp", "model", "celery-primary-metrics", "celery-light-metrics", "celery-docfetching-metrics", "celery-docprocessing-metrics", "celery-heavy-metrics", "celery-scheduled_tasks-metrics"}) {
 		t.Errorf("app ports %v", names)
 	}
 }
@@ -131,6 +132,18 @@ func TestStackProvider_composeUpWritesPortsAndExcludesLocalModel(t *testing.T) {
 	}
 	if slices.Contains(up, "inference_model_server") {
 		t.Errorf("compose up started the inference server with a local model server: %v", up)
+	}
+	var found, stopped bool
+	for _, call := range devtoolCalls(t, calls["docker"]) {
+		if len(call.Args) > 0 && call.Args[0] == "ps" {
+			found = slices.Contains(call.Args, "label=com.docker.compose.project="+stack.Project) && slices.Contains(call.Args, "label=com.docker.compose.service=inference_model_server")
+		}
+		if slices.Equal(call.Args, []string{"stop", "owned-inference-container"}) {
+			stopped = true
+		}
+	}
+	if !found || !stopped {
+		t.Fatal("local model mode did not stop only the project-scoped inference container")
 	}
 	env := devtoolReadFile(t, filepath.Join(root, ".vscode", ".env"))
 	if strings.Contains(env, "S3_LEGACY_ENDPOINT_URL") || !strings.Contains(env, "KEEP=1") {

@@ -145,9 +145,11 @@ func TestStackLifecycleCommandsReportFailedSetup(t *testing.T) {
 			devtoolFakeTool(t, filepath.Dir(uv), "uv", "exit 42\n")
 			logger := log.StandardLogger()
 			originalExit := logger.ExitFunc
-			t.Cleanup(func() { logger.ExitFunc = originalExit })
+			originalHook := exitHook
+			t.Cleanup(func() { logger.ExitFunc = originalExit; exitHook = originalHook })
 			type exitCode int
 			logger.ExitFunc = func(code int) { panic(exitCode(code)) }
+			exitHook = func(code int) { panic(exitCode(code)) }
 			cmd := NewRootCommand()
 			cmd.SetArgs([]string{"stack", action, "--timeout", "100ms", "--lock-wait", "1s"})
 			func() {

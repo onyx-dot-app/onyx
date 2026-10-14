@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,10 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
+
+// exitHook ends the process with a code after the status was printed. It
+// goes through logrus so its exit handlers run; tests replace it.
+var exitHook = func(code int) { log.StandardLogger().Exit(code) }
 
 // stackOptions holds the flags shared by the lifecycle subcommands.
 type stackOptions struct {
@@ -96,15 +101,22 @@ func newStackLifecycleCommand(name, short string) *cobra.Command {
 			default:
 				status, err = stack.Restart(ctx, provider, opts.Options)
 			}
+			if err != nil && status == nil {
+				// Setup failed before the services were reached; report the
+				// recorded phase and errors so the caller still gets a status.
+				if recorded, serr := stack.Status(); serr == nil && recorded != nil {
+					status = recorded
+				}
+			}
 			if status != nil {
 				printStackStatus(status, opts.JSON)
 			}
 			if err != nil {
-				if status != nil {
-					log.Error(err)
-					os.Exit(2)
+				log.Error(err)
+				if status != nil && status.Phase != devstack.PhaseFailed {
+					exitHook(2)
 				}
-				log.Fatal(err)
+				exitHook(1)
 			}
 		},
 	}
@@ -164,7 +176,7 @@ func newStackStatusCommand() *cobra.Command {
 			}
 			printStackStatus(status, asJSON)
 			if !status.Ready {
-				os.Exit(2)
+				exitHook(2)
 			}
 		},
 	}
@@ -265,6 +277,12 @@ func printStackStatus(status *devstack.Status, asJSON bool) {
 			detail = "unhealthy"
 		}
 		fmt.Printf("%-8s %-28s pid %-7d %s\n", svc.State, svc.Slug, svc.PID, detail)
+		if svc.LogTail != "" {
+			fmt.Printf("         log: %s\n", svc.Log)
+			for _, line := range strings.Split(svc.LogTail, "\n") {
+				fmt.Printf("         | %s\n", line)
+			}
+		}
 	}
 	for _, e := range status.Errors {
 		fmt.Printf("error:   %s\n", e)
@@ -364,7 +382,7 @@ func (p *stackProvider) AppPorts(opts devstack.Options) []devstack.PortRequest {
 
 // ComposeUp starts the infrastructure on the leased ports. With a local
 // model server the Compose inference server stays down.
-func (p *stackProvider) ComposeUp(_ context.Context, ports map[string]int, opts devstack.Options) error {
+func (p *stackProvider) ComposeUp(ctx context.Context, ports map[string]int, opts devstack.Options) error {
 	composePorts := map[string]string{}
 	for _, svc := range docker.InfraServices {
 		for _, spec := range svc.Ports {
@@ -376,6 +394,20 @@ func (p *stackProvider) ComposeUp(_ context.Context, ports map[string]int, opts 
 	composeOpts := &ComposeOptions{Wait: true, Infra: true, Ports: composePorts, Output: os.Stderr}
 	if opts.LocalModelServer {
 		composeOpts.ExcludeServices = []string{"inference_model_server"}
+		ids, err := exec.CommandContext(ctx, "docker", "ps",
+			"--filter", "label=com.docker.compose.project="+p.stack.Project,
+			"--filter", "label=com.docker.compose.service=inference_model_server",
+			"--format", "{{.ID}}").Output()
+		if err != nil {
+			return fmt.Errorf("find this stack's inference container: %w", err)
+		}
+		if containers := strings.Fields(string(ids)); len(containers) > 0 {
+			stop := exec.CommandContext(ctx, "docker", append([]string{"stop"}, containers...)...)
+			stop.Stdout, stop.Stderr = os.Stderr, os.Stderr
+			if err := stop.Run(); err != nil {
+				return fmt.Errorf("stop this stack's unused inference container: %w", err)
+			}
+		}
 	}
 	if err := runCompose("dev", composeOpts); err != nil {
 		return err
@@ -398,9 +430,41 @@ func (p *stackProvider) Migrate(ctx context.Context, env []string) error {
 	cmd := exec.CommandContext(ctx, bin, "upgrade", "head")
 	cmd.Dir = filepath.Join(p.stack.Root, "backend")
 	cmd.Env = env
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	var output commandOutputTail
+	writer := io.MultiWriter(os.Stderr, &output)
+	cmd.Stdout, cmd.Stderr = writer, writer
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("alembic upgrade head: %w\n%s", err, lastLines(string(output.data), 20))
+	}
+	return nil
+}
+
+type commandOutputTail struct {
+	data []byte
+}
+
+func (b *commandOutputTail) Write(p []byte) (int, error) {
+	const limit = 64 * 1024
+	n := len(p)
+	if n >= limit {
+		b.data = append(b.data[:0], p[n-limit:]...)
+		return n, nil
+	}
+	if overflow := len(b.data) + n - limit; overflow > 0 {
+		copy(b.data, b.data[overflow:])
+		b.data = b.data[:len(b.data)-overflow]
+	}
+	b.data = append(b.data, p...)
+	return n, nil
+}
+
+// lastLines returns the last n lines of text.
+func lastLines(text string, n int) string {
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (p *stackProvider) Plan(root string, ports map[string]int, env devstack.Env, opts devstack.Options) ([]devstack.Spec, error) {

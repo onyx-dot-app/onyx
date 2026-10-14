@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,6 +55,10 @@ type Options struct {
 	// BindRetries is how many times a service whose leased port turned
 	// out busy is moved to a new port.
 	BindRetries int
+	// SettleTime is how long a service without a health check must stay
+	// alive before the stack counts as ready, so a crash on startup is
+	// reported rather than hidden by a fast exit.
+	SettleTime time.Duration
 }
 
 // WithDefaults fills the zero fields of o.
@@ -72,6 +77,9 @@ func (o Options) WithDefaults() Options {
 	}
 	if o.BindRetries == 0 {
 		o.BindRetries = 3
+	}
+	if o.SettleTime == 0 {
+		o.SettleTime = 5 * time.Second
 	}
 	return o
 }
@@ -107,6 +115,7 @@ func (s *Stack) run(ctx context.Context, p Provider, opts Options, infra bool) (
 		log.Infof("Switching profile from %s to %s", st.Profile, opts.Profile)
 	}
 	st.Profile = opts.Profile
+	st.SettleTime = opts.SettleTime
 	st.Errors = nil
 	st.Phase = PhasePreparing
 	if err := s.WriteState(st); err != nil {
@@ -146,7 +155,7 @@ func (s *Stack) run(ctx context.Context, p Provider, opts Options, infra bool) (
 		}
 	}
 
-	env, fileEnv, err := s.serviceEnv(p, st.Ports)
+	env, fileEnv, err := s.serviceEnv(p, st.Ports, opts)
 	if err != nil {
 		return nil, s.fail(st, err)
 	}
@@ -175,7 +184,7 @@ func (s *Stack) run(ctx context.Context, p Provider, opts Options, infra bool) (
 			return nil, s.fail(st, err)
 		}
 		if len(busy) == 0 {
-			status, readyErr := s.waitReady(ctx, st, opts.ReadyTimeout)
+			status, readyErr := s.waitReady(ctx, st, opts.ReadyTimeout, opts.SettleTime)
 			var conflict *bindFailure
 			if !errors.As(readyErr, &conflict) {
 				return status, readyErr
@@ -210,7 +219,7 @@ func (s *Stack) run(ctx context.Context, p Provider, opts Options, infra bool) (
 		if err := s.leasePorts(st, retry); err != nil {
 			return nil, s.fail(st, err)
 		}
-		if env, _, err = s.serviceEnv(p, st.Ports); err != nil {
+		if env, _, err = s.serviceEnv(p, st.Ports, opts); err != nil {
 			return nil, s.fail(st, err)
 		}
 	}
@@ -228,12 +237,9 @@ func failedBind(rec ServiceRecord) bool {
 	if rec.Port <= 0 || rec.Log == "" {
 		return false
 	}
-	data, err := os.ReadFile(rec.Log)
+	data, err := readLogTail(rec.Log)
 	if err != nil {
 		return false
-	}
-	if len(data) > 65536 {
-		data = data[len(data)-65536:]
 	}
 	output := strings.ToLower(string(data))
 	return strings.Contains(output, "address already in use") || strings.Contains(output, "eaddrinuse")
@@ -256,6 +262,9 @@ func (s *Stack) leasePorts(st *State, requests []PortRequest) error {
 	}
 	for i, req := range requests {
 		for _, rec := range st.Services {
+			if req.Name == rec.Slug+"-metrics" && st.Ports[req.Name] > 0 && isCurrent(rec) {
+				requests[i].Fixed = st.Ports[req.Name]
+			}
 			if rec.Slug == req.Name && rec.Port > 0 && isCurrent(rec) {
 				requests[i].Fixed = rec.Port
 			}
@@ -292,7 +301,7 @@ func (e Env) With(layers ...[]string) []string {
 // serviceEnv builds the environment every service inherits, and returns the
 // entries of .vscode/.env separately. The infrastructure port variables are
 // also written to .vscode/.env for commands run by hand.
-func (s *Stack) serviceEnv(p Provider, ports map[string]int) (Env, []string, error) {
+func (s *Stack) serviceEnv(p Provider, ports map[string]int, opts Options) (Env, []string, error) {
 	values := p.InfraEnv(ports)
 	envPath := filepath.Join(s.Root, ".vscode", ".env")
 	if err := UpsertEnvFile(envPath, values); err != nil {
@@ -323,7 +332,9 @@ func (s *Stack) serviceEnv(p Provider, ports map[string]int) (Env, []string, err
 			overrides["MCP_SERVER_PORT"] = fmt.Sprint(port)
 			overrides["MCP_INTERNAL_URL"] = fmt.Sprintf("http://localhost:%d", port)
 		case "model":
-			overrides["MODEL_SERVER_PORT"] = fmt.Sprint(port)
+			if opts.LocalModelServer {
+				overrides["MODEL_SERVER_PORT"] = fmt.Sprint(port)
+			}
 		}
 	}
 	return Env{Base: environ(), Overrides: mapToEnv(overrides)}, fileEnv, nil
@@ -480,6 +491,9 @@ type ServiceStatus struct {
 	Log      string `json:"log,omitempty"`
 	Reason   string `json:"reason,omitempty"`
 	Optional bool   `json:"optional,omitempty"`
+	// LogTail holds the last lines of the log of a service that exited or
+	// is unhealthy, so a failure can be read from the status alone.
+	LogTail string `json:"log_tail,omitempty"`
 }
 
 // Service states.
@@ -538,12 +552,16 @@ func (s *Stack) status(st *State, probe bool) *Status {
 			if rec.Health != "" && probe {
 				healthy := healthy(rec.Health)
 				ss.Healthy = &healthy
-				if !healthy && !rec.Optional {
-					ready = false
+				if !healthy {
+					ss.LogTail = logTail(rec.Log, logTailLines)
+					if !rec.Optional {
+						ready = false
+					}
 				}
 			}
 		default:
 			ss.State = StateExited
+			ss.LogTail = logTail(rec.Log, logTailLines)
 			if !rec.Optional {
 				ready = false
 			}
@@ -553,8 +571,26 @@ func (s *Stack) status(st *State, probe bool) *Status {
 	if out.Services == nil {
 		out.Services = []ServiceStatus{}
 	}
-	out.Ready = ready && (st.Phase == PhaseReady || st.Phase == PhaseStarting || st.Phase == PhaseDegraded)
+	settle := st.SettleTime
+	if settle == 0 {
+		settle = Options{}.WithDefaults().SettleTime
+	}
+	out.Ready = ready && settled(st.Services, settle) && (st.Phase == PhaseReady || st.Phase == PhaseStarting || st.Phase == PhaseDegraded)
 	return out
+}
+
+// settled reports whether every required service without a health check
+// has been alive for at least settle.
+func settled(recs []ServiceRecord, settle time.Duration) bool {
+	for _, rec := range recs {
+		if rec.Skipped != "" || rec.Optional || rec.Health != "" {
+			continue
+		}
+		if time.Since(rec.StartedAt) < settle {
+			return false
+		}
+	}
+	return true
 }
 
 // URLs lists the stack's entry points by port name.
@@ -569,6 +605,45 @@ func URLs(ports map[string]int) map[string]string {
 	return urls
 }
 
+// logTailLines is how many log lines a failing service reports.
+const logTailLines = 30
+
+const maxLogTailBytes = 64 * 1024
+
+func readLogTail(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > maxLogTailBytes {
+		if _, err := file.Seek(info.Size()-maxLogTailBytes, io.SeekStart); err != nil {
+			return nil, err
+		}
+	}
+	return io.ReadAll(io.LimitReader(file, maxLogTailBytes))
+}
+
+// logTail returns the last n lines of a log file, or "" when unreadable.
+func logTail(path string, n int) string {
+	if path == "" || n <= 0 {
+		return ""
+	}
+	data, err := readLogTail(path)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
+}
+
 func healthy(url string) bool {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get(url)
@@ -580,8 +655,9 @@ func healthy(url string) bool {
 }
 
 // waitReady polls the services until every required one is running and
-// healthy, or a required one exited, or the timeout passes.
-func (s *Stack) waitReady(ctx context.Context, st *State, timeout time.Duration) (*Status, error) {
+// healthy and has been alive for settle, or a required one exited, or the
+// timeout passes.
+func (s *Stack) waitReady(ctx context.Context, st *State, timeout, settle time.Duration) (*Status, error) {
 	deadline := time.Now().Add(timeout)
 	for {
 		var conflicts []string
@@ -606,10 +682,10 @@ func (s *Stack) waitReady(ctx context.Context, st *State, timeout time.Duration)
 			}
 		}
 		if len(exited) > 0 {
-			err := fmt.Errorf("services exited during startup: %s", strings.Join(exited, ", "))
-			return status, s.fail(st, err)
+			err := s.fail(st, fmt.Errorf("services exited during startup: %s", strings.Join(exited, ", ")))
+			return s.status(st, true), err
 		}
-		if status.Ready {
+		if status.Ready && settled(st.Services, settle) {
 			st.Phase = PhaseReady
 			if err := s.WriteState(st); err != nil {
 				return status, err
@@ -624,8 +700,7 @@ func (s *Stack) waitReady(ctx context.Context, st *State, timeout time.Duration)
 			if werr := s.WriteState(st); werr != nil {
 				return status, werr
 			}
-			status.Phase = PhaseDegraded
-			return status, err
+			return s.status(st, true), err
 		}
 		select {
 		case <-ctx.Done():

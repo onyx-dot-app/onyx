@@ -107,6 +107,7 @@ func gitOutput(dir string, args ...string) (string, error) {
 
 // State is the persisted record of a stack.
 type State struct {
+	SettleTime    time.Duration     `json:"settle_time,omitempty"`
 	SchemaVersion int               `json:"schema_version"`
 	Root          string            `json:"root"`
 	Project       string            `json:"project"`
