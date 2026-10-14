@@ -44,6 +44,7 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     normalized_request_path,
     parse_target,
 )
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.server.features.mcp.credentials import (
     MCPCredentialsError,
     mcp_token_expired,
@@ -73,6 +74,19 @@ class MCPServerResolver(CredentialResolver):
         # only ever raised between servers the user can reach.
         self._accessible_ids_by_user: TTLCache[tuple[str, UUID], frozenset[int]] = (
             TTLCache(maxsize=10_000, ttl=cache_ttl_s)
+        )
+
+    def allows_destination(
+        self, sandbox: ResolvedSandbox, scheme: str, host: str, port: int
+    ) -> bool:
+        """Allow only origins enabled for Craft and accessible to this user."""
+        return scheme in {"http", "https"} and bool(
+            host_targets(
+                self._user_targets(sandbox.tenant_id, sandbox.user_id),
+                scheme,
+                host,
+                port,
+            )
         )
 
     def claims(self, request: http.Request, ctx: InjectionContext) -> bool:

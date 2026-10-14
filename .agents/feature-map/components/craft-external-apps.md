@@ -92,7 +92,7 @@ time.
 | `SANDBOX_BACKEND` (`SandboxBackend.KUBERNETES`/`DOCKER`) | `configs.py` | Selects `K8sSecretCAStore`/`K8sInformerLookup` vs. `FileCAStore`/`DockerEventsLookup` (`sandbox_proxy/certificate_authority/bootstrap.py:build_ca_store`, `sandbox_proxy/sandbox_identity/resolution.py:build_ip_lookup`). |
 | `SANDBOX_PROXY_CA_SECRET`, `SANDBOX_PROXY_CA_CONFIGMAP`, `SANDBOX_PROXY_NAMESPACE` | `configs.py` | K8s CA persistence and cross-namespace projection targets (`certificate_authority/kubernetes.py`). |
 | `SANDBOX_PROXY_CA_VOLUME_PATH` | `configs.py` | Docker CA persistence volume (`certificate_authority/docker.py`). |
-| `ONYX_SERVER_URL` | `configs.py` | The one internal host the proxy allows through the destination-block, and the host the `OnyxPatResolver` claims (`gate.py:_parse_api_server`, `resolvers/onyx_pat.py`). |
+| `ONYX_SERVER_URL` | `configs.py` | The configured internal API host the proxy allows through the destination-block, and the host the `OnyxPatResolver` claims (`gate.py:_parse_api_server`, `resolvers/onyx_pat.py`). |
 | `SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS` | `configs.py` | How long the proxy parks a request awaiting an `ASK` decision before claiming `EXPIRED` (`gate.py:_await_decision`). |
 | `MCP_SESSION_TAG_HEADER` | `configs.py` | Header opencode's in-process MCP client uses to carry the session tag (`gate.py:_extract_session_tag`). |
 | `PARSER_MAX_BODY_BYTES` | `sandbox_proxy/addons/gate.py` (constant, not env) | 32 MiB request-body cap; see §9. |
@@ -101,7 +101,10 @@ time.
 The proxy requires `SANDBOX_PROXY_INTERNAL_CIDRS` at startup when the listener
 uses IPv6 or global clients are enabled. Invalid CIDRs also prevent startup.
 Internal destinations remain blocked for HTTP and CONNECT. The exact
-`ONYX_SERVER_URL` host and port remain the only internal destination exception.
+`ONYX_SERVER_URL` host and port remain an internal destination exception.
+Craft-enabled MCP servers also permit their exact scheme, host, and port for
+users with access in the sandbox tenant. The resolver caches access for 30 seconds.
+Lookup failures deny access. Path, credential, and action checks still apply.
 Kubernetes identity lookup indexes each pod's primary `status.pod_ip`.
 Use listeners and Services in that address family: IPv4 remains the default;
 IPv6 listeners support IPv6-only deployments. Switching an IPv4-primary
@@ -185,6 +188,11 @@ sandbox process (opencode / a tool call)
 2. Destination checks and address pinning
      is_destination_blocked(config, host, port) rejects non-global addresses
      and configured internal CIDRs, except ONYX_SERVER_URL's exact host:port.
+     A blocked destination can use an accessible Craft MCP origin exception.
+     CONNECT checks HTTPS; requests check their scheme. Upstream sockets check TLS
+     or the accepted CONNECT origin before allowing internal MCP addresses.
+     GateAddon._resolve_mcp_destination resolves identity and MCP access, then
+     resolves the approved origin with allow_internal=True.
      http_connect and request check destinations before processing traffic.
      server_connect resolves and validates all answers again, then pins the
      upstream TCP connection to those addresses through UpstreamEventLoop.

@@ -23,6 +23,8 @@ from onyx.sandbox_proxy.destination_policy import (
     UpstreamEventLoop,
     parse_destination_policy,
 )
+from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
     RecordingCredentialResolver,
@@ -153,12 +155,16 @@ async def _read_response(reader: asyncio.StreamReader) -> bytes:
     return headers + body
 
 
+@pytest.mark.parametrize("connection_strategy", ["eager", "lazy"])
+@pytest.mark.parametrize("mcp_destination", [False, True])
 @pytest.mark.parametrize("certificate_host", [_HOST, "wrong.test"])
 @pytest.mark.parametrize("loopback", ["127.0.0.1", "::1"])
 def test_pinned_tls_preserves_hostname_verification_and_injection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     certificate_host: str,
+    mcp_destination: bool,
+    connection_strategy: str,
     loopback: str,
 ) -> None:
     async def exercise() -> None:
@@ -214,21 +220,41 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
             server, "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", str(upstream_ca)
         )
         master: DumpMaster = server._build_mitm_master()
-        master.options.update(connection_strategy="eager")
+        master.options.update(connection_strategy=connection_strategy)
         connected: _Connections = _Connections()
         master.addons.add(connected)
         credential: RecordingCredentialResolver = RecordingCredentialResolver(
             headers={"Authorization": "Bearer injected"}
         )
+        mcp_resolver = MCPServerResolver()
+        monkeypatch.setattr(
+            mcp_resolver,
+            "_load_targets",
+            lambda _tenant: (
+                CraftMCPTarget(
+                    server_id=1,
+                    scheme="https",
+                    host=_HOST,
+                    port=upstream_port,
+                    path_prefix="",
+                ),
+            ),
+        )
+        monkeypatch.setattr(
+            mcp_resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+        )
         master.addons.add(
             GateAddon(
+                mcp_resolver=mcp_resolver if mcp_destination else None,
                 identity=StubResolver(sandbox=make_resolved_sandbox()),
                 request_evaluator=NoMatchedRequest(),
                 cache_factory=unused_cache,
                 proxy_instance_id="tls-test",
                 credential_dispatcher=CredentialInjectionDispatcher([credential]),
                 destination_policy=parse_destination_policy(
-                    f"https://{_HOST}:{upstream_port}"
+                    "https://onyx.test"
+                    if mcp_destination
+                    else f"https://{_HOST}:{upstream_port}"
                 ),
             )
         )

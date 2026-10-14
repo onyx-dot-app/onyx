@@ -67,9 +67,16 @@ def is_internal(config: DestinationPolicyConfig, address: IPAddress) -> bool:
 
 
 def resolve_destination(
-    config: DestinationPolicyConfig, host: str, port: int
+    config: DestinationPolicyConfig,
+    host: str,
+    port: int,
+    *,
+    allow_internal: bool = False,
 ) -> tuple[str, ...] | None:
-    """Return all validated addresses in DNS order, or None if any is blocked."""
+    """Return validated addresses in DNS order, or None if any is blocked.
+
+    Set allow_internal only after authorizing the exact origin for the sandbox.
+    """
     host = host.strip().lower()
     if not host or not 1 <= port <= 65535:
         return None
@@ -96,7 +103,9 @@ def resolve_destination(
     if not addresses:
         return None
     is_api: bool = host == config.api_host and port == config.api_port
-    if not is_api and any(is_internal(config, address) for address in addresses):
+    if not (is_api or allow_internal) and any(
+        is_internal(config, address) for address in addresses
+    ):
         return None
     return tuple(dict.fromkeys(str(address) for address in addresses))
 

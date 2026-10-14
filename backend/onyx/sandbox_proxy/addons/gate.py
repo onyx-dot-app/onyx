@@ -62,6 +62,7 @@ from onyx.sandbox_proxy.models import (
     InjectionOutcome,
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 from onyx.server.features.build.configs import (
     MCP_SESSION_TAG_HEADER,
@@ -155,8 +156,10 @@ class GateAddon:
         credential_dispatcher: CredentialInjectionDispatcher,
         destination_policy: DestinationPolicyConfig,
         stream_responses: bool = True,
+        mcp_resolver: MCPServerResolver | None = None,
     ) -> None:
         self._destination_policy = destination_policy
+        self._mcp_resolver = mcp_resolver
         self._identity = identity
         self._request_evaluator = request_evaluator
         self._cache_factory = cache_factory
@@ -170,6 +173,8 @@ class GateAddon:
         # client connection id -> session tag, captured from the CONNECT's
         # Proxy-Authorization (only place it's visible for MITM'd HTTPS).
         self._conn_session_tags: dict[str, str] = {}
+        # Eager CONNECT opens TCP before mitmproxy marks the server as TLS.
+        self._conn_connect_origins: dict[str, tuple[str, int]] = {}
         # Tracks running `request()` coroutines so the drain can `asyncio.wait`
         # on real completion instead of sleeping. Self-cleaning.
         self._inflight_tasks: set[asyncio.Task[None]] = set()
@@ -203,6 +208,12 @@ class GateAddon:
             self._destination_policy,
             flow.request.host,
             flow.request.port,
+        ) and not await asyncio.to_thread(
+            self._resolve_mcp_destination,
+            flow.client_conn.peername,
+            "https",
+            flow.request.host,
+            flow.request.port,
         ):
             logger.info(
                 "egress_denied_internal_destination phase=connect host=%s port=%s",
@@ -230,6 +241,7 @@ class GateAddon:
         )
         if conn_id is None:
             return
+        self._conn_connect_origins[conn_id] = (flow.request.host, flow.request.port)
         if tag:
             self._conn_session_tags[conn_id] = tag
 
@@ -238,6 +250,7 @@ class GateAddon:
         conn_id = getattr(client, "id", None)  # ods: ignore[getattr]
         if conn_id is not None:
             self._conn_session_tags.pop(conn_id, None)
+            self._conn_connect_origins.pop(conn_id, None)
 
     async def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
         """Validate the final addresses and pin them while preserving TLS SNI."""
@@ -248,6 +261,17 @@ class GateAddon:
         addresses: tuple[str, ...] | None = await asyncio.to_thread(
             resolve_destination, self._destination_policy, host, port
         )
+        if addresses is None:
+            addresses = await asyncio.to_thread(
+                self._resolve_mcp_destination,
+                data.client.peername,
+                "https"
+                if server.tls
+                or self._conn_connect_origins.get(data.client.id) == (host, port)
+                else "http",
+                host,
+                port,
+            )
         if addresses is None:
             logger.info(
                 "egress_denied_internal_destination phase=server_connect host=%s port=%s",
@@ -296,6 +320,12 @@ class GateAddon:
             None,
             is_destination_blocked,
             self._destination_policy,
+            flow.request.host,
+            flow.request.port,
+        ) and not await asyncio.to_thread(
+            self._resolve_mcp_destination,
+            flow.client_conn.peername,
+            flow.request.scheme,
             flow.request.host,
             flow.request.port,
         ):
@@ -1110,6 +1140,32 @@ class GateAddon:
     # --------------------------------------------------------------------------
     # internal helpers
     # --------------------------------------------------------------------------
+
+    def _resolve_mcp_destination(
+        self,
+        peer: tuple[str, int] | tuple[str, int, int, int] | None,
+        scheme: str,
+        host: str,
+        port: int,
+    ) -> tuple[str, ...] | None:
+        """Resolve an internal MCP origin within the source sandbox's access scope."""
+        if self._mcp_resolver is None or peer is None:
+            return None
+        try:
+            address = ipaddress.ip_address(peer[0])
+            if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+                address = address.ipv4_mapped
+            sandbox = self._identity.resolve_sandbox(str(address))
+            if sandbox is None or not self._mcp_resolver.allows_destination(
+                sandbox, scheme, host, port
+            ):
+                return None
+            return resolve_destination(
+                self._destination_policy, host, port, allow_internal=True
+            )
+        except Exception:
+            logger.exception("mcp_destination_error host=%s port=%s", host, port)
+            return None
 
     def _resolve_sandbox(self, flow: http.HTTPFlow) -> ResolvedSandbox | None:
         """Identify the peer before accepting HTTP requests or CONNECT tunnels."""

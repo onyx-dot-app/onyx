@@ -21,6 +21,8 @@ from onyx.sandbox_proxy.destination_policy import (
     UpstreamEventLoop,
     parse_destination_policy,
 )
+from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
+from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
     StubResolver,
@@ -70,6 +72,7 @@ async def _proxy(
     api_port: int,
     barrier: "_ConnectionBarrier | None" = None,
     addresses: "_ConnectionAddresses | None" = None,
+    mcp_resolver: MCPServerResolver | None = None,
 ) -> AsyncIterator[int]:
     monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_HOST", address)
     monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_PORT", 0)
@@ -79,6 +82,7 @@ async def _proxy(
         master.addons.add(addresses)
     master.addons.add(
         GateAddon(
+            mcp_resolver=mcp_resolver,
             identity=StubResolver(sandbox=make_resolved_sandbox()),
             request_evaluator=NoMatchedRequest(),
             cache_factory=unused_cache,
@@ -287,3 +291,39 @@ def test_concurrent_connections_keep_their_own_pins(
             assert unpinned == []
 
     asyncio.run(exercise(), loop_factory=UpstreamEventLoop)
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "::1"])
+def test_private_http_mcp_uses_pinned_addresses(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, address: str
+) -> None:
+    async def exercise() -> None:
+        async with _upstream(address) as (port, requests):
+            resolver = MCPServerResolver()
+            monkeypatch.setattr(
+                resolver,
+                "_load_targets",
+                lambda _tenant: (
+                    CraftMCPTarget(
+                        server_id=1,
+                        scheme="http",
+                        host=_HOST,
+                        port=port,
+                        path_prefix="",
+                    ),
+                ),
+            )
+            monkeypatch.setattr(
+                resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
+            )
+            unpinned = _dns(monkeypatch, lambda _port: (address,), lambda _port: ())
+            async with _proxy(
+                monkeypatch, tmp_path, address, 1, mcp_resolver=resolver
+            ) as proxy_port:
+                response = await _request(address, proxy_port, port)
+            assert response.startswith(b"HTTP/1.1 200")
+            assert len(requests) == 1
+            assert not unpinned
+
+    with asyncio.Runner(loop_factory=UpstreamEventLoop) as runner:
+        runner.run(exercise())

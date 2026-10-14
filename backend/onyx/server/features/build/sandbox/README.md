@@ -352,7 +352,9 @@ The proxy also checks it at startup when global clients or an IPv6 listener is e
 The proxy rejects invalid CIDRs at startup.
 
 HTTP requests and CONNECT tunnels use the same destination policy: only public addresses outside these ranges are allowed.
-The exact `ONYX_SERVER_URL` host and port form the only internal destination exception.
+The exact `ONYX_SERVER_URL` host and port form an internal destination exception.
+Craft-enabled MCP servers also permit their exact scheme, host, and port for users with access.
+The proxy must have a network route and network-policy access to these servers.
 Standard NAT64 addresses with embedded private IPv4 destinations are also blocked.
 
 Configure these settings through Helm. The chart supplies `SANDBOX_PROXY_LISTEN_HOST`,
