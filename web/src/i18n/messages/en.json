@@ -2573,6 +2573,27 @@
         },
         "loadError": {
           "title": "Couldn't load the activity."
+        },
+        "docs": {
+          "title": "Failed documents",
+          "search": {
+            "placeholder": "Search files..."
+          },
+          "resolveAll": "Resolve All",
+          "resolveOne": "Resolve this document",
+          "more": "More",
+          "less": "Less",
+          "unknownDocument": "Unknown document",
+          "empty": "No open document errors",
+          "loadError": "Couldn't load the failed documents.",
+          "open": "Open the document"
+        },
+        "trace": {
+          "runId": "Run ID: {id}",
+          "copy": "Copy the stack trace"
+        },
+        "actions": {
+          "resolve": "Resolve"
         }
       },
       "stageDetails": {

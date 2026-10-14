@@ -2573,6 +2573,27 @@
         },
         "loadError": {
           "title": "アクティビティを読み込めませんでした。"
+        },
+        "docs": {
+          "title": "失敗したドキュメント",
+          "search": {
+            "placeholder": "ファイルを検索..."
+          },
+          "resolveAll": "すべて解決",
+          "resolveOne": "このドキュメントを解決",
+          "more": "さらに表示",
+          "less": "折りたたむ",
+          "unknownDocument": "不明なドキュメント",
+          "empty": "未解決のドキュメントエラーはありません",
+          "loadError": "失敗したドキュメントを読み込めませんでした。",
+          "open": "ドキュメントを開く"
+        },
+        "trace": {
+          "runId": "実行 ID: {id}",
+          "copy": "スタックトレースをコピー"
+        },
+        "actions": {
+          "resolve": "解決"
         }
       },
       "stageDetails": {

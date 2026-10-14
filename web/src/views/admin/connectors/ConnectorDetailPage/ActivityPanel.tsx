@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
+import { mutate } from "swr";
 import {
   Button,
   Card,
@@ -14,17 +15,19 @@ import {
   Tag,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
-import { IllustrationContent, Section } from "@opal/layouts";
+import { IllustrationContent, Section, toast } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
 import { SvgActivity, SvgAlertTriangle, SvgEye, SvgXCircle } from "@opal/icons";
-import type { CCPairRun } from "@/lib/connectors/types";
 import {
   useActivityGroup,
   type ActivityGroupState,
 } from "@/lib/connectors/ccPair/hooks";
-import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  resolveAllErrorsForCCPair,
+  resolveErrors,
+} from "@/lib/targeted_reindex";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
-import { runErrorText } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import {
   RUNS_POLL_MS,
   SEARCH_DELAY_MS,
@@ -39,10 +42,19 @@ type Shown = "all" | "failures" | "errors";
 const SHOWN: Shown[] = ["all", "failures", "errors"];
 
 interface GroupListProps {
+  ccPairId: number;
   state: ActivityGroupState;
-  onViewTrace: (run: CCPairRun) => void;
+  canResolve: boolean;
+  resolving: boolean;
+  onResolve: (indexAttemptId: number, errorIds: number[] | null) => void;
 }
-function GroupList({ state, onViewTrace }: GroupListProps) {
+function GroupList({
+  ccPairId,
+  state,
+  canResolve,
+  resolving,
+  onResolve,
+}: GroupListProps) {
   const t = useTranslations("admin.connector.activity");
   if (state.runs.length === 0) return null;
   return (
@@ -51,9 +63,12 @@ function GroupList({ state, onViewTrace }: GroupListProps) {
       {state.runs.map((run) => (
         <ActivityCard
           key={`${run.kind}-${run.attempt.id}`}
+          ccPairId={ccPairId}
           run={run}
           group={state.group}
-          onViewTrace={() => onViewTrace(run)}
+          canResolve={canResolve}
+          resolving={resolving}
+          onResolve={(errorIds) => onResolve(run.attempt.id, errorIds)}
         />
       ))}
       {state.hasMore && (
@@ -69,18 +84,23 @@ function GroupList({ state, onViewTrace }: GroupListProps) {
 
 export interface ActivityPanelProps {
   ccPairId: number;
+  /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
+  canResolve: boolean;
 }
 
 /** The pair's failed runs and runs with document errors, newest first, with the resolved ones a toggle away. */
-export default function ActivityPanel({ ccPairId }: ActivityPanelProps) {
+export default function ActivityPanel({
+  ccPairId,
+  canResolve,
+}: ActivityPanelProps) {
   const t = useTranslations("admin.connector.activity");
-  const tRuns = useTranslations("admin.connector.runs");
+  const tToasts = useTranslations("admin.connector.toasts");
   const format = useFormatter();
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   const [shown, setShown] = useState<Shown>("all");
   const [resolved, setResolved] = useState(false);
-  const [traceRun, setTraceRun] = useState<CCPairRun | null>(null);
+  const [resolving, setResolving] = useState(false);
 
   // The failures and errors totals head the panel, so both always poll.
   const failures = useActivityGroup(
@@ -124,6 +144,36 @@ export default function ActivityPanel({ ccPairId }: ActivityPanelProps) {
           ? t("empty.title")
           : t(`empty.${shown}`);
 
+  // Awaits only the submit. The errors and runs feeds poll, so rows clear as documents land.
+  async function resolve(indexAttemptId: number, errorIds: number[] | null) {
+    if (resolving) return;
+    setResolving(true);
+    try {
+      const result =
+        errorIds === null
+          ? await resolveAllErrorsForCCPair(ccPairId, indexAttemptId)
+          : await resolveErrors(errorIds);
+      if (result.total_error_ids === 0) {
+        toast.success(tToasts("noUnresolvedErrors"));
+      } else {
+        toast.success(
+          tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
+        );
+      }
+      await mutate(
+        (key) =>
+          typeof key === "string" &&
+          (key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId)) ||
+            key.startsWith(SWR_KEYS.ccPairRunsPrefix(ccPairId)))
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("targetedReindexFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
+
   // Full width once the page stacks its columns, the panel's own width beside them.
   return (
     <Section
@@ -133,13 +183,6 @@ export default function ActivityPanel({ ccPairId }: ActivityPanelProps) {
       className="lg:max-w-104 lg:shrink-0"
       data-testid="connector-activity"
     >
-      {traceRun !== null && (
-        <ExceptionTraceModal
-          onOutsideClick={() => setTraceRun(null)}
-          exceptionTrace={runErrorText(traceRun) ?? ""}
-          title={tRuns(`errorModal.${traceRun.kind}`)}
-        />
-      )}
       <Card border="solid" rounding={4} padding={2}>
         <Section alignItems="stretch" gap={3} height="fit">
           <Section alignItems="stretch" gap={1} height="fit">
@@ -246,8 +289,13 @@ export default function ActivityPanel({ ccPairId }: ActivityPanelProps) {
             groups.map((group) => (
               <GroupList
                 key={group.group}
+                ccPairId={ccPairId}
                 state={group}
-                onViewTrace={setTraceRun}
+                canResolve={canResolve}
+                resolving={resolving}
+                onResolve={(indexAttemptId, errorIds) =>
+                  void resolve(indexAttemptId, errorIds)
+                }
               />
             ))
           )}

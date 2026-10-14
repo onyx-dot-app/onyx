@@ -2573,6 +2573,27 @@
         },
         "loadError": {
           "title": "No se pudo cargar la actividad."
+        },
+        "docs": {
+          "title": "Documentos fallidos",
+          "search": {
+            "placeholder": "Buscar archivos..."
+          },
+          "resolveAll": "Resolver todo",
+          "resolveOne": "Resolver este documento",
+          "more": "Más",
+          "less": "Menos",
+          "unknownDocument": "Documento desconocido",
+          "empty": "Sin errores de documentos abiertos",
+          "loadError": "No se pudieron cargar los documentos fallidos.",
+          "open": "Abrir el documento"
+        },
+        "trace": {
+          "runId": "ID de ejecución: {id}",
+          "copy": "Copiar el seguimiento de pila"
+        },
+        "actions": {
+          "resolve": "Resolver"
         }
       },
       "stageDetails": {

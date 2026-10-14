@@ -2573,6 +2573,27 @@
         },
         "loadError": {
           "title": "Impossible de charger l'activité."
+        },
+        "docs": {
+          "title": "Documents en échec",
+          "search": {
+            "placeholder": "Rechercher des fichiers..."
+          },
+          "resolveAll": "Tout résoudre",
+          "resolveOne": "Résoudre ce document",
+          "more": "Plus",
+          "less": "Moins",
+          "unknownDocument": "Document inconnu",
+          "empty": "Aucune erreur de document ouverte",
+          "loadError": "Impossible de charger les documents en échec.",
+          "open": "Ouvrir le document"
+        },
+        "trace": {
+          "runId": "ID d'exécution : {id}",
+          "copy": "Copier la trace de la pile"
+        },
+        "actions": {
+          "resolve": "Résoudre"
         }
       },
       "stageDetails": {

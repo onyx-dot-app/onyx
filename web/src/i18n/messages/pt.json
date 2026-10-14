@@ -2573,6 +2573,27 @@
         },
         "loadError": {
           "title": "Não foi possível carregar a atividade."
+        },
+        "docs": {
+          "title": "Documentos com falha",
+          "search": {
+            "placeholder": "Pesquisar arquivos..."
+          },
+          "resolveAll": "Resolver tudo",
+          "resolveOne": "Resolver este documento",
+          "more": "Mais",
+          "less": "Menos",
+          "unknownDocument": "Documento desconhecido",
+          "empty": "Sem erros de documentos em aberto",
+          "loadError": "Não foi possível carregar os documentos com falha.",
+          "open": "Abrir o documento"
+        },
+        "trace": {
+          "runId": "ID da execução: {id}",
+          "copy": "Copiar o rastreamento de pilha"
+        },
+        "actions": {
+          "resolve": "Resolver"
         }
       },
       "stageDetails": {

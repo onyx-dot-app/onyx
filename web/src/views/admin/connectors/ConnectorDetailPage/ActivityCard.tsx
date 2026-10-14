@@ -1,11 +1,12 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Tag, Text } from "@opal/components";
+import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import {
   SvgAlertTriangle,
+  SvgCheckAll,
   SvgCheckCircle,
   SvgFileText,
   SvgTextLines,
@@ -14,6 +15,8 @@ import {
 import type { CardColor, IconFunctionComponent } from "@opal/types";
 import type { CCPairRun } from "@/lib/connectors/types";
 import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
+import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
+import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
 import {
   RUN_KIND_ICONS,
   RUN_TIME_FORMAT,
@@ -65,16 +68,25 @@ function cardState(
 }
 
 export interface ActivityCardProps {
+  ccPairId: number;
   run: CCPairRun;
   group: ActivityGroup;
-  onViewTrace: () => void;
+  /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
+  canResolve: boolean;
+  /** Resolves these errors of the run, or every open one when `null`. */
+  onResolve: (errorIds: number[] | null) => void;
+  /** A resolve is in flight, so the resolve actions wait for it. */
+  resolving: boolean;
 }
 
-/** One failed run, or one run with document errors: when, which kind, how it ended, its trace and error count. */
+/** One failed run, or one run with document errors: when, which kind, how it ended, its trace and failed documents. */
 export default function ActivityCard({
+  ccPairId,
   run,
   group,
-  onViewTrace,
+  canResolve,
+  onResolve,
+  resolving,
 }: ActivityCardProps) {
   const t = useTranslations("admin.connector.activity");
   const tRuns = useTranslations("admin.connector.runs");
@@ -85,6 +97,12 @@ export default function ActivityCard({
   const KindIcon = RUN_KIND_ICONS[run.kind];
   const minutes = runMinutes(run);
   const warnings = runWarnings(run);
+  const trace = run.attempt.full_exception_trace;
+  // The list holds open document errors, so only an index attempt with some lists its documents.
+  const openDocs =
+    run.kind === "indexing" ? run.attempt.open_doc_error_count : 0;
+  const listsDocs = openDocs > 0;
+  const resolvable = canResolve && listsDocs;
 
   // A failure explains itself. A run with errors reports what it still did.
   let description: string | null = null;
@@ -96,6 +114,10 @@ export default function ActivityCard({
       minutes,
     });
   }
+  const docsLabel =
+    group === "resolved"
+      ? t("tags.resolvedDocs", { count: warnings })
+      : t(`tags.${run.kind}`, { count: listsDocs ? openDocs : warnings });
 
   return (
     <Card color={style.color} border="none" rounding={2} padding={1}>
@@ -158,36 +180,68 @@ export default function ActivityCard({
             </Section>
           </Section>
         </Section>
-        {(run.attempt.full_exception_trace !== null || warnings > 0) && (
+        {(trace !== null || warnings > 0) && (
           <Section
             flexDirection="row"
-            justifyContent="start"
+            justifyContent="between"
             alignItems="center"
             gap={1}
             padding={0.5}
             height="fit"
-            wrap
           >
-            {run.attempt.full_exception_trace !== null && (
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              alignItems="center"
+              gap={1}
+              height="fit"
+              className="min-w-0 flex-1"
+              wrap
+            >
+              {trace !== null && (
+                <Popover>
+                  <Popover.Trigger asChild>
+                    <Button icon={SvgTextLines} prominence="tertiary" size="xs">
+                      {t("tags.stackTrace")}
+                    </Button>
+                  </Popover.Trigger>
+                  <StackTracePopoverContent
+                    runId={run.attempt.id}
+                    trace={trace}
+                  />
+                </Popover>
+              )}
+              {listsDocs ? (
+                <Popover>
+                  <Popover.Trigger asChild>
+                    <Button icon={SvgFileText} prominence="tertiary" size="xs">
+                      {docsLabel}
+                    </Button>
+                  </Popover.Trigger>
+                  <FailedDocsPopoverContent
+                    ccPairId={ccPairId}
+                    indexAttemptId={run.attempt.id}
+                    canResolve={resolvable}
+                    onResolve={onResolve}
+                    resolving={resolving}
+                  />
+                </Popover>
+              ) : (
+                warnings > 0 && (
+                  <Tag icon={SvgFileText} title={docsLabel} color="gray" />
+                )
+              )}
+            </Section>
+            {resolvable && (
               <Button
-                icon={SvgTextLines}
+                icon={SvgCheckAll}
                 prominence="tertiary"
                 size="xs"
-                onClick={onViewTrace}
+                disabled={resolving}
+                onClick={() => onResolve(null)}
               >
-                {t("tags.stackTrace")}
+                {t("actions.resolve")}
               </Button>
-            )}
-            {warnings > 0 && (
-              <Tag
-                icon={SvgFileText}
-                title={
-                  group === "resolved"
-                    ? t("tags.resolvedDocs", { count: warnings })
-                    : t(`tags.${run.kind}`, { count: warnings })
-                }
-                color="gray"
-              />
             )}
           </Section>
         )}

@@ -2573,6 +2573,27 @@
         },
         "loadError": {
           "title": "无法加载活动。"
+        },
+        "docs": {
+          "title": "失败的文档",
+          "search": {
+            "placeholder": "搜索文件..."
+          },
+          "resolveAll": "全部解决",
+          "resolveOne": "解决此文档",
+          "more": "更多",
+          "less": "收起",
+          "unknownDocument": "未知文档",
+          "empty": "没有未解决的文档错误",
+          "loadError": "无法加载失败的文档。",
+          "open": "打开文档"
+        },
+        "trace": {
+          "runId": "运行 ID：{id}",
+          "copy": "复制堆栈跟踪"
+        },
+        "actions": {
+          "resolve": "解决"
         }
       },
       "stageDetails": {

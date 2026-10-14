@@ -279,6 +279,12 @@ def test_errors_filter_keeps_runs_with_open_or_resolved_doc_errors(
     assert unresolved.total_items == 2
     assert unresolved.status_counts[CCPairRunStatusGroup.SUCCEEDED] == 2
     assert _order(resolved_only) == [(CCPairRunKind.INDEXING, resolved.id)]
+    # The open count leaves out the resolved error, the total keeps it.
+    open_run = next(run for run in unresolved.items if run.kind == "indexing")
+    assert open_run.attempt.error_count == 2
+    assert open_run.attempt.open_doc_error_count == 1
+    resolved_run = next(run for run in resolved_only.items if run.kind == "indexing")
+    assert resolved_run.attempt.open_doc_error_count == 0
     assert _order(not_failed) == _order(unresolved)
     assert not_failed.total_items == 2
     assert _order(by_doc_error) == [

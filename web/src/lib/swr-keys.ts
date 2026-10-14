@@ -300,6 +300,9 @@ export const SWR_KEYS = {
   // ── Index Attempts ────────────────────────────────────────────────────────
   ccPairLatestIndexAttempt: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/index-attempts?page_num=0&page_size=1`,
+  // Every runs feed query of one pair starts with this, so `mutate` can match them all.
+  ccPairRunsPrefix: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/runs?`,
   ccPairRuns: (ccPairId: number, query: CCPairRunsQuery) => {
     const params = new URLSearchParams({
       page_num: String(query.pageNum),
@@ -312,7 +315,7 @@ export const SWR_KEYS = {
     }
     if (query.q) params.set("q", query.q);
     if (query.errors !== null) params.set("errors", query.errors);
-    return `/api/manage/admin/cc-pair/${ccPairId}/runs?${params.toString()}`;
+    return `${SWR_KEYS.ccPairRunsPrefix(ccPairId)}${params.toString()}`;
   },
   ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
     `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
@@ -330,6 +333,25 @@ export const SWR_KEYS = {
   // this base key invalidates every variant under the same prefix.
   ccPairIndexingErrors: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/errors`,
+  // One attempt's open errors, searched by message or document id.
+  ccPairAttemptErrors: (
+    ccPairId: number,
+    query: {
+      indexAttemptId: number;
+      q: string;
+      pageNum: number;
+      pageSize: number;
+    }
+  ) => {
+    const params = new URLSearchParams({
+      index_attempt_id: String(query.indexAttemptId),
+      page_num: String(query.pageNum),
+      page_size: String(query.pageSize),
+      include_resolved: "false",
+    });
+    if (query.q) params.set("q", query.q);
+    return `/api/manage/admin/cc-pair/${ccPairId}/errors?${params.toString()}`;
+  },
 
   // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────
   // `scheduledTaskRuns` is a base URL — the run-history table appends
