@@ -28,7 +28,11 @@ from onyx.connectors.interfaces import (
     SlimConnector,
 )
 from onyx.connectors.models import Document, HierarchyNode, SlimDocument, TextSection
-from onyx.connectors.web.config import WEB_CONNECTOR_VALID_SETTINGS, UrlRewriteRule
+from onyx.connectors.web.config import (
+    UPLOAD_MODE_REMOVED_MESSAGE,
+    WEB_CONNECTOR_VALID_SETTINGS,
+    UrlRewriteRule,
+)
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.security.models import SSRFProtectionLevel, web_connector_ssrf_enforced
@@ -48,7 +52,6 @@ from onyx.utils.playwright_fetch import (
 from onyx.utils.sitemap import list_pages_for_site
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
-from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -334,12 +337,6 @@ def _ensure_valid_url(url: str) -> str:
     return url
 
 
-def _read_urls_file(location: str) -> list[str]:
-    with open(location, "r") as f:
-        urls = [_ensure_valid_url(line.strip()) for line in f if line.strip()]
-    return urls
-
-
 def _handle_cookies(context: BrowserContext, url: str) -> None:
     """Handle cookies for the given URL to help with bot detection"""
     try:
@@ -401,11 +398,9 @@ class WebConnector(LoadConnector, SlimConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
-        self.authorization_url: str | None = (
-            None
-            if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD
-            else _ensure_valid_url(base_url)
-        )
+        if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
+            raise ConnectorValidationError(UPLOAD_MODE_REMOVED_MESSAGE)
+        self.authorization_url: str = _ensure_valid_url(base_url)
         # Config arrives as raw JSON (list[dict]); validate into rule models.
         rules = _URL_REWRITES_ADAPTER.validate_python(url_rewrites or [])
         self.url_rewrites = _parse_url_rewrites(rules)
@@ -419,18 +414,6 @@ class WebConnector(LoadConnector, SlimConnector):
 
         elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP:
             self.to_visit_list = extract_urls_from_sitemap(_ensure_valid_url(base_url))
-
-        elif web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.UPLOAD:
-            # Explicitly check if running in multi-tenant mode to prevent potential security risks
-            if MULTI_TENANT:
-                raise ValueError(
-                    "Upload input for web connector is not supported in cloud environments"
-                )
-
-            logger.warning(
-                "This is not a UI supported Web Connector flow, are you sure you want to do this?"
-            )
-            self.to_visit_list = _read_urls_file(base_url)
 
         else:
             raise ValueError(
