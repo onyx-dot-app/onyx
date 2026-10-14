@@ -61,7 +61,11 @@ def apply_document_access_filter(
                 cast(postgresql.array(external_group_ids), postgresql.ARRAY(String))
             )
         )
-    acl_match = or_(*acl_filters)
+    # Source ACL columns only count on a perm-synced pair's row.
+    acl_match = and_(
+        ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
+        or_(*acl_filters),
+    )
     # The guard's per-row EXISTS checks can only matter once a guarded pair exists.
     if has_guarded_cc_pairs(db_session):
         acl_match = and_(

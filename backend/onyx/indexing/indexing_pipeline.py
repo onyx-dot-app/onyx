@@ -213,6 +213,14 @@ def _upsert_documents_in_db(
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
 ) -> None:
+    cc_pair = get_connector_credential_pair(
+        db_session,
+        index_attempt_metadata.connector_id,
+        index_attempt_metadata.credential_id,
+    )
+    # Only perm-synced pairs may write source ACLs.
+    keep_external_access = cc_pair is not None and cc_pair.access_type.is_perm_synced()
+
     # Metadata here refers to basic document info, not metadata about the actual content
     document_metadata_list: list[DocumentMetadata] = []
     for doc in documents:
@@ -228,7 +236,7 @@ def _upsert_documents_in_db(
             primary_owners=get_experts_stores_representations(doc.primary_owners),
             secondary_owners=get_experts_stores_representations(doc.secondary_owners),
             from_ingestion_api=doc.from_ingestion_api,
-            external_access=doc.external_access,
+            external_access=doc.external_access if keep_external_access else None,
             doc_metadata=doc.doc_metadata,
             # parent_hierarchy_node_id is resolved in docfetching using Redis cache
             parent_hierarchy_node_id=doc.parent_hierarchy_node_id,

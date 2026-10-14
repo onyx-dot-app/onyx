@@ -565,6 +565,18 @@ def connector_permission_sync_generator_task(
                     f"No connector credential pair found for id: {cc_pair_id}"
                 )
 
+            if not cc_pair.access_type.is_perm_synced():
+                error_msg = (
+                    f"cc_pair={cc_pair_id} is not perm-synced: {cc_pair.access_type}"
+                )
+                task_logger.warning(error_msg)
+                _fail_doc_permission_sync_attempt(attempt_id, error_msg)
+                # Clear the fence so a later sync is not blocked.
+                redis_connector.permissions.generator_clear()
+                redis_connector.permissions.taskset_clear()
+                redis_connector.permissions.set_fence(None)
+                return None
+
             try:
                 created = validate_ccpair_for_user(
                     cc_pair.connector.id,

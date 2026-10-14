@@ -236,6 +236,7 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
   CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK
     connector_permission_sync_generator_task
       create_doc_permission_sync_attempt          onyx/db/permission_sync_attempt.py
+      fails the attempt if the cc_pair is no longer perm-synced
       mark_doc_permission_sync_attempt_in_progress
       doc_sync_func(cc_pair, fetch_existing_docs_fn, fetch_existing_doc_ids_fn, callback)
         -> Generator[ElementExternalAccess]
@@ -247,6 +248,12 @@ beat: CHECK_FOR_DOC_PERMISSIONS_SYNC (every 30s)
       complete_doc_permission_sync_attempt (SUCCESS or COMPLETED_WITH_ERRORS)
       on exception: _fail_doc_permission_sync_attempt, fence cleared, re-raised
 ```
+
+The manual triggers `POST /manage/admin/cc-pair/{id}/sync-permissions` and
+`/sync-groups` (`ee/onyx/server/documents/cc_pair.py`) return `INVALID_INPUT`
+for a cc_pair that is not perm-synced. The indexing pipeline
+(`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
+`external_access` unless the writing cc_pair is perm-synced.
 
 Most doc-sync implementations funnel through
 `ee/onyx/external_permissions/utils.py:generic_doc_sync`, which:
