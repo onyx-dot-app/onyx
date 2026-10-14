@@ -3,7 +3,6 @@ from io import BytesIO
 
 from PIL import Image, ImageOps
 
-from onyx.chat.prompt_formatting import prepare_model_messages
 from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
     IMAGE_SUMMARIZATION_USER_PROMPT,
@@ -136,7 +135,7 @@ def _summarize_image(
 
     try:
         response = llm.invoke(
-            GenerationRequest(messages=prepare_model_messages(messages, llm.config)),
+            GenerationRequest(messages=messages),
             context=GenerationContext(
                 flow=LLMFlow.IMAGE_SUMMARIZATION,
                 content_mode=TraceContentMode.METADATA_ONLY,

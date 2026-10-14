@@ -1155,7 +1155,6 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
     )
 
     codec = CheckpointStorage({})
-    binding = CheckpointBinding(tenant_id="tenant", branch_id="branch")
 
     def save_original() -> tuple[str, str, AgentInfo]:
         children: list[SpawnResult] = []
@@ -1230,16 +1229,26 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
                 child.run_id
             ]
             return (
-                codec.save(checkpoint.run_state, checkpoint.agent_state, binding),
-                codec.save(child, AgentState(), binding),
+                codec.save(
+                    checkpoint.run_state,
+                    checkpoint.agent_state,
+                    CheckpointBinding(
+                        tenant_id="tenant", response_id=checkpoint.run_state.run_id
+                    ),
+                ),
+                codec.save(
+                    child,
+                    AgentState(),
+                    CheckpointBinding(tenant_id="tenant", response_id=child.run_id),
+                ),
                 info,
             )
         finally:
             assert owner.close(3)
 
     parent_json, child_json, info = save_original()
-    restored = codec.load(parent_json, expected_binding=binding)
-    archived_child = codec.load(child_json, expected_binding=binding).run_state
+    restored = codec.load(parent_json)
+    archived_child = codec.load(child_json).run_state
 
     def unexpected(_invocation: ToolInvocation) -> ToolResult:
         raise AssertionError("Completed or pending tool code must not repeat")
@@ -1874,6 +1883,82 @@ def suspended_agent() -> Agent:
     )
 
 
+@pytest.mark.parametrize("worker_failure", [False, True])
+def test_released_child_observation_failure_ends_parent(
+    worker_failure: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    child = suspended_agent()
+    spawned: list[SpawnResult] = []
+    completion_calls: list[list[RunState]] = []
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                child, name="child", description="", max_steps=2, messages=[]
+            )
+        )
+        return ChildRunWait(run_ids=[spawned[0].run_id])
+
+    def complete(_invocation: ToolInvocation, children: list[RunState]) -> ToolResult:
+        completion_calls.append(children)
+        return ToolResult(content="done")
+
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=complete,
+            )
+        ],
+    )
+    saved: list[RunState] = []
+    owner = AgentCoordinator(
+        directory=FakeAgentDirectory(
+            read_run_status=lambda *_: RunStatus.SUSPENDED,
+            read_run=lambda *_: saved[0],
+            cancel_run=lambda *_: None,
+        )
+    )
+    root = parent.start(max_steps=2, coordinator=owner)
+    try:
+        assert root.wait_until_settled(3).status == RunStatus.SUSPENDED
+        child_run = owner.run(spawned[0].run_id)
+        assert child_run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert child_run.wait_for_idle(3)
+        saved.append(child_run.snapshot())
+        if worker_failure:
+
+            def fail_start(_operation: Callable[[], object]) -> None:
+                raise RuntimeError("Cannot observe released child")
+
+            monkeypatch.setattr(owner._state.work, "start", fail_start)
+        else:
+            monkeypatch.setattr(
+                "onyx.agents.agent_coordination.OPERATION_TIMEOUT_SECONDS", 0
+            )
+        child_run.handoff()
+        with pytest.raises(RunFailed):
+            root.result(3)
+        assert root.wait_for_idle(3)
+        terminal = root.snapshot()
+        assert terminal.status == RunStatus.ERROR
+        assert terminal.child_runs[0].messages == saved[0].messages
+        assert terminal.child_runs[0].status == RunStatus.ERROR
+        assert not completion_calls
+        assert owner.completion(child_run.id).exception(timeout=0) is not None
+    finally:
+        monkeypatch.undo()
+        assert owner.close(3)
+
+
 def test_released_run_has_no_local_cleanup_or_controls() -> None:
     coordinator = AgentCoordinator()
     agent = suspended_agent()
@@ -1924,6 +2009,38 @@ def test_saved_completion_notifies_dependencies_without_execution_locks() -> Non
         assert coordinator.completion(run.id).result(3).status == RunStatus.COMPLETE
         with pytest.raises(ValueError, match="not owned"):
             coordinator.run(run.id)
+    finally:
+        assert coordinator.close(3)
+
+
+def test_duplicate_resume_does_not_release_the_current_owner() -> None:
+    aborted: list[str] = []
+    coordinator = AgentCoordinator(
+        ownership=FakeRunOwnership(abort_start=aborted.append)
+    )
+    original = suspended_agent()
+    run = original.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+        duplicate = Agent(
+            FakeModelClient(lambda *_: AssistantMessage(content=[])),
+            agent_id=original.id,
+            tools=original.tools,
+        )
+        with pytest.raises(RuntimeError, match="already running or draining"):
+            duplicate.resume(run.snapshot(), coordinator=coordinator)
+        assert aborted == []
+        assert coordinator.run(run.id) is run
+        run.submit(
+            HumanToolAnswer(
+                request_id="question",
+                decision=InputDecision.RESULT,
+                result=ToolResult(content="approved", terminate=True),
+            )
+        )
+        assert run.wait_until_settled(3).status == RunStatus.COMPLETE
+        assert run.wait_for_idle(3)
     finally:
         assert coordinator.close(3)
 
@@ -2121,7 +2238,9 @@ def test_child_deadline_survives_checkpoint_and_ownership_transfer(
         storage.save(
             captured.run_state,
             captured.agent_state,
-            CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+            CheckpointBinding(
+                tenant_id="tenant", response_id=captured.run_state.run_id
+            ),
         )
     )
     assert restored.run_state.progress is not None

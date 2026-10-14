@@ -23,6 +23,15 @@ annotations:
     - kind: security
       description: Bump the code-interpreter subchart to 0.4.10, which updates
         Pillow, pypdf, cryptography, fpdf2, and certifi in its images.
+    - kind: changed
+      description: PERMISSION_SYNC_TIMEOUT_SECONDS now limits group syncs only.
+        A doc permission sync has no time limit and stops after an hour
+        without progress.
+    - kind: added
+      description: Configure the maximum wait for a full chat response after
+        delivery ends with CHAT_RESPONSE_WAIT_TIMEOUT_S. Agent execution continues
+        independently of this wait.
+
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

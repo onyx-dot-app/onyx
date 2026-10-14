@@ -12,7 +12,6 @@ from onyx.agents.models import AgentInfo
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.incognito_context import (
     append_incognito_message,
-    get_or_create_incognito_root_id,
     load_incognito_agent_history,
     load_incognito_agent_metadata,
     load_incognito_context,
@@ -25,7 +24,7 @@ from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.chat_subagents import (
     ChatBranch,
     load_agent_history,
-    load_saved_run,
+    load_saved_response,
     load_session_agent_metadata,
     lookup_session_agent,
 )
@@ -57,8 +56,6 @@ class ChatHistoryStore(Protocol):
 
     def save_user_message(self, message: UserMessage) -> None: ...
 
-    def root_agent_id(self, proposed_id: str) -> str: ...
-
     def save_response(self, response: ChatResponseSnapshot) -> None: ...
 
 
@@ -86,7 +83,9 @@ class PostgresChatHistoryStore(ChatHistoryStore):
         return load_agent_history(self.message_id, agent_id)
 
     def load_saved_run(self, run_id: str, parent_id: str) -> ResponseRecord | None:
-        return load_saved_run(self.message_id, run_id, parent_id)
+        if not run_id.isdecimal():
+            return None
+        return load_saved_response(self.message_id, int(run_id), parent_id)
 
     def prepare_messages(
         self,
@@ -99,9 +98,6 @@ class PostgresChatHistoryStore(ChatHistoryStore):
 
     def save_user_message(self, message: UserMessage) -> None:  # noqa: ARG002
         """The chat message row already contains the accepted user text."""
-
-    def root_agent_id(self, proposed_id: str) -> str:
-        return proposed_id
 
     def save_response(self, response: ChatResponseSnapshot) -> None:
         save_chat_response_to_db(
@@ -162,9 +158,6 @@ class RedisChatHistoryStore(ChatHistoryStore):
 
     def save_user_message(self, message: UserMessage) -> None:
         append_incognito_message(self.chat_session_id, message)
-
-    def root_agent_id(self, proposed_id: str) -> str:
-        return get_or_create_incognito_root_id(self.chat_session_id, proposed_id)
 
     def save_response(self, response: ChatResponseSnapshot) -> None:
         answer = save_chat_response_to_db(
