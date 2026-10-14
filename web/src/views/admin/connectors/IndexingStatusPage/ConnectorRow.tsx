@@ -6,6 +6,8 @@ import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
+  SvgExpand,
+  SvgFold,
   SvgOrganization,
   SvgSettings,
   SvgUser,
@@ -20,6 +22,7 @@ import { getSourceMetadata } from "@/lib/connectors/utils";
 import { can } from "@/lib/permissions/resource-actions";
 import type { AccessType } from "@/lib/types";
 import { DocCounts } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
+import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 import { connectorRowStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import StageDetailsPopoverContent, {
   StageDetailsTrigger,
@@ -34,10 +37,17 @@ const ACCESS_ICONS = {
 
 export interface ConnectorRowProps {
   row: IndexingConnectorRow;
+  /** Shows the connector's run history under its summary. */
+  expanded: boolean;
+  onToggle: () => void;
 }
 
 /** One connector in the status page's list: what it is, how its latest run stands, and the documents it holds. */
-export default function ConnectorRow({ row }: ConnectorRowProps) {
+export default function ConnectorRow({
+  row,
+  expanded,
+  onToggle,
+}: ConnectorRowProps) {
   const t = useTranslations("admin.indexing.list");
   const tRuns = useTranslations("admin.connector.runs");
   const tBadges = useTranslations("admin.status.badges");
@@ -52,6 +62,7 @@ export default function ConnectorRow({ row }: ConnectorRowProps) {
     attempt?.status
   );
   const warnings = attempt?.error_count ?? 0;
+  const toggleLabel = expanded ? t("actions.collapse") : t("actions.expand");
 
   // What the status line adds: the live rate, the place in line, or when it last ran.
   function detail(): string {
@@ -97,155 +108,173 @@ export default function ConnectorRow({ row }: ConnectorRowProps) {
           padding={2}
           data-testid={`indexing-connector-${row.cc_pair_id}`}
         >
-          <Section
-            flexDirection="row"
-            alignItems="start"
-            justifyContent="start"
-            gap={1}
-            padding={1}
-            height="fit"
-          >
+          <Section alignItems="stretch" gap={1} height="fit">
             <Section
+              flexDirection="row"
               alignItems="start"
+              justifyContent="start"
               gap={1}
               padding={1}
               height="fit"
-              className="min-w-0 flex-1"
             >
-              {canOperate ? (
-                <Link
-                  href={`/admin/connector/${row.cc_pair_id}`}
-                  className="hover:underline"
-                >
+              <Section
+                alignItems="start"
+                gap={1}
+                padding={1}
+                height="fit"
+                className="min-w-0 flex-1"
+              >
+                {canOperate ? (
+                  <Link
+                    href={`/admin/connector/${row.cc_pair_id}`}
+                    className="hover:underline"
+                  >
+                    <Content
+                      icon={getSourceMetadata(row.source).icon}
+                      title={row.name}
+                      sizePreset="main-ui"
+                      variant="section"
+                    />
+                  </Link>
+                ) : (
                   <Content
                     icon={getSourceMetadata(row.source).icon}
                     title={row.name}
                     sizePreset="main-ui"
                     variant="section"
                   />
-                </Link>
-              ) : (
-                <Content
-                  icon={getSourceMetadata(row.source).icon}
-                  title={row.name}
-                  sizePreset="main-ui"
-                  variant="section"
-                />
-              )}
-              <Section
-                flexDirection="row"
-                justifyContent="start"
-                gap={1}
-                height="fit"
-                wrap
-              >
-                <Content
-                  icon={ACCESS_ICONS[row.access_type]}
-                  title={t(`access.${row.access_type}`)}
-                  sizePreset="secondary"
-                  variant="body"
-                  color="muted"
-                  width="fit"
-                />
-                {row.creator_email !== null && (
+                )}
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  gap={1}
+                  height="fit"
+                  wrap
+                >
                   <Content
-                    icon={SvgUser}
-                    title={row.creator_email}
+                    icon={ACCESS_ICONS[row.access_type]}
+                    title={t(`access.${row.access_type}`)}
                     sizePreset="secondary"
                     variant="body"
                     color="muted"
                     width="fit"
                   />
-                )}
+                  {row.creator_email !== null && (
+                    <Content
+                      icon={SvgUser}
+                      title={row.creator_email}
+                      sizePreset="secondary"
+                      variant="body"
+                      color="muted"
+                      width="fit"
+                    />
+                  )}
+                </Section>
               </Section>
-            </Section>
 
-            <Section
-              alignItems="start"
-              gap={1}
-              padding={1}
-              width={13}
-              height="fit"
-              className="shrink-0"
-            >
               <Section
-                flexDirection="row"
-                justifyContent="start"
+                alignItems="start"
                 gap={1}
-                width="fit"
+                padding={1}
+                width={13}
                 height="fit"
+                className="shrink-0"
               >
-                <Tag
-                  icon={tag.icon}
-                  title={tBadges(tag.labelKey)}
-                  color={tag.color}
-                />
-                {attempt !== null && <StageDetailsTrigger />}
-                {warnings > 0 && (
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  gap={1}
+                  width="fit"
+                  height="fit"
+                >
                   <Tag
-                    icon={SvgAlertTriangle}
-                    title={format.number(warnings)}
-                    tooltip={tRuns("warnings.tooltip", { count: warnings })}
-                    color="amber"
+                    icon={tag.icon}
+                    title={tBadges(tag.labelKey)}
+                    color={tag.color}
                   />
-                )}
+                  {attempt !== null && <StageDetailsTrigger />}
+                  {warnings > 0 && (
+                    <Tag
+                      icon={SvgAlertTriangle}
+                      title={format.number(warnings)}
+                      tooltip={tRuns("warnings.tooltip", { count: warnings })}
+                      color="amber"
+                    />
+                  )}
+                </Section>
+                <Text font="secondary-body" color="text-03">
+                  {detail()}
+                </Text>
               </Section>
-              <Text font="secondary-body" color="text-03">
-                {detail()}
-              </Text>
-            </Section>
 
-            <Section
-              alignItems="end"
-              gap={1}
-              padding={1}
-              width={10}
-              height="fit"
-              className="shrink-0"
-            >
+              <Section
+                alignItems="end"
+                gap={1}
+                padding={1}
+                width={10}
+                height="fit"
+                className="shrink-0"
+              >
+                <Section
+                  flexDirection="row"
+                  justifyContent="end"
+                  alignItems="end"
+                  gap={1}
+                  width="fit"
+                  height="fit"
+                >
+                  <Text font="main-ui-action" color="text-04">
+                    {row.status === "indexing" && attempt !== null
+                      ? t("docs.recentOfTotal", {
+                          recent: format.number(attempt.total_docs_indexed),
+                          total: format.number(row.docs_indexed),
+                        })
+                      : format.number(row.docs_indexed)}
+                  </Text>
+                  <Text font="secondary-body" color="text-03">
+                    {t("docs.label")}
+                  </Text>
+                </Section>
+                {attempt !== null && <DocCounts attempt={attempt} />}
+              </Section>
+
               <Section
                 flexDirection="row"
                 justifyContent="end"
-                alignItems="end"
+                alignItems="center"
                 gap={1}
                 width="fit"
                 height="fit"
+                className="shrink-0"
               >
-                <Text font="main-ui-action" color="text-04">
-                  {row.status === "indexing" && attempt !== null
-                    ? t("docs.recentOfTotal", {
-                        recent: format.number(attempt.total_docs_indexed),
-                        total: format.number(row.docs_indexed),
-                      })
-                    : format.number(row.docs_indexed)}
-                </Text>
-                <Text font="secondary-body" color="text-03">
-                  {t("docs.label")}
-                </Text>
-              </Section>
-              {attempt !== null && <DocCounts attempt={attempt} />}
-            </Section>
-
-            <Section
-              flexDirection="row"
-              justifyContent="end"
-              alignItems="center"
-              gap={1}
-              width="fit"
-              height="fit"
-              className="shrink-0"
-            >
-              {canOperate && (
+                {canOperate && (
+                  <Button
+                    icon={SvgSettings}
+                    prominence="tertiary"
+                    size="sm"
+                    href={`/admin/connector/${row.cc_pair_id}`}
+                    tooltip={t("actions.manage")}
+                    aria-label={t("actions.manage")}
+                  />
+                )}
                 <Button
-                  icon={SvgSettings}
+                  icon={expanded ? SvgFold : SvgExpand}
                   prominence="tertiary"
                   size="sm"
-                  href={`/admin/connector/${row.cc_pair_id}`}
-                  tooltip={t("actions.manage")}
-                  aria-label={t("actions.manage")}
+                  tooltip={toggleLabel}
+                  aria-label={toggleLabel}
+                  aria-expanded={expanded}
+                  onClick={onToggle}
                 />
-              )}
+              </Section>
             </Section>
+            {expanded && (
+              <RunsCard
+                ccPairId={row.cc_pair_id}
+                canOperate={canOperate}
+                embedded
+              />
+            )}
           </Section>
         </Card>
       </Popover.Anchor>

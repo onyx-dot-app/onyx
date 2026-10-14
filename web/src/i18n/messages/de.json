@@ -5805,7 +5805,9 @@
         },
         "actions": {
           "manage": "Verwalten",
-          "manageFederated": "Föderierten Konnektor verwalten"
+          "manageFederated": "Föderierten Konnektor verwalten",
+          "expand": "Details anzeigen",
+          "collapse": "Details ausblenden"
         },
         "federated": {
           "tag": "Föderiert"

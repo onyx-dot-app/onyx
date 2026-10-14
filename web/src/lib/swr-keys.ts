@@ -325,6 +325,9 @@ export const SWR_KEYS = {
   // The indexing status page's fleet-wide reads, over every readable pair.
   indexMonitoringOverview: (window: CCPairThroughputWindow) =>
     `/api/manage/admin/index-monitoring/overview?window=${window}`,
+  // Every connector list query starts with this, so `mutate` can match them all.
+  indexMonitoringConnectorsPrefix:
+    "/api/manage/admin/index-monitoring/connectors?",
   indexMonitoringConnectors: (query: IndexingConnectorsQuery) => {
     const params = new URLSearchParams({
       page_num: String(query.pageNum),
@@ -332,7 +335,7 @@ export const SWR_KEYS = {
     });
     if (query.q) params.set("q", query.q);
     if (query.status !== null) params.set("status", query.status);
-    return `/api/manage/admin/index-monitoring/connectors?${params.toString()}`;
+    return `${SWR_KEYS.indexMonitoringConnectorsPrefix}${params.toString()}`;
   },
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,

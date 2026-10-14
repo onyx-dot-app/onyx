@@ -98,6 +98,9 @@ export default function ConnectorList() {
   const [status, setStatus] = useState<IndexingConnectorStatus | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<number>>(
+    () => new Set()
+  );
 
   const { data, error, isLoading } = useSWR<IndexingConnectorsResponse>(
     SWR_KEYS.indexMonitoringConnectors({
@@ -113,6 +116,14 @@ export default function ConnectorList() {
   function pickStatus(next: IndexingConnectorStatus | null) {
     setStatus(next);
     setPage(1);
+  }
+
+  function toggleExpanded(ccPairId: number) {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(ccPairId)) next.add(ccPairId);
+      return next;
+    });
   }
 
   const totalItems = data?.total_items ?? 0;
@@ -232,7 +243,12 @@ export default function ConnectorList() {
       ) : (
         <Section alignItems="stretch" gap={2} height="fit">
           {data?.items.map((row) => (
-            <ConnectorRow key={row.cc_pair_id} row={row} />
+            <ConnectorRow
+              key={row.cc_pair_id}
+              row={row}
+              expanded={expandedIds.has(row.cc_pair_id)}
+              onToggle={() => toggleExpanded(row.cc_pair_id)}
+            />
           ))}
           {data?.federated_connectors.map((connector) => (
             <FederatedRow key={connector.id} connector={connector} />

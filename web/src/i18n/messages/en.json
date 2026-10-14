@@ -5805,7 +5805,9 @@
         },
         "actions": {
           "manage": "Manage",
-          "manageFederated": "Manage federated connector"
+          "manageFederated": "Manage federated connector",
+          "expand": "View Details",
+          "collapse": "Hide Details"
         },
         "federated": {
           "tag": "Federated"

@@ -5805,7 +5805,9 @@
         },
         "actions": {
           "manage": "管理",
-          "manageFederated": "フェデレーテッドコネクタを管理"
+          "manageFederated": "フェデレーテッドコネクタを管理",
+          "expand": "詳細を表示",
+          "collapse": "詳細を隠す"
         },
         "federated": {
           "tag": "フェデレーテッド"
