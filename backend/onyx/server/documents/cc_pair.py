@@ -356,8 +356,9 @@ def get_cc_pair_throughput(
     ),
     db_session: Session = Depends(get_session),
 ) -> CCPairThroughputResponse:
-    """Counts the documents the pair indexed in each equal slice of the window,
-    and lists when each run in it started."""
+    """Estimates the documents the pair indexed in each equal slice of the
+    window (see ``docs_indexed_per_slice``), and lists when each run in it
+    started."""
     # Called directly: the route contract reaches the scope gate three calls deep.
     if (
         get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)

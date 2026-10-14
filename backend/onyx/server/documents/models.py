@@ -570,9 +570,10 @@ class CCPairThroughputRun(BaseModel):
 
 
 class CCPairThroughputResponse(BaseModel):
-    """Documents indexed in each equal slice of the window, oldest first, and
-    the runs that began in it. A run that began earlier adds documents but is
-    not listed."""
+    """A rough estimate of the documents indexed in each equal slice of the
+    window, oldest first (each run's total spread evenly over its span, since
+    nothing records when a document landed), and the runs that began in it. A
+    run that began earlier adds documents but is not listed."""
 
     window_start: datetime
     window_end: datetime

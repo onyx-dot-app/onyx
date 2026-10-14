@@ -1,5 +1,7 @@
-"""Documents indexed over a window, from the index runs in it. A run records
-only its total, so its documents spread evenly over the time it ran."""
+"""A rough estimate of documents indexed over a window, from the index runs in
+it. Nothing records when each document landed: a run records only its total, so
+its documents spread evenly over the time it ran, and a slice's figure is that
+interpolation, not a count."""
 
 from datetime import datetime
 
@@ -12,8 +14,9 @@ def docs_indexed_per_slice(
     window_end: datetime,
     slice_count: int,
 ) -> list[int]:
-    """Documents indexed in each of ``slice_count`` equal slices of the window,
-    oldest first. A run still going counts up to ``window_end``."""
+    """Estimated documents indexed in each of ``slice_count`` equal slices of
+    the window, oldest first: each run's total spread evenly over its span. A
+    run still going counts up to ``window_end``."""
     width = (window_end - window_start) / slice_count
     totals = [0.0] * slice_count
     for attempt in attempts:
