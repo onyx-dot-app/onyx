@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from pydantic import BaseModel, ValidationError
+from sqlalchemy.orm import Session
 
 from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
@@ -16,22 +17,25 @@ from onyx.chat.models import ChatSearchResult
 from onyx.chat.presentation import _collect_tool_history, _saved_tool_metadata
 from onyx.chat.renderer import ToolRenderer
 from onyx.chat.response import response_record
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.db.models import ChatMessage, Tool, ToolCall
 from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.models import Tool, ToolCall
 from onyx.db.tools import restore_tool_result
 from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.session_loading import (
     _response_packets,
+    translate_assistant_message_to_packets,
 )
 from onyx.server.query_and_chat.streaming_models import (
+    AgentResponseDelta,
     CustomToolDelta,
     MemoryToolNoAccess,
     OverallStop,
     PacketException,
+    ReasoningDelta,
     SearchToolDocumentsDelta,
 )
 from onyx.tools.models import (
@@ -376,3 +380,87 @@ def test_memory_failure_does_not_claim_access_was_denied() -> None:
         for packet in packets
     )
     assert packets[-1].obj.type == "section_end"
+
+
+@pytest.mark.parametrize(
+    (
+        "first_reasoning",
+        "second_reasoning",
+        "final_reasoning",
+        "expected",
+        "final_turn",
+    ),
+    [
+        (
+            "First parallel thought",
+            "Second parallel thought",
+            "Final thought",
+            [("First parallel thought", 1), ("Final thought", 3)],
+            4,
+        ),
+        (
+            None,
+            "Second parallel thought",
+            "Final thought",
+            [("Second parallel thought", 1), ("Final thought", 3)],
+            4,
+        ),
+        (
+            "",
+            "Second parallel thought",
+            "Final thought",
+            [("Second parallel thought", 1), ("Final thought", 3)],
+            4,
+        ),
+        (None, None, None, [], 3),
+    ],
+)
+def test_legacy_thinking_precedes_tool_groups_and_final_answer(
+    first_reasoning: str | None,
+    second_reasoning: str | None,
+    final_reasoning: str | None,
+    expected: list[tuple[str, int]],
+    final_turn: int,
+) -> None:
+    response = ChatMessage(
+        id=10,
+        message="Final answer",
+        message_type=MessageType.ASSISTANT,
+        response_status=None,
+        reasoning_tokens=final_reasoning,
+        citations=None,
+        search_docs=[],
+        tool_calls=[
+            ToolCall(
+                id=call_id,
+                tool_id=1,
+                turn_number=2,
+                tab_index=index,
+                tool_call_arguments={},
+                tool_call_response="Tool output",
+                reasoning_tokens=first_reasoning if index == 0 else second_reasoning,
+            )
+            for index, call_id in enumerate((11, 12))
+        ],
+    )
+    with (
+        Session() as session,
+        patch(
+            "onyx.server.query_and_chat.session_loading.get_tool_by_id",
+            return_value=Tool(name="lookup", display_name="Lookup"),
+        ),
+    ):
+        packets = translate_assistant_message_to_packets(response, session)
+
+    assert [
+        (packet.obj.reasoning, packet.placement.turn_index)
+        for packet in packets
+        if isinstance(packet.obj, ReasoningDelta)
+    ] == expected
+    assert [
+        (packet.obj.content, packet.placement.turn_index)
+        for packet in packets
+        if isinstance(packet.obj, AgentResponseDelta)
+    ] == [("Final answer", final_turn)]
+    assert isinstance(packets[-1].obj, OverallStop)
+    assert packets[-1].placement.turn_index == final_turn
