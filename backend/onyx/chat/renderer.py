@@ -6,6 +6,7 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import MessageRendering, PresentationMode
+from onyx.chat.response import message_thinking
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_NAME,
@@ -25,7 +26,6 @@ from onyx.llm.models import (
     GenerationContentEvent,
     TextContent,
     TextDeltaEvent,
-    ThinkingContent,
     ThinkingDeltaEvent,
     ToolCall,
     ToolCallDeltaEvent,
@@ -276,14 +276,7 @@ class MessageRenderer:
         text = "".join(
             block.text for block in message.content if isinstance(block, TextContent)
         )
-        thinking = "".join(
-            block.text
-            for block in message.content
-            if isinstance(block, ThinkingContent)
-        )
-        for call in message.tool_calls:
-            if call.name == self.settings.think_tool:
-                thinking += _STRING.validate_python(call.arguments.get("reasoning", ""))
+        thinking = message_thinking(message, self.settings.think_tool)
         result = []
         if thinking.startswith(self._raw_thinking):
             result.extend(

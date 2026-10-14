@@ -94,6 +94,13 @@ data being gone.
 `generation_status` records the model generation outcome, independently of the whole response or tool outcome.
 `is_answer` identifies the step the runtime accepted as its answer. Partial output need not be an accepted answer.
 Response items use `step_index` for generation order and the assistant’s tool-call list for result order.
+Every response item belongs to a recorded model step; historical thinking does not create synthetic steps.
+Legacy responses have null `response_status` and read thinking from `chat_message.reasoning_tokens`
+and `tool_call.reasoning_tokens`, including explicit null values. SDK responses read thinking from response items.
+Finalization also retains the existing final-thinking display column. SDK pre-tool thinking stays in response items.
+Old API pods can omit SDK pre-tool thinking during deployment overlap; the stored model content remains intact.
+No thinking backfill or column-removal migration runs in this release.
+
 The nonunique `(chat_message_id, step_index)` index supports response lookups.
 A separate partial unique index permits one assistant message per step.
 
@@ -341,13 +348,10 @@ incognito mode does not persist content skip the naming call.
 3. **Input is on the user message; everything produced during inference is on
    the assistant message.** Response text, tool calls, feedback, and
    citations never live on a `USER` row.
-4. **Reasoning attaches to the message or tool call that came *after* it, not
-   before.** With parallel tool calls, the same reasoning text is duplicated
-   onto each of them (`db/README.md`;
-   `session_loading.py:translate_assistant_message_to_packets` picks the
-   first tool call in a turn that has `reasoning_tokens` and re-derives which
-   turn slot to render it under). This is unintuitive and worth re-reading
-   `db/README.md` before touching it.
+4. **Thinking preserves its recorded placement.** SDK response items retain thinking within the assistant model message.
+   Legacy thinking precedes its tool-call group or final answer. For parallel legacy calls, the loader selects
+   the first nonempty thinking value in the group. Legacy display text does not provide exact model block order
+   or provider signatures and must not be treated as a recorded SDK generation.
 5. **`save_chat_turn` commits exactly once per assistant message.** All of
    message text, `SearchDoc` rows, `ToolCall` rows, and citations land in that
    one transaction. Do not add a code path that commits partway through.

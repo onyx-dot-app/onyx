@@ -292,6 +292,10 @@ the clicking user, re-resolving the persona through that user's own access via
 session with `user_id=None` / `skip_permission_check=True`, since the reader at
 that point is not the message's original asker.
 
+The copy retains displayed answers and final thinking, without tool execution history.
+SDK sources read thinking from response items; legacy sources read the existing thinking column.
+The copied messages use the legacy display format, with no execution records or provider signatures.
+
 ---
 
 ## 5. Contracts and invariants

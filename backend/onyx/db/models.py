@@ -3471,8 +3471,9 @@ class ChatMessage(Base):
         postgresql.JSONB(), nullable=True
     )
 
-    # Current clients and search read the formatted final answer.
+    # Legacy display text; SDK readers use the thinking in response items.
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Current clients and search read the formatted final answer.
     message: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int] = mapped_column(Integer)
     message_type: Mapped[MessageType] = mapped_column(
@@ -3666,7 +3667,7 @@ class ToolCall(Base):
     # This is needed because LLMs expect the tool call and the response to have matching IDs
     # This is better than just regenerating one randomly
     tool_call_id: Mapped[str] = mapped_column(String())
-    # Preceeding reasoning tokens for this tool call, not included in the history
+    # Legacy pre-tool display text; SDK readers use the assistant model message.
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     # For "Agents" like the Research Agent for Deep Research -
     # the argument and final report are stored as the argument and response.

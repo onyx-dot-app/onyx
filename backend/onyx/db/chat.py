@@ -24,7 +24,12 @@ from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE
 
-from onyx.agents.execution_records import CompactionCheckpoint
+from onyx.agents.execution_records import (
+    CompactionCheckpoint,
+    RunStatus,
+)
+from onyx.chat.models import MessageRendering, PresentationMode
+from onyx.chat.response import message_thinking
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
@@ -633,6 +638,7 @@ def get_chat_messages_by_sessions(
     user_id: UUID | None,
     db_session: Session,
     skip_permission_check: bool = False,
+    prefetch_response_items: bool = False,
 ) -> Sequence[ChatMessage]:
     if not skip_permission_check:
         for chat_session_id in chat_session_ids:
@@ -651,6 +657,8 @@ def get_chat_messages_by_sessions(
         .where(ChatMessage.chat_session_id.in_(chat_session_ids))
         .order_by(nullsfirst(ChatMessage.parent_message_id))
     )
+    if prefetch_response_items:
+        stmt = stmt.options(selectinload(ChatMessage.response_items))
     return db_session.execute(stmt).scalars().all()
 
 
@@ -659,6 +667,7 @@ def add_chats_to_session_from_slack_thread(
     slack_chat_session_id: UUID,
     new_chat_session_id: UUID,
 ) -> None:
+    """Copy displayed conversation content and commit the new message tree."""
     source_session = db_session.get(ChatSession, slack_chat_session_id)
     if source_session and source_session.incognito_record_mode is not None:
         raise ValueError("Incognito chat sessions cannot be duplicated")
@@ -672,9 +681,11 @@ def add_chats_to_session_from_slack_thread(
         user_id=None,  # Ignore user permissions for this
         db_session=db_session,
         skip_permission_check=True,
+        prefetch_response_items=True,
     ):
         if chat_message.message_type == MessageType.SYSTEM:
             continue
+        reasoning = get_chat_message_reasoning(chat_message)
         new_root_message = create_new_chat_message(
             db_session=db_session,
             chat_session_id=new_chat_session_id,
@@ -684,8 +695,10 @@ def add_chats_to_session_from_slack_thread(
             error=chat_message.error,
             token_count=chat_message.token_count,
             message_type=chat_message.message_type,
-            reasoning_tokens=chat_message.reasoning_tokens,
+            reasoning_tokens=reasoning,
+            commit=False,
         )
+    db_session.commit()
 
 
 def add_search_docs_to_chat_message(
@@ -1074,6 +1087,32 @@ def translate_db_search_doc_to_saved_search_doc(
     )
 
 
+def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
+    """Read displayed thinking from the accepted answer or latest partial output."""
+    # Legacy responses have no recorded SDK steps.
+    if chat_message.response_status is None:
+        return chat_message.reasoning_tokens
+    for item in sorted(
+        chat_message.response_items,
+        key=lambda item: item.step_index,
+        reverse=True,
+    ):
+        if item.message is None:
+            continue
+        if chat_message.response_status == RunStatus.COMPLETE and not item.is_answer:
+            continue
+        rendering = (
+            MessageRendering.model_validate(item.rendering)
+            if item.rendering is not None
+            else MessageRendering()
+        )
+        if rendering.mode != PresentationMode.ANSWER:
+            continue
+        thinking = message_thinking(item.message, rendering.think_tool)
+        return thinking + (item.message.text if rendering.text_as_thinking else "")
+    return None
+
+
 def translate_db_message_to_chat_message_detail(
     chat_message: ChatMessage,
     remove_doc_content: bool = False,
@@ -1114,7 +1153,7 @@ def translate_db_message_to_chat_message_detail(
         parent_message=chat_message.parent_message_id,
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
-        reasoning_tokens=chat_message.reasoning_tokens,
+        reasoning_tokens=get_chat_message_reasoning(chat_message),
         request_params=GenerationRequestParams.model_validate(
             chat_message.request_params, extra="ignore"
         )
