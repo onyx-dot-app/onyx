@@ -207,12 +207,10 @@ function SettingsHeader({
 // Body
 // ---------------------------------------------------------------------------
 
-interface SettingsBodyProps extends WithoutStyles<
-  HtmlHTMLAttributes<HTMLDivElement>
-> {
+type SettingsBodyProps = WithoutStyles<HtmlHTMLAttributes<HTMLDivElement>> & {
   /** Space between sections, as a spacing step (`N / 4` rem). @default 8 */
   gap?: Spacing;
-}
+};
 
 function SettingsBody({ gap = 8, ...props }: SettingsBodyProps) {
   return (
