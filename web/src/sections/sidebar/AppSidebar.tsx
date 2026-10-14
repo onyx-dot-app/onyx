@@ -61,7 +61,7 @@ import {
   showErrorNotification,
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
-import { SidebarTab } from "@opal/components";
+import { SidebarTab, Tag } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
 import useAppFocus from "@/hooks/useAppFocus";
@@ -260,6 +260,9 @@ export default function AppSidebar() {
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
   const isOnyxCraftEnabled = combinedSettingsData?.onyx_craft_enabled === true;
+  const isOnyxCraftUpsell =
+    !isOnyxCraftEnabled &&
+    combinedSettingsData?.onyx_craft_requires_upgrade === true;
 
   // Fetch notifications for build mode intro
   const { notifications, refresh: mutateNotifications } = useNotifications({
@@ -611,12 +614,17 @@ export default function AppSidebar() {
               </SidebarTab>
             )}
           />
-          {isOnyxCraftEnabled && (
+          {(isOnyxCraftEnabled || isOnyxCraftUpsell) && (
             <div data-testid="AppSidebar/build">
               <SidebarTab
                 icon={SvgDevKit}
                 href={CRAFT_PATH}
                 onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
+                rightChildren={
+                  isOnyxCraftUpsell ? (
+                    <Tag title="Business" color="blue" />
+                  ) : undefined
+                }
               >
                 Craft
               </SidebarTab>

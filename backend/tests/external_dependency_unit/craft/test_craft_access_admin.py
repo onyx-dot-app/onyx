@@ -16,6 +16,7 @@ from onyx.server.features.build.api import require_onyx_craft_enabled
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.manage.models import UserCraftAccessUpdateRequest
 from onyx.server.manage.users import set_user_craft_access
+from onyx.server.settings.models import Tier
 from tests.external_dependency_unit.craft.db_helpers import make_user
 
 
@@ -27,6 +28,7 @@ def _enable_craft_deployment(monkeypatch: pytest.MonkeyPatch) -> None:
         "get_default_feature_flag_provider",
         lambda: NoOpFeatureFlagProvider(),
     )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.BUSINESS)
 
 
 def test_admin_batch_disable_and_reset_to_default(
