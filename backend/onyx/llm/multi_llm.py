@@ -284,7 +284,7 @@ def _event_with_request_params(
     )
 
 
-class _GenerationSignal(CancellationSignal):
+class _DeadlineCancellationSignal(CancellationSignal):
     def __init__(self, parent: CancellationSignal, timeout: float) -> None:
         super().__init__()
         self.parent = parent
@@ -305,7 +305,7 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
             parent.check()
             yield parent
         return
-    signal = _GenerationSignal(parent, context.total_timeout_s)
+    signal = _DeadlineCancellationSignal(parent, context.total_timeout_s)
     with (
         parent.on_cancel(signal.cancel),
         cancellation_scope(signal),
