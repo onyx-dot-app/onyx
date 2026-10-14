@@ -2585,7 +2585,8 @@
           "less": "Less",
           "unknownDocument": "Unknown document",
           "empty": "No open document errors",
-          "loadError": "Couldn't load the failed documents."
+          "loadError": "Couldn't load the failed documents.",
+          "open": "Open the document"
         },
         "trace": {
           "runId": "Run ID: {id}",

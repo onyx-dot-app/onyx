@@ -2585,7 +2585,8 @@
           "less": "Weniger",
           "unknownDocument": "Unbekanntes Dokument",
           "empty": "Keine offenen Dokumentfehler",
-          "loadError": "Die fehlgeschlagenen Dokumente konnten nicht geladen werden."
+          "loadError": "Die fehlgeschlagenen Dokumente konnten nicht geladen werden.",
+          "open": "Dokument öffnen"
         },
         "trace": {
           "runId": "Lauf-ID: {id}",

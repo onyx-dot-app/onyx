@@ -2585,7 +2585,8 @@
           "less": "Menos",
           "unknownDocument": "Documento desconocido",
           "empty": "Sin errores de documentos abiertos",
-          "loadError": "No se pudieron cargar los documentos fallidos."
+          "loadError": "No se pudieron cargar los documentos fallidos.",
+          "open": "Abrir el documento"
         },
         "trace": {
           "runId": "ID de ejecución: {id}",

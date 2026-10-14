@@ -2585,7 +2585,8 @@
           "less": "收起",
           "unknownDocument": "未知文档",
           "empty": "没有未解决的文档错误",
-          "loadError": "无法加载失败的文档。"
+          "loadError": "无法加载失败的文档。",
+          "open": "打开文档"
         },
         "trace": {
           "runId": "运行 ID：{id}",

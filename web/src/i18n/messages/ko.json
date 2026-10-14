@@ -2585,7 +2585,8 @@
           "less": "접기",
           "unknownDocument": "알 수 없는 문서",
           "empty": "미해결 문서 오류가 없습니다",
-          "loadError": "실패한 문서를 불러올 수 없습니다."
+          "loadError": "실패한 문서를 불러올 수 없습니다.",
+          "open": "문서 열기"
         },
         "trace": {
           "runId": "실행 ID: {id}",

@@ -15,7 +15,7 @@ import {
 import { useDebouncedValue, useOverflow } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { LineLoader } from "@opal/loaders";
-import { SvgCheckAll, SvgCheckSquare } from "@opal/icons";
+import { SvgCheckAll, SvgCheckSquare, SvgExternalLink } from "@opal/icons";
 import type {
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
@@ -71,7 +71,14 @@ function FailedDocRow({
         <Text font="secondary-mono" color="text-03">
           {format.dateTime(new Date(error.time_created), RUN_TIME_FORMAT)}
         </Text>
-        {error.document_link === null ? (
+        {/* The label truncates in its column, and the link rides on an icon beside it. */}
+        <Section
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="center"
+          gap={0.5}
+          height="fit"
+        >
           <OverflowText
             font="secondary-body"
             color="text-03"
@@ -79,11 +86,18 @@ function FailedDocRow({
           >
             {label}
           </OverflowText>
-        ) : (
-          <LinkButton href={error.document_link} target="_blank">
-            {label}
-          </LinkButton>
-        )}
+          {error.document_link !== null && (
+            <Button
+              icon={SvgExternalLink}
+              prominence="tertiary"
+              size="xs"
+              href={error.document_link}
+              target="_blank"
+              aria-label={t("open")}
+              tooltip={t("open")}
+            />
+          )}
+        </Section>
       </Section>
       <Section
         alignItems="start"
