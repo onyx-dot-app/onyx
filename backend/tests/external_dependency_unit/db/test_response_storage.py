@@ -59,6 +59,7 @@ from onyx.db.chat_response import (
     read_response__no_commit,
     read_response_steps,
     save_chat_response_to_db,
+    save_chat_turn,
     save_response_content,
     save_response_record__no_commit,
     write_response_items,
@@ -106,6 +107,7 @@ from onyx.tools.models import (
     MemoryUpdated,
     PythonExecutionDelta,
     PythonExecutionFile,
+    ToolCallInfo,
 )
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
     CodingAgentTool,
@@ -267,6 +269,71 @@ def _child_record(
     )
     parent.child_runs.append(child)
     return child
+
+
+def test_thinking_preserves_signed_content_and_final_display_text(
+    db_session: Session, conversation: ChatSession, tool_record: Tool
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    pre_tool = ThinkingContent(
+        text="Before tools",
+        blocks=[ThinkingBlock(thinking="Before tools", signature="tool-signature")],
+    )
+    final = ThinkingContent(
+        text="Before answer",
+        blocks=[ThinkingBlock(thinking="Before answer", signature="answer-signature")],
+    )
+    calls = [
+        ToolCall(id=name, name="lookup", arguments={}) for name in ("first", "second")
+    ]
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(content=[pre_tool, *calls]),
+            *[
+                ToolResultMessage(
+                    tool_call_id=call.id, tool_name=call.name, content="Result"
+                )
+                for call in calls
+            ],
+            AssistantMessage(content=[final, TextContent(text="Raw answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    save_chat_turn(
+        message_text="Formatted answer",
+        reasoning_tokens=final.text,
+        tool_calls=[
+            ToolCallInfo(
+                message_id=f"{record.run_id}:0",
+                parent_tool_call_id=None,
+                turn_index=0,
+                tab_index=index,
+                tool_name=call.name,
+                tool_call_id=call.id,
+                tool_id=tool_record.id,
+                reasoning_tokens=pre_tool.text,
+                tool_call_arguments={},
+                tool_call_response="Result",
+            )
+            for index, call in enumerate(calls)
+        ],
+        citation_to_doc={},
+        all_search_docs={},
+        db_session=db_session,
+        assistant_message=response,
+        response_record=record,
+    )
+    db_session.expire_all()
+
+    assert response.message == "Formatted answer"
+    assert response.reasoning_tokens == final.text
+    assert response.tool_calls is not None
+    assert len(response.tool_calls) == 2
+    steps = read_response_steps(response)
+    assert steps[0].message.content[0] == pre_tool
+    assert steps[1].message.content == [final, TextContent(text="Raw answer")]
 
 
 def test_response_tools_flush_together_and_keep_result_links(
