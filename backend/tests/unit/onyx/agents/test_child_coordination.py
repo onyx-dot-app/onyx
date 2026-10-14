@@ -1155,9 +1155,7 @@ def test_cold_parent_restores_archived_handled_child_failure() -> None:
     )
 
     codec = CheckpointStorage({})
-    binding = CheckpointBinding(
-        tenant_id="tenant", branch_id="branch", context_version="1"
-    )
+    binding = CheckpointBinding(tenant_id="tenant", branch_id="branch")
 
     def save_original() -> tuple[str, str, AgentInfo]:
         children: list[SpawnResult] = []
@@ -2123,9 +2121,7 @@ def test_child_deadline_survives_checkpoint_and_ownership_transfer(
         storage.save(
             captured.run_state,
             captured.agent_state,
-            CheckpointBinding(
-                tenant_id="tenant", branch_id="branch", context_version="v1"
-            ),
+            CheckpointBinding(tenant_id="tenant", branch_id="branch"),
         )
     )
     assert restored.run_state.progress is not None

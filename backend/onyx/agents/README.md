@@ -64,7 +64,7 @@ Cancellation preserves accepted partial output; `snapshot()` copies that state f
 Message events carry an explicit message ID. Updates reuse the LLM content delta types.
 Provider retries happen within this message lifecycle; they do not start another agent message.
 Chat converts these events into frontend packets for text, reasoning, tool activity, and response completion.
-It saves the response under a chat message ID. Message IDs connect SDK events to saved response messages.
+It saves the response under a chat message ID. Message IDs connect SDK events to saved response items.
 
 ## Quick start
 
@@ -428,6 +428,8 @@ The live coding task retains its sandbox until its workers finish after completi
 Chat saves messages at execution boundaries and adds display data when the response finishes.
 Tool-call row identities remain stable, including links from child responses.
 A safely paused response also needs supplemental execution progress in `ChatResponseCheckpoint`.
+Its `ownership_version` guards checkpoint ownership and changes on publish or claim.
+The runtime revision in the saved payload separately tracks execution changes.
 
 If child cancellation cannot settle within its bound, the parent records an execution failure
 and retains captured partial child content. Thread cleanup continues under the existing idle boundary.
@@ -437,9 +439,10 @@ and references the parent response that created it. The root controls access, sh
 The runtime agent ID identifies this session.
 
 An assistant `chat_message` owns one complete or partial response, its outcome, and feedback.
-Its user-message parent owns the input. Ordered `chat_response_message` rows store shared assistant messages or reference tool results.
-Assistant rows retain message identity, content, operation status, and provider metadata, including empty messages.
+Its user-message parent owns the input. Ordered `chat_response_item` rows store shared assistant messages or reference tool results.
+Assistant rows retain message identity, content, generation status, and provider metadata, including empty messages.
 `tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
+Argument parsing details remain in the saved assistant message; tool rows do not store another copy.
 
 The runtime selects final-answer content when its completion decision finishes execution.
 The application derives formatted answer text for existing clients from the selected assistant message.
@@ -513,7 +516,7 @@ Its `build_chat_prompt` function selects chat instructions and reminders before 
 `chat/prompt_formatting.py` resolves attachments, reminder tags, and cache markers for model input.
 Chat persistence receives the tool IDs and citation metadata needed to save their output.
 
-Chat keeps accepted output in `ChatMessage`, `ChatResponseMessage`, and `ToolCall`.
+Chat keeps accepted output in `ChatMessage`, `ChatResponseItem`, and `ToolCall`.
 A response's `run_id` connects live SDK handles to that same history.
 Chat uses one execution worker per active agent, one turn control worker, and one event-delivery worker.
 The execution worker consumes model streams directly.
