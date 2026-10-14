@@ -20,7 +20,7 @@ import {
   SvgActivity,
   SvgCheckCircle,
   SvgClock,
-  SvgPlayCircle,
+  SvgSlowMotion,
   SvgXOctagon,
 } from "@opal/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -244,7 +244,7 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
             <Dropdown>
               <Dropdown.Trigger asChild>
                 <FilterButton
-                  icon={SvgPlayCircle}
+                  icon={SvgSlowMotion}
                   active={kind !== null}
                   onClear={() => pickKind(null)}
                 >

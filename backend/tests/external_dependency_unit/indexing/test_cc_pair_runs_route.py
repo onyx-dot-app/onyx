@@ -530,4 +530,6 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
     )
 
     assert sum(response.docs_indexed) == 100 + round(100 * 11 / 12)
-    assert [run.started for run in response.runs] == [recent.time_started]
+    assert [(run.started, run.ended) for run in response.runs] == [
+        (recent.time_started, recent.time_finished)
+    ]

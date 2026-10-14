@@ -2379,7 +2379,8 @@
           "required_checks_failed": "Held: required checks failed",
           "start": "Start Indexing",
           "released": "Indexing started",
-          "releaseFailed": "Couldn't start indexing"
+          "releaseFailed": "Couldn't start indexing",
+          "viewChecks": "View connector checks"
         }
       },
       "toasts": {
@@ -2432,14 +2433,32 @@
             "channel": "{count, plural, one {Channel} other {Channels}}",
             "mailbox": "{count, plural, one {Mailbox} other {Mailboxes}}"
           },
-          "docs": "{count, plural, one {# doc} other {# docs}}",
+          "counts": {
+            "folder": "{count, plural, one {# folder} other {# folders}}",
+            "source": "{count, plural, one {# source} other {# sources}}",
+            "stub": "{count, plural, one {# node} other {# nodes}}",
+            "shared_drive": "{count, plural, one {# shared drive} other {# shared drives}}",
+            "my_drive": "{count, plural, one {# My Drive} other {# My Drives}}",
+            "space": "{count, plural, one {# space} other {# spaces}}",
+            "page": "{count, plural, one {# page} other {# pages}}",
+            "project": "{count, plural, one {# project} other {# projects}}",
+            "database": "{count, plural, one {# database} other {# databases}}",
+            "workspace": "{count, plural, one {# workspace} other {# workspaces}}",
+            "site": "{count, plural, one {# site} other {# sites}}",
+            "drive": "{count, plural, one {# document library} other {# document libraries}}",
+            "channel": "{count, plural, one {# channel} other {# channels}}",
+            "mailbox": "{count, plural, one {# mailbox} other {# mailboxes}}"
+          },
           "notIndexed": "Not indexed",
           "other": "Other documents",
           "loadError": "Couldn't load the document breakdown.",
           "open": "Open in the source",
           "empty": "No documents indexed yet.",
-          "unavailable": "Available after the first successful run."
-        }
+          "unavailable": "Available after the first successful run.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {doc} other {docs}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "Sharing Settings",
@@ -2514,7 +2533,7 @@
           "skippedChecks": "{count, plural, one {# check skipped} other {# checks skipped}}"
         },
         "search": {
-          "placeholder": "Search run errors..."
+          "placeholder": "Search indexing runs..."
         },
         "window": {
           "label": "Time range",
@@ -2553,8 +2572,9 @@
           "cancelFailed": "Couldn't cancel the run. Try again."
         },
         "checkResults": {
-          "title": "Connector Checks ({count})",
-          "close": "Close"
+          "title": "Connector Checks",
+          "close": "Close",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2668,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "Stage Details",
-        "calls": "Calls",
+        "batches": "Batches",
         "averageTime": "Average Time",
         "maxTime": "Max Time",
         "uneven": {
@@ -3148,7 +3168,7 @@
         },
         "checkFrequency": {
           "title": "Run Checks Every",
-          "description": "Re-run the connector checks on this schedule."
+          "description": "Check connection for capabilities and health."
         }
       },
       "settings": {

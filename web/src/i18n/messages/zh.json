@@ -2379,7 +2379,8 @@
           "required_checks_failed": "已暂停：必需的检查失败",
           "start": "开始索引",
           "released": "索引已开始",
-          "releaseFailed": "无法开始索引"
+          "releaseFailed": "无法开始索引",
+          "viewChecks": "查看连接器检查"
         }
       },
       "toasts": {
@@ -2432,14 +2433,32 @@
             "channel": "{count, plural, other {频道}}",
             "mailbox": "{count, plural, other {邮箱}}"
           },
-          "docs": "{count, plural, other {# 个文档}}",
+          "counts": {
+            "folder": "{count, plural, other {# 文件夹}}",
+            "source": "{count, plural, other {# 来源}}",
+            "stub": "{count, plural, other {# 节点}}",
+            "shared_drive": "{count, plural, other {# 共享云端硬盘}}",
+            "my_drive": "{count, plural, other {# 我的云端硬盘}}",
+            "space": "{count, plural, other {# 空间}}",
+            "page": "{count, plural, other {# 页面}}",
+            "project": "{count, plural, other {# 项目}}",
+            "database": "{count, plural, other {# 数据库}}",
+            "workspace": "{count, plural, other {# 工作区}}",
+            "site": "{count, plural, other {# 站点}}",
+            "drive": "{count, plural, other {# 文档资料库}}",
+            "channel": "{count, plural, other {# 频道}}",
+            "mailbox": "{count, plural, other {# 邮箱}}"
+          },
           "notIndexed": "未索引",
           "other": "其他文档",
           "loadError": "无法加载文档分布。",
           "open": "在来源中打开",
           "empty": "尚未索引任何文档。",
-          "unavailable": "首次成功运行后可用。"
-        }
+          "unavailable": "首次成功运行后可用。",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, other {个文档}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "共享设置",
@@ -2514,7 +2533,7 @@
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}"
         },
         "search": {
-          "placeholder": "搜索运行错误..."
+          "placeholder": "搜索索引运行..."
         },
         "window": {
           "label": "时间范围",
@@ -2553,8 +2572,9 @@
           "cancelFailed": "无法取消运行，请重试。"
         },
         "checkResults": {
-          "title": "连接器检查 ({count})",
-          "close": "关闭"
+          "title": "连接器检查",
+          "close": "关闭",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2668,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "阶段详情",
-        "calls": "调用次数",
+        "batches": "批次",
         "averageTime": "平均时间",
         "maxTime": "最长时间",
         "uneven": {
@@ -3148,7 +3168,7 @@
         },
         "checkFrequency": {
           "title": "检查运行间隔",
-          "description": "按此计划重新运行连接器检查。"
+          "description": "检查连接的功能与健康状况。"
         }
       },
       "settings": {

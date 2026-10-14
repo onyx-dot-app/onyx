@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Divider, OverflowText, Text } from "@opal/components";
+import { Button, OverflowText, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -36,6 +36,13 @@ export function buildConfigEntries(
   return config;
 }
 
+/** One setting: its config key, the label to show for it, and its stored value. */
+export interface ConfigRow {
+  key: string;
+  label: string | RichStr;
+  value: ConfigValue;
+}
+
 interface ConfigItemProps {
   label: string | RichStr;
   value: ConfigValue;
@@ -53,7 +60,12 @@ function ConfigItem({ label, value }: ConfigItemProps) {
         ? value
         : value.slice(0, FOLDED_LIST_LENGTH);
       return (
-        <Text font="secondary-body" color="text-03">
+        <Text
+          as="p"
+          font="main-ui-body"
+          color="text-04"
+          textPosition="text-end"
+        >
           {displayedItems.map((item) => convertObjectToString(item)).join(", ")}
         </Text>
       );
@@ -62,7 +74,7 @@ function ConfigItem({ label, value }: ConfigItemProps) {
       return (
         <Section gap={1} alignItems="end" height="fit">
           {Object.entries(value).map(([key, val]) => (
-            <Text key={key} font="secondary-body" color="text-03">
+            <Text key={key} font="main-ui-body" color="text-04">
               {`${key}: ${convertObjectToString(val) ?? ""}`}
             </Text>
           ))}
@@ -71,7 +83,7 @@ function ConfigItem({ label, value }: ConfigItemProps) {
     }
     if (typeof value === "boolean") {
       return (
-        <Text font="secondary-body" color="text-03">
+        <Text font="main-ui-body" color="text-04">
           {value ? t("configItem.booleanTrue") : t("configItem.booleanFalse")}
         </Text>
       );
@@ -79,8 +91,8 @@ function ConfigItem({ label, value }: ConfigItemProps) {
     return (
       <OverflowText
         as="p"
-        font="secondary-body"
-        color="text-03"
+        font="main-ui-body"
+        color="text-04"
         textPosition="text-end"
       >
         {convertObjectToString(value) || "-"}
@@ -92,12 +104,12 @@ function ConfigItem({ label, value }: ConfigItemProps) {
     <Section
       flexDirection="row"
       justifyContent="between"
-      alignItems="center"
-      gap={4}
+      alignItems="start"
+      gap={2}
       height="fit"
     >
-      <Section alignItems="start" width="fit" height="fit">
-        <Text font="main-ui-body" color="text-04">
+      <Section alignItems="start" height="fit" className="min-w-0 flex-1">
+        <Text font="main-ui-action" color="text-03">
           {label}
         </Text>
       </Section>
@@ -105,14 +117,16 @@ function ConfigItem({ label, value }: ConfigItemProps) {
         flexDirection="row"
         justifyContent="end"
         alignItems="center"
-        gap={2}
+        gap={1}
+        width="fit"
         height="fit"
-        className="min-w-0"
+        className="min-w-0 max-w-60"
       >
         {renderValue()}
         {isExpandable && (
           <Button
             prominence="tertiary"
+            size="xs"
             icon={isExpanded ? SvgChevronUp : SvgChevronDown}
             onClick={() => setIsExpanded(!isExpanded)}
           >
@@ -127,24 +141,15 @@ function ConfigItem({ label, value }: ConfigItemProps) {
 }
 
 export interface ConfigDisplayProps {
-  configEntries: ConfigEntries;
+  rows: ConfigRow[];
 }
 
-/** The connector's settings as label and value rows. */
-export function ConfigDisplay({ configEntries }: ConfigDisplayProps) {
-  const entries = Object.entries(configEntries);
-
+/** Settings as label and value rows. */
+export function ConfigDisplay({ rows }: ConfigDisplayProps) {
   return (
-    <Section gap={0} height="fit" alignItems="stretch">
-      {entries.map(([key, value], index) => (
-        <Section key={key} gap={0} height="fit" alignItems="stretch">
-          <Section padding={2} height="fit" alignItems="stretch">
-            <ConfigItem label={key} value={value} />
-          </Section>
-          {index < entries.length - 1 && (
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-          )}
-        </Section>
+    <Section gap={3} height="fit" alignItems="stretch">
+      {rows.map((row) => (
+        <ConfigItem key={row.key} label={row.label} value={row.value} />
       ))}
     </Section>
   );

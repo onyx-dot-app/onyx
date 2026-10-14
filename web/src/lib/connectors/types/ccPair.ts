@@ -251,6 +251,8 @@ export interface CCPairHierarchyBreakdown {
   nodes_by_type: Partial<Record<HierarchyNodeType, HierarchyBreakdownEntry[]>>;
   /** Documents in no listed node's subtree. Rows can overlap (a page inside a listed space), so rows plus this can exceed the pair's total. */
   other_doc_count: number;
+  /** Config fields whose values the rows list, so the page shows no row for them. */
+  config_fields: string[];
 }
 
 /** Mirrors `CCPairRunErrors`: runs with open document errors, or with all of them resolved. */
@@ -360,5 +362,6 @@ export interface CCPairThroughputResponse {
   window_start: string;
   window_end: string;
   docs_indexed: number[];
-  runs: { started: string; status: ValidStatuses }[];
+  /** `ended` is null while the run is still going. */
+  runs: { started: string; ended: string | null; status: ValidStatuses }[];
 }

@@ -2379,7 +2379,8 @@
           "required_checks_failed": "En attente : des vérifications obligatoires ont échoué",
           "start": "Démarrer l'indexation",
           "released": "Indexation démarrée",
-          "releaseFailed": "Impossible de démarrer l'indexation"
+          "releaseFailed": "Impossible de démarrer l'indexation",
+          "viewChecks": "Voir les vérifications du connecteur"
         }
       },
       "toasts": {
@@ -2432,14 +2433,32 @@
             "channel": "{count, plural, one {Canal} other {Canaux}}",
             "mailbox": "{count, plural, one {Boîte aux lettres} other {Boîtes aux lettres}}"
           },
-          "docs": "{count, plural, one {# document} other {# documents}}",
+          "counts": {
+            "folder": "{count, plural, one {# dossier} other {# dossiers}}",
+            "source": "{count, plural, one {# source} other {# sources}}",
+            "stub": "{count, plural, one {# nœud} other {# nœuds}}",
+            "shared_drive": "{count, plural, one {# Drive partagé} other {# Drives partagés}}",
+            "my_drive": "{count, plural, one {# Mon Drive} other {# Mes Drives}}",
+            "space": "{count, plural, one {# espace} other {# espaces}}",
+            "page": "{count, plural, one {# page} other {# pages}}",
+            "project": "{count, plural, one {# projet} other {# projets}}",
+            "database": "{count, plural, one {# base de données} other {# bases de données}}",
+            "workspace": "{count, plural, one {# espace de travail} other {# espaces de travail}}",
+            "site": "{count, plural, one {# site} other {# sites}}",
+            "drive": "{count, plural, one {# bibliothèque de documents} other {# bibliothèques de documents}}",
+            "channel": "{count, plural, one {# canal} other {# canaux}}",
+            "mailbox": "{count, plural, one {# boîte aux lettres} other {# boîtes aux lettres}}"
+          },
           "notIndexed": "Non indexé",
           "other": "Autres documents",
           "loadError": "Impossible de charger la répartition des documents.",
           "open": "Ouvrir dans la source",
           "empty": "Aucun document indexé pour le moment.",
-          "unavailable": "Disponible après la première exécution réussie."
-        }
+          "unavailable": "Disponible après la première exécution réussie.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {document} other {documents}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "Paramètres de partage",
@@ -2514,7 +2533,7 @@
           "skippedChecks": "{count, plural, one {# vérification ignorée} other {# vérifications ignorées}}"
         },
         "search": {
-          "placeholder": "Rechercher dans les erreurs d'exécution..."
+          "placeholder": "Rechercher des exécutions d'indexation..."
         },
         "window": {
           "label": "Période",
@@ -2553,8 +2572,9 @@
           "cancelFailed": "Impossible d'annuler l'exécution. Réessayez."
         },
         "checkResults": {
-          "title": "Vérifications du connecteur ({count})",
-          "close": "Fermer"
+          "title": "Vérifications du connecteur",
+          "close": "Fermer",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2668,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "Détails des étapes",
-        "calls": "Appels",
+        "batches": "Lots",
         "averageTime": "Temps moyen",
         "maxTime": "Temps max",
         "uneven": {
@@ -3148,7 +3168,7 @@
         },
         "checkFrequency": {
           "title": "Exécuter les vérifications toutes les",
-          "description": "Réexécute les vérifications du connecteur selon ce calendrier."
+          "description": "Vérifie la connexion, ses capacités et son état."
         }
       },
       "settings": {

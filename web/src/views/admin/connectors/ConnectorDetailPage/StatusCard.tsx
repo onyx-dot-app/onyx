@@ -13,7 +13,7 @@ import {
   Text,
 } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { SvgClock, SvgPlayCircle } from "@opal/icons";
+import { SvgClock, SvgListCheck, SvgPlayCircle } from "@opal/icons";
 import { CardLoader } from "@opal/loaders";
 import { timeAgo } from "@opal/time";
 import {
@@ -74,10 +74,16 @@ export interface StatusCardProps {
   ccPair: CCPairFullInfo;
   /** Shows Start Indexing while the pair's failed checks hold its first run. */
   canOperate: boolean;
+  /** Opens the checks card, from the checks icon a held pair shows in place of its stages. */
+  onViewChecks: () => void;
 }
 
 /** The pair at a glance: status, latest and total documents, its last run, and documents indexed over time. */
-export default function StatusCard({ ccPair, canOperate }: StatusCardProps) {
+export default function StatusCard({
+  ccPair,
+  canOperate,
+  onViewChecks,
+}: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
   const tWindow = useTranslations("admin.connector.runs.window");
@@ -160,7 +166,18 @@ export default function StatusCard({ ccPair, canOperate }: StatusCardProps) {
                     title={tBadges(status.labelKey)}
                     color={status.color}
                   />
-                  {latestIndexAttempt !== undefined && <StageDetailsTrigger />}
+                  {hold !== null ? (
+                    <Button
+                      icon={SvgListCheck}
+                      prominence="tertiary"
+                      size="xs"
+                      tooltip={t("hold.viewChecks")}
+                      aria-label={t("hold.viewChecks")}
+                      onClick={onViewChecks}
+                    />
+                  ) : (
+                    latestIndexAttempt !== undefined && <StageDetailsTrigger />
+                  )}
                 </Section>
                 <Text font="secondary-body" color="text-03">
                   {t("title")}
@@ -246,7 +263,13 @@ export default function StatusCard({ ccPair, canOperate }: StatusCardProps) {
               )}
             </Section>
             {chart && (
-              <Section padding={2} alignItems="stretch" height="fit">
+              // The chart sits 12px in from the card's sides and 8px from the row above.
+              <Section
+                padding={2}
+                alignItems="stretch"
+                height="fit"
+                className="mx-1"
+              >
                 <ThroughputChart ccPairId={ccPair.id} range={range} />
               </Section>
             )}

@@ -2379,7 +2379,8 @@
           "required_checks_failed": "متوقف: فشلت فحوصات مطلوبة",
           "start": "بدء الفهرسة",
           "released": "بدأت الفهرسة",
-          "releaseFailed": "تعذر بدء الفهرسة"
+          "releaseFailed": "تعذر بدء الفهرسة",
+          "viewChecks": "عرض فحوصات الموصل"
         }
       },
       "toasts": {
@@ -2432,14 +2433,32 @@
             "channel": "{count, plural, one {قناة} other {قنوات}}",
             "mailbox": "{count, plural, one {صندوق بريد} other {صناديق بريد}}"
           },
-          "docs": "{count, plural, zero {لا مستندات} one {مستند واحد} two {مستندان} few {# مستندات} many {# مستندًا} other {# مستند}}",
+          "counts": {
+            "folder": "{count, plural, one {# مجلد} other {# مجلدات}}",
+            "source": "{count, plural, one {# مصدر} other {# مصادر}}",
+            "stub": "{count, plural, one {# عقدة} other {# عقد}}",
+            "shared_drive": "{count, plural, one {# مساحة تخزين مشتركة} other {# مساحات تخزين مشتركة}}",
+            "my_drive": "{count, plural, one {# ملفاتي} other {# ملفاتي}}",
+            "space": "{count, plural, one {# مساحة} other {# مساحات}}",
+            "page": "{count, plural, one {# صفحة} other {# صفحات}}",
+            "project": "{count, plural, one {# مشروع} other {# مشاريع}}",
+            "database": "{count, plural, one {# قاعدة بيانات} other {# قواعد بيانات}}",
+            "workspace": "{count, plural, one {# مساحة عمل} other {# مساحات عمل}}",
+            "site": "{count, plural, one {# موقع} other {# مواقع}}",
+            "drive": "{count, plural, one {# مكتبة مستندات} other {# مكتبات مستندات}}",
+            "channel": "{count, plural, one {# قناة} other {# قنوات}}",
+            "mailbox": "{count, plural, one {# صندوق بريد} other {# صناديق بريد}}"
+          },
           "notIndexed": "غير مفهرس",
           "other": "مستندات أخرى",
           "loadError": "تعذر تحميل توزيع المستندات.",
           "open": "فتح في المصدر",
           "empty": "لم تتم فهرسة أي مستندات بعد.",
-          "unavailable": "متاح بعد أول عملية فهرسة ناجحة."
-        }
+          "unavailable": "متاح بعد أول عملية فهرسة ناجحة.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {مستند} two {مستندان} few {مستندات} many {مستندًا} other {مستند}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "إعدادات المشاركة",
@@ -2514,7 +2533,7 @@
           "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}"
         },
         "search": {
-          "placeholder": "ابحث في أخطاء التشغيل..."
+          "placeholder": "البحث في عمليات الفهرسة..."
         },
         "window": {
           "label": "النطاق الزمني",
@@ -2553,8 +2572,9 @@
           "cancelFailed": "تعذر إلغاء التشغيل. حاول مرة أخرى."
         },
         "checkResults": {
-          "title": "فحوصات الموصّل ({count})",
-          "close": "إغلاق"
+          "title": "فحوصات الموصّل",
+          "close": "إغلاق",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2668,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "تفاصيل المراحل",
-        "calls": "الاستدعاءات",
+        "batches": "الدفعات",
         "averageTime": "متوسط الوقت",
         "maxTime": "أقصى وقت",
         "uneven": {
@@ -3148,7 +3168,7 @@
         },
         "checkFrequency": {
           "title": "تشغيل الفحوصات كل",
-          "description": "إعادة تشغيل فحوصات الموصّل وفق هذا الجدول."
+          "description": "يتحقق من الاتصال وقدراته وسلامته."
         }
       },
       "settings": {

@@ -17,7 +17,12 @@ import {
 import { useDebouncedValue } from "@opal/hooks";
 import { IllustrationContent, Section, toast } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
-import { SvgActivity, SvgAlertTriangle, SvgEye, SvgXCircle } from "@opal/icons";
+import {
+  SvgActivity,
+  SvgAlertTriangle,
+  SvgEyeClosed,
+  SvgXCircle,
+} from "@opal/icons";
 import {
   useActivityGroup,
   type ActivityGroupState,
@@ -259,7 +264,7 @@ export default function ActivityPanel({
                 />
               </Dropdown>
               <SelectButton
-                icon={SvgEye}
+                icon={SvgEyeClosed}
                 state={resolved ? "selected" : "empty"}
                 aria-pressed={resolved}
                 onClick={() => setResolved((current) => !current)}

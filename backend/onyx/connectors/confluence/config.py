@@ -174,11 +174,13 @@ class ConfluenceConnectorConfig(ConfluenceCredentialBinding, ConnectorConfig):
                 node_type=HierarchyNodeType.SPACE,
                 expected_node_keys=configured_space,
                 case_insensitive_keys=True,
+                config_field="space",
             ),
             HierarchyBreakdownSection(
                 node_type=HierarchyNodeType.PAGE,
                 expected_node_keys=configured_page,
                 include_unexpected_nodes=False,
+                config_field="page_id",
                 # A page gets a hierarchy node only when it has child pages or
                 # attachments. A leaf page is only a document.
                 nodes_can_be_documents=True,

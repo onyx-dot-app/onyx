@@ -3,6 +3,7 @@
 import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
+  Divider,
   IconTooltip,
   Popover,
   ShadowDiv,
@@ -12,7 +13,7 @@ import { Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
 import { formatDurationMs } from "@opal/time";
-import { SvgAlertTriangle, SvgBarChartSmall, SvgX } from "@opal/icons";
+import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
 import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
 import type { IndexAttemptStageMetric } from "@/lib/types";
 import {
@@ -27,16 +28,16 @@ const HIDDEN_STAGES = new Set<IndexAttemptStageMetric["stage"]>([
   "BATCH_UNACCOUNTED",
 ]);
 
+// Column widths from the mock, in rem: the stage name, the batch count, the
+// average with its spread, the bar and the max. The actions take the rest.
+const NAME_WIDTH = 9.25;
+const BATCHES_WIDTH = 3.5;
+const AVERAGE_WIDTH = 8.5;
+const BAR_WIDTH = 5.75;
+const MAX_WIDTH = 4;
+
 function formatMs(ms: number | null | undefined): string {
   return ms == null ? "-" : formatDurationMs(ms);
-}
-
-function formatAverage(stage: IndexAttemptStageMetric | undefined): string {
-  if (stage?.avg_duration_ms == null) return "-";
-  const avg = formatDurationMs(stage.avg_duration_ms);
-  return stage.std_dev_duration_ms == null
-    ? avg
-    : `${avg} ± ${formatDurationMs(stage.std_dev_duration_ms)}`;
 }
 
 function percent(ms: number, scale: number): string {
@@ -49,7 +50,7 @@ export function StageDetailsTrigger() {
   return (
     <Popover.Trigger asChild>
       <Button
-        icon={SvgBarChartSmall}
+        icon={SvgStackLine}
         prominence="tertiary"
         size="xs"
         tooltip={t("actions.stages")}
@@ -59,21 +60,69 @@ export function StageDetailsTrigger() {
   );
 }
 
-interface HeaderStatProps {
-  label: string | RichStr;
-  value: string | RichStr;
+interface CellProps {
+  width: number;
   align?: "start" | "end";
+  children: React.ReactNode;
 }
-function HeaderStat({ label, value, align = "start" }: HeaderStatProps) {
+/** One fixed-width column of a row, padded as the mock's cells are. */
+function Cell({ width, align = "start", children }: CellProps) {
   return (
-    <Section alignItems={align} gap={1} padding={1} width="auto" height="fit">
-      <Text font="secondary-body" color="text-03">
-        {label}
-      </Text>
-      <Text font="secondary-action" color="text-04">
-        {value}
-      </Text>
+    <Section
+      alignItems={align}
+      justifyContent="start"
+      gap={1}
+      padding={1}
+      width={width}
+      height="fit"
+      className="shrink-0"
+    >
+      {children}
     </Section>
+  );
+}
+
+interface AverageProps {
+  stage: IndexAttemptStageMetric | undefined;
+}
+/** The average in emphasis with its spread muted beside it. */
+function Average({ stage }: AverageProps) {
+  if (stage?.avg_duration_ms == null) {
+    return (
+      <Text font="secondary-mono" color="text-03">
+        -
+      </Text>
+    );
+  }
+  return (
+    <Section
+      flexDirection="row"
+      alignItems="center"
+      justifyContent="start"
+      gap={1}
+      width="fit"
+      height="fit"
+    >
+      <Text font="secondary-mono-label" color="text-04">
+        {formatDurationMs(stage.avg_duration_ms)}
+      </Text>
+      {stage.std_dev_duration_ms !== null && (
+        <Text font="secondary-mono" color="text-03">
+          {`± ${formatDurationMs(stage.std_dev_duration_ms)}`}
+        </Text>
+      )}
+    </Section>
+  );
+}
+
+interface ColumnTitleProps {
+  children: string | RichStr;
+}
+function ColumnTitle({ children }: ColumnTitleProps) {
+  return (
+    <Text font="secondary-body" color="text-03">
+      {children}
+    </Text>
   );
 }
 
@@ -102,38 +151,23 @@ function StageRow({ stage, scale }: StageRowProps) {
       gap={1}
       height="fit"
     >
-      <Section padding={1} width={9.25} height="fit" className="shrink-0">
-        <Text font="secondary-body" color="text-04">
+      <Cell width={NAME_WIDTH}>
+        <Text font="secondary-action" color="text-03">
           {t(STAGE_LABEL_KEYS[stage.stage])}
         </Text>
-      </Section>
-      <Section
-        alignItems="end"
-        padding={1}
-        width={3.5}
-        height="fit"
-        className="shrink-0"
-      >
-        <Text font="secondary-mono" color="text-04">
+      </Cell>
+      <Cell width={BATCHES_WIDTH} align="end">
+        <Text font="secondary-mono" color="text-03">
           {format.number(stage.event_count)}
         </Text>
-      </Section>
-      <Section padding={1} width={8.5} height="fit" className="shrink-0">
-        <Text font="secondary-mono" color="text-04">
-          {formatAverage(stage)}
-        </Text>
-      </Section>
-      <Section
-        flexDirection="row"
-        alignItems="center"
-        gap={1}
-        padding={1}
-        height="fit"
-        className="min-w-0 flex-1"
-      >
-        <div className="relative h-1 w-full rounded-full bg-background-tint-01">
+      </Cell>
+      <Cell width={AVERAGE_WIDTH}>
+        <Average stage={stage} />
+      </Cell>
+      <Cell width={BAR_WIDTH}>
+        <div className="relative my-1.5 h-1 w-full rounded-sm bg-background-tint-01">
           <div
-            className="absolute top-0 h-1 rounded-full bg-theme-blue-02"
+            className="absolute top-0 h-1 rounded-sm bg-theme-blue-02"
             style={{
               insetInlineStart: percent(min, scale),
               width: percent(max - min, scale),
@@ -141,31 +175,26 @@ function StageRow({ stage, scale }: StageRowProps) {
           />
           {stage.avg_duration_ms !== null && (
             <div
-              className="absolute top-0 h-1 w-1 -ms-0.5 rounded-full bg-theme-blue-05"
+              className="absolute top-0 h-1 w-1 -ms-0.5 rounded-sm bg-theme-blue-05"
               style={{
                 insetInlineStart: percent(stage.avg_duration_ms, scale),
               }}
             />
           )}
         </div>
-      </Section>
-      <Section
-        alignItems="end"
-        padding={1}
-        width={4}
-        height="fit"
-        className="shrink-0"
-      >
-        <Text font="secondary-mono" color="text-04">
+      </Cell>
+      <Cell width={MAX_WIDTH} align="end">
+        <Text font="secondary-mono" color="text-03">
           {formatMs(stage.max_duration_ms)}
         </Text>
-      </Section>
+      </Cell>
       <Section
+        flexDirection="row"
         alignItems="center"
-        justifyContent="center"
-        width={1.5}
+        justifyContent="end"
+        width="auto"
         height="fit"
-        className="shrink-0"
+        className="min-w-0 flex-1"
       >
         {uneven && (
           <IconTooltip
@@ -226,7 +255,7 @@ interface StageDetailsBodyProps {
   indexAttemptId: number;
 }
 
-/** How long each pipeline stage took per batch of one index attempt. */
+/** How long each pipeline stage took per batch of one index attempt. The header carries the attempt's totals under each column title. */
 function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
   const t = useTranslations("admin.connector");
   const format = useFormatter();
@@ -243,7 +272,7 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
   return (
     <Section
       alignItems="stretch"
-      gap={0}
+      gap={1}
       padding={1}
       height="auto"
       className="min-h-0"
@@ -256,35 +285,44 @@ function StageDetailsBody({ indexAttemptId }: StageDetailsBodyProps) {
         height="fit"
         className="shrink-0"
       >
-        <Section padding={1} width={9.25} height="fit" className="shrink-0">
-          <Text font="secondary-body" color="text-03">
-            {t("stageDetails.title")}
+        <Cell width={NAME_WIDTH}>
+          <ColumnTitle>{t("stageDetails.title")}</ColumnTitle>
+        </Cell>
+        <Cell width={BATCHES_WIDTH} align="end">
+          <ColumnTitle>{t("stageDetails.batches")}</ColumnTitle>
+          <Text font="secondary-mono-label" color="text-04">
+            {total === undefined ? "-" : format.number(total.event_count)}
           </Text>
+        </Cell>
+        <Cell width={AVERAGE_WIDTH}>
+          <ColumnTitle>{t("stageDetails.averageTime")}</ColumnTitle>
+          <Average stage={total} />
+        </Cell>
+        <Cell width={BAR_WIDTH + MAX_WIDTH} align="end">
+          <ColumnTitle>{t("stageDetails.maxTime")}</ColumnTitle>
+          <Text font="secondary-mono" color="text-03">
+            {formatMs(total?.max_duration_ms)}
+          </Text>
+        </Cell>
+        <Section
+          flexDirection="row"
+          alignItems="start"
+          justifyContent="end"
+          width="auto"
+          height="fit"
+          className="min-w-0 flex-1"
+        >
+          <Popover.Close asChild>
+            <Button
+              icon={SvgX}
+              prominence="tertiary"
+              size="xs"
+              aria-label={t("stageDetails.close")}
+            />
+          </Popover.Close>
         </Section>
-        <HeaderStat
-          label={t("stageDetails.calls")}
-          value={total === undefined ? "-" : format.number(total.event_count)}
-          align="end"
-        />
-        <HeaderStat
-          label={t("stageDetails.averageTime")}
-          value={formatAverage(total)}
-        />
-        <Section height="fit" className="min-w-0 flex-1" />
-        <HeaderStat
-          label={t("stageDetails.maxTime")}
-          value={formatMs(total?.max_duration_ms)}
-          align="end"
-        />
-        <Popover.Close asChild>
-          <Button
-            icon={SvgX}
-            prominence="tertiary"
-            size="xs"
-            aria-label={t("stageDetails.close")}
-          />
-        </Popover.Close>
       </Section>
+      <Divider paddingParallel={1} paddingPerpendicular={1} />
       <StageRows
         rows={rows}
         loaded={data !== undefined}

@@ -8,13 +8,15 @@ import {
   SvgAlertTriangle,
   SvgCheckAll,
   SvgCheckCircle,
-  SvgFileText,
+  SvgFiles,
   SvgTextLines,
+  SvgUser,
+  SvgUsers,
   SvgXCircle,
   SvgXOctagon,
 } from "@opal/icons";
 import type { CardColor, IconFunctionComponent } from "@opal/types";
-import type { CCPairRun } from "@/lib/connectors/types";
+import type { CCPairRun, CCPairRunKind } from "@/lib/connectors/types";
 import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
@@ -50,6 +52,15 @@ const GROUP_STYLE: Record<
     stroke: "stroke-status-success-05",
   },
 };
+
+/** What each kind's failed items are: documents, users, groups or checks. */
+const WARNING_ICONS = {
+  indexing: SvgFiles,
+  doc_permission_sync: SvgUser,
+  group_sync: SvgUsers,
+  pruning: SvgFiles,
+  checks: SvgXOctagon,
+} satisfies Record<CCPairRunKind, IconFunctionComponent>;
 
 /** The title's state key: how the run stands in its group. */
 function cardState(
@@ -221,7 +232,7 @@ export default function ActivityCard({
               {listsDocs ? (
                 <Popover>
                   <Popover.Trigger asChild>
-                    <Button icon={SvgFileText} prominence="tertiary" size="xs">
+                    <Button icon={SvgFiles} prominence="tertiary" size="xs">
                       {docsLabel}
                     </Button>
                   </Popover.Trigger>
@@ -236,7 +247,11 @@ export default function ActivityCard({
               ) : run.kind === "checks" && listsChecks ? (
                 <Popover>
                   <Popover.Trigger asChild>
-                    <Button icon={SvgXOctagon} prominence="tertiary" size="xs">
+                    <Button
+                      icon={WARNING_ICONS.checks}
+                      prominence="tertiary"
+                      size="xs"
+                    >
                       {docsLabel}
                     </Button>
                   </Popover.Trigger>
@@ -244,7 +259,11 @@ export default function ActivityCard({
                 </Popover>
               ) : (
                 warnings > 0 && (
-                  <Tag icon={SvgFileText} title={docsLabel} color="gray" />
+                  <Tag
+                    icon={WARNING_ICONS[run.kind]}
+                    title={docsLabel}
+                    color="gray"
+                  />
                 )
               )}
             </Section>

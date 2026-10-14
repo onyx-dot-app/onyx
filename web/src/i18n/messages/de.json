@@ -2379,7 +2379,8 @@
           "required_checks_failed": "Angehalten: erforderliche Prüfungen fehlgeschlagen",
           "start": "Indexierung starten",
           "released": "Indexierung gestartet",
-          "releaseFailed": "Indexierung konnte nicht gestartet werden"
+          "releaseFailed": "Indexierung konnte nicht gestartet werden",
+          "viewChecks": "Connector-Prüfungen anzeigen"
         }
       },
       "toasts": {
@@ -2432,14 +2433,32 @@
             "channel": "{count, plural, one {Kanal} other {Kanäle}}",
             "mailbox": "{count, plural, one {Postfach} other {Postfächer}}"
           },
-          "docs": "{count, plural, one {# Dokument} other {# Dokumente}}",
+          "counts": {
+            "folder": "{count, plural, one {# Ordner} other {# Ordner}}",
+            "source": "{count, plural, one {# Quelle} other {# Quellen}}",
+            "stub": "{count, plural, one {# Knoten} other {# Knoten}}",
+            "shared_drive": "{count, plural, one {# Geteilte Ablage} other {# Geteilte Ablagen}}",
+            "my_drive": "{count, plural, one {# Meine Ablage} other {# Meine Ablagen}}",
+            "space": "{count, plural, one {# Bereich} other {# Bereiche}}",
+            "page": "{count, plural, one {# Seite} other {# Seiten}}",
+            "project": "{count, plural, one {# Projekt} other {# Projekte}}",
+            "database": "{count, plural, one {# Datenbank} other {# Datenbanken}}",
+            "workspace": "{count, plural, one {# Arbeitsbereich} other {# Arbeitsbereiche}}",
+            "site": "{count, plural, one {# Website} other {# Websites}}",
+            "drive": "{count, plural, one {# Dokumentbibliothek} other {# Dokumentbibliotheken}}",
+            "channel": "{count, plural, one {# Kanal} other {# Kanäle}}",
+            "mailbox": "{count, plural, one {# Postfach} other {# Postfächer}}"
+          },
           "notIndexed": "Nicht indexiert",
           "other": "Weitere Dokumente",
           "loadError": "Die Dokumentaufschlüsselung konnte nicht geladen werden.",
           "open": "In der Quelle öffnen",
           "empty": "Noch keine Dokumente indexiert.",
-          "unavailable": "Verfügbar nach dem ersten erfolgreichen Lauf."
-        }
+          "unavailable": "Verfügbar nach dem ersten erfolgreichen Lauf.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, one {Dokument} other {Dokumente}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "Freigabeeinstellungen",
@@ -2514,7 +2533,7 @@
           "skippedChecks": "{count, plural, one {# Prüfung übersprungen} other {# Prüfungen übersprungen}}"
         },
         "search": {
-          "placeholder": "Fehler in Läufen suchen..."
+          "placeholder": "Indexläufe durchsuchen..."
         },
         "window": {
           "label": "Zeitraum",
@@ -2553,8 +2572,9 @@
           "cancelFailed": "Der Lauf konnte nicht abgebrochen werden. Versuchen Sie es erneut."
         },
         "checkResults": {
-          "title": "Connector-Prüfungen ({count})",
-          "close": "Schließen"
+          "title": "Connector-Prüfungen",
+          "close": "Schließen",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2668,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "Phasendetails",
-        "calls": "Aufrufe",
+        "batches": "Batches",
         "averageTime": "Durchschnittszeit",
         "maxTime": "Maximalzeit",
         "uneven": {
@@ -3148,7 +3168,7 @@
         },
         "checkFrequency": {
           "title": "Prüfungen ausführen alle",
-          "description": "Die Connector-Prüfungen nach diesem Zeitplan erneut ausführen."
+          "description": "Prüft die Verbindung auf Funktionen und Zustand."
         }
       },
       "settings": {

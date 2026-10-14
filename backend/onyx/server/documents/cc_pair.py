@@ -94,7 +94,10 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.documents.cc_pair_throughput import docs_indexed_per_slice
+from onyx.server.documents.cc_pair_throughput import (
+    docs_indexed_per_slice,
+    run_ended_at,
+)
 from onyx.server.documents.credential import credential_ids_to_mask
 from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
@@ -422,7 +425,11 @@ def get_cc_pair_throughput(
         ),
         # A queued run has no start yet, so its mark sits at its creation.
         runs=[
-            CCPairThroughputRun(started=started, status=attempt.status)
+            CCPairThroughputRun(
+                started=started,
+                ended=run_ended_at(attempt, started),
+                status=attempt.status,
+            )
             for attempt in attempts
             if (started := attempt.time_started or attempt.time_created) >= window_start
         ],

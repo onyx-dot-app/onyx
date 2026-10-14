@@ -657,6 +657,8 @@ class CCPairThroughputWindow(str, Enum):
 
 class CCPairThroughputRun(BaseModel):
     started: datetime
+    # None while the run is still going.
+    ended: datetime | None
     status: IndexingStatus
 
 
@@ -719,6 +721,8 @@ class CCPairHierarchyBreakdown(BaseModel):
     # The rows can overlap (a listed page inside a listed space), so the row
     # counts plus this count can be more than the cc-pair's total.
     other_doc_count: int
+    # Config fields whose values the rows list, so the page shows no row for them.
+    config_fields: list[str]
 
 
 class CCPairFullInfo(BaseModel):

@@ -2379,7 +2379,8 @@
           "required_checks_failed": "保留中: 必須チェックが失敗しました",
           "start": "インデックス作成を開始",
           "released": "インデックス作成を開始しました",
-          "releaseFailed": "インデックス作成を開始できませんでした"
+          "releaseFailed": "インデックス作成を開始できませんでした",
+          "viewChecks": "コネクタのチェックを表示"
         }
       },
       "toasts": {
@@ -2432,14 +2433,32 @@
             "channel": "{count, plural, other {チャンネル}}",
             "mailbox": "{count, plural, other {メールボックス}}"
           },
-          "docs": "{count, plural, other {# 件のドキュメント}}",
+          "counts": {
+            "folder": "{count, plural, other {# フォルダ}}",
+            "source": "{count, plural, other {# ソース}}",
+            "stub": "{count, plural, other {# ノード}}",
+            "shared_drive": "{count, plural, other {# 共有ドライブ}}",
+            "my_drive": "{count, plural, other {# マイドライブ}}",
+            "space": "{count, plural, other {# スペース}}",
+            "page": "{count, plural, other {# ページ}}",
+            "project": "{count, plural, other {# プロジェクト}}",
+            "database": "{count, plural, other {# データベース}}",
+            "workspace": "{count, plural, other {# ワークスペース}}",
+            "site": "{count, plural, other {# サイト}}",
+            "drive": "{count, plural, other {# ドキュメントライブラリ}}",
+            "channel": "{count, plural, other {# チャンネル}}",
+            "mailbox": "{count, plural, other {# メールボックス}}"
+          },
           "notIndexed": "未インデックス",
           "other": "その他のドキュメント",
           "loadError": "ドキュメントの内訳を読み込めませんでした。",
           "open": "ソースで開く",
           "empty": "まだインデックスされたドキュメントはありません。",
-          "unavailable": "最初の実行が成功した後に利用できます。"
-        }
+          "unavailable": "最初の実行が成功した後に利用できます。",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, other {件のドキュメント}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "共有設定",
@@ -2514,7 +2533,7 @@
           "skippedChecks": "{count, plural, one {# 件のチェックをスキップ} other {# 件のチェックをスキップ}}"
         },
         "search": {
-          "placeholder": "実行エラーを検索..."
+          "placeholder": "インデックス実行を検索..."
         },
         "window": {
           "label": "期間",
@@ -2553,8 +2572,9 @@
           "cancelFailed": "実行をキャンセルできませんでした。もう一度お試しください。"
         },
         "checkResults": {
-          "title": "コネクタチェック ({count})",
-          "close": "閉じる"
+          "title": "コネクタチェック",
+          "close": "閉じる",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2668,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "ステージ詳細",
-        "calls": "呼び出し回数",
+        "batches": "バッチ",
         "averageTime": "平均時間",
         "maxTime": "最大時間",
         "uneven": {
@@ -3148,7 +3168,7 @@
         },
         "checkFrequency": {
           "title": "チェックの実行間隔",
-          "description": "このスケジュールでコネクタチェックを再実行します。"
+          "description": "接続の機能と状態を確認します。"
         }
       },
       "settings": {

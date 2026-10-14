@@ -6,14 +6,14 @@ import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
   SvgCheckCircle,
-  SvgCheckSquare,
-  SvgFileText,
-  SvgMinusCircle,
-  SvgPlusCircle,
-  SvgRefreshCw,
-  SvgTextLines,
-  SvgTrash,
-  SvgUserCheck,
+  SvgFileMinus,
+  SvgFilePlus,
+  SvgFileRefresh,
+  SvgFiles,
+  SvgListCheck,
+  SvgScissors,
+  SvgUser,
+  SvgUserShield,
   SvgUsers,
   SvgXCircle,
   SvgXOctagon,
@@ -34,11 +34,11 @@ import StageDetailsPopoverContent, {
 } from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
 
 export const RUN_KIND_ICONS = {
-  indexing: SvgFileText,
-  doc_permission_sync: SvgUserCheck,
+  indexing: SvgFiles,
+  doc_permission_sync: SvgUserShield,
   group_sync: SvgUsers,
-  pruning: SvgTrash,
-  checks: SvgCheckSquare,
+  pruning: SvgScissors,
+  checks: SvgListCheck,
 } satisfies Record<CCPairRunKind, IconFunctionComponent>;
 
 /** How many of a check run's checks ended in `status`. */
@@ -249,7 +249,7 @@ function RunFigures({ run }: RunFiguresProps) {
               )}
               {skipped > 0 && (
                 <Count
-                  icon={SvgMinusCircle}
+                  icon={SvgXCircle}
                   value={skipped}
                   tooltip={t("counts.skippedChecks", { count: skipped })}
                 />
@@ -269,14 +269,14 @@ function RunFigures({ run }: RunFiguresProps) {
           />
           <CountsRow>
             <Count
-              icon={SvgPlusCircle}
+              icon={SvgFilePlus}
               value={attempt.new_docs_indexed}
               tooltip={t("counts.newDocs", {
                 count: attempt.new_docs_indexed,
               })}
             />
             <Count
-              icon={SvgRefreshCw}
+              icon={SvgFileRefresh}
               value={Math.max(
                 0,
                 attempt.total_docs_indexed - attempt.new_docs_indexed
@@ -285,7 +285,7 @@ function RunFigures({ run }: RunFiguresProps) {
             />
             {attempt.docs_removed_from_index > 0 && (
               <Count
-                icon={SvgMinusCircle}
+                icon={SvgFileMinus}
                 value={attempt.docs_removed_from_index}
                 tooltip={t("counts.removedDocs", {
                   count: attempt.docs_removed_from_index,
@@ -313,7 +313,7 @@ function RunFigures({ run }: RunFiguresProps) {
           />
           <CountsRow>
             <Count
-              icon={SvgUserCheck}
+              icon={SvgUser}
               value={attempt.total_users_processed}
               tooltip={t("counts.users", {
                 count: attempt.total_users_processed,
@@ -486,7 +486,7 @@ export default function RunRow({
               )}
               {hasLogs && (
                 <Button
-                  icon={SvgTextLines}
+                  icon={SvgAlertTriangle}
                   prominence="tertiary"
                   size="sm"
                   tooltip={t("actions.logs")}

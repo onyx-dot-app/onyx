@@ -2379,7 +2379,8 @@
           "required_checks_failed": "보류됨: 필수 검사 실패",
           "start": "인덱싱 시작",
           "released": "인덱싱이 시작됨",
-          "releaseFailed": "인덱싱을 시작할 수 없음"
+          "releaseFailed": "인덱싱을 시작할 수 없음",
+          "viewChecks": "커넥터 검사 보기"
         }
       },
       "toasts": {
@@ -2432,14 +2433,32 @@
             "channel": "{count, plural, other {채널}}",
             "mailbox": "{count, plural, other {메일함}}"
           },
-          "docs": "{count, plural, other {문서 #개}}",
+          "counts": {
+            "folder": "{count, plural, other {# 폴더}}",
+            "source": "{count, plural, other {# 소스}}",
+            "stub": "{count, plural, other {# 노드}}",
+            "shared_drive": "{count, plural, other {# 공유 드라이브}}",
+            "my_drive": "{count, plural, other {# 내 드라이브}}",
+            "space": "{count, plural, other {# 스페이스}}",
+            "page": "{count, plural, other {# 페이지}}",
+            "project": "{count, plural, other {# 프로젝트}}",
+            "database": "{count, plural, other {# 데이터베이스}}",
+            "workspace": "{count, plural, other {# 워크스페이스}}",
+            "site": "{count, plural, other {# 사이트}}",
+            "drive": "{count, plural, other {# 문서 라이브러리}}",
+            "channel": "{count, plural, other {# 채널}}",
+            "mailbox": "{count, plural, other {# 메일함}}"
+          },
           "notIndexed": "인덱싱되지 않음",
           "other": "기타 문서",
           "loadError": "문서 분류를 불러올 수 없습니다.",
           "open": "소스에서 열기",
           "empty": "아직 인덱싱된 문서가 없습니다.",
-          "unavailable": "첫 번째 실행이 성공한 후에 사용할 수 있습니다."
-        }
+          "unavailable": "첫 번째 실행이 성공한 후에 사용할 수 있습니다.",
+          "displayName": "• {name}",
+          "docsUnit": "{count, plural, other {개 문서}}"
+        },
+        "summary": "{realm} • {counts}"
       },
       "sharing": {
         "title": "공유 설정",
@@ -2514,7 +2533,7 @@
           "skippedChecks": "{count, plural, one {검사 #개 건너뜀} other {검사 #개 건너뜀}}"
         },
         "search": {
-          "placeholder": "실행 오류 검색..."
+          "placeholder": "인덱싱 실행 검색..."
         },
         "window": {
           "label": "기간",
@@ -2553,8 +2572,9 @@
           "cancelFailed": "실행을 취소하지 못했습니다. 다시 시도하세요."
         },
         "checkResults": {
-          "title": "커넥터 검사 ({count})",
-          "close": "닫기"
+          "title": "커넥터 검사",
+          "close": "닫기",
+          "count": "({count})"
         }
       },
       "activity": {
@@ -2668,7 +2688,7 @@
       },
       "stageDetails": {
         "title": "단계 세부 정보",
-        "calls": "호출 수",
+        "batches": "배치",
         "averageTime": "평균 시간",
         "maxTime": "최대 시간",
         "uneven": {
@@ -3148,7 +3168,7 @@
         },
         "checkFrequency": {
           "title": "검사 실행 주기",
-          "description": "이 일정에 따라 커넥터 검사를 다시 실행합니다."
+          "description": "연결의 기능과 상태를 확인합니다."
         }
       },
       "settings": {

@@ -86,9 +86,20 @@ export default function CheckRunPopoverContent({
             height="fit"
             className="min-w-0 flex-1"
           >
-            <Text font="secondary-action" color="text-04">
-              {t("title", { count: run.check_results.length })}
-            </Text>
+            <Section
+              flexDirection="row"
+              justifyContent="start"
+              alignItems="center"
+              gap={1}
+              height="fit"
+            >
+              <Text font="main-ui-action" color="text-04">
+                {t("title")}
+              </Text>
+              <Text font="main-ui-muted" color="text-03">
+                {t("count", { count: run.check_results.length })}
+              </Text>
+            </Section>
             <Text font="secondary-body" color="text-03">
               {summary}
             </Text>

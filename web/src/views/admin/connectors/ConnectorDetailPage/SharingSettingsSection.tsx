@@ -4,15 +4,16 @@ import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
 import {
+  Button,
   Card,
   Collapsible,
   Divider,
   Tag,
   Text,
-  TextButton,
 } from "@opal/components";
 import { Content, ContentAction, Section } from "@opal/layouts";
 import {
+  SvgEditBig,
   SvgOrganization,
   SvgShare,
   SvgUserManage,
@@ -147,9 +148,9 @@ export default function SharingSettingsSection({
       rightChildren={
         open &&
         onEdit !== null && (
-          <TextButton font="secondary-action" onClick={onEdit}>
+          <Button prominence="secondary" icon={SvgEditBig} onClick={onEdit}>
             {t("editButton.label")}
-          </TextButton>
+          </Button>
         )
       }
     >

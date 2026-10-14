@@ -26,6 +26,8 @@ interface FrequencyFieldProps {
   max: number;
   decimalPlaces?: number;
   suffix: string;
+  /** Marks the field optional in its label. */
+  optional?: boolean;
   disabled: boolean;
   /** Resolves to whether the server stored the value. Never rejects. */
   onSave: (value: number) => Promise<boolean>;
@@ -41,6 +43,7 @@ function FrequencyField({
   max,
   decimalPlaces,
   suffix,
+  optional = false,
   disabled,
   onSave,
 }: FrequencyFieldProps) {
@@ -70,6 +73,7 @@ function FrequencyField({
       withLabel={id}
       title={title}
       description={description}
+      suffix={optional ? "optional" : undefined}
       disabled={disabled}
       fillInput
       center
@@ -236,6 +240,7 @@ export default function ScheduleSection({
               max={MAX_PRUNE_FREQ_HOURS}
               decimalPlaces={3}
               suffix={tFields("units.hours")}
+              optional
               disabled={!editable}
               onSave={(hours) =>
                 save(
