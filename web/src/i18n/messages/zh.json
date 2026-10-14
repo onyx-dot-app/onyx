@@ -2404,6 +2404,31 @@
         "description": "{source} • {count, plural, one {# 项设置} other {# 项设置}}",
         "editButton": {
           "label": "编辑配置"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, other {文件夹}}",
+            "source": "{count, plural, other {来源}}",
+            "stub": "{count, plural, other {节点}}",
+            "shared_drive": "{count, plural, other {共享云端硬盘}}",
+            "my_drive": "{count, plural, other {我的云端硬盘}}",
+            "space": "{count, plural, other {空间}}",
+            "page": "{count, plural, other {页面}}",
+            "project": "{count, plural, other {项目}}",
+            "database": "{count, plural, other {数据库}}",
+            "workspace": "{count, plural, other {工作区}}",
+            "site": "{count, plural, other {站点}}",
+            "drive": "{count, plural, other {文档资料库}}",
+            "channel": "{count, plural, other {频道}}",
+            "mailbox": "{count, plural, other {邮箱}}"
+          },
+          "docs": "{count, plural, other {# 个文档}}",
+          "notIndexed": "未索引",
+          "other": "其他文档",
+          "loadError": "无法加载文档分布。",
+          "open": "在来源中打开",
+          "empty": "尚未索引任何文档。",
+          "unavailable": "首次成功运行后可用。"
         }
       },
       "sharing": {

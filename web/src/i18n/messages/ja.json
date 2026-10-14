@@ -2404,6 +2404,31 @@
         "description": "{source} • {count, plural, one {# 件の設定} other {# 件の設定}}",
         "editButton": {
           "label": "設定を編集"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, other {フォルダ}}",
+            "source": "{count, plural, other {ソース}}",
+            "stub": "{count, plural, other {ノード}}",
+            "shared_drive": "{count, plural, other {共有ドライブ}}",
+            "my_drive": "{count, plural, other {マイドライブ}}",
+            "space": "{count, plural, other {スペース}}",
+            "page": "{count, plural, other {ページ}}",
+            "project": "{count, plural, other {プロジェクト}}",
+            "database": "{count, plural, other {データベース}}",
+            "workspace": "{count, plural, other {ワークスペース}}",
+            "site": "{count, plural, other {サイト}}",
+            "drive": "{count, plural, other {ドキュメントライブラリ}}",
+            "channel": "{count, plural, other {チャンネル}}",
+            "mailbox": "{count, plural, other {メールボックス}}"
+          },
+          "docs": "{count, plural, other {# 件のドキュメント}}",
+          "notIndexed": "未インデックス",
+          "other": "その他のドキュメント",
+          "loadError": "ドキュメントの内訳を読み込めませんでした。",
+          "open": "ソースで開く",
+          "empty": "まだインデックスされたドキュメントはありません。",
+          "unavailable": "最初の実行が成功した後に利用できます。"
         }
       },
       "sharing": {

@@ -20,6 +20,7 @@ import {
   buildConfigEntries,
   ConfigDisplay,
 } from "@/views/admin/connectors/ConnectorDetailPage/ConfigDisplay";
+import HierarchyBreakdown from "@/views/admin/connectors/ConnectorDetailPage/HierarchyBreakdown";
 import InlineFileManagement from "@/views/admin/connectors/ConnectorDetailPage/InlineFileManagement";
 
 interface LabeledConfigDisplayProps {
@@ -89,7 +90,9 @@ export default function IndexConfigurationsSection({
     ccPair.connector.connector_specific_config ?? {};
   const entries = buildConfigEntries(config, source);
   const count = Object.keys(entries).length;
-  if (count === 0 && !manageFiles) return null;
+  // A connector saved with no settings (e.g. Notion indexing everything)
+  // still has a breakdown, so the section stays.
+  const breakdownOnly = count === 0 && !manageFiles;
 
   return (
     <Collapsible
@@ -123,6 +126,7 @@ export default function IndexConfigurationsSection({
             ) : (
               <ConfigDisplay configEntries={entries} />
             ))}
+          <HierarchyBreakdown ccPairId={ccPair.id} showEmpty={breakdownOnly} />
           {manageFiles && (
             <InlineFileManagement
               connectorId={ccPair.connector.id}

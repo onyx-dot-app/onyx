@@ -2404,6 +2404,31 @@
         "description": "{source} • {count, plural, one {# paramètre} other {# paramètres}}",
         "editButton": {
           "label": "Modifier la configuration"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {Dossier} other {Dossiers}}",
+            "source": "{count, plural, one {Source} other {Sources}}",
+            "stub": "{count, plural, one {Nœud} other {Nœuds}}",
+            "shared_drive": "{count, plural, one {Drive partagé} other {Drives partagés}}",
+            "my_drive": "{count, plural, one {Mon Drive} other {Mes Drives}}",
+            "space": "{count, plural, one {Espace} other {Espaces}}",
+            "page": "{count, plural, one {Page} other {Pages}}",
+            "project": "{count, plural, one {Projet} other {Projets}}",
+            "database": "{count, plural, one {Base de données} other {Bases de données}}",
+            "workspace": "{count, plural, one {Espace de travail} other {Espaces de travail}}",
+            "site": "{count, plural, one {Site} other {Sites}}",
+            "drive": "{count, plural, one {Bibliothèque de documents} other {Bibliothèques de documents}}",
+            "channel": "{count, plural, one {Canal} other {Canaux}}",
+            "mailbox": "{count, plural, one {Boîte aux lettres} other {Boîtes aux lettres}}"
+          },
+          "docs": "{count, plural, one {# document} other {# documents}}",
+          "notIndexed": "Non indexé",
+          "other": "Autres documents",
+          "loadError": "Impossible de charger la répartition des documents.",
+          "open": "Ouvrir dans la source",
+          "empty": "Aucun document indexé pour le moment.",
+          "unavailable": "Disponible après la première exécution réussie."
         }
       },
       "sharing": {

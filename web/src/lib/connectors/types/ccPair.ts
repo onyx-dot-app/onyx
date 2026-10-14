@@ -153,6 +153,41 @@ export type CCPairRunStatusGroup =
   | "failed"
   | "canceled";
 
+/** Mirrors `HierarchyNodeType` in `backend/onyx/db/enums.py`. */
+export type HierarchyNodeType =
+  | "folder"
+  | "source"
+  | "stub"
+  | "shared_drive"
+  | "my_drive"
+  | "space"
+  | "page"
+  | "project"
+  | "database"
+  | "workspace"
+  | "site"
+  | "drive"
+  | "channel"
+  | "mailbox";
+
+/** One breakdown row: a node the config names or the hierarchy has, and the pair's documents under it. Mirrors `HierarchyBreakdownEntry`. */
+export interface HierarchyBreakdownEntry {
+  /** The id the connector config uses for the node, such as a Confluence space key. */
+  raw_node_id: string;
+  /** `null` when the config names a node the hierarchy does not have. */
+  display_name: string | null;
+  link: string | null;
+  /** `null` when the config names the node but no document sits under it. `0` for a node the config does not name. */
+  doc_count: number | null;
+}
+
+/** Where a pair's documents come from, by node type. Mirrors `CCPairHierarchyBreakdown`. */
+export interface CCPairHierarchyBreakdown {
+  nodes_by_type: Partial<Record<HierarchyNodeType, HierarchyBreakdownEntry[]>>;
+  /** Documents in no listed node's subtree. Rows can overlap (a page inside a listed space), so rows plus this can exceed the pair's total. */
+  other_doc_count: number;
+}
+
 /** Mirrors `CCPairRunErrors`: runs with open document errors, or with all of them resolved. */
 export type CCPairRunErrors = "unresolved" | "resolved";
 

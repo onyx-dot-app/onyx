@@ -2404,6 +2404,31 @@
         "description": "{source} • {count, plural, one {# setting} other {# settings}}",
         "editButton": {
           "label": "Edit Configs"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {Folder} other {Folders}}",
+            "source": "{count, plural, one {Source} other {Sources}}",
+            "stub": "{count, plural, one {Node} other {Nodes}}",
+            "shared_drive": "{count, plural, one {Shared drive} other {Shared drives}}",
+            "my_drive": "{count, plural, one {My Drive} other {My Drives}}",
+            "space": "{count, plural, one {Space} other {Spaces}}",
+            "page": "{count, plural, one {Page} other {Pages}}",
+            "project": "{count, plural, one {Project} other {Projects}}",
+            "database": "{count, plural, one {Database} other {Databases}}",
+            "workspace": "{count, plural, one {Workspace} other {Workspaces}}",
+            "site": "{count, plural, one {Site} other {Sites}}",
+            "drive": "{count, plural, one {Document library} other {Document libraries}}",
+            "channel": "{count, plural, one {Channel} other {Channels}}",
+            "mailbox": "{count, plural, one {Mailbox} other {Mailboxes}}"
+          },
+          "docs": "{count, plural, one {# doc} other {# docs}}",
+          "notIndexed": "Not indexed",
+          "other": "Other documents",
+          "loadError": "Couldn't load the document breakdown.",
+          "open": "Open in the source",
+          "empty": "No documents indexed yet.",
+          "unavailable": "Available after the first successful run."
         }
       },
       "sharing": {

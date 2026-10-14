@@ -2404,6 +2404,31 @@
         "description": "{source} • {count, plural, one {# configuração} other {# configurações}}",
         "editButton": {
           "label": "Editar configurações"
+        },
+        "breakdown": {
+          "types": {
+            "folder": "{count, plural, one {Pasta} other {Pastas}}",
+            "source": "{count, plural, one {Fonte} other {Fontes}}",
+            "stub": "{count, plural, one {Nó} other {Nós}}",
+            "shared_drive": "{count, plural, one {Drive compartilhado} other {Drives compartilhados}}",
+            "my_drive": "{count, plural, one {Meu Drive} other {Meus Drives}}",
+            "space": "{count, plural, one {Espaço} other {Espaços}}",
+            "page": "{count, plural, one {Página} other {Páginas}}",
+            "project": "{count, plural, one {Projeto} other {Projetos}}",
+            "database": "{count, plural, one {Banco de dados} other {Bancos de dados}}",
+            "workspace": "{count, plural, one {Espaço de trabalho} other {Espaços de trabalho}}",
+            "site": "{count, plural, one {Site} other {Sites}}",
+            "drive": "{count, plural, one {Biblioteca de documentos} other {Bibliotecas de documentos}}",
+            "channel": "{count, plural, one {Canal} other {Canais}}",
+            "mailbox": "{count, plural, one {Caixa de correio} other {Caixas de correio}}"
+          },
+          "docs": "{count, plural, one {# documento} other {# documentos}}",
+          "notIndexed": "Não indexado",
+          "other": "Outros documentos",
+          "loadError": "Não foi possível carregar a distribuição de documentos.",
+          "open": "Abrir na fonte",
+          "empty": "Nenhum documento indexado ainda.",
+          "unavailable": "Disponível após a primeira execução bem-sucedida."
         }
       },
       "sharing": {

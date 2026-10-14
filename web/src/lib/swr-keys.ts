@@ -322,6 +322,8 @@ export const SWR_KEYS = {
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 
+  ccPairHierarchyBreakdown: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/hierarchy-breakdown`,
   ccPairDataAccess: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/data-access`,
   ccPairManageAccess: (ccPairId: number) =>
