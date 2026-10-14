@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"syscall"
 	"time"
 )
 
@@ -164,12 +165,22 @@ func choosePort(req PortRequest, current int, foreign, claimed map[int]bool) (in
 
 // bindable reports whether the port can be bound on every interface.
 func bindable(port int) bool {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		return false
+	available := false
+	for _, probe := range []struct{ network, host string }{
+		{"tcp4", "127.0.0.1"}, {"tcp4", "0.0.0.0"},
+		{"tcp6", "::1"}, {"tcp6", "::"},
+	} {
+		ln, err := net.Listen(probe.network, net.JoinHostPort(probe.host, fmt.Sprint(port)))
+		if errors.Is(err, syscall.EAFNOSUPPORT) || errors.Is(err, syscall.EPROTONOSUPPORT) || errors.Is(err, syscall.EADDRNOTAVAIL) {
+			continue
+		}
+		if err != nil {
+			return false
+		}
+		_ = ln.Close()
+		available = true
 	}
-	_ = ln.Close()
-	return true
+	return available
 }
 
 func pruneStale(leases []Lease, root string) []Lease {

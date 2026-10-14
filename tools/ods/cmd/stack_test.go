@@ -5,6 +5,7 @@ package cmd
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -21,6 +22,14 @@ import (
 func stackTestRepo(t *testing.T) (root string, calls map[string]string) {
 	t.Helper()
 	binDir := devtoolBinDir(t)
+	// The process manager identifies services with ps.
+	ps, err := exec.LookPath("/bin/ps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(ps, filepath.Join(binDir, "ps")); err != nil {
+		t.Fatal(err)
+	}
 	root = devtoolRepo(t)
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	for _, dir := range []string{".vscode", "backend", "web", filepath.Join("web", "node_modules"), filepath.Join("deployment", "docker_compose"), filepath.Join(".venv", "bin")} {
@@ -257,4 +266,62 @@ func TestRunStackLogs(t *testing.T) {
 	if !reflect.DeepEqual(tail[1].Args, []string{"-n", "5", "-F", apiLog}) {
 		t.Errorf("one log followed: %v", tail[1].Args)
 	}
+}
+
+// runStackCommand runs "ods stack <args>" and returns its stdout.
+func runStackCommand(t *testing.T, args ...string) string {
+	t.Helper()
+	cmd := NewRootCommand()
+	cmd.SetArgs(append([]string{"stack"}, args...))
+	return composeCapture(t, &os.Stdout, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
+func TestStackCommands_lifecycleWithFakeService(t *testing.T) {
+	root, _ := stackTestRepo(t)
+	// The only service is a worker with no port, run by a fake interpreter
+	// that just stays alive.
+	writeFile(t, filepath.Join(root, ".venv", "bin", "python"), "#!/bin/sh\nexec /bin/sleep 300\n")
+	if err := os.Chmod(filepath.Join(root, ".venv", "bin", "python"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, ".vscode", "launch.json"), `{
+  "compounds": [{"name": "Run All Onyx Services", "configurations": ["Celery primary"]}],
+  "configurations": [
+    {"name": "Celery primary", "type": "debugpy", "request": "launch", "program": "${workspaceFolder}/backend/scripts/dev_celery_reload.py", "cwd": "${workspaceFolder}/backend", "args": ["-A", "primary"]}
+  ]
+}`)
+	stack, _ := openStack()
+	t.Cleanup(func() {
+		_ = stack.Stop(context.Background(), devstack.Options{StopTimeout: 2 * time.Second, LockWait: 10 * time.Second})
+	})
+
+	runStackCommand(t, "stop")
+	runStackCommand(t, "down")
+
+	out := runStackCommand(t, "up", "--profile", "full", "--skip-prepare", "--timeout", "20s", "--json")
+	if !strings.Contains(out, `"phase": "ready"`) || !strings.Contains(out, `"slug": "celery-primary"`) {
+		t.Fatalf("up output:\n%s", out)
+	}
+	if !strings.Contains(devtoolReadFile(t, filepath.Join(root, ".vscode", ".env")), "POSTGRES_PORT=5555") {
+		t.Error("infra port was not written to .vscode/.env")
+	}
+	out = runStackCommand(t, "status")
+	if !strings.Contains(out, "ready:   true") || !strings.Contains(out, "running  celery-primary") {
+		t.Errorf("status output:\n%s", out)
+	}
+	runStackCommand(t, "logs", "celery-primary")
+	out = runStackCommand(t, "restart", "--profile", "full", "--skip-prepare", "--timeout", "20s")
+	if !strings.Contains(out, "phase:   ready") {
+		t.Errorf("restart output:\n%s", out)
+	}
+	runStackCommand(t, "stop")
+	st, err := stack.ReadState()
+	if err != nil || st == nil || st.Phase != devstack.PhaseStopped || len(st.Services) != 0 {
+		t.Errorf("state after stop: %+v %v", st, err)
+	}
+	runStackCommand(t, "down")
 }
