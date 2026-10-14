@@ -12,7 +12,6 @@ import type {
   ConnectorAccessFormValues,
   ConnectorGroupRestrictionFormValues,
 } from "@/lib/connectors/accessType";
-import type { IndexAttemptStage, IndexAttemptStageMetric } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   connectorConfigs,
@@ -23,10 +22,6 @@ import credentialBoundFields from "@/lib/connectors/credentialBoundFields.json";
 import { getCredentialSpec, realmFields } from "@/lib/credentials/utils";
 import { FILE_TYPE_DEFINITIONS, TypedFile } from "@/lib/connectors/fileTypes";
 import {
-  PIPELINE_ORDER,
-  STAGE_BAR_COLORS,
-} from "@/lib/connectors/stageMetrics/constants";
-import {
   ConnectorCredentialPairStatus,
   FileTypeCategory,
   OneDriveScope,
@@ -34,7 +29,6 @@ import {
 import type {
   ConnectionConfiguration,
   GmailConfig,
-  SortMode,
 } from "@/lib/connectors/types";
 
 // ---------------------------------------------------------------------------
@@ -410,33 +404,6 @@ export function statusIsNotCurrentlyActive(
     status === ConnectorCredentialPairStatus.PAUSED ||
     status === ConnectorCredentialPairStatus.INVALID
   );
-}
-
-// ---------------------------------------------------------------------------
-// Stage metrics
-// ---------------------------------------------------------------------------
-
-// Sort per-batch stages according to the current sort mode. Pipeline order is
-// the canonical enum declaration order; time-taken sorts descending by
-// total duration so the long pole sits first.
-export function sortPerBatchStages(
-  stages: IndexAttemptStageMetric[],
-  sortMode: SortMode
-): IndexAttemptStageMetric[] {
-  const sorted = [...stages];
-  if (sortMode === "pipeline") {
-    sorted.sort(
-      (a, b) => (PIPELINE_ORDER[a.stage] ?? 0) - (PIPELINE_ORDER[b.stage] ?? 0)
-    );
-  } else {
-    sorted.sort((a, b) => b.total_duration_ms - a.total_duration_ms);
-  }
-  return sorted;
-}
-
-export function colorClassForStage(stage: IndexAttemptStage): string {
-  const idx = PIPELINE_ORDER[stage] ?? 0;
-  return STAGE_BAR_COLORS[idx % STAGE_BAR_COLORS.length]!;
 }
 
 // ---------------------------------------------------------------------------

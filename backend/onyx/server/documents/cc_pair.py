@@ -199,10 +199,9 @@ def get_index_attempt_stage_metrics(
 ) -> IndexAttemptStageMetricsResponse:
     """Return the per-stage timing breakdown for a single ``IndexAttempt``.
 
-    Returned in pipeline (enum declaration) order. The frontend renders this
-    order verbatim for the default "Pipeline order" sort and re-sorts
-    client-side for the "Time taken" sort. Auth: caller must have at least
-    read access to the cc-pair that owns the attempt.
+    Returned in pipeline (enum declaration) order, which the frontend renders
+    as-is. Auth: caller must have at least read access to the cc-pair that
+    owns the attempt.
     """
     index_attempt = get_index_attempt(
         db_session=db_session,
@@ -227,7 +226,7 @@ def get_index_attempt_stage_metrics(
         index_attempt_id=index_attempt_id,
     )
     stages = [IndexAttemptStageMetricSnapshot.from_db_model(m) for m in metrics]
-    # Append the BATCH_UNACCOUNTED residual (frontend re-sorts, so order is fine).
+    # Append the BATCH_UNACCOUNTED residual (the frontend sorts, so order is fine).
     unaccounted = synthesize_unaccounted(stages)
     if unaccounted is not None:
         stages.append(unaccounted)

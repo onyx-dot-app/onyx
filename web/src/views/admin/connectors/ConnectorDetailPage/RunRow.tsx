@@ -1,11 +1,10 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Card, Tag, Text } from "@opal/components";
+import { Button, Card, Popover, Tag, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import {
   SvgAlertTriangle,
-  SvgBarChartSmall,
   SvgFileText,
   SvgMinusCircle,
   SvgPlusCircle,
@@ -19,6 +18,9 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import type { CCPairRun, CCPairRunKind } from "@/lib/connectors/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { attemptStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
+import StageDetailsPopoverContent, {
+  StageDetailsTrigger,
+} from "@/views/admin/connectors/ConnectorDetailPage/StageDetailsPopover";
 
 export const RUN_KIND_ICONS = {
   indexing: SvgFileText,
@@ -207,7 +209,6 @@ export interface RunRowProps {
   canCancel: boolean;
   onCancel: () => void;
   onViewLogs: () => void;
-  onViewStages: () => void;
 }
 
 /** One run in the pair's run list: what ran and when, how it ended, and what it moved. */
@@ -216,7 +217,6 @@ export default function RunRow({
   canCancel,
   onCancel,
   onViewLogs,
-  onViewStages,
 }: RunRowProps) {
   const t = useTranslations("admin.connector.runs");
   const tBadges = useTranslations("admin.status.badges");
@@ -261,123 +261,122 @@ export default function RunRow({
   const warnings = runWarnings(run);
   const hasLogs = runErrorText(run) !== null;
 
+  // The stage details popover spans the row, so the row is its anchor.
   return (
-    <Card color="background-tint-00" border="none" rounding={2} padding={1}>
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        alignItems="center"
-        gap={1}
-        height="fit"
-      >
-        <Section
-          alignItems="start"
-          gap={1}
-          padding={1}
-          height="fit"
-          className="min-w-0 flex-1"
-        >
-          <Content
-            icon={RUN_KIND_ICONS[run.kind]}
-            title={t(`kinds.${run.kind}`)}
-            sizePreset="secondary"
-            variant="body"
-            color="muted"
-            width="fit"
-          />
-          <Text
-            font={active || failed ? "secondary-action" : "secondary-body"}
-            color={active || failed ? "text-04" : "text-03"}
-          >
-            {stamp(run.time_created)}
-          </Text>
-        </Section>
-
-        <Section
-          alignItems="start"
-          gap={1}
-          padding={1}
-          width={12}
-          height="fit"
-          className="shrink-0"
-        >
+    <Popover>
+      <Popover.Anchor asChild>
+        <Card color="background-tint-00" border="none" rounding={2} padding={1}>
           <Section
             flexDirection="row"
             justifyContent="start"
+            alignItems="center"
             gap={1}
-            width="fit"
             height="fit"
           >
-            <Tag
-              icon={tag.icon}
-              title={tBadges(tag.labelKey)}
-              color={tag.color}
-            />
-            {run.kind === "indexing" && (
-              <Button
-                icon={SvgBarChartSmall}
-                prominence="tertiary"
-                size="xs"
-                tooltip={t("actions.stages")}
-                aria-label={t("actions.stages")}
-                onClick={onViewStages}
+            <Section
+              alignItems="start"
+              gap={1}
+              padding={1}
+              height="fit"
+              className="min-w-0 flex-1"
+            >
+              <Content
+                icon={RUN_KIND_ICONS[run.kind]}
+                title={t(`kinds.${run.kind}`)}
+                sizePreset="secondary"
+                variant="body"
+                color="muted"
+                width="fit"
               />
-            )}
-            {warnings > 0 && (
-              <Tag
-                icon={SvgAlertTriangle}
-                title={format.number(warnings)}
-                tooltip={t("warnings.tooltip", { count: warnings })}
-                color="amber"
-              />
-            )}
+              <Text
+                font={active || failed ? "secondary-action" : "secondary-body"}
+                color={active || failed ? "text-04" : "text-03"}
+              >
+                {stamp(run.time_created)}
+              </Text>
+            </Section>
+
+            <Section
+              alignItems="start"
+              gap={1}
+              padding={1}
+              width={12}
+              height="fit"
+              className="shrink-0"
+            >
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                gap={1}
+                width="fit"
+                height="fit"
+              >
+                <Tag
+                  icon={tag.icon}
+                  title={tBadges(tag.labelKey)}
+                  color={tag.color}
+                />
+                {run.kind === "indexing" && <StageDetailsTrigger />}
+                {warnings > 0 && (
+                  <Tag
+                    icon={SvgAlertTriangle}
+                    title={format.number(warnings)}
+                    tooltip={t("warnings.tooltip", { count: warnings })}
+                    color="amber"
+                  />
+                )}
+              </Section>
+              <Text font="secondary-body" color="text-03">
+                {detail()}
+              </Text>
+            </Section>
+
+            <Section
+              alignItems="end"
+              gap={1}
+              padding={1}
+              width={9}
+              height="fit"
+              className="shrink-0"
+            >
+              <RunFigures run={run} />
+            </Section>
+
+            <Section
+              flexDirection="row"
+              justifyContent="end"
+              gap={1}
+              width={3.5}
+              height="fit"
+              className="shrink-0"
+            >
+              {canCancel && run.kind === "indexing" && active && (
+                <Button
+                  icon={SvgXCircle}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltip={t("actions.cancel")}
+                  aria-label={t("actions.cancel")}
+                  onClick={onCancel}
+                />
+              )}
+              {hasLogs && (
+                <Button
+                  icon={SvgTextLines}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltip={t("actions.logs")}
+                  aria-label={t("actions.logs")}
+                  onClick={onViewLogs}
+                />
+              )}
+            </Section>
           </Section>
-          <Text font="secondary-body" color="text-03">
-            {detail()}
-          </Text>
-        </Section>
-
-        <Section
-          alignItems="end"
-          gap={1}
-          padding={1}
-          width={9}
-          height="fit"
-          className="shrink-0"
-        >
-          <RunFigures run={run} />
-        </Section>
-
-        <Section
-          flexDirection="row"
-          justifyContent="end"
-          gap={1}
-          width={3.5}
-          height="fit"
-          className="shrink-0"
-        >
-          {canCancel && run.kind === "indexing" && active && (
-            <Button
-              icon={SvgXCircle}
-              prominence="tertiary"
-              size="sm"
-              tooltip={t("actions.cancel")}
-              aria-label={t("actions.cancel")}
-              onClick={onCancel}
-            />
-          )}
-          {hasLogs && (
-            <Button
-              icon={SvgTextLines}
-              prominence="tertiary"
-              size="sm"
-              tooltip={t("actions.logs")}
-              aria-label={t("actions.logs")}
-              onClick={onViewLogs}
-            />
-          )}
-        </Section>
-      </Section>
-    </Card>
+        </Card>
+      </Popover.Anchor>
+      {run.kind === "indexing" && (
+        <StageDetailsPopoverContent indexAttemptId={run.attempt.id} />
+      )}
+    </Popover>
   );
 }

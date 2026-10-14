@@ -2263,145 +2263,86 @@
         "entityType": "Invalid Connector"
       },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "Hide attempt overhead"
-          },
-          "showButton": {
-            "label": "Show attempt overhead"
-          }
-        },
-        "batchTotal": {
-          "empty": "No completed batches yet",
-          "summary": "Average batch: {avgLabel}, {count, plural, one {# batch} other {# batches}} — distribution shown below."
-        },
-        "empty": {
-          "description": "No stage timing data has been recorded for this attempt yet. Older attempts that ran before stage instrumentation was deployed will not have metrics."
-        },
         "loadError": {
-          "description": "Stage timing data could not be loaded for this attempt. The pipeline runs even when metric recording is unavailable, so this does not indicate a problem with the indexing run itself.",
           "title": "Failed to load stage metrics"
         },
-        "loading": "Loading stage metrics…",
         "perBatch": {
-          "columns": {
-            "avgTime": "Avg time",
-            "calls": "Calls",
-            "max": "Max",
-            "min": "Min",
-            "stage": "Stage",
-            "totalTime": "Total time"
-          },
           "empty": "No per-batch stage data recorded."
-        },
-        "sort": {
-          "label": "Sort:",
-          "pipelineOrder": {
-            "label": "Pipeline order"
-          },
-          "timeTaken": {
-            "label": "Time taken"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "Reads the batch back from object storage into worker memory.",
             "label": "Batch load"
           },
           "batchTotal": {
-            "description": "Total wall-clock time elapsed processing a single batch end-to-end.",
             "label": "Batch total"
           },
           "batchUnaccounted": {
-            "description": "Batch time not attributed to any named stage. A large value suggests missing instrumentation.",
             "label": "Unaccounted"
           },
           "checkpointLoad": {
-            "description": "Loads the saved checkpoint so the attempt resumes where the previous run stopped.",
             "label": "Checkpoint load"
           },
           "chunking": {
-            "description": "Splits each document into the chunks that get embedded and indexed.",
             "label": "Chunking"
           },
           "connectorFetch": {
-            "description": "Time the connector spends calling the source API and yielding raw documents.",
             "label": "Connector fetch"
           },
           "connectorValidation": {
-            "description": "Validates that the connector is configured correctly and reachable before fetching begins.",
             "label": "Connector validation"
           },
           "contextualRag": {
-            "description": "Generates per-chunk context summaries with an LLM to improve retrieval quality.",
             "label": "Contextual RAG"
           },
           "coordLockAcquireWait": {
-            "description": "Waits for the coordination lock that guards the attempt's shared progress counters.",
             "label": "Coord lock acquire wait"
           },
           "coordinationUpdate": {
-            "description": "Updates the attempt's progress counters so the UI reflects the completed batch.",
             "label": "Coordination update"
           },
           "docBatchEnqueue": {
-            "description": "Publishes the stored batch onto the Celery queue for a docprocessing worker to pick up.",
             "label": "Doc batch enqueue"
           },
           "docBatchStore": {
-            "description": "Persists a fetched batch of documents to object storage for the docprocessing workers.",
             "label": "Doc batch store"
           },
           "docDbPrepare": {
-            "description": "Resolves which documents are new or updated and prepares the database rows.",
             "label": "Doc DB prepare"
           },
           "docLockAcquireWait": {
-            "description": "Waits for per-document locks so concurrent attempts do not write the same document.",
             "label": "Doc lock acquire wait"
           },
           "docprocessingSetup": {
-            "description": "Prepares the worker: loads search settings, embedding model, and index clients.",
             "label": "Docprocessing setup"
           },
           "embedding": {
-            "description": "Calls the embedding model to turn chunks into vectors. Usually the slowest stage.",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "Attaches access control, boosts, and other metadata to each chunk before writing.",
             "label": "Enrichment prep"
           },
           "finalization": {
-            "description": "Cleans up worker resources and releases the batch once processing completes.",
             "label": "Finalization"
           },
           "gcCollect": {
-            "description": "Time spent in explicit garbage collection between batches.",
             "label": "Garbage collection"
           },
           "hierarchyUpsert": {
-            "description": "Writes the source's folder or space hierarchy so documents can be filtered by location.",
             "label": "Hierarchy upsert"
           },
           "imageProcessing": {
-            "description": "Extracts and summarizes images so their content becomes searchable text.",
             "label": "Image processing"
           },
           "permissionValidation": {
-            "description": "Confirms the credential has the permissions required to read the source's documents.",
             "label": "Permission validation"
           },
           "postIndexDbUpdate": {
-            "description": "Updates document rows in Postgres after the index write succeeds.",
             "label": "Post-index DB update"
           },
           "queueWait": {
-            "description": "Time a batch waits in the queue before a docprocessing worker starts it.",
             "label": "Queue wait"
           },
           "vectorDbWrite": {
-            "description": "Writes the embedded chunks into the document index.",
             "label": "Vector DB write"
           },
           "embeddingRateLimitWait": {
@@ -2413,10 +2354,6 @@
             "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "Per-batch and per-attempt timing for this index attempt.",
-        "title": "Indexing stage metrics"
       },
       "statusCard": {
         "documentsIndexed": {
@@ -2568,6 +2505,16 @@
           "canceled": "The run is being canceled.",
           "cancelFailed": "Couldn't cancel the run. Try again."
         }
+      },
+      "stageDetails": {
+        "title": "Stage Details",
+        "calls": "Calls",
+        "averageTime": "Average Time",
+        "maxTime": "Max Time",
+        "uneven": {
+          "tooltip": "Batch times vary widely for this stage"
+        },
+        "close": "Close stage details"
       }
     },
     "connectorTitle": {

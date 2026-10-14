@@ -38,7 +38,6 @@ import RunRow, {
   RUN_KIND_ICONS,
   runErrorText,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
-import StageMetricsModal from "@/views/admin/connectors/ConnectorDetailPage/StageMetricsModal";
 
 const PAGE_SIZE = 10;
 const RUNS_POLL_MS = 5000;
@@ -98,7 +97,6 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   const [logRun, setLogRun] = useState<CCPairRun | null>(null);
-  const [stagesAttemptId, setStagesAttemptId] = useState<number | null>(null);
 
   const key = SWR_KEYS.ccPairRuns(ccPairId, {
     pageNum: page - 1,
@@ -168,12 +166,6 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
           onOutsideClick={() => setLogRun(null)}
           exceptionTrace={runErrorText(logRun) ?? ""}
           title={t(`errorModal.${logRun.kind}`)}
-        />
-      )}
-      {stagesAttemptId !== null && (
-        <StageMetricsModal
-          indexAttemptId={stagesAttemptId}
-          onClose={() => setStagesAttemptId(null)}
         />
       )}
       <Section alignItems="stretch" gap={1} height="fit">
@@ -348,7 +340,6 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
                 canCancel={canOperate}
                 onCancel={() => void cancel(run)}
                 onViewLogs={() => setLogRun(run)}
-                onViewStages={() => setStagesAttemptId(run.attempt.id)}
               />
             ))}
           </Section>
