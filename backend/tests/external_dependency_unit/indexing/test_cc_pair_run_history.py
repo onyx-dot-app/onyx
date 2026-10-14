@@ -81,7 +81,8 @@ def _create_cc_pair(
         input_type=InputType.POLL,
         connector_specific_config=_CONFIG,
         refresh_freq=None,
-        prune_freq=None,
+        # Scheduled to prune, so the feed lists the pruning kind.
+        prune_freq=86400,
         check_freq=check_freq,
     )
     db_session.add(connector)

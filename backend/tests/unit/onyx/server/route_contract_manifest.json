@@ -570,6 +570,7 @@
   "POST /manage/admin/cc-pair/{cc_pair_id}/edit/files": "manage:connectors +scope",
   "POST /manage/admin/cc-pair/{cc_pair_id}/edit/plan": "manage:connectors +scope",
   "POST /manage/admin/cc-pair/{cc_pair_id}/prune": "manage:connectors +scope",
+  "POST /manage/admin/cc-pair/{cc_pair_id}/release-indexing-hold": "manage:connectors +scope",
   "POST /manage/admin/cc-pair/{cc_pair_id}/sync-groups": "manage:connectors +scope",
   "POST /manage/admin/cc-pair/{cc_pair_id}/sync-permissions": "manage:connectors +scope",
   "POST /manage/admin/connector": "manage:connectors +scope",

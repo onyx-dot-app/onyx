@@ -256,8 +256,9 @@ _RUNS_MAX_PAGE_SIZE = 50
 
 
 def _cc_pair_run_kinds(cc_pair: ConnectorCredentialPair) -> list[CCPairRunKind]:
-    """Indexing and pruning always, the permission syncs a perm-synced pair's
-    source runs, and the checks of a source that names some."""
+    """Indexing always, the permission syncs a perm-synced pair's source runs,
+    pruning when the pair has a prune schedule, and the checks of a source that
+    names some."""
     source = cc_pair.connector.source
     kinds = [CCPairRunKind.INDEXING]
     if cc_pair.access_type.is_perm_synced():
@@ -266,7 +267,9 @@ def _cc_pair_run_kinds(cc_pair: ConnectorCredentialPair) -> list[CCPairRunKind]:
             kinds.append(CCPairRunKind.DOC_PERMISSION_SYNC)
         if CredentialCapability.EXTERNAL_GROUP_SYNC in capabilities:
             kinds.append(CCPairRunKind.GROUP_SYNC)
-    kinds.append(CCPairRunKind.PRUNING)
+    # The same gate as the pruning beat: a file connector never prunes.
+    if cc_pair.connector.prune_freq:
+        kinds.append(CCPairRunKind.PRUNING)
     if has_named_capability_checks(source):
         kinds.append(CCPairRunKind.CHECKS)
     return kinds
