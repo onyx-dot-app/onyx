@@ -1,5 +1,6 @@
 """LLM output parsers must stay linear on adversarial model output."""
 
+import gc
 import signal
 import time
 from collections.abc import Callable
@@ -16,9 +17,17 @@ from onyx.secondary_llm_flows.time_filter import (
 )
 from onyx.utils.text_processing import find_all_json_objects, parse_llm_json_response
 
-# Linear code finishes these inputs in milliseconds; the old quadratic and
-# cubic scans took from several seconds to minutes.
-_TIME_BOUND_SECONDS = 1.0
+# Each adversarial case runs at n and _GROWTH x n. Linear code grows about
+# _GROWTH times; the old quadratic and cubic scans grew 64x to 512x. Comparing
+# growth instead of wall time keeps the tests stable on slow, shared runners.
+_GROWTH = 8
+_MAX_GROWTH_RATIO = 32.0
+# Below this, the large run is too fast for any quadratic regression to matter.
+_NOISE_FLOOR_SECONDS = 0.01
+# Stall guard per call. SIGALRM interrupts a stalled parser (sre and the
+# Python loop both check signals), so a regression fails instead of hanging.
+_STALL_SECONDS = 10.0
+_ROUNDS = 3
 
 _TOOLS = [
     ToolDefinition(
@@ -29,76 +38,117 @@ _TOOLS = [
 ]
 
 
-def _assert_fast(fn: Callable[[], Any]) -> None:
-    """Fail when fn runs past the bound. SIGALRM interrupts a stalled parser
-    (sre and the Python loop both check signals), so a regression fails the
-    test instead of hanging it."""
-
+def _timed(fn: Callable[[], Any]) -> float:
     def _on_timeout(_signum: int, _frame: FrameType | None) -> None:
-        raise TimeoutError(f"took more than {_TIME_BOUND_SECONDS}s")
+        raise TimeoutError(f"took more than {_STALL_SECONDS}s")
 
+    # GC passes over the parsed objects grow with the heap, not with the
+    # parser's own work, so they are kept out of the measurement.
+    gc.collect()
+    gc.disable()
     previous_handler = signal.signal(signal.SIGALRM, _on_timeout)
-    signal.setitimer(signal.ITIMER_REAL, _TIME_BOUND_SECONDS)
+    signal.setitimer(signal.ITIMER_REAL, _STALL_SECONDS)
     started = time.perf_counter()
     try:
         fn()
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous_handler)
-    elapsed = time.perf_counter() - started
-    assert elapsed < _TIME_BOUND_SECONDS, f"took {elapsed:.2f}s"
+        gc.enable()
+    return time.perf_counter() - started
 
 
+def _assert_linear(parse: Callable[[str], Any], build: Callable[[int], str]) -> None:
+    """Fail when parse time grows much faster than the input size."""
+    small_input = build(1)
+    large_input = build(_GROWTH)
+    small = large = float("inf")
+    # Interleaved rounds, best of each, so one slow moment on a shared
+    # runner does not decide the result.
+    for _ in range(_ROUNDS):
+        small = min(small, _timed(lambda: parse(small_input)))
+        large = min(large, _timed(lambda: parse(large_input)))
+    if large < _NOISE_FLOOR_SECONDS:
+        return
+    ratio = large / max(small, 1e-6)
+    assert ratio < _MAX_GROWTH_RATIO, (
+        f"{_GROWTH}x input took {ratio:.1f}x longer ({small:.3f}s -> {large:.3f}s)"
+    )
+
+
+def _recover(text: str) -> Any:
+    return extract_tool_calls_from_response_text(text, _TOOLS)
+
+
+# Each builder takes a scale factor; scale 1 is the small input.
 @pytest.mark.parametrize(
-    "text",
+    "build",
     [
-        pytest.param("<function_calls><invoke " + "{" * 50_000, id="open-braces"),
         pytest.param(
-            "<function_calls>" + "<invoke name='x'>" * 30_000, id="unclosed-invoke"
+            lambda k: "<function_calls><invoke " + "{" * 6_000 * k, id="open-braces"
         ),
-        pytest.param("<function_calls>" + "<invoke " * 30_000, id="invoke-no-gt"),
         pytest.param(
-            '<function_calls><invoke name="internal_search">'
-            + "<parameter name='q'>" * 30_000
-            + "</invoke></function_calls>",
+            lambda k: "<function_calls>" + "<invoke name='x'>" * 4_000 * k,
+            id="unclosed-invoke",
+        ),
+        pytest.param(
+            lambda k: "<function_calls>" + "<invoke " * 4_000 * k, id="invoke-no-gt"
+        ),
+        pytest.param(
+            lambda k: (
+                '<function_calls><invoke name="internal_search">'
+                + "<parameter name='q'>" * 4_000 * k
+                + "</invoke></function_calls>"
+            ),
             id="unclosed-parameter",
         ),
-        pytest.param('{"a":' * 20_000 + "1" + "}" * 20_000, id="deeply-nested-json"),
-        pytest.param("<function_calls><invoke " + "{bad}" * 40_000, id="many-invalid"),
-        pytest.param(('{"a":' * 200 + "0" + "}" * 200) * 100, id="many-deep-objects"),
+        pytest.param(
+            lambda k: '{"a":' * 2_500 * k + "1" + "}" * 2_500 * k,
+            id="deeply-nested-json",
+        ),
+        pytest.param(
+            lambda k: "<function_calls><invoke " + "{bad}" * 5_000 * k,
+            id="many-invalid",
+        ),
+        pytest.param(
+            lambda k: ('{"a":' * 200 + "0" + "}" * 200) * 12 * k,
+            id="many-deep-objects",
+        ),
     ],
 )
-def test_tool_call_recovery_is_linear(text: str) -> None:
-    _assert_fast(lambda: extract_tool_calls_from_response_text(text, _TOOLS))
+def test_tool_call_recovery_is_linear(build: Callable[[int], str]) -> None:
+    _assert_linear(_recover, build)
 
 
 @pytest.mark.parametrize(
-    "content",
+    "build",
     [
-        pytest.param("{" * 64_000, id="open-braces"),
-        pytest.param("```{" * 50_000, id="fenced-open-braces"),
-        pytest.param("```json\n{" + "}```" * 50_000, id="many-closing-fences"),
+        pytest.param(lambda k: "{" * 8_000 * k, id="open-braces"),
+        pytest.param(lambda k: "```{" * 6_000 * k, id="fenced-open-braces"),
+        pytest.param(
+            lambda k: "```json\n{" + "}```" * 6_000 * k, id="many-closing-fences"
+        ),
     ],
 )
-def test_parse_llm_json_response_is_linear(content: str) -> None:
-    _assert_fast(lambda: parse_llm_json_response(content))
+def test_parse_llm_json_response_is_linear(build: Callable[[int], str]) -> None:
+    _assert_linear(parse_llm_json_response, build)
 
 
 @pytest.mark.parametrize(
-    "content",
+    "build",
     [
-        pytest.param("(" + " " * 4_000, id="open-paren-spaces"),
-        pytest.param("(" + " " * 4_000 + ")", id="closed-paren-spaces"),
-        pytest.param("( a" + " " * 4_000 + ")", id="token-then-spaces"),
-        pytest.param("(" + " " * 100_000, id="long-spaces"),
+        pytest.param(lambda k: "(" + " " * 500 * k, id="open-paren-spaces"),
+        pytest.param(lambda k: "(" + " " * 500 * k + ")", id="closed-paren-spaces"),
+        pytest.param(lambda k: "( a" + " " * 500 * k + ")", id="token-then-spaces"),
+        pytest.param(lambda k: "(" + " " * 12_500 * k, id="long-spaces"),
     ],
 )
-def test_time_filter_parse_is_linear(content: str) -> None:
-    _assert_fast(lambda: _parse_time_decision(content))
+def test_time_filter_parse_is_linear(build: Callable[[int], str]) -> None:
+    _assert_linear(_parse_time_decision, build)
 
 
 def test_time_filter_pair_regex_is_linear_without_the_length_cap() -> None:
-    _assert_fast(lambda: _TIME_FILTER_PAIR_RE.search("(" + " " * 4_000))
+    _assert_linear(_TIME_FILTER_PAIR_RE.search, lambda k: "(" + " " * 500 * k)
 
 
 def test_find_all_json_objects_keeps_nested_and_order() -> None:
