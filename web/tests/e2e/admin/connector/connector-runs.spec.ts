@@ -1,5 +1,6 @@
-/** The run list: a file connector shows no run-type filter, and a perm-synced
- * pair's failed syncs open their error. */
+/** The run list and the activity panel: a file connector shows no run-type
+ * filter and no activity, and a perm-synced pair's failed syncs open their
+ * error and the doc sync's shows in the panel. */
 
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -137,13 +138,24 @@ async function mockSyncConnector(page: Page): Promise<void> {
   await page.route(`${base}/errors*`, async (route) => {
     await route.fulfill(jsonResponse({ items: [], total_items: 0 }));
   });
+  // The feed holds failed syncs only, so a query for runs with document errors finds none.
   await page.route(`${base}/runs*`, async (route) => {
-    await route.fulfill(jsonResponse(failedSyncRuns()));
+    const params = new URL(route.request().url()).searchParams;
+    const failedOnly = !params.has("errors");
+    await route.fulfill(
+      jsonResponse(
+        failedOnly
+          ? failedSyncRuns()
+          : { ...failedSyncRuns(), items: [], total_items: 0 }
+      )
+    );
   });
 }
 
 test.describe("Connector runs", () => {
-  test("a file connector shows no run-type filter", async ({ page }) => {
+  test("a file connector shows no run-type filter and no activity", async ({
+    page,
+  }) => {
     const apiClient = new OnyxApiClient(page.request);
     const ccPairId = await apiClient.createFileConnector(
       `E2E Runs File ${Date.now()}`
@@ -152,6 +164,7 @@ test.describe("Connector runs", () => {
       const detail = new AdminConnectorDetailPage(page);
       await detail.goto(ccPairId);
       await detail.expectNoRuns();
+      await detail.expectNoActivity();
       await expect(detail.runKindFilter).toHaveCount(0);
     } finally {
       await apiClient.deleteCCPair(ccPairId);
@@ -164,6 +177,8 @@ test.describe("Connector runs", () => {
     await detail.goto(MOCK_SYNC_CC_PAIR_ID);
     await detail.expectRunsVisible();
     await expect(detail.runKindFilter).toBeVisible();
+    await detail.expectActivityShows(MOCK_DOC_ERROR_MESSAGE);
+    await detail.expectActivityGroups(["2 Failures"]);
 
     const docModal = await detail.openRunLogs(
       0,

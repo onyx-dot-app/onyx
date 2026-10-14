@@ -53,6 +53,7 @@ from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
+    CCPairRunErrors,
     CCPairRunKind,
     CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
@@ -291,13 +292,16 @@ def get_cc_pair_runs(
     kinds: list[CCPairRunKind] | None = Query(None),
     status_groups: list[CCPairRunStatusGroup] | None = Query(None),
     q: str | None = Query(None, max_length=200),
+    errors: CCPairRunErrors | None = Query(None),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
 ) -> CCPairRunsResponse:
     """The pair's index attempts and permission syncs as one feed, newest
-    first. ``since`` windows on creation time and ``q`` matches error messages."""
+    first. ``since`` windows on creation time, ``q`` matches error messages,
+    including an index attempt's document errors, and ``errors`` keeps only
+    runs with document errors, open or resolved."""
     # Called directly: the route contract reaches the scope gate three calls deep.
     cc_pair = get_readable_connector_credential_pair_for_user(
         cc_pair_id, db_session, user
@@ -316,6 +320,7 @@ def get_cc_pair_runs(
         since=since,
         error_query=(q or "").strip() or None,
         status_groups=groups,
+        errors=errors,
     )
     page = get_cc_pair_run_page(
         db_session,

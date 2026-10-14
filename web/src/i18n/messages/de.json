@@ -2506,6 +2506,75 @@
           "cancelFailed": "Der Lauf konnte nicht abgebrochen werden. Versuchen Sie es erneut."
         }
       },
+      "activity": {
+        "search": {
+          "placeholder": "Aktivitätsverlauf durchsuchen..."
+        },
+        "counts": {
+          "failures": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}",
+          "errors": "{count, plural, one {# Lauf mit Dokumentfehlern} other {# Läufe mit Dokumentfehlern}}"
+        },
+        "filter": {
+          "label": "Anzeigen",
+          "all": "Fehlschläge und Fehler",
+          "failures": "Fehlschläge",
+          "errors": "Fehler"
+        },
+        "resolved": {
+          "label": "Behoben"
+        },
+        "groups": {
+          "failures": "{count, plural, one {# Fehlschlag} other {# Fehlschläge}}",
+          "errors": "{count, plural, one {# Fehler} other {# Fehler}}",
+          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "Indexierung fehlgeschlagen",
+            "running": "Indexierung läuft mit Fehlern",
+            "stopped": "Indexierung mit Fehlern abgebrochen",
+            "errors": "Indexierung mit Fehlern abgeschlossen",
+            "resolved": "Indexierungsfehler behoben"
+          },
+          "doc_permission_sync": {
+            "failed": "Berechtigungssynchronisierung fehlgeschlagen",
+            "running": "Berechtigungen werden mit Fehlern synchronisiert",
+            "stopped": "Berechtigungssynchronisierung mit Fehlern abgebrochen",
+            "errors": "Berechtigungen mit Fehlern synchronisiert",
+            "resolved": "Fehler der Berechtigungssynchronisierung behoben"
+          },
+          "group_sync": {
+            "failed": "Gruppenmitgliedschaftssynchronisierung fehlgeschlagen",
+            "running": "Gruppenmitgliedschaften werden mit Fehlern synchronisiert",
+            "stopped": "Gruppenmitgliedschaftssynchronisierung mit Fehlern abgebrochen",
+            "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert",
+            "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, one {# Dokument indexiert} other {# Dokumente indexiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
+          "doc_permission_sync": "{count, plural, one {# Dokument synchronisiert} other {# Dokumente synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}.",
+          "group_sync": "{count, plural, one {# Mitgliedschaft synchronisiert} other {# Mitgliedschaften synchronisiert}}. Laufzeit {minutes, plural, one {# Minute} other {# Minuten}}."
+        },
+        "tags": {
+          "stackTrace": "Stacktrace",
+          "indexing": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}",
+          "doc_permission_sync": "{count, plural, one {# Dokument nicht synchronisiert} other {# Dokumente nicht synchronisiert}}",
+          "group_sync": "{count, plural, one {# Gruppe nicht synchronisiert} other {# Gruppen nicht synchronisiert}}",
+          "resolvedDocs": "{count, plural, one {# Dokument behoben} other {# Dokumente behoben}}"
+        },
+        "more": "Mehr anzeigen",
+        "empty": {
+          "title": "Keine Fehlschläge oder Fehler",
+          "resolved": "Keine behobenen Fehler",
+          "filtered": "Nichts passt zu dieser Suche.",
+          "failures": "Keine Fehlschläge",
+          "errors": "Keine Fehler"
+        },
+        "loadError": {
+          "title": "Die Aktivität konnte nicht geladen werden."
+        }
+      },
       "stageDetails": {
         "title": "Phasendetails",
         "calls": "Aufrufe",

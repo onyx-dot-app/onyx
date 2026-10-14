@@ -2506,6 +2506,75 @@
           "cancelFailed": "실행을 취소하지 못했습니다. 다시 시도하세요."
         }
       },
+      "activity": {
+        "search": {
+          "placeholder": "활동 기록 검색..."
+        },
+        "counts": {
+          "failures": "{count, plural, other {실패한 실행 #개}}",
+          "errors": "{count, plural, other {문서 오류가 있는 실행 #개}}"
+        },
+        "filter": {
+          "label": "표시",
+          "all": "실패 및 오류",
+          "failures": "실패",
+          "errors": "오류"
+        },
+        "resolved": {
+          "label": "해결됨"
+        },
+        "groups": {
+          "failures": "{count, plural, other {실패 #개}}",
+          "errors": "{count, plural, other {오류 #개}}",
+          "resolved": "{count, plural, other {해결됨 #개}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "인덱싱 실패",
+            "running": "오류와 함께 인덱싱 진행 중",
+            "stopped": "오류와 함께 인덱싱 중단됨",
+            "errors": "오류와 함께 인덱싱 완료",
+            "resolved": "인덱싱 오류 해결됨"
+          },
+          "doc_permission_sync": {
+            "failed": "권한 동기화 실패",
+            "running": "오류와 함께 권한 동기화 중",
+            "stopped": "오류와 함께 권한 동기화 중단됨",
+            "errors": "오류와 함께 권한 동기화됨",
+            "resolved": "권한 동기화 오류 해결됨"
+          },
+          "group_sync": {
+            "failed": "그룹 멤버십 동기화 실패",
+            "running": "오류와 함께 그룹 멤버십 동기화 중",
+            "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨",
+            "errors": "오류와 함께 그룹 멤버십 동기화됨",
+            "resolved": "그룹 멤버십 동기화 오류 해결됨"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, other {문서 #개 인덱싱됨}}. 실행 시간 {minutes, plural, other {#분}}.",
+          "doc_permission_sync": "{count, plural, other {문서 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}.",
+          "group_sync": "{count, plural, other {멤버십 #개 동기화됨}}. 실행 시간 {minutes, plural, other {#분}}."
+        },
+        "tags": {
+          "stackTrace": "스택 트레이스",
+          "indexing": "{count, plural, other {문서 #개 실패}}",
+          "doc_permission_sync": "{count, plural, other {문서 #개 동기화 실패}}",
+          "group_sync": "{count, plural, other {그룹 #개 동기화 실패}}",
+          "resolvedDocs": "{count, plural, other {문서 #개 해결됨}}"
+        },
+        "more": "더 보기",
+        "empty": {
+          "title": "실패나 오류가 없습니다",
+          "resolved": "해결된 오류가 없습니다",
+          "filtered": "이 검색과 일치하는 항목이 없습니다.",
+          "failures": "실패가 없습니다",
+          "errors": "오류가 없습니다"
+        },
+        "loadError": {
+          "title": "활동을 불러올 수 없습니다."
+        }
+      },
       "stageDetails": {
         "title": "단계 세부 정보",
         "calls": "호출 수",

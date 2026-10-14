@@ -1,8 +1,10 @@
 """Coverage for a pair's run feed and the single-attempt cancel route: kinds
 merge newest first across pages, another pair's runs stay out unless its source
 shares one group sync history, counts ignore the
-status filter, `since` and `q` narrow the feed, a non-synced pair shows only
-indexing, cancel acts only on active attempts of a pair the caller operates,
+status filter, `since` and `q` narrow the feed, `q` also reads an attempt's
+document errors, `errors` keeps runs with open or resolved document errors, a
+non-synced pair shows only indexing, cancel acts only on active attempts of a
+pair the caller operates,
 and throughput counts only the pair's runs created inside the window."""
 
 from datetime import datetime, timedelta, timezone
@@ -17,6 +19,7 @@ from onyx.connectors.models import InputType
 from onyx.db import cc_pair_runs
 from onyx.db.enums import (
     AccessType,
+    CCPairRunErrors,
     CCPairRunKind,
     CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
@@ -30,6 +33,7 @@ from onyx.db.models import (
     DocPermissionSyncAttempt,
     ExternalGroupPermissionSyncAttempt,
     IndexAttempt,
+    IndexAttemptError,
     User,
 )
 from onyx.db.search_settings import get_current_search_settings
@@ -152,6 +156,7 @@ def _runs(
     kinds: list[CCPairRunKind] | None = None,
     status_groups: list[CCPairRunStatusGroup] | None = None,
     q: str | None = None,
+    errors: CCPairRunErrors | None = None,
 ) -> CCPairRunsResponse:
     return get_cc_pair_runs(
         cc_pair_id=cc_pair.id,
@@ -161,9 +166,23 @@ def _runs(
         kinds=kinds,
         status_groups=status_groups,
         q=q,
+        errors=errors,
         user=user,
         db_session=db_session,
     )
+
+
+def _doc_error(db_session: Session, attempt: IndexAttempt, is_resolved: bool) -> None:
+    db_session.add(
+        IndexAttemptError(
+            index_attempt_id=attempt.id,
+            connector_credential_pair_id=attempt.connector_credential_pair_id,
+            document_id=f"doc-{attempt.id}-{is_resolved}",
+            failure_message="boom",
+            is_resolved=is_resolved,
+        )
+    )
+    db_session.commit()
 
 
 def _order(response: CCPairRunsResponse) -> list[tuple[CCPairRunKind, int]]:
@@ -221,6 +240,54 @@ def test_leaves_out_a_run_deleted_while_the_page_loads(db_session: Session) -> N
         response = _runs(db_session, admin, cc_pair, page_num=0, page_size=10)
 
     assert _order(response) == [(CCPairRunKind.INDEXING, kept.id)]
+
+
+def test_errors_filter_keeps_runs_with_open_or_resolved_doc_errors(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "runs_admin", is_admin=True)
+    cc_pair = _create_cc_pair(db_session, AccessType.SYNC)
+    clean = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
+    open_errors = _index_attempt(
+        db_session, cc_pair, 1, IndexingStatus.COMPLETED_WITH_ERRORS
+    )
+    _doc_error(db_session, open_errors, is_resolved=False)
+    _doc_error(db_session, open_errors, is_resolved=True)
+    resolved = _index_attempt(db_session, cc_pair, 2, IndexingStatus.SUCCESS)
+    _doc_error(db_session, resolved, is_resolved=True)
+    unreadable = _doc_sync(db_session, cc_pair, 3, PermissionSyncStatus.SUCCESS)
+    unreadable.docs_with_permission_errors = 2
+    _group_sync(db_session, cc_pair, 4, PermissionSyncStatus.FAILED)
+    db_session.commit()
+
+    unresolved = _runs(db_session, admin, cc_pair, errors=CCPairRunErrors.UNRESOLVED)
+    resolved_only = _runs(db_session, admin, cc_pair, errors=CCPairRunErrors.RESOLVED)
+    # The activity panel's errors group: open errors on runs that did not fail.
+    not_failed = _runs(
+        db_session,
+        admin,
+        cc_pair,
+        status_groups=[CCPairRunStatusGroup.RUNNING, CCPairRunStatusGroup.SUCCEEDED],
+        errors=CCPairRunErrors.UNRESOLVED,
+    )
+    by_doc_error = _runs(db_session, admin, cc_pair, q="boom")
+
+    assert _order(unresolved) == [
+        (CCPairRunKind.DOC_PERMISSION_SYNC, unreadable.id),
+        (CCPairRunKind.INDEXING, open_errors.id),
+    ]
+    assert unresolved.total_items == 2
+    assert unresolved.status_counts[CCPairRunStatusGroup.SUCCEEDED] == 2
+    assert _order(resolved_only) == [(CCPairRunKind.INDEXING, resolved.id)]
+    assert _order(not_failed) == _order(unresolved)
+    assert not_failed.total_items == 2
+    assert _order(by_doc_error) == [
+        (CCPairRunKind.INDEXING, resolved.id),
+        (CCPairRunKind.INDEXING, open_errors.id),
+    ]
+    assert clean.id not in {
+        run.attempt.id for run in by_doc_error.items if run.kind == "indexing"
+    }
 
 
 def test_leaves_out_another_pairs_runs(db_session: Session) -> None:

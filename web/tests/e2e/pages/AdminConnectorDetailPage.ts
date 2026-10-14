@@ -19,6 +19,8 @@ export class AdminConnectorDetailPage {
   readonly runLogsButtons: Locator;
   /** The run list's empty state, shown once the feed has loaded with no runs. */
   readonly noRunsMessage: Locator;
+  /** The failures and errors panel beside the page's own column. */
+  readonly activityPanel: Locator;
   /** Opens the action menu. Present only when the caller may operate. */
   readonly manageButton: Locator;
   readonly deleteMenuItem: Locator;
@@ -36,6 +38,7 @@ export class AdminConnectorDetailPage {
     this.runKindFilter = page.getByRole("button", { name: "All Types" });
     this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
     this.noRunsMessage = page.getByText("No runs yet", { exact: true });
+    this.activityPanel = page.getByTestId("connector-activity");
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
       name: "Manage Index",
@@ -84,6 +87,25 @@ export class AdminConnectorDetailPage {
   /** Waits for the feed to load and show no runs. */
   async expectNoRuns(): Promise<void> {
     await expect(this.noRunsMessage).toBeVisible({ timeout: 30000 });
+  }
+
+  /** The activity panel has loaded and shows `text`, such as a failed run's error. */
+  async expectActivityShows(text: string): Promise<void> {
+    await expect(this.activityPanel).toContainText(text, { timeout: 30000 });
+  }
+
+  /** The activity panel shows exactly these group headings, such as "2 Failures". */
+  async expectActivityGroups(headings: string[]): Promise<void> {
+    await expect(
+      this.activityPanel.getByText(/^\d+ (Failures?|Errors?|Resolved)$/)
+    ).toHaveText(headings);
+  }
+
+  /** The activity panel has loaded with nothing to show. */
+  async expectNoActivity(): Promise<void> {
+    await expect(this.activityPanel).toContainText("No failures or errors", {
+      timeout: 30000,
+    });
   }
 
   /** Opens the `index`-th logs button, newest first, and returns its trace dialog. */

@@ -61,6 +61,7 @@ import IndexConfigurationsSection from "@/views/admin/connectors/ConnectorDetail
 import SharingSettingsSection from "@/views/admin/connectors/ConnectorDetailPage/SharingSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/ConnectorDetailPage/ScheduleSection";
 import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
+import ActivityPanel from "@/views/admin/connectors/ConnectorDetailPage/ActivityPanel";
 
 const CC_PAIR_POLL_MS = 5000;
 
@@ -350,7 +351,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
   };
 
   return (
-    <SettingsLayouts.Root width="sm">
+    <SettingsLayouts.Root width="xl">
       {ConfirmModal}
       {showDeleteConnectorConfirmModal && (
         <ConfirmEntityModal
@@ -415,69 +416,86 @@ function Main({ ccPairId }: { ccPairId: number }) {
         }
       />
 
-      <SettingsLayouts.Body gap={6}>
-        {ccPair.deletion_failure_message && isDeleting && (
-          <MessageCard
-            variant="error"
-            title={t("deletionError.title")}
-            description={t("deletionError.description")}
-            bottomChildren={
-              <Text font="secondary-body" color="text-04">
-                {ccPair.deletion_failure_message}
-              </Text>
-            }
-          />
-        )}
-        {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
-          <MessageCard
-            variant="warning"
-            title={t("invalidState.title")}
-            description={t("invalidState.description")}
-          />
-        )}
-        {indexAttemptErrors && indexAttemptErrorsTotalItems > 0 && (
-          <MessageCard
-            variant="warning"
-            title={t("indexErrorsAlert.title")}
-            description={
-              isResolvingErrors
-                ? t("indexErrorsAlert.resolvingStatus")
-                : t("indexErrorsAlert.description")
-            }
-            rightChildren={
-              !isResolvingErrors && (
-                <Button
-                  prominence="secondary"
-                  onClick={() => setShowIndexAttemptErrors(true)}
-                >
-                  {t("indexErrorsAlert.detailsButton.label")}
-                </Button>
-              )
-            }
-          />
-        )}
-        {ccPair.pending_backfills.length > 0 && (
-          <PendingBackfills backfills={ccPair.pending_backfills} />
-        )}
+      <SettingsLayouts.Body>
+        {/* The panel sits beside the column on wide screens and under it elsewhere. min-w-0 lets the column shrink under long content. */}
+        <Section
+          flexDirection="row"
+          alignItems="start"
+          gap={4}
+          height="fit"
+          className="max-lg:flex-col"
+        >
+          <Section
+            alignItems="stretch"
+            gap={6}
+            height="fit"
+            className="min-w-0 flex-1"
+          >
+            {ccPair.deletion_failure_message && isDeleting && (
+              <MessageCard
+                variant="error"
+                title={t("deletionError.title")}
+                description={t("deletionError.description")}
+                bottomChildren={
+                  <Text font="secondary-body" color="text-04">
+                    {ccPair.deletion_failure_message}
+                  </Text>
+                }
+              />
+            )}
+            {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
+              <MessageCard
+                variant="warning"
+                title={t("invalidState.title")}
+                description={t("invalidState.description")}
+              />
+            )}
+            {indexAttemptErrors && indexAttemptErrorsTotalItems > 0 && (
+              <MessageCard
+                variant="warning"
+                title={t("indexErrorsAlert.title")}
+                description={
+                  isResolvingErrors
+                    ? t("indexErrorsAlert.resolvingStatus")
+                    : t("indexErrorsAlert.description")
+                }
+                rightChildren={
+                  !isResolvingErrors && (
+                    <Button
+                      prominence="secondary"
+                      onClick={() => setShowIndexAttemptErrors(true)}
+                    >
+                      {t("indexErrorsAlert.detailsButton.label")}
+                    </Button>
+                  )
+                }
+              />
+            )}
+            {ccPair.pending_backfills.length > 0 && (
+              <PendingBackfills backfills={ccPair.pending_backfills} />
+            )}
 
-        <StatusCard ccPair={ccPair} />
-        <PairChecksCard
-          source={source}
-          credentialId={ccPair.credential.id}
-          connectorId={ccPair.connector.id}
-        />
-        <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
-        <IndexConfigurationsSection
-          ccPair={ccPair}
-          onEdit={onEdit}
-          manageFiles={canManageInlineFiles}
-          onRefresh={refresh}
-        />
-        <SharingSettingsSection ccPair={ccPair} onEdit={onEdit} />
-        <Divider paddingParallel={0} paddingPerpendicular={0} />
-        <ScheduleSection ccPair={ccPair} editable={canOperate} />
+            <StatusCard ccPair={ccPair} />
+            <PairChecksCard
+              source={source}
+              credentialId={ccPair.credential.id}
+              connectorId={ccPair.connector.id}
+            />
+            <AuthenticationAccountSection ccPair={ccPair} onEdit={onEdit} />
+            <IndexConfigurationsSection
+              ccPair={ccPair}
+              onEdit={onEdit}
+              manageFiles={canManageInlineFiles}
+              onRefresh={refresh}
+            />
+            <SharingSettingsSection ccPair={ccPair} onEdit={onEdit} />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
+            <ScheduleSection ccPair={ccPair} editable={canOperate} />
 
-        <RunsCard ccPairId={ccPair.id} canOperate={canOperate} />
+            <RunsCard ccPairId={ccPair.id} canOperate={canOperate} />
+          </Section>
+          <ActivityPanel ccPairId={ccPair.id} />
+        </Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

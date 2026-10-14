@@ -28,18 +28,30 @@ export const RUN_KIND_ICONS = {
   group_sync: SvgUsers,
 } satisfies Record<CCPairRunKind, IconFunctionComponent>;
 
-/** A run's error text: its trace, else its error message, or `null` when it has neither. */
-export function runErrorText(run: CCPairRun): string | null {
-  if (run.attempt.full_exception_trace !== null) {
-    return run.attempt.full_exception_trace;
-  }
+/** How run times print: a full date and time, as `useFormatter().dateTime` takes it. */
+export const RUN_TIME_FORMAT = {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+} as const;
+
+/** The run's own error message, without its trace. */
+export function runErrorMessage(run: CCPairRun): string | null {
   return run.kind === "indexing"
     ? run.attempt.error_msg
     : run.attempt.error_message;
 }
 
+/** A run's error text: its trace, else its error message, or `null` when it has neither. */
+export function runErrorText(run: CCPairRun): string | null {
+  return run.attempt.full_exception_trace ?? runErrorMessage(run);
+}
+
 /** The documents a run could not handle: indexing errors, or docs a sync could not read. */
-function runWarnings(run: CCPairRun): number {
+export function runWarnings(run: CCPairRun): number {
   switch (run.kind) {
     case "indexing":
       return run.attempt.error_count;
@@ -50,16 +62,41 @@ function runWarnings(run: CCPairRun): number {
   }
 }
 
-function isActive(run: CCPairRun): boolean {
+/** What the run moved: documents for indexing and doc syncs, memberships for group syncs. */
+export function runMoved(run: CCPairRun): number {
+  switch (run.kind) {
+    case "indexing":
+      return run.attempt.total_docs_indexed;
+    case "doc_permission_sync":
+      return run.attempt.total_docs_synced;
+    case "group_sync":
+      return run.attempt.total_group_memberships_synced;
+  }
+}
+
+export function isActive(run: CCPairRun): boolean {
   return (
     run.attempt.status === "in_progress" || run.attempt.status === "not_started"
   );
 }
 
 /** When the run finished, or `null` while it has not. */
-function finishedAt(run: CCPairRun): string | null {
+export function finishedAt(run: CCPairRun): string | null {
   if (isActive(run)) return null;
   return run.attempt.time_finished;
+}
+
+/** Whole minutes from the run's start to its end, or `null` before either. */
+export function runMinutes(run: CCPairRun): number | null {
+  const finished = finishedAt(run);
+  const started = run.attempt.time_started;
+  if (finished === null || started === null) return null;
+  return Math.max(
+    0,
+    Math.round(
+      (new Date(finished).getTime() - new Date(started).getTime()) / 60_000
+    )
+  );
 }
 
 interface FigureProps {
@@ -225,14 +262,7 @@ export default function RunRow({
   const active = isActive(run);
   const failed = run.attempt.status === "failed";
   const stamp = (value: string) =>
-    format.dateTime(new Date(value), {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
+    format.dateTime(new Date(value), RUN_TIME_FORMAT);
 
   // Queued, then the live rate, then when it finished and how long it took.
   function detail(): string {
@@ -247,14 +277,8 @@ export default function RunRow({
     }
     const finished = finishedAt(run);
     if (finished === null) return t("detail.running");
-    const started = run.attempt.time_started;
-    if (started === null) return stamp(finished);
-    const minutes = Math.max(
-      0,
-      Math.round(
-        (new Date(finished).getTime() - new Date(started).getTime()) / 60_000
-      )
-    );
+    const minutes = runMinutes(run);
+    if (minutes === null) return stamp(finished);
     return t("detail.finished", { time: stamp(finished), minutes });
   }
 

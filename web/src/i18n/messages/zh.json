@@ -2506,6 +2506,75 @@
           "cancelFailed": "无法取消运行，请重试。"
         }
       },
+      "activity": {
+        "search": {
+          "placeholder": "搜索活动记录..."
+        },
+        "counts": {
+          "failures": "{count, plural, other {# 次运行失败}}",
+          "errors": "{count, plural, other {# 次运行存在文档错误}}"
+        },
+        "filter": {
+          "label": "显示",
+          "all": "失败和错误",
+          "failures": "失败",
+          "errors": "错误"
+        },
+        "resolved": {
+          "label": "已解决"
+        },
+        "groups": {
+          "failures": "{count, plural, other {# 次失败}}",
+          "errors": "{count, plural, other {# 个错误}}",
+          "resolved": "{count, plural, other {# 个已解决}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "索引失败",
+            "running": "索引进行中，存在错误",
+            "stopped": "索引已停止，存在错误",
+            "errors": "索引已完成，存在错误",
+            "resolved": "索引错误已解决"
+          },
+          "doc_permission_sync": {
+            "failed": "权限同步失败",
+            "running": "权限同步进行中，存在错误",
+            "stopped": "权限同步已停止，存在错误",
+            "errors": "权限已同步，存在错误",
+            "resolved": "权限同步错误已解决"
+          },
+          "group_sync": {
+            "failed": "群组成员同步失败",
+            "running": "群组成员同步进行中，存在错误",
+            "stopped": "群组成员同步已停止，存在错误",
+            "errors": "群组成员已同步，存在错误",
+            "resolved": "群组成员同步错误已解决"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, other {已索引 # 个文档}}。运行时间 {minutes, plural, other {# 分钟}}。",
+          "doc_permission_sync": "{count, plural, other {已同步 # 个文档}}。运行时间 {minutes, plural, other {# 分钟}}。",
+          "group_sync": "{count, plural, other {已同步 # 个成员关系}}。运行时间 {minutes, plural, other {# 分钟}}。"
+        },
+        "tags": {
+          "stackTrace": "堆栈跟踪",
+          "indexing": "{count, plural, other {# 个文档失败}}",
+          "doc_permission_sync": "{count, plural, other {# 个文档同步失败}}",
+          "group_sync": "{count, plural, other {# 个群组同步失败}}",
+          "resolvedDocs": "{count, plural, other {# 个文档已解决}}"
+        },
+        "more": "显示更多",
+        "empty": {
+          "title": "没有失败或错误",
+          "resolved": "没有已解决的错误",
+          "filtered": "没有与此搜索匹配的内容。",
+          "failures": "没有失败",
+          "errors": "没有错误"
+        },
+        "loadError": {
+          "title": "无法加载活动。"
+        }
+      },
       "stageDetails": {
         "title": "阶段详情",
         "calls": "调用次数",
