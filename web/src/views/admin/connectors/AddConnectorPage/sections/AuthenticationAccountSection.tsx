@@ -113,6 +113,10 @@ export default function AuthenticationAccountSection({
   // Expanded, the section lists every account. Folded, only the chosen one
   // (or the new-account card when nothing is chosen) stays.
   const [accountsExpanded, setAccountsExpanded] = useState<boolean>(true);
+  const hasSavedAccounts: boolean = (credentials?.length ?? 0) > 0;
+  // With no saved account there is nothing to fold away, so the section
+  // stays expanded whatever folded it (starting the checks does).
+  const sectionExpanded: boolean = accountsExpanded || !hasSavedAccounts;
   // The saved accounts whose details are open.
   const [openDetailIds, setOpenDetailIds] = useState<ReadonlySet<number>>(
     () => new Set()
@@ -353,12 +357,10 @@ export default function AuthenticationAccountSection({
         selectable={isSelectable(credential)}
         // Folded, the pick is the only card shown: it keeps a light look,
         // and a click opens the section rather than dropping the pick.
-        quietSelection={!accountsExpanded}
+        quietSelection={!sectionExpanded}
         onSelect={() => onSwap(credential)}
         onDeselect={() =>
-          accountsExpanded
-            ? onCredentialChange(null)
-            : setAccountsExpanded(true)
+          sectionExpanded ? onCredentialChange(null) : setAccountsExpanded(true)
         }
         onDelete={() => onDeleteCredential(credential)}
         detailsOpen={openDetailIds.has(credential.id)}
@@ -497,7 +499,7 @@ export default function AuthenticationAccountSection({
             </Section>
             {/* Folding hides the saved accounts that are not the pick; with
             none, it would do nothing, so the button is left out. */}
-            {(credentials?.length ?? 0) > 0 && (
+            {hasSavedAccounts && (
               <Button
                 icon={accountsExpanded ? SvgFold : SvgExpand}
                 prominence="tertiary"
@@ -529,7 +531,7 @@ export default function AuthenticationAccountSection({
             {credentials.map((credential, index) => (
               <Fold
                 key={credential.id}
-                open={accountsExpanded || credential.id === selectedSavedId}
+                open={sectionExpanded || credential.id === selectedSavedId}
                 keepMounted
               >
                 <div className={cn(index > 0 && "pt-2")}>
@@ -538,7 +540,7 @@ export default function AuthenticationAccountSection({
               </Fold>
             ))}
             {canAuthorize && (
-              <Fold open={accountsExpanded} keepMounted>
+              <Fold open={sectionExpanded} keepMounted>
                 <div className={cn(credentials.length > 0 && "pt-2")}>
                   <Section flexDirection="row" justifyContent="start" gap={1}>
                     <Button
@@ -559,7 +561,7 @@ export default function AuthenticationAccountSection({
             {/* Shown unless a saved account is the pick. Its own fold (the
             form) is independent of the section's. */}
             <Fold
-              open={accountsExpanded || selectedSavedId === null}
+              open={sectionExpanded || selectedSavedId === null}
               keepMounted
             >
               <div
