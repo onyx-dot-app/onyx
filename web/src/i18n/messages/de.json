@@ -5757,149 +5757,8 @@
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "Von {source} übernommen"
-          },
-          "organizationPublic": {
-            "label": "Organisationsweit öffentlich"
-          },
-          "private": {
-            "label": "Privat"
-          }
-        },
-        "connectorCreated": {
-          "toast": "Konnektor erfolgreich erstellt"
-        },
-        "empty": {
-          "message": "Sie haben anscheinend noch keine Konnektoren eingerichtet. Öffnen Sie die Seite [Konnektor hinzufügen](/admin/connectors), um zu beginnen!"
-        },
-        "federated": {
-          "access": {
-            "label": "Föderierter Zugriff"
-          },
-          "indexed": {
-            "label": "Indiziert"
-          },
-          "notApplicable": {
-            "label": "Nicht zutreffend"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "Automatische Synchronisierung"
-            },
-            "private": {
-              "label": "Privat"
-            },
-            "public": {
-              "label": "Öffentlich"
-            },
-            "title": "Zugriffstyp"
-          },
-          "applyButton": {
-            "label": "Anwenden"
-          },
-          "docCount": {
-            "placeholder": "Anzahl",
-            "title": "Anzahl der Dokumente"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "Mit Fehlern abgeschlossen"
-            },
-            "failed": {
-              "label": "Fehlgeschlagen"
-            },
-            "inProgress": {
-              "label": "Läuft"
-            },
-            "interrupted": {
-              "label": "Unterbrochen"
-            },
-            "notStarted": {
-              "label": "Nicht gestartet"
-            },
-            "success": {
-              "label": "Erfolgreich"
-            },
-            "title": "Letzter Status"
-          },
-          "title": "Konnektoren filtern"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "Zugriff: {values}"
-          },
-          "clearBadge": {
-            "label": "Löschen"
-          },
-          "docsAnyBadge": {
-            "label": "Dok. {operator} beliebig"
-          },
-          "docsBadge": {
-            "label": "Dok. {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "Status: {values}"
-          }
-        },
-        "loadError": {
-          "message": "Fehler beim Laden des Indizierungsstatus."
-        },
-        "manageConnector": {
-          "tooltip": "Konnektor verwalten"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "Föderierten Konnektor verwalten"
-        },
-        "search": {
-          "placeholder": "Konnektoren suchen..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "Aktive Konnektoren"
-          },
-          "publicConnectors": {
-            "label": "Öffentliche Konnektoren"
-          },
-          "totalConnectors": {
-            "label": "Konnektoren gesamt"
-          },
-          "totalDocsIndexed": {
-            "label": "Indizierte Dokumente gesamt"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "Alles erledigt! Keine weiteren Konnektoren vorhanden"
-          },
-          "lastIndexed": {
-            "header": "Zuletzt indiziert"
-          },
-          "name": {
-            "header": "Name"
-          },
-          "permissions": {
-            "header": "Berechtigungen / Zugriff"
-          },
-          "status": {
-            "header": "Status"
-          },
-          "totalDocs": {
-            "header": "Dok. gesamt"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "Alle einklappen"
-          },
-          "expand": {
-            "label": "Alle ausklappen"
-          }
-        }
+      "connectorCreated": {
+        "toast": "Konnektor erfolgreich erstellt"
       },
       "overview": {
         "connectors": {
@@ -5914,6 +5773,50 @@
           "whole": "/ {whole}"
         },
         "loadError": "Die Übersicht konnte nicht geladen werden."
+      },
+      "list": {
+        "search": {
+          "placeholder": "Konnektoren suchen..."
+        },
+        "statusFilter": {
+          "label": "Status",
+          "all": "Alle Status"
+        },
+        "counts": {
+          "indexed": "{count, plural, one {# Konnektor indexiert} other {# Konnektoren indexiert}}",
+          "indexing": "{count, plural, one {# Konnektor indexiert gerade} other {# Konnektoren indexieren gerade}}",
+          "failed": "{count, plural, one {# Konnektor fehlgeschlagen} other {# Konnektoren fehlgeschlagen}}",
+          "paused": "{count, plural, one {# Konnektor pausiert} other {# Konnektoren pausiert}}"
+        },
+        "access": {
+          "public": "Öffentlich",
+          "private": "Privat",
+          "sync": "Auto-Sync",
+          "sync_restricted": "Auto-Sync, eingeschränkt"
+        },
+        "detail": {
+          "queued": "{position, selectordinal, other {#.}} in der Warteschlange",
+          "lastIndexed": "Zuletzt indexiert {when}",
+          "neverIndexed": "Noch nicht indexiert"
+        },
+        "docs": {
+          "label": "Dokumente",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "Verwalten",
+          "manageFederated": "Föderierten Konnektor verwalten"
+        },
+        "federated": {
+          "tag": "Föderiert"
+        },
+        "empty": {
+          "title": "Noch keine Konnektoren",
+          "description": "Besuche die Seite [Konnektor hinzufügen](/admin/connectors), um zu beginnen.",
+          "filteredTitle": "Keine Konnektoren entsprechen diesen Filtern."
+        },
+        "loadError": "Die Konnektoren konnten nicht geladen werden.",
+        "units": "{count, plural, one {Konnektor} other {Konnektoren}}"
       }
     },
     "languageModels": {

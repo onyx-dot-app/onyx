@@ -458,6 +458,7 @@ def get_connector_credential_pairs_for_user(
     source: DocumentSource | None = None,
     processing_mode: ProcessingMode | None = ProcessingMode.REGULAR,
     defer_connector_config: bool = False,
+    eager_load_creator: bool = False,
 ) -> list[ConnectorCredentialPair]:
     """Get connector credential pairs for a user.
 
@@ -466,12 +467,15 @@ def get_connector_credential_pairs_for_user(
             FILE_SYSTEM connectors from standard admin UI. Pass None to get all.
         defer_connector_config: If True, skips loading Connector.connector_specific_config
             to avoid fetching large JSONB blobs when they aren't needed.
+        eager_load_creator: If True, loads each pair's creator in one query.
     """
     if eager_load_user:
         assert eager_load_credential, (
             "eager_load_credential must be True if eager_load_user is True"
         )
     stmt = select(ConnectorCredentialPair).distinct()
+    if eager_load_creator:
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.creator))
 
     if eager_load_connector:
         connector_load = selectinload(ConnectorCredentialPair.connector)

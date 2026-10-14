@@ -5757,149 +5757,8 @@
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "{source}에서 상속됨"
-          },
-          "organizationPublic": {
-            "label": "조직 전체 공개"
-          },
-          "private": {
-            "label": "비공개"
-          }
-        },
-        "connectorCreated": {
-          "toast": "커넥터를 생성했습니다"
-        },
-        "empty": {
-          "message": "아직 설정된 커넥터가 없는 것 같습니다. [커넥터 추가](/admin/connectors) 페이지에서 시작하세요!"
-        },
-        "federated": {
-          "access": {
-            "label": "페더레이션 액세스"
-          },
-          "indexed": {
-            "label": "인덱싱됨"
-          },
-          "notApplicable": {
-            "label": "해당 없음"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "자동 동기화"
-            },
-            "private": {
-              "label": "비공개"
-            },
-            "public": {
-              "label": "공개"
-            },
-            "title": "액세스 유형"
-          },
-          "applyButton": {
-            "label": "적용"
-          },
-          "docCount": {
-            "placeholder": "개수",
-            "title": "문서 수"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "오류와 함께 완료"
-            },
-            "failed": {
-              "label": "실패"
-            },
-            "inProgress": {
-              "label": "진행 중"
-            },
-            "interrupted": {
-              "label": "중단됨"
-            },
-            "notStarted": {
-              "label": "시작되지 않음"
-            },
-            "success": {
-              "label": "성공"
-            },
-            "title": "최근 상태"
-          },
-          "title": "커넥터 필터"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "액세스: {values}"
-          },
-          "clearBadge": {
-            "label": "지우기"
-          },
-          "docsAnyBadge": {
-            "label": "문서 {operator} 전체"
-          },
-          "docsBadge": {
-            "label": "문서 {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "상태: {values}"
-          }
-        },
-        "loadError": {
-          "message": "인덱싱 상태를 불러오지 못했습니다."
-        },
-        "manageConnector": {
-          "tooltip": "커넥터 관리"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "페더레이션 커넥터 관리"
-        },
-        "search": {
-          "placeholder": "커넥터 검색..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "활성 커넥터"
-          },
-          "publicConnectors": {
-            "label": "공개 커넥터"
-          },
-          "totalConnectors": {
-            "label": "전체 커넥터"
-          },
-          "totalDocsIndexed": {
-            "label": "인덱싱된 총 문서 수"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "모두 확인했습니다! 표시할 커넥터가 더 없습니다"
-          },
-          "lastIndexed": {
-            "header": "마지막 인덱싱"
-          },
-          "name": {
-            "header": "이름"
-          },
-          "permissions": {
-            "header": "권한 / 액세스"
-          },
-          "status": {
-            "header": "상태"
-          },
-          "totalDocs": {
-            "header": "총 문서 수"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "모두 접기"
-          },
-          "expand": {
-            "label": "모두 펼치기"
-          }
-        }
+      "connectorCreated": {
+        "toast": "커넥터를 생성했습니다"
       },
       "overview": {
         "connectors": {
@@ -5914,6 +5773,50 @@
           "whole": "/ {whole}"
         },
         "loadError": "개요를 불러올 수 없습니다."
+      },
+      "list": {
+        "search": {
+          "placeholder": "커넥터 검색..."
+        },
+        "statusFilter": {
+          "label": "상태",
+          "all": "모든 상태"
+        },
+        "counts": {
+          "indexed": "{count, plural, other {커넥터 #개 인덱싱 완료}}",
+          "indexing": "{count, plural, other {커넥터 #개 인덱싱 중}}",
+          "failed": "{count, plural, other {커넥터 #개 실패}}",
+          "paused": "{count, plural, other {커넥터 #개 일시 중지됨}}"
+        },
+        "access": {
+          "public": "공개",
+          "private": "비공개",
+          "sync": "자동 동기화",
+          "sync_restricted": "자동 동기화(제한됨)"
+        },
+        "detail": {
+          "queued": "대기열 {position, selectordinal, other {#}}번째",
+          "lastIndexed": "마지막 인덱싱 {when}",
+          "neverIndexed": "아직 인덱싱되지 않음"
+        },
+        "docs": {
+          "label": "문서",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "관리",
+          "manageFederated": "페더레이션 커넥터 관리"
+        },
+        "federated": {
+          "tag": "페더레이션"
+        },
+        "empty": {
+          "title": "아직 커넥터가 없습니다",
+          "description": "[커넥터 추가](/admin/connectors) 페이지에서 시작하세요.",
+          "filteredTitle": "이 필터와 일치하는 커넥터가 없습니다."
+        },
+        "loadError": "커넥터를 불러올 수 없습니다.",
+        "units": "{count, plural, other {개 커넥터}}"
       }
     },
     "languageModels": {

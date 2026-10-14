@@ -5757,149 +5757,8 @@
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "Hérité de {source}"
-          },
-          "organizationPublic": {
-            "label": "Public dans l'organisation"
-          },
-          "private": {
-            "label": "Privé"
-          }
-        },
-        "connectorCreated": {
-          "toast": "Connecteur créé avec succès"
-        },
-        "empty": {
-          "message": "Il semble que vous n'ayez pas encore configuré de connecteurs. Consultez la page [Ajouter un connecteur](/admin/connectors) pour commencer !"
-        },
-        "federated": {
-          "access": {
-            "label": "Accès fédéré"
-          },
-          "indexed": {
-            "label": "Indexé"
-          },
-          "notApplicable": {
-            "label": "N/D"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "Synchronisation automatique"
-            },
-            "private": {
-              "label": "Privé"
-            },
-            "public": {
-              "label": "Public"
-            },
-            "title": "Type d'accès"
-          },
-          "applyButton": {
-            "label": "Appliquer"
-          },
-          "docCount": {
-            "placeholder": "Nombre",
-            "title": "Nombre de documents"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "Terminé avec des erreurs"
-            },
-            "failed": {
-              "label": "En échec"
-            },
-            "inProgress": {
-              "label": "En cours"
-            },
-            "interrupted": {
-              "label": "Interrompu"
-            },
-            "notStarted": {
-              "label": "Non démarré"
-            },
-            "success": {
-              "label": "Réussi"
-            },
-            "title": "Dernier statut"
-          },
-          "title": "Filtrer les connecteurs"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "Accès : {values}"
-          },
-          "clearBadge": {
-            "label": "Effacer"
-          },
-          "docsAnyBadge": {
-            "label": "Documents {operator} toute valeur"
-          },
-          "docsBadge": {
-            "label": "Documents {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "Statut : {values}"
-          }
-        },
-        "loadError": {
-          "message": "Erreur lors du chargement de l'état de l'indexation."
-        },
-        "manageConnector": {
-          "tooltip": "Gérer le connecteur"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "Gérer le connecteur fédéré"
-        },
-        "search": {
-          "placeholder": "Rechercher des connecteurs..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "Connecteurs actifs"
-          },
-          "publicConnectors": {
-            "label": "Connecteurs publics"
-          },
-          "totalConnectors": {
-            "label": "Total des connecteurs"
-          },
-          "totalDocsIndexed": {
-            "label": "Total des documents indexés"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "Tout est à jour ! Aucun autre connecteur à afficher"
-          },
-          "lastIndexed": {
-            "header": "Dernière indexation"
-          },
-          "name": {
-            "header": "Nom"
-          },
-          "permissions": {
-            "header": "Autorisations / Accès"
-          },
-          "status": {
-            "header": "Statut"
-          },
-          "totalDocs": {
-            "header": "Total des docs"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "Tout réduire"
-          },
-          "expand": {
-            "label": "Tout développer"
-          }
-        }
+      "connectorCreated": {
+        "toast": "Connecteur créé avec succès"
       },
       "overview": {
         "connectors": {
@@ -5914,6 +5773,50 @@
           "whole": "/ {whole}"
         },
         "loadError": "Impossible de charger la vue d'ensemble."
+      },
+      "list": {
+        "search": {
+          "placeholder": "Rechercher des connecteurs..."
+        },
+        "statusFilter": {
+          "label": "Statut",
+          "all": "Tous les statuts"
+        },
+        "counts": {
+          "indexed": "{count, plural, one {# connecteur indexé} other {# connecteurs indexés}}",
+          "indexing": "{count, plural, one {# connecteur en cours d'indexation} other {# connecteurs en cours d'indexation}}",
+          "failed": "{count, plural, one {# connecteur en échec} other {# connecteurs en échec}}",
+          "paused": "{count, plural, one {# connecteur en pause} other {# connecteurs en pause}}"
+        },
+        "access": {
+          "public": "Public",
+          "private": "Privé",
+          "sync": "Synchronisation automatique",
+          "sync_restricted": "Synchronisation automatique, restreinte"
+        },
+        "detail": {
+          "queued": "{position, selectordinal, one {#er} other {#e}} dans la file d'attente",
+          "lastIndexed": "Dernière indexation {when}",
+          "neverIndexed": "Pas encore indexé"
+        },
+        "docs": {
+          "label": "docs",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "Gérer",
+          "manageFederated": "Gérer le connecteur fédéré"
+        },
+        "federated": {
+          "tag": "Fédéré"
+        },
+        "empty": {
+          "title": "Aucun connecteur pour le moment",
+          "description": "Rendez-vous sur la page [Ajouter un connecteur](/admin/connectors) pour commencer.",
+          "filteredTitle": "Aucun connecteur ne correspond à ces filtres."
+        },
+        "loadError": "Impossible de charger les connecteurs.",
+        "units": "{count, plural, one {connecteur} other {connecteurs}}"
       }
     },
     "languageModels": {

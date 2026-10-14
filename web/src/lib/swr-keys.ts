@@ -9,6 +9,7 @@
 import type {
   CCPairRunsQuery,
   CCPairThroughputWindow,
+  IndexingConnectorsQuery,
 } from "@/lib/connectors/types";
 
 export const SWR_KEYS = {
@@ -324,6 +325,15 @@ export const SWR_KEYS = {
   // The indexing status page's fleet-wide reads, over every readable pair.
   indexMonitoringOverview: (window: CCPairThroughputWindow) =>
     `/api/manage/admin/index-monitoring/overview?window=${window}`,
+  indexMonitoringConnectors: (query: IndexingConnectorsQuery) => {
+    const params = new URLSearchParams({
+      page_num: String(query.pageNum),
+      page_size: String(query.pageSize),
+    });
+    if (query.q) params.set("q", query.q);
+    if (query.status !== null) params.set("status", query.status);
+    return `/api/manage/admin/index-monitoring/connectors?${params.toString()}`;
+  },
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 

@@ -5757,149 +5757,8 @@
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "موروث من {source}"
-          },
-          "organizationPublic": {
-            "label": "عام للمؤسسة"
-          },
-          "private": {
-            "label": "خاص"
-          }
-        },
-        "connectorCreated": {
-          "toast": "تم إنشاء الموصل بنجاح"
-        },
-        "empty": {
-          "message": "يبدو أنه ليس لديك أي موصلات معدّة بعد. زر صفحة [إضافة موصل](/admin/connectors) للبدء!"
-        },
-        "federated": {
-          "access": {
-            "label": "وصول موحّد"
-          },
-          "indexed": {
-            "label": "مفهرس"
-          },
-          "notApplicable": {
-            "label": "غير منطبق"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "مزامنة تلقائية"
-            },
-            "private": {
-              "label": "خاص"
-            },
-            "public": {
-              "label": "عام"
-            },
-            "title": "نوع الوصول"
-          },
-          "applyButton": {
-            "label": "تطبيق"
-          },
-          "docCount": {
-            "placeholder": "العدد",
-            "title": "عدد المستندات"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "اكتملت مع أخطاء"
-            },
-            "failed": {
-              "label": "فشلت"
-            },
-            "inProgress": {
-              "label": "قيد التنفيذ"
-            },
-            "interrupted": {
-              "label": "متقطعة"
-            },
-            "notStarted": {
-              "label": "لم تبدأ"
-            },
-            "success": {
-              "label": "نجحت"
-            },
-            "title": "آخر حالة"
-          },
-          "title": "تصفية الموصلات"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "الوصول: {values}"
-          },
-          "clearBadge": {
-            "label": "مسح"
-          },
-          "docsAnyBadge": {
-            "label": "المستندات {operator} أي"
-          },
-          "docsBadge": {
-            "label": "المستندات {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "الحالة: {values}"
-          }
-        },
-        "loadError": {
-          "message": "خطأ في تحميل حالة الفهرسة."
-        },
-        "manageConnector": {
-          "tooltip": "إدارة الموصل"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "إدارة الموصل الموحّد"
-        },
-        "search": {
-          "placeholder": "البحث في الموصلات..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "الموصلات النشطة"
-          },
-          "publicConnectors": {
-            "label": "الموصلات العامة"
-          },
-          "totalConnectors": {
-            "label": "إجمالي الموصلات"
-          },
-          "totalDocsIndexed": {
-            "label": "إجمالي المستندات المفهرسة"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "كل شيء محدّث! لا مزيد من الموصلات لعرضها"
-          },
-          "lastIndexed": {
-            "header": "آخر فهرسة"
-          },
-          "name": {
-            "header": "الاسم"
-          },
-          "permissions": {
-            "header": "الأذونات / الوصول"
-          },
-          "status": {
-            "header": "الحالة"
-          },
-          "totalDocs": {
-            "header": "إجمالي المستندات"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "طي الكل"
-          },
-          "expand": {
-            "label": "توسيع الكل"
-          }
-        }
+      "connectorCreated": {
+        "toast": "تم إنشاء الموصل بنجاح"
       },
       "overview": {
         "connectors": {
@@ -5914,6 +5773,50 @@
           "whole": "/ {whole}"
         },
         "loadError": "تعذر تحميل النظرة العامة."
+      },
+      "list": {
+        "search": {
+          "placeholder": "البحث في الموصلات..."
+        },
+        "statusFilter": {
+          "label": "الحالة",
+          "all": "كل الحالات"
+        },
+        "counts": {
+          "indexed": "{count, plural, one {موصل واحد مفهرس} other {# موصلات مفهرسة}}",
+          "indexing": "{count, plural, one {موصل واحد قيد الفهرسة} other {# موصلات قيد الفهرسة}}",
+          "failed": "{count, plural, one {موصل واحد فشل} other {# موصلات فشلت}}",
+          "paused": "{count, plural, one {موصل واحد متوقف مؤقتًا} other {# موصلات متوقفة مؤقتًا}}"
+        },
+        "access": {
+          "public": "عام",
+          "private": "خاص",
+          "sync": "مزامنة تلقائية",
+          "sync_restricted": "مزامنة تلقائية، مقيدة"
+        },
+        "detail": {
+          "queued": "الترتيب {position, selectordinal, other {#}} في قائمة الانتظار",
+          "lastIndexed": "آخر فهرسة {when}",
+          "neverIndexed": "لم تتم الفهرسة بعد"
+        },
+        "docs": {
+          "label": "مستندات",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "إدارة",
+          "manageFederated": "إدارة الموصل الموحد"
+        },
+        "federated": {
+          "tag": "موحد"
+        },
+        "empty": {
+          "title": "لا توجد موصلات بعد",
+          "description": "انتقل إلى صفحة [إضافة موصل](/admin/connectors) للبدء.",
+          "filteredTitle": "لا توجد موصلات تطابق هذه المرشحات."
+        },
+        "loadError": "تعذر تحميل الموصلات.",
+        "units": "{count, plural, one {موصل} other {موصلات}}"
       }
     },
     "languageModels": {

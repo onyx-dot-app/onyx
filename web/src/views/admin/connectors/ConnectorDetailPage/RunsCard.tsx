@@ -43,6 +43,8 @@ const PAGE_SIZE = 10;
 export const RUNS_POLL_MS = 5000;
 // Typing waits this long before it searches.
 export const SEARCH_DELAY_MS = 300;
+// The runs and errors routes refuse a longer search.
+export const SEARCH_MAX_LENGTH = 200;
 
 /** The windows the time filter offers, in hours. `null` is all time. */
 const WINDOWS = [

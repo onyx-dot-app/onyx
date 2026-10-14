@@ -5757,149 +5757,8 @@
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "继承自 {source}"
-          },
-          "organizationPublic": {
-            "label": "组织内公开"
-          },
-          "private": {
-            "label": "私有"
-          }
-        },
-        "connectorCreated": {
-          "toast": "已成功创建连接器"
-        },
-        "empty": {
-          "message": "您似乎还没有设置任何连接器。请访问[添加连接器](/admin/connectors)页面开始使用！"
-        },
-        "federated": {
-          "access": {
-            "label": "联合访问"
-          },
-          "indexed": {
-            "label": "已索引"
-          },
-          "notApplicable": {
-            "label": "不适用"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "自动同步"
-            },
-            "private": {
-              "label": "私有"
-            },
-            "public": {
-              "label": "公开"
-            },
-            "title": "访问类型"
-          },
-          "applyButton": {
-            "label": "应用"
-          },
-          "docCount": {
-            "placeholder": "数量",
-            "title": "文档数量"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "完成但有错误"
-            },
-            "failed": {
-              "label": "失败"
-            },
-            "inProgress": {
-              "label": "进行中"
-            },
-            "interrupted": {
-              "label": "已中断"
-            },
-            "notStarted": {
-              "label": "未开始"
-            },
-            "success": {
-              "label": "成功"
-            },
-            "title": "最近状态"
-          },
-          "title": "筛选连接器"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "访问：{values}"
-          },
-          "clearBadge": {
-            "label": "清除"
-          },
-          "docsAnyBadge": {
-            "label": "文档 {operator} 任意"
-          },
-          "docsBadge": {
-            "label": "文档 {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "状态：{values}"
-          }
-        },
-        "loadError": {
-          "message": "加载索引状态时出错。"
-        },
-        "manageConnector": {
-          "tooltip": "管理连接器"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "管理联合连接器"
-        },
-        "search": {
-          "placeholder": "搜索连接器..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "活跃连接器"
-          },
-          "publicConnectors": {
-            "label": "公开连接器"
-          },
-          "totalConnectors": {
-            "label": "连接器总数"
-          },
-          "totalDocsIndexed": {
-            "label": "已索引文档总数"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "已全部加载！没有更多连接器"
-          },
-          "lastIndexed": {
-            "header": "上次索引时间"
-          },
-          "name": {
-            "header": "名称"
-          },
-          "permissions": {
-            "header": "权限 / 访问"
-          },
-          "status": {
-            "header": "状态"
-          },
-          "totalDocs": {
-            "header": "文档总数"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "全部折叠"
-          },
-          "expand": {
-            "label": "全部展开"
-          }
-        }
+      "connectorCreated": {
+        "toast": "已成功创建连接器"
       },
       "overview": {
         "connectors": {
@@ -5914,6 +5773,50 @@
           "whole": "/ {whole}"
         },
         "loadError": "无法加载概览。"
+      },
+      "list": {
+        "search": {
+          "placeholder": "搜索连接器..."
+        },
+        "statusFilter": {
+          "label": "状态",
+          "all": "全部状态"
+        },
+        "counts": {
+          "indexed": "{count, plural, other {# 个连接器已索引}}",
+          "indexing": "{count, plural, other {# 个连接器正在索引}}",
+          "failed": "{count, plural, other {# 个连接器失败}}",
+          "paused": "{count, plural, other {# 个连接器已暂停}}"
+        },
+        "access": {
+          "public": "公开",
+          "private": "私有",
+          "sync": "自动同步",
+          "sync_restricted": "自动同步（受限）"
+        },
+        "detail": {
+          "queued": "队列中第 {position, selectordinal, other {#}} 位",
+          "lastIndexed": "上次索引 {when}",
+          "neverIndexed": "尚未索引"
+        },
+        "docs": {
+          "label": "文档",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "管理",
+          "manageFederated": "管理联合连接器"
+        },
+        "federated": {
+          "tag": "联合"
+        },
+        "empty": {
+          "title": "还没有连接器",
+          "description": "前往[添加连接器](/admin/connectors)页面开始。",
+          "filteredTitle": "没有连接器符合这些筛选条件。"
+        },
+        "loadError": "无法加载连接器。",
+        "units": "{count, plural, other {个连接器}}"
       }
     },
     "languageModels": {
