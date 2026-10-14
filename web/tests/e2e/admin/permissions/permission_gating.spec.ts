@@ -325,9 +325,20 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       // — a blank modal, no error, no network call.
       await page.goto("/admin/connectors/google-drive");
       await page.waitForLoadState("networkidle");
-      await page
-        .getByRole("button", { name: "New Google Drive Account" })
-        .click();
+      // The new-account card starts open when there is no saved account, so
+      // it is clicked only while folded. The sign-in is on the OAuth tab.
+      const newAccountCard = page.getByRole("button", {
+        name: "New Google Drive Account",
+      });
+      await expect(async () => {
+        if ((await newAccountCard.getAttribute("aria-expanded")) !== "true") {
+          await newAccountCard.click();
+        }
+        await expect(newAccountCard).toHaveAttribute("aria-expanded", "true", {
+          timeout: 1_000,
+        });
+      }).toPass({ timeout: 10000 });
+      await page.getByRole("tab", { name: "OAuth", exact: true }).click();
       await expect(
         page.getByText("Authenticate with Google Drive")
       ).toBeVisible({ timeout: 10000 });
