@@ -1060,7 +1060,7 @@ async def test_http_connect_caches_tag_and_client_disconnected_evicts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        gate, "is_destination_blocked", lambda _config, _host, _port: False
+        gate.DestinationResolver, "resolve", lambda *_args: ("8.8.8.8",)
     )
     addon = _build(
         resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=_StubMatcher()
@@ -1079,7 +1079,7 @@ async def test_http_connect_ignores_missing_or_garbled_header(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        gate, "is_destination_blocked", lambda _config, _host, _port: False
+        gate.DestinationResolver, "resolve", lambda *_args: ("8.8.8.8",)
     )
     addon = _build(
         resolver=StubResolver(sandbox=make_resolved_sandbox()), matcher=_StubMatcher()
@@ -1095,7 +1095,7 @@ async def test_http_connect_rejects_unknown_peer(
     monkeypatch: pytest.MonkeyPatch, peer_ip: str
 ) -> None:
     monkeypatch.setattr(
-        gate, "is_destination_blocked", lambda _config, _host, _port: False
+        gate.DestinationResolver, "resolve", lambda *_args: ("8.8.8.8",)
     )
     addon: GateAddon = _build(resolver=StubResolver(), matcher=_StubMatcher())
     flow: http.HTTPFlow = make_flow(
@@ -1114,7 +1114,7 @@ async def test_http_connect_rejects_missing_peer(
     monkeypatch: pytest.MonkeyPatch, peer: tuple[str, int] | None
 ) -> None:
     monkeypatch.setattr(
-        gate, "is_destination_blocked", lambda _config, _host, _port: False
+        gate.DestinationResolver, "resolve", lambda *_args: ("8.8.8.8",)
     )
     resolver: StubResolver = StubResolver(sandbox=make_resolved_sandbox())
     addon: GateAddon = _build(resolver=resolver, matcher=_StubMatcher())
@@ -1131,7 +1131,7 @@ async def test_http_connect_rejects_identity_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        gate, "is_destination_blocked", lambda _config, _host, _port: False
+        gate.DestinationResolver, "resolve", lambda *_args: ("8.8.8.8",)
     )
     addon: GateAddon = _build(
         resolver=StubResolver(sandbox_exc=RuntimeError("database unavailable")),
@@ -1276,7 +1276,7 @@ async def test_resolve_and_match_exact_tag_on_https_connect(
     """HTTPS: the tag rode on the CONNECT (captured via http_connect)
     and is read back off the connection, not the MITM'd request."""
     monkeypatch.setattr(
-        gate, "is_destination_blocked", lambda _config, _host, _port: False
+        gate.DestinationResolver, "resolve", lambda *_args: ("8.8.8.8",)
     )
     user_id = uuid4()
     tagged_id = UUID(_TAG_UUID)
@@ -1817,18 +1817,3 @@ def test_terminalize_wake_failure_swallowed(
 
     # Should not raise.
     addon._terminalize_after_unhandled_error(approval_id, "tenant-1")
-
-
-@pytest.mark.parametrize(
-    "address, expected",
-    [
-        ("10.0.0.1", "10.0.0.1"),
-        ("::ffff:10.0.0.1", "10.0.0.1"),
-        ("2001:db8::1", "2001:db8::1"),
-        ("2001:0db8:0:0:0:0:0:1", "2001:db8::1"),
-        ("invalid", None),
-    ],
-)
-def test_extract_src_ip_normalizes_peer(address: str, expected: str | None) -> None:
-    addon = _build(resolver=StubResolver(), matcher=_StubMatcher())
-    assert addon._extract_src_ip(make_flow(peername=(address, 12345))) == expected

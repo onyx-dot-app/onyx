@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urlsplit
@@ -73,11 +73,12 @@ def resolve_destination(
     host: str,
     port: int,
     *,
-    mcp_ssrf_params: OutboundSSRFParams | None = None,
+    authorize_internal: Callable[[], OutboundSSRFParams | None] | None = None,
 ) -> tuple[str, ...] | None:
     """Return validated addresses in DNS order, or None if any is blocked.
 
-    Supply MCP SSRF settings only after authorizing the exact origin.
+    Call authorize_internal only when the ordinary destination policy blocks access.
+    Validate its SSRF policy against these same DNS answers before returning them.
     """
     host = host.strip().lower()
     if not host or not 1 <= port <= 65535:
@@ -104,28 +105,24 @@ def resolve_destination(
             return None
     if not addresses:
         return None
-    is_api: bool = host == config.api_host and port == config.api_port
-    if mcp_ssrf_params is not None:
+    is_api = host == config.api_host and port == config.api_port
+    if not is_api and any(is_internal(config, address) for address in addresses):
+        params = authorize_internal() if authorize_internal is not None else None
+        if params is None or not params.allow_private_network:
+            return None
         # Validate the same answers that will be pinned, including embedded IPv4.
         for target in (host, *(str(_embedded_address(ip)) for ip in addresses)):
             authority = f"[{target}]" if ":" in target else target
             try:
                 validate_outbound_http_url(
                     f"https://{authority}:{port}",
-                    allow_private_network=mcp_ssrf_params.allow_private_network,
-                    block_loopback_and_link_local=mcp_ssrf_params.block_loopback_and_link_local,
-                    block_link_local_only=mcp_ssrf_params.block_link_local_only,
+                    allow_private_network=params.allow_private_network,
+                    block_loopback_and_link_local=params.block_loopback_and_link_local,
+                    block_link_local_only=params.block_link_local_only,
                     resolve_dns=False,
                 )
             except (SSRFException, ValueError):
                 return None
-    allow_internal = (
-        mcp_ssrf_params is not None and mcp_ssrf_params.allow_private_network
-    )
-    if not (is_api or allow_internal) and any(
-        is_internal(config, address) for address in addresses
-    ):
-        return None
     return tuple(dict.fromkeys(str(address) for address in addresses))
 
 

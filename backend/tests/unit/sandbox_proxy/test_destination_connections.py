@@ -29,6 +29,7 @@ from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
     StubResolver,
     make_resolved_sandbox,
+    make_tls_context,
     unused_cache,
     wait_for_proxy_listener,
 )
@@ -353,9 +354,7 @@ def test_private_connect_never_forwards_raw_tcp(
     connection_strategy: str,
     tls_payload: bool,
 ) -> None:
-    from tests.unit.sandbox_proxy.test_destination_tls import _tls_context
-
-    context, ca = _tls_context(tmp_path, _HOST)
+    context, ca = make_tls_context(tmp_path, _HOST)
     monkeypatch.setattr(server, "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", str(ca))
 
     async def exercise() -> None:

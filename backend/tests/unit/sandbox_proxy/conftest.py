@@ -11,11 +11,18 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+import ssl
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 from mitmproxy import http
 from mitmproxy.tools.dump import DumpMaster
 
@@ -273,6 +280,41 @@ def mcp_ssrf_settings(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
         return settings
 
     monkeypatch.setattr(
-        "onyx.sandbox_proxy.addons.gate.get_security_settings", read_settings
+        "onyx.sandbox_proxy.destination_resolver.get_security_settings", read_settings
     )
     return settings
+
+
+def make_tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Path]:
+    key: rsa.RSAPrivateKey = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048
+    )
+    subject: x509.Name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
+    now: dt.datetime = dt.datetime.now(dt.timezone.utc)
+    certificate: x509.Certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - dt.timedelta(minutes=1))
+        .not_valid_after(now + dt.timedelta(days=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False
+        )
+        .sign(key, hashes.SHA256())
+    )
+    cert_path: Path = tmp_path / "upstream.crt"
+    key_path: Path = tmp_path / "upstream.key"
+    cert_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    context: ssl.SSLContext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert_path, key_path)
+    return context, cert_path

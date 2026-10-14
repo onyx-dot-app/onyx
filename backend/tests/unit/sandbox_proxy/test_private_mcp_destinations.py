@@ -9,6 +9,7 @@ from mitmproxy.proxy import server_hooks
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import parse_destination_policy
+from onyx.sandbox_proxy.destination_resolver import DestinationResolver
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.server.security.models import SSRFProtectionLevel
@@ -166,7 +167,7 @@ def test_mcp_validates_resolved_addresses(
         parse_destination_policy("https://onyx.test"),
         "private-mcp.test",
         8443,
-        mcp_ssrf_params=outbound_ssrf_params(level),
+        authorize_internal=lambda: outbound_ssrf_params(level),
     )
     allowed = level in {
         SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK,
@@ -213,16 +214,12 @@ def test_mcp_rechecks_tenant_ssrf_settings(
         return mcp_ssrf_settings
 
     monkeypatch.setattr(
-        "onyx.sandbox_proxy.addons.gate.get_security_settings", settings
+        "onyx.sandbox_proxy.destination_resolver.get_security_settings", settings
     )
-    addon = GateAddon(
-        identity=StubResolver(sandbox=sandbox),
-        request_evaluator=NoMatchedRequest(),
-        cache_factory=unused_cache,
-        proxy_instance_id="test",
-        credential_dispatcher=CredentialInjectionDispatcher([]),
-        destination_policy=parse_destination_policy("https://onyx.test"),
-        mcp_resolver=resolver,
+    destinations = DestinationResolver(
+        parse_destination_policy("https://onyx.test"),
+        StubResolver(sandbox=sandbox).resolve_sandbox,
+        resolver,
     )
     previous = CURRENT_TENANT_ID_CONTEXTVAR.get()
     for level, expected in [
@@ -232,18 +229,15 @@ def test_mcp_rechecks_tenant_ssrf_settings(
     ]:
         mcp_ssrf_settings.ssrf_protection_level = level
         assert (
-            addon._resolve_mcp_destination(("10.0.0.1", 1234), "https", "10.1.2.3", 443)
+            destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443)
             == expected
         )
         assert CURRENT_TENANT_ID_CONTEXTVAR.get() == previous
     monkeypatch.setattr(
-        "onyx.sandbox_proxy.addons.gate.get_security_settings",
+        "onyx.sandbox_proxy.destination_resolver.get_security_settings",
         MagicMock(side_effect=RuntimeError("settings unavailable")),
     )
-    assert (
-        addon._resolve_mcp_destination(("10.0.0.1", 1234), "https", "10.1.2.3", 443)
-        is None
-    )
+    assert destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
     assert CURRENT_TENANT_ID_CONTEXTVAR.get() == previous
 
 
@@ -288,21 +282,14 @@ def test_private_mcp_denies_real_settings_read_failure(
         )
     )
     monkeypatch.setattr(store, "_db_load_overrides", db_read)
-    addon = GateAddon(
-        identity=StubResolver(sandbox=sandbox),
-        request_evaluator=NoMatchedRequest(),
-        cache_factory=unused_cache,
-        proxy_instance_id="test",
-        credential_dispatcher=CredentialInjectionDispatcher([]),
-        destination_policy=parse_destination_policy("https://onyx.test"),
-        mcp_resolver=resolver,
+    destinations = DestinationResolver(
+        parse_destination_policy("https://onyx.test"),
+        StubResolver(sandbox=sandbox).resolve_sandbox,
+        resolver,
     )
 
     # Populate MCP access and strict tenant settings through the actual reader.
-    assert (
-        addon._resolve_mcp_destination(("10.0.0.1", 1234), "https", "10.1.2.3", 443)
-        is None
-    )
+    assert destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
     store.invalidate_security_cache(sandbox.tenant_id)
     if failure == "database":
         db_read.side_effect = RuntimeError("database unavailable")
@@ -316,8 +303,7 @@ def test_private_mcp_denies_real_settings_read_failure(
             == SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK
         )
         assert (
-            addon._resolve_mcp_destination(("10.0.0.1", 1234), "https", "10.1.2.3", 443)
-            is None
+            destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) is None
         )
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -329,9 +315,9 @@ def test_private_mcp_denies_real_settings_read_failure(
     db_read.side_effect = None
     kv_store.load.side_effect = None
     db_read.return_value = SecuritySettingsOverrides()
-    assert addon._resolve_mcp_destination(
-        ("10.0.0.1", 1234), "https", "10.1.2.3", 443
-    ) == ("10.1.2.3",)
+    assert destinations.resolve(("10.0.0.1", 1234), "https", "10.1.2.3", 443) == (
+        "10.1.2.3",
+    )
 
 
 @pytest.mark.parametrize(
@@ -383,6 +369,59 @@ def test_disabled_ssrf_matches_backend_mcp_hostname_policy(
         parse_destination_policy("https://onyx.test"),
         host,
         8000,
-        mcp_ssrf_params=outbound_ssrf_params(SSRFProtectionLevel.DISABLED),
+        authorize_internal=lambda: outbound_ssrf_params(SSRFProtectionLevel.DISABLED),
     )
     assert (addresses is not None) == allowed
+
+
+@pytest.mark.parametrize(
+    "api_url,addresses,allowed,needs_mcp",
+    [
+        ("https://onyx.test", ["10.1.2.3"], True, True),
+        ("https://onyx.test", ["8.8.8.8", "10.1.2.3"], True, True),
+        ("https://onyx.test", ["10.1.2.3", "169.254.169.254"], False, True),
+        ("https://onyx.test", ["8.8.8.8"], True, False),
+        ("https://private-mcp.test", ["10.1.2.3"], True, False),
+        ("https://onyx.test", [], False, False),
+    ],
+)
+@pytest.mark.usefixtures("mcp_ssrf_settings")
+def test_destination_resolver_uses_one_dns_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    api_url: str,
+    addresses: list[str],
+    allowed: bool,
+    needs_mcp: bool,
+) -> None:
+    import socket
+
+    sandbox = make_resolved_sandbox()
+    identity = MagicMock(return_value=sandbox)
+    mcp = MCPServerResolver()
+    access = MagicMock(return_value=True)
+    monkeypatch.setattr(mcp, "allows_destination", access)
+    # A second resolution must not replace the answers that policy checked.
+    dns = MagicMock(
+        side_effect=[
+            [
+                (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, 443))
+                for ip in addresses
+            ],
+            AssertionError("Destination was resolved twice"),
+        ]
+    )
+    monkeypatch.setattr(socket, "getaddrinfo", dns)
+    destinations = DestinationResolver(parse_destination_policy(api_url), identity, mcp)
+
+    result = destinations.resolve(
+        ("::ffff:10.0.0.1", 1234), "https", "private-mcp.test", 443
+    )
+
+    assert result == (tuple(addresses) if allowed else None)
+    dns.assert_called_once()
+    if needs_mcp:
+        identity.assert_called_once_with("10.0.0.1")
+        access.assert_called_once_with(sandbox, "https", "private-mcp.test", 443)
+    else:
+        identity.assert_not_called()
+        access.assert_not_called()
