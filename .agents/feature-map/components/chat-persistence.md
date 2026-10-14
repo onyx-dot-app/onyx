@@ -103,6 +103,13 @@ Its `ownership_version` changes when a checkpoint is published or claimed, preve
 The runtime revision inside `state` tracks execution changes and serves a separate purpose.
 Current application writers do not use checkpoints yet.
 
+Migration `9d8f310ac672` adds nullable execution metadata to existing chat tables.
+It adds child-session links, response status and run IDs, and tool results.
+Current writers keep their existing behavior.
+Concurrent indexes avoid blocking writes during index scans.
+If an index build fails, rerunning the migration keeps committed columns and rebuilds invalid indexes.
+The final `run_id` column marks the completed schema phase.
+
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 
 | Column | Notes |
