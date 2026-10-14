@@ -1,7 +1,8 @@
 "use client";
 
 import type { CredentialRef } from "@/lib/credentials/types";
-import { useCallback, useMemo, useState } from "react";
+import { CHECKS_CARD_ID } from "@/lib/connectors/checks/constants";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
 import { ContentAction, Section } from "@opal/layouts";
 import { useFormatter, useTranslations } from "next-intl";
@@ -252,6 +253,8 @@ interface CheckCardViewProps {
   /** The run's checks, counted per state. */
   stateCounts: Record<DraftCheckStateKind, number>;
   onRerun: () => void;
+  /** Each increment opens the card and scrolls it into view. */
+  expandRequest?: number;
 }
 export function CheckCardView({
   status,
@@ -262,12 +265,20 @@ export function CheckCardView({
   stateCounts,
   onRerun,
   defaultCollapsed = false,
+  expandRequest = 0,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
   // The same "Re-run Checks" label the saved account cards use.
   const tAccount = useTranslations("admin.connectorsList.add.account");
   const format = useFormatter();
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const cardRef = useRef<HTMLDivElement>(null);
+  // The card can outgrow the viewport. Centered, its failed rows still show.
+  useEffect(() => {
+    if (expandRequest === 0) return;
+    setCollapsed(false);
+    cardRef.current?.scrollIntoView({ block: "center" });
+  }, [expandRequest]);
 
   const lines: CheckLine[] = useMemo(
     () => [
@@ -433,6 +444,8 @@ export function CheckCardView({
       padding={2}
       passive={!collapsed}
       onClick={collapsed ? () => setCollapsed(false) : undefined}
+      ref={cardRef}
+      data-testid={CHECKS_CARD_ID}
     >
       <Section justifyContent="start" alignItems="stretch" height="fit" gap={0}>
         {header}
@@ -502,6 +515,8 @@ export interface CredentialChecksCardProps {
   onStart?: () => void;
   /** Set when the form edits this pair: the checks are dry runs of it. */
   ccPairId?: number | null;
+  /** Each increment opens the results card and scrolls it into view. */
+  expandRequest?: number;
 }
 export default function CredentialChecksCard({
   source,
@@ -509,6 +524,7 @@ export default function CredentialChecksCard({
   locked,
   onStart,
   ccPairId = null,
+  expandRequest = 0,
 }: CredentialChecksCardProps) {
   const promptT = useTranslations("admin.connectorChecks.prompt");
   const { appName } = useSettings();
@@ -554,6 +570,7 @@ export default function CredentialChecksCard({
       expectedCount={checks.expectedCount}
       stateCounts={checks.stateCounts}
       onRerun={checks.rerun}
+      expandRequest={expandRequest}
     />
   );
 }

@@ -9123,6 +9123,17 @@
         "completed": "Checks completed.",
         "inProgress": "Checks in progress...",
         "waiting": "Waiting for connector settings..."
+      },
+      "advisory": {
+        "title": "Some content won't be indexed.",
+        "description": "**{count, plural, one {# non-required connector check failed.} other {# non-required connector checks failed.}}** They won't block the entire connector indexing but affected content won't be indexed.",
+        "proceed": "You can still proceed to create the connector and address these later.",
+        "viewButton": {
+          "label": "View Failed Checks"
+        },
+        "proceedButton": {
+          "label": "Create Connector Anyway"
+        }
       }
     },
     "connectorEdit": {

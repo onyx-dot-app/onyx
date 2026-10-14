@@ -9123,6 +9123,17 @@
         "completed": "Vérifications terminées.",
         "inProgress": "Vérifications en cours...",
         "waiting": "En attente des paramètres du connecteur..."
+      },
+      "advisory": {
+        "title": "Certains contenus ne seront pas indexés.",
+        "description": "**{count, plural, one {# vérification non obligatoire du connecteur a échoué.} other {# vérifications non obligatoires du connecteur ont échoué.}}** Elles ne bloquent pas l'indexation complète du connecteur, mais le contenu concerné ne sera pas indexé.",
+        "proceed": "Vous pouvez quand même créer le connecteur et corriger ces points plus tard.",
+        "viewButton": {
+          "label": "Voir les vérifications échouées"
+        },
+        "proceedButton": {
+          "label": "Créer le connecteur quand même"
+        }
       }
     },
     "connectorEdit": {

@@ -9123,6 +9123,17 @@
         "completed": "Verificações concluídas.",
         "inProgress": "Verificações em andamento...",
         "waiting": "Aguardando as configurações do conector..."
+      },
+      "advisory": {
+        "title": "Parte do conteúdo não será indexada.",
+        "description": "**{count, plural, one {# verificação não obrigatória do conector falhou.} other {# verificações não obrigatórias do conector falharam.}}** Elas não bloqueiam a indexação completa do conector, mas o conteúdo afetado não será indexado.",
+        "proceed": "Você ainda pode criar o conector e resolver isso depois.",
+        "viewButton": {
+          "label": "Ver verificações com falha"
+        },
+        "proceedButton": {
+          "label": "Criar conector mesmo assim"
+        }
       }
     },
     "connectorEdit": {

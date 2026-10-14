@@ -503,7 +503,11 @@ the first index attempt waits on it. `findings.py:bounded_options` and
 With `CONNECTOR_CHECKS_ENABLED`, a pair's first index attempt waits while a check
 run is in flight or fails to run, or while a required check has `FAILED`
 (`capability_checks/indexing_hold.py:get_first_indexing_hold`). See
-[[indexing-pipeline]] §4.2.
+[[indexing-pipeline]] §4.2. A check that is not required never blocks Create.
+When one has `FAILED` in the form's latest run, Create first opens an advisory
+(`web/src/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal.tsx`)
+that states the count and offers to show the checks card or to create the
+connector anyway. Edit mode skips the advisory: its plan lists failed checks itself.
 
 ### 4.9 Typed configs and credential families
 
