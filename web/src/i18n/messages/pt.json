@@ -9115,7 +9115,7 @@
         }
       },
       "placeholders": {
-        "matchRegex": "(?:ti|suporte)\\s*chamado"
+        "matchRegex": "chamado\\s*(?:de\\s*)?(?:ti|suporte)"
       }
     },
     "status": {

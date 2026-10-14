@@ -9115,7 +9115,7 @@
         }
       },
       "placeholders": {
-        "matchRegex": "(?:تقنية|دعم)\\s*تذكرة"
+        "matchRegex": "تذكرة\\s*(?:تقنية|دعم)"
       }
     },
     "status": {

@@ -9115,7 +9115,7 @@
         }
       },
       "placeholders": {
-        "matchRegex": "(?:informatique|support)\\s*ticket"
+        "matchRegex": "ticket\\s*(?:de\\s*)?(?:informatique|support)"
       }
     },
     "status": {
