@@ -269,7 +269,7 @@ _VERSIONS_LOCK = threading.Lock()
 _LAST_GOOD_VERSIONS: AllVersions | None = None
 # After a failure, skip refetching for a while: serve last good or re-raise.
 _VERSIONS_FAILURE_COOLDOWN_SECONDS = 60.0
-_LAST_VERSIONS_FAILURE: tuple[float, Exception] | None = None
+_LAST_VERSIONS_FAILURE_AT: float | None = None
 
 
 def _get_dockerhub_tags(repo: str) -> list[str]:
@@ -349,22 +349,28 @@ def _fetch_versions() -> AllVersions:
 
 
 def _get_cached_versions() -> AllVersions:
-    global _LAST_GOOD_VERSIONS, _LAST_VERSIONS_FAILURE
+    global _LAST_GOOD_VERSIONS, _LAST_VERSIONS_FAILURE_AT
     with _VERSIONS_LOCK:
         cached = _VERSIONS_CACHE.get(_VERSIONS_KEY)
         if cached is not None:
             return cached
-        if _LAST_VERSIONS_FAILURE is not None:
-            failed_at, error = _LAST_VERSIONS_FAILURE
-            if time.monotonic() - failed_at < _VERSIONS_FAILURE_COOLDOWN_SECONDS:
-                if _LAST_GOOD_VERSIONS is not None:
-                    return _LAST_GOOD_VERSIONS
-                raise error
+        if (
+            _LAST_VERSIONS_FAILURE_AT is not None
+            and time.monotonic() - _LAST_VERSIONS_FAILURE_AT
+            < _VERSIONS_FAILURE_COOLDOWN_SECONDS
+        ):
+            if _LAST_GOOD_VERSIONS is not None:
+                return _LAST_GOOD_VERSIONS
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Version lookup is temporarily unavailable",
+            )
         try:
             versions = _fetch_versions()
-        except Exception as e:
-            _LAST_VERSIONS_FAILURE = (time.monotonic(), e)
+        except Exception:
+            _LAST_VERSIONS_FAILURE_AT = time.monotonic()
             if _LAST_GOOD_VERSIONS is None:
+                logger.warning("DockerHub version lookup failed", exc_info=True)
                 raise
             logger.warning(
                 "DockerHub version lookup failed; serving last good value",
@@ -373,7 +379,7 @@ def _get_cached_versions() -> AllVersions:
             return _LAST_GOOD_VERSIONS
         _VERSIONS_CACHE[_VERSIONS_KEY] = versions
         _LAST_GOOD_VERSIONS = versions
-        _LAST_VERSIONS_FAILURE = None
+        _LAST_VERSIONS_FAILURE_AT = None
         return versions
 
 

@@ -1,6 +1,7 @@
 """Tests for the public /versions endpoint, with DockerHub mocked out."""
 
 import threading
+import traceback
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -10,6 +11,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage import get_state
 from onyx.server.manage.get_state import DOCUMENT_INDEX_IMAGE, get_versions
 
@@ -25,11 +28,11 @@ _COMPOSE_TEMPLATE = (
 def _reset_versions_cache() -> Generator[None, None, None]:
     get_state._VERSIONS_CACHE.clear()
     get_state._LAST_GOOD_VERSIONS = None
-    get_state._LAST_VERSIONS_FAILURE = None
+    get_state._LAST_VERSIONS_FAILURE_AT = None
     yield
     get_state._VERSIONS_CACHE.clear()
     get_state._LAST_GOOD_VERSIONS = None
-    get_state._LAST_VERSIONS_FAILURE = None
+    get_state._LAST_VERSIONS_FAILURE_AT = None
 
 
 def _dockerhub_page(_url: str, timeout: int) -> MagicMock:  # noqa: ARG001
@@ -137,9 +140,18 @@ def test_failure_with_no_last_good_value_is_cached_for_the_cooldown() -> None:
             get_versions()
         failed_calls = mock_get.call_count
 
-        with pytest.raises(requests.ConnectionError):
+        with pytest.raises(OnyxError) as first:
+            get_versions()
+        with pytest.raises(OnyxError) as second:
             get_versions()
         assert mock_get.call_count == failed_calls
+
+    # Fresh errors each time, so tracebacks do not pile up across requests.
+    assert first.value is not second.value
+    assert first.value.error_code == OnyxErrorCode.SERVICE_UNAVAILABLE
+    assert len(traceback.extract_tb(second.value.__traceback__)) == len(
+        traceback.extract_tb(first.value.__traceback__)
+    )
 
     after_cooldown = failed_at + get_state._VERSIONS_FAILURE_COOLDOWN_SECONDS
     with (
@@ -152,7 +164,7 @@ def test_failure_with_no_last_good_value_is_cached_for_the_cooldown() -> None:
 
     assert mock_get.call_count == len(get_state._DOCKERHUB_REPOS)
     assert versions.stable.onyx == "v3.2.0"
-    assert get_state._LAST_VERSIONS_FAILURE is None
+    assert get_state._LAST_VERSIONS_FAILURE_AT is None
 
 
 def test_concurrent_misses_share_one_failed_fetch() -> None:
@@ -163,22 +175,48 @@ def test_concurrent_misses_share_one_failed_fetch() -> None:
         start.wait()
         try:
             get_versions()
-        except requests.ConnectionError as e:
+        except Exception as e:
             return e
         return None
 
     with (
-        patch(
-            "onyx.server.manage.get_state.requests.get",
+        patch.object(
+            get_state,
+            "_fetch_versions",
             side_effect=requests.ConnectionError("dockerhub down"),
-        ) as mock_get,
+        ) as mock_fetch,
         ThreadPoolExecutor(max_workers=callers) as executor,
     ):
         errors = list(executor.map(lambda _: _call(), range(callers)))
 
     assert all(error is not None for error in errors)
-    # Every repo fails on its first page; queued callers hit the cooldown.
-    assert mock_get.call_count == len(get_state._DOCKERHUB_REPOS)
+    # Callers queued behind the failed fetch hit the cooldown.
+    assert mock_fetch.call_count == 1
+
+
+def test_dockerhub_requests_are_bounded() -> None:
+    def _endless_page(url: str, timeout: int) -> MagicMock:  # noqa: ARG001
+        response = _dockerhub_page(url, timeout)
+        page = response.json.return_value
+        page["next"] = "https://hub.docker.com/v2/next-page"
+        return response
+
+    with patch(
+        "onyx.server.manage.get_state.requests.get", side_effect=_endless_page
+    ) as mock_get:
+        get_versions()
+
+    repo_count = len(get_state._DOCKERHUB_REPOS)
+    assert mock_get.call_count == repo_count * get_state._DOCKERHUB_MAX_PAGES
+    assert get_state._DOCKERHUB_MAX_PAGES == 2
+    first_page_urls = [
+        call.args[0]
+        for call in mock_get.call_args_list
+        if "next-page" not in call.args[0]
+    ]
+    assert len(first_page_urls) == repo_count
+    assert all("page_size=100" in url for url in first_page_urls)
+    assert all(call.kwargs["timeout"] == 5 for call in mock_get.call_args_list)
 
 
 def test_concurrent_misses_share_one_fetch() -> None:
