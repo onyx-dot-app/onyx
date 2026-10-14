@@ -2573,6 +2573,26 @@
         },
         "loadError": {
           "title": "تعذر تحميل النشاط."
+        },
+        "docs": {
+          "title": "المستندات الفاشلة",
+          "search": {
+            "placeholder": "البحث في الملفات..."
+          },
+          "resolveAll": "حل الكل",
+          "resolveOne": "حل هذا المستند",
+          "more": "المزيد",
+          "less": "أقل",
+          "unknownDocument": "مستند غير معروف",
+          "empty": "لا توجد أخطاء مستندات مفتوحة",
+          "loadError": "تعذر تحميل المستندات الفاشلة."
+        },
+        "trace": {
+          "runId": "معرّف التشغيل: {id}",
+          "copy": "نسخ تتبع المكدس"
+        },
+        "actions": {
+          "resolve": "حل"
         }
       },
       "stageDetails": {

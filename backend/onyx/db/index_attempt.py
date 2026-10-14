@@ -935,6 +935,27 @@ def get_error_counts_for_index_attempts(
     return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
+def get_open_doc_error_counts_for_index_attempts(
+    db_session: Session,
+    index_attempt_ids: list[int],
+) -> dict[int, int]:
+    """Per-attempt counts of unresolved document-level errors, the ones a
+    targeted reindex can retry. Attempt ids with none are absent."""
+    if not index_attempt_ids:
+        return {}
+
+    stmt = (
+        select(IndexAttemptError.index_attempt_id, func.count())
+        .where(
+            IndexAttemptError.index_attempt_id.in_(index_attempt_ids),
+            IndexAttemptError.is_resolved.is_(False),
+            IndexAttemptError.document_id.isnot(None),
+        )
+        .group_by(IndexAttemptError.index_attempt_id)
+    )
+    return {attempt_id: count for attempt_id, count in db_session.execute(stmt).all()}  # noqa: C416  # unpacking types the SQLAlchemy Row
+
+
 def get_paginated_index_attempts_for_cc_pair_id(
     db_session: Session,
     cc_pair_id: int,
@@ -1219,19 +1240,46 @@ def get_index_attempt_errors(
     return list(errors.all())
 
 
+def _cc_pair_errors(
+    stmt: Select,
+    cc_pair_id: int,
+    unresolved_only: bool,
+    index_attempt_id: int | None,
+    query: str | None,
+) -> Select:
+    """Narrows an ``IndexAttemptError`` select to one pair, and optionally to
+    its open errors, one attempt, and messages, document ids or entity ids
+    containing ``query``."""
+    stmt = stmt.where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
+    if unresolved_only:
+        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
+    if index_attempt_id is not None:
+        stmt = stmt.where(IndexAttemptError.index_attempt_id == index_attempt_id)
+    if query:
+        stmt = stmt.where(
+            or_(
+                IndexAttemptError.failure_message.icontains(query, autoescape=True),
+                IndexAttemptError.document_id.icontains(query, autoescape=True),
+                IndexAttemptError.entity_id.icontains(query, autoescape=True),
+            )
+        )
+    return stmt
+
+
 def count_index_attempt_errors_for_cc_pair(
     cc_pair_id: int,
     unresolved_only: bool,
     db_session: Session,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
 ) -> int:
-    stmt = (
-        select(func.count())
-        .select_from(IndexAttemptError)
-        .where(IndexAttemptError.connector_credential_pair_id == cc_pair_id)
+    stmt = _cc_pair_errors(
+        select(func.count()).select_from(IndexAttemptError),
+        cc_pair_id,
+        unresolved_only,
+        index_attempt_id,
+        query,
     )
-    if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
-
     result = db_session.scalar(stmt)
     return 0 if result is None else result
 
@@ -1242,12 +1290,12 @@ def get_index_attempt_errors_for_cc_pair(
     db_session: Session,
     page: int | None = None,
     page_size: int | None = None,
+    index_attempt_id: int | None = None,
+    query: str | None = None,
 ) -> list[IndexAttemptError]:
-    stmt = select(IndexAttemptError).where(
-        IndexAttemptError.connector_credential_pair_id == cc_pair_id
+    stmt = _cc_pair_errors(
+        select(IndexAttemptError), cc_pair_id, unresolved_only, index_attempt_id, query
     )
-    if unresolved_only:
-        stmt = stmt.where(IndexAttemptError.is_resolved.is_(False))
 
     # Order by most recent first
     stmt = stmt.order_by(desc(IndexAttemptError.time_created))

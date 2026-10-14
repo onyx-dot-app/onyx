@@ -71,6 +71,7 @@ from onyx.db.index_attempt import (
     get_index_attempt_errors_for_cc_pair,
     get_latest_index_attempt_for_cc_pair_id,
     get_latest_successful_index_attempt_for_cc_pair_id,
+    get_open_doc_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
     get_waiting_index_attempt,
 )
@@ -174,15 +175,19 @@ def get_cc_pair_index_attempts(
         page=page_num,
         page_size=page_size,
     )
+    attempt_ids = [index_attempt.id for index_attempt in index_attempts]
     error_counts = get_error_counts_for_index_attempts(
-        db_session=db_session,
-        index_attempt_ids=[index_attempt.id for index_attempt in index_attempts],
+        db_session=db_session, index_attempt_ids=attempt_ids
+    )
+    open_counts = get_open_doc_error_counts_for_index_attempts(
+        db_session=db_session, index_attempt_ids=attempt_ids
     )
     return PaginatedReturn(
         items=[
             IndexAttemptSnapshot.from_index_attempt_db_model(
                 index_attempt,
                 error_count=error_counts.get(index_attempt.id, 0),
+                open_doc_error_count=open_counts.get(index_attempt.id, 0),
             )
             for index_attempt in index_attempts
         ],
@@ -254,7 +259,11 @@ def _cc_pair_run_kinds(cc_pair: ConnectorCredentialPair) -> list[CCPairRunKind]:
 
 
 def _run_item(
-    kind: CCPairRunKind, run_id: int, page: CCPairRunPage, error_counts: dict[int, int]
+    kind: CCPairRunKind,
+    run_id: int,
+    page: CCPairRunPage,
+    error_counts: dict[int, int],
+    open_counts: dict[int, int],
 ) -> CCPairRun:
     match kind:
         case CCPairRunKind.INDEXING:
@@ -262,7 +271,9 @@ def _run_item(
             return CCPairIndexRun(
                 time_created=attempt.time_created,
                 attempt=IndexAttemptSnapshot.from_index_attempt_db_model(
-                    attempt, error_count=error_counts.get(run_id, 0)
+                    attempt,
+                    error_count=error_counts.get(run_id, 0),
+                    open_doc_error_count=open_counts.get(run_id, 0),
                 ),
             )
         case CCPairRunKind.DOC_PERMISSION_SYNC:
@@ -332,10 +343,14 @@ def get_cc_pair_runs(
     error_counts = get_error_counts_for_index_attempts(
         db_session, list(page.index_attempts)
     )
+    open_counts = get_open_doc_error_counts_for_index_attempts(
+        db_session, list(page.index_attempts)
+    )
     status_counts = count_cc_pair_runs_by_status_group(db_session, wanted, run_filter)
     return CCPairRunsResponse(
         items=[
-            _run_item(kind, run_id, page, error_counts) for kind, run_id in page.order
+            _run_item(kind, run_id, page, error_counts, open_counts)
+            for kind, run_id in page.order
         ],
         total_items=sum(
             count
@@ -903,6 +918,8 @@ def get_cc_pair_indexing_errors(
     include_resolved: bool = Query(False),
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=100),
+    index_attempt_id: int | None = Query(None),
+    q: str | None = Query(None, max_length=200),
     user: User = Depends(
         require_permission(Permission.READ_CONNECTORS, allow_scope=True)
     ),
@@ -915,6 +932,8 @@ def get_cc_pair_indexing_errors(
         include_resolved: Whether to include resolved errors in the results
         page_num: Page number for pagination, starting at 0
         page_size: Number of errors to return per page
+        index_attempt_id: Keeps only the errors of this attempt
+        q: Keeps only errors whose message or document id contains this text
         user: Current user; must be able to read this CC pair
         db_session: Database session
 
@@ -922,11 +941,14 @@ def get_cc_pair_indexing_errors(
         Paginated list of indexing errors for the CC pair.
     """
     _get_readable_cc_pair_or_raise(cc_pair_id, db_session, user)
+    query = (q or "").strip() or None
 
     total_count = count_index_attempt_errors_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
         unresolved_only=not include_resolved,
+        index_attempt_id=index_attempt_id,
+        query=query,
     )
 
     index_attempt_errors = get_index_attempt_errors_for_cc_pair(
@@ -935,6 +957,8 @@ def get_cc_pair_indexing_errors(
         unresolved_only=not include_resolved,
         page=page_num,
         page_size=page_size,
+        index_attempt_id=index_attempt_id,
+        query=query,
     )
     return PaginatedReturn(
         items=[IndexAttemptErrorPydantic.from_model(e) for e in index_attempt_errors],

@@ -494,7 +494,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
             <RunsCard ccPairId={ccPair.id} canOperate={canOperate} />
           </Section>
-          <ActivityPanel ccPairId={ccPair.id} />
+          <ActivityPanel
+            ccPairId={ccPair.id}
+            canResolve={canOperate && ccPair.supports_targeted_reindex}
+          />
         </Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

@@ -2573,6 +2573,26 @@
         },
         "loadError": {
           "title": "Die Aktivität konnte nicht geladen werden."
+        },
+        "docs": {
+          "title": "Fehlgeschlagene Dokumente",
+          "search": {
+            "placeholder": "Dateien durchsuchen..."
+          },
+          "resolveAll": "Alle beheben",
+          "resolveOne": "Dieses Dokument beheben",
+          "more": "Mehr",
+          "less": "Weniger",
+          "unknownDocument": "Unbekanntes Dokument",
+          "empty": "Keine offenen Dokumentfehler",
+          "loadError": "Die fehlgeschlagenen Dokumente konnten nicht geladen werden."
+        },
+        "trace": {
+          "runId": "Lauf-ID: {id}",
+          "copy": "Stacktrace kopieren"
+        },
+        "actions": {
+          "resolve": "Beheben"
         }
       },
       "stageDetails": {

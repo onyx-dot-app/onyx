@@ -260,6 +260,8 @@ class IndexAttemptSnapshot(BaseModel):
     docs_removed_from_index: int
     error_msg: str | None
     error_count: int
+    # Unresolved document-level errors, the ones a targeted reindex can retry.
+    open_doc_error_count: int
     full_exception_trace: str | None
     time_started: str | None
     time_updated: str
@@ -274,7 +276,7 @@ class IndexAttemptSnapshot(BaseModel):
 
     @classmethod
     def from_index_attempt_db_model(
-        cls, index_attempt: IndexAttempt, error_count: int
+        cls, index_attempt: IndexAttempt, error_count: int, open_doc_error_count: int
     ) -> "IndexAttemptSnapshot":
         # Attempts from before time_finished existed end at their last heartbeat
         # check, and at their start when they never reached one.
@@ -295,6 +297,7 @@ class IndexAttemptSnapshot(BaseModel):
             docs_removed_from_index=index_attempt.docs_removed_from_index or 0,
             error_msg=index_attempt.error_msg,
             error_count=error_count,
+            open_doc_error_count=open_doc_error_count,
             full_exception_trace=index_attempt.full_exception_trace,
             time_started=(
                 index_attempt.time_started.isoformat()

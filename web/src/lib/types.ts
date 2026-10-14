@@ -217,6 +217,8 @@ export interface IndexAttemptSnapshot {
   total_docs_indexed: number;
   error_msg: string | null;
   error_count: number;
+  /** Unresolved document-level errors, the ones a targeted reindex can retry. */
+  open_doc_error_count: number;
   full_exception_trace: string | null;
   time_started: string | null;
   time_updated: string;
