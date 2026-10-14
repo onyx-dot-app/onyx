@@ -1382,14 +1382,18 @@ def claim_waiting_index_attempt(
 def cancel_waiting_index_attempt__no_commit(
     db_session: Session, index_attempt_id: int, reason: str
 ) -> bool:
-    """Ends a waiting attempt as CANCELED. Leaves ``time_started`` unset
-    (unlike ``mark_attempt_canceled``), so the attempt still counts as never
-    dispatched and the pair's next attempt still waits for the checks. False
-    when the attempt is no longer waiting. The caller commits."""
+    """Ends a waiting attempt as CANCELED, finished now. Leaves ``time_started``
+    unset (unlike ``mark_attempt_canceled``), so the attempt still counts as
+    never dispatched and the pair's next attempt still waits for the checks.
+    False when the attempt is no longer waiting. The caller commits."""
     result = db_session.execute(
         update(IndexAttempt)
         .where(IndexAttempt.id == index_attempt_id, _is_waiting_attempt())
-        .values(status=IndexingStatus.CANCELED, error_msg=reason)
+        .values(
+            status=IndexingStatus.CANCELED,
+            error_msg=reason,
+            time_finished=func.now(),
+        )
     )
     return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
 

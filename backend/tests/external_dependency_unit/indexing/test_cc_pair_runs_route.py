@@ -361,6 +361,8 @@ def test_cancel_ends_a_waiting_attempt_in_place(db_session: Session) -> None:
     db_session.refresh(attempt)
     assert attempt.status == IndexingStatus.CANCELED
     assert attempt.time_started is None
+    # Finished at the cancel, so the run list shows when the admin canceled it.
+    assert attempt.time_finished is not None
 
 
 def test_cancel_requests_cancellation_of_a_queued_attempt_and_revokes_its_task(
