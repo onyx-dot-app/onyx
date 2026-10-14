@@ -68,7 +68,7 @@ function OpenAICompatibleModalInternals({
     <>
       <APIBaseField
         subDescription={apiBaseSubDescription}
-        placeholder="http://localhost:8000/v1"
+        placeholder={t("placeholders.openAICompatibleApiBase")}
       />
 
       <APIKeyField

@@ -174,7 +174,7 @@ export default function AzureModal({
         >
           <InputTypeInField
             name="target_uri"
-            placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview"
+            placeholder={t("placeholders.azureTargetUri")}
           />
         </InputVertical>
       </InputPadder>

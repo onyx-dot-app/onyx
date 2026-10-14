@@ -809,6 +809,12 @@
         "ariaLabel": "Pesquisar ferramentas",
         "placeholder": "Pesquisar ferramentas…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://your-mcp-server.com/mcp"
     }
   },
   "admin": {
@@ -1745,6 +1751,9 @@
         "licenseSyncFailed": "Falha na sincronização da licença",
         "paymentMethodRequired": "Adicione uma forma de pagamento primeiro e tente fazer o upgrade novamente.",
         "syncLicenseFailed": "Falha ao sincronizar a licença"
+      },
+      "placeholders": {
+        "licenseKey": "eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
       }
     },
     "chatPreferences": {
@@ -4340,6 +4349,10 @@
         "saveFailed": "Falha ao salvar a substituição: {message}",
         "saved": "Taxa salva para {model}.",
         "unknownError": "Erro desconhecido"
+      },
+      "placeholders": {
+        "inputCost": "3,00",
+        "outputCost": "15,00"
       }
     },
     "craft": {
@@ -5792,6 +5805,9 @@
           "name": "Básico",
           "description": "Grupo padrão para todos os usuários com permissões básicas."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6065,6 +6081,9 @@
           "name": "Processamento de consultas",
           "description": "Executa em cada consulta do usuário antes de entrar no pipeline. Permite reescrever, filtrar ou rejeitar consultas."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://your-api-endpoint.com"
       }
     },
     "imageGeneration": {
@@ -6250,6 +6269,11 @@
       },
       "setDefaultSuccess": {
         "message": "{title} definido como padrão"
+      },
+      "placeholders": {
+        "vertexProjectId": "my-vertex-project",
+        "vertexLocation": "global",
+        "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview"
       }
     },
     "indexSettings": {
@@ -6806,6 +6830,12 @@
           "saved": "Limite salvo.",
           "failed": "Não foi possível salvar o limite."
         }
+      },
+      "placeholders": {
+        "azureEmbeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
+        "apiUrl": "https://...",
+        "bifrostApiBase": "https://bifrost.example.com",
+        "bifrostModel": "openai/text-embedding-3-large"
       }
     },
     "indexing": {
@@ -7432,6 +7462,16 @@
           "workloadIdentityNotice": {
             "title": "O {appName} vai usar as credenciais ambientes do Google Cloud no pod (via google.auth.default). Confirme que a ServiceAccount do Kubernetes está vinculada a uma conta de serviço do GCP com acesso ao Vertex AI."
           }
+        },
+        "placeholders": {
+          "bifrostApiBase": "https://your-bifrost-gateway.com/v1",
+          "vertexProjectId": "my-vertex-project",
+          "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
+          "openAICompatibleApiBase": "http://localhost:8000/v1",
+          "litellmApiBase": "https://your-litellm-proxy.com",
+          "bedrockAccessKeyId": "AKIAIOSFODNN7EXAMPLE",
+          "bedrockSecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          "apiBase": "https://"
         }
       },
       "newCustomProviderCard": {
@@ -8139,6 +8179,11 @@
         "securitySettingsUpdated": "Configurações de segurança atualizadas",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8819,7 +8864,8 @@
           },
           "nameField": {
             "description": "Slug único em minúsculas usado na URL de login. Não pode ser alterado depois.",
-            "title": "Nome"
+            "title": "Nome",
+            "placeholder": "company-a"
           },
           "providerTypeField": {
             "description": "O protocolo que este provedor usa para autenticar.",
@@ -8889,7 +8935,8 @@
         },
         "openidConfigUrl": {
           "label": "URL de configuração do OpenID",
-          "description": "A URL do documento de descoberta OpenID Connect do IdP."
+          "description": "A URL do documento de descoberta OpenID Connect do IdP.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "Exigir claim de e-mail verificado",
@@ -8897,27 +8944,33 @@
         },
         "idpEntityId": {
           "label": "ID da entidade do IdP",
-          "description": "O ID de entidade (emissor) do provedor de identidade."
+          "description": "O ID de entidade (emissor) do provedor de identidade.",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "URL de SSO do IdP",
-          "description": "O endpoint do IdP que recebe as solicitações de login."
+          "description": "O endpoint do IdP que recebe as solicitações de login.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "Certificado X.509 do IdP",
-          "description": "O certificado de assinatura do IdP, usado para verificar asserções."
+          "description": "O certificado de assinatura do IdP, usado para verificar asserções.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "ID da entidade do SP",
-          "description": "O ID de entidade desta instância, registrado no IdP."
+          "description": "O ID de entidade desta instância, registrado no IdP.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "Certificado X.509 do SP",
-          "description": "Apenas se esta instância assinar solicitações ou descriptografar asserções."
+          "description": "Apenas se esta instância assinar solicitações ou descriptografar asserções.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "Chave privada do SP",
-          "description": "Chave privada associada ao certificado do SP. Armazenada criptografada."
+          "description": "Chave privada associada ao certificado do SP. Armazenada criptografada.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "Atributo de e-mail",
@@ -9081,6 +9134,9 @@
         "deleted": {
           "message": "Resposta padrão {id} excluída"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:it|support)\\s*ticket"
       }
     },
     "status": {
@@ -9248,6 +9304,9 @@
         "logo": {
           "alt": "Logotipo"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9471,11 +9530,13 @@
             },
             "project": {
               "label": "Nome do projeto",
-              "description": "Nome do projeto do Braintrust onde os traces são registrados."
+              "description": "Nome do projeto do Braintrust onde os traces são registrados.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "URL da API",
-              "description": "O padrão é a região dos EUA. Cole a URL da API do Braintrust para outras regiões ou auto-hospedagem."
+              "description": "O padrão é a região dos EUA. Cole a URL da API do Braintrust para outras regiões ou auto-hospedagem.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9492,7 +9553,8 @@
             },
             "host": {
               "label": "URL base da API",
-              "description": "O padrão é a região da UE. Cole a URL base do Langfuse para outras regiões ou auto-hospedagem."
+              "description": "O padrão é a região da UE. Cole a URL base do Langfuse para outras regiões ou auto-hospedagem.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10049,6 +10111,10 @@
       },
       "unexpectedError": {
         "message": "Ocorreu um erro inesperado."
+      },
+      "placeholders": {
+        "azureEndpoint": "https://your_resource_region.tts.speech.microsoft.com/",
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10165,11 +10231,14 @@
         },
         "searxngBaseUrl": {
           "label": "URL base do SearXNG",
-          "description": "Cole a URL base da sua [instância SearXNG](https://docs.searxng.org/admin/installation.html)."
+          "description": "Cole a URL base da sua [instância SearXNG](https://docs.searxng.org/admin/installation.html).",
+          "placeholder": "https://your-searxng-instance.com"
         },
         "firecrawlBaseUrl": {
           "label": "URL base da API",
-          "description": "A URL base da sua API do Firecrawl."
+          "description": "A URL base da sua API do Firecrawl.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -11368,6 +11437,9 @@
       "sendFailed": {
         "toast": "Não foi possível enviar um novo e-mail de verificação: {errorDetail}"
       }
+    },
+    "placeholders": {
+      "email": "email@yourcompany.com"
     }
   },
   "cards": {
@@ -13694,7 +13766,10 @@
           }
         },
         "saveButton": "Salvar",
-        "savingButton": "Salvando…"
+        "savingButton": "Salvando…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "O app “{appName}” já tem uma habilidade associada chamada “{skillName}”. Envie uma habilidade com outro nome."
@@ -16454,6 +16529,9 @@
         "transferredToast": {
           "message": "Propriedade transferida."
         }
+      },
+      "placeholders": {
+        "githubRepository": "owner/repository ou https://github.com/owner/repository"
       }
     },
     "page": {

@@ -809,6 +809,12 @@
         "ariaLabel": "ツールを検索",
         "placeholder": "ツールを検索…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://your-mcp-server.com/mcp"
     }
   },
   "admin": {
@@ -1745,6 +1751,9 @@
         "licenseSyncFailed": "ライセンスの同期に失敗しました",
         "paymentMethodRequired": "先にお支払い方法を追加してから、もう一度アップグレードしてください。",
         "syncLicenseFailed": "ライセンスの同期に失敗しました"
+      },
+      "placeholders": {
+        "licenseKey": "eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
       }
     },
     "chatPreferences": {
@@ -4340,6 +4349,10 @@
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
         "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5792,6 +5805,9 @@
           "name": "基本",
           "description": "基本権限を持つ全ユーザーのデフォルトグループ。"
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6065,6 +6081,9 @@
           "name": "クエリ処理",
           "description": "パイプラインに入る前のすべてのユーザークエリに対して実行されます。クエリの書き換え、フィルタリング、拒否が可能です。"
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://your-api-endpoint.com"
       }
     },
     "imageGeneration": {
@@ -6250,6 +6269,11 @@
       },
       "setDefaultSuccess": {
         "message": "{title} をデフォルトに設定しました"
+      },
+      "placeholders": {
+        "vertexProjectId": "my-vertex-project",
+        "vertexLocation": "global",
+        "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview"
       }
     },
     "indexSettings": {
@@ -6806,6 +6830,12 @@
           "saved": "レート制限を保存しました。",
           "failed": "レート制限を保存できませんでした。"
         }
+      },
+      "placeholders": {
+        "azureEmbeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
+        "apiUrl": "https://...",
+        "bifrostApiBase": "https://bifrost.example.com",
+        "bifrostModel": "openai/text-embedding-3-large"
       }
     },
     "indexing": {
@@ -7432,6 +7462,16 @@
           "workloadIdentityNotice": {
             "title": "{appName} は Pod の環境に設定された Google Cloud 認証情報を google.auth.default 経由で使用します。Kubernetes ServiceAccount が Vertex AI にアクセスできる GCP サービスアカウントにバインドされていることを確認してください。"
           }
+        },
+        "placeholders": {
+          "bifrostApiBase": "https://your-bifrost-gateway.com/v1",
+          "vertexProjectId": "my-vertex-project",
+          "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
+          "openAICompatibleApiBase": "http://localhost:8000/v1",
+          "litellmApiBase": "https://your-litellm-proxy.com",
+          "bedrockAccessKeyId": "AKIAIOSFODNN7EXAMPLE",
+          "bedrockSecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          "apiBase": "https://"
         }
       },
       "newCustomProviderCard": {
@@ -8139,6 +8179,11 @@
         "securitySettingsUpdated": "セキュリティ設定を更新しました",
         "settingsUpdateFailed": "設定を更新できませんでした",
         "settingsUpdated": "設定を更新しました"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8819,7 +8864,8 @@
           },
           "nameField": {
             "description": "ログイン URL に使用する一意の小文字スラッグです。後から変更できません。",
-            "title": "名前"
+            "title": "名前",
+            "placeholder": "company-a"
           },
           "providerTypeField": {
             "description": "このプロバイダーが認証に使用するプロトコルです。",
@@ -8889,7 +8935,8 @@
         },
         "openidConfigUrl": {
           "label": "OpenID 設定 URL",
-          "description": "IdP の OpenID Connect ディスカバリードキュメントの URL。"
+          "description": "IdP の OpenID Connect ディスカバリードキュメントの URL。",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "メール検証済みクレームを必須にする",
@@ -8897,27 +8944,33 @@
         },
         "idpEntityId": {
           "label": "IdP エンティティ ID",
-          "description": "ID プロバイダーのエンティティ ID（発行者）。"
+          "description": "ID プロバイダーのエンティティ ID（発行者）。",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "IdP SSO URL",
-          "description": "サインインリクエストを受け取る IdP のエンドポイント。"
+          "description": "サインインリクエストを受け取る IdP のエンドポイント。",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "IdP X.509 証明書",
-          "description": "アサーションの検証に使用する IdP の署名証明書。"
+          "description": "アサーションの検証に使用する IdP の署名証明書。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "SP エンティティ ID",
-          "description": "IdP に登録されたこのインスタンスのエンティティ ID。"
+          "description": "IdP に登録されたこのインスタンスのエンティティ ID。",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "SP X.509 証明書",
-          "description": "このインスタンスがリクエストに署名する、またはアサーションを復号する場合のみ。"
+          "description": "このインスタンスがリクエストに署名する、またはアサーションを復号する場合のみ。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "SP 秘密鍵",
-          "description": "SP 証明書と対になる秘密鍵。暗号化して保存されます。"
+          "description": "SP 証明書と対になる秘密鍵。暗号化して保存されます。",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "メール属性",
@@ -9081,6 +9134,9 @@
         "deleted": {
           "message": "標準回答 {id} を削除しました"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:it|support)\\s*ticket"
       }
     },
     "status": {
@@ -9248,6 +9304,9 @@
         "logo": {
           "alt": "ロゴ"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9471,11 +9530,13 @@
             },
             "project": {
               "label": "プロジェクト名",
-              "description": "トレースを記録する Braintrust のプロジェクト名。"
+              "description": "トレースを記録する Braintrust のプロジェクト名。",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "API URL",
-              "description": "デフォルトは米国リージョンです。他のリージョンやセルフホストの場合は Braintrust の API URL を貼り付けてください。"
+              "description": "デフォルトは米国リージョンです。他のリージョンやセルフホストの場合は Braintrust の API URL を貼り付けてください。",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9492,7 +9553,8 @@
             },
             "host": {
               "label": "API ベース URL",
-              "description": "デフォルトは EU リージョンです。他のリージョンやセルフホストの場合は Langfuse のベース URL を貼り付けてください。"
+              "description": "デフォルトは EU リージョンです。他のリージョンやセルフホストの場合は Langfuse のベース URL を貼り付けてください。",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10049,6 +10111,10 @@
       },
       "unexpectedError": {
         "message": "予期しないエラーが発生しました。"
+      },
+      "placeholders": {
+        "azureEndpoint": "https://your_resource_region.tts.speech.microsoft.com/",
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10165,11 +10231,14 @@
         },
         "searxngBaseUrl": {
           "label": "SearXNG ベース URL",
-          "description": "[SearXNG インスタンス](https://docs.searxng.org/admin/installation.html)のベース URL を貼り付けてください。"
+          "description": "[SearXNG インスタンス](https://docs.searxng.org/admin/installation.html)のベース URL を貼り付けてください。",
+          "placeholder": "https://your-searxng-instance.com"
         },
         "firecrawlBaseUrl": {
           "label": "API ベース URL",
-          "description": "Firecrawl API のベース URL。"
+          "description": "Firecrawl API のベース URL。",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -11368,6 +11437,9 @@
       "sendFailed": {
         "toast": "確認メールの再送信に失敗しました - {errorDetail}"
       }
+    },
+    "placeholders": {
+      "email": "email@yourcompany.com"
     }
   },
   "cards": {
@@ -13694,7 +13766,10 @@
           }
         },
         "saveButton": "保存",
-        "savingButton": "保存中…"
+        "savingButton": "保存中…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "アプリ「{appName}」には「{skillName}」という名前の関連スキルがすでにあります。別の名前のスキルをアップロードしてください。"
@@ -16454,6 +16529,9 @@
         "transferredToast": {
           "message": "所有権を譲渡しました。"
         }
+      },
+      "placeholders": {
+        "githubRepository": "owner/repository または https://github.com/owner/repository"
       }
     },
     "page": {

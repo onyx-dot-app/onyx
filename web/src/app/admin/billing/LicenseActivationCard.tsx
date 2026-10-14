@@ -202,7 +202,7 @@ export default function LicenseActivationCard({
               withLabel
             >
               <InputSingleUpload
-                placeholder="eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
+                placeholder={t("placeholders.licenseKey")}
                 setValue={(value) => {
                   setLicenseKey(value);
                   setError(null);

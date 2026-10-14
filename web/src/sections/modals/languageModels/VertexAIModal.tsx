@@ -161,7 +161,7 @@ function VertexAIModalInternals({
             >
               <InputTypeInField
                 name={FIELD_VERTEX_PROJECT}
-                placeholder="my-vertex-project"
+                placeholder={t("placeholders.vertexProjectId")}
               />
             </InputVertical>
           </Card>

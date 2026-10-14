@@ -809,6 +809,12 @@
         "ariaLabel": "搜索工具",
         "placeholder": "搜索工具…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://your-mcp-server.com/mcp"
     }
   },
   "admin": {
@@ -1745,6 +1751,9 @@
         "licenseSyncFailed": "许可证同步失败",
         "paymentMethodRequired": "请先添加付款方式，然后重试升级。",
         "syncLicenseFailed": "同步许可证失败"
+      },
+      "placeholders": {
+        "licenseKey": "eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
       }
     },
     "chatPreferences": {
@@ -4340,6 +4349,10 @@
         "saveFailed": "保存覆盖失败：{message}",
         "saved": "已保存 {model} 的价格。",
         "unknownError": "未知错误"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5792,6 +5805,9 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6065,6 +6081,9 @@
           "name": "查询处理",
           "description": "在每个用户查询进入管道之前运行。允许重写、过滤或拒绝查询。"
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://your-api-endpoint.com"
       }
     },
     "imageGeneration": {
@@ -6250,6 +6269,11 @@
       },
       "setDefaultSuccess": {
         "message": "已将 {title} 设为默认"
+      },
+      "placeholders": {
+        "vertexProjectId": "my-vertex-project",
+        "vertexLocation": "global",
+        "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview"
       }
     },
     "indexSettings": {
@@ -6806,6 +6830,12 @@
           "saved": "速率限制已保存。",
           "failed": "无法保存速率限制。"
         }
+      },
+      "placeholders": {
+        "azureEmbeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
+        "apiUrl": "https://...",
+        "bifrostApiBase": "https://bifrost.example.com",
+        "bifrostModel": "openai/text-embedding-3-large"
       }
     },
     "indexing": {
@@ -7432,6 +7462,16 @@
           "workloadIdentityNotice": {
             "title": "{appName} 将使用 Pod 的环境 Google Cloud 凭据（通过 google.auth.default）。请确保 Kubernetes ServiceAccount 已绑定到有权访问 Vertex AI 的 GCP 服务账号。"
           }
+        },
+        "placeholders": {
+          "bifrostApiBase": "https://your-bifrost-gateway.com/v1",
+          "vertexProjectId": "my-vertex-project",
+          "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
+          "openAICompatibleApiBase": "http://localhost:8000/v1",
+          "litellmApiBase": "https://your-litellm-proxy.com",
+          "bedrockAccessKeyId": "AKIAIOSFODNN7EXAMPLE",
+          "bedrockSecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          "apiBase": "https://"
         }
       },
       "newCustomProviderCard": {
@@ -8139,6 +8179,11 @@
         "securitySettingsUpdated": "安全设置已更新",
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8819,7 +8864,8 @@
           },
           "nameField": {
             "description": "用于登录 URL 的唯一小写标识符。创建后无法更改。",
-            "title": "名称"
+            "title": "名称",
+            "placeholder": "company-a"
           },
           "providerTypeField": {
             "description": "此提供商使用的认证协议。",
@@ -8889,7 +8935,8 @@
         },
         "openidConfigUrl": {
           "label": "OpenID 配置 URL",
-          "description": "IdP 的 OpenID Connect 发现文档 URL。"
+          "description": "IdP 的 OpenID Connect 发现文档 URL。",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "要求已验证邮箱声明",
@@ -8897,27 +8944,33 @@
         },
         "idpEntityId": {
           "label": "IdP 实体 ID",
-          "description": "身份提供方的实体 ID（颁发者）。"
+          "description": "身份提供方的实体 ID（颁发者）。",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "IdP SSO URL",
-          "description": "接收登录请求的 IdP 端点。"
+          "description": "接收登录请求的 IdP 端点。",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "IdP X.509 证书",
-          "description": "IdP 的签名证书，用于验证断言。"
+          "description": "IdP 的签名证书，用于验证断言。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "SP 实体 ID",
-          "description": "此实例在 IdP 注册的实体 ID。"
+          "description": "此实例在 IdP 注册的实体 ID。",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "SP X.509 证书",
-          "description": "仅当此实例对请求签名或解密断言时需要。"
+          "description": "仅当此实例对请求签名或解密断言时需要。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "SP 私钥",
-          "description": "与 SP 证书配对的私钥。加密存储。"
+          "description": "与 SP 证书配对的私钥。加密存储。",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "邮箱属性",
@@ -9081,6 +9134,9 @@
         "deleted": {
           "message": "已删除标准答案 {id}"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:it|support)\\s*ticket"
       }
     },
     "status": {
@@ -9248,6 +9304,9 @@
         "logo": {
           "alt": "Logo"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9471,11 +9530,13 @@
             },
             "project": {
               "label": "项目名称",
-              "description": "记录跟踪数据的 Braintrust 项目名称。"
+              "description": "记录跟踪数据的 Braintrust 项目名称。",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "API URL",
-              "description": "默认为美国区域。其他区域或自托管请粘贴您的 Braintrust API URL。"
+              "description": "默认为美国区域。其他区域或自托管请粘贴您的 Braintrust API URL。",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9492,7 +9553,8 @@
             },
             "host": {
               "label": "API 基础 URL",
-              "description": "默认为欧盟区域。其他区域或自托管请粘贴您的 Langfuse 基础 URL。"
+              "description": "默认为欧盟区域。其他区域或自托管请粘贴您的 Langfuse 基础 URL。",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10049,6 +10111,10 @@
       },
       "unexpectedError": {
         "message": "发生意外错误。"
+      },
+      "placeholders": {
+        "azureEndpoint": "https://your_resource_region.tts.speech.microsoft.com/",
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10165,11 +10231,14 @@
         },
         "searxngBaseUrl": {
           "label": "SearXNG 基础 URL",
-          "description": "粘贴您的 [SearXNG 实例](https://docs.searxng.org/admin/installation.html)的基础 URL。"
+          "description": "粘贴您的 [SearXNG 实例](https://docs.searxng.org/admin/installation.html)的基础 URL。",
+          "placeholder": "https://your-searxng-instance.com"
         },
         "firecrawlBaseUrl": {
           "label": "API 基础 URL",
-          "description": "您的 Firecrawl API 基础 URL。"
+          "description": "您的 Firecrawl API 基础 URL。",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -11368,6 +11437,9 @@
       "sendFailed": {
         "toast": "发送新的验证邮件失败 - {errorDetail}"
       }
+    },
+    "placeholders": {
+      "email": "email@yourcompany.com"
     }
   },
   "cards": {
@@ -13694,7 +13766,10 @@
           }
         },
         "saveButton": "保存",
-        "savingButton": "正在保存…"
+        "savingButton": "正在保存…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
@@ -16454,6 +16529,9 @@
         "transferredToast": {
           "message": "所有权已转移。"
         }
+      },
+      "placeholders": {
+        "githubRepository": "owner/repository 或 https://github.com/owner/repository"
       }
     },
     "page": {

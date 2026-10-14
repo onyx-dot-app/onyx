@@ -235,7 +235,7 @@ function VertexFormFields(
                   value={field.value}
                   onChange={(e) => helper.setValue(e.target.value)}
                   onBlur={field.onBlur}
-                  placeholder="my-vertex-project"
+                  placeholder={t("placeholders.vertexProjectId")}
                   variant={disabled ? "disabled" : undefined}
                 />
               </FormField.Control>
@@ -280,7 +280,7 @@ function VertexFormFields(
                 value={field.value}
                 onChange={(e) => helper.setValue(e.target.value)}
                 onBlur={field.onBlur}
-                placeholder="global"
+                placeholder={t("placeholders.vertexLocation")}
                 variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>

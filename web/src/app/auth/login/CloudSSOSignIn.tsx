@@ -89,7 +89,7 @@ export default function CloudSSOSignIn({ nextUrl }: CloudSSOSignInProps) {
                 >
                   <InputTypeInField
                     name="email"
-                    placeholder="email@yourcompany.com"
+                    placeholder={t("placeholders.email")}
                     data-testid="sso-email"
                     autoComplete="username"
                   />

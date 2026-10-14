@@ -66,7 +66,7 @@ const ForgotPasswordPage: React.FC = () => {
                 name="email"
                 label={t("forgotPassword.emailField.label")}
                 type="email"
-                placeholder="email@yourcompany.com"
+                placeholder={t("placeholders.email")}
               />
 
               <div className="flex">

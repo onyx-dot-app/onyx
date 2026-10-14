@@ -114,7 +114,7 @@ function BifrostModalInternals({
 
       <APIBaseField
         subDescription={t("bifrost.apiBaseField.description")}
-        placeholder="https://your-bifrost-gateway.com/v1"
+        placeholder={t("placeholders.bifrostApiBase")}
       />
 
       <APIKeyField

@@ -59,7 +59,7 @@ function AzureFormFields(props: ImageGenFormChildProps<AzureFormValues>) {
             <FormField.Control>
               <InputTypeIn
                 {...field}
-                placeholder="https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview"
+                placeholder={t("placeholders.azureTargetUri")}
                 variant={disabled ? "disabled" : undefined}
               />
             </FormField.Control>

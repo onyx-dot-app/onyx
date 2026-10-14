@@ -462,7 +462,7 @@ function AzureProviderModal({
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           title={t("azure.targetUrl.title")}
-          placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
+          placeholder={t("placeholders.azureEmbeddingsUrl")}
         />
         <ApiKeyField provider={provider} />
         <TextField
@@ -563,7 +563,7 @@ function LiteLLMProviderModal({
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           title={t("litellm.apiUrl.title")}
-          placeholder="https://..."
+          placeholder={t("placeholders.apiUrl")}
           subDescription={t("litellm.apiUrl.description", {
             provider: provider.displayName,
           })}
@@ -663,7 +663,7 @@ function BifrostProviderModal({
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
           title={t("bifrost.apiUrl.title")}
-          placeholder="https://bifrost.example.com"
+          placeholder={t("placeholders.bifrostApiBase")}
           subDescription={t("bifrost.apiUrl.description", { appName })}
         />
 
@@ -672,7 +672,7 @@ function BifrostProviderModal({
         <TextField
           name="modelName"
           title={t("fields.modelName.title")}
-          placeholder="openai/text-embedding-3-large"
+          placeholder={t("placeholders.bifrostModel")}
           subDescription={
             isModelLocked
               ? t("bifrost.modelName.editDescription", { appName })

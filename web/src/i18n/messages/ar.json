@@ -809,6 +809,12 @@
         "ariaLabel": "البحث في الأدوات",
         "placeholder": "البحث في الأدوات…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://your-mcp-server.com/mcp"
     }
   },
   "admin": {
@@ -1745,6 +1751,9 @@
         "licenseSyncFailed": "فشلت مزامنة الترخيص",
         "paymentMethodRequired": "أضف طريقة دفع أولًا، ثم حاول الترقية مرة أخرى.",
         "syncLicenseFailed": "فشلت مزامنة الترخيص"
+      },
+      "placeholders": {
+        "licenseKey": "eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
       }
     },
     "chatPreferences": {
@@ -4340,6 +4349,10 @@
         "saveFailed": "فشل حفظ التجاوز: {message}",
         "saved": "حُفظ السعر للنموذج {model}.",
         "unknownError": "خطأ غير معروف"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5792,6 +5805,9 @@
           "name": "أساسي",
           "description": "المجموعة الافتراضية لجميع المستخدمين بأذونات أساسية."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6065,6 +6081,9 @@
           "name": "معالجة الاستعلامات",
           "description": "يعمل على كل استعلام مستخدم قبل دخوله المسار. يتيح إعادة كتابة الاستعلامات أو تصفيتها أو رفضها."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://your-api-endpoint.com"
       }
     },
     "imageGeneration": {
@@ -6250,6 +6269,11 @@
       },
       "setDefaultSuccess": {
         "message": "تم تعيين {title} كافتراضي"
+      },
+      "placeholders": {
+        "vertexProjectId": "my-vertex-project",
+        "vertexLocation": "global",
+        "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/images/generations?api-version=2025-01-01-preview"
       }
     },
     "indexSettings": {
@@ -6806,6 +6830,12 @@
           "saved": "تم حفظ حد المعدل.",
           "failed": "تعذّر حفظ حد المعدل."
         }
+      },
+      "placeholders": {
+        "azureEmbeddingsUrl": "https://your_resource_name.openai.azure.com/openai/v1/embeddings",
+        "apiUrl": "https://...",
+        "bifrostApiBase": "https://bifrost.example.com",
+        "bifrostModel": "openai/text-embedding-3-large"
       }
     },
     "indexing": {
@@ -7432,6 +7462,16 @@
           "workloadIdentityNotice": {
             "title": "سيستخدم {appName} بيانات اعتماد Google Cloud المحيطة بالحاوية (عبر google.auth.default). تأكد من ربط ServiceAccount الخاص بـ Kubernetes بحساب خدمة GCP لديه وصول إلى Vertex AI."
           }
+        },
+        "placeholders": {
+          "bifrostApiBase": "https://your-bifrost-gateway.com/v1",
+          "vertexProjectId": "my-vertex-project",
+          "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
+          "openAICompatibleApiBase": "http://localhost:8000/v1",
+          "litellmApiBase": "https://your-litellm-proxy.com",
+          "bedrockAccessKeyId": "AKIAIOSFODNN7EXAMPLE",
+          "bedrockSecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          "apiBase": "https://"
         }
       },
       "newCustomProviderCard": {
@@ -8139,6 +8179,11 @@
         "securitySettingsUpdated": "تم تحديث إعدادات الأمان",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "settingsUpdated": "تم تحديث الإعدادات"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8819,7 +8864,8 @@
           },
           "nameField": {
             "description": "معرّف فريد بأحرف صغيرة يُستخدم في رابط تسجيل الدخول. لا يمكن تغييره لاحقًا.",
-            "title": "الاسم"
+            "title": "الاسم",
+            "placeholder": "company-a"
           },
           "providerTypeField": {
             "description": "البروتوكول الذي يصادق به هذا الموفر.",
@@ -8889,7 +8935,8 @@
         },
         "openidConfigUrl": {
           "label": "عنوان URL لإعدادات OpenID",
-          "description": "عنوان URL لمستند اكتشاف OpenID Connect الخاص بموفّر الهوية."
+          "description": "عنوان URL لمستند اكتشاف OpenID Connect الخاص بموفّر الهوية.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "اشتراط مطالبة البريد الإلكتروني الموثّق",
@@ -8897,27 +8944,33 @@
         },
         "idpEntityId": {
           "label": "معرّف كيان موفّر الهوية",
-          "description": "معرّف كيان موفّر الهوية (المُصدِر)."
+          "description": "معرّف كيان موفّر الهوية (المُصدِر).",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "عنوان URL لتسجيل الدخول الموحّد لموفّر الهوية",
-          "description": "نقطة نهاية موفّر الهوية التي تستقبل طلبات تسجيل الدخول."
+          "description": "نقطة نهاية موفّر الهوية التي تستقبل طلبات تسجيل الدخول.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "شهادة X.509 لموفّر الهوية",
-          "description": "شهادة التوقيع لموفّر الهوية، تُستخدم للتحقق من التأكيدات."
+          "description": "شهادة التوقيع لموفّر الهوية، تُستخدم للتحقق من التأكيدات.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "معرّف كيان موفّر الخدمة",
-          "description": "معرّف كيان هذا المثيل، المسجّل لدى موفّر الهوية."
+          "description": "معرّف كيان هذا المثيل، المسجّل لدى موفّر الهوية.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "شهادة X.509 لموفّر الخدمة",
-          "description": "فقط إذا كان هذا المثيل يوقّع الطلبات أو يفكّ تشفير التأكيدات."
+          "description": "فقط إذا كان هذا المثيل يوقّع الطلبات أو يفكّ تشفير التأكيدات.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "المفتاح الخاص لموفّر الخدمة",
-          "description": "المفتاح الخاص المرتبط بشهادة موفّر الخدمة. يُخزَّن مشفّرًا."
+          "description": "المفتاح الخاص المرتبط بشهادة موفّر الخدمة. يُخزَّن مشفّرًا.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "سمة البريد الإلكتروني",
@@ -9081,6 +9134,9 @@
         "deleted": {
           "message": "تم حذف الإجابة القياسية {id}"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:it|support)\\s*ticket"
       }
     },
     "status": {
@@ -9248,6 +9304,9 @@
         "logo": {
           "alt": "الشعار"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9471,11 +9530,13 @@
             },
             "project": {
               "label": "اسم المشروع",
-              "description": "اسم مشروع Braintrust الذي تُسجَّل فيه التتبعات."
+              "description": "اسم مشروع Braintrust الذي تُسجَّل فيه التتبعات.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "عنوان URL لواجهة API",
-              "description": "الافتراضي هو منطقة الولايات المتحدة. الصق عنوان URL لواجهة Braintrust API للمناطق الأخرى أو الاستضافة الذاتية."
+              "description": "الافتراضي هو منطقة الولايات المتحدة. الصق عنوان URL لواجهة Braintrust API للمناطق الأخرى أو الاستضافة الذاتية.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9492,7 +9553,8 @@
             },
             "host": {
               "label": "عنوان URL الأساسي لواجهة API",
-              "description": "الافتراضي هو منطقة الاتحاد الأوروبي. الصق عنوان URL الأساسي لـ Langfuse للمناطق الأخرى أو الاستضافة الذاتية."
+              "description": "الافتراضي هو منطقة الاتحاد الأوروبي. الصق عنوان URL الأساسي لـ Langfuse للمناطق الأخرى أو الاستضافة الذاتية.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10049,6 +10111,10 @@
       },
       "unexpectedError": {
         "message": "حدث خطأ غير متوقع."
+      },
+      "placeholders": {
+        "azureEndpoint": "https://your_resource_region.tts.speech.microsoft.com/",
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10165,11 +10231,14 @@
         },
         "searxngBaseUrl": {
           "label": "عنوان URL الأساسي لـ SearXNG",
-          "description": "الصق عنوان URL الأساسي لـ [مثيل SearXNG](https://docs.searxng.org/admin/installation.html) الخاص بك."
+          "description": "الصق عنوان URL الأساسي لـ [مثيل SearXNG](https://docs.searxng.org/admin/installation.html) الخاص بك.",
+          "placeholder": "https://your-searxng-instance.com"
         },
         "firecrawlBaseUrl": {
           "label": "عنوان URL الأساسي لواجهة API",
-          "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك."
+          "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -11368,6 +11437,9 @@
       "sendFailed": {
         "toast": "فشل إرسال بريد تحقق جديد - {errorDetail}"
       }
+    },
+    "placeholders": {
+      "email": "email@yourcompany.com"
     }
   },
   "cards": {
@@ -13694,7 +13766,10 @@
           }
         },
         "saveButton": "حفظ",
-        "savingButton": "جارٍ الحفظ…"
+        "savingButton": "جارٍ الحفظ…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "التطبيق «{appName}» لديه بالفعل مهارة مرتبطة باسم «{skillName}». ارفع مهارة باسم مختلف."
@@ -16454,6 +16529,9 @@
         "transferredToast": {
           "message": "تم نقل الملكية."
         }
+      },
+      "placeholders": {
+        "githubRepository": "owner/repository أو https://github.com/owner/repository"
       }
     },
     "page": {

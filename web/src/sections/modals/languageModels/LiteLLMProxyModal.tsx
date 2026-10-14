@@ -66,7 +66,7 @@ function LiteLLMProxyModalInternals({
     <>
       <APIBaseField
         subDescription={t("liteLlmProxy.apiBaseField.description")}
-        placeholder="https://your-litellm-proxy.com"
+        placeholder={t("placeholders.litellmApiBase")}
       />
 
       <APIKeyField providerName="LiteLLM Proxy" />
