@@ -1,15 +1,89 @@
-"""Execution scopes for model generation.
+"""Cancellation signals and execution scopes for model generation."""
 
-Cancellation of in-flight provider calls is not implemented yet; it will live
-in this module. The context isolation below already exists because streaming
-needs it: a stream's tracing span must not leak into the caller's context, and
-cancellation will add a per-generation signal that needs the same isolation.
-"""
-
-from collections.abc import Callable, Generator
-from contextvars import copy_context
+import threading
+from collections.abc import Callable, Generator, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar, copy_context
 from functools import wraps
 from typing import ParamSpec, TypeVar
+
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
+
+class AgentCancelled(BaseException):
+    """Cancellation control flow bypasses ordinary model/tool error recovery."""
+
+
+class CancellationSignal:
+    def __init__(self) -> None:
+        self._cancelled = threading.Event()
+        self._lock = threading.Lock()
+        self._callbacks: set[Callable[[], None]] = set()
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled.is_set()
+
+    def check(self) -> None:
+        if self.cancelled:
+            raise AgentCancelled()
+
+    def cancel(self) -> None:
+        with self._lock:
+            if self.cancelled:
+                return
+            self._cancelled.set()
+            callbacks = tuple(self._callbacks)
+            self._callbacks.clear()
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception:
+                logger.exception("Agent cancellation callback failed")
+
+    @contextmanager
+    def on_cancel(self, callback: Callable[[], None]) -> Iterator[None]:
+        def notify() -> None:
+            return callback()
+
+        with self._lock:
+            cancelled = self.cancelled
+            if not cancelled:
+                self._callbacks.add(notify)
+        try:
+            if cancelled:
+                callback()
+            yield
+        finally:
+            with self._lock:
+                self._callbacks.discard(notify)
+
+
+_current_signal: ContextVar[CancellationSignal | None] = ContextVar(
+    "agent_cancellation", default=None
+)
+
+
+def current_cancellation() -> CancellationSignal | None:
+    return _current_signal.get()
+
+
+def check_cancelled() -> None:
+    signal = current_cancellation()
+    if signal is not None:
+        signal.check()
+
+
+@contextmanager
+def cancellation_scope(signal: CancellationSignal) -> Iterator[None]:
+    token = _current_signal.set(signal)
+    try:
+        yield
+    finally:
+        _current_signal.reset(token)
+
 
 _P = ParamSpec("_P")
 _T = TypeVar("_T")

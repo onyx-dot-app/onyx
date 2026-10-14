@@ -308,6 +308,23 @@ LiteLLM exceptions: `Timeout`, `APIConnectionError`, `ServiceUnavailableError`,
 attempts. The boundary is the first yielded chunk, even an empty or role-only one. Once any chunk has reached the caller, the same exception class
 propagates immediately; the stream is not restarted mid-answer.
 
+### Cooperative cancellation and shared message ownership
+
+`GenerationContext.cancellation` accepts a `CancellationSignal`. Shared calls also inherit
+an enclosing cancellation scope. The adapter checks the signal before provider attempts,
+between stream reads, and before retries. Cancellation after a partial answer emits an
+`aborted` generation error and preserves accepted content. Stream cleanup closes any per-request HTTP client.
+`AgentCancelled` bypasses ordinary exception recovery. Callers must handle it explicitly.
+
+Total deadlines use a child scope, so an expired generation does not cancel its parent.
+Blocked provider reads can delay cancellation and deadline checks. This is cooperative
+cancellation, not immediate socket interruption. Existing chat Stop wiring does not change here.
+
+Shared messages can carry an identity and local metadata/token estimates. Metadata and
+estimates are excluded from serialization. ToolResult adds typed details and error/termination
+flags; raw message dumps include their defaults. Provider serialization forwards only the
+existing provider message fields, not execution identities or result details.
+
 ### 4.7 Tracing
 
 `LitellmLLM.invoke` and `LitellmLLM.stream` each open their own generation span with

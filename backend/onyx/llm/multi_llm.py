@@ -3,7 +3,7 @@ import json
 import math
 import os
 import time
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union, cast
@@ -27,14 +27,27 @@ from onyx.llm.api_surfaces import (
     LlmApiSurface,
     resolve_api_surface,
 )
-from onyx.llm.cancellation import isolated_context
+from onyx.llm.cancellation import (
+    AgentCancelled,
+    CancellationSignal,
+    cancellation_scope,
+    check_cancelled,
+    current_cancellation,
+    isolated_context,
+)
 from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
     map_custom_config_to_model_kwargs,
 )
-from onyx.llm.exceptions import LLMRateLimitError, LLMTimeoutError
+from onyx.llm.exceptions import (
+    ClassifiedLLMError,
+    LLMContextLimitError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    litellm_exception_to_safe_error,
+)
 from onyx.llm.interfaces import LLM, GenerationContext, LLMConfig, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
@@ -271,6 +284,62 @@ def _event_with_request_params(
     )
 
 
+class _GenerationSignal(CancellationSignal):
+    def __init__(self, parent: CancellationSignal, timeout: float) -> None:
+        super().__init__()
+        self.parent = parent
+        self.deadline = time.monotonic() + timeout
+
+    def check(self) -> None:
+        self.parent.check()
+        if time.monotonic() >= self.deadline:
+            raise LLMTimeoutError("Model generation exceeded its total timeout")
+        super().check()
+
+
+@contextmanager
+def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal]:
+    parent = context.cancellation or current_cancellation() or CancellationSignal()
+    if context.total_timeout_s is None:
+        with cancellation_scope(parent):
+            parent.check()
+            yield parent
+        return
+    signal = _GenerationSignal(parent, context.total_timeout_s)
+    with (
+        parent.on_cancel(signal.cancel),
+        cancellation_scope(signal),
+    ):
+        parent.check()
+        yield signal
+
+
+@contextmanager
+def _provider_scope(
+    context: GenerationContext, llm: LLM
+) -> Iterator[CancellationSignal]:
+    from litellm.exceptions import ContextWindowExceededError, RateLimitError, Timeout
+    from openai import APIError
+
+    try:
+        with _generation_scope(context) as signal:
+            yield signal
+    except ContextWindowExceededError as error:
+        raise LLMContextLimitError("Model input exceeds its context limit") from error
+    except Timeout as error:
+        raise LLMTimeoutError(str(error)) from error
+    except RateLimitError as error:
+        raise LLMRateLimitError(str(error)) from error
+    except APIError as error:
+        # LiteLLM provider exceptions share the OpenAI SDK base class.
+        info = litellm_exception_to_safe_error(error, llm)
+        raise ClassifiedLLMError(
+            client_error_msg=info.message,
+            error_code=info.error_code,
+            is_retryable=info.is_retryable,
+        ) from error
+
+
 def _as_onyx_llm_error(error: Exception) -> Exception:
     """Translate a litellm exception into the Onyx one callers catch.
 
@@ -300,28 +369,31 @@ def _as_onyx_llm_error(error: Exception) -> Exception:
     return mapped
 
 
-def _consume_stream_until_deadline(stream: Any, deadline: float) -> list[Any]:
-    """Drain a litellm stream, capping total wall-clock time at ``deadline``.
+def _consume_stream_until_deadline[T](stream: Iterable[T], deadline: float) -> list[T]:
+    """Drain provider output within the invocation's remaining budget.
 
-    The socket read timeout only bounds the gap between packets, so keepalive
-    pings defeat it; this caps the whole call. On breach we raise — never close,
-    since litellm 1.93.0 exposes only async ``aclose`` — which frees the thread;
-    GC releases the connection.
-
-    The deadline is only checked between chunks, so a call can overshoot it by
-    up to one socket read timeout.
+    Socket read timeouts bound the gap between packets, so keepalive pings
+    can keep a call open indefinitely. Check the total deadline between chunks
+    as well; this check alone can overshoot by up to one socket read timeout.
     """
-    chunks: list[Any] = []
+    chunks: list[T] = []
     try:
-        for chunk in stream:
+        iterator = iter(stream)
+        while True:
+            check_cancelled()
+            try:
+                chunk = next(iterator)
+            except StopIteration:
+                check_cancelled()
+                break
+            check_cancelled()
             chunks.append(chunk)
             if time.monotonic() > deadline:
                 raise LLMTimeoutError("LLM streaming call exceeded its total timeout")
-    except LLMTimeoutError:
-        raise
-    except Exception as e:
+    except Exception as error:
+        check_cancelled()
         # The request itself succeeded, so _completion's mapping never saw this.
-        raise _as_onyx_llm_error(e)
+        raise _as_onyx_llm_error(error)
     return chunks
 
 
@@ -1274,6 +1346,7 @@ class LitellmLLM(LLM):
                     else nullcontext()
                 )
                 with env_ctx:
+                    check_cancelled()
                     return litellm.completion(
                         model=model,
                         base_url=self._api_base or None,
@@ -1296,6 +1369,7 @@ class LitellmLLM(LLM):
             attempts = _retry_attempts(optional_kwargs, required_kwarg_keys)
 
             for i, opts in enumerate(attempts):
+                check_cancelled()
                 # Last write wins: sent_kwargs holds what the returning (or
                 # final failing) attempt sent, reasoning_effort the effective
                 # intent. One dict, two sinks, so they cannot drift.
@@ -1315,6 +1389,7 @@ class LitellmLLM(LLM):
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
+                    check_cancelled()
                     if (
                         _rejection_demands_reasoning_none(e)
                         and opts.get("reasoning_effort") != _OPENAI_REASONING_NONE
@@ -1348,6 +1423,7 @@ class LitellmLLM(LLM):
                     )
             raise RuntimeError("unreachable: retry ladder always returns or raises")
         except Exception as e:
+            check_cancelled()
             raise _as_onyx_llm_error(e)
 
     def redact_error(self, text: str) -> str:
@@ -1602,13 +1678,15 @@ class LitellmLLM(LLM):
         #    - Shared pools can have connections corrupted by other threads
         #    - Per-request HTTPHandler eliminates cross-thread interference
         for attempt in range(max_attempts):
+            check_cancelled()
             client = None
             if self._uses_isolated_client():
                 client = HTTPHandler(timeout=stall_timeout_s)
 
             try:
+                # stream=True fixes the third-party return union to an iterator.
                 response = cast(
-                    LiteLLMCustomStreamWrapper,
+                    "LiteLLMCustomStreamWrapper",
                     self._completion(
                         prompt=prompt,
                         tools=tools,
@@ -1626,7 +1704,15 @@ class LitellmLLM(LLM):
                 )
 
                 routed_model: str | None = None
-                for chunk in response:
+                iterator = iter(response)
+                while True:
+                    check_cancelled()
+                    try:
+                        chunk = next(iterator)
+                    except StopIteration:
+                        check_cancelled()
+                        break
+                    check_cancelled()
                     model_response = from_litellm_model_response_stream(chunk)
 
                     chunk_routed: str | None = self._routed_model(model_response.model)
@@ -1641,6 +1727,7 @@ class LitellmLLM(LLM):
                     yield model_response
                 return
             except retryable_exceptions as e:
+                check_cancelled()
                 if yielded_any or attempt >= max_attempts - 1:
                     raise _as_onyx_llm_error(e)
                 logger.warning(
@@ -1675,34 +1762,44 @@ class LitellmLLM(LLM):
         context = context or GenerationContext()
         messages = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None
-        with llm_generation_span(
-            self,
-            context.flow or LLMFlow.UNTAGGED_INVOKE,
-            input_messages=messages,
-            tools=tools,
-            content_mode=context.content_mode,
-        ) as span:
+        with (
+            _provider_scope(context, self) as signal,
+            llm_generation_span(
+                self,
+                context.flow or LLMFlow.UNTAGGED_INVOKE,
+                input_messages=messages,
+                tools=tools,
+                content_mode=context.content_mode,
+            ) as span,
+        ):
+            signal.check()
             try:
                 response = self.invoke_raw(
                     messages,
                     tools=tools,
                     tool_choice=request.options.tool_choice,
                     structured_response_format=request.options.structured_response_format,
+                    total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
                     max_tokens=request.options.max_tokens,
                     reasoning_effort=request.options.reasoning_effort,
                     user_identity=context.user_identity,
-                    total_timeout_s=context.total_timeout_s or LLM_INVOKE_TIMEOUT_S,
                 )
-            except Exception as exc:
+            except Exception as error:
                 span.set_error(
                     {
-                        "message": self.redact_error(f"{type(exc).__name__}: {exc}"),
+                        "message": self.redact_error(
+                            f"{type(error).__name__}: {error}"
+                        ),
                         "data": None,
                     }
                 )
                 raise
+            # A completed response survives its deadline, but explicit Stop wins.
+            if signal.cancelled:
+                raise AgentCancelled()
+            message = to_assistant_message(response, request)
             record_llm_response(span, response)
-        return to_assistant_message(response, request)
+            return message
 
     @isolated_context
     def stream(
@@ -1713,16 +1810,20 @@ class LitellmLLM(LLM):
         accumulator = MessageAccumulator(request.tools)
         messages = self._prepare_request(request)
         tools = serialize_tools(request.tools) or None
-        with llm_generation_span(
-            self,
-            context.flow or LLMFlow.UNTAGGED_STREAM,
-            input_messages=messages,
-            tools=tools,
-            content_mode=context.content_mode,
-        ) as span:
+        with (
+            _provider_scope(context, self) as signal,
+            llm_generation_span(
+                self,
+                context.flow or LLMFlow.UNTAGGED_STREAM,
+                input_messages=messages,
+                tools=tools,
+                content_mode=context.content_mode,
+            ) as span,
+        ):
             started = time.monotonic()
             first_action = False
             request_params_sent = False
+            signal.check()
             yield GenerationStartEvent()
             events = accumulator.consume(
                 iter(
@@ -1730,19 +1831,20 @@ class LitellmLLM(LLM):
                         messages,
                         tools=tools,
                         tool_choice=request.options.tool_choice,
-                        structured_response_format=request.options.structured_response_format,
                         max_tokens=request.options.max_tokens,
                         reasoning_effort=request.options.reasoning_effort,
                         user_identity=context.user_identity,
+                        operation=operation,
                         stall_timeout_s=context.stall_timeout_s
                         or LLM_SOCKET_READ_TIMEOUT,
-                        operation=operation,
+                        structured_response_format=request.options.structured_response_format,
                     )
                 ),
                 request,
             )
             try:
                 for event in events:
+                    signal.check()
                     if not first_action:
                         span.span_data.time_to_first_action_seconds = (
                             time.monotonic() - started
@@ -1752,6 +1854,7 @@ class LitellmLLM(LLM):
                         event = _event_with_request_params(event, operation)
                         request_params_sent = True
                     yield event
+                signal.check()
                 if not (
                     accumulator.message.text
                     or accumulator.message.thinking
@@ -1771,17 +1874,28 @@ class LitellmLLM(LLM):
                         if event.type == "done"
                         else event
                     )
-            except Exception as exc:
+            except (Exception, AgentCancelled) as error:
                 span.set_error(
                     {
-                        "message": self.redact_error(f"{type(exc).__name__}: {exc}"),
+                        "message": self.redact_error(
+                            f"{type(error).__name__}: {error}"
+                        ),
                         "data": None,
                     }
                 )
-                accumulator.message.stop_reason = "error"
-                accumulator.message.error_message = "Generation failed"
+                accumulator.message.stop_reason = (
+                    "aborted" if isinstance(error, AgentCancelled) else "error"
+                )
+                accumulator.message.error_message = (
+                    "Generation cancelled"
+                    if isinstance(error, AgentCancelled)
+                    else "Generation failed"
+                )
                 yield _event_with_request_params(
                     GenerationErrorEvent(
+                        stop_reason="aborted"
+                        if isinstance(error, AgentCancelled)
+                        else "error",
                         error_message=accumulator.message.error_message,
                         usage=accumulator.message.usage.model_copy(deep=True)
                         if accumulator.message.usage
