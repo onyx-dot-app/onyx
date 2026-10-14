@@ -61,19 +61,11 @@ type Options struct {
 	SettleTime time.Duration
 }
 
-// WithDefaults fills the zero fields of o.
+// WithDefaults fills the fields that have no CLI flag. The timeouts keep
+// their value, so an explicit zero means no wait.
 func (o Options) WithDefaults() Options {
 	if o.Profile == "" {
 		o.Profile = "default"
-	}
-	if o.ReadyTimeout == 0 {
-		o.ReadyTimeout = 3 * time.Minute
-	}
-	if o.LockWait == 0 {
-		o.LockWait = 10 * time.Minute
-	}
-	if o.StopTimeout == 0 {
-		o.StopTimeout = 20 * time.Second
 	}
 	if o.BindRetries == 0 {
 		o.BindRetries = 3

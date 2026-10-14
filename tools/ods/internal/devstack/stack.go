@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode"
 )
 
 const (
@@ -79,8 +78,9 @@ func Open(dir, project string) (*Stack, error) {
 // path: the normalized directory name plus a short hash of the full path.
 func ProjectName(root string) string {
 	var b strings.Builder
+	// Compose accepts lowercase ASCII letters, digits, '-' and '_' only.
 	for _, r := range strings.ToLower(filepath.Base(root)) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
 			b.WriteRune(r)
 		}
 	}
