@@ -809,6 +809,12 @@
         "ariaLabel": "도구 검색",
         "placeholder": "도구 검색…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://mcp-seobeo.com/mcp"
     }
   },
   "admin": {
@@ -3242,7 +3248,8 @@
           "description": "웹 커넥터 구성",
           "fields": {
             "base_url": {
-              "label": "기본 URL"
+              "label": "기본 URL",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "스크래핑 방식",
@@ -3260,7 +3267,9 @@
               "label": "URL 재작성",
               "description": "저장하기 전에 문서 URL을 재작성합니다. 내부 미러를 통해 크롤링하면서 정식 공개 링크를 저장할 때 유용합니다. 예: https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "원본 URL 접두사",
-              "rightLabel": "대체 접두사"
+              "rightLabel": "대체 접두사",
+              "leftPlaceholder": "https://naebu-mireo.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3303,8 @@
           "fields": {
             "github_base_url": {
               "label": "GitHub Enterprise Server URL",
-              "description": "github.com을 사용하면 비워 두세요."
+              "description": "github.com을 사용하면 비워 두세요.",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "저장소 소유자"
@@ -3340,7 +3350,8 @@
           "description": "TestRail 커넥터 구성",
           "fields": {
             "testrail_base_url": {
-              "label": "TestRail 기본 URL"
+              "label": "TestRail 기본 URL",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "프로젝트 ID",
@@ -3364,7 +3375,8 @@
           "description": "GitLab 커넥터 구성",
           "fields": {
             "gitlab_url": {
-              "label": "GitLab URL"
+              "label": "GitLab URL",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "프로젝트 소유자"
@@ -3496,7 +3508,8 @@
           "description": "Bookstack 커넥터 구성",
           "fields": {
             "bookstack_base_url": {
-              "label": "BookStack 기본 URL"
+              "label": "BookStack 기본 URL",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3517,8 @@
           "description": "Outline 커넥터 구성",
           "fields": {
             "outline_base_url": {
-              "label": "Outline 기본 URL"
+              "label": "Outline 기본 URL",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3530,8 @@
               "description": "atlassian.net 사이트이면 Confluence Cloud를, 자체 호스팅하는 Confluence Server 또는 Data Center 사이트이면 Confluence Data Center를 선택하세요."
             },
             "wiki_base": {
-              "label": "사이트 URL"
+              "label": "사이트 URL",
+              "placeholder": "https://domein.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3576,8 @@
           "subtext": "인덱싱할 Jira 콘텐츠를 구성합니다. 전체를 인덱싱하거나 특정 프로젝트를 지정할 수 있습니다.",
           "fields": {
             "jira_base_url": {
-              "label": "사이트 URL"
+              "label": "사이트 URL",
+              "placeholder": "https://domein.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3798,8 @@
           "description": "Axero 커넥터 구성",
           "fields": {
             "base_url": {
-              "label": "Axero 기본 URL"
+              "label": "Axero 기본 URL",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "스페이스",
@@ -3835,7 +3852,8 @@
           "fields": {
             "gong_base_url": {
               "label": "Gong API 기본 URL",
-              "description": "기본값은 `https://api.gong.io`입니다."
+              "description": "기본값은 `https://api.gong.io`입니다.",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "워크스페이스",
@@ -3848,7 +3866,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Loopio 서브도메인",
-              "description": "Loopio 사이트의 서브도메인입니다. `acme.loopio.com`의 `acme`가 해당합니다."
+              "description": "Loopio 사이트의 서브도메인입니다. `acme.loopio.com`의 `acme`가 해당합니다.",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Loopio 스택 이름",
@@ -3940,7 +3959,8 @@
           "description": "Google Sites 커넥터 구성",
           "fields": {
             "base_url": {
-              "label": "기본 URL"
+              "label": "기본 URL",
+              "placeholder": "https://sites.google.com/view/saiteu"
             },
             "file_locations": {
               "label": "사이트 내보내기",
@@ -3953,7 +3973,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Zendesk 서브도메인",
-              "description": "Zendesk 사이트의 서브도메인입니다. `acme.zendesk.com`의 `acme`가 해당합니다."
+              "description": "Zendesk 사이트의 서브도메인입니다. `acme.zendesk.com`의 `acme`가 해당합니다.",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "콘텐츠 유형",
@@ -4142,7 +4163,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Freshdesk 도메인",
-              "description": "Freshdesk 사이트의 서브도메인입니다. `acme.freshdesk.com`의 `acme`가 해당합니다."
+              "description": "Freshdesk 사이트의 서브도메인입니다. `acme.freshdesk.com`의 `acme`가 해당합니다.",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4198,8 @@
           "fields": {
             "domain": {
               "label": "Egnyte 도메인",
-              "description": "Egnyte 사이트의 서브도메인입니다. `acme.egnyte.com`의 `acme`가 해당합니다."
+              "description": "Egnyte 사이트의 서브도메인입니다. `acme.egnyte.com`의 `acme`가 해당합니다.",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "폴더 경로",
@@ -4220,7 +4243,8 @@
           "description": "Highspot 커넥터 구성",
           "fields": {
             "highspot_url": {
-              "label": "Highspot URL"
+              "label": "Highspot URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "인덱싱할 Highspot 콘텐츠",
@@ -4322,6 +4346,10 @@
         "saveFailed": "재정의를 저장하지 못했습니다: {message}",
         "saved": "{model}의 요금을 저장했습니다.",
         "unknownError": "알 수 없는 오류"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5774,6 +5802,9 @@
           "name": "기본",
           "description": "기본 권한을 가진 모든 사용자의 기본 그룹입니다."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6047,6 +6078,9 @@
           "name": "쿼리 처리",
           "description": "파이프라인에 들어가기 전 모든 사용자 쿼리에 대해 실행됩니다. 쿼리를 재작성, 필터링 또는 거부할 수 있습니다."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://api-endeupointeu.com"
       }
     },
     "imageGeneration": {
@@ -6788,6 +6822,9 @@
           "saved": "요청 한도를 저장했습니다.",
           "failed": "요청 한도를 저장하지 못했습니다."
         }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
@@ -8121,6 +8158,11 @@
         "securitySettingsUpdated": "보안 설정을 업데이트했습니다",
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
         "settingsUpdated": "설정을 업데이트했습니다"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8801,7 +8843,8 @@
           },
           "nameField": {
             "description": "로그인 URL에 사용되는 고유한 소문자 슬러그입니다. 나중에 변경할 수 없습니다.",
-            "title": "이름"
+            "title": "이름",
+            "placeholder": "hoesa-a"
           },
           "providerTypeField": {
             "description": "이 공급자가 인증에 사용하는 프로토콜입니다.",
@@ -8871,7 +8914,8 @@
         },
         "openidConfigUrl": {
           "label": "OpenID 구성 URL",
-          "description": "IdP의 OpenID Connect 검색 문서 URL입니다."
+          "description": "IdP의 OpenID Connect 검색 문서 URL입니다.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "이메일 검증 클레임 필수",
@@ -8879,27 +8923,33 @@
         },
         "idpEntityId": {
           "label": "IdP 엔터티 ID",
-          "description": "ID 공급자의 엔터티 ID(발급자)입니다."
+          "description": "ID 공급자의 엔터티 ID(발급자)입니다.",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "IdP SSO URL",
-          "description": "로그인 요청을 받는 IdP 엔드포인트입니다."
+          "description": "로그인 요청을 받는 IdP 엔드포인트입니다.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "IdP X.509 인증서",
-          "description": "어설션 검증에 사용되는 IdP의 서명 인증서입니다."
+          "description": "어설션 검증에 사용되는 IdP의 서명 인증서입니다.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "SP 엔터티 ID",
-          "description": "IdP에 등록된 이 인스턴스의 엔터티 ID입니다."
+          "description": "IdP에 등록된 이 인스턴스의 엔터티 ID입니다.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "SP X.509 인증서",
-          "description": "이 인스턴스가 요청에 서명하거나 어설션을 복호화하는 경우에만 필요합니다."
+          "description": "이 인스턴스가 요청에 서명하거나 어설션을 복호화하는 경우에만 필요합니다.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "SP 개인 키",
-          "description": "SP 인증서와 쌍을 이루는 개인 키입니다. 암호화되어 저장됩니다."
+          "description": "SP 인증서와 쌍을 이루는 개인 키입니다. 암호화되어 저장됩니다.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "이메일 속성",
@@ -9063,6 +9113,9 @@
         "deleted": {
           "message": "표준 답변 {id}이(가) 삭제되었습니다"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:IT|지원)\\s*티켓"
       }
     },
     "status": {
@@ -9230,6 +9283,9 @@
         "logo": {
           "alt": "로고"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9453,11 +9509,13 @@
             },
             "project": {
               "label": "프로젝트 이름",
-              "description": "트레이스가 기록되는 Braintrust 프로젝트 이름입니다."
+              "description": "트레이스가 기록되는 Braintrust 프로젝트 이름입니다.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "API URL",
-              "description": "기본값은 미국 리전입니다. 다른 리전이나 자체 호스팅의 경우 Braintrust API URL을 붙여넣으세요."
+              "description": "기본값은 미국 리전입니다. 다른 리전이나 자체 호스팅의 경우 Braintrust API URL을 붙여넣으세요.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9474,7 +9532,8 @@
             },
             "host": {
               "label": "API 기본 URL",
-              "description": "기본값은 EU 리전입니다. 다른 리전이나 자체 호스팅의 경우 Langfuse 기본 URL을 붙여넣으세요."
+              "description": "기본값은 EU 리전입니다. 다른 리전이나 자체 호스팅의 경우 Langfuse 기본 URL을 붙여넣으세요.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10031,6 +10090,9 @@
       },
       "unexpectedError": {
         "message": "예기치 않은 오류가 발생했습니다."
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10147,11 +10209,14 @@
         },
         "searxngBaseUrl": {
           "label": "SearXNG 기본 URL",
-          "description": "[SearXNG 인스턴스](https://docs.searxng.org/admin/installation.html)의 기본 URL을 붙여넣으세요."
+          "description": "[SearXNG 인스턴스](https://docs.searxng.org/admin/installation.html)의 기본 URL을 붙여넣으세요.",
+          "placeholder": "https://searxng-inseuteonseu.com"
         },
         "firecrawlBaseUrl": {
           "label": "API 기본 URL",
-          "description": "Firecrawl API 기본 URL입니다."
+          "description": "Firecrawl API 기본 URL입니다.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -13493,6 +13558,31 @@
         "label": "플랜 업그레이드"
       },
       "availableFor": "{plan}에서 사용 가능"
+    },
+    "placeholders": {
+      "email": "ireum@hoesa.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://riseoseu.cognitiveservices.azure.com/openai/deployments/baepo-ireum/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://riseoseu.cognitiveservices.azure.com/openai/deployments/baepo-ireum/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://riseoseu_ireum.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://riseoseu_jiyeok.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://bifrost-geiteuwei.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://litellm-peurokssi.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "nae-vertex-peurojekteu",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -13676,7 +13766,10 @@
           }
         },
         "saveButton": "저장",
-        "savingButton": "저장 중…"
+        "savingButton": "저장 중…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "앱 \"{appName}\"에는 이미 \"{skillName}\" 이름의 연결된 스킬이 있습니다. 다른 이름의 스킬을 업로드하세요."
@@ -16436,6 +16529,9 @@
         "transferredToast": {
           "message": "소유권을 이전했습니다."
         }
+      },
+      "placeholders": {
+        "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
       }
     },
     "page": {

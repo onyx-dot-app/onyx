@@ -809,6 +809,12 @@
         "ariaLabel": "ツールを検索",
         "placeholder": "ツールを検索…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://mcp-sabaa.com/mcp"
     }
   },
   "admin": {
@@ -3242,7 +3248,8 @@
           "description": "Web コネクターを設定",
           "fields": {
             "base_url": {
-              "label": "ベース URL"
+              "label": "ベース URL",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "スクレイピング方法",
@@ -3260,7 +3267,9 @@
               "label": "URL の書き換え",
               "description": "保存前にドキュメントの URL を書き換えます。社内ミラー経由でクロールしつつ、正規の公開リンクを保存する場合に便利です。例: https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "元の URL プレフィックス",
-              "rightLabel": "置換後のプレフィックス"
+              "rightLabel": "置換後のプレフィックス",
+              "leftPlaceholder": "https://naibu-mira.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3303,8 @@
           "fields": {
             "github_base_url": {
               "label": "GitHub Enterprise Server の URL",
-              "description": "github.com を使用する場合は空欄のままにしてください。"
+              "description": "github.com を使用する場合は空欄のままにしてください。",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "リポジトリのオーナー"
@@ -3340,7 +3350,8 @@
           "description": "TestRail コネクターを設定",
           "fields": {
             "testrail_base_url": {
-              "label": "TestRail のベース URL"
+              "label": "TestRail のベース URL",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "プロジェクト ID",
@@ -3364,7 +3375,8 @@
           "description": "GitLab コネクターを設定",
           "fields": {
             "gitlab_url": {
-              "label": "GitLab の URL"
+              "label": "GitLab の URL",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "プロジェクトのオーナー"
@@ -3496,7 +3508,8 @@
           "description": "Bookstack コネクターを設定",
           "fields": {
             "bookstack_base_url": {
-              "label": "BookStack のベース URL"
+              "label": "BookStack のベース URL",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3517,8 @@
           "description": "Outline コネクターを設定",
           "fields": {
             "outline_base_url": {
-              "label": "Outline のベース URL"
+              "label": "Outline のベース URL",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3530,8 @@
               "description": "atlassian.net 上のサイトには Confluence Cloud を、セルフホストの Confluence Server または Data Center サイトには Confluence Data Center を選択してください。"
             },
             "wiki_base": {
-              "label": "サイト URL"
+              "label": "サイト URL",
+              "placeholder": "https://domein-mei.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3576,8 @@
           "subtext": "インデックスする Jira コンテンツを設定します。すべてをインデックスすることも、特定のプロジェクトを指定することもできます。",
           "fields": {
             "jira_base_url": {
-              "label": "サイト URL"
+              "label": "サイト URL",
+              "placeholder": "https://domein-mei.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3798,8 @@
           "description": "Axero コネクターを設定",
           "fields": {
             "base_url": {
-              "label": "Axero のベース URL"
+              "label": "Axero のベース URL",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "スペース",
@@ -3835,7 +3852,8 @@
           "fields": {
             "gong_base_url": {
               "label": "Gong API のベース URL",
-              "description": "デフォルトは `https://api.gong.io` です。"
+              "description": "デフォルトは `https://api.gong.io` です。",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "ワークスペース",
@@ -3848,7 +3866,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Loopio サブドメイン",
-              "description": "Loopio サイトのサブドメイン。`acme.loopio.com` の `acme` の部分です。"
+              "description": "Loopio サイトのサブドメイン。`acme.loopio.com` の `acme` の部分です。",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Loopio スタック名",
@@ -3940,7 +3959,8 @@
           "description": "Google Sites コネクターを設定",
           "fields": {
             "base_url": {
-              "label": "ベース URL"
+              "label": "ベース URL",
+              "placeholder": "https://sites.google.com/view/saito-mei"
             },
             "file_locations": {
               "label": "サイトのエクスポート",
@@ -3953,7 +3973,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Zendesk サブドメイン",
-              "description": "Zendesk サイトのサブドメイン。`acme.zendesk.com` の `acme` の部分です。"
+              "description": "Zendesk サイトのサブドメイン。`acme.zendesk.com` の `acme` の部分です。",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "コンテンツタイプ",
@@ -4142,7 +4163,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Freshdesk ドメイン",
-              "description": "Freshdesk サイトのサブドメイン。`acme.freshdesk.com` の `acme` の部分です。"
+              "description": "Freshdesk サイトのサブドメイン。`acme.freshdesk.com` の `acme` の部分です。",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4198,8 @@
           "fields": {
             "domain": {
               "label": "Egnyte ドメイン",
-              "description": "Egnyte サイトのサブドメイン。`acme.egnyte.com` の `acme` の部分です。"
+              "description": "Egnyte サイトのサブドメイン。`acme.egnyte.com` の `acme` の部分です。",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "フォルダーパス",
@@ -4220,7 +4243,8 @@
           "description": "Highspot コネクターを設定",
           "fields": {
             "highspot_url": {
-              "label": "Highspot の URL"
+              "label": "Highspot の URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "インデックスする Highspot コンテンツ",
@@ -4322,6 +4346,10 @@
         "saveFailed": "オーバーライドを保存できませんでした: {message}",
         "saved": "{model} の単価を保存しました。",
         "unknownError": "不明なエラー"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5774,6 +5802,9 @@
           "name": "基本",
           "description": "基本権限を持つ全ユーザーのデフォルトグループ。"
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6047,6 +6078,9 @@
           "name": "クエリ処理",
           "description": "パイプラインに入る前のすべてのユーザークエリに対して実行されます。クエリの書き換え、フィルタリング、拒否が可能です。"
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://api-endopointo.com"
       }
     },
     "imageGeneration": {
@@ -6788,6 +6822,9 @@
           "saved": "レート制限を保存しました。",
           "failed": "レート制限を保存できませんでした。"
         }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
@@ -8121,6 +8158,11 @@
         "securitySettingsUpdated": "セキュリティ設定を更新しました",
         "settingsUpdateFailed": "設定を更新できませんでした",
         "settingsUpdated": "設定を更新しました"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8801,7 +8843,8 @@
           },
           "nameField": {
             "description": "ログイン URL に使用する一意の小文字スラッグです。後から変更できません。",
-            "title": "名前"
+            "title": "名前",
+            "placeholder": "kaisha-a"
           },
           "providerTypeField": {
             "description": "このプロバイダーが認証に使用するプロトコルです。",
@@ -8871,7 +8914,8 @@
         },
         "openidConfigUrl": {
           "label": "OpenID 設定 URL",
-          "description": "IdP の OpenID Connect ディスカバリードキュメントの URL。"
+          "description": "IdP の OpenID Connect ディスカバリードキュメントの URL。",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "メール検証済みクレームを必須にする",
@@ -8879,27 +8923,33 @@
         },
         "idpEntityId": {
           "label": "IdP エンティティ ID",
-          "description": "ID プロバイダーのエンティティ ID（発行者）。"
+          "description": "ID プロバイダーのエンティティ ID（発行者）。",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "IdP SSO URL",
-          "description": "サインインリクエストを受け取る IdP のエンドポイント。"
+          "description": "サインインリクエストを受け取る IdP のエンドポイント。",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "IdP X.509 証明書",
-          "description": "アサーションの検証に使用する IdP の署名証明書。"
+          "description": "アサーションの検証に使用する IdP の署名証明書。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "SP エンティティ ID",
-          "description": "IdP に登録されたこのインスタンスのエンティティ ID。"
+          "description": "IdP に登録されたこのインスタンスのエンティティ ID。",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "SP X.509 証明書",
-          "description": "このインスタンスがリクエストに署名する、またはアサーションを復号する場合のみ。"
+          "description": "このインスタンスがリクエストに署名する、またはアサーションを復号する場合のみ。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "SP 秘密鍵",
-          "description": "SP 証明書と対になる秘密鍵。暗号化して保存されます。"
+          "description": "SP 証明書と対になる秘密鍵。暗号化して保存されます。",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "メール属性",
@@ -9063,6 +9113,9 @@
         "deleted": {
           "message": "標準回答 {id} を削除しました"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:IT|サポート)\\s*チケット"
       }
     },
     "status": {
@@ -9230,6 +9283,9 @@
         "logo": {
           "alt": "ロゴ"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9453,11 +9509,13 @@
             },
             "project": {
               "label": "プロジェクト名",
-              "description": "トレースを記録する Braintrust のプロジェクト名。"
+              "description": "トレースを記録する Braintrust のプロジェクト名。",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "API URL",
-              "description": "デフォルトは米国リージョンです。他のリージョンやセルフホストの場合は Braintrust の API URL を貼り付けてください。"
+              "description": "デフォルトは米国リージョンです。他のリージョンやセルフホストの場合は Braintrust の API URL を貼り付けてください。",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9474,7 +9532,8 @@
             },
             "host": {
               "label": "API ベース URL",
-              "description": "デフォルトは EU リージョンです。他のリージョンやセルフホストの場合は Langfuse のベース URL を貼り付けてください。"
+              "description": "デフォルトは EU リージョンです。他のリージョンやセルフホストの場合は Langfuse のベース URL を貼り付けてください。",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10031,6 +10090,9 @@
       },
       "unexpectedError": {
         "message": "予期しないエラーが発生しました。"
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10147,11 +10209,14 @@
         },
         "searxngBaseUrl": {
           "label": "SearXNG ベース URL",
-          "description": "[SearXNG インスタンス](https://docs.searxng.org/admin/installation.html)のベース URL を貼り付けてください。"
+          "description": "[SearXNG インスタンス](https://docs.searxng.org/admin/installation.html)のベース URL を貼り付けてください。",
+          "placeholder": "https://searxng-insutansu.com"
         },
         "firecrawlBaseUrl": {
           "label": "API ベース URL",
-          "description": "Firecrawl API のベース URL。"
+          "description": "Firecrawl API のベース URL。",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -13493,6 +13558,31 @@
         "label": "プランをアップグレード"
       },
       "availableFor": "{plan}で利用可能"
+    },
+    "placeholders": {
+      "email": "namae@kaisha-mei.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://risosu-mei.cognitiveservices.azure.com/openai/deployments/dipuroi-mei/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://risosu-mei.cognitiveservices.azure.com/openai/deployments/dipuroi-mei/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://risosu_mei.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://risosu_rijon.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://bifrost-geto-uei.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://litellm-purokishi.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "vertex-purojekuto",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -13676,7 +13766,10 @@
           }
         },
         "saveButton": "保存",
-        "savingButton": "保存中…"
+        "savingButton": "保存中…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "アプリ「{appName}」には「{skillName}」という名前の関連スキルがすでにあります。別の名前のスキルをアップロードしてください。"
@@ -16436,6 +16529,9 @@
         "transferredToast": {
           "message": "所有権を譲渡しました。"
         }
+      },
+      "placeholders": {
+        "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
       }
     },
     "page": {

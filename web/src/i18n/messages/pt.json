@@ -809,6 +809,12 @@
         "ariaLabel": "Pesquisar ferramentas",
         "placeholder": "Pesquisar ferramentas…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://seu-servidor-mcp.com/mcp"
     }
   },
   "admin": {
@@ -3242,7 +3248,8 @@
           "description": "Configurar conector da Web",
           "fields": {
             "base_url": {
-              "label": "URL base"
+              "label": "URL base",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "Método de rastreamento",
@@ -3260,7 +3267,9 @@
               "label": "Reescritas de URL",
               "description": "Reescreve as URLs dos documentos antes de armazenar. Útil ao rastrear por um espelho interno e armazenar os links públicos canônicos, por exemplo https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "Prefixo da URL de origem",
-              "rightLabel": "Prefixo de substituição"
+              "rightLabel": "Prefixo de substituição",
+              "leftPlaceholder": "https://espelho-interno.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3303,8 @@
           "fields": {
             "github_base_url": {
               "label": "URL do GitHub Enterprise Server",
-              "description": "Deixe em branco para github.com."
+              "description": "Deixe em branco para github.com.",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "Proprietário do repositório"
@@ -3340,7 +3350,8 @@
           "description": "Configurar conector do TestRail",
           "fields": {
             "testrail_base_url": {
-              "label": "URL base do TestRail"
+              "label": "URL base do TestRail",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "IDs de projetos",
@@ -3364,7 +3375,8 @@
           "description": "Configurar conector do GitLab",
           "fields": {
             "gitlab_url": {
-              "label": "URL do GitLab"
+              "label": "URL do GitLab",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "Proprietário do projeto"
@@ -3496,7 +3508,8 @@
           "description": "Configurar conector do Bookstack",
           "fields": {
             "bookstack_base_url": {
-              "label": "URL base do BookStack"
+              "label": "URL base do BookStack",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3517,8 @@
           "description": "Configurar conector do Outline",
           "fields": {
             "outline_base_url": {
-              "label": "URL base do Outline"
+              "label": "URL base do Outline",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3530,8 @@
               "description": "Escolha Confluence Cloud para um site em atlassian.net, ou Confluence Data Center para um site Confluence Server ou Data Center hospedado por conta própria."
             },
             "wiki_base": {
-              "label": "URL do site"
+              "label": "URL do site",
+              "placeholder": "https://seu-dominio.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3576,8 @@
           "subtext": "Configure qual conteúdo do Jira indexar. Você pode indexar tudo ou especificar um projeto.",
           "fields": {
             "jira_base_url": {
-              "label": "URL do site"
+              "label": "URL do site",
+              "placeholder": "https://seu-dominio.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3798,8 @@
           "description": "Configurar conector do Axero",
           "fields": {
             "base_url": {
-              "label": "URL base do Axero"
+              "label": "URL base do Axero",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "Spaces",
@@ -3835,7 +3852,8 @@
           "fields": {
             "gong_base_url": {
               "label": "URL base da API do Gong",
-              "description": "O padrão é `https://api.gong.io`."
+              "description": "O padrão é `https://api.gong.io`.",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "Workspaces",
@@ -3848,7 +3866,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Subdomínio do Loopio",
-              "description": "O subdomínio do seu site do Loopio, como `acme` em `acme.loopio.com`."
+              "description": "O subdomínio do seu site do Loopio, como `acme` em `acme.loopio.com`.",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Nome do Stack do Loopio",
@@ -3940,7 +3959,8 @@
           "description": "Configurar conector do Google Sites",
           "fields": {
             "base_url": {
-              "label": "URL base"
+              "label": "URL base",
+              "placeholder": "https://sites.google.com/view/seu-site"
             },
             "file_locations": {
               "label": "Exportação do site",
@@ -3953,7 +3973,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Subdomínio do Zendesk",
-              "description": "O subdomínio do seu site do Zendesk, como `acme` em `acme.zendesk.com`."
+              "description": "O subdomínio do seu site do Zendesk, como `acme` em `acme.zendesk.com`.",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "Tipo de conteúdo",
@@ -4142,7 +4163,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Domínio do Freshdesk",
-              "description": "O subdomínio do seu site do Freshdesk, como `acme` em `acme.freshdesk.com`."
+              "description": "O subdomínio do seu site do Freshdesk, como `acme` em `acme.freshdesk.com`.",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4198,8 @@
           "fields": {
             "domain": {
               "label": "Domínio do Egnyte",
-              "description": "O subdomínio do seu site do Egnyte, como `acme` em `acme.egnyte.com`."
+              "description": "O subdomínio do seu site do Egnyte, como `acme` em `acme.egnyte.com`.",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "Caminho da pasta",
@@ -4220,7 +4243,8 @@
           "description": "Configurar conector do Highspot",
           "fields": {
             "highspot_url": {
-              "label": "URL do Highspot"
+              "label": "URL do Highspot",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "Conteúdo do Highspot a indexar",
@@ -4322,6 +4346,10 @@
         "saveFailed": "Falha ao salvar a substituição: {message}",
         "saved": "Taxa salva para {model}.",
         "unknownError": "Erro desconhecido"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5774,6 +5802,9 @@
           "name": "Básico",
           "description": "Grupo padrão para todos os usuários com permissões básicas."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6047,6 +6078,9 @@
           "name": "Processamento de consultas",
           "description": "Executa em cada consulta do usuário antes de entrar no pipeline. Permite reescrever, filtrar ou rejeitar consultas."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://seu-endpoint-api.com"
       }
     },
     "imageGeneration": {
@@ -6788,6 +6822,9 @@
           "saved": "Limite salvo.",
           "failed": "Não foi possível salvar o limite."
         }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
@@ -8121,6 +8158,11 @@
         "securitySettingsUpdated": "Configurações de segurança atualizadas",
         "settingsUpdateFailed": "Falha ao atualizar as configurações",
         "settingsUpdated": "Configurações atualizadas"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8801,7 +8843,8 @@
           },
           "nameField": {
             "description": "Slug único em minúsculas usado na URL de login. Não pode ser alterado depois.",
-            "title": "Nome"
+            "title": "Nome",
+            "placeholder": "empresa-a"
           },
           "providerTypeField": {
             "description": "O protocolo que este provedor usa para autenticar.",
@@ -8871,7 +8914,8 @@
         },
         "openidConfigUrl": {
           "label": "URL de configuração do OpenID",
-          "description": "A URL do documento de descoberta OpenID Connect do IdP."
+          "description": "A URL do documento de descoberta OpenID Connect do IdP.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "Exigir claim de e-mail verificado",
@@ -8879,27 +8923,33 @@
         },
         "idpEntityId": {
           "label": "ID da entidade do IdP",
-          "description": "O ID de entidade (emissor) do provedor de identidade."
+          "description": "O ID de entidade (emissor) do provedor de identidade.",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "URL de SSO do IdP",
-          "description": "O endpoint do IdP que recebe as solicitações de login."
+          "description": "O endpoint do IdP que recebe as solicitações de login.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "Certificado X.509 do IdP",
-          "description": "O certificado de assinatura do IdP, usado para verificar asserções."
+          "description": "O certificado de assinatura do IdP, usado para verificar asserções.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "ID da entidade do SP",
-          "description": "O ID de entidade desta instância, registrado no IdP."
+          "description": "O ID de entidade desta instância, registrado no IdP.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "Certificado X.509 do SP",
-          "description": "Apenas se esta instância assinar solicitações ou descriptografar asserções."
+          "description": "Apenas se esta instância assinar solicitações ou descriptografar asserções.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "Chave privada do SP",
-          "description": "Chave privada associada ao certificado do SP. Armazenada criptografada."
+          "description": "Chave privada associada ao certificado do SP. Armazenada criptografada.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "Atributo de e-mail",
@@ -9063,6 +9113,9 @@
         "deleted": {
           "message": "Resposta padrão {id} excluída"
         }
+      },
+      "placeholders": {
+        "matchRegex": "chamado\\s*(?:de\\s*)?(?:ti|suporte)"
       }
     },
     "status": {
@@ -9230,6 +9283,9 @@
         "logo": {
           "alt": "Logotipo"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9453,11 +9509,13 @@
             },
             "project": {
               "label": "Nome do projeto",
-              "description": "Nome do projeto do Braintrust onde os traces são registrados."
+              "description": "Nome do projeto do Braintrust onde os traces são registrados.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "URL da API",
-              "description": "O padrão é a região dos EUA. Cole a URL da API do Braintrust para outras regiões ou auto-hospedagem."
+              "description": "O padrão é a região dos EUA. Cole a URL da API do Braintrust para outras regiões ou auto-hospedagem.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9474,7 +9532,8 @@
             },
             "host": {
               "label": "URL base da API",
-              "description": "O padrão é a região da UE. Cole a URL base do Langfuse para outras regiões ou auto-hospedagem."
+              "description": "O padrão é a região da UE. Cole a URL base do Langfuse para outras regiões ou auto-hospedagem.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10031,6 +10090,9 @@
       },
       "unexpectedError": {
         "message": "Ocorreu um erro inesperado."
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10147,11 +10209,14 @@
         },
         "searxngBaseUrl": {
           "label": "URL base do SearXNG",
-          "description": "Cole a URL base da sua [instância SearXNG](https://docs.searxng.org/admin/installation.html)."
+          "description": "Cole a URL base da sua [instância SearXNG](https://docs.searxng.org/admin/installation.html).",
+          "placeholder": "https://sua-instancia-searxng.com"
         },
         "firecrawlBaseUrl": {
           "label": "URL base da API",
-          "description": "A URL base da sua API do Firecrawl."
+          "description": "A URL base da sua API do Firecrawl.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -13493,6 +13558,31 @@
         "label": "Fazer upgrade do plano"
       },
       "availableFor": "Disponível no {plan}"
+    },
+    "placeholders": {
+      "email": "email@suaempresa.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://seu-recurso.cognitiveservices.azure.com/openai/deployments/nome-da-implantacao/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://seu-recurso.cognitiveservices.azure.com/openai/deployments/nome-da-implantacao/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://nome_do_seu_recurso.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://regiao_do_seu_recurso.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://seu-gateway-bifrost.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://seu-proxy-litellm.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "meu-projeto-vertex",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -13676,7 +13766,10 @@
           }
         },
         "saveButton": "Salvar",
-        "savingButton": "Salvando…"
+        "savingButton": "Salvando…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "O app “{appName}” já tem uma habilidade associada chamada “{skillName}”. Envie uma habilidade com outro nome."
@@ -16436,6 +16529,9 @@
         "transferredToast": {
           "message": "Propriedade transferida."
         }
+      },
+      "placeholders": {
+        "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"
       }
     },
     "page": {

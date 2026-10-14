@@ -809,6 +809,12 @@
         "ariaLabel": "搜索工具",
         "placeholder": "搜索工具…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://mcp-fuwuqi.com/mcp"
     }
   },
   "admin": {
@@ -3242,7 +3248,8 @@
           "description": "配置 Web 连接器",
           "fields": {
             "base_url": {
-              "label": "基础 URL"
+              "label": "基础 URL",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "抓取方式",
@@ -3260,7 +3267,9 @@
               "label": "URL 重写",
               "description": "在存储前重写文档 URL。适用于通过内部镜像抓取、同时存储规范的公开链接的场景，例如 https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "源 URL 前缀",
-              "rightLabel": "替换前缀"
+              "rightLabel": "替换前缀",
+              "leftPlaceholder": "https://neibu-jingxiang.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3303,8 @@
           "fields": {
             "github_base_url": {
               "label": "GitHub Enterprise Server URL",
-              "description": "使用 github.com 时请留空。"
+              "description": "使用 github.com 时请留空。",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "仓库所有者"
@@ -3340,7 +3350,8 @@
           "description": "配置 TestRail 连接器",
           "fields": {
             "testrail_base_url": {
-              "label": "TestRail 基础 URL"
+              "label": "TestRail 基础 URL",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "项目 ID",
@@ -3364,7 +3375,8 @@
           "description": "配置 GitLab 连接器",
           "fields": {
             "gitlab_url": {
-              "label": "GitLab URL"
+              "label": "GitLab URL",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "项目所有者"
@@ -3496,7 +3508,8 @@
           "description": "配置 Bookstack 连接器",
           "fields": {
             "bookstack_base_url": {
-              "label": "BookStack 基础 URL"
+              "label": "BookStack 基础 URL",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3517,8 @@
           "description": "配置 Outline 连接器",
           "fields": {
             "outline_base_url": {
-              "label": "Outline 基础 URL"
+              "label": "Outline 基础 URL",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3530,8 @@
               "description": "对于 atlassian.net 上的站点，请选择 Confluence Cloud；对于自托管的 Confluence Server 或 Data Center 站点，请选择 Confluence Data Center。"
             },
             "wiki_base": {
-              "label": "站点 URL"
+              "label": "站点 URL",
+              "placeholder": "https://nide-yuming.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3576,8 @@
           "subtext": "配置要索引的 Jira 内容。您可以索引全部内容，也可以指定某个项目。",
           "fields": {
             "jira_base_url": {
-              "label": "站点 URL"
+              "label": "站点 URL",
+              "placeholder": "https://nide-yuming.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3798,8 @@
           "description": "配置 Axero 连接器",
           "fields": {
             "base_url": {
-              "label": "Axero 基础 URL"
+              "label": "Axero 基础 URL",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "空间",
@@ -3835,7 +3852,8 @@
           "fields": {
             "gong_base_url": {
               "label": "Gong API 基础 URL",
-              "description": "默认为 `https://api.gong.io`。"
+              "description": "默认为 `https://api.gong.io`。",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "工作区",
@@ -3848,7 +3866,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Loopio 子域名",
-              "description": "您的 Loopio 站点的子域名，例如 `acme.loopio.com` 中的 `acme`。"
+              "description": "您的 Loopio 站点的子域名，例如 `acme.loopio.com` 中的 `acme`。",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Loopio Stack 名称",
@@ -3940,7 +3959,8 @@
           "description": "配置 Google Sites 连接器",
           "fields": {
             "base_url": {
-              "label": "基础 URL"
+              "label": "基础 URL",
+              "placeholder": "https://sites.google.com/view/nide-zhandian"
             },
             "file_locations": {
               "label": "站点导出文件",
@@ -3953,7 +3973,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Zendesk 子域名",
-              "description": "您的 Zendesk 站点的子域名，例如 `acme.zendesk.com` 中的 `acme`。"
+              "description": "您的 Zendesk 站点的子域名，例如 `acme.zendesk.com` 中的 `acme`。",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "内容类型",
@@ -4142,7 +4163,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Freshdesk 域名",
-              "description": "您的 Freshdesk 站点的子域名，例如 `acme.freshdesk.com` 中的 `acme`。"
+              "description": "您的 Freshdesk 站点的子域名，例如 `acme.freshdesk.com` 中的 `acme`。",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4198,8 @@
           "fields": {
             "domain": {
               "label": "Egnyte 域名",
-              "description": "您的 Egnyte 站点的子域名，例如 `acme.egnyte.com` 中的 `acme`。"
+              "description": "您的 Egnyte 站点的子域名，例如 `acme.egnyte.com` 中的 `acme`。",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "文件夹路径",
@@ -4220,7 +4243,8 @@
           "description": "配置 Highspot 连接器",
           "fields": {
             "highspot_url": {
-              "label": "Highspot URL"
+              "label": "Highspot URL",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "要索引的 Highspot 内容",
@@ -4322,6 +4346,10 @@
         "saveFailed": "保存覆盖失败：{message}",
         "saved": "已保存 {model} 的价格。",
         "unknownError": "未知错误"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5774,6 +5802,9 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6047,6 +6078,9 @@
           "name": "查询处理",
           "description": "在每个用户查询进入管道之前运行。允许重写、过滤或拒绝查询。"
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://api-duandian.com"
       }
     },
     "imageGeneration": {
@@ -6788,6 +6822,9 @@
           "saved": "速率限制已保存。",
           "failed": "无法保存速率限制。"
         }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
@@ -8121,6 +8158,11 @@
         "securitySettingsUpdated": "安全设置已更新",
         "settingsUpdateFailed": "更新设置失败",
         "settingsUpdated": "设置已更新"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8801,7 +8843,8 @@
           },
           "nameField": {
             "description": "用于登录 URL 的唯一小写标识符。创建后无法更改。",
-            "title": "名称"
+            "title": "名称",
+            "placeholder": "gongsi-a"
           },
           "providerTypeField": {
             "description": "此提供商使用的认证协议。",
@@ -8871,7 +8914,8 @@
         },
         "openidConfigUrl": {
           "label": "OpenID 配置 URL",
-          "description": "IdP 的 OpenID Connect 发现文档 URL。"
+          "description": "IdP 的 OpenID Connect 发现文档 URL。",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "要求已验证邮箱声明",
@@ -8879,27 +8923,33 @@
         },
         "idpEntityId": {
           "label": "IdP 实体 ID",
-          "description": "身份提供方的实体 ID（颁发者）。"
+          "description": "身份提供方的实体 ID（颁发者）。",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "IdP SSO URL",
-          "description": "接收登录请求的 IdP 端点。"
+          "description": "接收登录请求的 IdP 端点。",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "IdP X.509 证书",
-          "description": "IdP 的签名证书，用于验证断言。"
+          "description": "IdP 的签名证书，用于验证断言。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "SP 实体 ID",
-          "description": "此实例在 IdP 注册的实体 ID。"
+          "description": "此实例在 IdP 注册的实体 ID。",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "SP X.509 证书",
-          "description": "仅当此实例对请求签名或解密断言时需要。"
+          "description": "仅当此实例对请求签名或解密断言时需要。",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "SP 私钥",
-          "description": "与 SP 证书配对的私钥。加密存储。"
+          "description": "与 SP 证书配对的私钥。加密存储。",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "邮箱属性",
@@ -9063,6 +9113,9 @@
         "deleted": {
           "message": "已删除标准答案 {id}"
         }
+      },
+      "placeholders": {
+        "matchRegex": "(?:IT|支持)\\s*工单"
       }
     },
     "status": {
@@ -9230,6 +9283,9 @@
         "logo": {
           "alt": "Logo"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9453,11 +9509,13 @@
             },
             "project": {
               "label": "项目名称",
-              "description": "记录跟踪数据的 Braintrust 项目名称。"
+              "description": "记录跟踪数据的 Braintrust 项目名称。",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "API URL",
-              "description": "默认为美国区域。其他区域或自托管请粘贴您的 Braintrust API URL。"
+              "description": "默认为美国区域。其他区域或自托管请粘贴您的 Braintrust API URL。",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9474,7 +9532,8 @@
             },
             "host": {
               "label": "API 基础 URL",
-              "description": "默认为欧盟区域。其他区域或自托管请粘贴您的 Langfuse 基础 URL。"
+              "description": "默认为欧盟区域。其他区域或自托管请粘贴您的 Langfuse 基础 URL。",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10031,6 +10090,9 @@
       },
       "unexpectedError": {
         "message": "发生意外错误。"
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10147,11 +10209,14 @@
         },
         "searxngBaseUrl": {
           "label": "SearXNG 基础 URL",
-          "description": "粘贴您的 [SearXNG 实例](https://docs.searxng.org/admin/installation.html)的基础 URL。"
+          "description": "粘贴您的 [SearXNG 实例](https://docs.searxng.org/admin/installation.html)的基础 URL。",
+          "placeholder": "https://searxng-shili.com"
         },
         "firecrawlBaseUrl": {
           "label": "API 基础 URL",
-          "description": "您的 Firecrawl API 基础 URL。"
+          "description": "您的 Firecrawl API 基础 URL。",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -13493,6 +13558,31 @@
         "label": "升级方案"
       },
       "availableFor": "{plan}可用"
+    },
+    "placeholders": {
+      "email": "youxiang@nide-gongsi.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://ziyuan-ming.cognitiveservices.azure.com/openai/deployments/bushu-mingcheng/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://ziyuan-ming.cognitiveservices.azure.com/openai/deployments/bushu-mingcheng/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://ziyuan_mingcheng.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://ziyuan_quyu.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://bifrost-wangguan.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://litellm-daili.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "wode-vertex-xiangmu",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -13676,7 +13766,10 @@
           }
         },
         "saveButton": "保存",
-        "savingButton": "正在保存…"
+        "savingButton": "正在保存…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
@@ -16436,6 +16529,9 @@
         "transferredToast": {
           "message": "所有权已转移。"
         }
+      },
+      "placeholders": {
+        "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
       }
     },
     "page": {

@@ -60,6 +60,7 @@ function VertexAIModalInternals({
   isOnboarding,
 }: VertexAIModalInternalsProps) {
   const t = useTranslations("admin.languageModels.modals");
+  const tPlaceholders = useTranslations("common.placeholders");
   const tInputSelect = useTranslations("common.inputSelect");
   const formikProps = useFormikContext<VertexAIModalValues>();
   const authMethod = formikProps.values.custom_config?.vertex_auth_method;
@@ -161,7 +162,7 @@ function VertexAIModalInternals({
             >
               <InputTypeInField
                 name={FIELD_VERTEX_PROJECT}
-                placeholder="my-vertex-project"
+                placeholder={tPlaceholders("vertexAi.projectId")}
               />
             </InputVertical>
           </Card>

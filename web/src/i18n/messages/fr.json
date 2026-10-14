@@ -809,6 +809,12 @@
         "ariaLabel": "Rechercher des outils",
         "placeholder": "Rechercher des outils…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://votre-serveur-mcp.com/mcp"
     }
   },
   "admin": {
@@ -3242,7 +3248,8 @@
           "description": "Configurer le connecteur Web",
           "fields": {
             "base_url": {
-              "label": "URL de base"
+              "label": "URL de base",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "Méthode d'extraction",
@@ -3260,7 +3267,9 @@
               "label": "Réécritures d'URL",
               "description": "Réécrit les URL des documents avant leur stockage. Utile pour explorer via un miroir interne tout en stockant les liens publics canoniques, par exemple https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "Préfixe d'URL source",
-              "rightLabel": "Préfixe de remplacement"
+              "rightLabel": "Préfixe de remplacement",
+              "leftPlaceholder": "https://miroir-interne.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3303,8 @@
           "fields": {
             "github_base_url": {
               "label": "URL de GitHub Enterprise Server",
-              "description": "Laissez vide pour github.com."
+              "description": "Laissez vide pour github.com.",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "Propriétaire du dépôt"
@@ -3340,7 +3350,8 @@
           "description": "Configurer le connecteur TestRail",
           "fields": {
             "testrail_base_url": {
-              "label": "URL de base de TestRail"
+              "label": "URL de base de TestRail",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "ID de projet",
@@ -3364,7 +3375,8 @@
           "description": "Configurer le connecteur GitLab",
           "fields": {
             "gitlab_url": {
-              "label": "URL de GitLab"
+              "label": "URL de GitLab",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "Propriétaire du projet"
@@ -3496,7 +3508,8 @@
           "description": "Configurer le connecteur Bookstack",
           "fields": {
             "bookstack_base_url": {
-              "label": "URL de base de BookStack"
+              "label": "URL de base de BookStack",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3517,8 @@
           "description": "Configurer le connecteur Outline",
           "fields": {
             "outline_base_url": {
-              "label": "URL de base d'Outline"
+              "label": "URL de base d'Outline",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3530,8 @@
               "description": "Choisissez Confluence Cloud pour un site sur atlassian.net, ou Confluence Data Center pour un site Confluence Server ou Data Center auto-hébergé."
             },
             "wiki_base": {
-              "label": "URL du site"
+              "label": "URL du site",
+              "placeholder": "https://votre-domaine.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3576,8 @@
           "subtext": "Configurez le contenu Jira à indexer. Vous pouvez tout indexer ou indiquer un projet précis.",
           "fields": {
             "jira_base_url": {
-              "label": "URL du site"
+              "label": "URL du site",
+              "placeholder": "https://votre-domaine.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3798,8 @@
           "description": "Configurer le connecteur Axero",
           "fields": {
             "base_url": {
-              "label": "URL de base d'Axero"
+              "label": "URL de base d'Axero",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "Espaces",
@@ -3835,7 +3852,8 @@
           "fields": {
             "gong_base_url": {
               "label": "URL de base de l'API Gong",
-              "description": "Par défaut : `https://api.gong.io`."
+              "description": "Par défaut : `https://api.gong.io`.",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "Espaces de travail",
@@ -3848,7 +3866,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "Sous-domaine Loopio",
-              "description": "Le sous-domaine de votre site Loopio, comme `acme` dans `acme.loopio.com`."
+              "description": "Le sous-domaine de votre site Loopio, comme `acme` dans `acme.loopio.com`.",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "Nom de la pile Loopio",
@@ -3940,7 +3959,8 @@
           "description": "Configurer le connecteur Google Sites",
           "fields": {
             "base_url": {
-              "label": "URL de base"
+              "label": "URL de base",
+              "placeholder": "https://sites.google.com/view/votre-site"
             },
             "file_locations": {
               "label": "Export du site",
@@ -3953,7 +3973,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "Sous-domaine Zendesk",
-              "description": "Le sous-domaine de votre site Zendesk, comme `acme` dans `acme.zendesk.com`."
+              "description": "Le sous-domaine de votre site Zendesk, comme `acme` dans `acme.zendesk.com`.",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "Type de contenu",
@@ -4142,7 +4163,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "Domaine Freshdesk",
-              "description": "Le sous-domaine de votre site Freshdesk, comme `acme` dans `acme.freshdesk.com`."
+              "description": "Le sous-domaine de votre site Freshdesk, comme `acme` dans `acme.freshdesk.com`.",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4198,8 @@
           "fields": {
             "domain": {
               "label": "Domaine Egnyte",
-              "description": "Le sous-domaine de votre site Egnyte, comme `acme` dans `acme.egnyte.com`."
+              "description": "Le sous-domaine de votre site Egnyte, comme `acme` dans `acme.egnyte.com`.",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "Chemin du dossier",
@@ -4220,7 +4243,8 @@
           "description": "Configurer le connecteur Highspot",
           "fields": {
             "highspot_url": {
-              "label": "URL Highspot"
+              "label": "URL Highspot",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "Contenu Highspot à indexer",
@@ -4322,6 +4346,10 @@
         "saveFailed": "Échec de l'enregistrement du remplacement : {message}",
         "saved": "Tarif enregistré pour {model}.",
         "unknownError": "Erreur inconnue"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5774,6 +5802,9 @@
           "name": "Basique",
           "description": "Groupe par défaut pour tous les utilisateurs avec des autorisations de base."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6047,6 +6078,9 @@
           "name": "Traitement des requêtes",
           "description": "S'exécute sur chaque requête utilisateur avant son entrée dans le pipeline. Permet de réécrire, filtrer ou rejeter des requêtes."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://votre-endpoint-api.com"
       }
     },
     "imageGeneration": {
@@ -6788,6 +6822,9 @@
           "saved": "Limite enregistrée.",
           "failed": "Impossible d'enregistrer la limite."
         }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
@@ -8121,6 +8158,11 @@
         "securitySettingsUpdated": "Paramètres de sécurité mis à jour",
         "settingsUpdateFailed": "Échec de la mise à jour des paramètres",
         "settingsUpdated": "Paramètres mis à jour"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8801,7 +8843,8 @@
           },
           "nameField": {
             "description": "Identifiant unique en minuscules utilisé dans l'URL de connexion. Il ne peut pas être modifié plus tard.",
-            "title": "Nom"
+            "title": "Nom",
+            "placeholder": "entreprise-a"
           },
           "providerTypeField": {
             "description": "Le protocole utilisé par ce fournisseur pour authentifier.",
@@ -8871,7 +8914,8 @@
         },
         "openidConfigUrl": {
           "label": "URL de configuration OpenID",
-          "description": "L'URL du document de découverte OpenID Connect de l'IdP."
+          "description": "L'URL du document de découverte OpenID Connect de l'IdP.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "Exiger la revendication d'e-mail vérifié",
@@ -8879,27 +8923,33 @@
         },
         "idpEntityId": {
           "label": "ID d'entité IdP",
-          "description": "L'ID d'entité (émetteur) du fournisseur d'identité."
+          "description": "L'ID d'entité (émetteur) du fournisseur d'identité.",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "URL SSO de l'IdP",
-          "description": "Le point de terminaison de l'IdP qui reçoit les demandes de connexion."
+          "description": "Le point de terminaison de l'IdP qui reçoit les demandes de connexion.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "Certificat X.509 de l'IdP",
-          "description": "Le certificat de signature de l'IdP, utilisé pour vérifier les assertions."
+          "description": "Le certificat de signature de l'IdP, utilisé pour vérifier les assertions.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "ID d'entité SP",
-          "description": "L'ID d'entité de cette instance, enregistré auprès de l'IdP."
+          "description": "L'ID d'entité de cette instance, enregistré auprès de l'IdP.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "Certificat X.509 du SP",
-          "description": "Uniquement si cette instance signe les requêtes ou déchiffre les assertions."
+          "description": "Uniquement si cette instance signe les requêtes ou déchiffre les assertions.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "Clé privée du SP",
-          "description": "Clé privée associée au certificat du SP. Stockée chiffrée."
+          "description": "Clé privée associée au certificat du SP. Stockée chiffrée.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "Attribut e-mail",
@@ -9063,6 +9113,9 @@
         "deleted": {
           "message": "Réponse standard {id} supprimée"
         }
+      },
+      "placeholders": {
+        "matchRegex": "ticket\\s*(?:de\\s*)?(?:informatique|support)"
       }
     },
     "status": {
@@ -9230,6 +9283,9 @@
         "logo": {
           "alt": "Logo"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9453,11 +9509,13 @@
             },
             "project": {
               "label": "Nom du projet",
-              "description": "Nom du projet Braintrust dans lequel les traces sont enregistrées."
+              "description": "Nom du projet Braintrust dans lequel les traces sont enregistrées.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "URL de l'API",
-              "description": "Région US par défaut. Collez l'URL de l'API Braintrust pour d'autres régions ou un auto-hébergement."
+              "description": "Région US par défaut. Collez l'URL de l'API Braintrust pour d'autres régions ou un auto-hébergement.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9474,7 +9532,8 @@
             },
             "host": {
               "label": "URL de base de l'API",
-              "description": "Région UE par défaut. Collez l'URL de base Langfuse pour d'autres régions ou un auto-hébergement."
+              "description": "Région UE par défaut. Collez l'URL de base Langfuse pour d'autres régions ou un auto-hébergement.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10031,6 +10090,9 @@
       },
       "unexpectedError": {
         "message": "Une erreur inattendue est survenue."
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10147,11 +10209,14 @@
         },
         "searxngBaseUrl": {
           "label": "URL de base SearXNG",
-          "description": "Collez l'URL de base de votre [instance SearXNG](https://docs.searxng.org/admin/installation.html)."
+          "description": "Collez l'URL de base de votre [instance SearXNG](https://docs.searxng.org/admin/installation.html).",
+          "placeholder": "https://votre-instance-searxng.com"
         },
         "firecrawlBaseUrl": {
           "label": "URL de base de l'API",
-          "description": "L'URL de base de votre API Firecrawl."
+          "description": "L'URL de base de votre API Firecrawl.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -13493,6 +13558,31 @@
         "label": "Mettre à niveau l'offre"
       },
       "availableFor": "Disponible avec l’{plan}"
+    },
+    "placeholders": {
+      "email": "e-mail@votreentreprise.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://votre-ressource.cognitiveservices.azure.com/openai/deployments/nom-du-deploiement/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://votre-ressource.cognitiveservices.azure.com/openai/deployments/nom-du-deploiement/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://nom_de_votre_ressource.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://region_de_votre_ressource.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://votre-passerelle-bifrost.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://votre-proxy-litellm.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "mon-projet-vertex",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -13676,7 +13766,10 @@
           }
         },
         "saveButton": "Enregistrer",
-        "savingButton": "Enregistrement…"
+        "savingButton": "Enregistrement…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "L'app « {appName} » a déjà une compétence associée nommée « {skillName} ». Importez une compétence avec un autre nom."
@@ -16436,6 +16529,9 @@
         "transferredToast": {
           "message": "Propriété transférée."
         }
+      },
+      "placeholders": {
+        "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"
       }
     },
     "page": {

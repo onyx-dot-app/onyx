@@ -809,6 +809,12 @@
         "ariaLabel": "البحث في الأدوات",
         "placeholder": "البحث في الأدوات…"
       }
+    },
+    "placeholders": {
+      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
+      "oauthTokenUrl": "https://example.com/oauth/access_token",
+      "oauthScope": "https://www.googleapis.com/auth/logging.read",
+      "mcpServerUrl": "https://khadim-mcp.com/mcp"
     }
   },
   "admin": {
@@ -3242,7 +3248,8 @@
           "description": "تهيئة موصل الويب",
           "fields": {
             "base_url": {
-              "label": "عنوان URL الأساسي"
+              "label": "عنوان URL الأساسي",
+              "placeholder": "https://example.com"
             },
             "web_connector_type": {
               "label": "طريقة الاستخراج",
@@ -3260,7 +3267,9 @@
               "label": "إعادة كتابة عناوين URL",
               "description": "أعد كتابة عناوين URL للمستندات قبل التخزين. مفيد عند الزحف عبر نسخة داخلية مع تخزين الروابط العامة الأصلية، مثلاً https://internal-mirror.example.com → https://docs.example.com",
               "leftLabel": "بادئة URL المصدر",
-              "rightLabel": "بادئة الاستبدال"
+              "rightLabel": "بادئة الاستبدال",
+              "leftPlaceholder": "https://mirat-dakhiliya.example.com",
+              "rightPlaceholder": "https://docs.example.com"
             }
           }
         },
@@ -3294,7 +3303,8 @@
           "fields": {
             "github_base_url": {
               "label": "عنوان URL لخادم GitHub Enterprise",
-              "description": "اتركه فارغًا لـ github.com."
+              "description": "اتركه فارغًا لـ github.com.",
+              "placeholder": "https://github.example.com"
             },
             "repo_owner": {
               "label": "مالك المستودع"
@@ -3340,7 +3350,8 @@
           "description": "تهيئة موصل TestRail",
           "fields": {
             "testrail_base_url": {
-              "label": "عنوان URL الأساسي لـ TestRail"
+              "label": "عنوان URL الأساسي لـ TestRail",
+              "placeholder": "https://acme.testrail.io"
             },
             "project_ids": {
               "label": "معرّفات المشاريع",
@@ -3364,7 +3375,8 @@
           "description": "تهيئة موصل GitLab",
           "fields": {
             "gitlab_url": {
-              "label": "عنوان URL لـ GitLab"
+              "label": "عنوان URL لـ GitLab",
+              "placeholder": "https://gitlab.com"
             },
             "project_owner": {
               "label": "مالك المشروع"
@@ -3496,7 +3508,8 @@
           "description": "تهيئة موصل Bookstack",
           "fields": {
             "bookstack_base_url": {
-              "label": "عنوان URL الأساسي لـ BookStack"
+              "label": "عنوان URL الأساسي لـ BookStack",
+              "placeholder": "https://bookstack.example.com"
             }
           }
         },
@@ -3504,7 +3517,8 @@
           "description": "تهيئة موصل Outline",
           "fields": {
             "outline_base_url": {
-              "label": "عنوان URL الأساسي لـ Outline"
+              "label": "عنوان URL الأساسي لـ Outline",
+              "placeholder": "https://app.getoutline.com"
             }
           }
         },
@@ -3516,7 +3530,8 @@
               "description": "اختر Confluence Cloud لموقع على atlassian.net، أو Confluence Data Center لموقع Confluence Server أو Data Center مستضاف ذاتيًا."
             },
             "wiki_base": {
-              "label": "عنوان URL للموقع"
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://nitaquk.atlassian.net/wiki"
             },
             "indexing_scope": {
               "tabs": {
@@ -3561,7 +3576,8 @@
           "subtext": "حدّد محتوى Jira المراد فهرسته. يمكنك فهرسة كل شيء أو تحديد مشروع معين.",
           "fields": {
             "jira_base_url": {
-              "label": "عنوان URL للموقع"
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://nitaquk.atlassian.net"
             },
             "indexing_scope": {
               "tabs": {
@@ -3782,7 +3798,8 @@
           "description": "تهيئة موصل Axero",
           "fields": {
             "base_url": {
-              "label": "عنوان URL الأساسي لـ Axero"
+              "label": "عنوان URL الأساسي لـ Axero",
+              "placeholder": "https://axero.example.com"
             },
             "spaces": {
               "label": "المساحات",
@@ -3835,7 +3852,8 @@
           "fields": {
             "gong_base_url": {
               "label": "عنوان URL الأساسي لـ Gong API",
-              "description": "القيمة الافتراضية `https://api.gong.io`."
+              "description": "القيمة الافتراضية `https://api.gong.io`.",
+              "placeholder": "https://api.gong.io"
             },
             "workspaces": {
               "label": "مساحات العمل",
@@ -3848,7 +3866,8 @@
           "fields": {
             "loopio_subdomain": {
               "label": "النطاق الفرعي لـ Loopio",
-              "description": "النطاق الفرعي لموقع Loopio لديك، مثل `acme` في `acme.loopio.com`."
+              "description": "النطاق الفرعي لموقع Loopio لديك، مثل `acme` في `acme.loopio.com`.",
+              "placeholder": "acme"
             },
             "loopio_stack_name": {
               "label": "اسم مكدّس Loopio",
@@ -3940,7 +3959,8 @@
           "description": "تهيئة موصل Google Sites",
           "fields": {
             "base_url": {
-              "label": "عنوان URL الأساسي"
+              "label": "عنوان URL الأساسي",
+              "placeholder": "https://sites.google.com/view/mawqieuk"
             },
             "file_locations": {
               "label": "تصدير الموقع",
@@ -3953,7 +3973,8 @@
           "fields": {
             "zendesk_subdomain": {
               "label": "النطاق الفرعي لـ Zendesk",
-              "description": "النطاق الفرعي لموقع Zendesk لديك، مثل `acme` في `acme.zendesk.com`."
+              "description": "النطاق الفرعي لموقع Zendesk لديك، مثل `acme` في `acme.zendesk.com`.",
+              "placeholder": "acme"
             },
             "content_type": {
               "label": "نوع المحتوى",
@@ -4142,7 +4163,8 @@
           "fields": {
             "freshdesk_domain": {
               "label": "نطاق Freshdesk",
-              "description": "النطاق الفرعي لموقع Freshdesk لديك، مثل `acme` في `acme.freshdesk.com`."
+              "description": "النطاق الفرعي لموقع Freshdesk لديك، مثل `acme` في `acme.freshdesk.com`.",
+              "placeholder": "acme"
             }
           }
         },
@@ -4176,7 +4198,8 @@
           "fields": {
             "domain": {
               "label": "نطاق Egnyte",
-              "description": "النطاق الفرعي لموقع Egnyte لديك، مثل `acme` في `acme.egnyte.com`."
+              "description": "النطاق الفرعي لموقع Egnyte لديك، مثل `acme` في `acme.egnyte.com`.",
+              "placeholder": "acme"
             },
             "folder_path": {
               "label": "مسار المجلد",
@@ -4220,7 +4243,8 @@
           "description": "تهيئة موصل Highspot",
           "fields": {
             "highspot_url": {
-              "label": "عنوان URL لـ Highspot"
+              "label": "عنوان URL لـ Highspot",
+              "placeholder": "https://api-su2.highspot.com/v1.0/"
             },
             "highspot_scope": {
               "label": "محتوى Highspot المراد فهرسته",
@@ -4322,6 +4346,10 @@
         "saveFailed": "فشل حفظ التجاوز: {message}",
         "saved": "حُفظ السعر للنموذج {model}.",
         "unknownError": "خطأ غير معروف"
+      },
+      "placeholders": {
+        "inputCost": "3.00",
+        "outputCost": "15.00"
       }
     },
     "craft": {
@@ -5774,6 +5802,9 @@
           "name": "أساسي",
           "description": "المجموعة الافتراضية لجميع المستخدمين بأذونات أساسية."
         }
+      },
+      "placeholders": {
+        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6047,6 +6078,9 @@
           "name": "معالجة الاستعلامات",
           "description": "يعمل على كل استعلام مستخدم قبل دخوله المسار. يتيح إعادة كتابة الاستعلامات أو تصفيتها أو رفضها."
         }
+      },
+      "placeholders": {
+        "endpointUrl": "https://nuqtat-nihayat-api.com"
       }
     },
     "imageGeneration": {
@@ -6788,6 +6822,9 @@
           "saved": "تم حفظ حد المعدل.",
           "failed": "تعذّر حفظ حد المعدل."
         }
+      },
+      "placeholders": {
+        "apiUrl": "https://..."
       }
     },
     "indexing": {
@@ -8121,6 +8158,11 @@
         "securitySettingsUpdated": "تم تحديث إعدادات الأمان",
         "settingsUpdateFailed": "فشل تحديث الإعدادات",
         "settingsUpdated": "تم تحديث الإعدادات"
+      },
+      "placeholders": {
+        "jwksUrl": "https://idp.example.com/.well-known/jwks.json",
+        "audience": "onyx",
+        "issuer": "https://idp.example.com"
       }
     },
     "serviceAccounts": {
@@ -8801,7 +8843,8 @@
           },
           "nameField": {
             "description": "معرّف فريد بأحرف صغيرة يُستخدم في رابط تسجيل الدخول. لا يمكن تغييره لاحقًا.",
-            "title": "الاسم"
+            "title": "الاسم",
+            "placeholder": "sharika-a"
           },
           "providerTypeField": {
             "description": "البروتوكول الذي يصادق به هذا الموفر.",
@@ -8871,7 +8914,8 @@
         },
         "openidConfigUrl": {
           "label": "عنوان URL لإعدادات OpenID",
-          "description": "عنوان URL لمستند اكتشاف OpenID Connect الخاص بموفّر الهوية."
+          "description": "عنوان URL لمستند اكتشاف OpenID Connect الخاص بموفّر الهوية.",
+          "placeholder": "https://example.com/.well-known/openid-configuration"
         },
         "requireVerifiedEmail": {
           "label": "اشتراط مطالبة البريد الإلكتروني الموثّق",
@@ -8879,27 +8923,33 @@
         },
         "idpEntityId": {
           "label": "معرّف كيان موفّر الهوية",
-          "description": "معرّف كيان موفّر الهوية (المُصدِر)."
+          "description": "معرّف كيان موفّر الهوية (المُصدِر).",
+          "placeholder": "https://idp.example.com/entity"
         },
         "idpSsoUrl": {
           "label": "عنوان URL لتسجيل الدخول الموحّد لموفّر الهوية",
-          "description": "نقطة نهاية موفّر الهوية التي تستقبل طلبات تسجيل الدخول."
+          "description": "نقطة نهاية موفّر الهوية التي تستقبل طلبات تسجيل الدخول.",
+          "placeholder": "https://idp.example.com/sso"
         },
         "idpX509Cert": {
           "label": "شهادة X.509 لموفّر الهوية",
-          "description": "شهادة التوقيع لموفّر الهوية، تُستخدم للتحقق من التأكيدات."
+          "description": "شهادة التوقيع لموفّر الهوية، تُستخدم للتحقق من التأكيدات.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spEntityId": {
           "label": "معرّف كيان موفّر الخدمة",
-          "description": "معرّف كيان هذا المثيل، المسجّل لدى موفّر الهوية."
+          "description": "معرّف كيان هذا المثيل، المسجّل لدى موفّر الهوية.",
+          "placeholder": "onyx"
         },
         "spX509Cert": {
           "label": "شهادة X.509 لموفّر الخدمة",
-          "description": "فقط إذا كان هذا المثيل يوقّع الطلبات أو يفكّ تشفير التأكيدات."
+          "description": "فقط إذا كان هذا المثيل يوقّع الطلبات أو يفكّ تشفير التأكيدات.",
+          "placeholder": "-----BEGIN CERTIFICATE-----"
         },
         "spPrivateKey": {
           "label": "المفتاح الخاص لموفّر الخدمة",
-          "description": "المفتاح الخاص المرتبط بشهادة موفّر الخدمة. يُخزَّن مشفّرًا."
+          "description": "المفتاح الخاص المرتبط بشهادة موفّر الخدمة. يُخزَّن مشفّرًا.",
+          "placeholder": "-----BEGIN PRIVATE KEY-----"
         },
         "emailAttribute": {
           "label": "سمة البريد الإلكتروني",
@@ -9063,6 +9113,9 @@
         "deleted": {
           "message": "تم حذف الإجابة القياسية {id}"
         }
+      },
+      "placeholders": {
+        "matchRegex": "تذكرة\\s*(?:تقنية|دعم)"
       }
     },
     "status": {
@@ -9230,6 +9283,9 @@
         "logo": {
           "alt": "الشعار"
         }
+      },
+      "placeholders": {
+        "helpUrl": "https://docs.onyx.app"
       }
     },
     "tokenRateLimits": {
@@ -9453,11 +9509,13 @@
             },
             "project": {
               "label": "اسم المشروع",
-              "description": "اسم مشروع Braintrust الذي تُسجَّل فيه التتبعات."
+              "description": "اسم مشروع Braintrust الذي تُسجَّل فيه التتبعات.",
+              "placeholder": "Onyx"
             },
             "apiUrl": {
               "label": "عنوان URL لواجهة API",
-              "description": "الافتراضي هو منطقة الولايات المتحدة. الصق عنوان URL لواجهة Braintrust API للمناطق الأخرى أو الاستضافة الذاتية."
+              "description": "الافتراضي هو منطقة الولايات المتحدة. الصق عنوان URL لواجهة Braintrust API للمناطق الأخرى أو الاستضافة الذاتية.",
+              "placeholder": "https://api.braintrust.dev"
             }
           }
         },
@@ -9474,7 +9532,8 @@
             },
             "host": {
               "label": "عنوان URL الأساسي لواجهة API",
-              "description": "الافتراضي هو منطقة الاتحاد الأوروبي. الصق عنوان URL الأساسي لـ Langfuse للمناطق الأخرى أو الاستضافة الذاتية."
+              "description": "الافتراضي هو منطقة الاتحاد الأوروبي. الصق عنوان URL الأساسي لـ Langfuse للمناطق الأخرى أو الاستضافة الذاتية.",
+              "placeholder": "https://cloud.langfuse.com"
             }
           }
         }
@@ -10031,6 +10090,9 @@
       },
       "unexpectedError": {
         "message": "حدث خطأ غير متوقع."
+      },
+      "placeholders": {
+        "languages": "en-US, fr-FR"
       }
     },
     "webSearch": {
@@ -10147,11 +10209,14 @@
         },
         "searxngBaseUrl": {
           "label": "عنوان URL الأساسي لـ SearXNG",
-          "description": "الصق عنوان URL الأساسي لـ [مثيل SearXNG](https://docs.searxng.org/admin/installation.html) الخاص بك."
+          "description": "الصق عنوان URL الأساسي لـ [مثيل SearXNG](https://docs.searxng.org/admin/installation.html) الخاص بك.",
+          "placeholder": "https://searxng-mithal.com"
         },
         "firecrawlBaseUrl": {
           "label": "عنوان URL الأساسي لواجهة API",
-          "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك."
+          "description": "عنوان URL الأساسي لواجهة Firecrawl API الخاصة بك.",
+          "searchPlaceholder": "https://api.firecrawl.dev/v2/search",
+          "scrapePlaceholder": "https://api.firecrawl.dev/v2/scrape"
         }
       }
     },
@@ -13493,6 +13558,31 @@
         "label": "ترقية الخطة"
       },
       "availableFor": "متاح في {plan}"
+    },
+    "placeholders": {
+      "email": "albarid@sharikatuk.com",
+      "url": "https://",
+      "azure": {
+        "chatCompletionsUrl": "https://mawriduk.cognitiveservices.azure.com/openai/deployments/ism-alnashr/chat/completions?api-version=2025-01-01-preview",
+        "imageGenerationsUrl": "https://mawriduk.cognitiveservices.azure.com/openai/deployments/ism-alnashr/images/generations?api-version=2025-01-01-preview",
+        "embeddingsUrl": "https://ism_almawrid.openai.azure.com/openai/v1/embeddings",
+        "speechEndpoint": "https://mintaqat_almawrid.tts.speech.microsoft.com/"
+      },
+      "bifrost": {
+        "apiBase": "https://bawwabat-bifrost.com/v1",
+        "embeddingsApiBase": "https://bifrost.example.com",
+        "embeddingModel": "openai/text-embedding-3-large"
+      },
+      "litellm": {
+        "apiBase": "https://wakil-litellm.com"
+      },
+      "openAICompatible": {
+        "apiBase": "http://localhost:8000/v1"
+      },
+      "vertexAi": {
+        "projectId": "mashrue-vertex",
+        "location": "global"
+      }
     }
   },
   "craft": {
@@ -13676,7 +13766,10 @@
           }
         },
         "saveButton": "حفظ",
-        "savingButton": "جارٍ الحفظ…"
+        "savingButton": "جارٍ الحفظ…",
+        "placeholders": {
+          "allowedUrl": "https://api.example.com/*"
+        }
       },
       "errors": {
         "duplicateSkillName": "التطبيق «{appName}» لديه بالفعل مهارة مرتبطة باسم «{skillName}». ارفع مهارة باسم مختلف."
@@ -16436,6 +16529,9 @@
         "transferredToast": {
           "message": "تم نقل الملكية."
         }
+      },
+      "placeholders": {
+        "githubRepository": "almalik/almustawdae أو https://github.com/almalik/almustawdae"
       }
     },
     "page": {
