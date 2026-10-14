@@ -672,6 +672,18 @@ def test_save_rejects_metadata_server_url(monkeypatch: pytest.MonkeyPatch) -> No
     _validate_tool_definition(_schema("http://10.0.0.5"))
 
 
+@pytest.mark.parametrize("servers", [[{"url": 123}], [{"url": "   "}], [{}], None])
+def test_save_rejects_invalid_server_url(servers: list[dict[str, Any]] | None) -> None:
+    schema = _schema("https://api.example.com")
+    if servers is None:
+        del schema["servers"]
+    else:
+        schema["servers"] = servers
+    with pytest.raises(OnyxError) as exc_info:
+        _validate_tool_definition(schema)
+    assert exc_info.value.status_code == 400
+
+
 def _run_ping(server_url: str) -> ToolResponse:
     tool = build_custom_tools_from_openapi_schema_and_headers(
         tool_id=1, openapi_schema=_schema(server_url)
