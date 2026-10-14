@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any, cast
 from urllib.parse import urlparse
 
+import regex
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import override
 
@@ -473,7 +474,12 @@ def filter_channels(
         filtered_channels = [
             channel
             for channel in filtered_channels
-            if _channel_matches(channel, channels_to_include, include_regex_enabled)
+            if _channel_matches(
+                channel,
+                channels_to_include,
+                include_regex_enabled,
+                match_on_timeout=False,
+            )
         ]
 
     # unlike includes, exclude entries aren't validated: excluding a missing channel is harmless
@@ -483,7 +489,12 @@ def filter_channels(
         filtered_channels = [
             channel
             for channel in filtered_channels
-            if not _channel_matches(channel, channels_to_exclude, exclude_regex_enabled)
+            if not _channel_matches(
+                channel,
+                channels_to_exclude,
+                exclude_regex_enabled,
+                match_on_timeout=True,
+            )
         ]
 
     return filtered_channels
@@ -505,13 +516,43 @@ def normalize_channel_entries(entries: list[str]) -> list[str]:
     ]
 
 
+# Channel patterns come from the connector config; bound each match so a
+# backtracking pattern cannot pin the worker.
+_CHANNEL_REGEX_TIMEOUT_SECONDS = 0.05
+
+
+def _channel_regex_matches(pattern: str, name: str, match_on_timeout: bool) -> bool:
+    try:
+        return (
+            regex.fullmatch(
+                pattern,
+                name,
+                concurrent=True,
+                timeout=_CHANNEL_REGEX_TIMEOUT_SECONDS,
+            )
+            is not None
+        )
+    except TimeoutError:
+        logger.warning(
+            "Slack channel regex '%s' timed out on channel '%s'", pattern, name
+        )
+        return match_on_timeout
+
+
 def _channel_matches(
-    channel: ChannelType, patterns: list[str], regex_enabled: bool
+    channel: ChannelType,
+    patterns: list[str],
+    regex_enabled: bool,
+    match_on_timeout: bool,
 ) -> bool:
     """An exact entry names the channel by id, which survives a rename, or by
-    name. A regex matches the name only."""
+    name. A regex matches the name only. A regex that times out counts as
+    ``match_on_timeout``, so a slow exclude still excludes."""
     if regex_enabled:
-        return any(re.fullmatch(pattern, channel["name"]) for pattern in patterns)
+        return any(
+            _channel_regex_matches(pattern, channel["name"], match_on_timeout)
+            for pattern in patterns
+        )
     return channel["id"] in patterns or channel["name"] in patterns
 
 
@@ -540,8 +581,8 @@ def _validate_channels_exist(
 def validate_channel_regexes(patterns: list[str] | None, label: str) -> None:
     for pattern in patterns or []:
         try:
-            re.compile(pattern)
-        except re.error as e:
+            regex.compile(pattern)
+        except regex.error as e:
             raise ConnectorValidationError(
                 f"Invalid {label} regex '{pattern}': {e}"
             ) from e
