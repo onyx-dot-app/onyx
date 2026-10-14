@@ -4,7 +4,7 @@ from collections.abc import Generator
 from unittest.mock import patch
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from onyx.agents.execution_records import ExecutionStatus, RunStatus
 from onyx.agents.models import (
@@ -17,8 +17,10 @@ from onyx.agents.models import (
 )
 from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import AgentTool
-from onyx.chat.models import ResponseRecord
+from onyx.chat.models import ChatSearchResult
 from onyx.chat.response import response_record, response_snapshot
+from onyx.context.search.models import SearchDocsResponse
+from onyx.db.models import StoredToolResult
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -34,6 +36,7 @@ from onyx.llm.models import (
     Usage,
     UserMessage,
 )
+from onyx.tools.models import ChatFile, CustomToolCallSummary
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
 
 
@@ -41,7 +44,7 @@ class ApplicationData(BaseModel):
     private_field: str = "application-only"
 
 
-def test_result_order_hook_updates_and_application_data_exclusion() -> None:
+def test_result_order_hook_updates_and_durable_details() -> None:
     def finalize(_context: ToolCallContext, result: ToolResult) -> ToolResult:
         result.content = "updated " + str(result.content)
         return result
@@ -49,7 +52,13 @@ def test_result_order_hook_updates_and_application_data_exclusion() -> None:
     tool = AgentTool(
         definition=ToolDefinition(name="work", description="", parameters={}),
         execute=lambda invocation: ToolResult(
-            content=invocation.call_id, details=ApplicationData()
+            content=invocation.call_id,
+            details=CustomToolCallSummary(
+                tool_name="work",
+                response_type="json",
+                tool_result={"id": invocation.call_id},
+            ),
+            metadata=ApplicationData(),
         ),
     )
     agent = Agent(
@@ -76,7 +85,24 @@ def test_result_order_hook_updates_and_application_data_exclusion() -> None:
     canonical = response_record(transcript)
     serialized = canonical.model_dump_json()
     assert "application-only" not in serialized
-    assert ResponseRecord.model_validate_json(serialized) == canonical
+    for call_id in ("a", "b"):
+        result = canonical.steps[0].tools[call_id].result
+        assert result is not None
+        stored_result = StoredToolResult.model_validate_json(result.model_dump_json())
+        assert isinstance(stored_result.details, CustomToolCallSummary)
+        assert stored_result.details.tool_result == {"id": call_id}
+        assert stored_result.content == f"updated {call_id}"
+
+
+def test_storage_rejects_unsupported_result_details() -> None:
+    result = ToolResultMessage(
+        tool_call_id="call",
+        tool_name="tool",
+        content="result",
+        details=ApplicationData(),
+    )
+    with pytest.raises(ValidationError, match="Unable to extract tag"):
+        StoredToolResult.model_validate(result, from_attributes=True)
 
 
 @pytest.mark.parametrize("cancelled", [False, True])
@@ -226,13 +252,20 @@ def test_captured_and_restored_usage_is_isolated_from_mutation() -> None:
     assert saved_message.usage.total_tokens == 10
 
 
-def test_capture_omits_private_data_and_detaches_content() -> None:
+def test_capture_excludes_staged_files_and_metadata_before_copying() -> None:
     private = ApplicationData()
+    search = ChatSearchResult(
+        queries=["query"],
+        search_docs=[],
+        citation_mapping={},
+        displayed_docs=[],
+        staged_files=[ChatFile(filename="source.txt", content=b"private content")],
+    )
     result = ToolResultMessage(
         tool_call_id="call",
         tool_name="search",
         content="passage",
-        details=private,
+        details=search,
         metadata=private,
         cacheable=True,
         is_error=True,
@@ -256,19 +289,36 @@ def test_capture_omits_private_data_and_detaches_content() -> None:
             )
         ],
     )
-    with patch.object(
-        ApplicationData,
-        "__deepcopy__",
-        side_effect=AssertionError("Private data copied"),
+    with (
+        patch.object(
+            ApplicationData,
+            "__deepcopy__",
+            side_effect=AssertionError("Private metadata copied"),
+        ),
+        patch.object(
+            ChatFile,
+            "__deepcopy__",
+            side_effect=AssertionError("Staged file copied"),
+        ),
     ):
         record = response_record(state)
     restored = response_snapshot(record)
     for retained in (restored.input_messages[1], restored.messages[1]):
         assert isinstance(retained, ToolResultMessage)
-        assert retained.details is None and retained.metadata is None
+        assert type(retained.details) is SearchDocsResponse
+        assert retained.details.queries == ["query"]
+        assert retained.details.displayed_docs == []
+        assert retained.metadata is None
         assert retained.cacheable and retained.is_error and retained.terminate
         assert retained.content == "passage"
         retained.content = "changed"
+        retained.details.queries.append("changed")
     assert restored.input_messages[0].metadata is None
     assert result.content == "passage"
-    assert result.details is private and result.metadata is private
+    assert result.details is search and result.metadata is private
+    assert search.queries == ["query"]
+    assert b"private content" == search.staged_files[0].content
+    for retained in (record.input_messages[1], record.messages[1]):
+        assert isinstance(retained, ToolResultMessage)
+        assert isinstance(retained.details, SearchDocsResponse)
+        assert retained.details.queries == ["query"]

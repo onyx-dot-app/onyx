@@ -333,7 +333,6 @@ def test_full_response_reads_canonical_tool_output() -> None:
     )
     projected = project_response(snapshot, tool_ids={"echo": 1})
     assert projected.tool_calls[0].tool_call_response == "tool output"
-    assert projected.tool_calls[0].result_metadata is None
     future: Future[ChatResponseOutcome] = Future()
     future.set_result(
         ChatResponseOutcome(
