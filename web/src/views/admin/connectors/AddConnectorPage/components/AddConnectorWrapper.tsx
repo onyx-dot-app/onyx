@@ -94,6 +94,7 @@ import {
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 import AuthenticationAccountSection from "@/views/admin/connectors/AddConnectorPage/sections/AuthenticationAccountSection";
 import ConnectorContentSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorContentSection";
+import { visibleConnectorFields } from "@/views/admin/connectors/AddConnectorPage/form/ConnectorConfigFields";
 import ConnectorSettingsSection from "@/views/admin/connectors/AddConnectorPage/sections/ConnectorSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/AddConnectorPage/sections/ScheduleSection";
 import EditFileLocations from "@/views/admin/connectors/AddConnectorPage/form/EditFileLocations";
@@ -960,36 +961,48 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                             data-testid="connector-form"
                           >
                             <Section gap={6} alignItems="stretch" width="full">
-                              <ConnectorContentSection
-                                config={contentConfiguration}
-                                values={formikProps.values}
-                                connector={connector}
-                                currentCredential={formCredential}
-                                reportScope={
-                                  formCredentialId === null
-                                    ? null
-                                    : {
-                                        credentialId: formCredentialId,
-                                        connectorId:
-                                          edit?.ccPair.connector.id ?? null,
-                                      }
-                                }
-                                disabled={!formUnlocked}
-                              >
-                                {edit && editsFileList && (
-                                  <EditFileLocations
-                                    ccPairId={edit.ccPair.id}
-                                    // Review waits for the upload: a plan
-                                    // made earlier would miss its files.
-                                    onUploadingChange={setUploading}
-                                  />
-                                )}
-                              </ConnectorContentSection>
+                              {/* A source with nothing to configure (Gmail) skips the
+                              section. */}
+                              {(visibleConnectorFields(
+                                contentConfiguration,
+                                formikProps.values,
+                                formCredential
+                              ).length > 0 ||
+                                contentConfiguration.subtext !== undefined ||
+                                editsFileList) && (
+                                <>
+                                  <ConnectorContentSection
+                                    config={contentConfiguration}
+                                    values={formikProps.values}
+                                    connector={connector}
+                                    currentCredential={formCredential}
+                                    reportScope={
+                                      formCredentialId === null
+                                        ? null
+                                        : {
+                                            credentialId: formCredentialId,
+                                            connectorId:
+                                              edit?.ccPair.connector.id ?? null,
+                                          }
+                                    }
+                                    disabled={!formUnlocked}
+                                  >
+                                    {edit && editsFileList && (
+                                      <EditFileLocations
+                                        ccPairId={edit.ccPair.id}
+                                        // Review waits for the upload: a plan
+                                        // made earlier would miss its files.
+                                        onUploadingChange={setUploading}
+                                      />
+                                    )}
+                                  </ConnectorContentSection>
 
-                              <Divider
-                                paddingParallel={0}
-                                paddingPerpendicular={0}
-                              />
+                                  <Divider
+                                    paddingParallel={0}
+                                    paddingPerpendicular={0}
+                                  />
+                                </>
+                              )}
                               <ConnectorSettingsSection
                                 connector={connector}
                                 currentCredential={formCredential}
