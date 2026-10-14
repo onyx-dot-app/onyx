@@ -24,6 +24,12 @@ This file provides guidance to AI agents when working with code in this reposito
 - When making calls to the backend, always go through the frontend. E.g. make a call to `http://localhost:3000/api/persona` not `http://localhost:8080/api/persona`
 - If `.agents-local.md` exists at the repo root and its rules are not already in your context,
   read and follow it. It carries developer-local agent guidance and is never committed.
+- Before you start work, make sure your checkout has the latest `origin/main`. The feature map and
+  other agent context in `.agents/` are only current on a recent base. Claude Code and Codex check this
+  at session start (`.agents/hooks/ensure_latest_main.py`) and report if the branch is behind. Other
+  agents: run `git fetch origin main` and compare with `git rev-list --count HEAD..origin/main`. If the
+  count is not 0, update with `git rebase origin/main` (or `git merge origin/main` for a shared branch).
+  On `main`, use `git pull --ff-only origin main`. Never discard uncommitted changes to do this.
 
 ## Project Overview
 

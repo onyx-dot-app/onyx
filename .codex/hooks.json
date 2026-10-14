@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/ensure_latest_main.py\"",
+            "timeout": 45
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

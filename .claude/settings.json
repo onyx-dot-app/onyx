@@ -12,6 +12,16 @@
             "command": "d=\"$CLAUDE_PROJECT_DIR/.venv/bin\"; case \"$PATH\" in \"$d:\"*|\"$d\") ;; *) [ -n \"$CLAUDE_ENV_FILE\" ] && printf 'IFS= read -r PATH <<%s__ONYX_PATH_EOF__\\n%s\\n__ONYX_PATH_EOF__\\nexport PATH\\n' '\\' \"$d${PATH:+:$PATH}\" >> \"$CLAUDE_ENV_FILE\" || true ;; esac"
           }
         ]
+      },
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.agents/hooks/ensure_latest_main.py\"",
+            "timeout": 45
+          }
+        ]
       }
     ],
     "Stop": [
