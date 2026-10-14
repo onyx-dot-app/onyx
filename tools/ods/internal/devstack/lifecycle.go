@@ -544,7 +544,14 @@ func (s *Stack) Status() (*Status, error) {
 	return s.status(st, true), nil
 }
 
+// status is statusCtx without a deadline, for calls outside a readiness
+// wait.
 func (s *Stack) status(st *State, probe bool) *Status {
+	return s.statusCtx(context.Background(), st, probe)
+}
+
+// statusCtx computes the live status. Health probes are bounded by ctx.
+func (s *Stack) statusCtx(ctx context.Context, st *State, probe bool) *Status {
 	out := &Status{
 		Root:     s.Root,
 		Project:  s.Project,
@@ -567,7 +574,7 @@ func (s *Stack) status(st *State, probe bool) *Status {
 		case isCurrent(rec):
 			ss.State = StateRunning
 			if rec.Health != "" && probe {
-				healthy := healthy(rec.Health)
+				healthy := healthy(ctx, rec.Health)
 				ss.Healthy = &healthy
 				if !healthy {
 					ss.LogTail = logTail(rec.Log, logTailLines)
@@ -664,9 +671,16 @@ func logTail(path string, n int) string {
 	return strings.Join(lines, "\n")
 }
 
-func healthy(url string) bool {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(url)
+// healthy reports whether url answers 200 within 3 seconds and before ctx
+// ends, whichever comes first.
+func healthy(ctx context.Context, url string) bool {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
 	}
@@ -679,6 +693,9 @@ func healthy(url string) bool {
 // timeout passes.
 func (s *Stack) waitReady(ctx context.Context, st *State, timeout, settle time.Duration) (*Status, error) {
 	deadline := time.Now().Add(timeout)
+	// Health probes never run past the deadline.
+	probeCtx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 	for {
 		var conflicts []string
 		for i := range st.Services {
@@ -691,7 +708,7 @@ func (s *Stack) waitReady(ctx context.Context, st *State, timeout, settle time.D
 		if err := s.WriteState(st); err != nil {
 			return nil, err
 		}
-		status := s.status(st, true)
+		status := s.statusCtx(probeCtx, st, true)
 		if len(conflicts) > 0 {
 			return status, &bindFailure{services: conflicts}
 		}
@@ -723,7 +740,10 @@ func (s *Stack) waitReady(ctx context.Context, st *State, timeout, settle time.D
 			if werr := s.WriteState(st); werr != nil {
 				return status, werr
 			}
-			return s.status(st, true), err
+			// Report the probe that timed out; do not probe again.
+			status.Phase = PhaseDegraded
+			status.Errors = st.Errors
+			return status, err
 		}
 		select {
 		case <-ctx.Done():

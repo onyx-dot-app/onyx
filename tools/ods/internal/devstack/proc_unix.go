@@ -199,7 +199,12 @@ func stopRecords(recs []ServiceRecord, timeout time.Duration) []ServiceRecord {
 		_ = syscall.Kill(-rec.PGID, syscall.SIGKILL)
 		killed = append(killed, rec)
 	}
-	return append(waitGroups(killed, 5*time.Second), unresolved...)
+	// A zero timeout means no waiting, after the kill as well.
+	postKill := 5 * time.Second
+	if timeout == 0 {
+		postKill = 0
+	}
+	return append(waitGroups(killed, postKill), unresolved...)
 }
 
 func waitGroups(recs []ServiceRecord, timeout time.Duration) []ServiceRecord {
