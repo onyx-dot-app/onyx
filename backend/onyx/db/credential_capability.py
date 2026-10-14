@@ -38,8 +38,15 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
-from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
-from onyx.db.models import CredentialCapabilityReportRow
+from onyx.db.enums import (
+    CapabilityCheckRunStatus,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
+)
+from onyx.db.models import CapabilityCheckRun, CredentialCapabilityReportRow
+
+# What the sweep records on a run it retired.
+STALE_RUN_ERROR = "The run did not finish before its time ran out."
 
 # A stored report is granular when any check result came from a named check;
 # report serialization always writes ``is_fallback`` explicitly.
@@ -124,6 +131,35 @@ def _upsert_row(
     ).one_or_none()
 
 
+def _end_check_runs(
+    db_session: Session,
+    run_ids: list[UUID],
+    *,
+    status: CapabilityCheckRunStatus,
+    report: CredentialCapabilityReport | None = None,
+    error_message: str | None = None,
+    open_only: bool = True,
+) -> None:
+    """Closes the history rows of ``run_ids``. A failure mark closes only open
+    rows, so it never clobbers a completion; a completion that the report row
+    accepted lands even on a row the sweep retired, as the report did."""
+    if not run_ids:
+        return
+    where = [CapabilityCheckRun.run_id.in_(run_ids)]
+    if open_only:
+        where.append(CapabilityCheckRun.status == CapabilityCheckRunStatus.RUNNING)
+    db_session.execute(
+        update(CapabilityCheckRun)
+        .where(*where)
+        .values(
+            status=status,
+            report=report.model_dump(mode="json") if report is not None else None,
+            error_message=error_message,
+            time_finished=func.statement_timestamp(),
+        )
+    )
+
+
 def _completed_values(
     connector_id: int | None,
     source: DocumentSource,
@@ -203,9 +239,22 @@ def upsert_completed_capability_report(
         .returning(CredentialCapabilityReportRow)
     )
     # ``populate_existing``: see ``_upsert_row``.
-    return db_session.scalars(
+    row = db_session.scalars(
         stmt, execution_options={"populate_existing": True}
     ).one_or_none()
+    if row is not None:
+        _end_check_runs(
+            db_session,
+            [run_id],
+            status=(
+                CapabilityCheckRunStatus.FAILED
+                if report.required_failures()
+                else CapabilityCheckRunStatus.PASSED
+            ),
+            report=report,
+            open_only=False,
+        )
+    return row
 
 
 def upsert_completed_capability_report_unless_granular(
@@ -267,9 +316,10 @@ def mark_capability_report_running(
     triggers cannot double-mark. A RUNNING mark older than the bound is a
     crashed or expired run and is replaced. The mark stamps a fresh ``run_id``
     claiming the row for this attempt; the attempt's terminal writes are fenced
-    on it. Returns None when an active run blocked the mark.
+    on it. Returns None when an active run blocked the mark. The mark also
+    opens the run's history row.
     """
-    return _upsert_row(
+    row = _upsert_row(
         db_session,
         credential_id=credential_id,
         connector_id=connector_id,
@@ -292,6 +342,21 @@ def mark_capability_report_running(
             < func.statement_timestamp() - active_within,
         ),
     )
+    if row is None:
+        return None
+    # A mark that replaced a stale RUNNING mark leaves that run's history row
+    # open until the sweep retires it.
+    db_session.add(
+        CapabilityCheckRun(
+            credential_id=credential_id,
+            connector_id=connector_id,
+            run_id=row.run_id,
+            trigger=trigger,
+            status=CapabilityCheckRunStatus.RUNNING,
+        )
+    )
+    db_session.flush()
+    return row
 
 
 def mark_capability_run_failed(
@@ -300,6 +365,7 @@ def mark_capability_run_failed(
     credential_id: int,
     connector_id: int | None,
     run_id: UUID | None = None,
+    error_message: str | None = None,
 ) -> None:
     """Retires the scope's RUNNING mark to FAILED_TO_RUN; the report survives.
 
@@ -310,7 +376,8 @@ def mark_capability_run_failed(
     this write is never clobbered, and fenced to the caller's attempt so a
     superseded attempt cannot fail-mark its successor. ``run_id`` None is the
     legacy-task fence: it matches only a stored NULL (a pre-migration mark),
-    mirroring the completion writer.
+    mirroring the completion writer. ``error_message`` goes on the run's
+    history row.
     """
     where = [
         CredentialCapabilityReportRow.credential_id == credential_id,
@@ -332,6 +399,13 @@ def mark_capability_run_failed(
         )
     )
     db_session.execute(stmt)
+    if run_id is not None:
+        _end_check_runs(
+            db_session,
+            [run_id],
+            status=CapabilityCheckRunStatus.FAILED_TO_RUN,
+            error_message=error_message,
+        )
 
 
 def get_sources_with_running_capability_runs(
@@ -382,9 +456,28 @@ def mark_stale_capability_runs_failed(
             # Model ``onupdate`` does not apply to bulk updates.
             time_updated=func.statement_timestamp(),
         )
+        .returning(CredentialCapabilityReportRow.run_id)
     )
-    result = db_session.execute(stmt)
-    return int(result.rowcount)  # ty: ignore[unresolved-attribute]
+    retired = [run_id for run_id in db_session.scalars(stmt).all() if run_id]
+    _end_check_runs(
+        db_session,
+        retired,
+        status=CapabilityCheckRunStatus.FAILED_TO_RUN,
+        error_message=STALE_RUN_ERROR,
+    )
+    return len(retired)
+
+
+def get_latest_capability_check_run_time(
+    db_session: Session, credential_id: int, connector_id: int
+) -> datetime | None:
+    """When the scope's checks last started, for the check schedule."""
+    return db_session.scalar(
+        select(func.max(CapabilityCheckRun.time_created)).where(
+            CapabilityCheckRun.credential_id == credential_id,
+            CapabilityCheckRun.connector_id == connector_id,
+        )
+    )
 
 
 def get_capability_report_row(

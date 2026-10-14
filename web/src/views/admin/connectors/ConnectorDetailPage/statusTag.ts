@@ -8,7 +8,12 @@ import {
   SvgPauseCircle,
   SvgXOctagon,
 } from "@opal/icons";
-import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
+import {
+  type CCPairRun,
+  type CheckRunStatus,
+  ConnectorCredentialPairStatus,
+  type PruneRunStatus,
+} from "@/lib/connectors/types";
 import type { ValidStatuses } from "@/lib/types";
 
 /** One pair or attempt state as its status tag shows it. */
@@ -30,7 +35,12 @@ export interface StatusTag {
     | "failed"
     | "completedWithErrors"
     | "syncing"
-    | "synced";
+    | "synced"
+    | "pruning"
+    | "pruned"
+    | "checking"
+    | "passed"
+    | "failedToRun";
 }
 
 const TAGS = {
@@ -57,6 +67,11 @@ const TAGS = {
   },
   syncing: { icon: IconLoader, color: "blue", labelKey: "syncing" },
   synced: { icon: SvgCheckCircle, color: "green", labelKey: "synced" },
+  pruning: { icon: IconLoader, color: "blue", labelKey: "pruning" },
+  pruned: { icon: SvgCheckCircle, color: "green", labelKey: "pruned" },
+  checking: { icon: IconLoader, color: "blue", labelKey: "checking" },
+  passed: { icon: SvgCheckCircle, color: "green", labelKey: "passed" },
+  failedToRun: { icon: SvgXOctagon, color: "red", labelKey: "failedToRun" },
 } satisfies Record<StatusTag["labelKey"], StatusTag>;
 
 /** The tag for the pair's own state, else the latest attempt's. A live attempt outranks the sticky error. */
@@ -86,6 +101,47 @@ export function ccPairStatusTag(
       return TAGS.interrupted;
     default:
       return TAGS.indexed;
+  }
+}
+
+function pruneStatusTag(status: PruneRunStatus): StatusTag {
+  switch (status) {
+    case "in_progress":
+      return TAGS.pruning;
+    case "success":
+      return TAGS.pruned;
+    case "failed":
+      return TAGS.failed;
+    case "canceled":
+      return TAGS.canceled;
+  }
+}
+
+function checkRunStatusTag(status: CheckRunStatus): StatusTag {
+  switch (status) {
+    case "running":
+      return TAGS.checking;
+    case "passed":
+      return TAGS.passed;
+    case "failed":
+      return TAGS.failed;
+    case "failed_to_run":
+      return TAGS.failedToRun;
+  }
+}
+
+/** The tag of one run in the pair's run list, whatever its kind. */
+export function runStatusTag(run: CCPairRun): StatusTag {
+  switch (run.kind) {
+    case "indexing":
+      return attemptStatusTag(run.attempt.status, false);
+    case "doc_permission_sync":
+    case "group_sync":
+      return attemptStatusTag(run.attempt.status, true);
+    case "pruning":
+      return pruneStatusTag(run.attempt.status);
+    case "checks":
+      return checkRunStatusTag(run.attempt.status);
   }
 }
 

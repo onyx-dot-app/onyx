@@ -475,7 +475,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
               <PendingBackfills backfills={ccPair.pending_backfills} />
             )}
 
-            <StatusCard ccPair={ccPair} />
+            <StatusCard ccPair={ccPair} canOperate={canOperate} />
             <PairChecksCard
               source={source}
               credentialId={ccPair.credential.id}

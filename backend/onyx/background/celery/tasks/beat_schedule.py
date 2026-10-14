@@ -179,6 +179,16 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-scheduled-capability-checks",
+        "task": OnyxCeleryTask.CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS,
+        "schedule": timedelta(minutes=5),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-index-attempt-cleanup",
         "task": OnyxCeleryTask.CHECK_FOR_INDEX_ATTEMPT_CLEANUP,
         "schedule": timedelta(minutes=30),

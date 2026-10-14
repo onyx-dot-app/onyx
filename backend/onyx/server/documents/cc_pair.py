@@ -22,6 +22,7 @@ from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks.applicability import get_applicable_capabilities
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
 from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
+from onyx.connectors.capability_checks.registry import has_named_capability_checks
 from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
@@ -51,6 +52,7 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for_cc_pair
 from onyx.db.engine.sql_engine import get_session
+from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import (
     AccessType,
     CCPairRunErrors,
@@ -96,11 +98,13 @@ from onyx.server.documents.cc_pair_throughput import docs_indexed_per_slice
 from onyx.server.documents.credential import credential_ids_to_mask
 from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
+    CCPairChecksRun,
     CCPairDocPermissionSyncRun,
     CCPairFullInfo,
     CCPairGroupSyncRun,
     CCPairHierarchyBreakdown,
     CCPairIndexRun,
+    CCPairPruneRun,
     CCPairRun,
     CCPairRunsResponse,
     CCPairThroughputResponse,
@@ -108,6 +112,7 @@ from onyx.server.documents.models import (
     CCPairThroughputWindow,
     CCPropertyUpdateRequest,
     CCStatusUpdateRequest,
+    CheckRunSnapshot,
     ConnectorCredentialPairIdentifier,
     ConnectorCredentialPairMetadata,
     DocPermissionSyncAttemptSnapshot,
@@ -117,6 +122,7 @@ from onyx.server.documents.models import (
     IndexAttemptStageMetricSnapshot,
     IndexAttemptStageMetricsResponse,
     PaginatedReturn,
+    PruneRunSnapshot,
     synthesize_unaccounted,
 )
 from onyx.server.models import StatusResponse
@@ -246,15 +252,19 @@ _RUNS_MAX_PAGE_SIZE = 50
 
 
 def _cc_pair_run_kinds(cc_pair: ConnectorCredentialPair) -> list[CCPairRunKind]:
-    """Indexing always, plus the permission syncs a perm-synced pair's source runs."""
+    """Indexing and pruning always, the permission syncs a perm-synced pair's
+    source runs, and the checks of a source that names some."""
+    source = cc_pair.connector.source
     kinds = [CCPairRunKind.INDEXING]
-    if not cc_pair.access_type.is_perm_synced():
-        return kinds
-    capabilities = get_applicable_capabilities(cc_pair.connector.source)
-    if CredentialCapability.DOC_PERMISSION_SYNC in capabilities:
-        kinds.append(CCPairRunKind.DOC_PERMISSION_SYNC)
-    if CredentialCapability.EXTERNAL_GROUP_SYNC in capabilities:
-        kinds.append(CCPairRunKind.GROUP_SYNC)
+    if cc_pair.access_type.is_perm_synced():
+        capabilities = get_applicable_capabilities(source)
+        if CredentialCapability.DOC_PERMISSION_SYNC in capabilities:
+            kinds.append(CCPairRunKind.DOC_PERMISSION_SYNC)
+        if CredentialCapability.EXTERNAL_GROUP_SYNC in capabilities:
+            kinds.append(CCPairRunKind.GROUP_SYNC)
+    kinds.append(CCPairRunKind.PRUNING)
+    if has_named_capability_checks(source):
+        kinds.append(CCPairRunKind.CHECKS)
     return kinds
 
 
@@ -292,6 +302,18 @@ def _run_item(
                     group_sync
                 ),
             )
+        case CCPairRunKind.PRUNING:
+            prune = page.prune_runs[run_id]
+            return CCPairPruneRun(
+                time_created=prune.sync_start_time,
+                attempt=PruneRunSnapshot.from_sync_record(prune),
+            )
+        case CCPairRunKind.CHECKS:
+            check_run = page.check_runs[run_id]
+            return CCPairChecksRun(
+                time_created=check_run.time_created,
+                attempt=CheckRunSnapshot.from_check_run(check_run),
+            )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/runs")
@@ -327,6 +349,8 @@ def get_cc_pair_runs(
     groups = None if status_groups is None else set(status_groups)
     run_filter = CCPairRunFilter(
         cc_pair_id=cc_pair_id,
+        credential_id=cc_pair.credential_id,
+        connector_id=cc_pair.connector_id,
         source=cc_pair.connector.source,
         since=since,
         error_query=(q or "").strip() or None,
@@ -604,6 +628,7 @@ def get_cc_pair_full_info(
         supports_targeted_reindex=_connector_supports_targeted_reindex(
             cc_pair.connector.source, cc_pair.connector.input_type
         ),
+        has_named_checks=has_named_capability_checks(cc_pair.connector.source),
     )
 
 
@@ -818,6 +843,17 @@ def update_cc_pair_property(
         db_session.commit()
 
         msg = "Pruning frequency updated successfully"
+    elif update_request.name == "check_frequency":
+        if not has_named_capability_checks(cc_pair.connector.source):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "This connector's source has no checks to schedule.",
+            )
+        cc_pair.connector.check_freq = int(update_request.value)
+        cc_pair.connector.validate_check_freq()
+        db_session.commit()
+
+        msg = "Check frequency updated successfully"
     else:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -825,6 +861,52 @@ def update_cc_pair_property(
         )
 
     return StatusResponse(success=True, message=msg, data=cc_pair_id)
+
+
+@router.post("/admin/cc-pair/{cc_pair_id}/release-indexing-hold")
+def release_indexing_hold(
+    cc_pair_id: int,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> StatusResponse[int]:
+    """Starts the pair's first index attempt despite the hold its connector
+    checks put on it. A check run started after this holds again."""
+    tenant_id = get_current_tenant_id()
+    cc_pair = get_connector_credential_pair_from_id_for_user(
+        cc_pair_id=cc_pair_id,
+        db_session=db_session,
+        user=user,
+        access_level=CCPairAccessLevel.OPERATE,
+    )
+    if not cc_pair:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user's permissions",
+        )
+    if get_first_indexing_hold(db_session, cc_pair) is None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Indexing is not held.")
+    cc_pair.indexing_hold_released_at = get_db_current_time(db_session)
+    db_session.commit()
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=cc_pair_id,
+        extra={"indexing_hold": "released"},
+    )
+    # The indexing beat would dispatch the waiting attempt within its interval.
+    # Firing it now starts sooner.
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_INDEXING,
+        kwargs={"tenant_id": tenant_id},
+        priority=OnyxCeleryPriority.HIGH,
+    )
+    return StatusResponse(
+        success=True, message="Indexing hold released", data=cc_pair_id
+    )
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}/last_pruned")

@@ -509,6 +509,24 @@ When one has `FAILED` in the form's latest run, Create first opens an advisory
 that states the count and offers to show the checks card or to create the
 connector anyway. Edit mode skips the advisory: its plan lists failed checks itself.
 
+An admin can start the held attempt from the connector page's status card
+(`POST /admin/cc-pair/{id}/release-indexing-hold`), which stamps
+`ConnectorCredentialPair.indexing_hold_released_at`; `get_first_indexing_hold`
+ignores a report whose run started before the stamp, so a later run holds again.
+
+Every run of a scope's checks also writes a `capability_check_run` row
+(`db/credential_capability.py`): the RUNNING mark opens it, the completion
+closes it as `PASSED` or `FAILED` (a required, applicable check failed) with the
+report, a failure mark or the stale sweep closes it as `FAILED_TO_RUN` with the
+reason. `Connector.check_freq` (the schedule section's "Run Checks Every", saved
+through the pair `property` route as `check_frequency`) makes the
+`CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS` beat task start a pair's checks with
+trigger `SCHEDULED` once that long has passed since its last run. The connector
+page's run feed (`GET /admin/cc-pair/{id}/runs`, `db/cc_pair_runs.py`) lists
+these runs as kind `checks`, with a popover of the results, and the pair's
+prunes as kind `pruning` from its `sync_record` rows, which now carry the
+`error_message` a failed prune generator recorded.
+
 ### 4.9 Typed configs and credential families
 
 Every registry entry has a `ConnectorConfig` (`connector_config.py`). Each field

@@ -35,6 +35,22 @@ export async function cancelIndexAttempt(
   }
 }
 
+/** Starts a pair's first index attempt despite its failed checks. Resolves to the error message, or `null` on success. */
+export async function releaseIndexingHold(
+  ccPairId: number,
+  fallback: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/manage/admin/cc-pair/${ccPairId}/release-indexing-hold`,
+      { method: "POST" }
+    );
+    return response.ok ? null : await parseErrorDetail(response, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
 export async function triggerIndexing(
   fromBeginning: boolean,
   connectorId: number,

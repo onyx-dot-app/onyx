@@ -2372,6 +2372,14 @@
           "ariaLabel": "Documentos indexados ao longo do tempo",
           "tooltip": "{count, plural, one {# documento} other {# documentos}}",
           "loadError": "Não foi possível carregar o gráfico."
+        },
+        "hold": {
+          "checks_running": "Executando verificações pré-indexação",
+          "checks_failed_to_run": "Em espera: as verificações não foram executadas",
+          "required_checks_failed": "Em espera: verificações obrigatórias falharam",
+          "start": "Iniciar indexação",
+          "released": "Indexação iniciada",
+          "releaseFailed": "Não foi possível iniciar a indexação"
         }
       },
       "toasts": {
@@ -2388,7 +2396,9 @@
         "refreshFrequencyUpdateFailed": "Falha ao atualizar a frequência de atualização do conector",
         "refreshFrequencyUpdated": "Frequência de atualização do conector atualizada com sucesso",
         "targetedReindexFailed": "Falha na reindexação direcionada: {message}",
-        "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados."
+        "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados.",
+        "checkFrequencyUpdated": "Frequência de verificação do conector atualizada com sucesso",
+        "checkFrequencyUpdateFailed": "Falha ao atualizar a frequência de verificação do conector"
       },
       "backButton": {
         "label": "Todos os conectores"
@@ -2454,7 +2464,8 @@
       },
       "schedule": {
         "refresh": "Atualizar a cada **{every}**",
-        "prune": "Limpar a cada **{every}**"
+        "prune": "Limpar a cada **{every}**",
+        "checks": "Verificar a cada **{every}**"
       },
       "runs": {
         "kinds": {
@@ -2462,7 +2473,9 @@
           "all": "Todos os tipos",
           "indexing": "Índice de documentos",
           "doc_permission_sync": "Sincronização de permissões",
-          "group_sync": "Sincronização de membros de grupos"
+          "group_sync": "Sincronização de membros de grupos",
+          "pruning": "Limpeza de documentos",
+          "checks": "Verificações do conector"
         },
         "detail": {
           "queued": "Na fila",
@@ -2473,15 +2486,19 @@
         "actions": {
           "stages": "Ver métricas por etapa",
           "cancel": "Cancelar",
-          "logs": "Ver logs"
+          "logs": "Ver logs",
+          "checks": "Ver resultados das verificações"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {# documento falhou} other {# documentos falharam}}"
+          "tooltip": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}"
         },
         "figures": {
           "indexed": "indexados",
           "synced": "sincronizados",
-          "memberships": "associações"
+          "memberships": "associações",
+          "removed": "removidos",
+          "checks": "verificações executadas"
         },
         "counts": {
           "newDocs": "{count, plural, one {# documento novo} other {# documentos novos}}",
@@ -2491,7 +2508,10 @@
           "groups": "{count, plural, one {# grupo} other {# grupos}}",
           "running": "{count, plural, one {# execução em andamento} other {# execuções em andamento}}",
           "succeeded": "{count, plural, one {# execução bem-sucedida} other {# execuções bem-sucedidas}}",
-          "failed": "{count, plural, one {# execução com falha} other {# execuções com falha}}"
+          "failed": "{count, plural, one {# execução com falha} other {# execuções com falha}}",
+          "passedChecks": "{count, plural, one {# verificação aprovada} other {# verificações aprovadas}}",
+          "failedChecks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}",
+          "skippedChecks": "{count, plural, one {# verificação ignorada} other {# verificações ignoradas}}"
         },
         "search": {
           "placeholder": "Pesquisar erros de execuções..."
@@ -2524,11 +2544,17 @@
         "errorModal": {
           "indexing": "Erro na execução de indexação",
           "doc_permission_sync": "Erro na sincronização de permissões de documentos",
-          "group_sync": "Erro na sincronização de membros de grupos"
+          "group_sync": "Erro na sincronização de membros de grupos",
+          "pruning": "Erro na limpeza de documentos",
+          "checks": "Erro nas verificações do conector"
         },
         "toasts": {
           "canceled": "A execução está sendo cancelada.",
           "cancelFailed": "Não foi possível cancelar a execução. Tente novamente."
+        },
+        "checkResults": {
+          "title": "Verificações do conector ({count})",
+          "close": "Fechar"
         }
       },
       "activity": {
@@ -2574,19 +2600,38 @@
             "stopped": "Sincronização de membros de grupos interrompida com erros",
             "errors": "Membros de grupos sincronizados com erros",
             "resolved": "Erros de sincronização de membros de grupos resolvidos"
+          },
+          "pruning": {
+            "failed": "A limpeza falhou",
+            "running": "Limpeza em andamento com erros",
+            "stopped": "Limpeza interrompida com erros",
+            "errors": "Limpeza concluída com erros",
+            "resolved": "Erros de limpeza resolvidos"
+          },
+          "checks": {
+            "failed": "As verificações do conector falharam",
+            "running": "Verificações do conector em andamento com erros",
+            "stopped": "Verificações do conector interrompidas com erros",
+            "errors": "Verificações do conector concluídas com erros",
+            "resolved": "Erros das verificações do conector resolvidos"
           }
         },
         "description": {
           "indexing": "{count, plural, one {# documento indexado} other {# documentos indexados}}. Duração {minutes, plural, one {# minuto} other {# minutos}}.",
           "doc_permission_sync": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}. Duração {minutes, plural, one {# minuto} other {# minutos}}.",
-          "group_sync": "{count, plural, one {# associação sincronizada} other {# associações sincronizadas}}. Duração {minutes, plural, one {# minuto} other {# minutos}}."
+          "group_sync": "{count, plural, one {# associação sincronizada} other {# associações sincronizadas}}. Duração {minutes, plural, one {# minuto} other {# minutos}}.",
+          "pruning": "{count, plural, one {# documento removido} other {# documentos removidos}}. Duração da limpeza: {minutes, plural, one {# minuto} other {# minutos}}.",
+          "checks": "{count, plural, one {# verificação executada} other {# verificações executadas}}. Duração da verificação: {minutes, plural, one {# minuto} other {# minutos}}.",
+          "checksFailed": "{count, plural, one {# verificação falhou} other {# verificações falharam}}."
         },
         "tags": {
           "stackTrace": "Rastreamento de pilha",
           "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
           "doc_permission_sync": "{count, plural, one {# documento não sincronizado} other {# documentos não sincronizados}}",
           "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
-          "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}"
+          "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}",
+          "pruning": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "checks": "{count, plural, one {# verificação falhou} other {# verificações falharam}}"
         },
         "more": "Mostrar mais",
         "empty": {
@@ -3100,6 +3145,10 @@
         "units": {
           "hours": "horas",
           "minutes": "minutos"
+        },
+        "checkFrequency": {
+          "title": "Executar verificações a cada",
+          "description": "Executa novamente as verificações do conector nesta frequência."
         }
       },
       "settings": {
@@ -7978,7 +8027,12 @@
         "paused": "Pausado",
         "scheduled": "Agendado",
         "synced": "Sincronizado",
-        "syncing": "Sincronizando"
+        "syncing": "Sincronizando",
+        "pruning": "Limpando",
+        "pruned": "Limpo",
+        "checking": "Verificando",
+        "passed": "Aprovado",
+        "failedToRun": "Não executado"
       }
     },
     "systemInfo": {

@@ -73,6 +73,7 @@ from onyx.db.enums import (
     ApprovalDecision,
     ArtifactType,
     BuildSessionStatus,
+    CapabilityCheckRunStatus,
     CapabilityCheckTrigger,
     CapabilityReportRunStatus,
     ChatSessionSharedStatus,
@@ -1058,6 +1059,11 @@ class ConnectorCredentialPair(Base):
     perm_sync_pending_since: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # An admin started indexing despite the hold its connector checks put on
+    # the first attempt. It outranks a check run started before it.
+    indexing_hold_released_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Backfills an applied edit requested, oldest first. The indexing beat
     # creates one at a time while the pair is ACTIVE and has no active attempt,
     # and keeps each request until an attempt of it succeeds.
@@ -2007,6 +2013,9 @@ class Connector(Base):
 
     refresh_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     prune_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Seconds between scheduled runs of each pair's connector checks. None
+    # means the checks run only on request.
+    check_freq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -2044,6 +2053,13 @@ class Connector(Base):
             if self.prune_freq < 300:
                 raise ValueError(
                     "prune_freq must be greater than or equal to 5 minutes."
+                )
+
+    def validate_check_freq(self) -> None:
+        if self.check_freq is not None:
+            if self.check_freq < 300:
+                raise ValueError(
+                    "check_freq must be greater than or equal to 5 minutes."
                 )
 
 
@@ -2168,6 +2184,54 @@ class CredentialCapabilityReportRow(Base):
             "credential_id",
             unique=True,
             postgresql_where=text("connector_id IS NULL"),
+        ),
+    )
+
+
+class CapabilityCheckRun(Base):
+    """One run of a scope's capability checks, kept after the report row moves
+    on. Rows are written by the same lifecycle as the report row and keyed on
+    its ``run_id``, so a superseded run never lands on a later row."""
+
+    __tablename__ = "capability_check_run"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(
+        ForeignKey("credential.id", ondelete="CASCADE"), nullable=False
+    )
+    # NULL for a config-less credential-time run.
+    connector_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector.id", ondelete="CASCADE"), nullable=True
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False, unique=True
+    )
+    trigger: Mapped[CapabilityCheckTrigger] = mapped_column(
+        Enum(CapabilityCheckTrigger, native_enum=False), nullable=False
+    )
+    status: Mapped[CapabilityCheckRunStatus] = mapped_column(
+        Enum(CapabilityCheckRunStatus, native_enum=False), nullable=False
+    )
+    # The serialized ``CredentialCapabilityReport`` this run produced; None
+    # until it completes.
+    report: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    # Why the run never produced a report.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_capability_check_run_scope_time",
+            "credential_id",
+            "connector_id",
+            "time_created",
         ),
     )
 
@@ -3098,6 +3162,8 @@ class SyncRecord(Base):
     sync_end_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Why the sync failed, for the pair's run history. Only prunes write it.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index(

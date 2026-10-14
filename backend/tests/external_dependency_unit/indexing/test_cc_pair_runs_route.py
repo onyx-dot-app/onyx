@@ -206,6 +206,8 @@ def test_merges_kinds_newest_first_across_pages(db_session: Session) -> None:
         CCPairRunKind.INDEXING,
         CCPairRunKind.DOC_PERMISSION_SYNC,
         CCPairRunKind.GROUP_SYNC,
+        CCPairRunKind.PRUNING,
+        CCPairRunKind.CHECKS,
     ]
     assert first.total_items == 6
     assert _order(first) == [
@@ -362,7 +364,7 @@ def test_status_filter_keeps_counts(db_session: Session) -> None:
     }
 
 
-def test_public_pair_shows_only_indexing(db_session: Session) -> None:
+def test_public_pair_shows_no_syncs(db_session: Session) -> None:
     admin = create_test_user(db_session, "runs_admin", is_admin=True)
     cc_pair = _create_cc_pair(db_session, AccessType.PUBLIC)
     index_attempt = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS)
@@ -370,7 +372,11 @@ def test_public_pair_shows_only_indexing(db_session: Session) -> None:
 
     response = _runs(db_session, admin, cc_pair)
 
-    assert response.kinds == [CCPairRunKind.INDEXING]
+    assert response.kinds == [
+        CCPairRunKind.INDEXING,
+        CCPairRunKind.PRUNING,
+        CCPairRunKind.CHECKS,
+    ]
     assert _order(response) == [(CCPairRunKind.INDEXING, index_attempt.id)]
 
 

@@ -108,11 +108,14 @@ export default function ScheduleSection({
   const tToasts = useTranslations("admin.connector.toasts");
   const tDuration = useTranslations("admin.connector.advancedConfig.duration");
   const format = useFormatter();
-  const { refresh_freq, prune_freq, indexing_start } = ccPair.connector;
+  const { refresh_freq, prune_freq, check_freq, indexing_start } =
+    ccPair.connector;
   const refreshMinutes =
     refresh_freq === null ? null : Math.round(refresh_freq / 60);
   const pruneHours =
     prune_freq === null ? null : Number((prune_freq / 3600).toFixed(3));
+  const checkHours =
+    check_freq === null ? null : Number((check_freq / 3600).toFixed(3));
 
   // Whole hours read as hours, whole days as days.
   function minutesLabel(minutes: number): string {
@@ -131,10 +134,16 @@ export default function ScheduleSection({
   }
 
   async function save(
-    name: "refresh_frequency" | "pruning_frequency",
+    name: "refresh_frequency" | "pruning_frequency" | "check_frequency",
     seconds: number,
-    successKey: "refreshFrequencyUpdated" | "pruningFrequencyUpdated",
-    failureKey: "refreshFrequencyUpdateFailed" | "pruningFrequencyUpdateFailed"
+    successKey:
+      | "refreshFrequencyUpdated"
+      | "pruningFrequencyUpdated"
+      | "checkFrequencyUpdated",
+    failureKey:
+      | "refreshFrequencyUpdateFailed"
+      | "pruningFrequencyUpdateFailed"
+      | "checkFrequencyUpdateFailed"
   ): Promise<boolean> {
     let stored = false;
     try {
@@ -164,6 +173,9 @@ export default function ScheduleSection({
       pruneHours === null
         ? null
         : t("prune", { every: hoursLabel(pruneHours) }),
+      checkHours === null
+        ? null
+        : t("checks", { every: hoursLabel(checkHours) }),
     ].filter((part) => part !== null),
     { type: "unit" }
   );
@@ -213,6 +225,28 @@ export default function ScheduleSection({
               )
             }
           />
+          {/* Only a source with checks of its own can schedule them. Blank until set: they run only on request by default. */}
+          {ccPair.has_named_checks && (
+            <FrequencyField
+              id="checkFreq"
+              title={tFields("checkFrequency.title")}
+              description={tFields("checkFrequency.description")}
+              value={checkHours}
+              min={MIN_PRUNE_FREQ_HOURS}
+              max={MAX_PRUNE_FREQ_HOURS}
+              decimalPlaces={3}
+              suffix={tFields("units.hours")}
+              disabled={!editable}
+              onSave={(hours) =>
+                save(
+                  "check_frequency",
+                  hours * 3600,
+                  "checkFrequencyUpdated",
+                  "checkFrequencyUpdateFailed"
+                )
+              }
+            />
+          )}
           <InputHorizontal
             title={tFields("indexingStart.title")}
             description={tFields("indexingStart.description")}

@@ -1364,3 +1364,18 @@ def resync_cc_pair(
 
     if commit:
         db_session.commit()
+
+
+def get_cc_pairs_with_check_schedule(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    """The active pairs whose connector re-runs its checks on a schedule."""
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(Connector)
+        .where(
+            ConnectorCredentialPair.status == ConnectorCredentialPairStatus.ACTIVE,
+            Connector.check_freq.is_not(None),
+        )
+    )
+    return list(db_session.scalars(stmt).all())

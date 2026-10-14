@@ -717,6 +717,7 @@ class OnyxCeleryTask:
     RUN_CAPABILITY_CHECKS = "run_capability_checks"
     RUN_DRAFT_CAPABILITY_CHECKS = "run_draft_capability_checks"
     CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
+    CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS = "check_for_scheduled_capability_checks"
 
     # Draft credentials of connector forms that were never submitted
     CLEANUP_STALE_DRAFT_CREDENTIALS = "cleanup_stale_draft_credentials"

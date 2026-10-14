@@ -394,6 +394,16 @@ class CredentialCapabilityReport(BaseModel):
     verdicts: dict[CredentialCapability, CapabilityVerdict]
     check_results: list[CapabilityCheckResult]
 
+    def required_failures(self) -> list[CapabilityCheckResult]:
+        """The failed checks that block indexing: required and applicable."""
+        return [
+            result
+            for result in self.check_results
+            if result.required
+            and result.applicable
+            and result.status == CapabilityCheckStatus.FAILED
+        ]
+
 
 class NamedCheckRun(BaseModel):
     """The outcome of the named checks after the blocking budget."""

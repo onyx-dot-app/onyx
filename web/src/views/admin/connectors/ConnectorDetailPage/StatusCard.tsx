@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import {
   Button,
   Card,
@@ -12,8 +12,8 @@ import {
   Tag,
   Text,
 } from "@opal/components";
-import { Section } from "@opal/layouts";
-import { SvgClock } from "@opal/icons";
+import { Section, toast } from "@opal/layouts";
+import { SvgClock, SvgPlayCircle } from "@opal/icons";
 import { CardLoader } from "@opal/loaders";
 import { timeAgo } from "@opal/time";
 import {
@@ -22,6 +22,8 @@ import {
   type CCPairThroughputWindow,
   type PaginatedIndexAttempts,
 } from "@/lib/connectors/types";
+import { releaseIndexingHold } from "@/lib/connectors/svc";
+import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ccPairStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
@@ -70,15 +72,34 @@ const POLL_MS = 5000;
 
 export interface StatusCardProps {
   ccPair: CCPairFullInfo;
+  /** Shows Start Indexing while the pair's failed checks hold its first run. */
+  canOperate: boolean;
 }
 
 /** The pair at a glance: status, latest and total documents, its last run, and documents indexed over time. */
-export default function StatusCard({ ccPair }: StatusCardProps) {
+export default function StatusCard({ ccPair, canOperate }: StatusCardProps) {
   const t = useTranslations("admin.connector.statusCard");
   const tBadges = useTranslations("admin.status.badges");
   const tWindow = useTranslations("admin.connector.runs.window");
   const locale = useLocale();
   const [range, setRange] = useState<CCPairThroughputWindow>("12h");
+  const [releasing, setReleasing] = useState(false);
+  const hold = ccPair.indexing_hold;
+
+  async function release() {
+    setReleasing(true);
+    const failure = await releaseIndexingHold(
+      ccPair.id,
+      t("hold.releaseFailed")
+    );
+    setReleasing(false);
+    if (failure !== null) {
+      toast.error(failure);
+      return;
+    }
+    toast.success(t("hold.released"));
+    await mutate(buildCCPairInfoUrl(ccPair.id));
+  }
   const { data: latestIndexAttempts, error } = useSWR<PaginatedIndexAttempts>(
     SWR_KEYS.ccPairLatestIndexAttempt(ccPair.id),
     errorHandlingFetcher,
@@ -145,12 +166,28 @@ export default function StatusCard({ ccPair }: StatusCardProps) {
                   {t("title")}
                 </Text>
                 <Text font="secondary-body" color="text-03">
-                  {speed === null
-                    ? t("lastIndexed.value", {
-                        when: timeAgo(ccPair.last_indexed, locale) ?? "-",
-                      })
-                    : t("indexingSpeed", { speed })}
+                  {hold !== null
+                    ? t(`hold.${hold.reason}`)
+                    : speed === null
+                      ? t("lastIndexed.value", {
+                          when: timeAgo(ccPair.last_indexed, locale) ?? "-",
+                        })
+                      : t("indexingSpeed", { speed })}
                 </Text>
+                {/* A run in flight ends on its own; the other holds wait for the admin. */}
+                {hold !== null &&
+                  hold.reason !== "checks_running" &&
+                  canOperate && (
+                    <Button
+                      icon={SvgPlayCircle}
+                      prominence="secondary"
+                      size="sm"
+                      disabled={releasing}
+                      onClick={() => void release()}
+                    >
+                      {t("hold.start")}
+                    </Button>
+                  )}
               </StatBlock>
               <StatBlock>
                 <Section

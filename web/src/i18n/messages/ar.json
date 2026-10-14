@@ -2372,6 +2372,14 @@
           "ariaLabel": "المستندات المفهرسة بمرور الوقت",
           "tooltip": "{count, plural, one {# مستند} other {# مستندات}}",
           "loadError": "تعذر تحميل الرسم البياني."
+        },
+        "hold": {
+          "checks_running": "جارٍ تشغيل فحوصات ما قبل الفهرسة",
+          "checks_failed_to_run": "متوقف: تعذر تشغيل الفحوصات",
+          "required_checks_failed": "متوقف: فشلت فحوصات مطلوبة",
+          "start": "بدء الفهرسة",
+          "released": "بدأت الفهرسة",
+          "releaseFailed": "تعذر بدء الفهرسة"
         }
       },
       "toasts": {
@@ -2388,7 +2396,9 @@
         "refreshFrequencyUpdateFailed": "فشل تحديث تكرار تحديث الموصل",
         "refreshFrequencyUpdated": "تم تحديث تكرار تحديث الموصل بنجاح",
         "targetedReindexFailed": "فشلت إعادة الفهرسة الموجهة: {message}",
-        "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات."
+        "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات.",
+        "checkFrequencyUpdated": "تم تحديث معدل فحص الموصّل بنجاح",
+        "checkFrequencyUpdateFailed": "فشل تحديث معدل فحص الموصّل"
       },
       "backButton": {
         "label": "كل الموصلات"
@@ -2454,7 +2464,8 @@
       },
       "schedule": {
         "refresh": "تحديث كل **{every}**",
-        "prune": "تنقية كل **{every}**"
+        "prune": "تنقية كل **{every}**",
+        "checks": "تشغيل الفحوصات كل **{every}**"
       },
       "runs": {
         "kinds": {
@@ -2462,7 +2473,9 @@
           "all": "كل الأنواع",
           "indexing": "فهرسة المستندات",
           "doc_permission_sync": "مزامنة الأذونات",
-          "group_sync": "مزامنة عضوية المجموعات"
+          "group_sync": "مزامنة عضوية المجموعات",
+          "pruning": "تقليم المستندات",
+          "checks": "فحوصات الموصّل"
         },
         "detail": {
           "queued": "في قائمة الانتظار",
@@ -2473,15 +2486,19 @@
         "actions": {
           "stages": "عرض مقاييس المراحل",
           "cancel": "إلغاء",
-          "logs": "عرض السجلات"
+          "logs": "عرض السجلات",
+          "checks": "عرض نتائج الفحوصات"
         },
         "warnings": {
-          "tooltip": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}"
+          "tooltip": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
+          "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
         },
         "figures": {
           "indexed": "مفهرس",
           "synced": "متزامن",
-          "memberships": "عضويات"
+          "memberships": "عضويات",
+          "removed": "تمت إزالتها",
+          "checks": "فحوصات تم تشغيلها"
         },
         "counts": {
           "newDocs": "{count, plural, one {مستند جديد واحد} other {# مستندات جديدة}}",
@@ -2491,7 +2508,10 @@
           "groups": "{count, plural, one {مجموعة واحدة} other {# مجموعات}}",
           "running": "{count, plural, one {تشغيل واحد قيد التنفيذ} other {# عمليات تشغيل قيد التنفيذ}}",
           "succeeded": "{count, plural, one {نجح تشغيل واحد} other {نجحت # عمليات تشغيل}}",
-          "failed": "{count, plural, one {فشل تشغيل واحد} other {فشلت # عمليات تشغيل}}"
+          "failed": "{count, plural, one {فشل تشغيل واحد} other {فشلت # عمليات تشغيل}}",
+          "passedChecks": "{count, plural, one {نجح فحص واحد} other {نجح # فحوصات}}",
+          "failedChecks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}",
+          "skippedChecks": "{count, plural, one {تم تخطي فحص واحد} other {تم تخطي # فحوصات}}"
         },
         "search": {
           "placeholder": "ابحث في أخطاء التشغيل..."
@@ -2524,11 +2544,17 @@
         "errorModal": {
           "indexing": "خطأ في تشغيل الفهرسة",
           "doc_permission_sync": "خطأ في مزامنة أذونات المستندات",
-          "group_sync": "خطأ في مزامنة عضوية المجموعات"
+          "group_sync": "خطأ في مزامنة عضوية المجموعات",
+          "pruning": "خطأ في تقليم المستندات",
+          "checks": "خطأ في فحوصات الموصّل"
         },
         "toasts": {
           "canceled": "يجري إلغاء التشغيل.",
           "cancelFailed": "تعذر إلغاء التشغيل. حاول مرة أخرى."
+        },
+        "checkResults": {
+          "title": "فحوصات الموصّل ({count})",
+          "close": "إغلاق"
         }
       },
       "activity": {
@@ -2574,19 +2600,38 @@
             "stopped": "توقفت مزامنة عضوية المجموعات مع أخطاء",
             "errors": "تمت مزامنة عضوية المجموعات مع أخطاء",
             "resolved": "تم حل أخطاء مزامنة عضوية المجموعات"
+          },
+          "pruning": {
+            "failed": "فشل التقليم",
+            "running": "التقليم قيد التنفيذ مع وجود أخطاء",
+            "stopped": "توقف التقليم مع وجود أخطاء",
+            "errors": "اكتمل التقليم مع وجود أخطاء",
+            "resolved": "تم حل أخطاء التقليم"
+          },
+          "checks": {
+            "failed": "فشلت فحوصات الموصّل",
+            "running": "فحوصات الموصّل قيد التنفيذ مع وجود أخطاء",
+            "stopped": "توقفت فحوصات الموصّل مع وجود أخطاء",
+            "errors": "اكتملت فحوصات الموصّل مع وجود أخطاء",
+            "resolved": "تم حل أخطاء فحوصات الموصّل"
           }
         },
         "description": {
           "indexing": "{count, plural, zero {لم تتم فهرسة أي مستند} one {تمت فهرسة مستند واحد} two {تمت فهرسة مستندين} few {تمت فهرسة # مستندات} many {تمت فهرسة # مستندًا} other {تمت فهرسة # مستند}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
           "doc_permission_sync": "{count, plural, zero {لم تتم مزامنة أي مستند} one {تمت مزامنة مستند واحد} two {تمت مزامنة مستندين} few {تمت مزامنة # مستندات} many {تمت مزامنة # مستندًا} other {تمت مزامنة # مستند}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
-          "group_sync": "{count, plural, zero {لم تتم مزامنة أي عضوية} one {تمت مزامنة عضوية واحدة} two {تمت مزامنة عضويتين} few {تمت مزامنة # عضويات} many {تمت مزامنة # عضوية} other {تمت مزامنة # عضوية}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}."
+          "group_sync": "{count, plural, zero {لم تتم مزامنة أي عضوية} one {تمت مزامنة عضوية واحدة} two {تمت مزامنة عضويتين} few {تمت مزامنة # عضويات} many {تمت مزامنة # عضوية} other {تمت مزامنة # عضوية}}. مدة التشغيل {minutes, plural, zero {أقل من دقيقة} one {دقيقة واحدة} two {دقيقتان} few {# دقائق} many {# دقيقة} other {# دقيقة}}.",
+          "pruning": "{count, plural, one {تمت إزالة مستند واحد} other {تمت إزالة # مستندات}}. مدة التقليم {minutes, plural, one {دقيقة واحدة} other {# دقائق}}.",
+          "checks": "{count, plural, one {تم تشغيل فحص واحد} other {تم تشغيل # فحوصات}}. مدة الفحص {minutes, plural, one {دقيقة واحدة} other {# دقائق}}.",
+          "checksFailed": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}."
         },
         "tags": {
           "stackTrace": "تتبع المكدس",
           "indexing": "{count, plural, zero {لم يفشل أي مستند} one {فشل مستند واحد} two {فشل مستندان} few {فشلت # مستندات} many {فشل # مستندًا} other {فشل # مستند}}",
           "doc_permission_sync": "{count, plural, zero {لم تفشل مزامنة أي مستند} one {فشلت مزامنة مستند واحد} two {فشلت مزامنة مستندين} few {فشلت مزامنة # مستندات} many {فشلت مزامنة # مستندًا} other {فشلت مزامنة # مستند}}",
           "group_sync": "{count, plural, zero {لم تفشل مزامنة أي مجموعة} one {فشلت مزامنة مجموعة واحدة} two {فشلت مزامنة مجموعتين} few {فشلت مزامنة # مجموعات} many {فشلت مزامنة # مجموعة} other {فشلت مزامنة # مجموعة}}",
-          "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}"
+          "resolvedDocs": "{count, plural, zero {لم يتم حل أي مستند} one {تم حل مستند واحد} two {تم حل مستندين} few {تم حل # مستندات} many {تم حل # مستندًا} other {تم حل # مستند}}",
+          "pruning": "{count, plural, one {فشل مستند واحد} other {فشل # مستندات}}",
+          "checks": "{count, plural, one {فشل فحص واحد} other {فشل # فحوصات}}"
         },
         "more": "عرض المزيد",
         "empty": {
@@ -3100,6 +3145,10 @@
         "units": {
           "hours": "ساعات",
           "minutes": "دقائق"
+        },
+        "checkFrequency": {
+          "title": "تشغيل الفحوصات كل",
+          "description": "إعادة تشغيل فحوصات الموصّل وفق هذا الجدول."
         }
       },
       "settings": {
@@ -7978,7 +8027,12 @@
         "paused": "موقوف مؤقتًا",
         "scheduled": "مجدولة",
         "synced": "تمت المزامنة",
-        "syncing": "جارٍ المزامنة"
+        "syncing": "جارٍ المزامنة",
+        "pruning": "جارٍ التقليم",
+        "pruned": "تم التقليم",
+        "checking": "جارٍ الفحص",
+        "passed": "ناجح",
+        "failedToRun": "تعذر التشغيل"
       }
     },
     "systemInfo": {
