@@ -10,6 +10,7 @@ interface SettleChatSessionOptions {
   sessionId: string;
   controller: AbortController;
   errorMessage: string;
+  mode?: "completion" | "recovery";
   refreshHistory?: boolean;
   completeRendering?: boolean;
 }
@@ -44,6 +45,7 @@ export async function settleChatSession({
   sessionId,
   controller,
   errorMessage,
+  mode = "completion",
   refreshHistory = true,
   completeRendering = true,
 }: SettleChatSessionOptions): Promise<void> {
@@ -59,12 +61,17 @@ export async function settleChatSession({
       .getState()
       .sessions.get(sessionId)?.sendAcknowledged;
     if (sendAcknowledged) {
-      await sendAcknowledged;
+      try {
+        await sendAcknowledged;
+      } catch (error) {
+        // Explicit recovery checks server state after the original send failed.
+        if (mode !== "recovery") throw error;
+      }
       if (!ownsSettlement()) return;
     }
     await waitForChatSessionIdle(sessionId);
     if (!ownsSettlement()) return;
-    if (refreshHistory) {
+    if (refreshHistory || mode === "recovery") {
       const settled = await fetchSettledChatSession(sessionId);
       if (!ownsSettlement()) return;
       if (settled.is_processing || settled.current_stream)

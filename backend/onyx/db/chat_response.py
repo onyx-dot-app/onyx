@@ -2,7 +2,7 @@ import json
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens
@@ -389,7 +389,6 @@ def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatM
                 & (ChatResponseItem.step_index == ToolCall.turn_number),
             )
             .where(
-                ChatResponseItem.message.is_not(None),
                 ToolCall.parent_chat_message_id.in_(response_ids),
                 ChatMessage.response_status.is_not(None),
             )
@@ -466,9 +465,7 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
             response, agent_path, invoking_message_id=invoking_message_id
         )
         message_ids_by_step = {
-            row.step_index: row.id
-            for row in response.response_items
-            if row.message is not None
+            row.step_index: row.id for row in response.response_items
         }
         message_ids_by_tool: dict[int, str] = {}
         for row in response.response_items:
@@ -532,12 +529,6 @@ def save_response_content(
     if not persist_content:
         message.response_status = record.status
         return []
-    if (
-        message.response_status is not None
-        and message.response_status.is_terminal
-        and message.run_id != sanitize_string(record.run_id)
-    ):
-        raise ValueError("Response content has already been saved")
     if record.agent_id != str(message.chat_session_id):
         raise ValueError("Root response must use its session identity")
     writer = _ResponseWriter(db_session, message, presentation or {})
@@ -561,17 +552,19 @@ class _ResponseWriter:
         self.db_session = db_session
         self.response = response
         self.branch_ids = visible_message_ids(db_session, response)
-        self.sessions = {response.chat_session_id: response.chat_session}
         self.tools: dict[tuple[str, str], ToolCall] = {}
         self.presentation = dict(presentation)
-        self.responses: dict[str, ChatMessage] = {}
+        self.seen_response_ids: set[int] = set()
 
     def store(
         self, record: ResponseRecord, parent: ChatMessage | None, depth: int = 0
     ) -> None:
-        if depth > MAX_AGENT_DEPTH or len(self.responses) >= MAX_AGENT_HISTORY_RUNS:
+        if (
+            depth > MAX_AGENT_DEPTH
+            or len(self.seen_response_ids) >= MAX_AGENT_HISTORY_RUNS
+        ):
             raise ValueError("Response hierarchy exceeds its limit")
-        if record.agent_id is None or record.run_id in self.responses:
+        if record.agent_id is None or int(record.run_id) in self.seen_response_ids:
             raise ValueError("Execution identity is missing or repeated")
         if len(record.messages) > MAX_CONVERSATION_MESSAGES:
             raise ValueError("Response exceeds its content limit")
@@ -587,13 +580,11 @@ class _ResponseWriter:
                 raise ValueError("Root response has no question")
         else:
             response = self._child_response(record, parent, instruction)
-        run_id = sanitize_string(record.run_id)
-        if response.run_id is not None and response.run_id != run_id:
-            raise ValueError("Response belongs to another SDK run")
-        response.run_id = run_id
+        if str(response.id) != record.run_id:
+            raise ValueError("Response identity does not match its reserved message")
         response.response_status = record.status
         response.response_failure = record.failure
-        self.responses[record.run_id] = response
+        self.seen_response_ids.add(response.id)
         self.tools.update(
             write_response_items(
                 self.db_session,
@@ -649,23 +640,18 @@ class _ResponseWriter:
         )
         if invocation is None or invocation.parent_chat_message_id != parent.id:
             raise ValueError("Child instruction has no parent invocation")
-        session_id = UUID(record.agent_id)
-        session = self.sessions.get(session_id) or self.db_session.get(
-            ChatSession, session_id
-        )
-        if session is None:
-            session = ChatSession(
-                id=session_id,
-                spawned_by_message_id=parent.id,
-                agent_name=sanitize_string(record.agent_path.rsplit("/", 1)[-1]),
-                description=sanitize_string(record.agent_description),
-                restoration_config=record.restoration_config,
-            )
-            self.db_session.add(session)
-            self.db_session.flush()
+        response = find_response__no_commit(self.db_session, int(record.run_id))
+        if response is None:
+            raise ValueError("Child response was not reserved")
+        if response.chat_session_id != UUID(record.agent_id):
+            raise ValueError("Saved response belongs to another agent")
+        question = response.parent_message
+        if question is None or question.invoking_tool_call_id != invocation.id:
+            raise ValueError("Saved response belongs to another invocation")
+        creation_id = response.chat_session.spawned_by_message_id
         creation_response = (
-            self.db_session.get(ChatMessage, session.spawned_by_message_id)
-            if session.spawned_by_message_id is not None
+            self.db_session.get(ChatMessage, creation_id)
+            if creation_id is not None
             else None
         )
         if (
@@ -675,61 +661,152 @@ class _ResponseWriter:
             not in self.branch_ids
         ):
             raise ValueError("Child session is unavailable on this branch")
-        self.sessions[session.id] = session
-        predecessor = self.responses.get(record.previous_run_id or "")
-        if predecessor is None and record.previous_run_id:
-            if record.previous_run_id.isdecimal():
-                predecessor_id = int(record.previous_run_id)
-            else:
-                predecessor_id = self.db_session.scalar(
-                    select(ChatMessage.id).where(
-                        ChatMessage.run_id == sanitize_string(record.previous_run_id)
-                    )
-                )
-                if predecessor_id is None:
-                    raise ValueError("Child predecessor has no saved response")
-            predecessor = self.db_session.get(ChatMessage, predecessor_id)
-            if (
-                predecessor is None
-                or root_response_id(self.db_session, predecessor) not in self.branch_ids
-            ):
-                raise ValueError("Child predecessor is unavailable on this branch")
-        if predecessor is not None and predecessor.chat_session_id != session.id:
-            raise ValueError("Child predecessor belongs to another conversation")
-        response = self.db_session.scalar(
-            select(ChatMessage).where(
-                ChatMessage.run_id == sanitize_string(record.run_id)
-            )
-        )
-        if response is not None:
-            if response.chat_session_id != session.id:
-                raise ValueError("Saved response belongs to another agent")
-            question = response.parent_message
-            if question is None or question.invoking_tool_call_id != invocation.id:
-                raise ValueError("Saved response belongs to another invocation")
-        else:
-            instruction_text = sanitize_string(instruction.text)
-            question = ChatMessage(
-                chat_session_id=session.id,
-                parent_message_id=predecessor.id if predecessor else None,
-                invoking_tool_call_id=invocation.id,
-                message=instruction_text,
-                token_count=count_tokens(instruction_text),
-                message_type=MessageType.USER,
-            )
-            self.db_session.add(question)
-            self.db_session.flush()
-            response = ChatMessage(
-                chat_session_id=session.id,
-                parent_message_id=question.id,
-                message="",
-                token_count=0,
-                message_type=MessageType.ASSISTANT,
-            )
-            self.db_session.add(response)
-            self.db_session.flush()
-            question.latest_child_message_id = response.id
+        if question.parent_message_id != (
+            int(record.previous_run_id) if record.previous_run_id else None
+        ):
+            raise ValueError("Saved response belongs to another predecessor")
         return response
+
+
+def reserve_child_response__no_commit(
+    session: Session,
+    root_message_id: int,
+    *,
+    agent: AgentInfo,
+    instruction: UserMessage,
+    previous_response_id: int | None,
+    parent_response_id: int,
+    parent_message_id: str,
+    parent_tool_call_id: str,
+) -> int:
+    """Reserve a child question and response before execution; caller commits."""
+    configure_response_transaction__no_commit(session)
+    root = session.get(ChatMessage, root_message_id)
+    parent = find_response__no_commit(session, parent_response_id)
+    if root is None or parent is None or root_response_id(session, parent) != root.id:
+        raise ValueError("Parent response is unavailable on this branch")
+    if agent.parent_id != str(parent.chat_session_id):
+        raise ValueError("Child agent belongs to another parent")
+    if not isinstance(instruction.content, str):
+        raise ValueError("Saved child instructions must contain text only")
+    generation = next(
+        (row for row in parent.response_items if row.id == parent_message_id),
+        None,
+    )
+    invocation = next(
+        (
+            tool
+            for tool in parent.tool_calls or []
+            if generation is not None
+            and tool.turn_number == generation.step_index
+            and tool.tool_call_id == parent_tool_call_id
+        ),
+        None,
+    )
+    if invocation is None:
+        raise ValueError("Child instruction has no parent invocation")
+    child_session = session.get(ChatSession, UUID(agent.id))
+    branch_ids = visible_message_ids(session, root)
+    if child_session is None:
+        child_session = ChatSession(
+            id=UUID(agent.id),
+            spawned_by_message_id=parent.id,
+            agent_name=sanitize_string(agent.path.rsplit("/", 1)[-1]),
+            description=sanitize_string(agent.description),
+            restoration_config=agent.restoration_config,
+        )
+        session.add(child_session)
+        session.flush()
+    creation_response = (
+        session.get(ChatMessage, child_session.spawned_by_message_id)
+        if child_session.spawned_by_message_id is not None
+        else None
+    )
+    if (
+        creation_response is None
+        or creation_response.chat_session_id != parent.chat_session_id
+        or root_response_id(session, creation_response) not in branch_ids
+    ):
+        raise ValueError("Child session is unavailable on this branch")
+    predecessor = None
+    if previous_response_id is not None:
+        predecessor = find_response__no_commit(session, previous_response_id)
+        if (
+            predecessor is None
+            or predecessor.chat_session_id != child_session.id
+            or root_response_id(session, predecessor) not in branch_ids
+        ):
+            raise ValueError("Child predecessor is unavailable on this branch")
+        if (
+            predecessor.response_status is None
+            or not predecessor.response_status.is_terminal
+        ):
+            raise ValueError("Child predecessor has not finished")
+    instruction_text = sanitize_string(instruction.text)
+    question = ChatMessage(
+        chat_session_id=child_session.id,
+        parent_message_id=predecessor.id if predecessor else None,
+        invoking_tool_call_id=invocation.id,
+        message=instruction_text,
+        token_count=count_tokens(instruction_text),
+        message_type=MessageType.USER,
+    )
+    session.add(question)
+    session.flush()
+    response = ChatMessage(
+        chat_session_id=child_session.id,
+        parent_message_id=question.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+    )
+    session.add(response)
+    session.flush()
+    question.latest_child_message_id = response.id
+    return response.id
+
+
+def abort_response_start__no_commit(
+    session: Session, root_message_id: int, response_id: int
+) -> None:
+    """Undo an unused reservation; caller holds its ownership lock."""
+    configure_response_transaction__no_commit(session)
+    response = find_response__no_commit(session, response_id)
+    if (
+        response is None
+        or response.response_status not in (None, RunStatus.RUNNING)
+        or response.response_items
+        or session.get(ChatResponseCheckpoint, response.id) is not None
+    ):
+        return
+    branch = session.get(ChatMessage, root_message_id)
+    root_id = root_response_id(session, response)
+    root = session.get(ChatMessage, root_id)
+    if (
+        branch is None
+        or root is None
+        or root.chat_session_id != branch.chat_session_id
+        or root_id not in visible_message_ids(session, branch)
+    ):
+        raise ValueError("Response is unavailable on this branch")
+    if response.id == root_id:
+        response.response_status = None
+        return
+    question = response.parent_message
+    if question is None or question.invoking_tool_call_id is None:
+        raise ValueError("Child response has no invocation")
+    child_session_id = response.chat_session_id
+    session.execute(
+        delete(ChatMessage).where(ChatMessage.id.in_([response.id, question.id]))
+    )
+    session.execute(
+        delete(ChatSession).where(
+            ChatSession.id == child_session_id,
+            ~select(ChatMessage.id)
+            .where(ChatMessage.chat_session_id == child_session_id)
+            .exists(),
+        )
+    )
 
 
 def read_response_steps(response: ChatMessage) -> list[StepRecord]:
@@ -738,51 +815,37 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
         (tool.turn_number, tool.tool_call_id): tool
         for tool in response.tool_calls or []
     }
-    calls: dict[str, str] = {}
-    # Tool completion order does not determine conversation order.
-    for row in sorted(
-        response.response_items,
-        key=lambda row: (row.step_index, row.message is None),
-    ):
+    # Assistant call order determines result order, not tool completion order.
+    for row in sorted(response.response_items, key=lambda row: row.step_index):
         if row.chat_message_id != response.id:
             raise ValueError("Response item ownership is invalid")
-        if row.message is not None:
-            if row.message.id != row.id or row.step_index != len(steps):
-                raise ValueError("Response assistant identity or step is invalid")
-            if row.generation_status is None:
-                raise ValueError("Assistant message has no generation outcome")
-            step = StepRecord(
-                message=row.message.model_copy(deep=True),
-                generation_status=row.generation_status,
-            )
-            calls = {call.id: call.name for call in row.message.tool_calls}
-            for call in row.message.tool_calls:
-                tool = tools.get((row.step_index, call.id))
-                if tool is None:
-                    raise ValueError(
-                        "Assistant tool call has no matching stored invocation"
-                    )
-                if tool.operation_status is not None:
-                    step.tools[call.id] = ToolExecutionRecord(
-                        status=tool.operation_status
-                    )
-            steps.append(step)
-            continue
-        tool = row.tool_call
-        if (
-            tool is None
-            or tool.parent_chat_message_id != response.id
-            or tool.turn_number != len(steps) - 1
-            or row.step_index != len(steps) - 1
-            or tool.tool_call_id not in calls
-            or tool.result is None
-            or tool.result.tool_call_id != tool.tool_call_id
-            or tool.result.tool_name != calls[tool.tool_call_id]
-            or tool.tool_call_id not in steps[-1].tools
-        ):
-            raise ValueError("Response tool result has no matching call")
-        del calls[tool.tool_call_id]
-        steps[-1].tools[tool.tool_call_id].result = tool.result.model_copy(deep=True)
+        if row.message.id != row.id or row.step_index != len(steps):
+            raise ValueError("Response assistant identity or step is invalid")
+        step = StepRecord(
+            message=row.message.model_copy(deep=True),
+            generation_status=row.generation_status,
+        )
+        for call in row.message.tool_calls:
+            tool = tools.pop((row.step_index, call.id), None)
+            if tool is None or tool.parent_chat_message_id != response.id:
+                raise ValueError(
+                    "Assistant tool call has no matching stored invocation"
+                )
+            result = tool.result
+            if result is not None and (
+                tool.operation_status is None
+                or result.tool_call_id != call.id
+                or result.tool_name != call.name
+            ):
+                raise ValueError("Response tool result has no matching call")
+            if tool.operation_status is not None:
+                step.tools[call.id] = ToolExecutionRecord(
+                    status=tool.operation_status,
+                    result=result.model_copy(deep=True) if result is not None else None,
+                )
+        steps.append(step)
+    if any(tool.result is not None for tool in tools.values()):
+        raise ValueError("Response tool result has no matching call")
     return steps
 
 
@@ -794,14 +857,11 @@ def _invoking_message_id(invocation: ToolCall) -> str:
         select(ChatResponseItem).where(
             ChatResponseItem.chat_message_id == invocation.parent_chat_message_id,
             ChatResponseItem.step_index == invocation.turn_number,
-            ChatResponseItem.message.is_not(None),
         )
     )
-    if (
-        row is None
-        or row.message is None
-        or invocation.tool_call_id not in {call.id for call in row.message.tool_calls}
-    ):
+    if row is None or invocation.tool_call_id not in {
+        call.id for call in row.message.tool_calls
+    }:
         raise ValueError("Tool invocation has no assistant message")
     return row.id
 
@@ -824,9 +884,7 @@ def read_response_record(
     invocation = question.invoking_tool_call
     input_id = f"chat:{question.id}"
     if invocation is not None:
-        if response.run_id is None:
-            raise ValueError("Child response has no run identity")
-        input_id = run_input_message_id(response.run_id, 0)
+        input_id = run_input_message_id(str(response.id), 0)
     previous = question.parent_message
     if previous is not None and previous.response_status is None:
         previous = None
@@ -875,13 +933,22 @@ def write_response_items(
         for tool in response.tool_calls or []
     }
     incoming_ids: set[str] = set()
+    incoming_calls: set[tuple[int, str]] = set()
     if record.answer_step_index is not None and not (
         0 <= record.answer_step_index < len(record.steps)
     ):
         raise ValueError("Selected answer is not a recorded step")
 
-    def item_row(item_id: str, step_index: int) -> ChatResponseItem:
-        item_id = sanitize_string(item_id)
+    response_tools = response.tool_calls
+    if response_tools is None:
+        response_tools = []
+        response.tool_calls = response_tools
+    for step_index, step in enumerate(record.steps):
+        message = step.message
+        message_id = message.id
+        if message_id is None:
+            raise ValueError("Saved assistant message has no identity")
+        item_id = sanitize_string(message_id)
         if item_id in incoming_ids:
             raise ValueError("Response contains duplicate item identities")
         incoming_ids.add(item_id)
@@ -894,18 +961,6 @@ def write_response_items(
             raise ValueError("Response item identity or step changed")
         if item_id not in existing:
             response.response_items.append(row)
-        return row
-
-    response_tools = response.tool_calls
-    if response_tools is None:
-        response_tools = []
-        response.tool_calls = response_tools
-    for step_index, step in enumerate(record.steps):
-        message = step.message
-        message_id = message.id
-        if message_id is None:
-            raise ValueError("Saved assistant message has no identity")
-        row = item_row(message_id, step_index)
         row.message = message
         row.generation_status = step.generation_status
         row.is_answer = step_index == record.answer_step_index
@@ -920,6 +975,7 @@ def write_response_items(
                 raise ValueError("Duplicate tool call within one assistant message")
             execution = step.tools.get(call.id)
             stored_call_id = sanitize_string(call.id)
+            incoming_calls.add((step_index, stored_call_id))
             arguments = sanitize_json_like(call.arguments)
             tool = stored_tools.get((step_index, stored_call_id)) or ToolCall(
                 chat_session_id=response.chat_session_id,
@@ -932,6 +988,10 @@ def write_response_items(
                 tool_call_tokens=count_tokens(json.dumps(arguments)),
                 legacy_response="",
             )
+            if tool.result is not None and (
+                execution is None or execution.result is None
+            ):
+                raise ValueError("Response update cannot discard recorded results")
             tool.tool_call_arguments = arguments
             tool.operation_status = execution.status if execution is not None else None
             if (step_index, stored_call_id) not in stored_tools:
@@ -945,9 +1005,12 @@ def write_response_items(
                 tool.result = StoredToolResult.model_validate(
                     result, from_attributes=True
                 )
-                result_row = item_row(f"{message_id}:result:{call.id}", step_index)
-                result_row.tool_call = tool
-                result_row.is_answer = False
+    if any(
+        tool.result is not None
+        for key, tool in stored_tools.items()
+        if key not in incoming_calls
+    ):
+        raise ValueError("Response update cannot discard recorded results")
     if existing.keys() - incoming_ids:
         raise ValueError("Response update cannot discard recorded items")
     db_session.flush()
@@ -970,7 +1033,6 @@ class SavedResponse(BaseModel):
 
 class ResponseStatus(BaseModel):
     message_id: int
-    run_id: str
     root_message_id: int
     root_session_id: UUID
     parent_agent_id: str | None
@@ -979,7 +1041,6 @@ class ResponseStatus(BaseModel):
 
 class _ResponseAncestry(BaseModel):
     message_id: int
-    run_id: str | None
     session_id: UUID
     status: RunStatus | None
     spawned_by_message_id: int | None
@@ -987,19 +1048,15 @@ class _ResponseAncestry(BaseModel):
     parent_response_id: int | None
 
 
-def _read_response_ancestry(session: Session, run_id: str) -> _ResponseAncestry | None:
+def _read_response_ancestry(
+    session: Session, response_id: int
+) -> _ResponseAncestry | None:
     question = aliased(ChatMessage)
     spawning_response = aliased(ChatMessage)
-    predicate = (
-        ChatMessage.id == int(run_id)
-        if run_id.isdecimal()
-        else ChatMessage.run_id == run_id
-    )
     row = (
         session.execute(
             select(
                 ChatMessage.id.label("message_id"),
-                ChatMessage.run_id,
                 ChatMessage.chat_session_id.label("session_id"),
                 ChatMessage.response_status.label("status"),
                 ChatSession.spawned_by_message_id,
@@ -1013,7 +1070,7 @@ def _read_response_ancestry(session: Session, run_id: str) -> _ResponseAncestry 
                 spawning_response,
                 spawning_response.id == ChatSession.spawned_by_message_id,
             )
-            .where(predicate)
+            .where(ChatMessage.id == response_id)
         )
         .mappings()
         .one_or_none()
@@ -1022,10 +1079,10 @@ def _read_response_ancestry(session: Session, run_id: str) -> _ResponseAncestry 
 
 
 def read_response_status__no_commit(
-    session: Session, run_id: str
+    session: Session, response_id: int
 ) -> ResponseStatus | None:
     """Read status and authorization identities without loading conversation content."""
-    response = _read_response_ancestry(session, run_id)
+    response = _read_response_ancestry(session, response_id)
     if response is None or response.status is None:
         return None
     current = response
@@ -1036,13 +1093,12 @@ def read_response_status__no_commit(
         visited.add(current.message_id)
         if current.parent_session_id is None or current.parent_response_id is None:
             raise ValueError("Child response is missing its invocation or parent")
-        parent = _read_response_ancestry(session, str(current.parent_response_id))
+        parent = _read_response_ancestry(session, current.parent_response_id)
         if parent is None:
             raise ValueError("Parent response is unavailable")
         current = parent
     return ResponseStatus(
         message_id=response.message_id,
-        run_id=response.run_id or str(response.message_id),
         root_message_id=current.message_id,
         root_session_id=current.session_id,
         parent_agent_id=str(response.parent_session_id)
@@ -1052,15 +1108,10 @@ def read_response_status__no_commit(
     )
 
 
-def find_response__no_commit(session: Session, run_id: str) -> ChatMessage | None:
-    predicate = (
-        ChatMessage.id == int(run_id)
-        if run_id.isdecimal()
-        else ChatMessage.run_id == run_id
-    )
+def find_response__no_commit(session: Session, response_id: int) -> ChatMessage | None:
     return session.scalar(
         select(ChatMessage)
-        .where(predicate)
+        .where(ChatMessage.id == response_id)
         .options(
             selectinload(ChatMessage.response_items),
             selectinload(ChatMessage.tool_calls),
@@ -1068,8 +1119,10 @@ def find_response__no_commit(session: Session, run_id: str) -> ChatMessage | Non
     )
 
 
-def read_response__no_commit(session: Session, run_id: str) -> SavedResponse | None:
-    response = find_response__no_commit(session, run_id)
+def read_response__no_commit(
+    session: Session, response_id: int
+) -> SavedResponse | None:
+    response = find_response__no_commit(session, response_id)
     if response is None or response.response_status is None:
         return None
     root_id = root_response_id(session, response)
@@ -1085,17 +1138,6 @@ def read_response__no_commit(session: Session, run_id: str) -> SavedResponse | N
             session, response.chat_session_id, visible_message_ids(session, response)
         )
     )
-    record.run_id = response.run_id or str(response.id)
-    if record.previous_run_id is not None:
-        previous = session.get(ChatMessage, int(record.previous_run_id))
-        if previous is None:
-            raise ValueError("Previous response is unavailable")
-        record.previous_run_id = previous.run_id or str(previous.id)
-    if record.parent_run_id is not None:
-        parent = session.get(ChatMessage, int(record.parent_run_id))
-        if parent is None:
-            raise ValueError("Parent response is unavailable")
-        record.parent_run_id = parent.run_id or str(parent.id)
     return SavedResponse(
         message_id=response.id,
         root_message_id=root_id,
@@ -1117,23 +1159,19 @@ def save_response_record__no_commit(
     session: Session,
     root_message_id: int,
     record: ResponseRecord,
-) -> int:
+) -> None:
     configure_response_transaction__no_commit(session)
     root = session.get(ChatMessage, root_message_id)
     if root is None:
         raise ValueError("Response root is unavailable")
     parent = None
     if record.parent_run_id is not None:
-        parent = find_response__no_commit(session, record.parent_run_id)
+        parent = find_response__no_commit(session, int(record.parent_run_id))
         if parent is None or root_response_id(session, parent) != root.id:
             raise ValueError("Parent response is unavailable on this branch")
     writer = _ResponseWriter(session, root, {})
     if parent is not None:
-        message_ids_by_step = {
-            row.step_index: row.id
-            for row in parent.response_items
-            if row.message is not None
-        }
+        message_ids_by_step = {row.step_index: row.id for row in parent.response_items}
         for tool in parent.tool_calls or []:
             assistant_message_id = message_ids_by_step.get(tool.turn_number)
             if assistant_message_id is None:
@@ -1141,4 +1179,3 @@ def save_response_record__no_commit(
             writer.tools[(assistant_message_id, tool.tool_call_id)] = tool
     writer.store(record, parent)
     session.flush()
-    return writer.responses[record.run_id].id

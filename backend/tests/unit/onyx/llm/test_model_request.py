@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from onyx.configs.chat_configs import LLM_INVOKE_TIMEOUT_S, LLM_SOCKET_READ_TIMEOUT
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import GenerationContext, LLMConfig
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_response import (
     ChatCompletionMessageToolCall,
     Choice,
@@ -38,16 +38,14 @@ from tests.unit.onyx.agents.fakes import collect_generation
 
 class RecordingProvider(LitellmLLM):
     def __init__(self) -> None:
-        self.calls: list[dict[str, Any]] = []
-
-    @property
-    def config(self) -> LLMConfig:
-        return LLMConfig(
+        super().__init__(
+            api_key=None,
             model_provider="openai",
             model_name="test",
             temperature=0,
             max_input_tokens=4096,
         )
+        self.calls: list[dict[str, Any]] = []
 
     def invoke_raw(self, prompt: Any, *args: Any, **kwargs: Any) -> ModelResponse:
         assert not args

@@ -3,7 +3,6 @@
 from pathlib import Path
 from uuid import uuid4
 
-import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
@@ -20,7 +19,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
@@ -229,44 +227,24 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                     "message_kind",
                     "summary_message_id",
                     "invocation_index",
+                    "run_id",
                 } & {
                     column["name"]
                     for column in inspect(connection).get_columns(
                         "chat_message", schema=schema
                     )
                 }
-                # A failed unique build leaves a committed schema and an invalid index.
+                # Retry after metadata commits but before all indexes exist.
                 connection.execute(
-                    text(
-                        "ALTER TABLE chat_message DROP CONSTRAINT uq_chat_message_run_id"
-                    )
-                )
-                connection.execute(
-                    text(
-                        "UPDATE chat_message SET run_id='duplicate' WHERE id IN (42, 43)"
-                    )
+                    text("DROP INDEX ix_chat_message_invoking_tool_call_id")
                 )
                 connection.commit()
-                with pytest.raises(IntegrityError):
-                    revision.module.upgrade()
-                assert (
-                    connection.scalar(
-                        text("""
-                    SELECT indisvalid FROM pg_index
-                    WHERE indexrelid='uq_chat_message_run_id'::regclass
-                """)
-                    )
-                    is False
-                )
-                connection.execute(
-                    text("UPDATE chat_message SET run_id=NULL WHERE id=43")
-                )
                 revision.module.upgrade()
                 assert (
                     connection.scalar(
                         text("""
                     SELECT indisvalid FROM pg_index
-                    WHERE indexrelid='uq_chat_message_run_id'::regclass
+                    WHERE indexrelid='ix_chat_message_invoking_tool_call_id'::regclass
                 """)
                     )
                     is True
@@ -438,7 +416,10 @@ def _assert_response_schema_contract(connection: Connection, schema: str) -> Non
         for column in inspector.get_columns("chat_response_item", schema=schema)
     }
     assert {"message", "generation_status"} <= response_columns
-    assert not {"content", "operation_status", "position"} & response_columns
+    assert (
+        not {"content", "operation_status", "position", "tool_call_id"}
+        & response_columns
+    )
     tool_columns = {
         column["name"] for column in inspector.get_columns("tool_call", schema=schema)
     }
@@ -446,13 +427,19 @@ def _assert_response_schema_contract(connection: Connection, schema: str) -> Non
         not {"argument_error", "raw_arguments", "arguments_complete", "tool_name"}
         & tool_columns
     )
-    assert "ix_chat_response_item_chat_message_id" not in {
+    assert all(
+        not column["nullable"]
+        for column in inspector.get_columns("chat_response_item", schema=schema)
+        if column["name"] in {"message", "generation_status"}
+    )
+    assert "ix_response_item_step" not in {
         index["name"]
         for index in inspector.get_indexes("chat_response_item", schema=schema)
     }
     assert any(
         index["column_names"] == ["chat_message_id", "step_index"]
-        and not index["unique"]
+        and index["unique"]
+        and not index.get("dialect_options", {}).get("postgresql_where")
         for index in inspector.get_indexes("chat_response_item", schema=schema)
     )
     checkpoint_columns = {

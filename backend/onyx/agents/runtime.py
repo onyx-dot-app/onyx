@@ -313,43 +313,64 @@ class Agent:
                 or self.generation_context.cancellation
                 or CancellationSignal()
             )
-            run_id = _snapshot.run_id if _snapshot is not None else str(uuid4())
-            run = Run(
-                _snapshot.model_copy(deep=True)
-                if _snapshot is not None
-                else RunState(
-                    progress=RunProgress(
-                        step_limit=max_steps, deadline_at=_deadline_at
-                    ),
-                    run_id=run_id,
+            previous_run_id = previous.id if previous else self._previous_run_id
+            if _snapshot is not None:
+                run_id = _snapshot.run_id
+            elif coordinator is not None:
+                run_id = coordinator.reserve_run_id(
                     agent_id=self.id,
-                    previous_run_id=previous.id if previous else self._previous_run_id,
+                    messages=messages,
+                    previous_run_id=previous_run_id,
                     parent_run_id=parent_run_id,
-                    parent_tool_call_id=parent_tool_call_id,
                     parent_message_id=parent_message_id,
-                    status=RunStatus.RUNNING,
-                    # Child instructions have identities within their own conversation.
-                    input_messages=[
-                        message.model_copy(
-                            deep=True,
-                            update={
-                                "id": message.id
-                                if parent_run_id is None and message.id
-                                else run_input_message_id(run_id, index)
-                            },
-                        )
-                        for index, message in enumerate(messages)
-                    ],
-                    checkpoint=history.checkpoint,
-                ),
-                cancellation_signal,
-                event_dispatcher,
-                history=history,
-                event_parent=_event_parent,
-            )
+                    parent_tool_call_id=parent_tool_call_id,
+                )
+            else:
+                run_id = str(uuid4())
+            try:
+                run = Run(
+                    _snapshot.model_copy(deep=True)
+                    if _snapshot is not None
+                    else RunState(
+                        progress=RunProgress(
+                            step_limit=max_steps, deadline_at=_deadline_at
+                        ),
+                        run_id=run_id,
+                        agent_id=self.id,
+                        previous_run_id=previous_run_id,
+                        parent_run_id=parent_run_id,
+                        parent_tool_call_id=parent_tool_call_id,
+                        parent_message_id=parent_message_id,
+                        status=RunStatus.RUNNING,
+                        # Child instructions have identities within their own conversation.
+                        input_messages=[
+                            message.model_copy(
+                                deep=True,
+                                update={
+                                    "id": message.id
+                                    if parent_run_id is None and message.id
+                                    else run_input_message_id(run_id, index)
+                                },
+                            )
+                            for index, message in enumerate(messages)
+                        ],
+                        checkpoint=history.checkpoint,
+                    ),
+                    cancellation_signal,
+                    event_dispatcher,
+                    history=history,
+                    event_parent=_event_parent,
+                )
+                if on_event is not None:
+                    run.subscribe(on_event)
+            except BaseException:
+                if coordinator is not None and _snapshot is None:
+                    try:
+                        coordinator.abort_start(run_id)
+                    except Exception:
+                        logger.exception("Agent start reservation rollback failed")
+                raise
             self._latest_run = run
-        if on_event is not None:
-            run.subscribe(on_event)
         try:
             run._start(
                 self,
@@ -626,6 +647,7 @@ class Run:
         background: bool,
     ) -> None:
         state = self._state
+        is_resuming = state.status == RunStatus.SUSPENDED
         with self._lock:
             self._state.status = RunStatus.RUNNING
         try:
@@ -682,9 +704,11 @@ class Run:
             self._start_execution(background=background)
         except BaseException:
             self._cancellation_link.close()
-            if self._coordination is not None:
+            if coordinator is not None and (
+                self._coordination is not None or not is_resuming
+            ):
                 try:
-                    self._coordination.coordinator.abort_start(self)
+                    coordinator.abort_start(self.id)
                 except Exception:
                     logger.exception("Agent start registration rollback failed")
             if self._coordination is not None:
