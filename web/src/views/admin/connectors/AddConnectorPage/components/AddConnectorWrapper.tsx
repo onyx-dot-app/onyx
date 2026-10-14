@@ -120,6 +120,7 @@ import {
   planConnectorEdit,
 } from "@/lib/connectors/edit/svc";
 import EditPlanModal from "@/views/admin/connectors/EditConnectorPage/EditPlanModal";
+import FailedChecksAdvisoryModal from "@/views/admin/connectors/AddConnectorPage/components/FailedChecksAdvisoryModal";
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
@@ -129,6 +130,8 @@ interface ConnectorChecksGates {
   formUnlocked: boolean;
   /** Every required check passed for the current form: Create may run. */
   createReady: boolean;
+  /** How many non-required checks failed: Create warns of them first. */
+  optionalFailedCount: number;
 }
 
 interface ConnectorChecksGateProps {
@@ -140,9 +143,9 @@ interface ConnectorChecksGateProps {
 }
 
 /**
- * Gives the form the capability checks' two gates. The hook needs the Formik
- * context, which the form's render function sits inside but cannot call hooks
- * in.
+ * Gives the form the capability checks' gates and failed-check count. The
+ * hook needs the Formik context, which the form's render function sits
+ * inside but cannot call hooks in.
  */
 function ConnectorChecksGate({
   source,
@@ -150,12 +153,15 @@ function ConnectorChecksGate({
   ccPairId,
   children,
 }: ConnectorChecksGateProps) {
-  const { formUnlocked, createReady } = useConnectorChecks({
+  const { formUnlocked, createReady, results } = useConnectorChecks({
     source,
     credential,
     ccPairId,
   });
-  return children({ formUnlocked, createReady });
+  const optionalFailedCount: number = results.filter(
+    (result) => result.status === "failed" && !result.required
+  ).length;
+  return children({ formUnlocked, createReady, optionalFailedCount });
 }
 
 async function submitConnector<T>(
@@ -290,6 +296,10 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
+  // Create warns of failed non-required checks before it runs.
+  const [advisoryOpen, setAdvisoryOpen] = useState(false);
+  // Counts View Failed Checks clicks, so the checks card opens and scrolls into view.
+  const [expandChecksRequest, setExpandChecksRequest] = useState(0);
   // Edit mode: the plan shown for review, with the proposal it was computed
   // for, so a stale plan can be computed again.
   const [planning, setPlanning] = useState(false);
@@ -747,6 +757,14 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                 : formUnlocked
                   ? undefined
                   : checksT("lockReason");
+              // Disabled while the credentials load or after they fail, since
+              // nothing can be connected then.
+              const createDisabled: boolean =
+                credentialsLoading ||
+                credentialsFailed ||
+                !blockingErrorsEmpty(formikProps.errors) ||
+                !createReady ||
+                busy;
               return (
                 <SettingsLayouts.Root width="sm">
                   <SettingsLayouts.Header
@@ -788,21 +806,19 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                       >
                         {t("header.cancelButton.label")}
                       </Button>,
-                      // Always present; disabled while the credentials load or
-                      // after they fail, since nothing can be connected then.
+                      // Always present.
                       <Button
                         key="connect"
-                        disabled={
-                          credentialsLoading ||
-                          credentialsFailed ||
-                          !blockingErrorsEmpty(formikProps.errors) ||
-                          !createReady ||
-                          busy
-                        }
+                        disabled={createDisabled}
                         icon={busy ? IconLoader : undefined}
                         onClick={async () => {
                           const errors = await formikProps.validateForm();
                           if (blockingErrorsEmpty(errors)) {
+                            // Edit mode's plan lists failed checks itself.
+                            if (!edit && checks.optionalFailedCount > 0) {
+                              setAdvisoryOpen(true);
+                              return;
+                            }
                             // Formik's own submit stops at any error.
                             await submitForm(formikProps.values);
                           } else {
@@ -914,6 +930,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                                 gate?.reason?.kind !== "runChecks"
                               }
                               editCCPairId={edit?.ccPair.id ?? null}
+                              expandChecksRequest={expandChecksRequest}
                             />
                           )}
 
@@ -1001,6 +1018,21 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
                           </Disabled>
                         </Section>
                       </>
+                    )}
+                    {!edit && advisoryOpen && (
+                      <FailedChecksAdvisoryModal
+                        failedCount={checks.optionalFailedCount}
+                        canCreate={!createDisabled}
+                        onClose={() => setAdvisoryOpen(false)}
+                        onViewChecks={() => {
+                          setAdvisoryOpen(false);
+                          setExpandChecksRequest((count) => count + 1);
+                        }}
+                        onProceed={async () => {
+                          setAdvisoryOpen(false);
+                          await submitForm(formikProps.values);
+                        }}
+                      />
                     )}
                     {edit && editPlan && (
                       <EditPlanModal

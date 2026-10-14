@@ -9123,6 +9123,17 @@
         "completed": "检查已完成。",
         "inProgress": "检查进行中...",
         "waiting": "正在等待连接器设置..."
+      },
+      "advisory": {
+        "title": "部分内容不会被索引。",
+        "description": "**{count, plural, other {# 项非必需的连接器检查失败。}}** 这不会阻止整个连接器的索引，但受影响的内容不会被索引。",
+        "proceed": "你仍然可以继续创建连接器，稍后再处理这些问题。",
+        "viewButton": {
+          "label": "查看失败的检查"
+        },
+        "proceedButton": {
+          "label": "仍然创建连接器"
+        }
       }
     },
     "connectorEdit": {

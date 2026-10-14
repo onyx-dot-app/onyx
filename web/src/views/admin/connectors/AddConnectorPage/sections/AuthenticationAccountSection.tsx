@@ -71,6 +71,8 @@ interface AuthenticationAccountSectionProps {
   checksLocked: boolean;
   /** Set when the form edits this pair: the checks are dry runs of it. */
   editCCPairId?: number | null;
+  /** Each increment opens the checks card and scrolls it into view. */
+  expandChecksRequest?: number;
 }
 
 /**
@@ -88,6 +90,7 @@ export default function AuthenticationAccountSection({
   checkedCredential,
   checksLocked,
   editCCPairId = null,
+  expandChecksRequest = 0,
 }: AuthenticationAccountSectionProps) {
   const t = useTranslations("admin.connectorsList");
   const newAccountNameField = `${NEW_ACCOUNT_FIELD}.${NEW_ACCOUNT_NAME_FIELD}`;
@@ -573,6 +576,7 @@ export default function AuthenticationAccountSection({
             // Starting the checks completes the account step, so it folds.
             onStart={foldAccounts}
             ccPairId={editCCPairId}
+            expandRequest={expandChecksRequest}
           />
         </Section>
       )}

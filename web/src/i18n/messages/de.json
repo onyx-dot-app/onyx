@@ -9123,6 +9123,17 @@
         "completed": "Prüfungen abgeschlossen.",
         "inProgress": "Prüfungen laufen...",
         "waiting": "Warten auf Connector-Einstellungen..."
+      },
+      "advisory": {
+        "title": "Einige Inhalte werden nicht indexiert.",
+        "description": "**{count, plural, one {# nicht erforderliche Connector-Prüfung ist fehlgeschlagen.} other {# nicht erforderliche Connector-Prüfungen sind fehlgeschlagen.}}** Sie blockieren nicht die gesamte Indexierung des Connectors, aber die betroffenen Inhalte werden nicht indexiert.",
+        "proceed": "Du kannst den Connector trotzdem erstellen und diese Punkte später beheben.",
+        "viewButton": {
+          "label": "Fehlgeschlagene Prüfungen anzeigen"
+        },
+        "proceedButton": {
+          "label": "Connector trotzdem erstellen"
+        }
       }
     },
     "connectorEdit": {
