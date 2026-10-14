@@ -11,23 +11,30 @@ from sqlalchemy.orm import Session
 from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
     element_update_permissions,
 )
-from onyx.access.models import DocExternalAccess, ExternalAccess
+from onyx.access.models import DocExternalAccess, ExternalAccess, NodeExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document as ConnectorDocument
+from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.connectors.models import IndexAttemptMetadata, InputType
 from onyx.db.document import (
     get_document_source_types,
     get_document_source_types_after_cc_pair_removal,
     upsert_document_by_connector_credential_pair,
 )
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, HierarchyNodeType
+from onyx.db.hierarchy import (
+    get_hierarchy_node_by_raw_id,
+    persist_hierarchy_nodes_for_cc_pair,
+    upsert_hierarchy_node_cc_pair_entries,
+)
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
     Document,
     DocumentByConnectorCredentialPair,
+    HierarchyNode,
 )
 from onyx.indexing.indexing_pipeline import _upsert_documents_in_db
 from onyx.kg.models import KGStage
@@ -741,6 +748,13 @@ def test_same_source_permissions_remain_last_writer_wins(
             document_id,
             "first",
         )
+        # Both pairs serve the doc; a pair that does not serve it is skipped.
+        _add_document_relationship(
+            db_session,
+            second_sharepoint,
+            document_id,
+            has_been_indexed=True,
+        )
         _write_permissions(
             db_session,
             second_sharepoint,
@@ -864,3 +878,169 @@ def test_document_lock_prevents_concurrent_sharepoint_final_write(
         release_onedrive.set()
         event.remove(engine, "after_cursor_execute", pause_first_locked_writer)
         _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
+
+
+def _sync_write(
+    cc_pair: ConnectorCredentialPair,
+    permissions: DocExternalAccess | NodeExternalAccess,
+) -> None:
+    assert element_update_permissions(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        permissions=permissions,
+        source_type_str=DocumentSource.CONFLUENCE.value,
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+    )
+
+
+_GRANT = ExternalAccess(
+    external_user_emails={"perm-sync-writer@example.com"},
+    external_user_group_ids={"writer-group"},
+    is_public=True,
+)
+
+
+def test_permission_write_skips_document_of_another_cc_pair(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    document_id = f"pair-scoped-doc-{unique}"
+    old_modified = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    owner = _add_cc_pair(
+        db_session,
+        DocumentSource.WEB,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.PRIVATE,
+    )
+    syncer = _add_cc_pair(
+        db_session,
+        DocumentSource.CONFLUENCE,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.SYNC,
+    )
+    db_session.add(
+        Document(
+            id=document_id,
+            semantic_id=document_id,
+            kg_stage=KGStage.NOT_STARTED,
+            external_user_emails=[],
+            external_user_group_ids=[],
+            is_public=False,
+            last_modified=old_modified,
+        )
+    )
+    db_session.flush()
+    _add_document_relationship(db_session, owner, document_id, has_been_indexed=True)
+
+    try:
+        _sync_write(
+            syncer, DocExternalAccess(external_access=_GRANT, doc_id=document_id)
+        )
+
+        db_session.expire_all()
+        document = db_session.get(Document, document_id)
+        assert document is not None
+        assert document.is_public is False
+        assert document.external_user_emails == []
+        assert document.external_user_group_ids == []
+        assert document.last_modified == old_modified
+        assert (
+            db_session.get(
+                DocumentByConnectorCredentialPair,
+                (document_id, syncer.connector_id, syncer.credential_id),
+            )
+            is None
+        )
+
+        # Once the syncing pair also serves the doc, its write applies.
+        _add_document_relationship(
+            db_session, syncer, document_id, has_been_indexed=True
+        )
+        _sync_write(
+            syncer, DocExternalAccess(external_access=_GRANT, doc_id=document_id)
+        )
+
+        db_session.expire_all()
+        document = db_session.get(Document, document_id)
+        assert document is not None
+        assert document.is_public is True
+        assert document.external_user_emails == ["perm-sync-writer@example.com"]
+    finally:
+        _delete_test_data(db_session, [document_id], [owner, syncer])
+
+
+def test_permission_write_skips_hierarchy_node_of_another_cc_pair(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    unique = uuid4().hex
+    raw_node_id = f"pair-scoped-node-{unique}"
+    owner = _add_cc_pair(
+        db_session,
+        DocumentSource.CONFLUENCE,
+        ConnectorCredentialPairStatus.ACTIVE,
+        unique,
+        AccessType.PRIVATE,
+    )
+    syncer = _add_cc_pair(
+        db_session,
+        DocumentSource.CONFLUENCE,
+        ConnectorCredentialPairStatus.ACTIVE,
+        f"{unique}-syncer",
+        AccessType.SYNC,
+    )
+    db_session.commit()
+    nodes = persist_hierarchy_nodes_for_cc_pair(
+        db_session=db_session,
+        nodes=[
+            PydanticHierarchyNode(
+                raw_node_id=raw_node_id,
+                raw_parent_id=None,
+                display_name=raw_node_id,
+                node_type=HierarchyNodeType.SPACE,
+            )
+        ],
+        source=DocumentSource.CONFLUENCE,
+        connector_id=owner.connector_id,
+        credential_id=owner.credential_id,
+    )
+    node_access = NodeExternalAccess(
+        external_access=_GRANT,
+        raw_node_id=raw_node_id,
+        source=DocumentSource.CONFLUENCE.value,
+    )
+
+    try:
+        _sync_write(syncer, node_access)
+
+        db_session.expire_all()
+        node = get_hierarchy_node_by_raw_id(
+            db_session, raw_node_id, DocumentSource.CONFLUENCE
+        )
+        assert node is not None
+        assert node.is_public is False
+        assert node.external_user_emails is None
+
+        upsert_hierarchy_node_cc_pair_entries(
+            db_session,
+            [nodes[0].id],
+            syncer.connector_id,
+            syncer.credential_id,
+        )
+        _sync_write(syncer, node_access)
+
+        db_session.expire_all()
+        node = get_hierarchy_node_by_raw_id(
+            db_session, raw_node_id, DocumentSource.CONFLUENCE
+        )
+        assert node is not None
+        assert node.is_public is True
+    finally:
+        db_session.execute(
+            delete(HierarchyNode).where(HierarchyNode.raw_node_id == raw_node_id)
+        )
+        db_session.commit()
+        _delete_test_data(db_session, [], [owner, syncer])

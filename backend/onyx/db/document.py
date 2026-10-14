@@ -378,6 +378,17 @@ def get_max_document_id_for_cc_pair(db_session: Session, cc_pair_id: int) -> str
     ).scalar()
 
 
+def document_linked_to_cc_pair_clause(
+    connector_id: int, credential_id: int
+) -> ColumnElement[bool]:
+    """Matches Document rows that have a link row for this cc_pair."""
+    return exists().where(
+        DocumentByConnectorCredentialPair.id == DbDocument.id,
+        DocumentByConnectorCredentialPair.connector_id == connector_id,
+        DocumentByConnectorCredentialPair.credential_id == credential_id,
+    )
+
+
 def filter_existing_cc_pair_document_ids(
     db_session: Session,
     cc_pair_id: int,
@@ -1273,20 +1284,25 @@ def update_docs_created_at__no_commit(
 
 def backfill_docs_created_at__no_commit(
     ids_to_created_at: dict[str, datetime],
+    connector_id: int,
+    credential_id: int,
     db_session: Session,
 ) -> None:
     """Set ``doc_created_at`` for docs whose value is newly available or changed,
     bumping ``last_modified`` so the metadata sync task propagates it to the index.
 
     Only touches rows that actually change, so a repeated sweep doesn't needlessly
-    re-dirty every document.
+    re-dirty every document. Docs not linked to the cc_pair are skipped.
     """
     if not ids_to_created_at:
         return
 
     documents_to_update = (
         db_session.query(DbDocument)
-        .filter(DbDocument.id.in_(list(ids_to_created_at.keys())))
+        .filter(
+            DbDocument.id.in_(list(ids_to_created_at.keys())),
+            document_linked_to_cc_pair_clause(connector_id, credential_id),
+        )
         .all()
     )
     now = datetime.now(timezone.utc)

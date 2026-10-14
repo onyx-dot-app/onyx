@@ -151,6 +151,8 @@ def _resolve_and_update_document_parents(
     redis_client: TenantRedisClient,
     source: DocumentSource,
     raw_id_to_parent: dict[str, str | None],
+    connector_id: int,
+    credential_id: int,
 ) -> None:
     """Resolve parent_hierarchy_raw_node_id → parent_hierarchy_node_id for
     each document and bulk-update the DB. Mirrors the resolution logic in
@@ -170,6 +172,8 @@ def _resolve_and_update_document_parents(
     update_document_parent_hierarchy_nodes(
         db_session=db_session,
         doc_parent_map=resolved,
+        connector_id=connector_id,
+        credential_id=credential_id,
         commit=True,
     )
     task_logger.info(
@@ -743,11 +747,15 @@ def connector_pruning_generator_task(
                 redis_client=redis_client,
                 source=source,
                 raw_id_to_parent=all_connector_doc_ids,
+                connector_id=connector_id,
+                credential_id=credential_id,
             )
 
             # Backfill source creation time collected during enumeration.
             backfill_docs_created_at__no_commit(
                 ids_to_created_at=extraction_result.id_to_created_at,
+                connector_id=connector_id,
+                credential_id=credential_id,
                 db_session=db_session,
             )
             db_session.commit()

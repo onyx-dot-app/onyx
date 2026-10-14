@@ -255,6 +255,10 @@ for a cc_pair that is not perm-synced. The indexing pipeline
 (`indexing_pipeline.py:_upsert_documents_in_db`) also drops connector-emitted
 `external_access` unless the writing cc_pair is perm-synced.
 
+Both element writers skip a document or hierarchy node that is linked only to
+other cc_pairs. A document with no row yet becomes a placeholder linked to the
+syncing cc_pair.
+
 Most doc-sync implementations funnel through
 `ee/onyx/external_permissions/utils.py:generic_doc_sync`, which:
 
