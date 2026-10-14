@@ -2427,7 +2427,8 @@
           "other": "Otros documentos",
           "loadError": "No se pudo cargar el desglose de documentos.",
           "open": "Abrir en la fuente",
-          "empty": "Aún no hay documentos indexados."
+          "empty": "Aún no hay documentos indexados.",
+          "unavailable": "Disponible después de la primera ejecución correcta."
         }
       },
       "sharing": {

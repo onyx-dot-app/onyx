@@ -2427,7 +2427,8 @@
           "other": "Outros documentos",
           "loadError": "Não foi possível carregar a distribuição de documentos.",
           "open": "Abrir na fonte",
-          "empty": "Nenhum documento indexado ainda."
+          "empty": "Nenhum documento indexado ainda.",
+          "unavailable": "Disponível após a primeira execução bem-sucedida."
         }
       },
       "sharing": {

@@ -2427,7 +2427,8 @@
           "other": "Autres documents",
           "loadError": "Impossible de charger la répartition des documents.",
           "open": "Ouvrir dans la source",
-          "empty": "Aucun document indexé pour le moment."
+          "empty": "Aucun document indexé pour le moment.",
+          "unavailable": "Disponible après la première exécution réussie."
         }
       },
       "sharing": {

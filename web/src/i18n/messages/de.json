@@ -2427,7 +2427,8 @@
           "other": "Weitere Dokumente",
           "loadError": "Die Dokumentaufschlüsselung konnte nicht geladen werden.",
           "open": "In der Quelle öffnen",
-          "empty": "Noch keine Dokumente indexiert."
+          "empty": "Noch keine Dokumente indexiert.",
+          "unavailable": "Verfügbar nach dem ersten erfolgreichen Lauf."
         }
       },
       "sharing": {

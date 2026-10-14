@@ -110,7 +110,8 @@ export default function HierarchyBreakdown({
   showEmpty = false,
 }: HierarchyBreakdownProps) {
   const t = useTranslations("admin.connector.configuration.breakdown");
-  const empty = showEmpty ? <BreakdownNote>{t("empty")}</BreakdownNote> : null;
+  const note = (key: "empty" | "unavailable") =>
+    showEmpty ? <BreakdownNote>{t(key)}</BreakdownNote> : null;
   // The request reads every document of the pair, so it runs once per visit and gives up early.
   const { data, error } = useSWR<CCPairHierarchyBreakdown | null>(
     SWR_KEYS.ccPairHierarchyBreakdown(ccPairId),
@@ -132,13 +133,13 @@ export default function HierarchyBreakdown({
     );
   }
   // null until the pair has a successful index run.
-  if (data === null) return empty;
+  if (data === null) return note("unavailable");
   // SAFETY: the backend keys the dict by its own node type enum, which the union mirrors.
   const groups = Object.entries(data.nodes_by_type).filter(
     (group): group is [HierarchyNodeType, HierarchyBreakdownEntry[]] =>
       group[1] !== undefined
   );
-  if (groups.length === 0 && data.other_doc_count === 0) return empty;
+  if (groups.length === 0 && data.other_doc_count === 0) return note("empty");
 
   return (
     <Section alignItems="stretch" gap={1} padding={1} height="fit">
