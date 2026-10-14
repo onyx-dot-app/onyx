@@ -3178,6 +3178,1088 @@
       },
       "optionsListInput": {
         "placeholder": "목록에서 {label} 선택 또는 입력"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "이미지와 문서를 포함한 페이지 첨부 파일 처리를 사용합니다",
+              "label": "첨부 파일 포함"
+            },
+            "scoped_token": {
+              "label": "범위가 지정된 API 토큰입니다",
+              "description": "범위가 지정된 토큰은 Atlassian API 게이트웨이를 거쳐야 합니다. 기존 토큰이면 끄세요."
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "회의 ID",
+              "description": "반복 회의는 회차별로 인덱싱됩니다. Zoom은 최근 15개월의 회차만 반환하므로 그보다 오래된 회차는 회의 ID로 가져올 수 없습니다. 더 오래된 기록을 인덱싱하려면 호스트 이메일 또는 Zoom Group으로 범위를 지정하세요. 둘 다 이 제한이 없습니다."
+            },
+            "webinar_ids": {
+              "label": "웨비나 ID",
+              "description": "웨비나를 사용하려면 호스트에게 Webinar 애드온도 활성화되어 있어야 합니다. 회의 ID와 달리 웨비나 기록에는 15개월 제한이 없습니다."
+            },
+            "host_emails": {
+              "label": "호스트 이메일",
+              "description": "이 사용자들이 호스팅하는 모든 세션 중 아래에서 선택한 유형을 인덱싱합니다. Zoom 사용자와 일치하지 않는 이메일은 무시되지 않고 인덱싱 오류로 보고됩니다."
+            },
+            "group_id": {
+              "label": "Zoom Group ID",
+              "description": "하나의 Zoom Group 구성원이 호스팅하는 모든 세션 중 아래에서 선택한 유형을 인덱싱합니다. Zoom은 실행할 때마다 구성원 목록을 다시 읽으므로, 이 커넥터를 수정하지 않아도 가입자와 탈퇴자가 반영됩니다."
+            },
+            "include_meetings": {
+              "label": "회의 포함",
+              "description": "호스트 이메일과 Zoom Group에 적용됩니다. 위의 ID 목록은 각 ID의 유형을 이미 구분합니다."
+            },
+            "include_webinars": {
+              "label": "웨비나 포함",
+              "description": "호스트 이메일과 Zoom Group에 적용됩니다. 웨비나를 사용하려면 호스트에게 Webinar 애드온도 활성화되어 있어야 합니다."
+            },
+            "treat_link_access_as_public": {
+              "label": "링크 액세스를 공개로 처리",
+              "description": "권한 동기화를 사용할 때만 적용됩니다. 켜면 링크 액세스가 \"링크가 있는 모든 사용자\" 또는 로그인 규칙인 녹화는 모든 Onyx 사용자에게, 도메인 규칙인 녹화는 해당 도메인의 사용자에게 표시됩니다. 끄면 Zoom이 \"액세스 권한이 있는 사용자\"를 알려 주지 않으므로 모든 녹취록이 녹화 소유자에게만 표시됩니다."
+            },
+            "plan_tier": {
+              "label": "Zoom 요금제",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "이 커넥터가 Zoom을 호출할 수 있는 속도를 정합니다. Pro 계정이면 `pro`를, Business, Education, Enterprise 또는 Partner 계정이면 `business_plus`를 선택하세요."
+            },
+            "rate_limit_percent": {
+              "label": "Zoom API 속도 제한",
+              "description": "이 커넥터가 사용할 수 있는 계정 Zoom 속도 제한의 비율로, 1에서 100 사이의 정수입니다. 비워 두면 50이며, 고객의 다른 Zoom 연동을 위한 여유를 남깁니다. 각 Zoom 커넥터는 자체적으로 속도를 조절하며 다른 커넥터를 알지 못하므로, 한 Zoom 계정의 커넥터 두 개는 각각 이 비율을 사용합니다. 여러 개를 실행한다면 나누어 설정하세요."
+            }
+          },
+          "description": "Zoom 커넥터 구성",
+          "subtext": "Zoom Pro 이상 요금제에서 각 Zoom 세션의 클라우드 녹화 녹취록을 인덱싱합니다. 클라우드에 녹화된 적이 없는 세션은 건너뜁니다. 고급 설정에서 인덱싱 시작 날짜를 지정하세요. Zoom은 요청당 한 달 분량의 녹화를 나열하므로, 시작 날짜가 없으면 첫 크롤링이 2013년까지 매달 요청하여 아무것도 없는 수년 치에 계정의 API 허용량을 소모합니다."
+        },
+        "web": {
+          "description": "웹 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "기본 URL"
+            },
+            "web_connector_type": {
+              "label": "스크래핑 방식",
+              "options": {
+                "recursive": "재귀",
+                "single": "단일",
+                "sitemap": "사이트맵"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "스크래핑 전 스크롤",
+              "description": "원하는 콘텐츠를 불러오려면 스크롤이 필요한 웹사이트에서 사용하세요"
+            },
+            "url_rewrites": {
+              "label": "URL 재작성",
+              "description": "저장하기 전에 문서 URL을 재작성합니다. 내부 미러를 통해 크롤링하면서 정식 공개 링크를 저장할 때 유용합니다. 예: https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "원본 URL 접두사",
+              "rightLabel": "대체 접두사"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "LumApps 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "API 기본 URL (셀 호스트)",
+              "description": "LumApps 셀/API 호스트입니다. 예: https://go-cell-005.api.lumapps.com (문서 사이트 api.lumapps.com이 아님)."
+            },
+            "organization_id": {
+              "label": "조직 ID",
+              "description": "LumApps 조직 ID입니다 (숫자)."
+            },
+            "instance_ids": {
+              "label": "인스턴스(사이트) ID",
+              "description": "특정 인스턴스/사이트 ID만 인덱싱하도록 제한합니다. 비워 두면 서비스 사용자에게 보이는 모든 콘텐츠를 인덱싱합니다."
+            },
+            "custom_content_types": {
+              "label": "사용자 지정 콘텐츠 유형 ID",
+              "description": "특정 사용자 지정 콘텐츠 유형 ID로 제한합니다. 비워 두면 모든 콘텐츠 유형을 인덱싱합니다."
+            },
+            "lang": {
+              "label": "언어",
+              "description": "콘텐츠 제목/본문과 메타데이터 레이블에 사용할 언어입니다 (ISO 639-1, 예: en, fr)."
+            }
+          }
+        },
+        "github": {
+          "description": "GitHub 커넥터 구성",
+          "fields": {
+            "github_base_url": {
+              "label": "GitHub Enterprise Server URL",
+              "description": "github.com을 사용하면 비워 두세요."
+            },
+            "repo_owner": {
+              "label": "저장소 소유자"
+            },
+            "github_mode": {
+              "label": "인덱싱할 GitHub 콘텐츠",
+              "tabs": {
+                "repo": {
+                  "label": "특정 저장소"
+                },
+                "everything": {
+                  "label": "전체"
+                }
+              }
+            },
+            "repositories": {
+              "label": "저장소 이름",
+              "description": "저장소가 여러 개이면 쉼표로 구분하여 이름을 입력하세요 (예: repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "전체",
+              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 저장소를 인덱싱합니다!"
+            },
+            "include_prs": {
+              "label": "풀 리퀘스트 포함",
+              "description": "저장소의 풀 리퀘스트를 인덱싱합니다"
+            },
+            "include_issues": {
+              "label": "이슈 포함",
+              "description": "저장소의 이슈를 인덱싱합니다"
+            },
+            "include_files": {
+              "label": "문서 포함",
+              "description": "저장소의 텍스트 기반 문서(마크다운, 텍스트 등)를 인덱싱합니다"
+            },
+            "branch": {
+              "label": "브랜치",
+              "description": "문서를 인덱싱할 브랜치입니다 (예: gh-pages). 비워 두면 각 저장소의 기본 브랜치를 사용합니다. '문서 포함'을 켠 경우에만 적용됩니다. 기존 커넥터에서 이 값을 변경한 후 새 브랜치를 바로 반영하려면 재인덱싱을 실행하세요."
+            }
+          }
+        },
+        "testrail": {
+          "description": "TestRail 커넥터 구성",
+          "fields": {
+            "testrail_base_url": {
+              "label": "TestRail 기본 URL"
+            },
+            "project_ids": {
+              "label": "프로젝트 ID",
+              "description": "인덱싱할 TestRail 프로젝트 ID를 쉼표로 구분하여 입력하세요 (예: 1 또는 1,2,3). 비워 두면 모든 프로젝트를 인덱싱합니다."
+            },
+            "cases_page_size": {
+              "label": "케이스 페이지 크기",
+              "description": "TestRail API에서 페이지당 가져올 테스트 케이스 수입니다 (기본값: 250)"
+            },
+            "max_pages": {
+              "label": "최대 페이지 수",
+              "description": "무한 루프를 방지하기 위해 가져올 최대 페이지 수입니다 (기본값: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "문서 글자 수 제한",
+              "description": "이 글자 수 제한을 초과하는 테스트 케이스는 인덱싱하지 않습니다 (기본값: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "GitLab 커넥터 구성",
+          "fields": {
+            "gitlab_url": {
+              "label": "GitLab URL"
+            },
+            "project_owner": {
+              "label": "프로젝트 소유자"
+            },
+            "project_name": {
+              "label": "프로젝트 이름"
+            },
+            "include_mrs": {
+              "label": "MR 포함",
+              "description": "저장소의 머지 리퀘스트를 인덱싱합니다"
+            },
+            "include_issues": {
+              "label": "이슈 포함",
+              "description": "저장소의 이슈를 인덱싱합니다"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "Bitbucket 커넥터 구성",
+          "subtext": "Bitbucket 커넥터 구성 (Cloud 전용). 워크스페이스, 특정 프로젝트 또는 저장소를 인덱싱할 수 있습니다.",
+          "fields": {
+            "workspace": {
+              "label": "워크스페이스",
+              "description": "인덱싱할 Bitbucket 워크스페이스입니다 (예: https://bitbucket.org/atlassian/workspace 의 \"atlassian\")."
+            },
+            "bitbucket_mode": {
+              "label": "인덱싱할 Bitbucket 콘텐츠",
+              "tabs": {
+                "repo": {
+                  "label": "특정 저장소"
+                },
+                "project": {
+                  "label": "프로젝트"
+                },
+                "workspace": {
+                  "label": "워크스페이스"
+                }
+              }
+            },
+            "repositories": {
+              "label": "저장소 슬러그",
+              "description": "저장소가 여러 개이면 쉼표로 구분하여 슬러그를 입력하세요 (예: repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "프로젝트 키",
+              "description": "해당 프로젝트의 모든 저장소를 인덱싱할 Bitbucket 프로젝트 키를 하나 이상 쉼표로 구분하여 입력하세요 (예: PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "워크스페이스",
+              "description": "이 커넥터는 워크스페이스의 모든 저장소를 인덱싱합니다."
+            }
+          }
+        },
+        "gitbook": {
+          "description": "GitBook 커넥터 구성",
+          "fields": {
+            "space_id": {
+              "label": "스페이스 ID",
+              "description": "인덱싱할 GitBook 스페이스의 ID입니다. 스페이스에 있는 페이지의 URL에서 찾을 수 있습니다. 예를 들어 URL이 `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/` 이면 스페이스 ID는 `8JkzVx8QCIGRrmxhGHU8`입니다."
+            }
+          }
+        },
+        "google_drive": {
+          "description": "Google Drive 커넥터 구성",
+          "fields": {
+            "credential_kind": {
+              "label": "자격 증명 종류"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "일반"
+                },
+                "Specific": {
+                  "label": "특정"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "공유 드라이브 포함",
+              "description": {
+                "oauth": "Onyx가 액세스할 수 있는 공유 드라이브의 모든 항목을 인덱싱하도록 허용합니다.",
+                "serviceAccount": "Onyx가 조직 공유 드라이브의 모든 항목을 인덱싱하도록 허용합니다."
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "내 드라이브 포함",
+                "serviceAccount": "모든 사용자의 내 드라이브 포함"
+              },
+              "description": {
+                "oauth": "Onyx가 내 드라이브의 모든 항목을 인덱싱하도록 허용합니다.",
+                "serviceAccount": "Onyx가 모든 사용자의 내 드라이브에 있는 모든 항목을 인덱싱하도록 허용합니다."
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "Onyx가 나와 공유된 모든 파일을 인덱싱하도록 허용합니다.",
+              "label": "나와 공유된 모든 파일 포함"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "인덱싱할 공유 드라이브의 URL을 쉼표로 구분하여 입력하세요. 해당 공유 드라이브에 대한 액세스 권한이 있어야 합니다.",
+                "serviceAccount": "인덱싱할 공유 드라이브의 URL을 쉼표로 구분하여 입력하세요."
+              },
+              "label": "공유 드라이브 URL"
+            },
+            "shared_folder_urls": {
+              "description": "인덱싱할 폴더의 URL을 쉼표로 구분하여 입력하세요. 이 폴더(및 모든 하위 폴더)에 있는 파일이 인덱싱됩니다.",
+              "label": "폴더 URL"
+            },
+            "my_drive_emails": {
+              "description": "내 드라이브를 인덱싱할 사용자의 이메일을 쉼표로 구분하여 입력하세요.",
+              "label": "내 드라이브 이메일"
+            },
+            "specific_user_emails": {
+              "description": "인덱싱할 특정 사용자의 이메일을 쉼표로 구분하여 입력하세요. 이 사용자들이 액세스할 수 있는 파일만 인덱싱됩니다.",
+              "label": "특정 사용자 이메일"
+            },
+            "exclude_domain_link_only": {
+              "label": "도메인 링크 전용 파일 숨기기",
+              "description": "켜면 Onyx는 광범위하게(도메인 전체 또는 공개) 공유되지만 링크가 있어야 액세스할 수 있는 파일을 건너뜁니다."
+            }
+          }
+        },
+        "gmail": {
+          "description": "Gmail 커넥터 구성"
+        },
+        "bookstack": {
+          "description": "Bookstack 커넥터 구성",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "BookStack 기본 URL"
+            }
+          }
+        },
+        "outline": {
+          "description": "Outline 커넥터 구성",
+          "fields": {
+            "outline_base_url": {
+              "label": "Outline 기본 URL"
+            }
+          }
+        },
+        "confluence": {
+          "description": "Confluence 커넥터 구성",
+          "fields": {
+            "is_cloud": {
+              "label": "Cloud 여부",
+              "description": "atlassian.net 사이트이면 Confluence Cloud를, 자체 호스팅하는 Confluence Server 또는 Data Center 사이트이면 Confluence Data Center를 선택하세요."
+            },
+            "wiki_base": {
+              "label": "사이트 URL"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "전체"
+                },
+                "space": {
+                  "label": "스페이스"
+                },
+                "page": {
+                  "label": "페이지"
+                },
+                "cql": {
+                  "label": "CQL 쿼리"
+                }
+              }
+            },
+            "everything": {
+              "label": "전체",
+              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 페이지를 인덱싱합니다!"
+            },
+            "space": {
+              "label": "스페이스 키",
+              "description": "인덱싱할 Confluence 스페이스 키입니다 (예: `KB`)."
+            },
+            "page_id": {
+              "label": "페이지 ID",
+              "description": "인덱싱할 특정 페이지 ID입니다 (예: `131368`)"
+            },
+            "index_recursively": {
+              "label": "재귀적으로 인덱싱",
+              "description": "이 옵션을 설정하면 페이지 ID로 지정한 페이지와 모든 하위 페이지를 인덱싱합니다."
+            },
+            "cql_query": {
+              "label": "CQL 쿼리",
+              "description": "중요: 현재 'page' 유형의 객체를 반환하는 CQL 쿼리만 지원합니다. 따라서 모든 CQL 쿼리에는 유일한 유형 필터로 'type=page'가 포함되어야 합니다. 'lastModified' 필터는 커넥터의 폴링 로직에 문제를 일으키므로 사용하지 마세요. 커넥터가 자체 정렬 순서를 설정하므로 ORDER BY도 사용하지 마세요. CQL 쿼리가 반환한 페이지의 모든 첨부 파일과 댓글은 그대로 가져옵니다. 'lastmodified' 필터는 덮어써집니다. 자세한 내용은 Atlassian의 [CQL 문서](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)를 참조하세요."
+            }
+          }
+        },
+        "jira": {
+          "description": "Jira 커넥터 구성",
+          "subtext": "인덱싱할 Jira 콘텐츠를 구성합니다. 전체를 인덱싱하거나 특정 프로젝트를 지정할 수 있습니다.",
+          "fields": {
+            "jira_base_url": {
+              "label": "사이트 URL"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "전체"
+                },
+                "project": {
+                  "label": "프로젝트"
+                },
+                "jql": {
+                  "label": "JQL 쿼리"
+                }
+              }
+            },
+            "everything": {
+              "label": "전체",
+              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 이슈를 인덱싱합니다!"
+            },
+            "project_key": {
+              "label": "프로젝트 키",
+              "description": "인덱싱할 특정 프로젝트의 키입니다 (예: 'PROJ')."
+            },
+            "jql_query": {
+              "label": "JQL 쿼리",
+              "description": "Jira 이슈를 필터링하는 사용자 지정 JQL 쿼리입니다.\n\n중요: 커넥터의 로직과 충돌하므로 JQL 쿼리에 시간 기반 필터를 포함하지 마세요. 또한 ORDER BY 절도 포함하지 마세요.\n\n구문에 대한 자세한 내용은 Atlassian의 [JQL 문서](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)를 참조하세요."
+            },
+            "comment_email_blacklist": {
+              "label": "댓글 이메일 차단 목록",
+              "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "salesforce": {
+          "description": "Salesforce 커넥터 구성",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "구성 유형",
+              "tabs": {
+                "simple": {
+                  "label": "간단"
+                },
+                "advanced": {
+                  "label": "고급"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "요청 객체",
+              "description": "인덱싱할 Salesforce 객체 유형을 지정하세요. 잘 모르겠다면 객체를 지정하지 마세요. Onyx가 기본값인 'Account'를 인덱싱합니다.\n\n힌트: 객체 이름은 단수형으로 입력하세요 (예: 'Opportunities'가 아니라 'Opportunity')."
+            },
+            "custom_query_config": {
+              "label": "사용자 지정 쿼리 구성",
+              "description": "인덱싱할 필드와 하위 객체를 정확히 정의하는 JSON 구성을 입력하세요. 데이터 구조를 완전히 제어할 수 있습니다.\n\n예시: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n자세한 내용은 [문서]({docsAdminsPath}/connectors/official/salesforce)를 참조하세요."
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "SharePoint 커넥터 구성",
+          "fields": {
+            "sites": {
+              "label": "사이트",
+              "description": "- 사이트를 지정하지 않으면 조직의 모든 사이트가 인덱싱됩니다 (`Sites.Read.All` 권한 필요).\n- 예를 들어 `https://onyxai.sharepoint.com/sites/support`를 지정하면 이 사이트만 인덱싱합니다.\n- 예를 들어 `https://onyxai.sharepoint.com/sites/support/subfolder`를 지정하면 이 폴더만 인덱싱합니다.\n- 사용자의 개인 사이트를 인덱싱하려면 [OneDrive 커넥터]({docsAdminsPath}/connectors/official/onedrive)를 사용하세요.\n- 사이트 지정은 현재 영어, 스페인어 또는 독일어를 사용하는 SharePoint 인스턴스에서만 작동합니다. 다른 언어 지원이 필요하면 Onyx 팀에 문의하세요."
+            },
+            "include_site_documents": {
+              "label": "문서 인덱싱",
+              "description": "위에서 정의한 모든 SharePoint 라이브러리 또는 폴더의 문서를 인덱싱합니다."
+            },
+            "include_site_pages": {
+              "label": "ASPX 사이트 인덱싱",
+              "description": "라이브러리나 폴더를 지정했더라도 위에서 정의한 모든 SharePoint 사이트의 aspx 페이지를 인덱싱합니다."
+            },
+            "treat_sharing_link_as_public": {
+              "label": "공유 링크를 공개로 처리",
+              "description": "켜면 공유 링크(익명 또는 조직 전체)가 있는 문서는 공개(모든 Onyx 사용자에게 표시)로 처리됩니다. 끄면 명시적으로 역할이 할당된 사용자와 그룹만 문서를 볼 수 있습니다."
+            },
+            "excluded_sites": {
+              "label": "제외할 사이트",
+              "description": "인덱싱에서 제외할 사이트 URL 또는 glob 패턴입니다. 일치하는 사이트는 위 사이트 목록에 있더라도 인덱싱되지 않습니다. 예: `https://contoso.sharepoint.com/sites/archive` (정확히 일치), `*://*/sites/archive-*` (glob 패턴)."
+            },
+            "excluded_paths": {
+              "label": "제외할 경로",
+              "description": "문서 라이브러리 내에서 인덱싱에서 제외할 파일 경로의 glob 패턴입니다. 패턴은 전체 상대 경로와 파일 이름 모두와 비교됩니다. 예: `*.tmp` (임시 파일), `~$*` (Office 잠금 파일), `Archive/*` (폴더)."
+            },
+            "authority_host": {
+              "label": "인증 기관 호스트",
+              "description": "인증에 사용하는 Microsoft ID 인증 기관 호스트입니다. 대부분의 배포에서는 기본값으로 두세요. GCC High / DoD에서는 https://login.microsoftonline.us 를 사용하세요"
+            },
+            "graph_api_host": {
+              "label": "Graph API 호스트",
+              "description": "Microsoft Graph API 호스트입니다. 대부분의 배포에서는 기본값으로 두세요. GCC High / DoD에서는 https://graph.microsoft.us 를 사용하세요"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "SharePoint 도메인 접미사",
+              "description": "SharePoint 사이트의 도메인 접미사입니다 (예: sharepoint.com). 대부분의 배포에서는 기본값으로 두세요. GCC High에서는 sharepoint.us를 사용하세요"
+            }
+          }
+        },
+        "teams": {
+          "description": "Teams 커넥터 구성",
+          "fields": {
+            "teams": {
+              "label": "팀",
+              "description": "인덱싱할 팀을 0개 이상 지정하세요. 예를 들어 'onyxai' 조직의 'Support' 팀을 지정하면 'Support' 팀에 속한 채널에서 전송된 메시지만 인덱싱합니다. 팀을 지정하지 않으면 조직의 모든 팀이 인덱싱됩니다."
+            },
+            "include_attachments": {
+              "description": "각 채널의 파일 탭에 있는 파일을 SharePoint가 부여한 읽기 권한자와 함께 별도의 문서로 인덱싱합니다. 인증서 자격 증명, Graph의 Files.Read.All 또는 Sites.Read.All, 그리고 각 파일의 읽기 권한자를 읽기 위한 SharePoint API의 Sites.FullControl.All이 필요합니다. Sites.Selected를 사용하는 경우 각 채널 사이트에 대해 앱에 모든 권한을 부여하세요."
+            },
+            "include_inline_images": {
+              "label": "인라인 이미지 포함",
+              "description": "채널 메시지에 붙여넣은 이미지를 스레드와 함께 인덱싱합니다. 추가 권한이 필요하지 않습니다. 검색 설정에서 이미지 추출 및 분석이 꺼져 있으면 아무것도 다운로드되지 않습니다."
+            },
+            "include_meeting_transcripts": {
+              "label": "회의 녹취록 포함",
+              "description": "예약된 회의의 녹취록을 주최자와 참석자가 읽을 수 있는 별도의 문서로 인덱싱합니다. OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All, User.Read.All 애플리케이션 권한, Graph API의 녹취록 액세스를 허용하는 테넌트 설정, 그리고 주최자에게 부여된 애플리케이션 액세스 정책이 필요합니다. 채널 회의는 포함되지 않습니다. 최근 6개월의 녹취록이 인덱싱되며, 그보다 오래된 녹취록은 인덱스에서 제거됩니다."
+            },
+            "include_meeting_chats": {
+              "label": "회의 채팅 포함",
+              "description": "예약된 회의 채팅에 사람들이 작성한 내용을 채팅 구성원이 읽을 수 있는 하루 단위 문서로 인덱싱합니다. Chat.Read.All 및 User.Read.All 애플리케이션 권한이 필요합니다. 이 테넌트에서 주최한 회의만 해당하며, Microsoft는 다른 조직이 만든 회의의 채팅을 제공하지 않습니다."
+            },
+            "meeting_organizers": {
+              "label": "회의 주최자",
+              "description": "회의 녹취록과 채팅을 인덱싱할 주최자의 사용자 계정 이름(UPN)입니다. 비워 두면 Teams 라이선스가 있는 모든 활성 사용자를 포함합니다."
+            },
+            "authority_host": {
+              "label": "인증 기관 호스트",
+              "description": "인증에 사용하는 Microsoft ID 인증 기관 호스트입니다. 대부분의 배포에서는 기본값으로 두세요. GCC High / DoD에서는 https://login.microsoftonline.us 를 사용하세요"
+            },
+            "graph_api_host": {
+              "label": "Graph API 호스트",
+              "description": "Microsoft Graph API 호스트입니다. 대부분의 배포에서는 기본값으로 두세요. GCC High / DoD에서는 https://graph.microsoft.us 를 사용하세요"
+            }
+          }
+        },
+        "outlook": {
+          "description": "Outlook 커넥터 구성",
+          "fields": {
+            "mailboxes": {
+              "label": "사서함",
+              "description": "인덱싱할 사서함의 사용자 계정 이름(UPN) 또는 기본 이메일 주소입니다. 이 항목과 사서함 그룹을 모두 비워 두면 앱 등록이 열 수 있는 모든 사서함을 인덱싱합니다. 공유 사서함은 자동으로 포함되지 않으므로 여기에 나열해야 합니다."
+            },
+            "mailbox_groups": {
+              "label": "사서함 그룹",
+              "description": "Entra 그룹의 표시 이름 또는 개체 ID입니다. 중첩 그룹의 구성원을 포함하여 모든 구성원의 사서함이 인덱싱되므로, 테넌트를 Onyx를 사용하는 사람들로 제한할 수 있습니다. GroupMember.Read.All 애플리케이션 권한이 필요합니다."
+            },
+            "include_attachments": {
+              "description": "파일 첨부 파일의 텍스트를 인덱싱합니다. 인라인 이미지, 중첩 항목, 클라우드 링크는 건너뜁니다."
+            },
+            "include_calendar": {
+              "label": "캘린더 포함",
+              "description": "각 사서함의 메일과 함께 캘린더도 인덱싱합니다. Calendars.Read 애플리케이션 권한이 필요합니다."
+            },
+            "excluded_folders": {
+              "label": "제외할 폴더",
+              "description": "모든 사서함에서 건너뛸 폴더 이름입니다. 정크 메일, 삭제된 항목, 임시 보관함, 보낼 편지함은 항상 건너뜁니다."
+            },
+            "calendar_past_days": {
+              "label": "캘린더 과거 일수",
+              "description": "캘린더 포함이 켜져 있을 때 사용합니다. 캘린더 범위가 과거 어디까지 이어지는지 정합니다. 범위가 앞으로 이동하면 이보다 오래된 일정은 다음 정리 때 인덱스에서 제거됩니다. 나중에 범위를 넓히면 변경되지 않은 일정은 자동으로 다시 들어오지 않으므로 재인덱싱이 필요합니다."
+            },
+            "calendar_future_days": {
+              "label": "캘린더 미래 일수",
+              "description": "캘린더 포함이 켜져 있을 때 사용합니다. 캘린더 범위가 미래 어디까지 이어지는지 정합니다. 나중에 범위를 넓히면 변경되지 않은 일정은 자동으로 다시 들어오지 않으므로 재인덱싱이 필요합니다."
+            },
+            "authority_host": {
+              "label": "인증 기관 호스트",
+              "description": "인증에 사용하는 Microsoft ID 인증 기관 호스트입니다. 대부분의 배포에서는 기본값으로 두세요. GCC High / DoD에서는 https://login.microsoftonline.us 를 사용하세요"
+            },
+            "graph_api_host": {
+              "label": "Graph API 호스트",
+              "description": "Microsoft Graph API 호스트입니다. 대부분의 배포에서는 기본값으로 두세요. GCC High / DoD에서는 https://graph.microsoft.us 를 사용하세요"
+            }
+          }
+        },
+        "discourse": {
+          "description": "Discourse 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "기본 URL"
+            },
+            "categories": {
+              "label": "카테고리"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "Drupal Wiki 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "기본 URL",
+              "description": "Drupal Wiki 인스턴스의 기본 URL입니다 (예: https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "인덱싱할 Drupal Wiki 콘텐츠",
+              "tabs": {
+                "everything": {
+                  "label": "전체"
+                },
+                "specific": {
+                  "label": "특정 스페이스/페이지"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "전체",
+              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 스페이스를 인덱싱합니다!"
+            },
+            "spaces": {
+              "label": "스페이스 ID",
+              "description": "인덱싱할 스페이스 ID를 하나 이상 지정하세요. 숫자 값만 허용됩니다."
+            },
+            "pages": {
+              "label": "페이지 ID",
+              "description": "인덱싱할 페이지 ID를 하나 이상 지정하세요. 숫자 값만 허용됩니다."
+            }
+          }
+        },
+        "axero": {
+          "description": "Axero 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "Axero 기본 URL"
+            },
+            "spaces": {
+              "label": "스페이스",
+              "description": "인덱싱할 스페이스를 스페이스 ID로 0개 이상 지정하세요. 스페이스 ID를 지정하지 않으면 모든 스페이스가 인덱싱됩니다."
+            }
+          }
+        },
+        "productboard": {
+          "description": "Productboard 커넥터 구성"
+        },
+        "slack": {
+          "description": "Slack 커넥터 구성",
+          "fields": {
+            "channels": {
+              "label": "채널",
+              "description": "인덱싱할 채널을 0개 이상 지정하세요. 목록에서 채널을 선택하면 ID로 추적하므로 이름이 바뀌어도 인덱싱이 중단되지 않습니다. 봇이 초대된 비공개 채널처럼 목록에 표시되지 않는 채널은 이름을 직접 입력하세요. 채널을 지정하지 않으면 워크스페이스의 모든 채널이 인덱싱됩니다."
+            },
+            "channel_regex_enabled": {
+              "label": "채널 정규식 사용",
+              "description": "켜면 위에서 지정한 \"채널\"을 정규식으로 처리합니다. 채널 이름이 지정한 정규식 중 하나와 완전히 일치하면 커넥터가 해당 채널의 메시지를 가져옵니다.\n\n예를 들어 \"채널\"로 `.*-support.*`를 지정하면 이름에 \"-support\"가 포함된 모든 채널을 포함합니다."
+            },
+            "exclude_channels": {
+              "label": "제외할 채널",
+              "description": "제외할 채널을 0개 이상 지정하세요. 제외는 위의 \"채널\" 필터 이후에 적용되므로 두 곳에 모두 일치하는 채널은 제외됩니다. 채널을 지정하지 않으면 아무것도 제외되지 않습니다."
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "제외 채널 정규식 사용",
+              "description": "켜면 위에서 지정한 \"제외할 채널\"을 정규식으로 처리합니다. 채널 이름이 지정한 정규식 중 하나와 완전히 일치하면 해당 채널이 제외됩니다.\n\n예를 들어 \"제외할 채널\"로 `.*-alerts`를 지정하면 이름이 \"-alerts\"로 끝나는 모든 채널을 건너뜁니다."
+            },
+            "include_bot_messages": {
+              "label": "봇 메시지 포함",
+              "description": "켜면 봇과 앱의 메시지를 인덱싱합니다. 주로 봇이 채우는 피드(예: CRM 업데이트, 자동 메모)가 있는 채널에 유용합니다."
+            }
+          }
+        },
+        "slab": {
+          "description": "Slab 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "기본 URL",
+              "description": "Slab 팀의 기본 URL을 지정하세요. 다음과 같은 형태입니다: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "Guru 커넥터 구성"
+        },
+        "gong": {
+          "description": "Gong 커넥터 구성",
+          "fields": {
+            "gong_base_url": {
+              "label": "Gong API 기본 URL",
+              "description": "기본값은 `https://api.gong.io`입니다."
+            },
+            "workspaces": {
+              "label": "워크스페이스",
+              "description": "인덱싱할 워크스페이스를 0개 이상 지정하세요. Gong의 워크스페이스 ID 또는 정확한 워크스페이스 이름을 입력하세요. 워크스페이스를 지정하지 않으면 모든 워크스페이스의 녹취록이 인덱싱됩니다."
+            }
+          }
+        },
+        "loopio": {
+          "description": "Loopio 커넥터 구성",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Loopio 서브도메인",
+              "description": "Loopio 사이트의 서브도메인입니다. `acme.loopio.com`의 `acme`가 해당합니다."
+            },
+            "loopio_stack_name": {
+              "label": "Loopio 스택 이름",
+              "description": "라이브러리 관리의 이름과 정확히 일치해야 합니다. 모든 스택을 인덱싱하려면 비워 두세요"
+            }
+          }
+        },
+        "file": {
+          "description": "파일 커넥터 구성",
+          "fields": {
+            "file_locations": {
+              "label": "파일"
+            }
+          }
+        },
+        "zulip": {
+          "description": "Zulip 커넥터 구성",
+          "fields": {
+            "realm_name": {
+              "label": "렐름 이름"
+            },
+            "realm_url": {
+              "label": "렐름 URL"
+            }
+          }
+        },
+        "coda": {
+          "description": "Coda 커넥터 구성"
+        },
+        "notion": {
+          "description": "Notion 커넥터 구성",
+          "fields": {
+            "root_page_id": {
+              "label": "루트 페이지 ID",
+              "description": "지정하면 해당 페이지와 모든 하위 페이지만 인덱싱합니다. 비워 두면 통합에 액세스 권한이 부여된 모든 페이지를 인덱싱합니다."
+            }
+          }
+        },
+        "hubspot": {
+          "description": "HubSpot 커넥터 구성",
+          "fields": {
+            "object_types": {
+              "label": "객체 유형",
+              "options": {
+                "tickets": "티켓",
+                "companies": "회사",
+                "deals": "거래",
+                "contacts": "연락처"
+              },
+              "description": "인덱싱할 HubSpot 객체 유형을 선택하세요. 기본적으로 모든 유형이 선택됩니다."
+            }
+          }
+        },
+        "document360": {
+          "description": "Document360 커넥터 구성",
+          "fields": {
+            "workspace": {
+              "label": "워크스페이스"
+            },
+            "categories": {
+              "label": "카테고리",
+              "description": "인덱싱할 카테고리를 0개 이상 지정하세요. 예를 들어 'Help' 카테고리를 지정하면 'Help' 카테고리 내의 모든 콘텐츠만 인덱싱합니다. 카테고리를 지정하지 않으면 워크스페이스의 모든 카테고리가 인덱싱됩니다."
+            }
+          }
+        },
+        "clickup": {
+          "description": "ClickUp 커넥터 구성",
+          "fields": {
+            "connector_type": {
+              "label": "커넥터 유형",
+              "options": {
+                "list": "목록",
+                "folder": "폴더",
+                "space": "스페이스",
+                "workspace": "워크스페이스"
+              }
+            },
+            "connector_ids": {
+              "label": "커넥터 ID",
+              "description": "인덱싱할 ID를 0개 이상 지정하세요."
+            },
+            "retrieve_task_comments": {
+              "label": "작업 댓글 가져오기",
+              "description": "선택하면 각 작업의 모든 댓글도 함께 가져와 인덱싱합니다."
+            }
+          }
+        },
+        "google_sites": {
+          "description": "Google Sites 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "기본 URL"
+            },
+            "file_locations": {
+              "label": "사이트 내보내기",
+              "description": "Google Site의 HTML이 들어 있는 `.zip` 파일을 업로드하세요."
+            }
+          }
+        },
+        "zendesk": {
+          "description": "Zendesk 커넥터 구성",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Zendesk 서브도메인",
+              "description": "Zendesk 사이트의 서브도메인입니다. `acme.zendesk.com`의 `acme`가 해당합니다."
+            },
+            "content_type": {
+              "label": "콘텐츠 유형",
+              "options": {
+                "articles": "문서",
+                "tickets": "티켓"
+              }
+            },
+            "calls_per_minute": {
+              "label": "분당 API 호출 수",
+              "description": "이 커넥터가 분당 수행할 수 있는 Zendesk API 호출 수를 제한합니다 (이 커넥터에만 적용). 기본값은 https://developer.zendesk.com/api-reference/introduction/rate-limits/ 를 참조하세요"
+            }
+          }
+        },
+        "box": {
+          "description": "Box 커넥터 구성",
+          "fields": {
+            "folder_ids": {
+              "label": "폴더",
+              "description": "인덱싱할 Box 폴더 ID 또는 폴더 URL입니다 (예: https://app.box.com/folder/123456789). 비워 두면 인증된 사용자에게 보이는 모든 항목을 인덱싱합니다."
+            },
+            "include_web_links": {
+              "label": "웹 링크 포함",
+              "description": "Box 웹 링크(북마크)도 경량 문서로 인덱싱합니다."
+            }
+          }
+        },
+        "dropbox": {
+          "description": "Dropbox 커넥터 구성"
+        },
+        "s3": {
+          "description": "S3 커넥터 구성",
+          "fields": {
+            "bucket_name": {
+              "label": "버킷 이름"
+            },
+            "prefix": {
+              "label": "접두사"
+            },
+            "region_name": {
+              "label": "AWS 리전",
+              "description": "버킷의 AWS 리전입니다 (예: us-east-1). GovCloud(us-gov-west-1)와 같이 기본 파티션이 아닌 곳의 버킷에 필요하며, 그 외에는 기본 리전 확인 방식을 사용합니다."
+            },
+            "bucket_type": {
+              "label": "버킷 유형"
+            }
+          }
+        },
+        "r2": {
+          "description": "R2 커넥터 구성",
+          "fields": {
+            "bucket_name": {
+              "label": "버킷 이름"
+            },
+            "prefix": {
+              "label": "접두사"
+            },
+            "european_residency": {
+              "label": "EU 데이터 상주",
+              "description": "버킷에서 EU 데이터 상주를 사용 설정했다면 선택하세요."
+            },
+            "bucket_type": {
+              "label": "버킷 유형"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "Google Cloud Storage 커넥터 구성",
+          "fields": {
+            "bucket_name": {
+              "label": "버킷 이름",
+              "description": "인덱싱할 GCS 버킷의 이름입니다. 예: my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "경로 접두사"
+            },
+            "bucket_type": {
+              "label": "버킷 유형"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "OCI Storage 커넥터 구성",
+          "fields": {
+            "bucket_name": {
+              "label": "버킷 이름"
+            },
+            "prefix": {
+              "label": "접두사"
+            },
+            "bucket_type": {
+              "label": "버킷 유형"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "Wikipedia 커넥터 구성",
+          "fields": {
+            "language_code": {
+              "label": "언어 코드",
+              "description": "올바른 Wikipedia 언어 코드를 입력하세요 (예: 'en', 'es')"
+            },
+            "categories": {
+              "label": "인덱싱할 카테고리",
+              "description": "인덱싱할 카테고리 이름을 0개 이상 지정하세요. 대부분의 Wikipedia 사이트에서 카테고리는 'Category: XYZ' 형식의 이름을 가진 페이지로, 다른 페이지/카테고리의 목록입니다. URL이 아니라 카테고리 이름만 지정하세요."
+            },
+            "pages": {
+              "label": "페이지",
+              "description": "인덱싱할 페이지 이름을 0개 이상 지정하세요."
+            },
+            "recurse_depth": {
+              "label": "재귀 깊이",
+              "description": "하위 카테고리가 있는 카테고리를 인덱싱할 때 인덱싱할 단계 수를 정합니다. 0을 지정하면 카테고리 자체만 인덱싱합니다 (재귀 없음). -1을 지정하면 재귀 깊이가 무제한입니다. 드물게 카테고리가 자기 자신을 하위 항목으로 포함하여 무한 루프가 발생할 수 있습니다. 이런 일이 없다고 확신할 때만 -1을 사용하세요."
+            }
+          }
+        },
+        "xenforo": {
+          "description": "Xenforo 커넥터 구성",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "인덱싱할 XenForo v2.2 포럼 URL입니다. 게시판 또는 스레드일 수 있습니다."
+            }
+          }
+        },
+        "asana": {
+          "description": "Asana 커넥터 구성",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "워크스페이스 ID",
+              "description": "인덱싱할 Asana 워크스페이스의 ID입니다. https://app.asana.com/api/1.0/workspaces 에서 찾을 수 있으며, 1234567890123456 같은 숫자입니다."
+            },
+            "asana_project_ids": {
+              "label": "프로젝트 ID",
+              "description": "인덱싱할 특정 Asana 프로젝트의 ID를 쉼표로 구분하여 입력하세요. 비워 두면 워크스페이스의 모든 프로젝트를 인덱싱합니다. 예: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "팀 ID",
+              "description": "팀에 공개된 작업에 액세스할 때 사용할 팀의 ID입니다. 공개 작업에 더해 팀에 공개된 작업도 인덱싱할 수 있습니다. 이 기능을 사용하지 않으려면 비워 두세요."
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "MediaWiki 커넥터 구성",
+          "fields": {
+            "language_code": {
+              "label": "언어 코드",
+              "description": "올바른 MediaWiki 언어 코드를 입력하세요 (예: 'en', 'es')"
+            },
+            "hostname": {
+              "label": "MediaWiki 사이트 URL"
+            },
+            "categories": {
+              "label": "인덱싱할 카테고리",
+              "description": "인덱싱할 카테고리 이름을 0개 이상 지정하세요. 대부분의 MediaWiki 사이트에서 카테고리는 'Category: XYZ' 형식의 이름을 가진 페이지로, 다른 페이지/카테고리의 목록입니다. URL이 아니라 카테고리 이름만 지정하세요."
+            },
+            "pages": {
+              "label": "페이지",
+              "description": "인덱싱할 페이지 이름을 0개 이상 지정하세요. URL이 아니라 페이지 이름만 지정하세요."
+            },
+            "recurse_depth": {
+              "label": "재귀 깊이",
+              "description": "하위 카테고리가 있는 카테고리를 인덱싱할 때 인덱싱할 단계 수를 정합니다. 0을 지정하면 카테고리 자체만 인덱싱합니다 (재귀 없음). -1을 지정하면 재귀 깊이가 무제한입니다. 드물게 카테고리가 자기 자신을 하위 항목으로 포함하여 무한 루프가 발생할 수 있습니다. 이런 일이 없다고 확신할 때만 -1을 사용하세요."
+            }
+          }
+        },
+        "discord": {
+          "description": "Discord 커넥터 구성",
+          "fields": {
+            "server_ids": {
+              "label": "서버 ID",
+              "description": "포함할 서버 ID를 0개 이상 지정하세요. 해당 서버 안의 채널만 인덱싱에 사용됩니다"
+            },
+            "channel_names": {
+              "label": "채널",
+              "description": "인덱싱할 채널을 0개 이상 지정하세요. 예를 들어 \"support\" 채널을 지정하면 \"#support\" 채널 내의 모든 콘텐츠만 인덱싱합니다. 채널을 지정하지 않으면 봇이 액세스할 수 있는 모든 채널이 인덱싱됩니다."
+            },
+            "start_date": {
+              "label": "시작 날짜",
+              "description": "이 날짜 이후의 메시지만 인덱싱됩니다. 형식: YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "Freshdesk 커넥터 구성",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Freshdesk 도메인",
+              "description": "Freshdesk 사이트의 서브도메인입니다. `acme.freshdesk.com`의 `acme`가 해당합니다."
+            }
+          }
+        },
+        "fireflies": {
+          "description": "Fireflies 커넥터 구성"
+        },
+        "braintrust": {
+          "description": "Braintrust 커넥터 구성",
+          "fields": {
+            "project_name": {
+              "label": "프로젝트 이름",
+              "description": "이 프로젝트의 프롬프트, 데이터셋, 실험만 인덱싱합니다. 비워 두면 조직 전체를 인덱싱합니다."
+            },
+            "experiment_row_lookback_days": {
+              "label": "실험 행 조회 기간(일)",
+              "description": "지정한 일수 이내에 생성된 실험의 행별 결과만 인덱싱합니다. 실험 요약은 항상 인덱싱됩니다. 0으로 설정하면 모든 실험의 행을 인덱싱합니다."
+            }
+          }
+        },
+        "canvas": {
+          "description": "Canvas 커넥터 구성",
+          "fields": {
+            "canvas_base_url": {
+              "label": "Canvas 기본 URL",
+              "description": "예: https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "Egnyte 커넥터 구성",
+          "fields": {
+            "domain": {
+              "label": "Egnyte 도메인",
+              "description": "Egnyte 사이트의 서브도메인입니다. `acme.egnyte.com`의 `acme`가 해당합니다."
+            },
+            "folder_path": {
+              "label": "폴더 경로",
+              "description": "인덱싱할 폴더 경로입니다 (예: '/Shared/Documents'). 비워 두면 모든 항목을 인덱싱합니다."
+            }
+          }
+        },
+        "airtable": {
+          "description": "Airtable 커넥터 구성",
+          "fields": {
+            "airtable_scope": {
+              "label": "인덱싱할 Airtable 콘텐츠",
+              "tabs": {
+                "everything": {
+                  "label": "전체"
+                },
+                "specific": {
+                  "label": "특정 테이블"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "전체",
+              "description": "이 커넥터는 API 토큰으로 액세스할 수 있는 모든 베이스와 테이블을 자동으로 찾아 인덱싱합니다."
+            },
+            "airtable_url": {
+              "label": "Airtable URL",
+              "description": "테이블을 보고 있을 때 브라우저의 URL을 붙여넣으세요. 예: https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "공유 ID",
+              "description": "선택 사항입니다. 레코드 링크에 공유 보기 URL을 사용하려면 여기에 공유 ID를 입력하세요. 예: shrkfjEzDmLaDtK83."
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "첨부 파일을 제외한 모든 필드를 메타데이터로 처리",
+              "description": "인덱싱할 주요 콘텐츠가 첨부 파일이고 다른 모든 열이 해당 첨부 파일의 메타데이터라면 선택하세요."
+            }
+          }
+        },
+        "highspot": {
+          "description": "Highspot 커넥터 구성",
+          "fields": {
+            "highspot_url": {
+              "label": "Highspot URL"
+            },
+            "highspot_scope": {
+              "label": "인덱싱할 Highspot 콘텐츠",
+              "tabs": {
+                "spots": {
+                  "label": "특정 스팟"
+                },
+                "everything": {
+                  "label": "전체"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "스팟 이름",
+              "description": "스팟이 여러 개이면 하나씩 입력하세요."
+            },
+            "everything": {
+              "label": "전체",
+              "description": "이 커넥터는 제공된 자격 증명으로 액세스할 수 있는 모든 스팟을 인덱싱합니다!"
+            }
+          }
+        },
+        "imap": {
+          "description": "이메일 커넥터 구성",
+          "fields": {
+            "host": {
+              "label": "IMAP 서버 호스트",
+              "description": "IMAP 서버 호스트 이름입니다 (예: imap.gmail.com, outlook.office365.com)"
+            },
+            "port": {
+              "label": "IMAP 서버 포트",
+              "description": "IMAP 서버 포트입니다 (기본값: SSL의 경우 993)"
+            },
+            "mailboxes": {
+              "label": "사서함",
+              "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
+            }
+          }
+        }
       }
     },
     "costOverrides": {

@@ -177,6 +177,8 @@ export function splitCredentialBoundFields(
 }
 
 interface ConnectorValidationMessages {
+  /** A required field left empty, named by its label. */
+  required?: (field: string) => string;
   oneDriveUsersRequired?: string;
   specificGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
@@ -271,9 +273,10 @@ export function createConnectorInitialValues(
 export function createConnectorValidationSchema(
   connector: ConfigurableSources,
   requireGroups: boolean = false,
-  messages: ConnectorValidationMessages = {}
+  messages: ConnectorValidationMessages = {},
+  // The translated config, so "required" messages name translated labels.
+  configuration: ConnectionConfiguration = connectorConfigs[connector]
 ): Yup.ObjectSchema<Record<string, any>> {
-  const configuration = connectorConfigs[connector];
   const fields = [...configuration.values, ...configuration.advanced_values];
 
   const fieldSchemas = fields.reduce<Record<string, Yup.Schema>>(
@@ -294,7 +297,13 @@ export function createConnectorValidationSchema(
                     : Yup.string();
 
       if (!field.optional) {
-        schema = schema.required(`${field.label} is required`);
+        const label: string =
+          (typeof field.label === "function"
+            ? field.label(null)
+            : field.label) ?? field.name;
+        schema = schema.required(
+          messages.required?.(label) ?? `${label} is required`
+        );
       }
 
       acc[field.name] = schema;

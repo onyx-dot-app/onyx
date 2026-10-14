@@ -1,5 +1,6 @@
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
+import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import type {
   BooleanOption,
@@ -8,6 +9,7 @@ import type {
 } from "@/lib/connectors/types";
 import { OneDriveScope } from "@/lib/connectors/types";
 import { googleCredentialKind } from "@/lib/credentials/utils";
+import type { CredentialValues } from "@/lib/credentials/types";
 
 const DEFAULT_MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
 const DEFAULT_MICROSOFT_GRAPH_API_HOST = "https://graph.microsoft.com";
@@ -31,21 +33,21 @@ interface OneDriveConfigurationText {
 }
 
 const ONE_DRIVE_TRANSLATION_KEYS: OneDriveConfigurationText = {
-  description: "description",
-  indexingScopeLabel: "indexingScope.label",
-  generalLabel: "indexingScope.general.label",
-  generalDescription: "indexingScope.general.description",
-  specificLabel: "indexingScope.specific.label",
-  usersLabel: "indexingScope.specific.users.label",
-  usersDescription: "indexingScope.specific.users.description",
-  excludedPathsLabel: "excludedPaths.label",
-  excludedPathsDescription: "excludedPaths.description",
-  organizationLinksLabel: "organizationLinks.label",
-  organizationLinksDescription: "organizationLinks.description",
-  authorityHostLabel: "authorityHost.label",
-  authorityHostDescription: "authorityHost.description",
-  graphApiHostLabel: "graphApiHost.label",
-  graphApiHostDescription: "graphApiHost.description",
+  description: "oneDrive.description",
+  indexingScopeLabel: "oneDrive.indexingScope.label",
+  generalLabel: "oneDrive.indexingScope.general.label",
+  generalDescription: "oneDrive.indexingScope.general.description",
+  specificLabel: "oneDrive.indexingScope.specific.label",
+  usersLabel: "oneDrive.indexingScope.specific.users.label",
+  usersDescription: "oneDrive.indexingScope.specific.users.description",
+  excludedPathsLabel: "oneDrive.excludedPaths.label",
+  excludedPathsDescription: "oneDrive.excludedPaths.description",
+  organizationLinksLabel: "oneDrive.organizationLinks.label",
+  organizationLinksDescription: "oneDrive.organizationLinks.description",
+  authorityHostLabel: "oneDrive.authorityHost.label",
+  authorityHostDescription: "oneDrive.authorityHost.description",
+  graphApiHostLabel: "oneDrive.graphApiHost.label",
+  graphApiHostDescription: "oneDrive.graphApiHost.description",
 };
 
 function buildOneDriveConfiguration(
@@ -137,11 +139,11 @@ interface LinearConfigurationText {
 }
 
 const LINEAR_TRANSLATION_KEYS: LinearConfigurationText = {
-  description: "description",
-  teamsLabel: "teams.label",
-  teamsDescription: "teams.description",
-  projectsLabel: "projects.label",
-  projectsDescription: "projects.description",
+  description: "linear.description",
+  teamsLabel: "linear.teams.label",
+  teamsDescription: "linear.teams.description",
+  projectsLabel: "linear.projects.label",
+  projectsDescription: "linear.projects.description",
 };
 
 function buildLinearConfiguration(
@@ -169,43 +171,79 @@ function buildLinearConfiguration(
   };
 }
 
+type ConnectorField = ConnectionConfiguration["values"][number];
+type FieldText =
+  | string
+  | ((currentCredential: CredentialValues | null) => string);
+
+/**
+ * The connector's form config with its copy translated. The configs hold
+ * message keys under `admin.connectorsList` (`connectors.<source>...`, and
+ * OneDrive's and Linear's own namespaces); this swaps in the messages.
+ */
 export function useConnectorConfiguration(
   connector: ConfigurableSources
 ): ConnectionConfiguration {
-  const t = useTranslations("admin.connectorsList.oneDrive");
-  const linearText = useTranslations("admin.connectorsList.linear");
+  const t = useTranslations("admin.connectorsList");
+  return useMemo(
+    () =>
+      translateConfiguration(connectorConfigs[connector], (key) =>
+        // SAFETY: every copy string in `connectorConfigs` is a key of
+        // `admin.connectorsList`; `connectorCopy.test.ts` checks each one
+        // against en.json.
+        t(key as Parameters<typeof t>[0], {
+          docsAdminsPath: DOCS_ADMINS_PATH,
+        })
+      ),
+    [connector, t]
+  );
+}
 
-  if (connector === "linear") {
-    return buildLinearConfiguration({
-      description: linearText("description"),
-      teamsLabel: linearText("teams.label"),
-      teamsDescription: linearText("teams.description"),
-      projectsLabel: linearText("projects.label"),
-      projectsDescription: linearText("projects.description"),
-    });
-  }
-
-  if (connector !== "onedrive") {
-    return connectorConfigs[connector];
-  }
-
-  return buildOneDriveConfiguration({
-    description: t("description"),
-    indexingScopeLabel: t("indexingScope.label"),
-    generalLabel: t("indexingScope.general.label"),
-    generalDescription: t("indexingScope.general.description"),
-    specificLabel: t("indexingScope.specific.label"),
-    usersLabel: t("indexingScope.specific.users.label"),
-    usersDescription: t("indexingScope.specific.users.description"),
-    excludedPathsLabel: t("excludedPaths.label"),
-    excludedPathsDescription: t("excludedPaths.description"),
-    organizationLinksLabel: t("organizationLinks.label"),
-    organizationLinksDescription: t("organizationLinks.description"),
-    authorityHostLabel: t("authorityHost.label"),
-    authorityHostDescription: t("authorityHost.description"),
-    graphApiHostLabel: t("graphApiHost.label"),
-    graphApiHostDescription: t("graphApiHost.description"),
-  });
+export function translateConfiguration(
+  config: ConnectionConfiguration,
+  translate: (key: string) => string
+): ConnectionConfiguration {
+  const text = (value: FieldText): FieldText =>
+    typeof value === "function"
+      ? (currentCredential) => translate(value(currentCredential))
+      : translate(value);
+  const field = <T extends ConnectorField>(f: T): T => {
+    const out: ConnectorField = {
+      ...f,
+      ...(f.label !== undefined && { label: text(f.label) }),
+      ...(f.description !== undefined && {
+        description: text(f.description),
+      }),
+    };
+    if (out.type === "tab") {
+      out.tabs = out.tabs.map((tab) => ({
+        ...tab,
+        label: translate(tab.label),
+        fields: tab.fields.map(field),
+      }));
+    }
+    if ((out.type === "select" || out.type === "multiselect") && out.options) {
+      out.options = out.options.map((option) => ({
+        ...option,
+        name: translate(option.name),
+      }));
+    }
+    if (out.type === "string_pair_list") {
+      out.leftLabel = translate(out.leftLabel);
+      out.rightLabel = translate(out.rightLabel);
+    }
+    // SAFETY: `out` is a copy of `f` with only its copy replaced.
+    return out as T;
+  };
+  return {
+    ...config,
+    description: translate(config.description),
+    ...(config.subtext !== undefined && {
+      subtext: translate(config.subtext),
+    }),
+    values: config.values.map(field),
+    advanced_values: config.advanced_values.map(field),
+  };
 }
 
 // Shared "Include Attachments" checkbox. Pair with an `include_attachments`
@@ -213,12 +251,11 @@ export function useConnectorConfiguration(
 // the convention, including how to pick the default.
 export function buildIncludeAttachmentsOption(
   defaultValue: boolean,
-  description: string = "Enable processing of page attachments including images and documents"
+  description: string = "connectors.shared.fields.include_attachments.description"
 ): BooleanOption {
   return {
     type: "checkbox",
-    query: "Include attachments?",
-    label: "Include Attachments",
+    label: "connectors.shared.fields.include_attachments.label",
     name: "include_attachments",
     description,
     default: defaultValue,
@@ -227,26 +264,32 @@ export function buildIncludeAttachmentsOption(
 
 const zoomMeetingIdsOption: ListOption = {
   type: "list",
-  query: "Enter the Zoom meeting IDs to index:",
-  label: "Meeting IDs",
+  label: "connectors.zoom.fields.meeting_ids.label",
   name: "meeting_ids",
   optional: true,
-  description:
-    "Each recurring meeting is indexed occurrence by occurrence. Zoom returns " +
-    "occurrences from the last 15 months only, so older ones are out of reach " +
-    "of a meeting ID. To index history further back, scope by host email or by " +
-    "Zoom Group instead — neither has that limit.",
+  description: "connectors.zoom.fields.meeting_ids.description",
 };
 
 const zoomWebinarIdsOption: ListOption = {
   type: "list",
-  query: "Enter the Zoom webinar IDs to index:",
-  label: "Webinar IDs",
+  label: "connectors.zoom.fields.webinar_ids.label",
   name: "webinar_ids",
   optional: true,
-  description:
-    "Webinars also need the Webinar add-on, enabled for the host. Unlike " +
-    "meeting IDs, webinar history has no 15-month limit.",
+  description: "connectors.zoom.fields.webinar_ids.description",
+};
+
+/**
+ * Whether an Atlassian API token (Confluence, Jira) has scopes. It sits below
+ * the site URL in both connectors.
+ */
+const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
+  type: "checkbox",
+  label: "connectors.shared.fields.scoped_token.label",
+  description: "connectors.shared.fields.scoped_token.description",
+  name: "scoped_token",
+  optional: true,
+  default: false,
+  asCheckbox: true,
 };
 
 export const connectorConfigs: Record<
@@ -254,52 +297,53 @@ export const connectorConfigs: Record<
   ConnectionConfiguration
 > = {
   web: {
-    description: "Configure Web connector",
+    description: "connectors.web.description",
     values: [
       {
         type: "text",
-        query: "Enter the website URL to scrape e.g. https://docs.onyx.app/:",
-        label: "Base URL",
+        label: "connectors.web.fields.base_url.label",
         name: "base_url",
         placeholder: "https://example.com",
         optional: false,
       },
       {
         type: "select",
-        query: "Select the web connector type:",
-        label: "Scrape Method",
+        label: "connectors.web.fields.web_connector_type.label",
         name: "web_connector_type",
         options: [
-          { name: "recursive", value: "recursive" },
-          { name: "single", value: "single" },
-          { name: "sitemap", value: "sitemap" },
+          {
+            name: "connectors.web.fields.web_connector_type.options.recursive",
+            value: "recursive",
+          },
+          {
+            name: "connectors.web.fields.web_connector_type.options.single",
+            value: "single",
+          },
+          {
+            name: "connectors.web.fields.web_connector_type.options.sitemap",
+            value: "sitemap",
+          },
         ],
       },
     ],
     advanced_values: [
       {
         type: "checkbox",
-        query: "Scroll before scraping:",
-        label: "Scroll before scraping",
-        description:
-          "Enable if the website requires scrolling for the desired content to load",
+        label: "connectors.web.fields.scroll_before_scraping.label",
+        description: "connectors.web.fields.scroll_before_scraping.description",
         name: "scroll_before_scraping",
         optional: true,
       },
       {
         type: "string_pair_list",
-        query: "Enter URL rewrite rules:",
-        label: "URL Rewrites",
+        label: "connectors.web.fields.url_rewrites.label",
         name: "url_rewrites",
         leftKey: "source",
         rightKey: "target",
         optional: true,
-        description:
-          "Rewrite document URLs before storing. Useful when crawling through an internal " +
-          "mirror while storing the canonical public links, for example " +
-          "https://internal-mirror.example.com \u2192 https://docs.example.com",
-        leftLabel: "Source URL prefix",
-        rightLabel: "Replacement prefix",
+        description: "connectors.web.fields.url_rewrites.description",
+        leftLabel: "connectors.web.fields.url_rewrites.leftLabel",
+        rightLabel: "connectors.web.fields.url_rewrites.rightLabel",
         leftPlaceholder: "https://internal-mirror.example.com",
         rightPlaceholder: "https://docs.example.com",
         default: [],
@@ -308,102 +352,96 @@ export const connectorConfigs: Record<
     overrideDefaultFreq: 60 * 60 * 24,
   },
   lumapps: {
-    description: "Configure LumApps connector",
+    description: "connectors.lumapps.description",
     values: [
       {
         type: "text",
-        label: "API Base URL (cell host)",
+        label: "connectors.lumapps.fields.base_url.label",
         name: "base_url",
         optional: false,
-        description:
-          "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com).",
+        description: "connectors.lumapps.fields.base_url.description",
       },
       {
         type: "text",
-        label: "Organization ID",
+        label: "connectors.lumapps.fields.organization_id.label",
         name: "organization_id",
         optional: false,
-        description: "Your LumApps organization id (numeric).",
+        description: "connectors.lumapps.fields.organization_id.description",
       },
     ],
     advanced_values: [
       {
         type: "list",
-        label: "Instance (site) IDs",
+        label: "connectors.lumapps.fields.instance_ids.label",
         name: "instance_ids",
         optional: true,
-        description:
-          "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user.",
+        description: "connectors.lumapps.fields.instance_ids.description",
       },
       {
         type: "list",
-        label: "Custom Content Type IDs",
+        label: "connectors.lumapps.fields.custom_content_types.label",
         name: "custom_content_types",
         optional: true,
         description:
-          "Restrict to specific custom content type IDs. Leave empty to index all content types.",
+          "connectors.lumapps.fields.custom_content_types.description",
       },
       {
         type: "text",
-        label: "Language",
+        label: "connectors.lumapps.fields.lang.label",
         name: "lang",
         optional: true,
         default: "en",
-        description:
-          "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr).",
+        description: "connectors.lumapps.fields.lang.description",
       },
     ],
   },
   github: {
-    description: "Configure GitHub connector",
+    description: "connectors.github.description",
     values: [
       {
         type: "text",
-        label: "GitHub Enterprise Server URL",
+        label: "connectors.github.fields.github_base_url.label",
         name: "github_base_url",
         optional: true,
-        description: "Leave blank for github.com.",
+        description: "connectors.github.fields.github_base_url.description",
         placeholder: "https://github.example.com",
         subDescription: "siteUrl",
       },
       {
         type: "text",
-        query: "Enter the GitHub username or organization:",
-        label: "Repository Owner",
+        label: "connectors.github.fields.repo_owner.label",
         name: "repo_owner",
         optional: false,
       },
       {
         type: "tab",
         name: "github_mode",
-        label: "GitHub content to index",
+        label: "connectors.github.fields.github_mode.label",
         optional: true,
         tabs: [
           {
             value: "repo",
-            label: "Specific Repository",
+            label: "connectors.github.fields.github_mode.tabs.repo.label",
             fields: [
               {
                 type: "text",
-                query: "Enter the repository name(s):",
-                label: "Repository Name(s)",
+                label: "connectors.github.fields.repositories.label",
                 name: "repositories",
                 optional: false,
                 description:
-                  "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)",
+                  "connectors.github.fields.repositories.description",
               },
             ],
           },
           {
             value: "everything",
-            label: "Everything",
+            label: "connectors.github.fields.github_mode.tabs.everything.label",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label: "connectors.github.fields.everything.label",
                 name: "everything",
-                description:
-                  "This connector will index all repositories the provided credentials have access to!",
+                description: "connectors.github.fields.everything.description",
               },
             ],
           },
@@ -411,48 +449,42 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        query: "Include pull requests",
-        label: "Include pull requests",
-        description: "Index pull requests from repositories",
+        label: "connectors.github.fields.include_prs.label",
+        description: "connectors.github.fields.include_prs.description",
         name: "include_prs",
         optional: true,
       },
       {
         type: "checkbox",
-        query: "Include issues?",
-        label: "Include Issues",
+        label: "connectors.github.fields.include_issues.label",
         name: "include_issues",
-        description: "Index issues from repositories",
+        description: "connectors.github.fields.include_issues.description",
         optional: true,
       },
       {
         type: "checkbox",
-        query: "Include documents?",
-        label: "Include Documents",
+        label: "connectors.github.fields.include_files.label",
         name: "include_files",
-        description:
-          "Index text-based documents (markdown, text, etc.) from repositories",
+        description: "connectors.github.fields.include_files.description",
         optional: true,
       },
     ],
     advanced_values: [
       {
         type: "text",
-        query: "Enter the branch to index documents from:",
-        label: "Branch",
+        label: "connectors.github.fields.branch.label",
         name: "branch",
         optional: true,
-        description:
-          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
+        description: "connectors.github.fields.branch.description",
       },
     ],
   },
   testrail: {
-    description: "Configure TestRail connector",
+    description: "connectors.testrail.description",
     values: [
       {
         type: "text",
-        label: "TestRail Base URL",
+        label: "connectors.testrail.fields.testrail_base_url.label",
         name: "testrail_base_url",
         optional: false,
         placeholder: "https://acme.testrail.io",
@@ -460,46 +492,43 @@ export const connectorConfigs: Record<
       },
       {
         type: "text",
-        label: "Project IDs",
+        label: "connectors.testrail.fields.project_ids.label",
         name: "project_ids",
         optional: true,
-        description:
-          "Comma-separated list of TestRail project IDs to index (e.g., 1 or 1,2,3). Leave empty to index all projects.",
+        description: "connectors.testrail.fields.project_ids.description",
       },
     ],
     advanced_values: [
       {
         type: "number",
-        label: "Cases Page Size",
+        label: "connectors.testrail.fields.cases_page_size.label",
         name: "cases_page_size",
         optional: true,
-        description:
-          "Number of test cases to fetch per page from the TestRail API (default: 250)",
+        description: "connectors.testrail.fields.cases_page_size.description",
       },
       {
         type: "number",
-        label: "Max Pages",
+        label: "connectors.testrail.fields.max_pages.label",
         name: "max_pages",
         optional: true,
-        description:
-          "Maximum number of pages to fetch to prevent infinite loops (default: 10000)",
+        description: "connectors.testrail.fields.max_pages.description",
       },
       {
         type: "number",
-        label: "Skip Document Character Limit",
+        label: "connectors.testrail.fields.skip_doc_absolute_chars.label",
         name: "skip_doc_absolute_chars",
         optional: true,
         description:
-          "Skip indexing test cases that exceed this character limit (default: 200000)",
+          "connectors.testrail.fields.skip_doc_absolute_chars.description",
       },
     ],
   },
   gitlab: {
-    description: "Configure GitLab connector",
+    description: "connectors.gitlab.description",
     values: [
       {
         type: "text",
-        label: "GitLab URL",
+        label: "connectors.gitlab.fields.gitlab_url.label",
         name: "gitlab_url",
         optional: false,
         placeholder: "https://gitlab.com",
@@ -507,15 +536,13 @@ export const connectorConfigs: Record<
       },
       {
         type: "text",
-        query: "Enter the project owner:",
-        label: "Project Owner",
+        label: "connectors.gitlab.fields.project_owner.label",
         name: "project_owner",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the project name:",
-        label: "Project Name",
+        label: "connectors.gitlab.fields.project_name.label",
         name: "project_name",
         optional: false,
       },
@@ -523,78 +550,76 @@ export const connectorConfigs: Record<
     advanced_values: [
       {
         type: "checkbox",
-        query: "Include merge requests?",
-        label: "Include MRs",
+        label: "connectors.gitlab.fields.include_mrs.label",
         name: "include_mrs",
-        description: "Index merge requests from repositories",
+        description: "connectors.gitlab.fields.include_mrs.description",
         default: true,
       },
       {
         type: "checkbox",
-        query: "Include issues?",
-        label: "Include Issues",
+        label: "connectors.gitlab.fields.include_issues.label",
         name: "include_issues",
-        description: "Index issues from repositories",
+        description: "connectors.gitlab.fields.include_issues.description",
         default: true,
       },
     ],
   },
   bitbucket: {
-    description: "Configure Bitbucket connector",
-    subtext:
-      "Configure Bitbucket connector (Cloud only). You can index a workspace, specific projects or repositories.",
+    description: "connectors.bitbucket.description",
+    subtext: "connectors.bitbucket.subtext",
     values: [
       {
         type: "text",
-        label: "Workspace",
+        label: "connectors.bitbucket.fields.workspace.label",
         name: "workspace",
         optional: false,
-        description: `The Bitbucket workspace to index (e.g., "atlassian" from https://bitbucket.org/atlassian/workspace ).`,
+        description: "connectors.bitbucket.fields.workspace.description",
       },
       {
         type: "tab",
         name: "bitbucket_mode",
-        label: "Bitbucket content to index",
+        label: "connectors.bitbucket.fields.bitbucket_mode.label",
         optional: true,
         tabs: [
           {
             value: "repo",
-            label: "Specific Repositories",
+            label: "connectors.bitbucket.fields.bitbucket_mode.tabs.repo.label",
             fields: [
               {
                 type: "text",
-                label: "Repository Slugs",
+                label: "connectors.bitbucket.fields.repositories.label",
                 name: "repositories",
                 optional: false,
                 description:
-                  "For multiple repositories, enter comma-separated slugs (e.g., repo1,repo2,repo3)",
+                  "connectors.bitbucket.fields.repositories.description",
               },
             ],
           },
           {
             value: "project",
-            label: "Project(s)",
+            label:
+              "connectors.bitbucket.fields.bitbucket_mode.tabs.project.label",
             fields: [
               {
                 type: "text",
-                label: "Project Key(s)",
+                label: "connectors.bitbucket.fields.projects.label",
                 name: "projects",
                 optional: false,
-                description:
-                  "One or more Bitbucket Project Keys (comma-separated) to index all repositories in those projects (e.g., PROJ1,PROJ2)",
+                description: "connectors.bitbucket.fields.projects.description",
               },
             ],
           },
           {
             value: "workspace",
-            label: "Workspace",
+            label:
+              "connectors.bitbucket.fields.bitbucket_mode.tabs.workspace.label",
             fields: [
               {
                 type: "string_tab",
-                label: "Workspace",
+                label: "connectors.bitbucket.fields.workspace_tab.label",
                 name: "workspace_tab",
                 description:
-                  "This connector will index all repositories in the workspace.",
+                  "connectors.bitbucket.fields.workspace_tab.description",
               },
             ],
           },
@@ -604,32 +629,27 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   gitbook: {
-    description: "Configure GitBook connector",
+    description: "connectors.gitbook.description",
     values: [
       {
         type: "text",
-        query: "Enter the space ID:",
-        label: "Space ID",
+        label: "connectors.gitbook.fields.space_id.label",
         name: "space_id",
         optional: false,
-        description:
-          "The ID of the GitBook space to index. This can be found in the URL " +
-          "of a page in the space. For example, if your URL looks like " +
-          "`https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, " +
-          "then your space ID is `8JkzVx8QCIGRrmxhGHU8`.",
+        description: "connectors.gitbook.fields.space_id.description",
       },
     ],
     advanced_values: [],
   },
   google_drive: {
-    description: "Configure Google Drive connector",
+    description: "connectors.google_drive.description",
     configFromCredential: (credential) => ({
       credential_kind: googleCredentialKind(credential),
     }),
     values: [
       {
         type: "text",
-        label: "Credential kind",
+        label: "connectors.google_drive.fields.credential_kind.label",
         name: "credential_kind",
         optional: true,
         hidden: true,
@@ -641,15 +661,17 @@ export const connectorConfigs: Record<
         tabs: [
           {
             value: OneDriveScope.General,
-            label: "General",
+            label:
+              "connectors.google_drive.fields.indexing_scope.tabs.General.label",
             fields: [
               {
                 type: "checkbox",
-                label: "Include shared drives",
+                label:
+                  "connectors.google_drive.fields.include_shared_drives.label",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "This will allow Onyx to index everything in the shared drives you have access to."
-                    : "This will allow Onyx to index everything in your Organization's shared drives.";
+                    ? "connectors.google_drive.fields.include_shared_drives.description.oauth"
+                    : "connectors.google_drive.fields.include_shared_drives.description.serviceAccount";
                 },
                 name: "include_shared_drives",
                 default: false,
@@ -658,13 +680,13 @@ export const connectorConfigs: Record<
                 type: "checkbox",
                 label: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Include My Drive"
-                    : "Include Everyone's My Drive";
+                    ? "connectors.google_drive.fields.include_my_drives.label.oauth"
+                    : "connectors.google_drive.fields.include_my_drives.label.serviceAccount";
                 },
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "This will allow Onyx to index everything in your My Drive."
-                    : "This will allow Onyx to index everything in everyone's My Drives.";
+                    ? "connectors.google_drive.fields.include_my_drives.description.oauth"
+                    : "connectors.google_drive.fields.include_my_drives.description.serviceAccount";
                 },
                 name: "include_my_drives",
                 default: false,
@@ -672,8 +694,9 @@ export const connectorConfigs: Record<
               {
                 type: "checkbox",
                 description:
-                  "This will allow Onyx to index all files shared with you.",
-                label: "Include All Files Shared With You",
+                  "connectors.google_drive.fields.include_files_shared_with_me.description",
+                label:
+                  "connectors.google_drive.fields.include_files_shared_with_me.label",
                 name: "include_files_shared_with_me",
                 visibleCondition: (values, currentCredential) =>
                   currentCredential?.credential_json?.google_tokens,
@@ -683,16 +706,17 @@ export const connectorConfigs: Record<
           },
           {
             value: OneDriveScope.Specific,
-            label: "Specific",
+            label:
+              "connectors.google_drive.fields.indexing_scope.tabs.Specific.label",
             fields: [
               {
                 type: "text",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Enter a comma separated list of the URLs for the shared drive you would like to index. You must have access to these shared drives."
-                    : "Enter a comma separated list of the URLs for the shared drive you would like to index.";
+                    ? "connectors.google_drive.fields.shared_drive_urls.description.oauth"
+                    : "connectors.google_drive.fields.shared_drive_urls.description.serviceAccount";
                 },
-                label: "Shared Drive URLs",
+                label: "connectors.google_drive.fields.shared_drive_urls.label",
                 name: "shared_drive_urls",
                 default: "",
                 isTextArea: true,
@@ -700,8 +724,9 @@ export const connectorConfigs: Record<
               {
                 type: "text",
                 description:
-                  "Enter a comma separated list of the URLs of any folders you would like to index. The files located in these folders (and all subfolders) will be indexed.",
-                label: "Folder URLs",
+                  "connectors.google_drive.fields.shared_folder_urls.description",
+                label:
+                  "connectors.google_drive.fields.shared_folder_urls.label",
                 name: "shared_folder_urls",
                 default: "",
                 isTextArea: true,
@@ -709,8 +734,8 @@ export const connectorConfigs: Record<
               {
                 type: "text",
                 description:
-                  "Enter a comma separated list of the emails of the users whose MyDrive you want to index.",
-                label: "My Drive Emails",
+                  "connectors.google_drive.fields.my_drive_emails.description",
+                label: "connectors.google_drive.fields.my_drive_emails.label",
                 name: "my_drive_emails",
                 visibleCondition: (values, currentCredential) =>
                   !currentCredential?.credential_json?.google_tokens,
@@ -727,8 +752,8 @@ export const connectorConfigs: Record<
       {
         type: "text",
         description:
-          "Enter a comma separated list of specific user emails to index. This will only index files accessible to these users.",
-        label: "Specific User Emails",
+          "connectors.google_drive.fields.specific_user_emails.description",
+        label: "connectors.google_drive.fields.specific_user_emails.label",
         name: "specific_user_emails",
         optional: true,
         default: "",
@@ -738,9 +763,9 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        label: "Hide domain link-only files",
+        label: "connectors.google_drive.fields.exclude_domain_link_only.label",
         description:
-          "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access.",
+          "connectors.google_drive.fields.exclude_domain_link_only.description",
         name: "exclude_domain_link_only",
         optional: true,
         default: false,
@@ -749,16 +774,16 @@ export const connectorConfigs: Record<
   },
   onedrive: buildOneDriveConfiguration(ONE_DRIVE_TRANSLATION_KEYS),
   gmail: {
-    description: "Configure Gmail connector",
+    description: "connectors.gmail.description",
     values: [],
     advanced_values: [],
   },
   bookstack: {
-    description: "Configure Bookstack connector",
+    description: "connectors.bookstack.description",
     values: [
       {
         type: "text",
-        label: "BookStack Base URL",
+        label: "connectors.bookstack.fields.bookstack_base_url.label",
         name: "bookstack_base_url",
         optional: false,
         placeholder: "https://bookstack.example.com",
@@ -768,11 +793,11 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   outline: {
-    description: "Configure Outline connector",
+    description: "connectors.outline.description",
     values: [
       {
         type: "text",
-        label: "Outline Base URL",
+        label: "connectors.outline.fields.outline_base_url.label",
         name: "outline_base_url",
         optional: false,
         placeholder: "https://app.getoutline.com",
@@ -782,13 +807,12 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   confluence: {
-    description: "Configure Confluence connector",
+    description: "connectors.confluence.description",
     initialConnectorName: "cloud_name",
     values: [
       {
         type: "checkbox",
-        query: "Is this a Confluence Cloud instance?",
-        label: "Is Cloud",
+        label: "connectors.confluence.fields.is_cloud.label",
         name: "is_cloud",
         optional: false,
         default: true,
@@ -796,8 +820,7 @@ export const connectorConfigs: Record<
           true: "confluenceCloud",
           false: "confluenceDataCenter",
         },
-        description:
-          "Choose Confluence Cloud for a site on atlassian.net, or Confluence Data Center for a self-hosted Confluence Server or Data Center site.",
+        description: "connectors.confluence.fields.is_cloud.description",
         // An OAuth credential is for Confluence Cloud only.
         initial: (currentCredential) =>
           currentCredential?.credential_json?.confluence_refresh_token
@@ -812,8 +835,7 @@ export const connectorConfigs: Record<
       },
       {
         type: "text",
-        query: "Enter the wiki base URL:",
-        label: "Site URL",
+        label: "connectors.confluence.fields.wiki_base.label",
         name: "wiki_base",
         optional: false,
         initial: (currentCredential) => {
@@ -828,17 +850,7 @@ export const connectorConfigs: Record<
         placeholder: "https://your-domain.atlassian.net/wiki",
         subDescription: "siteUrl",
       },
-      {
-        type: "checkbox",
-        query: "Using scoped token?",
-        label: "This is an API token with scopes",
-        description:
-          "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens.",
-        name: "scoped_token",
-        optional: true,
-        default: false,
-        asCheckbox: true,
-      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
       {
         type: "tab",
         name: "indexing_scope",
@@ -846,50 +858,50 @@ export const connectorConfigs: Record<
         tabs: [
           {
             value: "everything",
-            label: "Everything",
+            label:
+              "connectors.confluence.fields.indexing_scope.tabs.everything.label",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label: "connectors.confluence.fields.everything.label",
                 name: "everything",
                 description:
-                  "This connector will index all pages the provided credentials have access to!",
+                  "connectors.confluence.fields.everything.description",
               },
             ],
           },
           {
             value: "space",
-            label: "Space",
+            label:
+              "connectors.confluence.fields.indexing_scope.tabs.space.label",
             fields: [
               {
                 type: "text",
-                query: "Enter the space:",
-                label: "Space Key",
+                label: "connectors.confluence.fields.space.label",
                 name: "space",
                 default: "",
-                description: "The Confluence space key to index (e.g. `KB`).",
+                description: "connectors.confluence.fields.space.description",
               },
             ],
           },
           {
             value: "page",
-            label: "Page",
+            label:
+              "connectors.confluence.fields.indexing_scope.tabs.page.label",
             fields: [
               {
                 type: "text",
-                query: "Enter the page ID:",
-                label: "Page ID",
+                label: "connectors.confluence.fields.page_id.label",
                 name: "page_id",
                 default: "",
-                description: "Specific page ID to index (e.g. `131368`)",
+                description: "connectors.confluence.fields.page_id.description",
               },
               {
                 type: "checkbox",
-                query: "Should index pages recursively?",
-                label: "Index Recursively",
+                label: "connectors.confluence.fields.index_recursively.label",
                 name: "index_recursively",
                 description:
-                  "If this is set, we will index the page indicated by the Page ID as well as all of its children.",
+                  "connectors.confluence.fields.index_recursively.description",
                 optional: false,
                 default: true,
               },
@@ -897,16 +909,15 @@ export const connectorConfigs: Record<
           },
           {
             value: "cql",
-            label: "CQL Query",
+            label: "connectors.confluence.fields.indexing_scope.tabs.cql.label",
             fields: [
               {
                 type: "text",
-                query: "Enter the CQL query (optional):",
-                label: "CQL Query",
+                label: "connectors.confluence.fields.cql_query.label",
                 name: "cql_query",
                 default: "",
                 description:
-                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. Do not use ORDER BY, because the connector sets its own sort order. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details.",
+                  "connectors.confluence.fields.cql_query.description",
               },
             ],
           },
@@ -918,26 +929,18 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira: {
-    description: "Configure Jira connector",
-    subtext: `Configure which Jira content to index. You can index everything or specify a particular project.`,
+    description: "connectors.jira.description",
+    subtext: "connectors.jira.subtext",
     values: [
       {
         type: "text",
-        query: "Enter the Jira base URL:",
-        label: "Jira Base URL",
+        label: "connectors.jira.fields.jira_base_url.label",
         name: "jira_base_url",
         optional: false,
-        description:
-          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+        placeholder: "https://your-domain.atlassian.net",
+        subDescription: "siteUrl",
       },
-      {
-        type: "checkbox",
-        query: "Using scoped token?",
-        label: "Using scoped token",
-        name: "scoped_token",
-        optional: true,
-        default: false,
-      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
       {
         type: "tab",
         name: "indexing_scope",
@@ -945,44 +948,38 @@ export const connectorConfigs: Record<
         tabs: [
           {
             value: "everything",
-            label: "Everything",
+            label:
+              "connectors.jira.fields.indexing_scope.tabs.everything.label",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label: "connectors.jira.fields.everything.label",
                 name: "everything",
-                description:
-                  "This connector will index all issues the provided credentials have access to!",
+                description: "connectors.jira.fields.everything.description",
               },
             ],
           },
           {
             value: "project",
-            label: "Project",
+            label: "connectors.jira.fields.indexing_scope.tabs.project.label",
             fields: [
               {
                 type: "text",
-                query: "Enter the project key:",
-                label: "Project Key",
+                label: "connectors.jira.fields.project_key.label",
                 name: "project_key",
-                description:
-                  "The key of a specific project to index (e.g., 'PROJ').",
+                description: "connectors.jira.fields.project_key.description",
               },
             ],
           },
           {
             value: "jql",
-            label: "JQL Query",
+            label: "connectors.jira.fields.indexing_scope.tabs.jql.label",
             fields: [
               {
                 type: "text",
-                query: "Enter the JQL query:",
-                label: "JQL Query",
+                label: "connectors.jira.fields.jql_query.label",
                 name: "jql_query",
-                description:
-                  "A custom JQL query to filter Jira issues." +
-                  "\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses." +
-                  "\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax.",
+                description: "connectors.jira.fields.jql_query.description",
               },
             ],
           },
@@ -991,58 +988,52 @@ export const connectorConfigs: Record<
       },
       {
         type: "list",
-        query: "Enter email addresses to blacklist from comments:",
-        label: "Comment Email Blacklist",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
         name: "comment_email_blacklist",
         description:
-          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+          "connectors.jira.fields.comment_email_blacklist.description",
         optional: true,
       },
     ],
     advanced_values: [],
   },
   salesforce: {
-    description: "Configure Salesforce connector",
+    description: "connectors.salesforce.description",
     values: [
       {
         type: "tab",
         name: "salesforce_config_type",
-        label: "Configuration Type",
+        label: "connectors.salesforce.fields.salesforce_config_type.label",
         optional: true,
         tabs: [
           {
             value: "simple",
-            label: "Simple",
+            label:
+              "connectors.salesforce.fields.salesforce_config_type.tabs.simple.label",
             fields: [
               {
                 type: "list",
-                query: "Enter requested objects:",
-                label: "Requested Objects",
+                label: "connectors.salesforce.fields.requested_objects.label",
                 name: "requested_objects",
                 optional: true,
                 description:
-                  "Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'." +
-                  "\n\nHint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').",
+                  "connectors.salesforce.fields.requested_objects.description",
               },
             ],
           },
           {
             value: "advanced",
-            label: "Advanced",
+            label:
+              "connectors.salesforce.fields.salesforce_config_type.tabs.advanced.label",
             fields: [
               {
                 type: "text",
-                query: "Enter custom query config:",
-                label: "Custom Query Config",
+                label: "connectors.salesforce.fields.custom_query_config.label",
                 name: "custom_query_config",
                 optional: true,
                 isTextArea: true,
                 description:
-                  "Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure." +
-                  "\n\nExample: " +
-                  '`{"Account": {"fields": ["Id", "Name", "Industry"], ' +
-                  '"associations": {"Contact": ["Id", "FirstName", "LastName", "Email"]}}}`' +
-                  `\n\n[See our docs](${DOCS_ADMINS_PATH}/connectors/official/salesforce) for more details.`,
+                  "connectors.salesforce.fields.custom_query_config.description",
               },
             ],
           },
@@ -1053,329 +1044,235 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   sharepoint: {
-    description: "Configure SharePoint connector",
+    description: "connectors.sharepoint.description",
     values: [
       {
         type: "list",
-        query: "Enter SharePoint sites:",
-        label: "Sites",
+        label: "connectors.sharepoint.fields.sites.label",
         name: "sites",
         optional: true,
-        description: `- If no sites are specified, all sites in your organization will be indexed (\`Sites.Read.All\` permission required).
-- Specifying \`https://onyxai.sharepoint.com/sites/support\` for example only indexes this site.
-- Specifying \`https://onyxai.sharepoint.com/sites/support/subfolder\` for example only indexes this folder.
-- To index users' personal sites, use the [OneDrive connector](${DOCS_ADMINS_PATH}/connectors/official/onedrive).
-- Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported.`,
+        description: "connectors.sharepoint.fields.sites.description",
       },
     ],
     advanced_values: [
       {
         type: "checkbox",
-        query: "Index Documents:",
-        label: "Index Documents",
+        label: "connectors.sharepoint.fields.include_site_documents.label",
         name: "include_site_documents",
         optional: true,
         default: true,
         description:
-          "Index documents of all SharePoint libraries or folders defined above.",
+          "connectors.sharepoint.fields.include_site_documents.description",
       },
       {
         type: "checkbox",
-        query: "Index ASPX Sites:",
-        label: "Index ASPX Sites",
+        label: "connectors.sharepoint.fields.include_site_pages.label",
         name: "include_site_pages",
         optional: true,
         default: true,
         description:
-          "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified.",
+          "connectors.sharepoint.fields.include_site_pages.description",
       },
       {
         type: "checkbox",
-        label: "Treat sharing links as public",
+        label:
+          "connectors.sharepoint.fields.treat_sharing_link_as_public.label",
         description:
-          "When enabled, documents with a sharing link (anonymous or organization-wide) " +
-          "are treated as public (visible to all Onyx users). " +
-          "When disabled, only users and groups with explicit role assignments can see the document.",
+          "connectors.sharepoint.fields.treat_sharing_link_as_public.description",
         name: "treat_sharing_link_as_public",
         optional: true,
         default: false,
       },
       {
         type: "list",
-        query: "Enter site URLs to exclude:",
-        label: "Excluded Sites",
+        label: "connectors.sharepoint.fields.excluded_sites.label",
         name: "excluded_sites",
         optional: true,
-        description:
-          "Site URLs or glob patterns to exclude from indexing. " +
-          "Matched sites will never be indexed, even if they appear in the sites list above. " +
-          "Examples: `https://contoso.sharepoint.com/sites/archive` (exact), " +
-          "`*://*/sites/archive-*` (glob pattern).",
+        description: "connectors.sharepoint.fields.excluded_sites.description",
       },
       {
         type: "list",
-        query: "Enter file path patterns to exclude:",
-        label: "Excluded Paths",
+        label: "connectors.sharepoint.fields.excluded_paths.label",
         name: "excluded_paths",
         optional: true,
-        description:
-          "Glob patterns for file paths to exclude from indexing within document libraries. " +
-          "Patterns are matched against both the full relative path and the filename. " +
-          "Examples: `*.tmp` (temp files), `~$*` (Office lock files), `Archive/*` (folder).",
+        description: "connectors.sharepoint.fields.excluded_paths.description",
       },
       {
         type: "text",
-        query: "Microsoft Authority Host:",
-        label: "Authority Host",
+        label: "connectors.sharepoint.fields.authority_host.label",
         name: "authority_host",
         optional: true,
         default: "https://login.microsoftonline.com",
-        description:
-          "The Microsoft identity authority host used for authentication. " +
-          "For most deployments, leave as default. " +
-          "For GCC High / DoD, use https://login.microsoftonline.us",
+        description: "connectors.sharepoint.fields.authority_host.description",
       },
       {
         type: "text",
-        query: "Microsoft Graph API Host:",
-        label: "Graph API Host",
+        label: "connectors.sharepoint.fields.graph_api_host.label",
         name: "graph_api_host",
         optional: true,
         default: "https://graph.microsoft.com",
-        description:
-          "The Microsoft Graph API host. " +
-          "For most deployments, leave as default. " +
-          "For GCC High / DoD, use https://graph.microsoft.us",
+        description: "connectors.sharepoint.fields.graph_api_host.description",
       },
       {
         type: "text",
-        query: "SharePoint Domain Suffix:",
-        label: "SharePoint Domain Suffix",
+        label: "connectors.sharepoint.fields.sharepoint_domain_suffix.label",
         name: "sharepoint_domain_suffix",
         optional: true,
         default: "sharepoint.com",
         description:
-          "The domain suffix for SharePoint sites (e.g. sharepoint.com). " +
-          "For most deployments, leave as default. " +
-          "For GCC High, use sharepoint.us",
+          "connectors.sharepoint.fields.sharepoint_domain_suffix.description",
       },
     ],
   },
   teams: {
-    description: "Configure Teams connector",
+    description: "connectors.teams.description",
     values: [
       {
         type: "list",
-        query: "Enter Teams to include:",
-        label: "Teams",
+        label: "connectors.teams.fields.teams.label",
         name: "teams",
         optional: true,
-        description: `Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed.`,
+        description: "connectors.teams.fields.teams.description",
       },
       buildIncludeAttachmentsOption(
         false,
-        "Index the files in each channel's Files tab as their own documents, " +
-          "with the readers SharePoint grants them. Needs a certificate " +
-          "credential, Files.Read.All or Sites.Read.All on Graph, and " +
-          "Sites.FullControl.All on the SharePoint API to read each file's " +
-          "readers. With Sites.Selected, grant the app full control on each " +
-          "channel site."
+        "connectors.teams.fields.include_attachments.description"
       ),
       {
         type: "checkbox",
-        query: "Include inline images?",
-        label: "Include Inline Images",
+        label: "connectors.teams.fields.include_inline_images.label",
         name: "include_inline_images",
         description:
-          "Index the images pasted into channel messages with their thread. " +
-          "Needs no extra permission. Nothing is downloaded while image " +
-          "extraction and analysis is off in the search settings.",
+          "connectors.teams.fields.include_inline_images.description",
         default: false,
       },
       {
         type: "checkbox",
-        query: "Include meeting transcripts?",
-        label: "Include Meeting Transcripts",
+        label: "connectors.teams.fields.include_meeting_transcripts.label",
         name: "include_meeting_transcripts",
         description:
-          "Index the transcripts of scheduled meetings as their own documents, " +
-          "readable by the organizer and the attendees. Needs the " +
-          "OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All and " +
-          "User.Read.All application permissions, the tenant setting that " +
-          "allows Graph API access to transcripts, and an application access " +
-          "policy granted to the organizers. Channel meetings are not covered. " +
-          "Transcripts from the last six months are indexed, and a transcript " +
-          "leaves the index once it is older than that.",
+          "connectors.teams.fields.include_meeting_transcripts.description",
         default: false,
       },
       {
         type: "checkbox",
-        query: "Include meeting chats?",
-        label: "Include Meeting Chats",
+        label: "connectors.teams.fields.include_meeting_chats.label",
         name: "include_meeting_chats",
         description:
-          "Index what people write in the chat of a scheduled meeting, a " +
-          "document per day, readable by the members of the chat. Needs the " +
-          "Chat.Read.All and User.Read.All application permissions. Covers " +
-          "meetings organized in this tenant: Microsoft does not serve the " +
-          "chat of a meeting another organization set up.",
+          "connectors.teams.fields.include_meeting_chats.description",
         default: false,
       },
       {
         type: "list",
-        query: "Enter meeting organizers to include:",
-        label: "Meeting Organizers",
+        label: "connectors.teams.fields.meeting_organizers.label",
         name: "meeting_organizers",
         optional: true,
-        description:
-          "User principal names of the organizers whose meeting transcripts " +
-          "and chats to index. Leave empty to include every enabled user with " +
-          "a Teams license.",
+        description: "connectors.teams.fields.meeting_organizers.description",
       },
     ],
     advanced_values: [
       {
         type: "text",
-        query: "Microsoft Authority Host:",
-        label: "Authority Host",
+        label: "connectors.teams.fields.authority_host.label",
         name: "authority_host",
         optional: true,
         default: "https://login.microsoftonline.com",
-        description:
-          "The Microsoft identity authority host used for authentication. " +
-          "For most deployments, leave as default. " +
-          "For GCC High / DoD, use https://login.microsoftonline.us",
+        description: "connectors.teams.fields.authority_host.description",
       },
       {
         type: "text",
-        query: "Microsoft Graph API Host:",
-        label: "Graph API Host",
+        label: "connectors.teams.fields.graph_api_host.label",
         name: "graph_api_host",
         optional: true,
         default: "https://graph.microsoft.com",
-        description:
-          "The Microsoft Graph API host. " +
-          "For most deployments, leave as default. " +
-          "For GCC High / DoD, use https://graph.microsoft.us",
+        description: "connectors.teams.fields.graph_api_host.description",
       },
     ],
   },
   outlook: {
-    description: "Configure Outlook connector",
+    description: "connectors.outlook.description",
     values: [
       {
         type: "list",
-        query: "Enter mailboxes to index:",
-        label: "Mailboxes",
+        label: "connectors.outlook.fields.mailboxes.label",
         name: "mailboxes",
         optional: true,
-        description:
-          "User principal names or primary email addresses of the mailboxes to index. " +
-          "Leave this and Mailbox Groups empty to index every mailbox the app registration may open. " +
-          "Shared mailboxes are never picked up automatically and must be listed here.",
+        description: "connectors.outlook.fields.mailboxes.description",
       },
       {
         type: "list",
-        query: "Enter groups whose mailboxes to index:",
-        label: "Mailbox Groups",
+        label: "connectors.outlook.fields.mailbox_groups.label",
         name: "mailbox_groups",
         optional: true,
-        description:
-          "Display names or object IDs of Entra groups. The mailbox of every member is indexed, " +
-          "members of nested groups included, so a tenant can be limited to the people who use Onyx. " +
-          "Needs the GroupMember.Read.All application permission.",
+        description: "connectors.outlook.fields.mailbox_groups.description",
       },
       buildIncludeAttachmentsOption(
         false,
-        "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
+        "connectors.outlook.fields.include_attachments.description"
       ),
       {
         type: "checkbox",
-        query: "Include calendar events?",
-        label: "Include Calendar",
+        label: "connectors.outlook.fields.include_calendar.label",
         name: "include_calendar",
-        description:
-          "Index the calendar of each mailbox as well as its mail. " +
-          "Needs the Calendars.Read application permission.",
+        description: "connectors.outlook.fields.include_calendar.description",
         default: false,
       },
     ],
     advanced_values: [
       {
         type: "list",
-        query: "Enter folders to skip:",
-        label: "Excluded Folders",
+        label: "connectors.outlook.fields.excluded_folders.label",
         name: "excluded_folders",
         optional: true,
-        description:
-          "Folder names to skip in every mailbox, in addition to Junk Email, " +
-          "Deleted Items, Drafts and Outbox, which are always skipped.",
+        description: "connectors.outlook.fields.excluded_folders.description",
       },
       {
         type: "number",
-        query: "Days of past calendar to index:",
-        label: "Calendar Past Days",
+        label: "connectors.outlook.fields.calendar_past_days.label",
         name: "calendar_past_days",
         optional: true,
         default: 365,
-        description:
-          "Used when Include Calendar is on. How far back the calendar window " +
-          "reaches. Events older than this leave the index at the next prune as " +
-          "the window moves forward. Widening it later needs a re-index, since " +
-          "unchanged events do not re-enter on their own.",
+        description: "connectors.outlook.fields.calendar_past_days.description",
       },
       {
         type: "number",
-        query: "Days of future calendar to index:",
-        label: "Calendar Future Days",
+        label: "connectors.outlook.fields.calendar_future_days.label",
         name: "calendar_future_days",
         optional: true,
         default: 180,
         description:
-          "Used when Include Calendar is on. How far ahead the calendar window " +
-          "reaches. Widening it later needs a re-index, since unchanged events " +
-          "do not re-enter on their own.",
+          "connectors.outlook.fields.calendar_future_days.description",
       },
       {
         type: "text",
-        query: "Microsoft Authority Host:",
-        label: "Authority Host",
+        label: "connectors.outlook.fields.authority_host.label",
         name: "authority_host",
         optional: true,
         default: "https://login.microsoftonline.com",
-        description:
-          "The Microsoft identity authority host used for authentication. " +
-          "For most deployments, leave as default. " +
-          "For GCC High / DoD, use https://login.microsoftonline.us",
+        description: "connectors.outlook.fields.authority_host.description",
       },
       {
         type: "text",
-        query: "Microsoft Graph API Host:",
-        label: "Graph API Host",
+        label: "connectors.outlook.fields.graph_api_host.label",
         name: "graph_api_host",
         optional: true,
         default: "https://graph.microsoft.com",
-        description:
-          "The Microsoft Graph API host. " +
-          "For most deployments, leave as default. " +
-          "For GCC High / DoD, use https://graph.microsoft.us",
+        description: "connectors.outlook.fields.graph_api_host.description",
       },
     ],
   },
   discourse: {
-    description: "Configure Discourse connector",
+    description: "connectors.discourse.description",
     values: [
       {
         type: "text",
-        query: "Enter the base URL:",
-        label: "Base URL",
+        label: "connectors.discourse.fields.base_url.label",
         name: "base_url",
         optional: false,
       },
       {
         type: "list",
-        query: "Enter categories to include:",
-        label: "Categories",
+        label: "connectors.discourse.fields.categories.label",
         name: "categories",
         optional: true,
       },
@@ -1383,58 +1280,55 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   drupal_wiki: {
-    description: "Configure Drupal Wiki connector",
+    description: "connectors.drupal_wiki.description",
     values: [
       {
         type: "text",
-        query: "Enter the base URL of the Drupal Wiki instance:",
-        label: "Base URL",
+        label: "connectors.drupal_wiki.fields.base_url.label",
         name: "base_url",
         optional: false,
-        description:
-          "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )",
+        description: "connectors.drupal_wiki.fields.base_url.description",
       },
       {
         type: "tab",
         name: "indexing_scope",
-        label: "Drupal Wiki content to index",
+        label: "connectors.drupal_wiki.fields.indexing_scope.label",
         optional: true,
         tabs: [
           {
             value: "everything",
-            label: "Everything",
+            label:
+              "connectors.drupal_wiki.fields.indexing_scope.tabs.everything.label",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label:
+                  "connectors.drupal_wiki.fields.everything_description.label",
                 name: "everything_description",
                 description:
-                  "This connector will index all spaces the provided credentials have access to!",
+                  "connectors.drupal_wiki.fields.everything_description.description",
               },
             ],
           },
           {
             value: "specific",
-            label: "Specific Spaces/Pages",
+            label:
+              "connectors.drupal_wiki.fields.indexing_scope.tabs.specific.label",
             fields: [
               {
                 type: "list",
-                query: "Enter space IDs to include:",
-                label: "Space IDs",
+                label: "connectors.drupal_wiki.fields.spaces.label",
                 name: "spaces",
-                description:
-                  "Specify one or more space IDs to index. Only numeric values are allowed.",
+                description: "connectors.drupal_wiki.fields.spaces.description",
                 optional: true,
                 transform: (values: string[]) =>
                   values.filter((value) => /^\d+$/.test(value.trim())),
               },
               {
                 type: "list",
-                query: "Enter page IDs to include:",
-                label: "Page IDs",
+                label: "connectors.drupal_wiki.fields.pages.label",
                 name: "pages",
-                description:
-                  "Specify one or more page IDs to index. Only numeric values are allowed.",
+                description: "connectors.drupal_wiki.fields.pages.description",
                 optional: true,
                 transform: (values: string[]) =>
                   values.filter((value) => /^\d+$/.test(value.trim())),
@@ -1448,11 +1342,11 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   axero: {
-    description: "Configure Axero connector",
+    description: "connectors.axero.description",
     values: [
       {
         type: "text",
-        label: "Axero Base URL",
+        label: "connectors.axero.fields.base_url.label",
         name: "base_url",
         optional: false,
         placeholder: "https://axero.example.com",
@@ -1460,52 +1354,46 @@ export const connectorConfigs: Record<
       },
       {
         type: "list",
-        query: "Enter spaces to include:",
-        label: "Spaces",
+        label: "connectors.axero.fields.spaces.label",
         name: "spaces",
         optional: true,
-        description:
-          "Specify zero or more Spaces to index (by the Space IDs). If no Space IDs are specified, all Spaces will be indexed.",
+        description: "connectors.axero.fields.spaces.description",
       },
     ],
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   productboard: {
-    description: "Configure Productboard connector",
+    description: "connectors.productboard.description",
     values: [],
     advanced_values: [],
   },
   slack: {
-    description: "Configure Slack connector",
+    description: "connectors.slack.description",
     values: [],
     advanced_values: [
       {
         type: "list",
-        query: "Enter channels to include:",
-        label: "Channels",
+        label: "connectors.slack.fields.channels.label",
         name: "channels",
-        description: `Specify 0 or more channels to index. Pick a channel from the list to follow it by id, so a rename does not break indexing, or type the name of a channel the list does not show, such as a private channel the bot was invited to. If no channels are specified, all channels in your workspace will be indexed.`,
+        description: "connectors.slack.fields.channels.description",
         optional: true,
         optionsFinding: "readable_channels",
         plainListCondition: (values) => values.channel_regex_enabled === true,
       },
       {
         type: "checkbox",
-        query: "Enable channel regex?",
-        label: "Enable Channel Regex",
+        label: "connectors.slack.fields.channel_regex_enabled.label",
         name: "channel_regex_enabled",
-        description: `If enabled, we will treat the "channels" specified above as regular expressions. A channel's messages will be pulled in by the connector if the name of the channel fully matches any of the specified regular expressions.
-
-For example, specifying \`.*-support.*\` as a "channel" will cause the connector to include any channels with "-support" in the name.`,
+        description:
+          "connectors.slack.fields.channel_regex_enabled.description",
         optional: true,
       },
       {
         type: "list",
-        query: "Enter channels to exclude:",
-        label: "Channels to Exclude",
+        label: "connectors.slack.fields.exclude_channels.label",
         name: "exclude_channels",
-        description: `Specify 0 or more channels to exclude. Exclusions are applied after the "Channels" filter above, so a channel matched by both is excluded. If no channels are specified, nothing is excluded.`,
+        description: "connectors.slack.fields.exclude_channels.description",
         optional: true,
         optionsFinding: "readable_channels",
         plainListCondition: (values) =>
@@ -1513,87 +1401,77 @@ For example, specifying \`.*-support.*\` as a "channel" will cause the connector
       },
       {
         type: "checkbox",
-        query: "Enable exclude channel regex?",
-        label: "Enable Exclude Channel Regex",
+        label: "connectors.slack.fields.exclude_channel_regex_enabled.label",
         name: "exclude_channel_regex_enabled",
-        description: `If enabled, we will treat the "channels to exclude" specified above as regular expressions. A channel will be excluded if its name fully matches any of the specified regular expressions.
-
-For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the connector to skip any channels ending in "-alerts".`,
+        description:
+          "connectors.slack.fields.exclude_channel_regex_enabled.description",
         optional: true,
       },
       {
         type: "checkbox",
-        query: "Include bot messages?",
-        label: "Include Bot Messages",
+        label: "connectors.slack.fields.include_bot_messages.label",
         name: "include_bot_messages",
-        description:
-          "If enabled, messages from bots and apps will be indexed. Useful for channels that are primarily bot-driven feeds (e.g. CRM updates, automated notes).",
+        description: "connectors.slack.fields.include_bot_messages.description",
         optional: true,
       },
     ],
   },
   slab: {
-    description: "Configure Slab connector",
+    description: "connectors.slab.description",
     values: [
       {
         type: "text",
-        query: "Enter the base URL:",
-        label: "Base URL",
+        label: "connectors.slab.fields.base_url.label",
         name: "base_url",
         optional: false,
-        description: `Specify the base URL for your Slab team. This will look something like: https://onyx.slab.com/`,
+        description: "connectors.slab.fields.base_url.description",
       },
     ],
     advanced_values: [],
   },
   guru: {
-    description: "Configure Guru connector",
+    description: "connectors.guru.description",
     values: [],
     advanced_values: [],
   },
   gong: {
-    description: "Configure Gong connector",
+    description: "connectors.gong.description",
     values: [
       {
         type: "text",
-        label: "Gong API Base URL",
+        label: "connectors.gong.fields.gong_base_url.label",
         name: "gong_base_url",
         optional: true,
-        description: "Defaults to `https://api.gong.io`.",
+        description: "connectors.gong.fields.gong_base_url.description",
         placeholder: "https://api.gong.io",
         subDescription: "siteUrl",
       },
       {
         type: "list",
-        query: "Enter workspaces to include:",
-        label: "Workspaces",
+        label: "connectors.gong.fields.workspaces.label",
         name: "workspaces",
         optional: true,
-        description:
-          "Specify 0 or more workspaces to index. Provide the workspace ID or the EXACT workspace name from Gong. If no workspaces are specified, transcripts from all workspaces will be indexed.",
+        description: "connectors.gong.fields.workspaces.description",
       },
     ],
     advanced_values: [],
   },
   loopio: {
-    description: "Configure Loopio connector",
+    description: "connectors.loopio.description",
     values: [
       {
         type: "text",
-        label: "Loopio Subdomain",
+        label: "connectors.loopio.fields.loopio_subdomain.label",
         name: "loopio_subdomain",
         optional: false,
-        description:
-          "The subdomain of your Loopio site, like `acme` in `acme.loopio.com`.",
+        description: "connectors.loopio.fields.loopio_subdomain.description",
         placeholder: "acme",
       },
       {
         type: "text",
-        query: "Enter the Loopio stack name",
-        label: "Loopio Stack Name",
+        label: "connectors.loopio.fields.loopio_stack_name.label",
         name: "loopio_stack_name",
-        description:
-          "Must be exact match to the name in Library Management, leave this blank if you want to index all Stacks",
+        description: "connectors.loopio.fields.loopio_stack_name.description",
         optional: true,
       },
     ],
@@ -1601,12 +1479,11 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     overrideDefaultFreq: 60 * 60 * 24,
   },
   file: {
-    description: "Configure File connector",
+    description: "connectors.file.description",
     values: [
       {
         type: "file",
-        query: "Enter file locations:",
-        label: "Files",
+        label: "connectors.file.fields.file_locations.label",
         name: "file_locations",
         optional: false,
       },
@@ -1614,19 +1491,17 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     advanced_values: [],
   },
   zulip: {
-    description: "Configure Zulip connector",
+    description: "connectors.zulip.description",
     values: [
       {
         type: "text",
-        query: "Enter the realm name",
-        label: "Realm Name",
+        label: "connectors.zulip.fields.realm_name.label",
         name: "realm_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the realm URL",
-        label: "Realm URL",
+        label: "connectors.zulip.fields.realm_url.label",
         name: "realm_url",
         optional: false,
       },
@@ -1634,112 +1509,125 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     advanced_values: [],
   },
   coda: {
-    description: "Configure Coda connector",
+    description: "connectors.coda.description",
     values: [],
     advanced_values: [],
   },
   notion: {
-    description: "Configure Notion connector",
+    description: "connectors.notion.description",
     values: [
       {
         type: "text",
-        query: "Enter the root page ID",
-        label: "Root Page ID",
+        label: "connectors.notion.fields.root_page_id.label",
         name: "root_page_id",
         optional: true,
-        description:
-          "If specified, will only index the specified page + all of its child pages. If left blank, will index all pages the integration has been given access to.",
+        description: "connectors.notion.fields.root_page_id.description",
       },
     ],
     advanced_values: [],
   },
   hubspot: {
-    description: "Configure HubSpot connector",
+    description: "connectors.hubspot.description",
     values: [
       {
         type: "multiselect",
-        query: "Select which HubSpot objects to index:",
-        label: "Object Types",
+        label: "connectors.hubspot.fields.object_types.label",
         name: "object_types",
         options: [
-          { name: "Tickets", value: "tickets" },
-          { name: "Companies", value: "companies" },
-          { name: "Deals", value: "deals" },
-          { name: "Contacts", value: "contacts" },
+          {
+            name: "connectors.hubspot.fields.object_types.options.tickets",
+            value: "tickets",
+          },
+          {
+            name: "connectors.hubspot.fields.object_types.options.companies",
+            value: "companies",
+          },
+          {
+            name: "connectors.hubspot.fields.object_types.options.deals",
+            value: "deals",
+          },
+          {
+            name: "connectors.hubspot.fields.object_types.options.contacts",
+            value: "contacts",
+          },
         ],
         default: ["tickets", "companies", "deals", "contacts"],
-        description:
-          "Choose which HubSpot object types to index. All types are selected by default.",
+        description: "connectors.hubspot.fields.object_types.description",
         optional: false,
       },
     ],
     advanced_values: [],
   },
   document360: {
-    description: "Configure Document360 connector",
+    description: "connectors.document360.description",
     values: [
       {
         type: "text",
-        query: "Enter the workspace",
-        label: "Workspace",
+        label: "connectors.document360.fields.workspace.label",
         name: "workspace",
         optional: false,
       },
       {
         type: "list",
-        query: "Enter categories to include",
-        label: "Categories",
+        label: "connectors.document360.fields.categories.label",
         name: "categories",
         optional: true,
-        description:
-          "Specify 0 or more categories to index. For instance, specifying the category 'Help' will cause us to only index all content within the 'Help' category. If no categories are specified, all categories in your workspace will be indexed.",
+        description: "connectors.document360.fields.categories.description",
       },
     ],
     advanced_values: [],
   },
   clickup: {
-    description: "Configure ClickUp connector",
+    description: "connectors.clickup.description",
     values: [
       {
         type: "select",
-        query: "Select the connector type:",
-        label: "Connector Type",
+        label: "connectors.clickup.fields.connector_type.label",
         name: "connector_type",
         optional: false,
         options: [
-          { name: "list", value: "list" },
-          { name: "folder", value: "folder" },
-          { name: "space", value: "space" },
-          { name: "workspace", value: "workspace" },
+          {
+            name: "connectors.clickup.fields.connector_type.options.list",
+            value: "list",
+          },
+          {
+            name: "connectors.clickup.fields.connector_type.options.folder",
+            value: "folder",
+          },
+          {
+            name: "connectors.clickup.fields.connector_type.options.space",
+            value: "space",
+          },
+          {
+            name: "connectors.clickup.fields.connector_type.options.workspace",
+            value: "workspace",
+          },
         ],
       },
       {
         type: "list",
-        query: "Enter connector IDs:",
-        label: "Connector IDs",
+        label: "connectors.clickup.fields.connector_ids.label",
         name: "connector_ids",
-        description: "Specify 0 or more id(s) to index from.",
+        description: "connectors.clickup.fields.connector_ids.description",
         optional: true,
       },
       {
         type: "checkbox",
-        query: "Retrieve task comments?",
-        label: "Retrieve Task Comments",
+        label: "connectors.clickup.fields.retrieve_task_comments.label",
         name: "retrieve_task_comments",
         description:
-          "If checked, then all the comments for each task will also be retrieved and indexed.",
+          "connectors.clickup.fields.retrieve_task_comments.description",
         optional: false,
       },
     ],
     advanced_values: [],
   },
   google_sites: {
-    description: "Configure Google Sites connector",
+    description: "connectors.google_sites.description",
     values: [
       {
         type: "text",
-        query: "Enter the base URL:",
-        label: "Base URL",
+        label: "connectors.google_sites.fields.base_url.label",
         name: "base_url",
         optional: false,
         // The published site's root; each page's link is this plus its path.
@@ -1747,12 +1635,11 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
       },
       {
         type: "file",
-        query: "Enter the zip path:",
-        label: "Site Export",
+        label: "connectors.google_sites.fields.file_locations.label",
         name: "file_locations",
         optional: false,
         description:
-          "Upload a `.zip` file containing the HTML of your Google Site.",
+          "connectors.google_sites.fields.file_locations.description",
         multiple: false,
         accept: ".zip",
       },
@@ -1760,26 +1647,30 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     advanced_values: [],
   },
   zendesk: {
-    description: "Configure Zendesk connector",
+    description: "connectors.zendesk.description",
     values: [
       {
         type: "text",
-        label: "Zendesk Subdomain",
+        label: "connectors.zendesk.fields.zendesk_subdomain.label",
         name: "zendesk_subdomain",
         optional: false,
-        description:
-          "The subdomain of your Zendesk site, like `acme` in `acme.zendesk.com`.",
+        description: "connectors.zendesk.fields.zendesk_subdomain.description",
         placeholder: "acme",
       },
       {
         type: "select",
-        query: "Select the what content this connector will index:",
-        label: "Content Type",
+        label: "connectors.zendesk.fields.content_type.label",
         name: "content_type",
         optional: false,
         options: [
-          { name: "articles", value: "articles" },
-          { name: "tickets", value: "tickets" },
+          {
+            name: "connectors.zendesk.fields.content_type.options.articles",
+            value: "articles",
+          },
+          {
+            name: "connectors.zendesk.fields.content_type.options.tickets",
+            value: "tickets",
+          },
         ],
         default: "articles",
       },
@@ -1787,77 +1678,65 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     advanced_values: [
       {
         type: "number",
-        label: "API Calls per Minute",
+        label: "connectors.zendesk.fields.calls_per_minute.label",
         name: "calls_per_minute",
         optional: true,
-        description:
-          "Restricts how many Zendesk API calls this connector can make per minute (applies only to this connector). See defaults: https://developer.zendesk.com/api-reference/introduction/rate-limits/",
+        description: "connectors.zendesk.fields.calls_per_minute.description",
       },
     ],
   },
   linear: buildLinearConfiguration(LINEAR_TRANSLATION_KEYS),
   box: {
-    description: "Configure Box connector",
+    description: "connectors.box.description",
     values: [
       {
         type: "list",
-        query: "Enter folder IDs or URLs to index:",
-        label: "Folders",
+        label: "connectors.box.fields.folder_ids.label",
         name: "folder_ids",
-        description:
-          "Box folder IDs or folder URLs (e.g. https://app.box.com/folder/123456789) to index. " +
-          "Leave empty to index everything visible to the authenticated user.",
+        description: "connectors.box.fields.folder_ids.description",
         optional: true,
       },
     ],
     advanced_values: [
       {
         type: "checkbox",
-        query: "Include web links:",
-        label: "Include Web Links",
+        label: "connectors.box.fields.include_web_links.label",
         name: "include_web_links",
-        description:
-          "Also index Box web links (bookmarks) as lightweight documents.",
+        description: "connectors.box.fields.include_web_links.description",
         optional: true,
       },
     ],
   },
   dropbox: {
-    description: "Configure Dropbox connector",
+    description: "connectors.dropbox.description",
     values: [],
     advanced_values: [],
   },
   s3: {
-    description: "Configure S3 connector",
+    description: "connectors.s3.description",
     values: [
       {
         type: "text",
-        query: "Enter the bucket name:",
-        label: "Bucket Name",
+        label: "connectors.s3.fields.bucket_name.label",
         name: "bucket_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the prefix:",
-        label: "Prefix",
+        label: "connectors.s3.fields.prefix.label",
         name: "prefix",
         optional: true,
       },
       {
         type: "text",
-        query: "Enter the AWS region:",
-        label: "AWS Region",
+        label: "connectors.s3.fields.region_name.label",
         name: "region_name",
-        description:
-          "The AWS region of the bucket (e.g. us-east-1). Required for buckets in " +
-          "non-default partitions such as GovCloud (us-gov-west-1); otherwise the " +
-          "default region resolution is used.",
+        description: "connectors.s3.fields.region_name.description",
         optional: true,
       },
       {
         type: "text",
-        label: "Bucket Type",
+        label: "connectors.s3.fields.bucket_type.label",
         name: "bucket_type",
         optional: false,
         default: "s3",
@@ -1868,34 +1747,31 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     overrideDefaultFreq: 60 * 60 * 24,
   },
   r2: {
-    description: "Configure R2 connector",
+    description: "connectors.r2.description",
     values: [
       {
         type: "text",
-        query: "Enter the bucket name:",
-        label: "Bucket Name",
+        label: "connectors.r2.fields.bucket_name.label",
         name: "bucket_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the prefix:",
-        label: "Prefix",
+        label: "connectors.r2.fields.prefix.label",
         name: "prefix",
         optional: true,
       },
       {
         type: "checkbox",
-        label: "EU Data Residency",
+        label: "connectors.r2.fields.european_residency.label",
         name: "european_residency",
-        description:
-          "Check this box if your bucket has EU data residency enabled.",
+        description: "connectors.r2.fields.european_residency.description",
         optional: true,
         default: false,
       },
       {
         type: "text",
-        label: "Bucket Type",
+        label: "connectors.r2.fields.bucket_type.label",
         name: "bucket_type",
         optional: false,
         default: "r2",
@@ -1906,26 +1782,25 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     overrideDefaultFreq: 60 * 60 * 24,
   },
   google_cloud_storage: {
-    description: "Configure Google Cloud Storage connector",
+    description: "connectors.google_cloud_storage.description",
     values: [
       {
         type: "text",
-        query: "Enter the bucket name:",
-        label: "Bucket Name",
+        label: "connectors.google_cloud_storage.fields.bucket_name.label",
         name: "bucket_name",
         optional: false,
-        description: "Name of the GCS bucket to index, e.g. my-gcs-bucket",
+        description:
+          "connectors.google_cloud_storage.fields.bucket_name.description",
       },
       {
         type: "text",
-        query: "Enter the prefix:",
-        label: "Path Prefix",
+        label: "connectors.google_cloud_storage.fields.prefix.label",
         name: "prefix",
         optional: true,
       },
       {
         type: "text",
-        label: "Bucket Type",
+        label: "connectors.google_cloud_storage.fields.bucket_type.label",
         name: "bucket_type",
         optional: false,
         default: "google_cloud_storage",
@@ -1936,25 +1811,23 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     overrideDefaultFreq: 60 * 60 * 24,
   },
   oci_storage: {
-    description: "Configure OCI Storage connector",
+    description: "connectors.oci_storage.description",
     values: [
       {
         type: "text",
-        query: "Enter the bucket name:",
-        label: "Bucket Name",
+        label: "connectors.oci_storage.fields.bucket_name.label",
         name: "bucket_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the prefix:",
-        label: "Prefix",
+        label: "connectors.oci_storage.fields.prefix.label",
         name: "prefix",
         optional: true,
       },
       {
         type: "text",
-        label: "Bucket Type",
+        label: "connectors.oci_storage.fields.bucket_type.label",
         name: "bucket_type",
         optional: false,
         default: "oci_storage",
@@ -1964,199 +1837,168 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     advanced_values: [],
   },
   wikipedia: {
-    description: "Configure Wikipedia connector",
+    description: "connectors.wikipedia.description",
     values: [
       {
         type: "text",
-        query: "Enter the language code:",
-        label: "Language Code",
+        label: "connectors.wikipedia.fields.language_code.label",
         name: "language_code",
         optional: false,
-        description: "Input a valid Wikipedia language code (e.g. 'en', 'es')",
+        description: "connectors.wikipedia.fields.language_code.description",
       },
       {
         type: "list",
-        query: "Enter categories to include:",
-        label: "Categories to index",
+        label: "connectors.wikipedia.fields.categories.label",
         name: "categories",
-        description:
-          "Specify 0 or more names of categories to index. For most Wikipedia sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url.",
+        description: "connectors.wikipedia.fields.categories.description",
         optional: true,
       },
       {
         type: "list",
-        query: "Enter pages to include:",
-        label: "Pages",
+        label: "connectors.wikipedia.fields.pages.label",
         name: "pages",
         optional: true,
-        description: "Specify 0 or more names of pages to index.",
+        description: "connectors.wikipedia.fields.pages.description",
       },
       {
         type: "number",
-        query: "Enter the recursion depth:",
-        label: "Recursion Depth",
+        label: "connectors.wikipedia.fields.recurse_depth.label",
         name: "recurse_depth",
-        description:
-          "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen.",
+        description: "connectors.wikipedia.fields.recurse_depth.description",
         optional: false,
       },
     ],
     advanced_values: [],
   },
   xenforo: {
-    description: "Configure Xenforo connector",
+    description: "connectors.xenforo.description",
     values: [
       {
         type: "text",
-        query: "Enter forum or thread URL:",
-        label: "URL",
+        label: "connectors.xenforo.fields.base_url.label",
         name: "base_url",
         optional: false,
-        description:
-          "The XenForo v2.2 forum URL to index. Can be board or thread.",
+        description: "connectors.xenforo.fields.base_url.description",
       },
     ],
     advanced_values: [],
   },
   asana: {
-    description: "Configure Asana connector",
+    description: "connectors.asana.description",
     values: [
       {
         type: "text",
-        query: "Enter your Asana workspace ID:",
-        label: "Workspace ID",
+        label: "connectors.asana.fields.asana_workspace_id.label",
         name: "asana_workspace_id",
         optional: false,
-        description:
-          "The ID of the Asana workspace to index. You can find this at https://app.asana.com/api/1.0/workspaces. It's a number that looks like 1234567890123456.",
+        description: "connectors.asana.fields.asana_workspace_id.description",
       },
       {
         type: "text",
-        query: "Enter project IDs to index (optional):",
-        label: "Project IDs",
+        label: "connectors.asana.fields.asana_project_ids.label",
         name: "asana_project_ids",
-        description:
-          "IDs of specific Asana projects to index, separated by commas. Leave empty to index all projects in the workspace. Example: 1234567890123456,2345678901234567",
+        description: "connectors.asana.fields.asana_project_ids.description",
         optional: true,
       },
       {
         type: "text",
-        query: "Enter the Team ID (optional):",
-        label: "Team ID",
+        label: "connectors.asana.fields.asana_team_id.label",
         name: "asana_team_id",
         optional: true,
-        description:
-          "ID of a team to use for accessing team-visible tasks. This allows indexing of team-visible tasks in addition to public tasks. Leave empty if you don't want to use this feature.",
+        description: "connectors.asana.fields.asana_team_id.description",
       },
     ],
     advanced_values: [],
   },
   mediawiki: {
-    description: "Configure MediaWiki connector",
+    description: "connectors.mediawiki.description",
     values: [
       {
         type: "text",
-        query: "Enter the language code:",
-        label: "Language Code",
+        label: "connectors.mediawiki.fields.language_code.label",
         name: "language_code",
         optional: false,
-        description: "Input a valid MediaWiki language code (e.g. 'en', 'es')",
+        description: "connectors.mediawiki.fields.language_code.description",
       },
       {
         type: "text",
-        query: "Enter the MediaWiki Site URL",
-        label: "MediaWiki Site URL",
+        label: "connectors.mediawiki.fields.hostname.label",
         name: "hostname",
         optional: false,
       },
       {
         type: "list",
-        query: "Enter categories to include:",
-        label: "Categories to index",
+        label: "connectors.mediawiki.fields.categories.label",
         name: "categories",
-        description:
-          "Specify 0 or more names of categories to index. For most MediaWiki sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url.",
+        description: "connectors.mediawiki.fields.categories.description",
         optional: true,
       },
       {
         type: "list",
-        query: "Enter pages to include:",
-        label: "Pages",
+        label: "connectors.mediawiki.fields.pages.label",
         name: "pages",
         optional: true,
-        description:
-          "Specify 0 or more names of pages to index. Only specify the name of the page, not its url.",
+        description: "connectors.mediawiki.fields.pages.description",
       },
       {
         type: "number",
-        query: "Enter the recursion depth:",
-        label: "Recursion Depth",
+        label: "connectors.mediawiki.fields.recurse_depth.label",
         name: "recurse_depth",
-        description:
-          "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen.",
+        description: "connectors.mediawiki.fields.recurse_depth.description",
         optional: false,
       },
     ],
     advanced_values: [],
   },
   discord: {
-    description: "Configure Discord connector",
+    description: "connectors.discord.description",
     values: [],
     advanced_values: [
       {
         type: "list",
-        query: "Enter Server IDs to include:",
-        label: "Server IDs",
+        label: "connectors.discord.fields.server_ids.label",
         name: "server_ids",
-        description: `Specify 0 or more server ids to include. Only channels inside them will be used for indexing`,
+        description: "connectors.discord.fields.server_ids.description",
         optional: true,
       },
       {
         type: "list",
-        query: "Enter channel names to include:",
-        label: "Channels",
+        label: "connectors.discord.fields.channel_names.label",
         name: "channel_names",
-        description: `Specify 0 or more channels to index. For example, specifying the channel "support" will cause us to only index all content within the "#support" channel. If no channels are specified, all channels the bot has access to will be indexed.`,
+        description: "connectors.discord.fields.channel_names.description",
         optional: true,
       },
       {
         type: "text",
-        query: "Enter the Start Date:",
-        label: "Start Date",
+        label: "connectors.discord.fields.start_date.label",
         name: "start_date",
-        description: `Only messages after this date will be indexed. Format: YYYY-MM-DD`,
+        description: "connectors.discord.fields.start_date.description",
         optional: true,
       },
     ],
   },
   freshdesk: {
-    description: "Configure Freshdesk connector",
+    description: "connectors.freshdesk.description",
     values: [
       {
         type: "text",
-        label: "Freshdesk Domain",
+        label: "connectors.freshdesk.fields.freshdesk_domain.label",
         name: "freshdesk_domain",
         optional: false,
-        description:
-          "The subdomain of your Freshdesk site, like `acme` in `acme.freshdesk.com`.",
+        description: "connectors.freshdesk.fields.freshdesk_domain.description",
         placeholder: "acme",
       },
     ],
     advanced_values: [],
   },
   fireflies: {
-    description: "Configure Fireflies connector",
+    description: "connectors.fireflies.description",
     values: [],
     advanced_values: [],
   },
   zoom: {
-    description: "Configure Zoom connector",
-    subtext:
-      "Indexes the Cloud Recording transcript of each Zoom session, on a Zoom " +
-      "Pro plan or higher. A session that was never cloud-recorded is skipped. " +
-      "Set an Indexing Start date under Advanced. Zoom lists recordings a month " +
-      "per request, so without one the first crawl asks for every month back to " +
-      "2013 and spends your account's API allowance on years that hold nothing.",
+    description: "connectors.zoom.description",
+    subtext: "connectors.zoom.subtext",
     values: [
       // Two lists rather than one: the same number can be a legal meeting id
       // and a legal webinar id, so the list it is typed into says which.
@@ -2164,197 +2006,169 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
       zoomWebinarIdsOption,
       {
         type: "list",
-        query: "Enter the Zoom host emails to index:",
-        label: "Host Emails",
+        label: "connectors.zoom.fields.host_emails.label",
         name: "host_emails",
         optional: true,
-        description:
-          "Index every session these people host, of the types ticked " +
-          "below. An email that matches no Zoom user is reported as an " +
-          "indexing error rather than silently ignored.",
+        description: "connectors.zoom.fields.host_emails.description",
       },
       {
         type: "text",
-        query: "Enter the Zoom Group ID to index:",
-        label: "Zoom Group ID",
+        label: "connectors.zoom.fields.group_id.label",
         name: "group_id",
         optional: true,
-        description:
-          "Index every session the members of one Zoom Group host, of the " +
-          "types ticked below. Zoom re-reads the member list on every run, " +
-          "so a joiner or leaver is picked up without editing this connector.",
+        description: "connectors.zoom.fields.group_id.description",
       },
       {
         type: "checkbox",
-        query: "Include meetings?",
-        label: "Include meetings",
+        label: "connectors.zoom.fields.include_meetings.label",
         name: "include_meetings",
-        description:
-          "Applies to Host Emails and Zoom Group. The ID lists above already " +
-          "say which type each ID is.",
+        description: "connectors.zoom.fields.include_meetings.description",
         default: true,
       },
       {
         type: "checkbox",
-        query: "Include webinars?",
-        label: "Include webinars",
+        label: "connectors.zoom.fields.include_webinars.label",
         name: "include_webinars",
-        description:
-          "Applies to Host Emails and Zoom Group. Webinars also need the " +
-          "Webinar add-on, enabled for the host.",
+        description: "connectors.zoom.fields.include_webinars.description",
         default: true,
       },
       {
         type: "checkbox",
-        query: "Treat link access as public?",
-        label: "Treat link access as public",
+        label: "connectors.zoom.fields.treat_link_access_as_public.label",
         name: "treat_link_access_as_public",
         description:
-          "Only matters with permission sync. When on, a recording whose Link " +
-          'access is "Anyone with the link" or a signed-in rule is visible ' +
-          "to all Onyx users, and a domain rule to users of those domains. " +
-          "When off, every transcript is visible to the recording's owner " +
-          'alone, because Zoom cannot say who is in "People with access".',
+          "connectors.zoom.fields.treat_link_access_as_public.description",
         default: true,
       },
       {
         type: "select",
-        query: "Select the Zoom plan:",
-        label: "Zoom Plan",
+        label: "connectors.zoom.fields.plan_tier.label",
         name: "plan_tier",
         optional: false,
         options: [
-          { name: "pro", value: "pro" },
-          { name: "business_plus", value: "business_plus" },
+          {
+            name: "connectors.zoom.fields.plan_tier.options.pro",
+            value: "pro",
+          },
+          {
+            name: "connectors.zoom.fields.plan_tier.options.business_plus",
+            value: "business_plus",
+          },
         ],
-        description:
-          "Sets how fast this connector is allowed to call Zoom. Pick `pro` on " +
-          "a Pro account, and `business_plus` on Business, Education, " +
-          "Enterprise or Partner.",
+        description: "connectors.zoom.fields.plan_tier.description",
       },
     ],
     advanced_values: [
       {
         type: "number",
-        query: "Enter the share of Zoom's rate limit to use:",
-        label: "Zoom API Rate Limit",
+        label: "connectors.zoom.fields.rate_limit_percent.label",
         name: "rate_limit_percent",
         optional: true,
-        description:
-          "Whole percent, 1 to 100, of the account's Zoom rate limit this " +
-          "connector may spend. Blank means 50, which leaves room for the " +
-          "customer's other Zoom integrations. Each Zoom connector paces " +
-          "itself and cannot see the others, so two connectors on one Zoom " +
-          "account spend this percent each — divide it if you run several.",
+        description: "connectors.zoom.fields.rate_limit_percent.description",
       },
     ],
   },
   braintrust: {
-    description: "Configure Braintrust connector",
+    description: "connectors.braintrust.description",
     values: [
       {
         type: "text",
-        query: "Enter the Braintrust project name to index:",
-        label: "Project Name",
+        label: "connectors.braintrust.fields.project_name.label",
         name: "project_name",
         optional: true,
-        description:
-          "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization.",
+        description: "connectors.braintrust.fields.project_name.description",
       },
     ],
     advanced_values: [
       {
         type: "number",
-        query: "Enter the experiment row lookback window in days:",
-        label: "Experiment Row Lookback (days)",
+        label:
+          "connectors.braintrust.fields.experiment_row_lookback_days.label",
         name: "experiment_row_lookback_days",
         optional: true,
         default: 30,
         description:
-          "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments.",
+          "connectors.braintrust.fields.experiment_row_lookback_days.description",
       },
     ],
   },
   canvas: {
-    description: "Configure Canvas connector",
+    description: "connectors.canvas.description",
     values: [
       {
         type: "text",
-        query: "Enter the Canvas base URL:",
-        label: "Canvas Base URL",
+        label: "connectors.canvas.fields.canvas_base_url.label",
         name: "canvas_base_url",
         optional: false,
-        description: "e.g. https://school.instructure.com",
+        description: "connectors.canvas.fields.canvas_base_url.description",
       },
     ],
     advanced_values: [],
   },
   egnyte: {
-    description: "Configure Egnyte connector",
+    description: "connectors.egnyte.description",
     values: [
       {
         type: "text",
-        label: "Egnyte Domain",
+        label: "connectors.egnyte.fields.domain.label",
         name: "domain",
         optional: false,
-        description:
-          "The subdomain of your Egnyte site, like `acme` in `acme.egnyte.com`.",
+        description: "connectors.egnyte.fields.domain.description",
         placeholder: "acme",
       },
       {
         type: "text",
-        query: "Enter folder path to index:",
-        label: "Folder Path",
+        label: "connectors.egnyte.fields.folder_path.label",
         name: "folder_path",
         optional: true,
-        description:
-          "The folder path to index (e.g., '/Shared/Documents'). Leave empty to index everything.",
+        description: "connectors.egnyte.fields.folder_path.description",
       },
     ],
     advanced_values: [],
   },
   airtable: {
-    description: "Configure Airtable connector",
+    description: "connectors.airtable.description",
     values: [
       {
         type: "tab",
         name: "airtable_scope",
-        label: "Airtable content to index",
+        label: "connectors.airtable.fields.airtable_scope.label",
         optional: true,
         tabs: [
           {
             value: "everything",
-            label: "Everything",
+            label:
+              "connectors.airtable.fields.airtable_scope.tabs.everything.label",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label:
+                  "connectors.airtable.fields.everything_description.label",
                 name: "everything_description",
                 description:
-                  "This connector will automatically discover and index all bases and tables accessible by your API token.",
+                  "connectors.airtable.fields.everything_description.description",
               },
             ],
           },
           {
             value: "specific",
-            label: "Specific Table",
+            label:
+              "connectors.airtable.fields.airtable_scope.tabs.specific.label",
             fields: [
               {
                 type: "text",
-                query: "Paste the Airtable URL:",
-                label: "Airtable URL",
+                label: "connectors.airtable.fields.airtable_url.label",
                 name: "airtable_url",
                 optional: false,
                 description:
-                  "Paste the URL from your browser when viewing the table, e.g. https://airtable.com/appXXX/tblYYY/viwZZZ",
+                  "connectors.airtable.fields.airtable_url.description",
               },
               {
                 type: "text",
-                label: "Share ID",
+                label: "connectors.airtable.fields.share_id.label",
                 name: "share_id",
                 optional: true,
-                description:
-                  "Optional. If you want record links to use a shared view URL, put the share ID here e.g. shrkfjEzDmLaDtK83.",
+                description: "connectors.airtable.fields.share_id.description",
               },
             ],
           },
@@ -2362,10 +2176,11 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
       },
       {
         type: "checkbox",
-        label: "Treat all fields except attachments as metadata",
+        label:
+          "connectors.airtable.fields.treat_all_non_attachment_fields_as_metadata.label",
         name: "treat_all_non_attachment_fields_as_metadata",
         description:
-          "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments.",
+          "connectors.airtable.fields.treat_all_non_attachment_fields_as_metadata.description",
         optional: false,
       },
     ],
@@ -2373,11 +2188,11 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     overrideDefaultFreq: 60 * 60 * 24,
   },
   highspot: {
-    description: "Configure Highspot connector",
+    description: "connectors.highspot.description",
     values: [
       {
         type: "text",
-        label: "Highspot URL",
+        label: "connectors.highspot.fields.highspot_url.label",
         name: "highspot_url",
         optional: false,
         placeholder: "https://api-su2.highspot.com/v1.0/",
@@ -2386,33 +2201,34 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
       {
         type: "tab",
         name: "highspot_scope",
-        label: "Highspot content to index",
+        label: "connectors.highspot.fields.highspot_scope.label",
         optional: true,
         tabs: [
           {
             value: "spots",
-            label: "Specific Spots",
+            label: "connectors.highspot.fields.highspot_scope.tabs.spots.label",
             fields: [
               {
                 type: "list",
-                query: "Enter the spot name(s):",
-                label: "Spot Name(s)",
+                label: "connectors.highspot.fields.spot_names.label",
                 name: "spot_names",
                 optional: false,
-                description: "For multiple spots, enter your spot one by one.",
+                description:
+                  "connectors.highspot.fields.spot_names.description",
               },
             ],
           },
           {
             value: "everything",
-            label: "Everything",
+            label:
+              "connectors.highspot.fields.highspot_scope.tabs.everything.label",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label: "connectors.highspot.fields.everything.label",
                 name: "everything",
                 description:
-                  "This connector will index all spots the provided credentials have access to!",
+                  "connectors.highspot.fields.everything.description",
               },
             ],
           },
@@ -2422,34 +2238,29 @@ For example, specifying \`.*-alerts\` as a "channel to exclude" will cause the c
     advanced_values: [],
   },
   imap: {
-    description: "Configure Email connector",
+    description: "connectors.imap.description",
     values: [
       {
         type: "text",
-        query: "Enter the IMAP server host:",
-        label: "IMAP Server Host",
+        label: "connectors.imap.fields.host.label",
         name: "host",
         optional: false,
-        description:
-          "The IMAP server hostname (e.g., imap.gmail.com, outlook.office365.com)",
+        description: "connectors.imap.fields.host.description",
       },
       {
         type: "number",
-        query: "Enter the IMAP server port:",
-        label: "IMAP Server Port",
+        label: "connectors.imap.fields.port.label",
         name: "port",
         optional: true,
         default: 993,
-        description: "The IMAP server port (default: 993 for SSL)",
+        description: "connectors.imap.fields.port.description",
       },
       {
         type: "list",
-        query: "Enter mailboxes to include:",
-        label: "Mailboxes",
+        label: "connectors.imap.fields.mailboxes.label",
         name: "mailboxes",
         optional: true,
-        description:
-          "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes.",
+        description: "connectors.imap.fields.mailboxes.description",
       },
     ],
     advanced_values: [],

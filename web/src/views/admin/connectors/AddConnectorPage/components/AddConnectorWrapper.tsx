@@ -687,6 +687,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         // Edit mode leaves the manage groups alone, so it needs none.
         isScopedManager && edit === undefined,
         {
+          required: (field) => tValidation("required", { field }),
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),
@@ -695,7 +696,8 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           ),
           stringPairEmptyKey: keyValueT("emptyKey"),
           stringPairDuplicateKey: keyValueT("duplicateKey"),
-        }
+        },
+        configuration
       ).shape({
         // Always checked, so its fields can show errors. With a saved pick
         // the typed account is not used, and Create ignores its errors (see

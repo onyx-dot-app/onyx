@@ -3178,6 +3178,1088 @@
       },
       "optionsListInput": {
         "placeholder": "Pick {label} from the list, or type one"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "Enable processing of page attachments including images and documents",
+              "label": "Include Attachments"
+            },
+            "scoped_token": {
+              "label": "This is an API token with scopes",
+              "description": "Scoped tokens require routing through Atlassian's API gateway. Leave off for classic tokens."
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "Meeting IDs",
+              "description": "Each recurring meeting is indexed occurrence by occurrence. Zoom returns occurrences from the last 15 months only, so older ones are out of reach of a meeting ID. To index history further back, scope by host email or by Zoom Group instead — neither has that limit."
+            },
+            "webinar_ids": {
+              "label": "Webinar IDs",
+              "description": "Webinars also need the Webinar add-on, enabled for the host. Unlike meeting IDs, webinar history has no 15-month limit."
+            },
+            "host_emails": {
+              "label": "Host Emails",
+              "description": "Index every session these people host, of the types ticked below. An email that matches no Zoom user is reported as an indexing error rather than silently ignored."
+            },
+            "group_id": {
+              "label": "Zoom Group ID",
+              "description": "Index every session the members of one Zoom Group host, of the types ticked below. Zoom re-reads the member list on every run, so a joiner or leaver is picked up without editing this connector."
+            },
+            "include_meetings": {
+              "label": "Include meetings",
+              "description": "Applies to Host Emails and Zoom Group. The ID lists above already say which type each ID is."
+            },
+            "include_webinars": {
+              "label": "Include webinars",
+              "description": "Applies to Host Emails and Zoom Group. Webinars also need the Webinar add-on, enabled for the host."
+            },
+            "treat_link_access_as_public": {
+              "label": "Treat link access as public",
+              "description": "Only matters with permission sync. When on, a recording whose Link access is \"Anyone with the link\" or a signed-in rule is visible to all Onyx users, and a domain rule to users of those domains. When off, every transcript is visible to the recording's owner alone, because Zoom cannot say who is in \"People with access\"."
+            },
+            "plan_tier": {
+              "label": "Zoom Plan",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "Sets how fast this connector is allowed to call Zoom. Pick `pro` on a Pro account, and `business_plus` on Business, Education, Enterprise or Partner."
+            },
+            "rate_limit_percent": {
+              "label": "Zoom API Rate Limit",
+              "description": "Whole percent, 1 to 100, of the account's Zoom rate limit this connector may spend. Blank means 50, which leaves room for the customer's other Zoom integrations. Each Zoom connector paces itself and cannot see the others, so two connectors on one Zoom account spend this percent each — divide it if you run several."
+            }
+          },
+          "description": "Configure Zoom connector",
+          "subtext": "Indexes the Cloud Recording transcript of each Zoom session, on a Zoom Pro plan or higher. A session that was never cloud-recorded is skipped. Set an Indexing Start date under Advanced. Zoom lists recordings a month per request, so without one the first crawl asks for every month back to 2013 and spends your account's API allowance on years that hold nothing."
+        },
+        "web": {
+          "description": "Configure Web connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL"
+            },
+            "web_connector_type": {
+              "label": "Scrape Method",
+              "options": {
+                "recursive": "recursive",
+                "single": "single",
+                "sitemap": "sitemap"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "Scroll before scraping",
+              "description": "Enable if the website requires scrolling for the desired content to load"
+            },
+            "url_rewrites": {
+              "label": "URL Rewrites",
+              "description": "Rewrite document URLs before storing. Useful when crawling through an internal mirror while storing the canonical public links, for example https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "Source URL prefix",
+              "rightLabel": "Replacement prefix"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "Configure LumApps connector",
+          "fields": {
+            "base_url": {
+              "label": "API Base URL (cell host)",
+              "description": "Your LumApps cell/API host, e.g. https://go-cell-005.api.lumapps.com (not the docs site api.lumapps.com)."
+            },
+            "organization_id": {
+              "label": "Organization ID",
+              "description": "Your LumApps organization id (numeric)."
+            },
+            "instance_ids": {
+              "label": "Instance (site) IDs",
+              "description": "Restrict indexing to specific instance/site IDs. Leave empty to index all content visible to the service user."
+            },
+            "custom_content_types": {
+              "label": "Custom Content Type IDs",
+              "description": "Restrict to specific custom content type IDs. Leave empty to index all content types."
+            },
+            "lang": {
+              "label": "Language",
+              "description": "Language used for content title/body and metadata labels (ISO 639-1, e.g. en, fr)."
+            }
+          }
+        },
+        "github": {
+          "description": "Configure GitHub connector",
+          "fields": {
+            "github_base_url": {
+              "label": "GitHub Enterprise Server URL",
+              "description": "Leave blank for github.com."
+            },
+            "repo_owner": {
+              "label": "Repository Owner"
+            },
+            "github_mode": {
+              "label": "GitHub content to index",
+              "tabs": {
+                "repo": {
+                  "label": "Specific Repository"
+                },
+                "everything": {
+                  "label": "Everything"
+                }
+              }
+            },
+            "repositories": {
+              "label": "Repository Name(s)",
+              "description": "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "Everything",
+              "description": "This connector will index all repositories the provided credentials have access to!"
+            },
+            "include_prs": {
+              "label": "Include pull requests",
+              "description": "Index pull requests from repositories"
+            },
+            "include_issues": {
+              "label": "Include Issues",
+              "description": "Index issues from repositories"
+            },
+            "include_files": {
+              "label": "Include Documents",
+              "description": "Index text-based documents (markdown, text, etc.) from repositories"
+            },
+            "branch": {
+              "label": "Branch",
+              "description": "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately."
+            }
+          }
+        },
+        "testrail": {
+          "description": "Configure TestRail connector",
+          "fields": {
+            "testrail_base_url": {
+              "label": "TestRail Base URL"
+            },
+            "project_ids": {
+              "label": "Project IDs",
+              "description": "Comma-separated list of TestRail project IDs to index (e.g., 1 or 1,2,3). Leave empty to index all projects."
+            },
+            "cases_page_size": {
+              "label": "Cases Page Size",
+              "description": "Number of test cases to fetch per page from the TestRail API (default: 250)"
+            },
+            "max_pages": {
+              "label": "Max Pages",
+              "description": "Maximum number of pages to fetch to prevent infinite loops (default: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "Skip Document Character Limit",
+              "description": "Skip indexing test cases that exceed this character limit (default: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "Configure GitLab connector",
+          "fields": {
+            "gitlab_url": {
+              "label": "GitLab URL"
+            },
+            "project_owner": {
+              "label": "Project Owner"
+            },
+            "project_name": {
+              "label": "Project Name"
+            },
+            "include_mrs": {
+              "label": "Include MRs",
+              "description": "Index merge requests from repositories"
+            },
+            "include_issues": {
+              "label": "Include Issues",
+              "description": "Index issues from repositories"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "Configure Bitbucket connector",
+          "subtext": "Configure Bitbucket connector (Cloud only). You can index a workspace, specific projects or repositories.",
+          "fields": {
+            "workspace": {
+              "label": "Workspace",
+              "description": "The Bitbucket workspace to index (e.g., \"atlassian\" from https://bitbucket.org/atlassian/workspace )."
+            },
+            "bitbucket_mode": {
+              "label": "Bitbucket content to index",
+              "tabs": {
+                "repo": {
+                  "label": "Specific Repositories"
+                },
+                "project": {
+                  "label": "Project(s)"
+                },
+                "workspace": {
+                  "label": "Workspace"
+                }
+              }
+            },
+            "repositories": {
+              "label": "Repository Slugs",
+              "description": "For multiple repositories, enter comma-separated slugs (e.g., repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "Project Key(s)",
+              "description": "One or more Bitbucket Project Keys (comma-separated) to index all repositories in those projects (e.g., PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "Workspace",
+              "description": "This connector will index all repositories in the workspace."
+            }
+          }
+        },
+        "gitbook": {
+          "description": "Configure GitBook connector",
+          "fields": {
+            "space_id": {
+              "label": "Space ID",
+              "description": "The ID of the GitBook space to index. This can be found in the URL of a page in the space. For example, if your URL looks like `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, then your space ID is `8JkzVx8QCIGRrmxhGHU8`."
+            }
+          }
+        },
+        "google_drive": {
+          "description": "Configure Google Drive connector",
+          "fields": {
+            "credential_kind": {
+              "label": "Credential kind"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "General"
+                },
+                "Specific": {
+                  "label": "Specific"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "Include shared drives",
+              "description": {
+                "oauth": "This will allow Onyx to index everything in the shared drives you have access to.",
+                "serviceAccount": "This will allow Onyx to index everything in your Organization's shared drives."
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "Include My Drive",
+                "serviceAccount": "Include Everyone's My Drive"
+              },
+              "description": {
+                "oauth": "This will allow Onyx to index everything in your My Drive.",
+                "serviceAccount": "This will allow Onyx to index everything in everyone's My Drives."
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "This will allow Onyx to index all files shared with you.",
+              "label": "Include All Files Shared With You"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "Enter a comma separated list of the URLs for the shared drive you would like to index. You must have access to these shared drives.",
+                "serviceAccount": "Enter a comma separated list of the URLs for the shared drive you would like to index."
+              },
+              "label": "Shared Drive URLs"
+            },
+            "shared_folder_urls": {
+              "description": "Enter a comma separated list of the URLs of any folders you would like to index. The files located in these folders (and all subfolders) will be indexed.",
+              "label": "Folder URLs"
+            },
+            "my_drive_emails": {
+              "description": "Enter a comma separated list of the emails of the users whose MyDrive you want to index.",
+              "label": "My Drive Emails"
+            },
+            "specific_user_emails": {
+              "description": "Enter a comma separated list of specific user emails to index. This will only index files accessible to these users.",
+              "label": "Specific User Emails"
+            },
+            "exclude_domain_link_only": {
+              "label": "Hide domain link-only files",
+              "description": "When enabled, Onyx skips files that are shared broadly (domain or public) but require the link to access."
+            }
+          }
+        },
+        "gmail": {
+          "description": "Configure Gmail connector"
+        },
+        "bookstack": {
+          "description": "Configure Bookstack connector",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "BookStack Base URL"
+            }
+          }
+        },
+        "outline": {
+          "description": "Configure Outline connector",
+          "fields": {
+            "outline_base_url": {
+              "label": "Outline Base URL"
+            }
+          }
+        },
+        "confluence": {
+          "description": "Configure Confluence connector",
+          "fields": {
+            "is_cloud": {
+              "label": "Is Cloud",
+              "description": "Choose Confluence Cloud for a site on atlassian.net, or Confluence Data Center for a self-hosted Confluence Server or Data Center site."
+            },
+            "wiki_base": {
+              "label": "Site URL"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "space": {
+                  "label": "Space"
+                },
+                "page": {
+                  "label": "Page"
+                },
+                "cql": {
+                  "label": "CQL Query"
+                }
+              }
+            },
+            "everything": {
+              "label": "Everything",
+              "description": "This connector will index all pages the provided credentials have access to!"
+            },
+            "space": {
+              "label": "Space Key",
+              "description": "The Confluence space key to index (e.g. `KB`)."
+            },
+            "page_id": {
+              "label": "Page ID",
+              "description": "Specific page ID to index (e.g. `131368`)"
+            },
+            "index_recursively": {
+              "label": "Index Recursively",
+              "description": "If this is set, we will index the page indicated by the Page ID as well as all of its children."
+            },
+            "cql_query": {
+              "label": "CQL Query",
+              "description": "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. Do not use ORDER BY, because the connector sets its own sort order. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See Atlassian's [CQL documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/) for more details."
+            }
+          }
+        },
+        "jira": {
+          "description": "Configure Jira connector",
+          "subtext": "Configure which Jira content to index. You can index everything or specify a particular project.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "project": {
+                  "label": "Project"
+                },
+                "jql": {
+                  "label": "JQL Query"
+                }
+              }
+            },
+            "everything": {
+              "label": "Everything",
+              "description": "This connector will index all issues the provided credentials have access to!"
+            },
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific project to index (e.g., 'PROJ')."
+            },
+            "jql_query": {
+              "label": "JQL Query",
+              "description": "A custom JQL query to filter Jira issues.\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses.\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax."
+            },
+            "comment_email_blacklist": {
+              "label": "Comment Email Blacklist",
+              "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
+            }
+          }
+        },
+        "salesforce": {
+          "description": "Configure Salesforce connector",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "Configuration Type",
+              "tabs": {
+                "simple": {
+                  "label": "Simple"
+                },
+                "advanced": {
+                  "label": "Advanced"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "Requested Objects",
+              "description": "Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'.\n\nHint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities')."
+            },
+            "custom_query_config": {
+              "label": "Custom Query Config",
+              "description": "Enter a JSON configuration that precisely defines which fields and child objects to index. This gives you complete control over the data structure.\n\nExample: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n[See our docs]({docsAdminsPath}/connectors/official/salesforce) for more details."
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "Configure SharePoint connector",
+          "fields": {
+            "sites": {
+              "label": "Sites",
+              "description": "- If no sites are specified, all sites in your organization will be indexed (`Sites.Read.All` permission required).\n- Specifying `https://onyxai.sharepoint.com/sites/support` for example only indexes this site.\n- Specifying `https://onyxai.sharepoint.com/sites/support/subfolder` for example only indexes this folder.\n- To index users' personal sites, use the [OneDrive connector]({docsAdminsPath}/connectors/official/onedrive).\n- Specifying sites currently works for SharePoint instances using English, Spanish, or German. Contact the Onyx team if you need another language supported."
+            },
+            "include_site_documents": {
+              "label": "Index Documents",
+              "description": "Index documents of all SharePoint libraries or folders defined above."
+            },
+            "include_site_pages": {
+              "label": "Index ASPX Sites",
+              "description": "Index aspx-pages of all SharePoint sites defined above, even if a library or folder is specified."
+            },
+            "treat_sharing_link_as_public": {
+              "label": "Treat sharing links as public",
+              "description": "When enabled, documents with a sharing link (anonymous or organization-wide) are treated as public (visible to all Onyx users). When disabled, only users and groups with explicit role assignments can see the document."
+            },
+            "excluded_sites": {
+              "label": "Excluded Sites",
+              "description": "Site URLs or glob patterns to exclude from indexing. Matched sites will never be indexed, even if they appear in the sites list above. Examples: `https://contoso.sharepoint.com/sites/archive` (exact), `*://*/sites/archive-*` (glob pattern)."
+            },
+            "excluded_paths": {
+              "label": "Excluded Paths",
+              "description": "Glob patterns for file paths to exclude from indexing within document libraries. Patterns are matched against both the full relative path and the filename. Examples: `*.tmp` (temp files), `~$*` (Office lock files), `Archive/*` (folder)."
+            },
+            "authority_host": {
+              "label": "Authority Host",
+              "description": "The Microsoft identity authority host used for authentication. For most deployments, leave as default. For GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API Host",
+              "description": "The Microsoft Graph API host. For most deployments, leave as default. For GCC High / DoD, use https://graph.microsoft.us"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "SharePoint Domain Suffix",
+              "description": "The domain suffix for SharePoint sites (e.g. sharepoint.com). For most deployments, leave as default. For GCC High, use sharepoint.us"
+            }
+          }
+        },
+        "teams": {
+          "description": "Configure Teams connector",
+          "fields": {
+            "teams": {
+              "label": "Teams",
+              "description": "Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed."
+            },
+            "include_attachments": {
+              "description": "Index the files in each channel's Files tab as their own documents, with the readers SharePoint grants them. Needs a certificate credential, Files.Read.All or Sites.Read.All on Graph, and Sites.FullControl.All on the SharePoint API to read each file's readers. With Sites.Selected, grant the app full control on each channel site."
+            },
+            "include_inline_images": {
+              "label": "Include Inline Images",
+              "description": "Index the images pasted into channel messages with their thread. Needs no extra permission. Nothing is downloaded while image extraction and analysis is off in the search settings."
+            },
+            "include_meeting_transcripts": {
+              "label": "Include Meeting Transcripts",
+              "description": "Index the transcripts of scheduled meetings as their own documents, readable by the organizer and the attendees. Needs the OnlineMeetingTranscript.Read.All, OnlineMeetings.Read.All and User.Read.All application permissions, the tenant setting that allows Graph API access to transcripts, and an application access policy granted to the organizers. Channel meetings are not covered. Transcripts from the last six months are indexed, and a transcript leaves the index once it is older than that."
+            },
+            "include_meeting_chats": {
+              "label": "Include Meeting Chats",
+              "description": "Index what people write in the chat of a scheduled meeting, a document per day, readable by the members of the chat. Needs the Chat.Read.All and User.Read.All application permissions. Covers meetings organized in this tenant: Microsoft does not serve the chat of a meeting another organization set up."
+            },
+            "meeting_organizers": {
+              "label": "Meeting Organizers",
+              "description": "User principal names of the organizers whose meeting transcripts and chats to index. Leave empty to include every enabled user with a Teams license."
+            },
+            "authority_host": {
+              "label": "Authority Host",
+              "description": "The Microsoft identity authority host used for authentication. For most deployments, leave as default. For GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API Host",
+              "description": "The Microsoft Graph API host. For most deployments, leave as default. For GCC High / DoD, use https://graph.microsoft.us"
+            }
+          }
+        },
+        "outlook": {
+          "description": "Configure Outlook connector",
+          "fields": {
+            "mailboxes": {
+              "label": "Mailboxes",
+              "description": "User principal names or primary email addresses of the mailboxes to index. Leave this and Mailbox Groups empty to index every mailbox the app registration may open. Shared mailboxes are never picked up automatically and must be listed here."
+            },
+            "mailbox_groups": {
+              "label": "Mailbox Groups",
+              "description": "Display names or object IDs of Entra groups. The mailbox of every member is indexed, members of nested groups included, so a tenant can be limited to the people who use Onyx. Needs the GroupMember.Read.All application permission."
+            },
+            "include_attachments": {
+              "description": "Index the text of file attachments. Inline images, nested items and cloud links are skipped."
+            },
+            "include_calendar": {
+              "label": "Include Calendar",
+              "description": "Index the calendar of each mailbox as well as its mail. Needs the Calendars.Read application permission."
+            },
+            "excluded_folders": {
+              "label": "Excluded Folders",
+              "description": "Folder names to skip in every mailbox, in addition to Junk Email, Deleted Items, Drafts and Outbox, which are always skipped."
+            },
+            "calendar_past_days": {
+              "label": "Calendar Past Days",
+              "description": "Used when Include Calendar is on. How far back the calendar window reaches. Events older than this leave the index at the next prune as the window moves forward. Widening it later needs a re-index, since unchanged events do not re-enter on their own."
+            },
+            "calendar_future_days": {
+              "label": "Calendar Future Days",
+              "description": "Used when Include Calendar is on. How far ahead the calendar window reaches. Widening it later needs a re-index, since unchanged events do not re-enter on their own."
+            },
+            "authority_host": {
+              "label": "Authority Host",
+              "description": "The Microsoft identity authority host used for authentication. For most deployments, leave as default. For GCC High / DoD, use https://login.microsoftonline.us"
+            },
+            "graph_api_host": {
+              "label": "Graph API Host",
+              "description": "The Microsoft Graph API host. For most deployments, leave as default. For GCC High / DoD, use https://graph.microsoft.us"
+            }
+          }
+        },
+        "discourse": {
+          "description": "Configure Discourse connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL"
+            },
+            "categories": {
+              "label": "Categories"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "Configure Drupal Wiki connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL",
+              "description": "The base URL of your Drupal Wiki instance (e.g., https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "Drupal Wiki content to index",
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "specific": {
+                  "label": "Specific Spaces/Pages"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "Everything",
+              "description": "This connector will index all spaces the provided credentials have access to!"
+            },
+            "spaces": {
+              "label": "Space IDs",
+              "description": "Specify one or more space IDs to index. Only numeric values are allowed."
+            },
+            "pages": {
+              "label": "Page IDs",
+              "description": "Specify one or more page IDs to index. Only numeric values are allowed."
+            }
+          }
+        },
+        "axero": {
+          "description": "Configure Axero connector",
+          "fields": {
+            "base_url": {
+              "label": "Axero Base URL"
+            },
+            "spaces": {
+              "label": "Spaces",
+              "description": "Specify zero or more Spaces to index (by the Space IDs). If no Space IDs are specified, all Spaces will be indexed."
+            }
+          }
+        },
+        "productboard": {
+          "description": "Configure Productboard connector"
+        },
+        "slack": {
+          "description": "Configure Slack connector",
+          "fields": {
+            "channels": {
+              "label": "Channels",
+              "description": "Specify 0 or more channels to index. Pick a channel from the list to follow it by id, so a rename does not break indexing, or type the name of a channel the list does not show, such as a private channel the bot was invited to. If no channels are specified, all channels in your workspace will be indexed."
+            },
+            "channel_regex_enabled": {
+              "label": "Enable Channel Regex",
+              "description": "If enabled, we will treat the \"channels\" specified above as regular expressions. A channel's messages will be pulled in by the connector if the name of the channel fully matches any of the specified regular expressions.\n\nFor example, specifying `.*-support.*` as a \"channel\" will cause the connector to include any channels with \"-support\" in the name."
+            },
+            "exclude_channels": {
+              "label": "Channels to Exclude",
+              "description": "Specify 0 or more channels to exclude. Exclusions are applied after the \"Channels\" filter above, so a channel matched by both is excluded. If no channels are specified, nothing is excluded."
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "Enable Exclude Channel Regex",
+              "description": "If enabled, we will treat the \"channels to exclude\" specified above as regular expressions. A channel will be excluded if its name fully matches any of the specified regular expressions.\n\nFor example, specifying `.*-alerts` as a \"channel to exclude\" will cause the connector to skip any channels ending in \"-alerts\"."
+            },
+            "include_bot_messages": {
+              "label": "Include Bot Messages",
+              "description": "If enabled, messages from bots and apps will be indexed. Useful for channels that are primarily bot-driven feeds (e.g. CRM updates, automated notes)."
+            }
+          }
+        },
+        "slab": {
+          "description": "Configure Slab connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL",
+              "description": "Specify the base URL for your Slab team. This will look something like: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "Configure Guru connector"
+        },
+        "gong": {
+          "description": "Configure Gong connector",
+          "fields": {
+            "gong_base_url": {
+              "label": "Gong API Base URL",
+              "description": "Defaults to `https://api.gong.io`."
+            },
+            "workspaces": {
+              "label": "Workspaces",
+              "description": "Specify 0 or more workspaces to index. Provide the workspace ID or the EXACT workspace name from Gong. If no workspaces are specified, transcripts from all workspaces will be indexed."
+            }
+          }
+        },
+        "loopio": {
+          "description": "Configure Loopio connector",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Loopio Subdomain",
+              "description": "The subdomain of your Loopio site, like `acme` in `acme.loopio.com`."
+            },
+            "loopio_stack_name": {
+              "label": "Loopio Stack Name",
+              "description": "Must be exact match to the name in Library Management, leave this blank if you want to index all Stacks"
+            }
+          }
+        },
+        "file": {
+          "description": "Configure File connector",
+          "fields": {
+            "file_locations": {
+              "label": "Files"
+            }
+          }
+        },
+        "zulip": {
+          "description": "Configure Zulip connector",
+          "fields": {
+            "realm_name": {
+              "label": "Realm Name"
+            },
+            "realm_url": {
+              "label": "Realm URL"
+            }
+          }
+        },
+        "coda": {
+          "description": "Configure Coda connector"
+        },
+        "notion": {
+          "description": "Configure Notion connector",
+          "fields": {
+            "root_page_id": {
+              "label": "Root Page ID",
+              "description": "If specified, will only index the specified page + all of its child pages. If left blank, will index all pages the integration has been given access to."
+            }
+          }
+        },
+        "hubspot": {
+          "description": "Configure HubSpot connector",
+          "fields": {
+            "object_types": {
+              "label": "Object Types",
+              "options": {
+                "tickets": "Tickets",
+                "companies": "Companies",
+                "deals": "Deals",
+                "contacts": "Contacts"
+              },
+              "description": "Choose which HubSpot object types to index. All types are selected by default."
+            }
+          }
+        },
+        "document360": {
+          "description": "Configure Document360 connector",
+          "fields": {
+            "workspace": {
+              "label": "Workspace"
+            },
+            "categories": {
+              "label": "Categories",
+              "description": "Specify 0 or more categories to index. For instance, specifying the category 'Help' will cause us to only index all content within the 'Help' category. If no categories are specified, all categories in your workspace will be indexed."
+            }
+          }
+        },
+        "clickup": {
+          "description": "Configure ClickUp connector",
+          "fields": {
+            "connector_type": {
+              "label": "Connector Type",
+              "options": {
+                "list": "list",
+                "folder": "folder",
+                "space": "space",
+                "workspace": "workspace"
+              }
+            },
+            "connector_ids": {
+              "label": "Connector IDs",
+              "description": "Specify 0 or more id(s) to index from."
+            },
+            "retrieve_task_comments": {
+              "label": "Retrieve Task Comments",
+              "description": "If checked, then all the comments for each task will also be retrieved and indexed."
+            }
+          }
+        },
+        "google_sites": {
+          "description": "Configure Google Sites connector",
+          "fields": {
+            "base_url": {
+              "label": "Base URL"
+            },
+            "file_locations": {
+              "label": "Site Export",
+              "description": "Upload a `.zip` file containing the HTML of your Google Site."
+            }
+          }
+        },
+        "zendesk": {
+          "description": "Configure Zendesk connector",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Zendesk Subdomain",
+              "description": "The subdomain of your Zendesk site, like `acme` in `acme.zendesk.com`."
+            },
+            "content_type": {
+              "label": "Content Type",
+              "options": {
+                "articles": "articles",
+                "tickets": "tickets"
+              }
+            },
+            "calls_per_minute": {
+              "label": "API Calls per Minute",
+              "description": "Restricts how many Zendesk API calls this connector can make per minute (applies only to this connector). See defaults: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "Configure Box connector",
+          "fields": {
+            "folder_ids": {
+              "label": "Folders",
+              "description": "Box folder IDs or folder URLs (e.g. https://app.box.com/folder/123456789) to index. Leave empty to index everything visible to the authenticated user."
+            },
+            "include_web_links": {
+              "label": "Include Web Links",
+              "description": "Also index Box web links (bookmarks) as lightweight documents."
+            }
+          }
+        },
+        "dropbox": {
+          "description": "Configure Dropbox connector"
+        },
+        "s3": {
+          "description": "Configure S3 connector",
+          "fields": {
+            "bucket_name": {
+              "label": "Bucket Name"
+            },
+            "prefix": {
+              "label": "Prefix"
+            },
+            "region_name": {
+              "label": "AWS Region",
+              "description": "The AWS region of the bucket (e.g. us-east-1). Required for buckets in non-default partitions such as GovCloud (us-gov-west-1); otherwise the default region resolution is used."
+            },
+            "bucket_type": {
+              "label": "Bucket Type"
+            }
+          }
+        },
+        "r2": {
+          "description": "Configure R2 connector",
+          "fields": {
+            "bucket_name": {
+              "label": "Bucket Name"
+            },
+            "prefix": {
+              "label": "Prefix"
+            },
+            "european_residency": {
+              "label": "EU Data Residency",
+              "description": "Check this box if your bucket has EU data residency enabled."
+            },
+            "bucket_type": {
+              "label": "Bucket Type"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "Configure Google Cloud Storage connector",
+          "fields": {
+            "bucket_name": {
+              "label": "Bucket Name",
+              "description": "Name of the GCS bucket to index, e.g. my-gcs-bucket"
+            },
+            "prefix": {
+              "label": "Path Prefix"
+            },
+            "bucket_type": {
+              "label": "Bucket Type"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "Configure OCI Storage connector",
+          "fields": {
+            "bucket_name": {
+              "label": "Bucket Name"
+            },
+            "prefix": {
+              "label": "Prefix"
+            },
+            "bucket_type": {
+              "label": "Bucket Type"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "Configure Wikipedia connector",
+          "fields": {
+            "language_code": {
+              "label": "Language Code",
+              "description": "Input a valid Wikipedia language code (e.g. 'en', 'es')"
+            },
+            "categories": {
+              "label": "Categories to index",
+              "description": "Specify 0 or more names of categories to index. For most Wikipedia sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url."
+            },
+            "pages": {
+              "label": "Pages",
+              "description": "Specify 0 or more names of pages to index."
+            },
+            "recurse_depth": {
+              "label": "Recursion Depth",
+              "description": "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen."
+            }
+          }
+        },
+        "xenforo": {
+          "description": "Configure Xenforo connector",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "The XenForo v2.2 forum URL to index. Can be board or thread."
+            }
+          }
+        },
+        "asana": {
+          "description": "Configure Asana connector",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "Workspace ID",
+              "description": "The ID of the Asana workspace to index. You can find this at https://app.asana.com/api/1.0/workspaces. It's a number that looks like 1234567890123456."
+            },
+            "asana_project_ids": {
+              "label": "Project IDs",
+              "description": "IDs of specific Asana projects to index, separated by commas. Leave empty to index all projects in the workspace. Example: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "Team ID",
+              "description": "ID of a team to use for accessing team-visible tasks. This allows indexing of team-visible tasks in addition to public tasks. Leave empty if you don't want to use this feature."
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "Configure MediaWiki connector",
+          "fields": {
+            "language_code": {
+              "label": "Language Code",
+              "description": "Input a valid MediaWiki language code (e.g. 'en', 'es')"
+            },
+            "hostname": {
+              "label": "MediaWiki Site URL"
+            },
+            "categories": {
+              "label": "Categories to index",
+              "description": "Specify 0 or more names of categories to index. For most MediaWiki sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url."
+            },
+            "pages": {
+              "label": "Pages",
+              "description": "Specify 0 or more names of pages to index. Only specify the name of the page, not its url."
+            },
+            "recurse_depth": {
+              "label": "Recursion Depth",
+              "description": "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen."
+            }
+          }
+        },
+        "discord": {
+          "description": "Configure Discord connector",
+          "fields": {
+            "server_ids": {
+              "label": "Server IDs",
+              "description": "Specify 0 or more server ids to include. Only channels inside them will be used for indexing"
+            },
+            "channel_names": {
+              "label": "Channels",
+              "description": "Specify 0 or more channels to index. For example, specifying the channel \"support\" will cause us to only index all content within the \"#support\" channel. If no channels are specified, all channels the bot has access to will be indexed."
+            },
+            "start_date": {
+              "label": "Start Date",
+              "description": "Only messages after this date will be indexed. Format: YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "Configure Freshdesk connector",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Freshdesk Domain",
+              "description": "The subdomain of your Freshdesk site, like `acme` in `acme.freshdesk.com`."
+            }
+          }
+        },
+        "fireflies": {
+          "description": "Configure Fireflies connector"
+        },
+        "braintrust": {
+          "description": "Configure Braintrust connector",
+          "fields": {
+            "project_name": {
+              "label": "Project Name",
+              "description": "Only index prompts, datasets, and experiments from this project. Leave empty to index the whole organization."
+            },
+            "experiment_row_lookback_days": {
+              "label": "Experiment Row Lookback (days)",
+              "description": "Only index per-row results for experiments created within this many days. Experiment summaries are always indexed. Set to 0 to index rows for all experiments."
+            }
+          }
+        },
+        "canvas": {
+          "description": "Configure Canvas connector",
+          "fields": {
+            "canvas_base_url": {
+              "label": "Canvas Base URL",
+              "description": "e.g. https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "Configure Egnyte connector",
+          "fields": {
+            "domain": {
+              "label": "Egnyte Domain",
+              "description": "The subdomain of your Egnyte site, like `acme` in `acme.egnyte.com`."
+            },
+            "folder_path": {
+              "label": "Folder Path",
+              "description": "The folder path to index (e.g., '/Shared/Documents'). Leave empty to index everything."
+            }
+          }
+        },
+        "airtable": {
+          "description": "Configure Airtable connector",
+          "fields": {
+            "airtable_scope": {
+              "label": "Airtable content to index",
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "specific": {
+                  "label": "Specific Table"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "Everything",
+              "description": "This connector will automatically discover and index all bases and tables accessible by your API token."
+            },
+            "airtable_url": {
+              "label": "Airtable URL",
+              "description": "Paste the URL from your browser when viewing the table, e.g. https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "Share ID",
+              "description": "Optional. If you want record links to use a shared view URL, put the share ID here e.g. shrkfjEzDmLaDtK83."
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "Treat all fields except attachments as metadata",
+              "description": "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments."
+            }
+          }
+        },
+        "highspot": {
+          "description": "Configure Highspot connector",
+          "fields": {
+            "highspot_url": {
+              "label": "Highspot URL"
+            },
+            "highspot_scope": {
+              "label": "Highspot content to index",
+              "tabs": {
+                "spots": {
+                  "label": "Specific Spots"
+                },
+                "everything": {
+                  "label": "Everything"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "Spot Name(s)",
+              "description": "For multiple spots, enter your spot one by one."
+            },
+            "everything": {
+              "label": "Everything",
+              "description": "This connector will index all spots the provided credentials have access to!"
+            }
+          }
+        },
+        "imap": {
+          "description": "Configure Email connector",
+          "fields": {
+            "host": {
+              "label": "IMAP Server Host",
+              "description": "The IMAP server hostname (e.g., imap.gmail.com, outlook.office365.com)"
+            },
+            "port": {
+              "label": "IMAP Server Port",
+              "description": "The IMAP server port (default: 993 for SSL)"
+            },
+            "mailboxes": {
+              "label": "Mailboxes",
+              "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
+            }
+          }
+        }
       }
     },
     "costOverrides": {

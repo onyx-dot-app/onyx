@@ -3178,6 +3178,1088 @@
       },
       "optionsListInput": {
         "placeholder": "リストから {label} を選択するか入力"
+      },
+      "connectors": {
+        "shared": {
+          "fields": {
+            "include_attachments": {
+              "description": "画像やドキュメントを含むページの添付ファイルを処理します",
+              "label": "添付ファイルを含める"
+            },
+            "scoped_token": {
+              "label": "スコープ付き API トークンを使用する",
+              "description": "スコープ付きトークンは、Atlassian の API ゲートウェイ経由のルーティングが必要です。従来型トークンの場合はオフのままにしてください。"
+            }
+          }
+        },
+        "zoom": {
+          "fields": {
+            "meeting_ids": {
+              "label": "ミーティング ID",
+              "description": "定期ミーティングは、開催回ごとにインデックスされます。Zoom が返す開催回は過去 15 か月分のみのため、それより古い回はミーティング ID では取得できません。さらに過去の履歴をインデックスするには、ホストのメールアドレスまたは Zoom グループで範囲を指定してください。どちらにもこの制限はありません。"
+            },
+            "webinar_ids": {
+              "label": "ウェビナー ID",
+              "description": "ウェビナーには、ホストに対して有効化された Webinar アドオンも必要です。ミーティング ID と異なり、ウェビナーの履歴には 15 か月の制限がありません。"
+            },
+            "host_emails": {
+              "label": "ホストのメールアドレス",
+              "description": "これらのユーザーがホストするすべてのセッションのうち、下でチェックした種類のものをインデックスします。Zoom ユーザーに一致しないメールアドレスは、無視されずにインデックスエラーとして報告されます。"
+            },
+            "group_id": {
+              "label": "Zoom グループ ID",
+              "description": "1 つの Zoom グループのメンバーがホストするすべてのセッションのうち、下でチェックした種類のものをインデックスします。Zoom は実行のたびにメンバー一覧を再取得するため、このコネクターを編集しなくても、参加者や退出者が反映されます。"
+            },
+            "include_meetings": {
+              "label": "ミーティングを含める",
+              "description": "ホストのメールアドレスと Zoom グループに適用されます。上の ID 一覧では、各 ID の種類がすでに指定されています。"
+            },
+            "include_webinars": {
+              "label": "ウェビナーを含める",
+              "description": "ホストのメールアドレスと Zoom グループに適用されます。ウェビナーには、ホストに対して有効化された Webinar アドオンも必要です。"
+            },
+            "treat_link_access_as_public": {
+              "label": "リンクアクセスを公開として扱う",
+              "description": "権限同期を使用する場合のみ有効です。オンにすると、リンクアクセスが「リンクを知っている全員」またはサインイン済みユーザー向けのルールになっている録画は、すべての Onyx ユーザーに表示され、ドメイン向けのルールの場合はそのドメインのユーザーに表示されます。オフにすると、Zoom は「アクセス権のあるユーザー」に誰が含まれるかを返せないため、すべての文字起こしは録画の所有者のみに表示されます。"
+            },
+            "plan_tier": {
+              "label": "Zoom プラン",
+              "options": {
+                "pro": "pro",
+                "business_plus": "business_plus"
+              },
+              "description": "このコネクターが Zoom を呼び出せる速度を設定します。Pro アカウントでは `pro` を、Business、Education、Enterprise、Partner では `business_plus` を選択してください。"
+            },
+            "rate_limit_percent": {
+              "label": "Zoom API レート制限",
+              "description": "このコネクターが使用できる、アカウントの Zoom レート制限の割合を 1 から 100 の整数(パーセント)で指定します。空欄の場合は 50 になり、お客様の他の Zoom 連携用の余裕が残ります。各 Zoom コネクターは自身のペースを調整し、他のコネクターを把握できないため、1 つの Zoom アカウントに 2 つのコネクターがあると、それぞれがこの割合を消費します。複数実行する場合は、値を分割してください。"
+            }
+          },
+          "description": "Zoom コネクターを設定",
+          "subtext": "Zoom Pro プラン以上で、各 Zoom セッションのクラウドレコーディングの文字起こしをインデックスします。クラウド録画されなかったセッションはスキップされます。「詳細設定」でインデックス開始日を設定してください。Zoom は録画を 1 リクエストにつき 1 か月分ずつ一覧表示するため、開始日がないと、最初のクロールで 2013 年までのすべての月を要求し、何もない年のためにアカウントの API 利用枠を消費してしまいます。"
+        },
+        "web": {
+          "description": "Web コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL"
+            },
+            "web_connector_type": {
+              "label": "スクレイピング方法",
+              "options": {
+                "recursive": "再帰",
+                "single": "単一",
+                "sitemap": "サイトマップ"
+              }
+            },
+            "scroll_before_scraping": {
+              "label": "スクレイピング前にスクロールする",
+              "description": "目的のコンテンツを読み込むためにスクロールが必要なウェブサイトの場合に有効にします"
+            },
+            "url_rewrites": {
+              "label": "URL の書き換え",
+              "description": "保存前にドキュメントの URL を書き換えます。社内ミラー経由でクロールしつつ、正規の公開リンクを保存する場合に便利です。例: https://internal-mirror.example.com → https://docs.example.com",
+              "leftLabel": "元の URL プレフィックス",
+              "rightLabel": "置換後のプレフィックス"
+            }
+          }
+        },
+        "lumapps": {
+          "description": "LumApps コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "API ベース URL(セルホスト)",
+              "description": "LumApps のセル/API ホスト。例: https://go-cell-005.api.lumapps.com(ドキュメントサイトの api.lumapps.com ではありません)。"
+            },
+            "organization_id": {
+              "label": "組織 ID",
+              "description": "LumApps の組織 ID(数値)。"
+            },
+            "instance_ids": {
+              "label": "インスタンス(サイト)ID",
+              "description": "インデックス対象を特定のインスタンス/サイト ID に限定します。空欄の場合は、サービスユーザーが閲覧できるすべてのコンテンツをインデックスします。"
+            },
+            "custom_content_types": {
+              "label": "カスタムコンテンツタイプ ID",
+              "description": "特定のカスタムコンテンツタイプ ID に限定します。空欄の場合は、すべてのコンテンツタイプをインデックスします。"
+            },
+            "lang": {
+              "label": "言語",
+              "description": "コンテンツのタイトル/本文とメタデータラベルに使用する言語(ISO 639-1。例: en、fr)。"
+            }
+          }
+        },
+        "github": {
+          "description": "GitHub コネクターを設定",
+          "fields": {
+            "github_base_url": {
+              "label": "GitHub Enterprise Server の URL",
+              "description": "github.com を使用する場合は空欄のままにしてください。"
+            },
+            "repo_owner": {
+              "label": "リポジトリのオーナー"
+            },
+            "github_mode": {
+              "label": "インデックスする GitHub コンテンツ",
+              "tabs": {
+                "repo": {
+                  "label": "特定のリポジトリ"
+                },
+                "everything": {
+                  "label": "すべて"
+                }
+              }
+            },
+            "repositories": {
+              "label": "リポジトリ名",
+              "description": "複数のリポジトリを指定する場合は、名前をカンマ区切りで入力してください(例: repo1,repo2,repo3)"
+            },
+            "everything": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのリポジトリをインデックスします。"
+            },
+            "include_prs": {
+              "label": "プルリクエストを含める",
+              "description": "リポジトリのプルリクエストをインデックスします"
+            },
+            "include_issues": {
+              "label": "Issue を含める",
+              "description": "リポジトリの Issue をインデックスします"
+            },
+            "include_files": {
+              "label": "ドキュメントを含める",
+              "description": "リポジトリのテキストベースのドキュメント(Markdown、テキストなど)をインデックスします"
+            },
+            "branch": {
+              "label": "ブランチ",
+              "description": "ドキュメントをインデックスするブランチ(例: gh-pages)。空欄の場合は、各リポジトリのデフォルトブランチを使用します。「ドキュメントを含める」が有効な場合のみ適用されます。既存のコネクターでこの設定を変更した後は、再インデックスを実行すると新しいブランチがすぐに反映されます。"
+            }
+          }
+        },
+        "testrail": {
+          "description": "TestRail コネクターを設定",
+          "fields": {
+            "testrail_base_url": {
+              "label": "TestRail のベース URL"
+            },
+            "project_ids": {
+              "label": "プロジェクト ID",
+              "description": "インデックスする TestRail プロジェクト ID のカンマ区切りリスト(例: 1 または 1,2,3)。空欄の場合は、すべてのプロジェクトをインデックスします。"
+            },
+            "cases_page_size": {
+              "label": "ケースのページサイズ",
+              "description": "TestRail API から 1 ページあたりに取得するテストケース数(デフォルト: 250)"
+            },
+            "max_pages": {
+              "label": "最大ページ数",
+              "description": "無限ループを防ぐために取得するページ数の上限(デフォルト: 10000)"
+            },
+            "skip_doc_absolute_chars": {
+              "label": "ドキュメントの文字数上限(スキップ)",
+              "description": "この文字数を超えるテストケースのインデックスをスキップします(デフォルト: 200000)"
+            }
+          }
+        },
+        "gitlab": {
+          "description": "GitLab コネクターを設定",
+          "fields": {
+            "gitlab_url": {
+              "label": "GitLab の URL"
+            },
+            "project_owner": {
+              "label": "プロジェクトのオーナー"
+            },
+            "project_name": {
+              "label": "プロジェクト名"
+            },
+            "include_mrs": {
+              "label": "MR を含める",
+              "description": "リポジトリのマージリクエストをインデックスします"
+            },
+            "include_issues": {
+              "label": "Issue を含める",
+              "description": "リポジトリの Issue をインデックスします"
+            }
+          }
+        },
+        "bitbucket": {
+          "description": "Bitbucket コネクターを設定",
+          "subtext": "Bitbucket コネクターを設定します(Cloud のみ)。ワークスペース、特定のプロジェクト、またはリポジトリをインデックスできます。",
+          "fields": {
+            "workspace": {
+              "label": "ワークスペース",
+              "description": "インデックスする Bitbucket ワークスペース(例: https://bitbucket.org/atlassian/workspace の \"atlassian\")。"
+            },
+            "bitbucket_mode": {
+              "label": "インデックスする Bitbucket コンテンツ",
+              "tabs": {
+                "repo": {
+                  "label": "特定のリポジトリ"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "workspace": {
+                  "label": "ワークスペース"
+                }
+              }
+            },
+            "repositories": {
+              "label": "リポジトリのスラッグ",
+              "description": "複数のリポジトリを指定する場合は、スラッグをカンマ区切りで入力してください(例: repo1,repo2,repo3)"
+            },
+            "projects": {
+              "label": "プロジェクトキー",
+              "description": "1 つ以上の Bitbucket プロジェクトキー(カンマ区切り)。それらのプロジェクト内のすべてのリポジトリをインデックスします(例: PROJ1,PROJ2)"
+            },
+            "workspace_tab": {
+              "label": "ワークスペース",
+              "description": "このコネクターは、ワークスペース内のすべてのリポジトリをインデックスします。"
+            }
+          }
+        },
+        "gitbook": {
+          "description": "GitBook コネクターを設定",
+          "fields": {
+            "space_id": {
+              "label": "スペース ID",
+              "description": "インデックスする GitBook スペースの ID。スペース内のページの URL で確認できます。たとえば URL が `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/` の場合、スペース ID は `8JkzVx8QCIGRrmxhGHU8` です。"
+            }
+          }
+        },
+        "google_drive": {
+          "description": "Google Drive コネクターを設定",
+          "fields": {
+            "credential_kind": {
+              "label": "認証情報の種類"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "General": {
+                  "label": "一般"
+                },
+                "Specific": {
+                  "label": "特定"
+                }
+              }
+            },
+            "include_shared_drives": {
+              "label": "共有ドライブを含める",
+              "description": {
+                "oauth": "アクセス権のある共有ドライブ内のすべてをインデックスすることを Onyx に許可します。",
+                "serviceAccount": "組織の共有ドライブ内のすべてをインデックスすることを Onyx に許可します。"
+              }
+            },
+            "include_my_drives": {
+              "label": {
+                "oauth": "マイドライブを含める",
+                "serviceAccount": "全員のマイドライブを含める"
+              },
+              "description": {
+                "oauth": "マイドライブ内のすべてをインデックスすることを Onyx に許可します。",
+                "serviceAccount": "全員のマイドライブ内のすべてをインデックスすることを Onyx に許可します。"
+              }
+            },
+            "include_files_shared_with_me": {
+              "description": "あなたと共有されているすべてのファイルをインデックスすることを Onyx に許可します。",
+              "label": "あなたと共有されているすべてのファイルを含める"
+            },
+            "shared_drive_urls": {
+              "description": {
+                "oauth": "インデックスする共有ドライブの URL をカンマ区切りで入力してください。これらの共有ドライブにアクセスできる必要があります。",
+                "serviceAccount": "インデックスする共有ドライブの URL をカンマ区切りで入力してください。"
+              },
+              "label": "共有ドライブの URL"
+            },
+            "shared_folder_urls": {
+              "description": "インデックスするフォルダーの URL をカンマ区切りで入力してください。これらのフォルダー(およびすべてのサブフォルダー)内のファイルがインデックスされます。",
+              "label": "フォルダーの URL"
+            },
+            "my_drive_emails": {
+              "description": "マイドライブをインデックスするユーザーのメールアドレスをカンマ区切りで入力してください。",
+              "label": "マイドライブのメールアドレス"
+            },
+            "specific_user_emails": {
+              "description": "インデックスする特定のユーザーのメールアドレスをカンマ区切りで入力してください。これらのユーザーがアクセスできるファイルのみがインデックスされます。",
+              "label": "特定のユーザーのメールアドレス"
+            },
+            "exclude_domain_link_only": {
+              "label": "ドメイン内リンクのみのファイルを非表示にする",
+              "description": "有効にすると、Onyx は広範囲(ドメイン全体または公開)に共有されていても、アクセスにリンクが必要なファイルをスキップします。"
+            }
+          }
+        },
+        "gmail": {
+          "description": "Gmail コネクターを設定"
+        },
+        "bookstack": {
+          "description": "Bookstack コネクターを設定",
+          "fields": {
+            "bookstack_base_url": {
+              "label": "BookStack のベース URL"
+            }
+          }
+        },
+        "outline": {
+          "description": "Outline コネクターを設定",
+          "fields": {
+            "outline_base_url": {
+              "label": "Outline のベース URL"
+            }
+          }
+        },
+        "confluence": {
+          "description": "Confluence コネクターを設定",
+          "fields": {
+            "is_cloud": {
+              "label": "クラウド版",
+              "description": "atlassian.net 上のサイトには Confluence Cloud を、セルフホストの Confluence Server または Data Center サイトには Confluence Data Center を選択してください。"
+            },
+            "wiki_base": {
+              "label": "サイト URL"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "space": {
+                  "label": "スペース"
+                },
+                "page": {
+                  "label": "ページ"
+                },
+                "cql": {
+                  "label": "CQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのページをインデックスします。"
+            },
+            "space": {
+              "label": "スペースキー",
+              "description": "インデックスする Confluence のスペースキー(例: `KB`)。"
+            },
+            "page_id": {
+              "label": "ページ ID",
+              "description": "インデックスする特定のページ ID(例: `131368`)"
+            },
+            "index_recursively": {
+              "label": "再帰的にインデックス",
+              "description": "オンにすると、ページ ID で指定したページと、そのすべての子ページをインデックスします。"
+            },
+            "cql_query": {
+              "label": "CQL クエリ",
+              "description": "重要: 現在、'page' タイプのオブジェクトを返す CQL クエリのみがサポートされています。つまり、すべての CQL クエリで、唯一のタイプフィルターとして 'type=page' を含める必要があります。また、コネクターのポーリングロジックに問題が生じるため、'lastModified' のフィルターは使用しないでください。コネクターが独自の並び順を設定するため、ORDER BY も使用しないでください。CQL クエリが返すページの添付ファイルとコメントは、すべて取得されます。'lastmodified' フィルターは上書きされます。詳細は、Atlassian の [CQL ドキュメント](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/)を参照してください。"
+            }
+          }
+        },
+        "jira": {
+          "description": "Jira コネクターを設定",
+          "subtext": "インデックスする Jira コンテンツを設定します。すべてをインデックスすることも、特定のプロジェクトを指定することもできます。",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "jql": {
+                  "label": "JQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべての Issue をインデックスします。"
+            },
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "インデックスする特定のプロジェクトのキー(例: 'PROJ')。"
+            },
+            "jql_query": {
+              "label": "JQL クエリ",
+              "description": "Jira の Issue を絞り込むカスタム JQL クエリ。\n\n重要: コネクターのロジックと競合するため、JQL クエリに時間ベースのフィルターを含めないでください。また、ORDER BY 句も含めないでください。\n\n構文の詳細は、Atlassian の [JQL ドキュメント](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)を参照してください。"
+            },
+            "comment_email_blacklist": {
+              "label": "コメントのメール除外リスト",
+              "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "salesforce": {
+          "description": "Salesforce コネクターを設定",
+          "fields": {
+            "salesforce_config_type": {
+              "label": "設定タイプ",
+              "tabs": {
+                "simple": {
+                  "label": "シンプル"
+                },
+                "advanced": {
+                  "label": "詳細"
+                }
+              }
+            },
+            "requested_objects": {
+              "label": "対象オブジェクト",
+              "description": "インデックスする Salesforce オブジェクトタイプを指定します。不明な場合はオブジェクトを指定しなければ、Onyx はデフォルトで 'Account' をインデックスします。\n\nヒント: オブジェクト名は単数形で指定してください(例: 'Opportunities' ではなく 'Opportunity')。"
+            },
+            "custom_query_config": {
+              "label": "カスタムクエリ設定",
+              "description": "インデックスするフィールドと子オブジェクトを正確に定義する JSON 設定を入力してください。これにより、データ構造を完全に制御できます。\n\n例: `'{'\"Account\": '{'\"fields\": [\"Id\", \"Name\", \"Industry\"], \"associations\": '{'\"Contact\": [\"Id\", \"FirstName\", \"LastName\", \"Email\"]'}''}''}'`\n\n詳細は[ドキュメントを参照]({docsAdminsPath}/connectors/official/salesforce)してください。"
+            }
+          }
+        },
+        "sharepoint": {
+          "description": "SharePoint コネクターを設定",
+          "fields": {
+            "sites": {
+              "label": "サイト",
+              "description": "- サイトを指定しない場合、組織内のすべてのサイトがインデックスされます(`Sites.Read.All` 権限が必要)。\n- たとえば `https://onyxai.sharepoint.com/sites/support` を指定すると、このサイトのみがインデックスされます。\n- たとえば `https://onyxai.sharepoint.com/sites/support/subfolder` を指定すると、このフォルダーのみがインデックスされます。\n- ユーザーの個人サイトをインデックスするには、[OneDrive コネクター]({docsAdminsPath}/connectors/official/onedrive)を使用してください。\n- サイトの指定は現在、英語、スペイン語、ドイツ語を使用する SharePoint インスタンスで動作します。他の言語への対応が必要な場合は、Onyx チームにお問い合わせください。"
+            },
+            "include_site_documents": {
+              "label": "ドキュメントをインデックス",
+              "description": "上で定義したすべての SharePoint ライブラリまたはフォルダーのドキュメントをインデックスします。"
+            },
+            "include_site_pages": {
+              "label": "ASPX サイトをインデックス",
+              "description": "ライブラリやフォルダーが指定されている場合でも、上で定義したすべての SharePoint サイトの aspx ページをインデックスします。"
+            },
+            "treat_sharing_link_as_public": {
+              "label": "共有リンクを公開として扱う",
+              "description": "有効にすると、共有リンク(匿名または組織全体)があるドキュメントは公開(すべての Onyx ユーザーに表示)として扱われます。無効にすると、明示的なロールが割り当てられたユーザーとグループのみがドキュメントを閲覧できます。"
+            },
+            "excluded_sites": {
+              "label": "除外するサイト",
+              "description": "インデックスから除外するサイトの URL または glob パターン。一致したサイトは、上のサイト一覧に含まれていても、インデックスされません。例: `https://contoso.sharepoint.com/sites/archive`(完全一致)、`*://*/sites/archive-*`(glob パターン)。"
+            },
+            "excluded_paths": {
+              "label": "除外するパス",
+              "description": "ドキュメントライブラリ内で、インデックスから除外するファイルパスの glob パターン。パターンは、相対パス全体とファイル名の両方に対して照合されます。例: `*.tmp`(一時ファイル)、`~$*`(Office のロックファイル)、`Archive/*`(フォルダー)。"
+            },
+            "authority_host": {
+              "label": "認証局ホスト",
+              "description": "認証に使用する Microsoft ID 認証局のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://login.microsoftonline.us を使用してください。"
+            },
+            "graph_api_host": {
+              "label": "Graph API ホスト",
+              "description": "Microsoft Graph API のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://graph.microsoft.us を使用してください。"
+            },
+            "sharepoint_domain_suffix": {
+              "label": "SharePoint ドメインサフィックス",
+              "description": "SharePoint サイトのドメインサフィックス(例: sharepoint.com)。ほとんどの環境ではデフォルトのままにしてください。GCC High の場合は、sharepoint.us を使用してください。"
+            }
+          }
+        },
+        "teams": {
+          "description": "Teams コネクターを設定",
+          "fields": {
+            "teams": {
+              "label": "チーム",
+              "description": "インデックスするチームを 0 個以上指定します。たとえば、'onyxai' 組織の 'Support' チームを指定すると、'Support' チームに属するチャンネルで送信されたメッセージのみがインデックスされます。チームを指定しない場合は、組織内のすべてのチームがインデックスされます。"
+            },
+            "include_attachments": {
+              "description": "各チャンネルの「ファイル」タブにあるファイルを、SharePoint が付与する閲覧者付きの独立したドキュメントとしてインデックスします。証明書認証情報、Graph の Files.Read.All または Sites.Read.All、および各ファイルの閲覧者を読み取るための SharePoint API の Sites.FullControl.All が必要です。Sites.Selected を使用する場合は、各チャンネルサイトでアプリにフルコントロールを付与してください。"
+            },
+            "include_inline_images": {
+              "label": "インライン画像を含める",
+              "description": "チャンネルメッセージに貼り付けられた画像を、スレッドとともにインデックスします。追加の権限は不要です。検索設定で画像の抽出と分析がオフの間は、何もダウンロードされません。"
+            },
+            "include_meeting_transcripts": {
+              "label": "ミーティングの文字起こしを含める",
+              "description": "予定されたミーティングの文字起こしを、主催者と参加者が閲覧できる独立したドキュメントとしてインデックスします。OnlineMeetingTranscript.Read.All、OnlineMeetings.Read.All、User.Read.All のアプリケーション権限、Graph API による文字起こしへのアクセスを許可するテナント設定、および主催者に付与されたアプリケーションアクセスポリシーが必要です。チャンネルミーティングは対象外です。過去 6 か月分の文字起こしがインデックスされ、それより古くなった文字起こしはインデックスから削除されます。"
+            },
+            "include_meeting_chats": {
+              "label": "ミーティングのチャットを含める",
+              "description": "予定されたミーティングのチャットに書き込まれた内容を、チャットのメンバーが閲覧できる 1 日 1 ドキュメントとしてインデックスします。Chat.Read.All と User.Read.All のアプリケーション権限が必要です。このテナントで主催されたミーティングが対象です。Microsoft は、他の組織が設定したミーティングのチャットを提供しません。"
+            },
+            "meeting_organizers": {
+              "label": "ミーティング主催者",
+              "description": "ミーティングの文字起こしとチャットをインデックスする主催者のユーザープリンシパル名。空欄の場合は、Teams ライセンスを持つ有効なすべてのユーザーが対象です。"
+            },
+            "authority_host": {
+              "label": "認証局ホスト",
+              "description": "認証に使用する Microsoft ID 認証局のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://login.microsoftonline.us を使用してください。"
+            },
+            "graph_api_host": {
+              "label": "Graph API ホスト",
+              "description": "Microsoft Graph API のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://graph.microsoft.us を使用してください。"
+            }
+          }
+        },
+        "outlook": {
+          "description": "Outlook コネクターを設定",
+          "fields": {
+            "mailboxes": {
+              "label": "メールボックス",
+              "description": "インデックスするメールボックスのユーザープリンシパル名またはプライマリメールアドレス。この項目とメールボックスグループの両方を空欄にすると、アプリ登録で開けるすべてのメールボックスをインデックスします。共有メールボックスは自動的には取得されないため、ここに記載する必要があります。"
+            },
+            "mailbox_groups": {
+              "label": "メールボックスグループ",
+              "description": "Entra グループの表示名またはオブジェクト ID。ネストされたグループのメンバーを含め、すべてのメンバーのメールボックスがインデックスされるため、テナントを Onyx を使用するユーザーに限定できます。GroupMember.Read.All アプリケーション権限が必要です。"
+            },
+            "include_attachments": {
+              "description": "ファイル添付のテキストをインデックスします。インライン画像、ネストされたアイテム、クラウドリンクはスキップされます。"
+            },
+            "include_calendar": {
+              "label": "カレンダーを含める",
+              "description": "各メールボックスのメールに加えて、カレンダーもインデックスします。Calendars.Read アプリケーション権限が必要です。"
+            },
+            "excluded_folders": {
+              "label": "除外するフォルダー",
+              "description": "すべてのメールボックスでスキップするフォルダー名。常にスキップされる「迷惑メール」、「削除済みアイテム」、「下書き」、「送信トレイ」に追加されます。"
+            },
+            "calendar_past_days": {
+              "label": "カレンダーの過去日数",
+              "description": "「カレンダーを含める」がオンの場合に使用します。カレンダーの対象期間をどれだけ過去にさかのぼるかを指定します。これより古い予定は、期間が進むにつれて、次回のプルーニング時にインデックスから削除されます。後で期間を広げる場合は、変更されていない予定は自動的に再取り込みされないため、再インデックスが必要です。"
+            },
+            "calendar_future_days": {
+              "label": "カレンダーの未来日数",
+              "description": "「カレンダーを含める」がオンの場合に使用します。カレンダーの対象期間をどれだけ先まで含めるかを指定します。後で期間を広げる場合は、変更されていない予定は自動的に再取り込みされないため、再インデックスが必要です。"
+            },
+            "authority_host": {
+              "label": "認証局ホスト",
+              "description": "認証に使用する Microsoft ID 認証局のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://login.microsoftonline.us を使用してください。"
+            },
+            "graph_api_host": {
+              "label": "Graph API ホスト",
+              "description": "Microsoft Graph API のホスト。ほとんどの環境ではデフォルトのままにしてください。GCC High / DoD の場合は、https://graph.microsoft.us を使用してください。"
+            }
+          }
+        },
+        "discourse": {
+          "description": "Discourse コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL"
+            },
+            "categories": {
+              "label": "カテゴリ"
+            }
+          }
+        },
+        "drupal_wiki": {
+          "description": "Drupal Wiki コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL",
+              "description": "Drupal Wiki インスタンスのベース URL(例: https://help.drupal-wiki.com )"
+            },
+            "indexing_scope": {
+              "label": "インデックスする Drupal Wiki コンテンツ",
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "specific": {
+                  "label": "特定のスペース/ページ"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのスペースをインデックスします。"
+            },
+            "spaces": {
+              "label": "スペース ID",
+              "description": "インデックスするスペース ID を 1 つ以上指定します。数値のみ使用できます。"
+            },
+            "pages": {
+              "label": "ページ ID",
+              "description": "インデックスするページ ID を 1 つ以上指定します。数値のみ使用できます。"
+            }
+          }
+        },
+        "axero": {
+          "description": "Axero コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "Axero のベース URL"
+            },
+            "spaces": {
+              "label": "スペース",
+              "description": "インデックスするスペースを(スペース ID で)0 個以上指定します。スペース ID を指定しない場合は、すべてのスペースがインデックスされます。"
+            }
+          }
+        },
+        "productboard": {
+          "description": "Productboard コネクターを設定"
+        },
+        "slack": {
+          "description": "Slack コネクターを設定",
+          "fields": {
+            "channels": {
+              "label": "チャンネル",
+              "description": "インデックスするチャンネルを 0 個以上指定します。リストからチャンネルを選ぶと ID で追跡されるため、名前が変更されてもインデックスは中断されません。リストに表示されないチャンネル(ボットが招待された非公開チャンネルなど)は、名前を入力してください。チャンネルを指定しない場合は、ワークスペース内のすべてのチャンネルがインデックスされます。"
+            },
+            "channel_regex_enabled": {
+              "label": "チャンネルの正規表現を有効にする",
+              "description": "有効にすると、上で指定した「チャンネル」を正規表現として扱います。チャンネル名が指定した正規表現のいずれかに完全一致する場合、そのチャンネルのメッセージがコネクターによって取り込まれます。\n\n例: 「チャンネル」として `.*-support.*` を指定すると、名前に「-support」を含むすべてのチャンネルが対象になります。"
+            },
+            "exclude_channels": {
+              "label": "除外するチャンネル",
+              "description": "除外するチャンネルを 0 個以上指定します。除外は上の「チャンネル」フィルターの後に適用されるため、両方に一致するチャンネルは除外されます。チャンネルを指定しない場合は、何も除外されません。"
+            },
+            "exclude_channel_regex_enabled": {
+              "label": "除外チャンネルの正規表現を有効にする",
+              "description": "有効にすると、上で指定した「除外するチャンネル」を正規表現として扱います。チャンネル名が指定した正規表現のいずれかに完全一致する場合、そのチャンネルは除外されます。\n\n例: 「除外するチャンネル」として `.*-alerts` を指定すると、名前が「-alerts」で終わるすべてのチャンネルがスキップされます。"
+            },
+            "include_bot_messages": {
+              "label": "ボットのメッセージを含める",
+              "description": "有効にすると、ボットやアプリからのメッセージがインデックスされます。主にボットが投稿するフィード(CRM の更新、自動メモなど)のチャンネルに便利です。"
+            }
+          }
+        },
+        "slab": {
+          "description": "Slab コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL",
+              "description": "Slab チームのベース URL を指定します。次のような形式です: https://onyx.slab.com/"
+            }
+          }
+        },
+        "guru": {
+          "description": "Guru コネクターを設定"
+        },
+        "gong": {
+          "description": "Gong コネクターを設定",
+          "fields": {
+            "gong_base_url": {
+              "label": "Gong API のベース URL",
+              "description": "デフォルトは `https://api.gong.io` です。"
+            },
+            "workspaces": {
+              "label": "ワークスペース",
+              "description": "インデックスするワークスペースを 0 個以上指定します。ワークスペース ID、または Gong 上の正確なワークスペース名を入力してください。ワークスペースを指定しない場合は、すべてのワークスペースの文字起こしがインデックスされます。"
+            }
+          }
+        },
+        "loopio": {
+          "description": "Loopio コネクターを設定",
+          "fields": {
+            "loopio_subdomain": {
+              "label": "Loopio サブドメイン",
+              "description": "Loopio サイトのサブドメイン。`acme.loopio.com` の `acme` の部分です。"
+            },
+            "loopio_stack_name": {
+              "label": "Loopio スタック名",
+              "description": "ライブラリ管理の名前と完全に一致する必要があります。すべてのスタックをインデックスする場合は空欄にしてください"
+            }
+          }
+        },
+        "file": {
+          "description": "ファイルコネクターを設定",
+          "fields": {
+            "file_locations": {
+              "label": "ファイル"
+            }
+          }
+        },
+        "zulip": {
+          "description": "Zulip コネクターを設定",
+          "fields": {
+            "realm_name": {
+              "label": "レルム名"
+            },
+            "realm_url": {
+              "label": "レルム URL"
+            }
+          }
+        },
+        "coda": {
+          "description": "Coda コネクターを設定"
+        },
+        "notion": {
+          "description": "Notion コネクターを設定",
+          "fields": {
+            "root_page_id": {
+              "label": "ルートページ ID",
+              "description": "指定すると、そのページとすべての子ページのみをインデックスします。空欄の場合は、インテグレーションにアクセスが付与されたすべてのページをインデックスします。"
+            }
+          }
+        },
+        "hubspot": {
+          "description": "HubSpot コネクターを設定",
+          "fields": {
+            "object_types": {
+              "label": "オブジェクトタイプ",
+              "options": {
+                "tickets": "チケット",
+                "companies": "会社",
+                "deals": "取引",
+                "contacts": "コンタクト"
+              },
+              "description": "インデックスする HubSpot オブジェクトタイプを選択します。デフォルトではすべてのタイプが選択されています。"
+            }
+          }
+        },
+        "document360": {
+          "description": "Document360 コネクターを設定",
+          "fields": {
+            "workspace": {
+              "label": "ワークスペース"
+            },
+            "categories": {
+              "label": "カテゴリ",
+              "description": "インデックスするカテゴリを 0 個以上指定します。たとえば、カテゴリ 'Help' を指定すると、'Help' カテゴリ内のすべてのコンテンツのみがインデックスされます。カテゴリを指定しない場合は、ワークスペース内のすべてのカテゴリがインデックスされます。"
+            }
+          }
+        },
+        "clickup": {
+          "description": "ClickUp コネクターを設定",
+          "fields": {
+            "connector_type": {
+              "label": "コネクタータイプ",
+              "options": {
+                "list": "リスト",
+                "folder": "フォルダー",
+                "space": "スペース",
+                "workspace": "ワークスペース"
+              }
+            },
+            "connector_ids": {
+              "label": "コネクター ID",
+              "description": "インデックス元の ID を 0 個以上指定します。"
+            },
+            "retrieve_task_comments": {
+              "label": "タスクコメントを取得",
+              "description": "オンにすると、各タスクのすべてのコメントも取得してインデックスします。"
+            }
+          }
+        },
+        "google_sites": {
+          "description": "Google Sites コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "ベース URL"
+            },
+            "file_locations": {
+              "label": "サイトのエクスポート",
+              "description": "Google サイトの HTML を含む `.zip` ファイルをアップロードしてください。"
+            }
+          }
+        },
+        "zendesk": {
+          "description": "Zendesk コネクターを設定",
+          "fields": {
+            "zendesk_subdomain": {
+              "label": "Zendesk サブドメイン",
+              "description": "Zendesk サイトのサブドメイン。`acme.zendesk.com` の `acme` の部分です。"
+            },
+            "content_type": {
+              "label": "コンテンツタイプ",
+              "options": {
+                "articles": "記事",
+                "tickets": "チケット"
+              }
+            },
+            "calls_per_minute": {
+              "label": "1 分あたりの API 呼び出し数",
+              "description": "このコネクターが 1 分間に実行できる Zendesk API 呼び出し数を制限します(このコネクターのみに適用)。デフォルト値は次を参照してください: https://developer.zendesk.com/api-reference/introduction/rate-limits/"
+            }
+          }
+        },
+        "box": {
+          "description": "Box コネクターを設定",
+          "fields": {
+            "folder_ids": {
+              "label": "フォルダー",
+              "description": "インデックスする Box のフォルダー ID またはフォルダー URL(例: https://app.box.com/folder/123456789)。空欄の場合は、認証済みユーザーが閲覧できるすべてをインデックスします。"
+            },
+            "include_web_links": {
+              "label": "Web リンクを含める",
+              "description": "Box の Web リンク(ブックマーク)も、軽量なドキュメントとしてインデックスします。"
+            }
+          }
+        },
+        "dropbox": {
+          "description": "Dropbox コネクターを設定"
+        },
+        "s3": {
+          "description": "S3 コネクターを設定",
+          "fields": {
+            "bucket_name": {
+              "label": "バケット名"
+            },
+            "prefix": {
+              "label": "プレフィックス"
+            },
+            "region_name": {
+              "label": "AWS リージョン",
+              "description": "バケットの AWS リージョン(例: us-east-1)。GovCloud(us-gov-west-1)などデフォルト以外のパーティションにあるバケットでは必須です。それ以外の場合は、デフォルトのリージョン解決が使用されます。"
+            },
+            "bucket_type": {
+              "label": "バケットタイプ"
+            }
+          }
+        },
+        "r2": {
+          "description": "R2 コネクターを設定",
+          "fields": {
+            "bucket_name": {
+              "label": "バケット名"
+            },
+            "prefix": {
+              "label": "プレフィックス"
+            },
+            "european_residency": {
+              "label": "EU データレジデンシー",
+              "description": "バケットで EU データレジデンシーが有効な場合は、このボックスをチェックしてください。"
+            },
+            "bucket_type": {
+              "label": "バケットタイプ"
+            }
+          }
+        },
+        "google_cloud_storage": {
+          "description": "Google Cloud Storage コネクターを設定",
+          "fields": {
+            "bucket_name": {
+              "label": "バケット名",
+              "description": "インデックスする GCS バケットの名前(例: my-gcs-bucket)"
+            },
+            "prefix": {
+              "label": "パスプレフィックス"
+            },
+            "bucket_type": {
+              "label": "バケットタイプ"
+            }
+          }
+        },
+        "oci_storage": {
+          "description": "OCI Storage コネクターを設定",
+          "fields": {
+            "bucket_name": {
+              "label": "バケット名"
+            },
+            "prefix": {
+              "label": "プレフィックス"
+            },
+            "bucket_type": {
+              "label": "バケットタイプ"
+            }
+          }
+        },
+        "wikipedia": {
+          "description": "Wikipedia コネクターを設定",
+          "fields": {
+            "language_code": {
+              "label": "言語コード",
+              "description": "有効な Wikipedia の言語コードを入力してください(例: 'en'、'es')"
+            },
+            "categories": {
+              "label": "インデックスするカテゴリ",
+              "description": "インデックスするカテゴリ名を 0 個以上指定します。ほとんどの Wikipedia サイトでは、これらは 'Category: XYZ' という形式の名前を持ち、他のページやカテゴリの一覧となっているページです。カテゴリの URL ではなく、名前のみを指定してください。"
+            },
+            "pages": {
+              "label": "ページ",
+              "description": "インデックスするページ名を 0 個以上指定します。"
+            },
+            "recurse_depth": {
+              "label": "再帰の深さ",
+              "description": "サブカテゴリを持つカテゴリをインデックスする場合に、何階層までインデックスするかを決定します。0 を指定すると、カテゴリ自体のみをインデックスします(再帰なし)。-1 を指定すると、再帰の深さは無制限になります。まれに、カテゴリが依存関係に自分自身を含み、無限ループが発生する場合があります。これが起きないと確信できる場合のみ -1 を使用してください。"
+            }
+          }
+        },
+        "xenforo": {
+          "description": "Xenforo コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "URL",
+              "description": "インデックスする XenForo v2.2 フォーラムの URL。ボードまたはスレッドを指定できます。"
+            }
+          }
+        },
+        "asana": {
+          "description": "Asana コネクターを設定",
+          "fields": {
+            "asana_workspace_id": {
+              "label": "ワークスペース ID",
+              "description": "インデックスする Asana ワークスペースの ID。https://app.asana.com/api/1.0/workspaces で確認できます。1234567890123456 のような数値です。"
+            },
+            "asana_project_ids": {
+              "label": "プロジェクト ID",
+              "description": "インデックスする特定の Asana プロジェクトの ID をカンマ区切りで指定します。空欄の場合は、ワークスペース内のすべてのプロジェクトをインデックスします。例: 1234567890123456,2345678901234567"
+            },
+            "asana_team_id": {
+              "label": "チーム ID",
+              "description": "チームに表示されるタスクにアクセスするためのチーム ID。公開タスクに加えて、チームに表示されるタスクもインデックスできます。この機能を使用しない場合は空欄にしてください。"
+            }
+          }
+        },
+        "mediawiki": {
+          "description": "MediaWiki コネクターを設定",
+          "fields": {
+            "language_code": {
+              "label": "言語コード",
+              "description": "有効な MediaWiki の言語コードを入力してください(例: 'en'、'es')"
+            },
+            "hostname": {
+              "label": "MediaWiki サイトの URL"
+            },
+            "categories": {
+              "label": "インデックスするカテゴリ",
+              "description": "インデックスするカテゴリ名を 0 個以上指定します。ほとんどの MediaWiki サイトでは、これらは 'Category: XYZ' という形式の名前を持ち、他のページやカテゴリの一覧となっているページです。カテゴリの URL ではなく、名前のみを指定してください。"
+            },
+            "pages": {
+              "label": "ページ",
+              "description": "インデックスするページ名を 0 個以上指定します。ページの URL ではなく、名前のみを指定してください。"
+            },
+            "recurse_depth": {
+              "label": "再帰の深さ",
+              "description": "サブカテゴリを持つカテゴリをインデックスする場合に、何階層までインデックスするかを決定します。0 を指定すると、カテゴリ自体のみをインデックスします(再帰なし)。-1 を指定すると、再帰の深さは無制限になります。まれに、カテゴリが依存関係に自分自身を含み、無限ループが発生する場合があります。これが起きないと確信できる場合のみ -1 を使用してください。"
+            }
+          }
+        },
+        "discord": {
+          "description": "Discord コネクターを設定",
+          "fields": {
+            "server_ids": {
+              "label": "サーバー ID",
+              "description": "含めるサーバー ID を 0 個以上指定します。その内部のチャンネルのみがインデックスの対象になります"
+            },
+            "channel_names": {
+              "label": "チャンネル",
+              "description": "インデックスするチャンネルを 0 個以上指定します。たとえば、チャンネル \"support\" を指定すると、\"#support\" チャンネル内のすべてのコンテンツのみがインデックスされます。チャンネルを指定しない場合は、ボットがアクセスできるすべてのチャンネルがインデックスされます。"
+            },
+            "start_date": {
+              "label": "開始日",
+              "description": "この日付以降のメッセージのみがインデックスされます。形式: YYYY-MM-DD"
+            }
+          }
+        },
+        "freshdesk": {
+          "description": "Freshdesk コネクターを設定",
+          "fields": {
+            "freshdesk_domain": {
+              "label": "Freshdesk ドメイン",
+              "description": "Freshdesk サイトのサブドメイン。`acme.freshdesk.com` の `acme` の部分です。"
+            }
+          }
+        },
+        "fireflies": {
+          "description": "Fireflies コネクターを設定"
+        },
+        "braintrust": {
+          "description": "Braintrust コネクターを設定",
+          "fields": {
+            "project_name": {
+              "label": "プロジェクト名",
+              "description": "このプロジェクトのプロンプト、データセット、実験のみをインデックスします。空欄の場合は、組織全体をインデックスします。"
+            },
+            "experiment_row_lookback_days": {
+              "label": "実験行の遡及期間(日数)",
+              "description": "この日数以内に作成された実験の行ごとの結果のみをインデックスします。実験のサマリーは常にインデックスされます。0 を指定すると、すべての実験の行をインデックスします。"
+            }
+          }
+        },
+        "canvas": {
+          "description": "Canvas コネクターを設定",
+          "fields": {
+            "canvas_base_url": {
+              "label": "Canvas のベース URL",
+              "description": "例: https://school.instructure.com"
+            }
+          }
+        },
+        "egnyte": {
+          "description": "Egnyte コネクターを設定",
+          "fields": {
+            "domain": {
+              "label": "Egnyte ドメイン",
+              "description": "Egnyte サイトのサブドメイン。`acme.egnyte.com` の `acme` の部分です。"
+            },
+            "folder_path": {
+              "label": "フォルダーパス",
+              "description": "インデックスするフォルダーパス(例: '/Shared/Documents')。空欄の場合は、すべてをインデックスします。"
+            }
+          }
+        },
+        "airtable": {
+          "description": "Airtable コネクターを設定",
+          "fields": {
+            "airtable_scope": {
+              "label": "インデックスする Airtable コンテンツ",
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "specific": {
+                  "label": "特定のテーブル"
+                }
+              }
+            },
+            "everything_description": {
+              "label": "すべて",
+              "description": "このコネクターは、API トークンでアクセスできるすべてのベースとテーブルを自動的に検出してインデックスします。"
+            },
+            "airtable_url": {
+              "label": "Airtable の URL",
+              "description": "テーブルを表示しているときのブラウザーの URL を貼り付けてください。例: https://airtable.com/appXXX/tblYYY/viwZZZ"
+            },
+            "share_id": {
+              "label": "共有 ID",
+              "description": "任意。レコードリンクに共有ビューの URL を使用する場合は、ここに共有 ID を入力してください。例: shrkfjEzDmLaDtK83。"
+            },
+            "treat_all_non_attachment_fields_as_metadata": {
+              "label": "添付ファイル以外のすべてのフィールドをメタデータとして扱う",
+              "description": "インデックスする主なコンテンツが添付ファイルで、その他のすべての列がそれらの添付ファイルのメタデータである場合に選択してください。"
+            }
+          }
+        },
+        "highspot": {
+          "description": "Highspot コネクターを設定",
+          "fields": {
+            "highspot_url": {
+              "label": "Highspot の URL"
+            },
+            "highspot_scope": {
+              "label": "インデックスする Highspot コンテンツ",
+              "tabs": {
+                "spots": {
+                  "label": "特定のスポット"
+                },
+                "everything": {
+                  "label": "すべて"
+                }
+              }
+            },
+            "spot_names": {
+              "label": "スポット名",
+              "description": "複数のスポットを指定する場合は、スポット名を 1 つずつ入力してください。"
+            },
+            "everything": {
+              "label": "すべて",
+              "description": "このコネクターは、指定した認証情報でアクセスできるすべてのスポットをインデックスします。"
+            }
+          }
+        },
+        "imap": {
+          "description": "メールコネクターを設定",
+          "fields": {
+            "host": {
+              "label": "IMAP サーバーのホスト",
+              "description": "IMAP サーバーのホスト名(例: imap.gmail.com、outlook.office365.com)"
+            },
+            "port": {
+              "label": "IMAP サーバーのポート",
+              "description": "IMAP サーバーのポート(デフォルト: SSL の場合は 993)"
+            },
+            "mailboxes": {
+              "label": "メールボックス",
+              "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
+            }
+          }
+        }
       }
     },
     "costOverrides": {
