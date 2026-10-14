@@ -311,6 +311,7 @@ export const SWR_KEYS = {
       params.append("status_groups", group);
     }
     if (query.q) params.set("q", query.q);
+    if (query.errors !== null) params.set("errors", query.errors);
     return `/api/manage/admin/cc-pair/${ccPairId}/runs?${params.toString()}`;
   },
   ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>

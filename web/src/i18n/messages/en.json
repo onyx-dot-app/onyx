@@ -2506,6 +2506,72 @@
           "cancelFailed": "Couldn't cancel the run. Try again."
         }
       },
+      "activity": {
+        "search": {
+          "placeholder": "Search activity history..."
+        },
+        "counts": {
+          "failures": "{count, plural, one {# run failed} other {# runs failed}}",
+          "errors": "{count, plural, one {# run with document errors} other {# runs with document errors}}"
+        },
+        "filter": {
+          "label": "Show",
+          "all": "Failures and errors",
+          "failures": "Failures",
+          "errors": "Errors"
+        },
+        "resolved": {
+          "label": "Resolved"
+        },
+        "groups": {
+          "failures": "{count, plural, one {# Failure} other {# Failures}}",
+          "errors": "{count, plural, one {# Error} other {# Errors}}",
+          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "Indexing failed",
+            "running": "Indexing in progress with errors",
+            "errors": "Indexing completed with errors",
+            "resolved": "Indexing errors resolved"
+          },
+          "doc_permission_sync": {
+            "failed": "Permissions sync failed",
+            "running": "Permissions syncing with errors",
+            "errors": "Permissions synced with errors",
+            "resolved": "Permissions sync errors resolved"
+          },
+          "group_sync": {
+            "failed": "Group membership sync failed",
+            "running": "Group membership syncing with errors",
+            "errors": "Group membership synced with errors",
+            "resolved": "Group membership sync errors resolved"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, one {# doc indexed} other {# docs indexed}}. Index run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "doc_permission_sync": "{count, plural, one {# doc synced} other {# docs synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}.",
+          "group_sync": "{count, plural, one {# membership synced} other {# memberships synced}}. Sync run time {minutes, plural, one {# minute} other {# minutes}}."
+        },
+        "tags": {
+          "stackTrace": "Stack Trace",
+          "indexing": "{count, plural, one {# doc failed} other {# docs failed}}",
+          "doc_permission_sync": "{count, plural, one {# doc failed to sync} other {# docs failed to sync}}",
+          "group_sync": "{count, plural, one {# group failed to sync} other {# groups failed to sync}}",
+          "resolvedDocs": "{count, plural, one {# doc resolved} other {# docs resolved}}"
+        },
+        "more": "Show more",
+        "empty": {
+          "title": "No failures or errors",
+          "resolved": "No resolved errors",
+          "filtered": "Nothing matches this search.",
+          "failures": "No failures",
+          "errors": "No errors"
+        },
+        "loadError": {
+          "title": "Couldn't load the activity."
+        }
+      },
       "stageDetails": {
         "title": "Stage Details",
         "calls": "Calls",

@@ -2506,6 +2506,72 @@
           "cancelFailed": "Não foi possível cancelar a execução. Tente novamente."
         }
       },
+      "activity": {
+        "search": {
+          "placeholder": "Pesquisar histórico de atividade..."
+        },
+        "counts": {
+          "failures": "{count, plural, one {# execução falhou} other {# execuções falharam}}",
+          "errors": "{count, plural, one {# execução com erros de documentos} other {# execuções com erros de documentos}}"
+        },
+        "filter": {
+          "label": "Mostrar",
+          "all": "Falhas e erros",
+          "failures": "Falhas",
+          "errors": "Erros"
+        },
+        "resolved": {
+          "label": "Resolvidos"
+        },
+        "groups": {
+          "failures": "{count, plural, one {# falha} other {# falhas}}",
+          "errors": "{count, plural, one {# erro} other {# erros}}",
+          "resolved": "{count, plural, one {# resolvido} other {# resolvidos}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "A indexação falhou",
+            "running": "Indexação em andamento com erros",
+            "errors": "Indexação concluída com erros",
+            "resolved": "Erros de indexação resolvidos"
+          },
+          "doc_permission_sync": {
+            "failed": "A sincronização de permissões falhou",
+            "running": "Sincronização de permissões em andamento com erros",
+            "errors": "Permissões sincronizadas com erros",
+            "resolved": "Erros de sincronização de permissões resolvidos"
+          },
+          "group_sync": {
+            "failed": "A sincronização de membros de grupos falhou",
+            "running": "Sincronização de membros de grupos em andamento com erros",
+            "errors": "Membros de grupos sincronizados com erros",
+            "resolved": "Erros de sincronização de membros de grupos resolvidos"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, one {# documento indexado} other {# documentos indexados}}. Duração {minutes, plural, one {# minuto} other {# minutos}}.",
+          "doc_permission_sync": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}. Duração {minutes, plural, one {# minuto} other {# minutos}}.",
+          "group_sync": "{count, plural, one {# associação sincronizada} other {# associações sincronizadas}}. Duração {minutes, plural, one {# minuto} other {# minutos}}."
+        },
+        "tags": {
+          "stackTrace": "Rastreamento de pilha",
+          "indexing": "{count, plural, one {# documento falhou} other {# documentos falharam}}",
+          "doc_permission_sync": "{count, plural, one {# documento não sincronizado} other {# documentos não sincronizados}}",
+          "group_sync": "{count, plural, one {# grupo não sincronizado} other {# grupos não sincronizados}}",
+          "resolvedDocs": "{count, plural, one {# documento resolvido} other {# documentos resolvidos}}"
+        },
+        "more": "Mostrar mais",
+        "empty": {
+          "title": "Sem falhas ou erros",
+          "resolved": "Sem erros resolvidos",
+          "filtered": "Nada corresponde a esta pesquisa.",
+          "failures": "Sem falhas",
+          "errors": "Sem erros"
+        },
+        "loadError": {
+          "title": "Não foi possível carregar a atividade."
+        }
+      },
       "stageDetails": {
         "title": "Detalhes das etapas",
         "calls": "Chamadas",

@@ -153,6 +153,9 @@ export type CCPairRunStatusGroup =
   | "failed"
   | "canceled";
 
+/** Mirrors `CCPairRunErrors`: runs with open document errors, or with all of them resolved. */
+export type CCPairRunErrors = "unresolved" | "resolved";
+
 /** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
 export type CCPairRun =
   | { kind: "indexing"; time_created: string; attempt: IndexAttemptSnapshot }
@@ -185,6 +188,8 @@ export interface CCPairRunsQuery {
   statusGroups: CCPairRunStatusGroup[] | null;
   /** Matched against error messages. */
   q: string;
+  /** Keeps only runs with document errors, open or resolved. */
+  errors: CCPairRunErrors | null;
 }
 
 export interface IndexAttemptError {

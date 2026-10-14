@@ -2506,6 +2506,72 @@
           "cancelFailed": "実行をキャンセルできませんでした。もう一度お試しください。"
         }
       },
+      "activity": {
+        "search": {
+          "placeholder": "アクティビティ履歴を検索..."
+        },
+        "counts": {
+          "failures": "{count, plural, other {失敗した実行 # 件}}",
+          "errors": "{count, plural, other {ドキュメントエラーのある実行 # 件}}"
+        },
+        "filter": {
+          "label": "表示",
+          "all": "失敗とエラー",
+          "failures": "失敗",
+          "errors": "エラー"
+        },
+        "resolved": {
+          "label": "解決済み"
+        },
+        "groups": {
+          "failures": "{count, plural, other {失敗 # 件}}",
+          "errors": "{count, plural, other {エラー # 件}}",
+          "resolved": "{count, plural, other {解決済み # 件}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "インデックス作成に失敗しました",
+            "running": "エラーを伴いインデックス作成中",
+            "errors": "エラーを伴いインデックス作成が完了しました",
+            "resolved": "インデックス作成のエラーが解決されました"
+          },
+          "doc_permission_sync": {
+            "failed": "権限の同期に失敗しました",
+            "running": "エラーを伴い権限を同期中",
+            "errors": "エラーを伴い権限が同期されました",
+            "resolved": "権限同期のエラーが解決されました"
+          },
+          "group_sync": {
+            "failed": "グループメンバーシップの同期に失敗しました",
+            "running": "エラーを伴いグループメンバーシップを同期中",
+            "errors": "エラーを伴いグループメンバーシップが同期されました",
+            "resolved": "グループメンバーシップ同期のエラーが解決されました"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, other {# 件のドキュメントをインデックス化}}。実行時間 {minutes, plural, other {# 分}}。",
+          "doc_permission_sync": "{count, plural, other {# 件のドキュメントを同期}}。実行時間 {minutes, plural, other {# 分}}。",
+          "group_sync": "{count, plural, other {# 件のメンバーシップを同期}}。実行時間 {minutes, plural, other {# 分}}。"
+        },
+        "tags": {
+          "stackTrace": "スタックトレース",
+          "indexing": "{count, plural, other {# 件のドキュメントが失敗}}",
+          "doc_permission_sync": "{count, plural, other {# 件のドキュメントの同期に失敗}}",
+          "group_sync": "{count, plural, other {# 件のグループの同期に失敗}}",
+          "resolvedDocs": "{count, plural, other {# 件のドキュメントを解決}}"
+        },
+        "more": "さらに表示",
+        "empty": {
+          "title": "失敗もエラーもありません",
+          "resolved": "解決済みのエラーはありません",
+          "filtered": "この検索に一致するものはありません。",
+          "failures": "失敗はありません",
+          "errors": "エラーはありません"
+        },
+        "loadError": {
+          "title": "アクティビティを読み込めませんでした。"
+        }
+      },
       "stageDetails": {
         "title": "ステージ詳細",
         "calls": "呼び出し回数",

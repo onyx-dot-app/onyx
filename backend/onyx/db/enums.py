@@ -135,6 +135,13 @@ class CCPairRunStatusGroup(str, PyEnum):
     CANCELED = "canceled"
 
 
+class CCPairRunErrors(str, PyEnum):
+    """Runs with document errors: some still open, or all of them resolved."""
+
+    UNRESOLVED = "unresolved"
+    RESOLVED = "resolved"
+
+
 class PortAttemptStatus(str, PyEnum):
     NOT_STARTED = "NOT_STARTED"
     IN_PROGRESS = "IN_PROGRESS"

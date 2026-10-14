@@ -2,14 +2,26 @@
 document permission syncs, group syncs) is windowed and searched the same way,
 and one union pages every kind newest first, so no page loads the runs before it."""
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import TypeVar
 
-from sqlalchemy import Select, func, literal, or_, select, union_all
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    exists,
+    false,
+    func,
+    literal,
+    or_,
+    select,
+    union_all,
+)
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.enums import (
+    CCPairRunErrors,
     CCPairRunKind,
     CCPairRunStatusGroup,
     IndexingStatus,
@@ -20,6 +32,7 @@ from onyx.db.models import (
     DocPermissionSyncAttempt,
     ExternalGroupPermissionSyncAttempt,
     IndexAttempt,
+    IndexAttemptError,
     SearchSettings,
 )
 from onyx.db.permission_sync_attempt import (
@@ -48,7 +61,7 @@ def _narrowed(
     stmt: Select,
     run_filter: CCPairRunFilter,
     time_created: InstrumentedAttribute[datetime],
-    error_message: InstrumentedAttribute[str | None],
+    matches_error: Callable[[str], ColumnElement[bool]],
     status: InstrumentedAttribute[_StatusT],
     statuses: type[_StatusT],
     with_status_filter: bool,
@@ -56,9 +69,7 @@ def _narrowed(
     if run_filter.since is not None:
         stmt = stmt.where(time_created >= run_filter.since)
     if run_filter.error_query:
-        stmt = stmt.where(
-            error_message.icontains(run_filter.error_query, autoescape=True)
-        )
+        stmt = stmt.where(matches_error(run_filter.error_query))
     groups = run_filter.status_groups
     if with_status_filter and groups is not None:
         stmt = stmt.where(
@@ -84,11 +95,32 @@ def _index_runs_of_pair(cc_pair_id: int) -> Select:
 def _index_attempt_runs(
     run_filter: CCPairRunFilter, with_status_filter: bool
 ) -> Select:
+    stmt = _index_runs_of_pair(run_filter.cc_pair_id)
+    own_errors = exists().where(IndexAttemptError.index_attempt_id == IndexAttempt.id)
+    unresolved = own_errors.where(IndexAttemptError.is_resolved.is_(False))
+    match run_filter.errors:
+        case CCPairRunErrors.UNRESOLVED:
+            stmt = stmt.where(unresolved)
+        case CCPairRunErrors.RESOLVED:
+            stmt = stmt.where(own_errors, ~unresolved)
+        case None:
+            pass
+
+    # A search also reads the attempt's document errors, which carry the
+    # message when the attempt itself finished without one.
+    def matches_error(query: str) -> ColumnElement[bool]:
+        return or_(
+            IndexAttempt.error_msg.icontains(query, autoescape=True),
+            own_errors.where(
+                IndexAttemptError.failure_message.icontains(query, autoescape=True)
+            ),
+        )
+
     return _narrowed(
-        _index_runs_of_pair(run_filter.cc_pair_id),
+        stmt,
         run_filter,
         IndexAttempt.time_created,
-        IndexAttempt.error_msg,
+        matches_error,
         IndexAttempt.status,
         IndexingStatus,
         with_status_filter,
@@ -101,11 +133,18 @@ def _doc_permission_sync_runs(
     stmt = select(DocPermissionSyncAttempt).where(
         DocPermissionSyncAttempt.connector_credential_pair_id == run_filter.cc_pair_id
     )
+    # A sync counts the documents it could not read, and nothing resolves them.
+    if run_filter.errors == CCPairRunErrors.UNRESOLVED:
+        stmt = stmt.where(DocPermissionSyncAttempt.docs_with_permission_errors > 0)
+    elif run_filter.errors == CCPairRunErrors.RESOLVED:
+        stmt = stmt.where(false())
     return _narrowed(
         stmt,
         run_filter,
         DocPermissionSyncAttempt.time_created,
-        DocPermissionSyncAttempt.error_message,
+        lambda query: DocPermissionSyncAttempt.error_message.icontains(
+            query, autoescape=True
+        ),
         DocPermissionSyncAttempt.status,
         PermissionSyncStatus,
         with_status_filter,
@@ -118,11 +157,16 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
             run_filter.cc_pair_id, run_filter.source
         )
     )
+    # A group sync records no per-item errors, so it either fails or succeeds.
+    if run_filter.errors is not None:
+        stmt = stmt.where(false())
     return _narrowed(
         stmt,
         run_filter,
         ExternalGroupPermissionSyncAttempt.time_created,
-        ExternalGroupPermissionSyncAttempt.error_message,
+        lambda query: ExternalGroupPermissionSyncAttempt.error_message.icontains(
+            query, autoescape=True
+        ),
         ExternalGroupPermissionSyncAttempt.status,
         PermissionSyncStatus,
         with_status_filter,

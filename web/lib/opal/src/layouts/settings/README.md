@@ -13,10 +13,10 @@ Scrollable wrapper that centers content at a configurable max-width.
 
 | Prop    | Type                                        | Default | Description                           |
 | ------- | ------------------------------------------- | ------- | ------------------------------------- |
-| `width` | `"sm" \| "sm-md" \| "md" \| "lg" \| "full"` | `"md"`  | Max-width of the inner content column |
+| `width` | `"sm" \| "md" \| "lg" \| "xl" \| "full"`    | `"md"`  | Max-width of the inner content column |
 
 Width presets map to CSS variables defined by the app (`--app-container-*`):
-`sm` = 672px, `sm-md` = 752px, `md` = 872px, `lg` = 992px, `full` = 100%.
+`sm` = 672px, `md` = 872px, `lg` = 992px, `xl` = 1120px, `full` = 100%.
 
 ### Header
 

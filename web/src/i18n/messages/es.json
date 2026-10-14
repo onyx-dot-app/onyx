@@ -2506,6 +2506,72 @@
           "cancelFailed": "No se pudo cancelar la ejecución. Inténtalo de nuevo."
         }
       },
+      "activity": {
+        "search": {
+          "placeholder": "Buscar en el historial de actividad..."
+        },
+        "counts": {
+          "failures": "{count, plural, one {# ejecución fallida} other {# ejecuciones fallidas}}",
+          "errors": "{count, plural, one {# ejecución con errores de documentos} other {# ejecuciones con errores de documentos}}"
+        },
+        "filter": {
+          "label": "Mostrar",
+          "all": "Fallos y errores",
+          "failures": "Fallos",
+          "errors": "Errores"
+        },
+        "resolved": {
+          "label": "Resueltos"
+        },
+        "groups": {
+          "failures": "{count, plural, one {# fallo} other {# fallos}}",
+          "errors": "{count, plural, one {# error} other {# errores}}",
+          "resolved": "{count, plural, one {# resuelto} other {# resueltos}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "La indexación falló",
+            "running": "Indexación en curso con errores",
+            "errors": "Indexación completada con errores",
+            "resolved": "Errores de indexación resueltos"
+          },
+          "doc_permission_sync": {
+            "failed": "La sincronización de permisos falló",
+            "running": "Sincronización de permisos en curso con errores",
+            "errors": "Permisos sincronizados con errores",
+            "resolved": "Errores de sincronización de permisos resueltos"
+          },
+          "group_sync": {
+            "failed": "La sincronización de membresías de grupo falló",
+            "running": "Sincronización de membresías de grupo en curso con errores",
+            "errors": "Membresías de grupo sincronizadas con errores",
+            "resolved": "Errores de sincronización de membresías de grupo resueltos"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, one {# documento indexado} other {# documentos indexados}}. Duración {minutes, plural, one {# minuto} other {# minutos}}.",
+          "doc_permission_sync": "{count, plural, one {# documento sincronizado} other {# documentos sincronizados}}. Duración {minutes, plural, one {# minuto} other {# minutos}}.",
+          "group_sync": "{count, plural, one {# membresía sincronizada} other {# membresías sincronizadas}}. Duración {minutes, plural, one {# minuto} other {# minutos}}."
+        },
+        "tags": {
+          "stackTrace": "Seguimiento de pila",
+          "indexing": "{count, plural, one {# documento falló} other {# documentos fallaron}}",
+          "doc_permission_sync": "{count, plural, one {# documento no se sincronizó} other {# documentos no se sincronizaron}}",
+          "group_sync": "{count, plural, one {# grupo no se sincronizó} other {# grupos no se sincronizaron}}",
+          "resolvedDocs": "{count, plural, one {# documento resuelto} other {# documentos resueltos}}"
+        },
+        "more": "Mostrar más",
+        "empty": {
+          "title": "Sin fallos ni errores",
+          "resolved": "Sin errores resueltos",
+          "filtered": "Nada coincide con esta búsqueda.",
+          "failures": "Sin fallos",
+          "errors": "Sin errores"
+        },
+        "loadError": {
+          "title": "No se pudo cargar la actividad."
+        }
+      },
       "stageDetails": {
         "title": "Detalles de etapas",
         "calls": "Llamadas",

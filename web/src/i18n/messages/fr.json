@@ -2506,6 +2506,72 @@
           "cancelFailed": "Impossible d'annuler l'exécution. Réessayez."
         }
       },
+      "activity": {
+        "search": {
+          "placeholder": "Rechercher dans l'historique d'activité..."
+        },
+        "counts": {
+          "failures": "{count, plural, one {# exécution échouée} other {# exécutions échouées}}",
+          "errors": "{count, plural, one {# exécution avec des erreurs de documents} other {# exécutions avec des erreurs de documents}}"
+        },
+        "filter": {
+          "label": "Afficher",
+          "all": "Échecs et erreurs",
+          "failures": "Échecs",
+          "errors": "Erreurs"
+        },
+        "resolved": {
+          "label": "Résolues"
+        },
+        "groups": {
+          "failures": "{count, plural, one {# échec} other {# échecs}}",
+          "errors": "{count, plural, one {# erreur} other {# erreurs}}",
+          "resolved": "{count, plural, one {# résolue} other {# résolues}}"
+        },
+        "title": {
+          "indexing": {
+            "failed": "L'indexation a échoué",
+            "running": "Indexation en cours avec des erreurs",
+            "errors": "Indexation terminée avec des erreurs",
+            "resolved": "Erreurs d'indexation résolues"
+          },
+          "doc_permission_sync": {
+            "failed": "La synchronisation des autorisations a échoué",
+            "running": "Synchronisation des autorisations en cours avec des erreurs",
+            "errors": "Autorisations synchronisées avec des erreurs",
+            "resolved": "Erreurs de synchronisation des autorisations résolues"
+          },
+          "group_sync": {
+            "failed": "La synchronisation des appartenances aux groupes a échoué",
+            "running": "Synchronisation des appartenances aux groupes en cours avec des erreurs",
+            "errors": "Appartenances aux groupes synchronisées avec des erreurs",
+            "resolved": "Erreurs de synchronisation des appartenances aux groupes résolues"
+          }
+        },
+        "description": {
+          "indexing": "{count, plural, one {# document indexé} other {# documents indexés}}. Durée {minutes, plural, one {# minute} other {# minutes}}.",
+          "doc_permission_sync": "{count, plural, one {# document synchronisé} other {# documents synchronisés}}. Durée {minutes, plural, one {# minute} other {# minutes}}.",
+          "group_sync": "{count, plural, one {# appartenance synchronisée} other {# appartenances synchronisées}}. Durée {minutes, plural, one {# minute} other {# minutes}}."
+        },
+        "tags": {
+          "stackTrace": "Trace de la pile",
+          "indexing": "{count, plural, one {# document en échec} other {# documents en échec}}",
+          "doc_permission_sync": "{count, plural, one {# document non synchronisé} other {# documents non synchronisés}}",
+          "group_sync": "{count, plural, one {# groupe non synchronisé} other {# groupes non synchronisés}}",
+          "resolvedDocs": "{count, plural, one {# document résolu} other {# documents résolus}}"
+        },
+        "more": "Afficher plus",
+        "empty": {
+          "title": "Aucun échec ni erreur",
+          "resolved": "Aucune erreur résolue",
+          "filtered": "Rien ne correspond à cette recherche.",
+          "failures": "Aucun échec",
+          "errors": "Aucune erreur"
+        },
+        "loadError": {
+          "title": "Impossible de charger l'activité."
+        }
+      },
       "stageDetails": {
         "title": "Détails des étapes",
         "calls": "Appels",

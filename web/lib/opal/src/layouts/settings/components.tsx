@@ -21,19 +21,20 @@ import { useOpalStrings } from "@opal/strings";
 // ---------------------------------------------------------------------------
 
 const widthClasses: Record<
-  Extract<SizeVariants, "sm" | "md" | "lg" | "full">,
+  Extract<SizeVariants, "sm" | "md" | "lg" | "xl" | "full">,
   string
 > = {
   sm: "w-[min(var(--app-container-sm),100%)]",
   md: "w-[min(var(--app-container-md),100%)]",
   lg: "w-[min(var(--app-container-lg),100%)]",
+  xl: "w-[min(var(--app-container-xl),100%)]",
   full: "w-(--app-container-full)",
 };
 
 interface SettingsRootProps extends WithoutStyles<
   React.HtmlHTMLAttributes<HTMLDivElement>
 > {
-  width?: Extract<SizeVariants, "sm" | "md" | "lg" | "full">;
+  width?: Extract<SizeVariants, "sm" | "md" | "lg" | "xl" | "full">;
 }
 
 /**

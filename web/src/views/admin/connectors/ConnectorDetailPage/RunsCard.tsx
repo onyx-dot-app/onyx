@@ -40,9 +40,9 @@ import RunRow, {
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 
 const PAGE_SIZE = 10;
-const RUNS_POLL_MS = 5000;
+export const RUNS_POLL_MS = 5000;
 // Typing waits this long before it searches.
-const SEARCH_DELAY_MS = 300;
+export const SEARCH_DELAY_MS = 300;
 
 /** The windows the time filter offers, in hours. `null` is all time. */
 const WINDOWS = [
@@ -105,6 +105,7 @@ export default function RunsCard({ ccPairId, canOperate }: RunsCardProps) {
     kinds: kind === null ? null : [kind],
     statusGroups: statusGroup === null ? null : [statusGroup],
     q: search,
+    errors: null,
   });
   const { data, error, isLoading } = useSWR<CCPairRunsResponse>(
     key,
