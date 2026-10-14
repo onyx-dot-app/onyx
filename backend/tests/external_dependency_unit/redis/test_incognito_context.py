@@ -323,15 +323,13 @@ def test_response_retention_keeps_root_usable_and_reports_expired_child_history(
 ):
     from onyx.chat.incognito_context import (
         append_incognito_message,
-        get_or_create_incognito_root_id,
         load_incognito_agent_history,
         save_incognito_response,
     )
 
     session_id = uuid4()
-    root_id, child_id = str(uuid4()), str(uuid4())
+    root_id, child_id = str(session_id), str(uuid4())
     append_incognito_message(session_id, UserMessage(content="question"))
-    get_or_create_incognito_root_id(session_id, root_id)
     first_child = _terminal_record(child_id, "child result " + "x" * 250)
     first_child.agent_path = "/root/research"
     first = _terminal_record(root_id, "root result " + "a" * 250)
@@ -407,7 +405,7 @@ def test_concurrent_terminal_writes_preserve_root_and_child_records() -> None:
     from onyx.chat import incognito_context
 
     session_id = uuid4()
-    root_id = str(uuid4())
+    root_id = str(session_id)
     incognito_context.append_incognito_message(
         session_id, UserMessage(content="question")
     )
@@ -474,40 +472,16 @@ def test_terminal_write_waiting_on_teardown_cannot_restore_replay_state() -> Non
     assert _archive(_agents_key(session_id)) == {}
 
 
-def test_concurrent_root_registration_returns_one_identity() -> None:
-    from onyx.chat.incognito_context import get_or_create_incognito_root_id
-
-    session_id = uuid4()
-    assert _save(session_id, [_message("question")])
-    barrier = Barrier(2)
-
-    def register(proposed: str) -> str:
-        barrier.wait(timeout=5)
-        return get_or_create_incognito_root_id(session_id, proposed)
-
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [
-            executor.submit(copy_context().run, register, proposed)
-            for proposed in ("one", "two")
-        ]
-        roots = [future.result(timeout=10) for future in futures]
-    assert roots[0] == roots[1]
-    assert roots[0] in {"one", "two"}
-    assert _archive(_agents_key(session_id))[b"root_id"].decode() == roots[0]
-
-
 def test_root_replay_is_stored_once_and_conflicting_retries_are_rejected() -> None:
     from onyx.chat.incognito_context import (
         append_incognito_message,
-        get_or_create_incognito_root_id,
         load_incognito_agent_metadata,
         save_incognito_response,
     )
 
     session_id = uuid4()
-    root_id = str(uuid4())
+    root_id = str(session_id)
     append_incognito_message(session_id, UserMessage(content="question"))
-    get_or_create_incognito_root_id(session_id, root_id)
     reply = _terminal_record(root_id, "accepted output " + "x" * 3000)
     messages = reply.messages
     with patch("onyx.chat.incognito_context._MAX_CONTEXT_BYTES", 4096):

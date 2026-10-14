@@ -1,7 +1,8 @@
 """Run the chat adapter through model streaming, tools, and packet rendering."""
 
 from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
-from typing import Any
+from typing import Any, override
+from uuid import uuid4
 
 from onyx.agents.agent_coordination import (
     AgentCoordinator,
@@ -99,6 +100,19 @@ class FakeRunOwnership(RunOwnership):
         self._register = register
         self._release = release
         self._abort_start = abort_start
+
+    @override
+    def reserve_run_id(
+        self,
+        *,
+        agent: AgentInfo,
+        messages: Sequence[Message],
+        previous_run_id: str | None,
+        parent_run_id: str | None,
+        parent_message_id: str | None,
+        parent_tool_call_id: str | None,
+    ) -> str:
+        return str(uuid4())
 
     def register(self, run: Run) -> None:
         if self._register is not None:

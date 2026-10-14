@@ -238,7 +238,7 @@ def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
     serialized = CheckpointStorage({}).save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
     )
     del captured, run, agent
     restored = CheckpointStorage({}).load(serialized)
@@ -322,7 +322,7 @@ def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> 
     serialized = CheckpointStorage({}).save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+        CheckpointBinding(tenant_id="tenant", response_id=captured.run_state.run_id),
     )
     del captured, run, agent
     restored = CheckpointStorage({}).load(serialized)
@@ -412,7 +412,9 @@ def test_resume_after_completed_step_does_not_repeat_completion_callback() -> No
         serialized = CheckpointStorage({}).save(
             captured.run_state,
             captured.agent_state,
-            CheckpointBinding(tenant_id="tenant", branch_id="branch"),
+            CheckpointBinding(
+                tenant_id="tenant", response_id=captured.run_state.run_id
+            ),
         )
         restored = CheckpointStorage({}).load(serialized)
         replacement = Agent(

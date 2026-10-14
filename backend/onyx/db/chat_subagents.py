@@ -284,11 +284,9 @@ def _load_history(
         question = response.parent_message
         if question is None or question.message_type != MessageType.USER:
             raise ValueError("Child response has no user instruction")
-        if response.run_id is None:
-            raise ValueError("Child response has no run identity")
         messages.append(
             UserMessage(
-                id=run_input_message_id(response.run_id, 0), content=question.message
+                id=run_input_message_id(str(response.id), 0), content=question.message
             )
         )
         messages.extend(messages_from_steps(read_response_steps(response)))
@@ -335,17 +333,15 @@ def load_agent_history(message_id: int, agent_id: str) -> SavedAgentContext:
         )
 
 
-def load_saved_run(
-    message_id: int, run_id: str, parent_agent_id: str
+def load_saved_response(
+    message_id: int, response_id: int, parent_agent_id: str
 ) -> ResponseRecord | None:
     """Read a completed child response after authorizing its parent branch."""
     branch = load_chat_branch(message_id)
-    if not run_id.isdecimal():
-        return None
     with get_session_with_current_tenant() as db_session:
         session_id = db_session.scalar(
             select(ChatMessage.chat_session_id).where(
-                ChatMessage.id == int(run_id), ChatMessage.response_status.is_not(None)
+                ChatMessage.id == response_id, ChatMessage.response_status.is_not(None)
             )
         )
         if session_id is None:
@@ -354,12 +350,12 @@ def load_saved_run(
         if parent_session_id(db_session, agent) != UUID(parent_agent_id):
             return None
         links = _selected_response_links(db_session, branch, [agent.id])[agent.id]
-        if not any(link.id == int(run_id) for link in links):
+        if not any(link.id == response_id for link in links):
             return None
-        _check_history_size(db_session, [int(run_id)])
+        _check_history_size(db_session, [response_id])
         response = db_session.scalar(
             select(ChatMessage)
-            .where(ChatMessage.id == int(run_id))
+            .where(ChatMessage.id == response_id)
             .options(
                 selectinload(ChatMessage.response_items),
                 selectinload(ChatMessage.tool_calls),

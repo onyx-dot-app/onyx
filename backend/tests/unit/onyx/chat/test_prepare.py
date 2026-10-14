@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.agents.execution_records import RunStatus
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.chat_processing_checker import (
     PREPARATION_LEASE_SECONDS,
@@ -321,6 +322,7 @@ def _mock_chat_preparation(
     parent = ChatMessage(
         id=1, message_type=MessageType.ASSISTANT, is_clarification=False
     )
+    monkeypatch.setattr("onyx.chat.prepare.incognito_session_ended", lambda _id: False)
     monkeypatch.setattr(
         "onyx.chat.prepare.get_cache_backend", lambda **_kwargs: FakeCache()
     )
@@ -824,3 +826,52 @@ def test_expired_preparation_cannot_write_next_message(
             llm_overrides=None,
         )
     write.assert_not_called()
+
+
+def test_preparation_uses_selected_recorded_response_as_predecessor(
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    recorded = ChatMessage(
+        id=7,
+        message_type=MessageType.ASSISTANT,
+        response_status=RunStatus.CANCELLED,
+        is_clarification=False,
+    )
+    legacy = ChatMessage(
+        id=8, message_type=MessageType.ASSISTANT, is_clarification=False
+    )
+    with patch(
+        "onyx.chat.prepare.load_message_branch",
+        return_value=([recorded, legacy], legacy),
+    ):
+        setup = prepare_chat_turn(
+            SendMessageRequest(message="Next", chat_session_id=chat_session.id),
+            User(id=uuid4(), email="reader@example.com"),
+            llm_overrides=None,
+        )
+    assert setup.previous_run_id == "7"
+    setup.admission.release()
+
+
+def test_incognito_preparation_rejects_ended_context_before_reserving_response(
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    with (
+        patch("onyx.chat.prepare.incognito_session_ended", return_value=True),
+        patch(
+            "onyx.chat.history_store.load_incognito_context",
+            return_value=IncognitoContext(version=0, messages=[]),
+        ),
+        patch("onyx.chat.history_store.append_incognito_message"),
+        patch("onyx.chat.prepare.reserve_chat_response_ids") as reserve_response,
+    ):
+        with pytest.raises(RuntimeError, match="Incognito session ended"):
+            prepare_chat_turn(
+                SendMessageRequest(message="Question", chat_session_id=chat_session.id),
+                User(id=uuid4(), email="reader@example.com"),
+                llm_overrides=None,
+            )
+    reserve_response.assert_not_called()
