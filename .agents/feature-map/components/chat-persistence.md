@@ -105,6 +105,11 @@ The nonunique `(chat_message_id, step_index)` index supports response lookups.
 A separate partial unique index permits one assistant message per step.
 
 Tool names and argument parsing details stay in the saved model message. Tool rows retain queryable arguments and execution results.
+`tool_call.result` stores model content, outcome flags, and typed application details together.
+`StoredToolResult` validates those details when saving and restores their concrete types when loading.
+SDK rendering reads the saved details without looking up the current tool definition.
+Search documents retain their existing relation; saved details contain queries, filters, citations, and the selection state.
+Rendering loads those documents into a detached result. It does not change the saved conversation or checkpoint input.
 Application enums define response, generation, and tool statuses; historical response and tool rows can have null statuses.
 
 `chat_response_checkpoint` stores resume progress alongside response history, rather than another copy of that history.
@@ -173,9 +178,10 @@ separate share-link table.
 | `tool_call_id` | The provider-facing call id string (must round-trip to the LLM). |
 | `reasoning_tokens` | The reasoning that preceded this call. See §5. |
 | `tool_call_arguments` | JSONB. For a sub-agent, this is the agent's task/instructions. |
-| `tool_call_response` | Text. For a sub-agent, this is its final report, not its internal steps (those are the nested `ToolCall` rows). |
+| `result` | JSONB. SDK tool result: model content, call identity, outcome flags, and typed application details. |
+| `tool_call_response` | Legacy output text, mapped as `legacy_response`. SDK saves leave it empty. The Python `tool_call_response` property returns `result.text` when a result exists. |
 | `tool_call_tokens` | Token count of the arguments only; only top-level rows count toward the session total. |
-| `generated_images` | Image-tool replay data. |
+| `generated_images` | Legacy image replay data. SDK results store images in their typed details. |
 
 ### `SearchDoc` (`db/models.py:SearchDoc`, table `search_doc`)
 
@@ -495,11 +501,9 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/
 - **The empty root message means message counts are off by one** from what a
   naive count of "turns" suggests. Do not assume `len(messages)` is `2 *
   num_turns`.
-- **Tool responses are not stored in the LLM-facing history**, only the
-  `ToolCall.tool_call_response` field on the DB row for replay purposes. What
-  the model saw in later cycles was a fixed placeholder
-  ([[core-chat-loop]] §9); do not confuse "what's in the DB" with "what the
-  model remembers."
+- **Tool content and application details have different consumers.** SDK history
+  replays the saved result content to the model. Rendering reads its typed details.
+  Legacy history may use placeholders because it lacks saved model-facing results.
 - **A `ToolCall` with `parent_tool_call_id` set is a sub-agent's internal
   call, not a retry.** `turn_number` distinguishes retries/sequences;
   `parent_tool_call_id` distinguishes nesting depth. Conflating the two will
@@ -508,9 +512,8 @@ uv run --env-file .vscode/.env pytest backend/tests/external_dependency_unit/db/
   `tool_calls` list on a `ChatMessage` is not automatically a bug: check
   `ChatSession.incognito_record_mode` before assuming data loss.
 - **`tool_id` on `ToolCall` is not a foreign key.** A deleted `Tool` leaves
-  old `ToolCall` rows pointing at a dead id;
-  `translate_assistant_message_to_packets` handles this with a `try`/`except`
-  per tool call, logging and skipping rather than failing the whole replay.
+  old calls pointing at a missing definition. SDK rendering uses saved typed
+  details and still works. Legacy rendering may log and skip those calls.
 - **Deleting a session does not unshare it.** `shared_status` is untouched by
   delete; only the `deleted` / hard-delete guard on `get_chat_session_by_id`
   keeps a deleted session from being readable through the share link.
