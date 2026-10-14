@@ -344,8 +344,26 @@ def mark_capability_report_running(
     )
     if row is None:
         return None
-    # A mark that replaced a stale RUNNING mark leaves that run's history row
-    # open until the sweep retires it.
+    # A mark that replaced a stale RUNNING mark retires that run's history row,
+    # which the sweep could no longer find once the report row carries a new run_id.
+    db_session.execute(
+        update(CapabilityCheckRun)
+        .where(
+            CapabilityCheckRun.credential_id == credential_id,
+            (
+                CapabilityCheckRun.connector_id.is_(None)
+                if connector_id is None
+                else CapabilityCheckRun.connector_id == connector_id
+            ),
+            CapabilityCheckRun.status == CapabilityCheckRunStatus.RUNNING,
+            CapabilityCheckRun.run_id != row.run_id,
+        )
+        .values(
+            status=CapabilityCheckRunStatus.FAILED_TO_RUN,
+            error_message=STALE_RUN_ERROR,
+            time_finished=func.statement_timestamp(),
+        )
+    )
     db_session.add(
         CapabilityCheckRun(
             credential_id=credential_id,

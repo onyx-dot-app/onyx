@@ -15,6 +15,9 @@ from pydantic import (
 
 from onyx.auth.permission_projection import cc_pair_permissions
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capability_checks.findings_setting import (
+    hide_findings_if_disabled,
+)
 from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
@@ -590,6 +593,8 @@ class CheckRunSnapshot(BaseModel):
             results = CredentialCapabilityReport.model_validate(
                 run.report
             ).check_results
+        # The history keeps the findings, the response honors the workspace switch.
+        hide_findings_if_disabled(results)
         return cls(
             id=run.id,
             status=run.status,
@@ -666,8 +671,8 @@ class CCPairThroughputRun(BaseModel):
 class CCPairThroughputResponse(BaseModel):
     """A rough estimate of the documents indexed in each equal slice of the
     window, oldest first (each run's total spread evenly over its span, since
-    nothing records when a document landed), and the runs that began in it. A
-    run that began earlier adds documents but is not listed."""
+    nothing records when a document landed), and the runs that overlap it,
+    oldest first."""
 
     window_start: datetime
     window_end: datetime

@@ -26,9 +26,9 @@ import {
   ConfigDisplay,
   type ConfigRow,
 } from "@/views/admin/connectors/ConnectorDetailPage/ConfigDisplay";
+import { useHierarchyBreakdown } from "@/lib/connectors/hooks";
 import HierarchyBreakdown, {
   breakdownGroups,
-  useHierarchyBreakdown,
 } from "@/views/admin/connectors/ConnectorDetailPage/HierarchyBreakdown";
 import InlineFileManagement from "@/views/admin/connectors/ConnectorDetailPage/InlineFileManagement";
 

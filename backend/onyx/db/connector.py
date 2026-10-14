@@ -148,7 +148,9 @@ def create_connector(
         refresh_freq=connector_data.refresh_freq,
         indexing_start=connector_data.indexing_start,
         prune_freq=connector_data.prune_freq,
+        check_freq=connector_data.check_freq,
     )
+    connector.validate_check_freq()
     db_session.add(connector)
     db_session.commit()
 
@@ -181,6 +183,8 @@ def update_connector(
         if connector_data.prune_freq is not None
         else DEFAULT_PRUNING_FREQ
     )
+    connector.check_freq = connector_data.check_freq
+    connector.validate_check_freq()
 
     db_session.commit()
     return connector

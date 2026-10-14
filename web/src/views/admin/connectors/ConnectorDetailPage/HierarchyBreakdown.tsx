@@ -2,32 +2,18 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import useSWR from "swr";
 import { Button, Fold, OverflowText, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgChevronDown, SvgChevronUp, SvgExternalLink } from "@opal/icons";
 import { LineLoader } from "@opal/loaders";
 import { useOpalStrings } from "@opal/strings";
+import type { RichStr } from "@opal/types";
+import { useHierarchyBreakdown } from "@/lib/connectors/hooks";
 import type {
   CCPairHierarchyBreakdown,
   HierarchyBreakdownEntry,
   HierarchyNodeType,
 } from "@/lib/connectors/types";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
-
-/** The pair's breakdown: `null` until its first successful run. It reads every document of the pair, so it loads once per visit and gives up early. */
-export function useHierarchyBreakdown(ccPairId: number) {
-  return useSWR<CCPairHierarchyBreakdown | null>(
-    SWR_KEYS.ccPairHierarchyBreakdown(ccPairId),
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      errorRetryCount: 1,
-    }
-  );
-}
 
 /** The node type groups with rows, in the backend's order. */
 export function breakdownGroups(
@@ -139,16 +125,17 @@ function NodeRow({ entry }: NodeRowProps) {
 }
 
 interface BreakdownGroupProps {
-  title: string;
+  title: string | RichStr;
   children: React.ReactNode;
 }
 /** One node type: its title, a fold toggle, and its rows. */
 function BreakdownGroup({ title, children }: BreakdownGroupProps) {
   const strings = useOpalStrings();
   const [open, setOpen] = useState(true);
+  const plainTitle = typeof title === "string" ? title : title.raw;
   const label = open
-    ? strings.collapsibleFoldSection(title)
-    : strings.collapsibleExpandSection(title);
+    ? strings.collapsibleFoldSection(plainTitle)
+    : strings.collapsibleExpandSection(plainTitle);
   return (
     <Section alignItems="stretch" gap={0} height="fit">
       <Section

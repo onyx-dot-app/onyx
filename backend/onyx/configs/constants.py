@@ -176,6 +176,9 @@ CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
 # code path once we have already decided the process needs to die.
 CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS = 10  # seconds
 
+# The indexing beat runs every 15 s, so a late kick of its check has no value.
+CHECK_FOR_INDEXING_EXPIRES_SECONDS = 60
+
 # soft timeout for the lock taken by the indexing connector run
 # allows the lock to eventually expire if the managing code around it dies
 # if we can get callbacks as object bytes download, we could lower this a lot.

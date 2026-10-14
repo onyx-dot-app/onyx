@@ -847,6 +847,7 @@ def update_connector_files(
         connector_specific_config=updated_config,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
         indexing_start=connector.indexing_start,
     )
 

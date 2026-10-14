@@ -835,11 +835,9 @@ def connector_pruning_generator_task(
         # keeping the fence lets the monitor finalize the in-flight taskset, and
         # generator_failed makes it record a FAILED prune instead of a false success.
         fanned_out = redis_connector.prune.generator_complete is not None
-        if fanned_out:
-            redis_connector.prune.set_generator_failed()
-        else:
-            redis_connector.prune.reset()
-        # Nothing finalizes a prune that never fanned out, so it ends here.
+        # Nothing finalizes a prune that never fanned out, so it ends here. The
+        # error lands while the fence still holds, so a prune queued meanwhile
+        # cannot become the latest record and take it.
         with get_session_with_current_tenant() as db_session:
             record_sync_record_error(
                 db_session,
@@ -848,6 +846,10 @@ def connector_pruning_generator_task(
                 error_message=format_error_for_logging(e),
                 finish=not fanned_out,
             )
+        if fanned_out:
+            redis_connector.prune.set_generator_failed()
+        else:
+            redis_connector.prune.reset()
 
         raise e
     finally:

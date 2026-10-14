@@ -13,6 +13,7 @@ from onyx.background.celery.tasks.pruning.tasks import try_creating_prune_genera
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import (
+    CHECK_FOR_INDEXING_EXPIRES_SECONDS,
     PUBLIC_API_TAGS,
     DocumentSource,
     OnyxCeleryPriority,
@@ -403,8 +404,8 @@ def get_cc_pair_throughput(
     db_session: Session = Depends(get_session),
 ) -> CCPairThroughputResponse:
     """Estimates the documents the pair indexed in each equal slice of the
-    window (see ``docs_indexed_per_slice``), and lists when each run in it
-    started."""
+    window (see ``docs_indexed_per_slice``), and lists the runs that overlap
+    it."""
     # Called directly: the route contract reaches the scope gate three calls deep.
     if (
         get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)
@@ -423,15 +424,17 @@ def get_cc_pair_throughput(
         docs_indexed=docs_indexed_per_slice(
             attempts, window_start, window_end, _THROUGHPUT_SLICES
         ),
-        # A queued run has no start yet, so its mark sits at its creation.
+        # Every run the query gives overlaps the window, also one that began
+        # before it. A queued run has no start yet, so it starts at its creation.
         runs=[
             CCPairThroughputRun(
-                started=started,
-                ended=run_ended_at(attempt, started),
+                started=attempt.time_started or attempt.time_created,
+                ended=run_ended_at(
+                    attempt, attempt.time_started or attempt.time_created
+                ),
                 status=attempt.status,
             )
             for attempt in attempts
-            if (started := attempt.time_started or attempt.time_created) >= window_start
         ],
     )
 
@@ -856,7 +859,10 @@ def update_cc_pair_property(
                 OnyxErrorCode.INVALID_INPUT,
                 "This connector's source has no checks to schedule.",
             )
-        cc_pair.connector.check_freq = int(update_request.value)
+        # Blank clears the schedule: the checks then run only on request.
+        cc_pair.connector.check_freq = (
+            int(update_request.value) if update_request.value else None
+        )
         cc_pair.connector.validate_check_freq()
         db_session.commit()
 
@@ -910,6 +916,7 @@ def release_indexing_hold(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,
+        expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
     )
     return StatusResponse(
         success=True, message="Indexing hold released", data=cc_pair_id
