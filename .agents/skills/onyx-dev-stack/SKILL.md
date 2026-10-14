@@ -18,7 +18,8 @@ uv run --frozen --only-group ods ods stack --help
 If the pinned package predates `ods stack`, build the command from this checkout. This requires Go:
 
 ```bash
-ODS="$(git rev-parse --path-format=absolute --git-path ods-stack-bin)"
+ODS_BUILD_DIR="$(mktemp -d "$(git rev-parse --path-format=absolute --git-path ods-stack-bin).XXXXXX")"
+ODS="$ODS_BUILD_DIR/ods"
 go -C tools/ods build -o "$ODS" .
 "$ODS" stack --help
 ```
