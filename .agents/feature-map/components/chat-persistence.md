@@ -97,6 +97,12 @@ Each item requires a model message and generation status. Deleting a response re
 The unique `(chat_message_id, step_index)` index supports response lookups and step ordering.
 Existing tables, ORM mappings, and writers stay unchanged. Application adoption will start writing these items later.
 
+Migration `6b4e821c0a93` adds `chat_response_checkpoint` without changing existing tables or response items.
+Each checkpoint belongs to one response and is deleted with that response.
+Its `ownership_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
+The runtime revision inside `state` tracks execution changes and serves a separate purpose.
+Current application writers do not use checkpoints yet.
+
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 
 | Column | Notes |
