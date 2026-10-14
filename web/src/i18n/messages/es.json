@@ -2532,18 +2532,21 @@
           "indexing": {
             "failed": "La indexación falló",
             "running": "Indexación en curso con errores",
+            "stopped": "Indexación detenida con errores",
             "errors": "Indexación completada con errores",
             "resolved": "Errores de indexación resueltos"
           },
           "doc_permission_sync": {
             "failed": "La sincronización de permisos falló",
             "running": "Sincronización de permisos en curso con errores",
+            "stopped": "Sincronización de permisos detenida con errores",
             "errors": "Permisos sincronizados con errores",
             "resolved": "Errores de sincronización de permisos resueltos"
           },
           "group_sync": {
             "failed": "La sincronización de membresías de grupo falló",
             "running": "Sincronización de membresías de grupo en curso con errores",
+            "stopped": "Sincronización de membresías de grupo detenida con errores",
             "errors": "Membresías de grupo sincronizadas con errores",
             "resolved": "Errores de sincronización de membresías de grupo resueltos"
           }

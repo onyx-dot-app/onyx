@@ -2532,18 +2532,21 @@
           "indexing": {
             "failed": "索引失败",
             "running": "索引进行中，存在错误",
+            "stopped": "索引已停止，存在错误",
             "errors": "索引已完成，存在错误",
             "resolved": "索引错误已解决"
           },
           "doc_permission_sync": {
             "failed": "权限同步失败",
             "running": "权限同步进行中，存在错误",
+            "stopped": "权限同步已停止，存在错误",
             "errors": "权限已同步，存在错误",
             "resolved": "权限同步错误已解决"
           },
           "group_sync": {
             "failed": "群组成员同步失败",
             "running": "群组成员同步进行中，存在错误",
+            "stopped": "群组成员同步已停止，存在错误",
             "errors": "群组成员已同步，存在错误",
             "resolved": "群组成员同步错误已解决"
           }

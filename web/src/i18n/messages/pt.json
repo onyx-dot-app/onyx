@@ -2532,18 +2532,21 @@
           "indexing": {
             "failed": "A indexação falhou",
             "running": "Indexação em andamento com erros",
+            "stopped": "Indexação interrompida com erros",
             "errors": "Indexação concluída com erros",
             "resolved": "Erros de indexação resolvidos"
           },
           "doc_permission_sync": {
             "failed": "A sincronização de permissões falhou",
             "running": "Sincronização de permissões em andamento com erros",
+            "stopped": "Sincronização de permissões interrompida com erros",
             "errors": "Permissões sincronizadas com erros",
             "resolved": "Erros de sincronização de permissões resolvidos"
           },
           "group_sync": {
             "failed": "A sincronização de membros de grupos falhou",
             "running": "Sincronização de membros de grupos em andamento com erros",
+            "stopped": "Sincronização de membros de grupos interrompida com erros",
             "errors": "Membros de grupos sincronizados com erros",
             "resolved": "Erros de sincronização de membros de grupos resolvidos"
           }

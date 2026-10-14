@@ -2532,18 +2532,21 @@
           "indexing": {
             "failed": "인덱싱 실패",
             "running": "오류와 함께 인덱싱 진행 중",
+            "stopped": "오류와 함께 인덱싱 중단됨",
             "errors": "오류와 함께 인덱싱 완료",
             "resolved": "인덱싱 오류 해결됨"
           },
           "doc_permission_sync": {
             "failed": "권한 동기화 실패",
             "running": "오류와 함께 권한 동기화 중",
+            "stopped": "오류와 함께 권한 동기화 중단됨",
             "errors": "오류와 함께 권한 동기화됨",
             "resolved": "권한 동기화 오류 해결됨"
           },
           "group_sync": {
             "failed": "그룹 멤버십 동기화 실패",
             "running": "오류와 함께 그룹 멤버십 동기화 중",
+            "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨",
             "errors": "오류와 함께 그룹 멤버십 동기화됨",
             "resolved": "그룹 멤버십 동기화 오류 해결됨"
           }

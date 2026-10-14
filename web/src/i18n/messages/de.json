@@ -2532,18 +2532,21 @@
           "indexing": {
             "failed": "Indexierung fehlgeschlagen",
             "running": "Indexierung läuft mit Fehlern",
+            "stopped": "Indexierung mit Fehlern abgebrochen",
             "errors": "Indexierung mit Fehlern abgeschlossen",
             "resolved": "Indexierungsfehler behoben"
           },
           "doc_permission_sync": {
             "failed": "Berechtigungssynchronisierung fehlgeschlagen",
             "running": "Berechtigungen werden mit Fehlern synchronisiert",
+            "stopped": "Berechtigungssynchronisierung mit Fehlern abgebrochen",
             "errors": "Berechtigungen mit Fehlern synchronisiert",
             "resolved": "Fehler der Berechtigungssynchronisierung behoben"
           },
           "group_sync": {
             "failed": "Gruppenmitgliedschaftssynchronisierung fehlgeschlagen",
             "running": "Gruppenmitgliedschaften werden mit Fehlern synchronisiert",
+            "stopped": "Gruppenmitgliedschaftssynchronisierung mit Fehlern abgebrochen",
             "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert",
             "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben"
           }

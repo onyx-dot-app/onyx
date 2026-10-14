@@ -47,16 +47,20 @@ const GROUP_STYLE: Record<
 
 /** The title's state key: how the run stands in its group. */
 function cardState(
-  group: ActivityGroup,
-  active: boolean
-): "failed" | "running" | "errors" | "resolved" {
+  run: CCPairRun,
+  group: ActivityGroup
+): "failed" | "running" | "stopped" | "errors" | "resolved" {
   switch (group) {
     case "failures":
       return "failed";
     case "resolved":
       return "resolved";
     case "errors":
-      return active ? "running" : "errors";
+      if (isActive(run)) return "running";
+      return run.attempt.status === "canceled" ||
+        run.attempt.status === "interrupted"
+        ? "stopped"
+        : "errors";
   }
 }
 
@@ -144,7 +148,7 @@ export default function ActivityCard({
             </Section>
             <Section alignItems="stretch" gap={0} padding={0.5} height="fit">
               <Text font="main-ui-body" color="text-04">
-                {t(`title.${run.kind}.${cardState(group, active)}`)}
+                {t(`title.${run.kind}.${cardState(run, group)}`)}
               </Text>
               {description !== null && (
                 <Text font="secondary-body" color="text-03" maxLines={3}>

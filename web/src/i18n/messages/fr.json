@@ -2532,18 +2532,21 @@
           "indexing": {
             "failed": "L'indexation a échoué",
             "running": "Indexation en cours avec des erreurs",
+            "stopped": "Indexation arrêtée avec des erreurs",
             "errors": "Indexation terminée avec des erreurs",
             "resolved": "Erreurs d'indexation résolues"
           },
           "doc_permission_sync": {
             "failed": "La synchronisation des autorisations a échoué",
             "running": "Synchronisation des autorisations en cours avec des erreurs",
+            "stopped": "Synchronisation des autorisations arrêtée avec des erreurs",
             "errors": "Autorisations synchronisées avec des erreurs",
             "resolved": "Erreurs de synchronisation des autorisations résolues"
           },
           "group_sync": {
             "failed": "La synchronisation des appartenances aux groupes a échoué",
             "running": "Synchronisation des appartenances aux groupes en cours avec des erreurs",
+            "stopped": "Synchronisation des appartenances aux groupes arrêtée avec des erreurs",
             "errors": "Appartenances aux groupes synchronisées avec des erreurs",
             "resolved": "Erreurs de synchronisation des appartenances aux groupes résolues"
           }

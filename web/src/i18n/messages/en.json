@@ -2532,18 +2532,21 @@
           "indexing": {
             "failed": "Indexing failed",
             "running": "Indexing in progress with errors",
+            "stopped": "Indexing stopped with errors",
             "errors": "Indexing completed with errors",
             "resolved": "Indexing errors resolved"
           },
           "doc_permission_sync": {
             "failed": "Permissions sync failed",
             "running": "Permissions syncing with errors",
+            "stopped": "Permissions sync stopped with errors",
             "errors": "Permissions synced with errors",
             "resolved": "Permissions sync errors resolved"
           },
           "group_sync": {
             "failed": "Group membership sync failed",
             "running": "Group membership syncing with errors",
+            "stopped": "Group membership sync stopped with errors",
             "errors": "Group membership synced with errors",
             "resolved": "Group membership sync errors resolved"
           }
