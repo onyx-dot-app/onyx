@@ -1,8 +1,9 @@
 """Coverage for the indexing status page's fleet-wide run feed: runs of every
 readable pair merge newest first with each run naming its pair, the status
-filter narrows the feed but not the counts, and a scoped reader sees only the
-pairs they can read, plus the group sync their source shares even when another
-pair logged it. A creator holds operate on their groupless private pair, so they read it
+filter narrows the feed but not the counts, `errors=none` keeps the runs
+without document errors, and a scoped reader sees only the pairs they can
+read, plus the group sync their source shares even when another pair logged it.
+A creator holds operate on their groupless private pair, so they read it
 through the operate level, but without MANAGE_CONNECTORS they cannot resolve
 its errors."""
 
@@ -16,19 +17,27 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckRunStatus,
+    CapabilityCheckTrigger,
+    CCPairRunErrors,
     CCPairRunKind,
     CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     PermissionSyncStatus,
+    SyncStatus,
+    SyncType,
 )
 from onyx.db.models import (
+    CapabilityCheckRun,
     Connector,
     ConnectorCredentialPair,
     Credential,
     DocPermissionSyncAttempt,
     ExternalGroupPermissionSyncAttempt,
     IndexAttempt,
+    IndexAttemptError,
+    SyncRecord,
     User,
 )
 from onyx.db.search_settings import get_current_search_settings
@@ -144,11 +153,55 @@ def _group_sync(
     return attempt
 
 
+def _prune(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    minutes: int,
+    status: SyncStatus,
+    mark: str,
+) -> SyncRecord:
+    record = SyncRecord(
+        entity_id=cc_pair.id,
+        sync_type=SyncType.PRUNING,
+        sync_status=status,
+        num_docs_synced=0,
+        sync_start_time=_T0 + timedelta(minutes=minutes),
+        sync_end_time=_T0 + timedelta(minutes=minutes + 1),
+        error_message=mark,
+    )
+    db_session.add(record)
+    db_session.commit()
+    return record
+
+
+def _check_run(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    minutes: int,
+    status: CapabilityCheckRunStatus,
+    mark: str,
+) -> CapabilityCheckRun:
+    run = CapabilityCheckRun(
+        credential_id=cc_pair.credential_id,
+        connector_id=cc_pair.connector_id,
+        run_id=uuid4(),
+        trigger=CapabilityCheckTrigger.SCHEDULED,
+        status=status,
+        error_message=mark,
+    )
+    db_session.add(run)
+    db_session.flush()
+    run.time_created = _T0 + timedelta(minutes=minutes)
+    db_session.commit()
+    return run
+
+
 def _runs(
     db_session: Session,
     user: User,
     mark: str,
     status_groups: list[CCPairRunStatusGroup] | None = None,
+    errors: CCPairRunErrors | None = None,
 ) -> IndexingRunsResponse:
     return get_indexing_runs(
         page_num=0,
@@ -157,7 +210,7 @@ def _runs(
         kinds=None,
         status_groups=status_groups,
         q=mark,
-        errors=None,
+        errors=errors,
         user=user,
         db_session=db_session,
     )
@@ -270,3 +323,40 @@ def test_a_creator_reads_their_private_pair_but_cannot_resolve_it(
     # The targeted reindex route needs MANAGE_CONNECTORS, which a creator lacks.
     assert pairs[drive.id].can_resolve is False
     assert pairs[web.id].can_resolve is False
+
+
+def test_errors_none_keeps_the_runs_without_document_errors(
+    db_session: Session,
+) -> None:
+    admin = create_test_user(db_session, "monitor_runs_admin", is_admin=True)
+    mark = _mark()
+    cc_pair = _create_cc_pair(db_session, "Monitor Runs Clean", AccessType.SYNC)
+    clean = _index_attempt(db_session, cc_pair, 0, IndexingStatus.SUCCESS, mark)
+    with_errors = _index_attempt(
+        db_session, cc_pair, 1, IndexingStatus.COMPLETED_WITH_ERRORS, mark
+    )
+    db_session.add(
+        IndexAttemptError(
+            index_attempt_id=with_errors.id,
+            connector_credential_pair_id=cc_pair.id,
+            document_id="doc",
+            failure_message=mark,
+            is_resolved=False,
+        )
+    )
+    clean_sync = _doc_sync(db_session, cc_pair, 2, PermissionSyncStatus.SUCCESS, mark)
+    unreadable = _doc_sync(db_session, cc_pair, 3, PermissionSyncStatus.SUCCESS, mark)
+    unreadable.docs_with_permission_errors = 2
+    db_session.commit()
+    # A prune or a check run never has document errors, so both stay in.
+    prune = _prune(db_session, cc_pair, 4, SyncStatus.SUCCESS, mark)
+    check = _check_run(db_session, cc_pair, 5, CapabilityCheckRunStatus.PASSED, mark)
+
+    response = _runs(db_session, admin, mark, errors=CCPairRunErrors.NONE)
+
+    assert [(item.run.kind, item.run.attempt.id) for item in response.items] == [
+        (CCPairRunKind.CHECKS, check.id),
+        (CCPairRunKind.PRUNING, prune.id),
+        (CCPairRunKind.DOC_PERMISSION_SYNC, clean_sync.id),
+        (CCPairRunKind.INDEXING, clean.id),
+    ]

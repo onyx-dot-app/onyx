@@ -2588,9 +2588,10 @@
         },
         "filter": {
           "label": "Show",
-          "all": "Failures and errors",
+          "all": "All levels",
           "failures": "Failures",
-          "errors": "Errors"
+          "errors": "Errors",
+          "other": "Other"
         },
         "resolved": {
           "label": "Resolved"
@@ -2598,7 +2599,8 @@
         "groups": {
           "failures": "{count, plural, one {# Failure} other {# Failures}}",
           "errors": "{count, plural, one {# Error} other {# Errors}}",
-          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}"
+          "resolved": "{count, plural, one {# Resolved} other {# Resolved}}",
+          "other": "Other"
         },
         "title": {
           "indexing": {
@@ -2606,35 +2608,50 @@
             "running": "Indexing in progress with errors",
             "stopped": "Indexing stopped with errors",
             "errors": "Indexing completed with errors",
-            "resolved": "Indexing errors resolved"
+            "resolved": "Indexing errors resolved",
+            "succeeded": "Indexing completed successfully",
+            "inProgress": "Indexing in progress",
+            "canceled": "Indexing stopped"
           },
           "doc_permission_sync": {
             "failed": "Permissions sync failed",
             "running": "Permissions syncing with errors",
             "stopped": "Permissions sync stopped with errors",
             "errors": "Permissions synced with errors",
-            "resolved": "Permissions sync errors resolved"
+            "resolved": "Permissions sync errors resolved",
+            "succeeded": "Permissions synced successfully",
+            "inProgress": "Permissions syncing",
+            "canceled": "Permissions sync stopped"
           },
           "group_sync": {
             "failed": "Group membership sync failed",
             "running": "Group membership syncing with errors",
             "stopped": "Group membership sync stopped with errors",
             "errors": "Group membership synced with errors",
-            "resolved": "Group membership sync errors resolved"
+            "resolved": "Group membership sync errors resolved",
+            "succeeded": "Group membership synced successfully",
+            "inProgress": "Group membership syncing",
+            "canceled": "Group membership sync stopped"
           },
           "pruning": {
             "failed": "Pruning failed",
             "running": "Pruning in progress with errors",
             "stopped": "Pruning stopped with errors",
             "errors": "Pruning completed with errors",
-            "resolved": "Pruning errors resolved"
+            "resolved": "Pruning errors resolved",
+            "succeeded": "Pruning completed successfully",
+            "inProgress": "Pruning in progress",
+            "canceled": "Pruning stopped"
           },
           "checks": {
             "failed": "Connector checks failed",
             "running": "Connector checks running with errors",
             "stopped": "Connector checks stopped with errors",
             "errors": "Connector checks completed with errors",
-            "resolved": "Connector check errors resolved"
+            "resolved": "Connector check errors resolved",
+            "succeeded": "Connector checks passed",
+            "inProgress": "Connector checks running",
+            "canceled": "Connector checks stopped"
           }
         },
         "description": {
@@ -2660,7 +2677,8 @@
           "resolved": "No resolved errors",
           "filtered": "Nothing matches this search.",
           "failures": "No failures",
-          "errors": "No errors"
+          "errors": "No errors",
+          "other": "No other runs"
         },
         "loadError": {
           "title": "Couldn't load the activity."
@@ -5775,7 +5793,13 @@
         "loadError": "The overview could not load."
       },
       "activities": {
-        "title": "Activities"
+        "title": "Activities",
+        "history": "Full Activity History",
+        "viewLogs": "View activity history",
+        "panel": {
+          "title": "Activity History",
+          "close": "Hide activity history"
+        }
       },
       "list": {
         "search": {

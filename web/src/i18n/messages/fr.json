@@ -2588,9 +2588,10 @@
         },
         "filter": {
           "label": "Afficher",
-          "all": "Échecs et erreurs",
+          "all": "Tous les niveaux",
           "failures": "Échecs",
-          "errors": "Erreurs"
+          "errors": "Erreurs",
+          "other": "Autres"
         },
         "resolved": {
           "label": "Résolues"
@@ -2598,7 +2599,8 @@
         "groups": {
           "failures": "{count, plural, one {# échec} other {# échecs}}",
           "errors": "{count, plural, one {# erreur} other {# erreurs}}",
-          "resolved": "{count, plural, one {# résolue} other {# résolues}}"
+          "resolved": "{count, plural, one {# résolue} other {# résolues}}",
+          "other": "Autres"
         },
         "title": {
           "indexing": {
@@ -2606,35 +2608,50 @@
             "running": "Indexation en cours avec des erreurs",
             "stopped": "Indexation arrêtée avec des erreurs",
             "errors": "Indexation terminée avec des erreurs",
-            "resolved": "Erreurs d'indexation résolues"
+            "resolved": "Erreurs d'indexation résolues",
+            "succeeded": "Indexation terminée avec succès",
+            "inProgress": "Indexation en cours",
+            "canceled": "Indexation arrêtée"
           },
           "doc_permission_sync": {
             "failed": "La synchronisation des autorisations a échoué",
             "running": "Synchronisation des autorisations en cours avec des erreurs",
             "stopped": "Synchronisation des autorisations arrêtée avec des erreurs",
             "errors": "Autorisations synchronisées avec des erreurs",
-            "resolved": "Erreurs de synchronisation des autorisations résolues"
+            "resolved": "Erreurs de synchronisation des autorisations résolues",
+            "succeeded": "Permissions synchronisées avec succès",
+            "inProgress": "Synchronisation des permissions en cours",
+            "canceled": "Synchronisation des permissions arrêtée"
           },
           "group_sync": {
             "failed": "La synchronisation des appartenances aux groupes a échoué",
             "running": "Synchronisation des appartenances aux groupes en cours avec des erreurs",
             "stopped": "Synchronisation des appartenances aux groupes arrêtée avec des erreurs",
             "errors": "Appartenances aux groupes synchronisées avec des erreurs",
-            "resolved": "Erreurs de synchronisation des appartenances aux groupes résolues"
+            "resolved": "Erreurs de synchronisation des appartenances aux groupes résolues",
+            "succeeded": "Appartenances aux groupes synchronisées avec succès",
+            "inProgress": "Synchronisation des appartenances aux groupes",
+            "canceled": "Synchronisation des groupes arrêtée"
           },
           "pruning": {
             "failed": "L'élagage a échoué",
             "running": "Élagage en cours avec des erreurs",
             "stopped": "Élagage arrêté avec des erreurs",
             "errors": "Élagage terminé avec des erreurs",
-            "resolved": "Erreurs d'élagage résolues"
+            "resolved": "Erreurs d'élagage résolues",
+            "succeeded": "Élagage terminé avec succès",
+            "inProgress": "Élagage en cours",
+            "canceled": "Élagage arrêté"
           },
           "checks": {
             "failed": "Les vérifications du connecteur ont échoué",
             "running": "Vérifications du connecteur en cours avec des erreurs",
             "stopped": "Vérifications du connecteur arrêtées avec des erreurs",
             "errors": "Vérifications du connecteur terminées avec des erreurs",
-            "resolved": "Erreurs des vérifications du connecteur résolues"
+            "resolved": "Erreurs des vérifications du connecteur résolues",
+            "succeeded": "Vérifications du connecteur réussies",
+            "inProgress": "Vérifications du connecteur en cours",
+            "canceled": "Vérifications du connecteur arrêtées"
           }
         },
         "description": {
@@ -2660,7 +2677,8 @@
           "resolved": "Aucune erreur résolue",
           "filtered": "Rien ne correspond à cette recherche.",
           "failures": "Aucun échec",
-          "errors": "Aucune erreur"
+          "errors": "Aucune erreur",
+          "other": "Aucune autre exécution"
         },
         "loadError": {
           "title": "Impossible de charger l'activité."
@@ -5775,7 +5793,13 @@
         "loadError": "Impossible de charger la vue d'ensemble."
       },
       "activities": {
-        "title": "Activités"
+        "title": "Activités",
+        "history": "Historique complet de l'activité",
+        "viewLogs": "Voir l'historique de l'activité",
+        "panel": {
+          "title": "Historique de l'activité",
+          "close": "Masquer l'historique de l'activité"
+        }
       },
       "list": {
         "search": {

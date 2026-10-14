@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { mutate } from "swr";
+import { toast } from "@opal/layouts";
 import useSWRInfinite from "swr/infinite";
 import { setCCPairStatus } from "@/lib/ccPair";
 import { buildCCPairInfoUrl } from "@/lib/connectors/utils";
@@ -11,12 +12,17 @@ import type {
   CCPairFullInfo,
   CCPairRun,
   CCPairRunErrors,
+  CCPairRef,
   CCPairRunsQuery,
   CCPairRunStatusGroup,
   IndexingRun,
 } from "@/lib/connectors/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  resolveAllErrorsForCCPair,
+  resolveErrors,
+} from "@/lib/targeted_reindex";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 
 // ---------------------------------------------------------------------------
@@ -89,36 +95,47 @@ export function useStatusChange(ccPair: CCPairFullInfo | null) {
 }
 
 // ---------------------------------------------------------------------------
-// useActivityGroup
+// useActivityItems
 // ---------------------------------------------------------------------------
 
-/** Which list of the connector page's activity panel a run sits in. */
-export type ActivityGroup = "failures" | "errors" | "resolved";
+/** Which list of an activity panel a run sits in. "other" is every run that neither failed nor has document errors. */
+export type ActivityGroup = "failures" | "errors" | "other" | "resolved";
 
 /** How each group narrows the runs feed. Resolved errors can sit on a run of any status. */
-const ACTIVITY_GROUP_QUERY: Record<
-  ActivityGroup,
-  {
-    statusGroups: CCPairRunStatusGroup[] | null;
-    errors: CCPairRunErrors | null;
-  }
-> = {
+const ACTIVITY_GROUP_QUERY = {
   failures: { statusGroups: ["failed"], errors: null },
   errors: {
     statusGroups: ["running", "succeeded", "canceled"],
     errors: "unresolved",
   },
+  other: { statusGroups: ["running", "succeeded", "canceled"], errors: "none" },
   resolved: { statusGroups: null, errors: "resolved" },
-};
+} satisfies Record<
+  ActivityGroup,
+  {
+    statusGroups: CCPairRunStatusGroup[] | null;
+    errors: CCPairRunErrors | null;
+  }
+>;
 
 const ACTIVITY_PAGE_SIZE = 20;
 
-/** Which pairs an activity feed reads: one pair, or every readable one. */
-export type ActivityScope = { ccPairId: number } | "fleet";
+/** Which pairs an activity feed reads: one pair, with whether the viewer may resolve its runs' document errors, or every readable one. */
+export type ActivityScope = { ccPairId: number; canResolve: boolean } | "fleet";
 
-export interface ActivityGroupState<Run> {
+/** One run in an activity panel, with the pair it ran on and what the viewer may do to it. */
+export interface ActivityItem {
+  ccPairId: number;
+  run: CCPairRun;
+  /** Set when the feed spans pairs, so the card names the pair. */
+  connector: CCPairRef | undefined;
+  /** The viewer may re-fetch single documents of the run's pair. */
+  canResolve: boolean;
+}
+
+export interface ActivityGroupState {
   group: ActivityGroup;
-  runs: Run[];
+  runs: ActivityItem[];
   /** Runs in the group, loaded or not. */
   total: number;
   loaded: boolean;
@@ -129,36 +146,63 @@ export interface ActivityGroupState<Run> {
   more: () => void;
 }
 
-interface RunsPage<Run> {
-  items: Run[];
+/** A page of either feed. A pair's feed returns bare runs, the fleet's wraps each with its pair. */
+interface FeedPage {
+  items: (CCPairRun | IndexingRun)[];
   total_items: number;
 }
 
-/** Pages one feed query, polled while `enabled`. `more` loads the next page; a new search starts over. */
-function usePagedRuns<Run>(
-  keyFor: (query: CCPairRunsQuery) => string,
-  runKey: (run: Run) => string,
+function itemOf(
+  run: CCPairRun | IndexingRun,
+  scope: ActivityScope
+): ActivityItem {
+  if ("cc_pair" in run) {
+    return {
+      ccPairId: run.cc_pair.id,
+      run: run.run,
+      connector: run.cc_pair,
+      canResolve: run.cc_pair.can_resolve,
+    };
+  }
+  // A bare run only comes from a pair's own feed.
+  const pair = scope === "fleet" ? null : scope;
+  if (pair === null)
+    throw new Error("A fleet feed returned a run without its pair");
+  return {
+    ccPairId: pair.ccPairId,
+    run,
+    connector: undefined,
+    canResolve: pair.canResolve,
+  };
+}
+
+/** One activity group of the scope, polled while `enabled`. `more` loads the next page and a new search starts over. */
+export function useActivityItems(
+  scope: ActivityScope,
   group: ActivityGroup,
   q: string,
   enabled: boolean,
   pollMs: number
-): ActivityGroupState<Run> {
-  const { data, error, isLoading, size, setSize } = useSWRInfinite<
-    RunsPage<Run>
-  >(
-    (pageIndex, previous: RunsPage<Run> | null) => {
+): ActivityGroupState {
+  const ccPairId = scope === "fleet" ? null : scope.ccPairId;
+  const canResolve = scope === "fleet" ? null : scope.canResolve;
+  const { data, error, isLoading, size, setSize } = useSWRInfinite<FeedPage>(
+    (pageIndex, previous: FeedPage | null) => {
       if (!enabled) return null;
       if (previous !== null && previous.items.length < ACTIVITY_PAGE_SIZE) {
         return null;
       }
-      return keyFor({
+      const query: CCPairRunsQuery = {
         pageNum: pageIndex,
         pageSize: ACTIVITY_PAGE_SIZE,
         since: null,
         kinds: null,
         q,
         ...ACTIVITY_GROUP_QUERY[group],
-      });
+      };
+      return ccPairId === null
+        ? SWR_KEYS.indexMonitoringRuns(query)
+        : SWR_KEYS.ccPairRuns(ccPairId, query);
     },
     errorHandlingFetcher,
     { refreshInterval: pollMs, keepPreviousData: true }
@@ -168,16 +212,22 @@ function usePagedRuns<Run>(
   }, [q, setSize]);
   // Polling shifts the offsets, so a run can land on two pages.
   const runs = useMemo(() => {
+    const itemScope: ActivityScope =
+      ccPairId === null || canResolve === null
+        ? "fleet"
+        : { ccPairId, canResolve };
     const seen = new Set<string>();
     return (data ?? []).flatMap((page) =>
-      page.items.filter((run) => {
-        const key = runKey(run);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
+      page.items
+        .map((run) => itemOf(run, itemScope))
+        .filter((item) => {
+          const key = `${item.run.kind}-${item.run.attempt.id}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
     );
-  }, [data, runKey]);
+  }, [data, ccPairId, canResolve]);
   const first = data?.[0];
   const last = data?.[data.length - 1];
   return {
@@ -196,49 +246,45 @@ function usePagedRuns<Run>(
   };
 }
 
-function ccPairRunKey(run: CCPairRun): string {
-  return `${run.kind}-${run.attempt.id}`;
-}
+// ---------------------------------------------------------------------------
+// useResolveRunErrors
+// ---------------------------------------------------------------------------
 
-function indexingRunKey(item: IndexingRun): string {
-  return ccPairRunKey(item.run);
-}
+/** Resolves a run's document errors and refreshes every feed they appear in, one submit at a time. */
+export function useResolveRunErrors() {
+  const tToasts = useTranslations("admin.connector.toasts");
+  const [resolving, setResolving] = useState(false);
 
-/** One activity group of a pair. */
-export function useActivityGroup(
-  ccPairId: number,
-  group: ActivityGroup,
-  q: string,
-  enabled: boolean,
-  pollMs: number
-): ActivityGroupState<CCPairRun> {
-  const keyFor = useCallback(
-    (query: CCPairRunsQuery) => SWR_KEYS.ccPairRuns(ccPairId, query),
-    [ccPairId]
-  );
-  return usePagedRuns<CCPairRun>(
-    keyFor,
-    ccPairRunKey,
-    group,
-    q,
-    enabled,
-    pollMs
-  );
-}
+  // Awaits only the submit. The feeds poll, so rows clear as documents land.
+  async function resolve(item: ActivityItem, errorIds: number[] | null) {
+    if (resolving) return;
+    setResolving(true);
+    try {
+      const result =
+        errorIds === null
+          ? await resolveAllErrorsForCCPair(item.ccPairId, item.run.attempt.id)
+          : await resolveErrors(errorIds);
+      if (result.total_error_ids === 0) {
+        toast.success(tToasts("noUnresolvedErrors"));
+      } else {
+        toast.success(
+          tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
+        );
+      }
+      await mutate(
+        (key) =>
+          typeof key === "string" &&
+          (key.startsWith(SWR_KEYS.ccPairIndexingErrors(item.ccPairId)) ||
+            key.startsWith(SWR_KEYS.ccPairRunsPrefix(item.ccPairId)) ||
+            key.startsWith(SWR_KEYS.indexMonitoringRunsPrefix))
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(tToasts("targetedReindexFailed", { message }));
+    } finally {
+      setResolving(false);
+    }
+  }
 
-/** One activity group across every readable pair. Each run names its pair. */
-export function useFleetActivityGroup(
-  group: ActivityGroup,
-  q: string,
-  enabled: boolean,
-  pollMs: number
-): ActivityGroupState<IndexingRun> {
-  return usePagedRuns<IndexingRun>(
-    SWR_KEYS.indexMonitoringRuns,
-    indexingRunKey,
-    group,
-    q,
-    enabled,
-    pollMs
-  );
+  return { resolving, resolve };
 }

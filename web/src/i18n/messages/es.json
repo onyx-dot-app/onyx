@@ -2588,9 +2588,10 @@
         },
         "filter": {
           "label": "Mostrar",
-          "all": "Fallos y errores",
+          "all": "Todos los niveles",
           "failures": "Fallos",
-          "errors": "Errores"
+          "errors": "Errores",
+          "other": "Otros"
         },
         "resolved": {
           "label": "Resueltos"
@@ -2598,7 +2599,8 @@
         "groups": {
           "failures": "{count, plural, one {# fallo} other {# fallos}}",
           "errors": "{count, plural, one {# error} other {# errores}}",
-          "resolved": "{count, plural, one {# resuelto} other {# resueltos}}"
+          "resolved": "{count, plural, one {# resuelto} other {# resueltos}}",
+          "other": "Otros"
         },
         "title": {
           "indexing": {
@@ -2606,35 +2608,50 @@
             "running": "Indexación en curso con errores",
             "stopped": "Indexación detenida con errores",
             "errors": "Indexación completada con errores",
-            "resolved": "Errores de indexación resueltos"
+            "resolved": "Errores de indexación resueltos",
+            "succeeded": "Indexación completada correctamente",
+            "inProgress": "Indexación en curso",
+            "canceled": "Indexación detenida"
           },
           "doc_permission_sync": {
             "failed": "La sincronización de permisos falló",
             "running": "Sincronización de permisos en curso con errores",
             "stopped": "Sincronización de permisos detenida con errores",
             "errors": "Permisos sincronizados con errores",
-            "resolved": "Errores de sincronización de permisos resueltos"
+            "resolved": "Errores de sincronización de permisos resueltos",
+            "succeeded": "Permisos sincronizados correctamente",
+            "inProgress": "Sincronizando permisos",
+            "canceled": "Sincronización de permisos detenida"
           },
           "group_sync": {
             "failed": "La sincronización de membresías de grupo falló",
             "running": "Sincronización de membresías de grupo en curso con errores",
             "stopped": "Sincronización de membresías de grupo detenida con errores",
             "errors": "Membresías de grupo sincronizadas con errores",
-            "resolved": "Errores de sincronización de membresías de grupo resueltos"
+            "resolved": "Errores de sincronización de membresías de grupo resueltos",
+            "succeeded": "Membresías de grupo sincronizadas correctamente",
+            "inProgress": "Sincronizando membresías de grupo",
+            "canceled": "Sincronización de grupos detenida"
           },
           "pruning": {
             "failed": "La depuración falló",
             "running": "Depuración en curso con errores",
             "stopped": "Depuración detenida con errores",
             "errors": "Depuración completada con errores",
-            "resolved": "Errores de depuración resueltos"
+            "resolved": "Errores de depuración resueltos",
+            "succeeded": "Depuración completada correctamente",
+            "inProgress": "Depuración en curso",
+            "canceled": "Depuración detenida"
           },
           "checks": {
             "failed": "Las comprobaciones del conector fallaron",
             "running": "Comprobaciones del conector en curso con errores",
             "stopped": "Comprobaciones del conector detenidas con errores",
             "errors": "Comprobaciones del conector completadas con errores",
-            "resolved": "Errores de las comprobaciones del conector resueltos"
+            "resolved": "Errores de las comprobaciones del conector resueltos",
+            "succeeded": "Comprobaciones del conector superadas",
+            "inProgress": "Comprobaciones del conector en curso",
+            "canceled": "Comprobaciones del conector detenidas"
           }
         },
         "description": {
@@ -2660,7 +2677,8 @@
           "resolved": "Sin errores resueltos",
           "filtered": "Nada coincide con esta búsqueda.",
           "failures": "Sin fallos",
-          "errors": "Sin errores"
+          "errors": "Sin errores",
+          "other": "No hay otras ejecuciones"
         },
         "loadError": {
           "title": "No se pudo cargar la actividad."
@@ -5775,7 +5793,13 @@
         "loadError": "No se pudo cargar el resumen."
       },
       "activities": {
-        "title": "Actividades"
+        "title": "Actividades",
+        "history": "Historial completo de actividad",
+        "viewLogs": "Ver el historial de actividad",
+        "panel": {
+          "title": "Historial de actividad",
+          "close": "Ocultar el historial de actividad"
+        }
       },
       "list": {
         "search": {
