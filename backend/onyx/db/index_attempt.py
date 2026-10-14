@@ -441,6 +441,7 @@ def mark_attempt_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.SUCCESS
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.celery_task_id = None
         db_session.commit()
 
@@ -472,6 +473,7 @@ def mark_attempt_partially_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.COMPLETED_WITH_ERRORS
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.celery_task_id = None
         db_session.commit()
 
@@ -506,6 +508,7 @@ def mark_attempt_canceled(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.CANCELED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = reason
         db_session.commit()
 
@@ -540,6 +543,7 @@ def mark_attempt_failed(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.FAILED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = failure_reason
         attempt.full_exception_trace = full_exception_trace
         attempt.celery_task_id = None
@@ -584,6 +588,7 @@ def mark_attempt_interrupted(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.INTERRUPTED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = reason
         attempt.celery_task_id = None
         db_session.commit()

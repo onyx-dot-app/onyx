@@ -263,8 +263,8 @@ class IndexAttemptSnapshot(BaseModel):
     full_exception_trace: str | None
     time_started: str | None
     time_updated: str
-    # When a finished attempt ended, from its last heartbeat. `time_updated`
-    # moves days later when checkpoint cleanup touches the row.
+    # When a finished attempt ended. `time_updated` moves days later when
+    # checkpoint cleanup touches the row, so it is no stand-in.
     time_finished: str | None
     poll_range_start: datetime | None = None
     poll_range_end: datetime | None = None
@@ -276,9 +276,11 @@ class IndexAttemptSnapshot(BaseModel):
     def from_index_attempt_db_model(
         cls, index_attempt: IndexAttempt, error_count: int
     ) -> "IndexAttemptSnapshot":
-        # An attempt that ended before its first heartbeat check was instant.
+        # Attempts from before time_finished existed end at their last heartbeat
+        # check, and at their start when they never reached one.
         finished = (
-            index_attempt.last_heartbeat_time
+            index_attempt.time_finished
+            or index_attempt.last_heartbeat_time
             or index_attempt.time_started
             or index_attempt.time_created
             if index_attempt.is_finished()
