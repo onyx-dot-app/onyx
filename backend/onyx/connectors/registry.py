@@ -44,6 +44,12 @@ from onyx.connectors.mediawiki.config import MediaWikiConnectorConfig
 from onyx.connectors.mock_connector.config import MockConnectorConfig
 from onyx.connectors.notion.config import NotionConnectorConfig
 from onyx.connectors.onedrive.config import OneDriveConnectorConfig
+from onyx.connectors.outbound_fields import (
+    OutboundField,
+    OutboundFieldSource,
+    OutboundSubdomainField,
+    OutboundUrlField,
+)
 from onyx.connectors.outline.config import OutlineConnectorConfig
 from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.productboard.config import ProductboardConnectorConfig
@@ -65,6 +71,13 @@ class ConnectorMapping(BaseModel):
     module_path: str
     class_name: str
     config_class: type[ConnectorConfig]
+    # Config and credential values that pick where the connector sends
+    # requests. ``instantiate_connector`` validates them first.
+    outbound_fields: tuple[OutboundField, ...] = ()
+
+
+_CONFIG = OutboundFieldSource.CONFIG
+_CREDENTIAL = OutboundFieldSource.CREDENTIAL
 
 
 # Mapping of DocumentSource to connector details for lazy loading
@@ -113,11 +126,15 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.bookstack.connector",
         class_name="BookstackConnector",
         config_class=BookstackConnectorConfig,
+        outbound_fields=(
+            OutboundUrlField(source=_CREDENTIAL, key="bookstack_base_url"),
+        ),
     ),
     DocumentSource.OUTLINE: ConnectorMapping(
         module_path="onyx.connectors.outline.connector",
         class_name="OutlineConnector",
         config_class=OutlineConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CREDENTIAL, key="outline_base_url"),),
     ),
     DocumentSource.CONFLUENCE: ConnectorMapping(
         module_path="onyx.connectors.confluence.connector",
@@ -128,6 +145,7 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.jira.connector",
         class_name="JiraConnector",
         config_class=JiraConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CONFIG, key="jira_base_url"),),
     ),
     DocumentSource.PRODUCTBOARD: ConnectorMapping(
         module_path="onyx.connectors.productboard.connector",
@@ -148,6 +166,7 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.canvas.connector",
         class_name="CanvasConnector",
         config_class=CanvasConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CONFIG, key="canvas_base_url"),),
     ),
     DocumentSource.NOTION: ConnectorMapping(
         module_path="onyx.connectors.notion.connector",
@@ -193,6 +212,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.zendesk.connector",
         class_name="ZendeskConnector",
         config_class=ZendeskConnectorConfig,
+        outbound_fields=(
+            OutboundSubdomainField(
+                source=_CREDENTIAL, key="zendesk_subdomain", vendor_domain="zendesk.com"
+            ),
+        ),
     ),
     DocumentSource.LOOPIO: ConnectorMapping(
         module_path="onyx.connectors.loopio.connector",
@@ -238,11 +262,13 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.discourse.connector",
         class_name="DiscourseConnector",
         config_class=DiscourseConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CONFIG, key="base_url"),),
     ),
     DocumentSource.AXERO: ConnectorMapping(
         module_path="onyx.connectors.axero.connector",
         class_name="AxeroConnector",
         config_class=AxeroConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CREDENTIAL, key="base_url"),),
     ),
     DocumentSource.CLICKUP: ConnectorMapping(
         module_path="onyx.connectors.clickup.connector",
@@ -253,6 +279,7 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.mediawiki.wiki",
         class_name="MediaWikiConnector",
         config_class=MediaWikiConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CONFIG, key="hostname"),),
     ),
     DocumentSource.WIKIPEDIA: ConnectorMapping(
         module_path="onyx.connectors.wikipedia.connector",
@@ -288,6 +315,7 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.xenforo.connector",
         class_name="XenforoConnector",
         config_class=XenforoConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CONFIG, key="base_url"),),
     ),
     DocumentSource.DISCORD: ConnectorMapping(
         module_path="onyx.connectors.discord.connector",
@@ -298,6 +326,13 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.freshdesk.connector",
         class_name="FreshdeskConnector",
         config_class=FreshdeskConnectorConfig,
+        outbound_fields=(
+            OutboundSubdomainField(
+                source=_CREDENTIAL,
+                key="freshdesk_domain",
+                vendor_domain="freshdesk.com",
+            ),
+        ),
     ),
     DocumentSource.FIREFLIES: ConnectorMapping(
         module_path="onyx.connectors.fireflies.connector",
@@ -313,6 +348,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.egnyte.connector",
         class_name="EgnyteConnector",
         config_class=EgnyteConnectorConfig,
+        outbound_fields=(
+            OutboundSubdomainField(
+                source=_CREDENTIAL, key="domain", vendor_domain="egnyte.com"
+            ),
+        ),
     ),
     DocumentSource.AIRTABLE: ConnectorMapping(
         module_path="onyx.connectors.airtable.airtable_connector",
@@ -323,11 +363,13 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.highspot.connector",
         class_name="HighspotConnector",
         config_class=HighspotConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CREDENTIAL, key="highspot_url"),),
     ),
     DocumentSource.DRUPAL_WIKI: ConnectorMapping(
         module_path="onyx.connectors.drupal_wiki.connector",
         class_name="DrupalWikiConnector",
         config_class=DrupalWikiConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CONFIG, key="base_url"),),
     ),
     DocumentSource.IMAP: ConnectorMapping(
         module_path="onyx.connectors.imap.connector",
@@ -343,6 +385,9 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.testrail.connector",
         class_name="TestRailConnector",
         config_class=TestRailConnectorConfig,
+        outbound_fields=(
+            OutboundUrlField(source=_CREDENTIAL, key="testrail_base_url"),
+        ),
     ),
     DocumentSource.BRAINTRUST: ConnectorMapping(
         module_path="onyx.connectors.braintrust.connector",
@@ -353,6 +398,7 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.lumapps.connector",
         class_name="LumAppsConnector",
         config_class=LumAppsConnectorConfig,
+        outbound_fields=(OutboundUrlField(source=_CONFIG, key="base_url"),),
     ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(

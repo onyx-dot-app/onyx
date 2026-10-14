@@ -4,12 +4,9 @@ from urllib.parse import ParseResult, urlparse
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
-from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.cross_connector_utils.outbound import validate_connector_url
 from onyx.connectors.github.models import GitHubRepository
-from onyx.server.security.models import web_connector_ssrf_enforced
-from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
@@ -63,20 +60,7 @@ def validate_credential_base_url(base_url: str) -> None:
     When an admin relaxes it, a private Enterprise Server becomes reachable but
     cloud metadata stays blocked.
     """
-    enforced: bool = web_connector_ssrf_enforced(
-        get_security_settings().ssrf_protection_level
-    )
-    try:
-        validate_outbound_http_url(
-            base_url,
-            https_only=True,
-            allow_private_network=not enforced,
-            block_link_local_only=not enforced,
-        )
-    except (SSRFException, ValueError) as e:
-        raise ConnectorValidationError(
-            f"Invalid GitHub Enterprise Server URL '{base_url}': {e}"
-        ) from e
+    validate_connector_url(base_url, "GitHub Enterprise Server URL", https_only=True)
 
 
 def parse_repository_names(repositories: str | None) -> list[str]:

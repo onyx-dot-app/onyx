@@ -18,7 +18,9 @@ def _ssrf_env(
     resolves_to: str = PUBLIC_IP,
 ) -> Iterator[None]:
     """Pin the SSRF policy and DNS so these tests never touch the network."""
-    with patch("onyx.connectors.github.utils.get_security_settings") as settings:
+    with patch(
+        "onyx.connectors.cross_connector_utils.outbound.get_security_settings"
+    ) as settings:
         settings.return_value.ssrf_protection_level = level
         with patch("onyx.utils.url.socket.getaddrinfo") as getaddrinfo:
             getaddrinfo.return_value = [(2, 1, 6, "", (resolves_to, 443))]
