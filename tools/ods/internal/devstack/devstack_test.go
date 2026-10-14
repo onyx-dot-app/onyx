@@ -110,9 +110,11 @@ type fakeProvider struct {
 	// fixedPorts per service slug: a port the service binds that is not
 	// leased, as the Slack bot's metrics port.
 	fixedPorts map[string]int
-	migrated   [][]string
-	composeUp  int
-	prepared   int
+	// planHook runs at the start of Plan, inside the lifecycle lock.
+	planHook  func()
+	migrated  [][]string
+	composeUp int
+	prepared  int
 }
 
 func (p *fakeProvider) Prepare(context.Context) error {
@@ -149,6 +151,9 @@ func (p *fakeProvider) Migrate(_ context.Context, env []string) error {
 }
 
 func (p *fakeProvider) Plan(_ string, ports map[string]int, env Env, _ Options) ([]Spec, error) {
+	if p.planHook != nil {
+		p.planHook()
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, err
@@ -598,35 +603,27 @@ func TestRestart_holdsOneLock(t *testing.T) {
 	p := &fakeProvider{services: []string{"web"}}
 	first := mustUp(t, s, p)
 
-	// While Restart runs, every attempt to take the lock must fail.
-	done := make(chan struct{})
-	leaked := make(chan bool, 1)
-	go func() {
-		for {
-			unlock, err := s.Lock(context.Background(), "intruder", 20*time.Millisecond)
-			select {
-			case <-done:
-				if err == nil {
-					unlock()
-				}
-				leaked <- false
-				return
-			default:
-			}
-			if err == nil {
-				unlock()
-				leaked <- true
-				return
-			}
+	// Plan runs inside the locked restart, after the services were stopped:
+	// a competing lifecycle command must be refused at that point.
+	var lockErr error
+	hooked := false
+	p.planHook = func() {
+		hooked = true
+		var unlock func()
+		unlock, lockErr = s.Lock(context.Background(), "intruder", 100*time.Millisecond)
+		if lockErr == nil {
+			unlock()
 		}
-	}()
+	}
 	status, err := s.Restart(context.Background(), p, testOptions())
-	close(done)
 	if err != nil || !status.Ready {
 		t.Fatalf("restart: %v %+v", err, status)
 	}
-	if <-leaked {
-		t.Error("another command took the lock during restart")
+	if !hooked {
+		t.Fatal("plan hook did not run")
+	}
+	if !errors.Is(lockErr, ErrLocked) {
+		t.Errorf("another command could take the lock during restart: %v", lockErr)
 	}
 	if status.Ports["web"] != first.Ports["web"] {
 		t.Errorf("restart changed the port: %d -> %d", first.Ports["web"], status.Ports["web"])
