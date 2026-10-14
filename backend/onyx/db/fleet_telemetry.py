@@ -7,6 +7,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import KeyedColumnElement
 
+from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.enums import (
     AccessType,
     AccountType,
@@ -30,6 +31,7 @@ from onyx.db.models import (
     SyncRecord,
     User,
 )
+from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 
 # Rows per read.
 ROW_LIMIT: int = 1000
@@ -67,9 +69,9 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
         select(
             ConnectorCredentialPair.id.label("cc_pair_id"),
             ConnectorCredentialPair.connector_id,
+            ConnectorCredentialPair.credential_id,
             Connector.source,
             ConnectorCredentialPair.status,
-            ConnectorCredentialPair.total_docs_indexed.label("doc_count"),
             ConnectorCredentialPair.last_successful_index_time.label("last_success_at"),
             Connector.refresh_freq.label("refresh_seconds"),
             Connector.prune_freq.label("prune_seconds"),
@@ -85,7 +87,26 @@ def connector_rows(db_session: Session) -> list[dict[str, Any]]:
         .order_by(ConnectorCredentialPair.id)
         .limit(ROW_LIMIT)
     )
-    return [dict(row) for row in db_session.execute(statement).mappings()]
+    rows = [dict(row) for row in db_session.execute(statement).mappings()]
+    # Match the admin count: only documents indexed for this exact pair.
+    counts = {
+        (connector_id, credential_id): count
+        for connector_id, credential_id, count in get_document_counts_for_cc_pairs(
+            db_session,
+            [
+                ConnectorCredentialPairIdentifier(
+                    connector_id=row["connector_id"],
+                    credential_id=row["credential_id"],
+                )
+                for row in rows
+            ],
+        )
+    }
+    for row in rows:
+        row["doc_count"] = counts.get(
+            (row["connector_id"], row.pop("credential_id")), 0
+        )
+    return rows
 
 
 def has_indexed_connectors__no_commit(db_session: Session) -> bool:

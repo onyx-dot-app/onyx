@@ -46,6 +46,10 @@ The server emits one query event when execution ends, even if the client disconn
 Cancellation freezes usage at the server's stop point. Search-mode requests leave this chat classification unset.
 Outcome remains separate from tool usage. Deploy the receiving server's optional `tool_usage` field before this instrumentation.
 
+Connector document counts use the same query as the connector admin page. They count indexed
+document links for each connector and credential pair, excluding pending links. Counts follow
+indexing and deletion directly; they do not use the pair's legacy stored counter.
+
 Only the API reports deployment type, using `DISABLE_VECTOR_DB` to distinguish Lite from Standard.
 Workers and standalone collectors omit type because their settings can differ from the API's.
 The connector flag checks indexed document links for existing connector/credential pairs, excluding
