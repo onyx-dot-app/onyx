@@ -220,6 +220,8 @@ export interface IndexAttemptSnapshot {
   full_exception_trace: string | null;
   time_started: string | null;
   time_updated: string;
+  /** When a finished attempt ended. `time_updated` also moves on checkpoint cleanup. */
+  time_finished: string | null;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The

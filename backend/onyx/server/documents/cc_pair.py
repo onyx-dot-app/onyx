@@ -18,6 +18,8 @@ from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryTask,
 )
+from onyx.connectors.capabilities import CredentialCapability
+from onyx.connectors.capability_checks.applicability import get_applicable_capabilities
 from onyx.connectors.capability_checks.indexing_hold import get_first_indexing_hold
 from onyx.connectors.capability_checks.indexing_hold_models import IndexingHold
 from onyx.connectors.exceptions import ValidationError
@@ -25,6 +27,11 @@ from onyx.connectors.factory import identify_connector_class, validate_ccpair_fo
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.connectors.pairing_access import validate_pairing_access
+from onyx.db.cc_pair_runs import (
+    count_cc_pair_runs_by_status_group,
+    get_cc_pair_run_page,
+)
+from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
@@ -34,6 +41,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pair,
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
+    get_readable_connector_credential_pair_for_user,
     remove_credential_from_connector,
     update_connector_credential_pair_from_id,
     verify_user_can_manage_all_cc_pairs,
@@ -44,6 +52,8 @@ from onyx.db.document import get_document_counts_for_cc_pairs, get_documents_for
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     AccessType,
+    CCPairRunKind,
+    CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     IndexingStatus,
@@ -64,11 +74,13 @@ from onyx.db.index_attempt import (
 )
 from onyx.db.index_attempt_metrics import get_stage_metrics_for_attempt
 from onyx.db.indexing_coordination import IndexingCoordination
-from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    IndexAttempt,
+    User,
+)
 from onyx.db.permission_sync_attempt import (
     get_latest_doc_permission_sync_attempt_for_cc_pair,
-    get_recent_doc_permission_sync_attempts_for_cc_pair,
-    get_relevant_external_group_sync_attempts_for_cc_pair,
 )
 from onyx.db.search_settings import get_current_search_settings
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -80,9 +92,13 @@ from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.credential import credential_ids_to_mask
 from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
+    CCPairDocPermissionSyncRun,
     CCPairFullInfo,
+    CCPairGroupSyncRun,
     CCPairHierarchyBreakdown,
-    CCPairSyncAttemptsResponse,
+    CCPairIndexRun,
+    CCPairRun,
+    CCPairRunsResponse,
     CCPropertyUpdateRequest,
     CCStatusUpdateRequest,
     ConnectorCredentialPairIdentifier,
@@ -104,7 +120,6 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -114,18 +129,8 @@ router = APIRouter(prefix="/manage")
 def _get_readable_cc_pair(
     cc_pair_id: int, db_session: Session, user: User
 ) -> ConnectorCredentialPair | None:
-    """Fetch a cc-pair for the detail page and its sub-resources.
-
-    Neither filter contains the other, so both run: the read one drops a creator's
-    groupless private pair and pairs managed only through a role, the operate one
-    drops plain group membership. Operate runs second, so the common case still
-    costs one query.
-    """
-    return get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, CCPairAccessLevel.READ
-    ) or get_connector_credential_pair_from_id_for_user(
-        cc_pair_id, db_session, user, CCPairAccessLevel.OPERATE
-    )
+    """Fetch a cc-pair for the detail page and its sub-resources."""
+    return get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)
 
 
 def _get_readable_cc_pair_or_raise(
@@ -227,133 +232,162 @@ def get_index_attempt_stage_metrics(
     )
 
 
-# Cap on how many recent attempts the per-cc-pair sync-history endpoints
-# will scan when computing pagination. The frontend pages over this fixed
-# pool client-side; older attempts beyond the cap are not surfaced. Matches
-# the previous (pre-CCPairSyncAttemptsResponse) behavior.
-_SYNC_ATTEMPTS_HISTORY_LIMIT = 1000
+_RUNS_MAX_PAGE_SIZE = 50
 
 
-def _get_cc_pair_source_or_raise(
+def _cc_pair_run_kinds(cc_pair: ConnectorCredentialPair) -> list[CCPairRunKind]:
+    """Indexing always, plus the permission syncs a perm-synced pair's source runs."""
+    kinds = [CCPairRunKind.INDEXING]
+    if not cc_pair.access_type.is_perm_synced():
+        return kinds
+    capabilities = get_applicable_capabilities(cc_pair.connector.source)
+    if CredentialCapability.DOC_PERMISSION_SYNC in capabilities:
+        kinds.append(CCPairRunKind.DOC_PERMISSION_SYNC)
+    if CredentialCapability.EXTERNAL_GROUP_SYNC in capabilities:
+        kinds.append(CCPairRunKind.GROUP_SYNC)
+    return kinds
+
+
+def _run_item(
+    kind: CCPairRunKind, run_id: int, page: CCPairRunPage, error_counts: dict[int, int]
+) -> CCPairRun:
+    match kind:
+        case CCPairRunKind.INDEXING:
+            attempt = page.index_attempts[run_id]
+            return CCPairIndexRun(
+                time_created=attempt.time_created,
+                attempt=IndexAttemptSnapshot.from_index_attempt_db_model(
+                    attempt, error_count=error_counts.get(run_id, 0)
+                ),
+            )
+        case CCPairRunKind.DOC_PERMISSION_SYNC:
+            sync = page.doc_permission_syncs[run_id]
+            return CCPairDocPermissionSyncRun(
+                time_created=sync.time_created,
+                attempt=DocPermissionSyncAttemptSnapshot.from_doc_permission_sync_attempt_db_model(
+                    sync
+                ),
+            )
+        case CCPairRunKind.GROUP_SYNC:
+            group_sync = page.group_syncs[run_id]
+            return CCPairGroupSyncRun(
+                time_created=group_sync.time_created,
+                attempt=ExternalGroupSyncAttemptSnapshot.from_external_group_sync_attempt_db_model(
+                    group_sync
+                ),
+            )
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/runs")
+def get_cc_pair_runs(
     cc_pair_id: int,
-    user: User,
-    db_session: Session,
-) -> DocumentSource:
-    """Authorize ``user`` for ``cc_pair_id`` and return its source.
-
-    Raises ``OnyxError(NOT_FOUND)`` if the cc-pair doesn't exist or the user
-    can't see it. Co-located with the sync-history endpoints because both
-    routes need the same cc-pair lookup + auth + source resolution.
-    """
-    cc_pair = _get_readable_cc_pair(cc_pair_id, db_session, user)
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=_RUNS_MAX_PAGE_SIZE),
+    since: datetime | None = Query(None),
+    kinds: list[CCPairRunKind] | None = Query(None),
+    status_groups: list[CCPairRunStatusGroup] | None = Query(None),
+    q: str | None = Query(None, max_length=200),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairRunsResponse:
+    """The pair's index attempts and permission syncs as one feed, newest
+    first. ``since`` windows on creation time and ``q`` matches error messages."""
+    # Called directly: the route contract reaches the scope gate three calls deep.
+    cc_pair = get_readable_connector_credential_pair_for_user(
+        cc_pair_id, db_session, user
+    )
     if cc_pair is None:
         raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "CC Pair not found for current user permissions",
         )
-    return cc_pair.connector.source
+    pair_kinds = _cc_pair_run_kinds(cc_pair)
+    wanted = [kind for kind in pair_kinds if kinds is None or kind in kinds]
+    groups = None if status_groups is None else set(status_groups)
+    run_filter = CCPairRunFilter(
+        cc_pair_id=cc_pair_id,
+        source=cc_pair.connector.source,
+        since=since,
+        error_query=(q or "").strip() or None,
+        status_groups=groups,
+    )
+    page = get_cc_pair_run_page(
+        db_session,
+        wanted,
+        run_filter,
+        offset=page_num * page_size,
+        limit=page_size,
+    )
+    error_counts = get_error_counts_for_index_attempts(
+        db_session, list(page.index_attempts)
+    )
+    status_counts = count_cc_pair_runs_by_status_group(db_session, wanted, run_filter)
+    return CCPairRunsResponse(
+        items=[
+            _run_item(kind, run_id, page, error_counts) for kind, run_id in page.order
+        ],
+        total_items=sum(
+            count
+            for group, count in status_counts.items()
+            if groups is None or group in groups
+        ),
+        kinds=pair_kinds,
+        status_counts=status_counts,
+    )
 
 
-@router.get("/admin/cc-pair/{cc_pair_id}/permission-sync-attempts")
-def get_cc_pair_permission_sync_attempts(
-    cc_pair_id: int,
-    page_num: int = Query(0, ge=0),
-    page_size: int = Query(10, ge=1, le=1000),
+def _cancel_index_attempt(
+    db_session: Session, attempt: IndexAttempt, reason: str
+) -> None:
+    """Cancels an active attempt the way a pause does. A first attempt that
+    waits for the capability checks has no task to see a cancel request, so it
+    ends now and stays undispatched. Any other gets the request its task reads,
+    and its task is revoked. The caller commits."""
+    if attempt.celery_task_id is None and cancel_waiting_index_attempt__no_commit(
+        db_session, attempt.id, reason
+    ):
+        return
+    IndexingCoordination.request_cancellation(db_session, attempt.id)
+    if attempt.celery_task_id:
+        client_app.control.revoke(attempt.celery_task_id)
+
+
+@router.post("/admin/index-attempt/{index_attempt_id}/cancel")
+def cancel_index_attempt(
+    index_attempt_id: int,
     user: User = Depends(
-        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
     db_session: Session = Depends(get_session),
-) -> CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot]:
-    """Recent doc-permission sync attempts for a cc-pair, paginated.
-
-    Returns ``applicable=False`` when the source does not run a separate
-    doc-permission sync job (e.g. Salesforce, where ACLs are pulled inline
-    during indexing). The frontend uses ``applicable`` to distinguish
-    "this kind of sync isn't applicable" from "no attempts yet".
-    """
-    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
-
-    source_requires_doc_sync = fetch_ee_implementation_or_noop(
-        "onyx.external_permissions.sync_params",
-        "source_requires_doc_sync",
-        noop_return_value=False,
-    )
-    if not source_requires_doc_sync(source):
-        return CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot](
-            applicable=False,
-            items=[],
-            total_items=0,
+) -> None:
+    """Cancels one running or queued index attempt of a pair the caller operates."""
+    attempt = get_index_attempt(db_session, index_attempt_id)
+    if attempt is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Index attempt not found")
+    if not verify_user_has_access_to_cc_pair(
+        attempt.connector_credential_pair_id,
+        db_session,
+        user,
+        CCPairAccessLevel.OPERATE,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You do not have access to this index attempt",
         )
+    if attempt.status.is_terminal():
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Index attempt is not running.")
 
-    all_attempts = get_recent_doc_permission_sync_attempts_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
-        db_session=db_session,
-    )
-    start_idx = page_num * page_size
-    end_idx = start_idx + page_size
-    return CCPairSyncAttemptsResponse[DocPermissionSyncAttemptSnapshot](
-        applicable=True,
-        items=[
-            DocPermissionSyncAttemptSnapshot.from_doc_permission_sync_attempt_db_model(
-                attempt
-            )
-            for attempt in all_attempts[start_idx:end_idx]
-        ],
-        total_items=len(all_attempts),
-    )
-
-
-@router.get("/admin/cc-pair/{cc_pair_id}/external-group-sync-attempts")
-def get_cc_pair_external_group_sync_attempts(
-    cc_pair_id: int,
-    page_num: int = Query(0, ge=0),
-    page_size: int = Query(10, ge=1, le=1000),
-    user: User = Depends(
-        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
-    ),
-    db_session: Session = Depends(get_session),
-) -> CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot]:
-    """Recent external-group sync attempts a viewer of this cc-pair would
-    expect to see, paginated.
-
-    Returns ``applicable=False`` when the source does not run a separate
-    external-group sync job. For sources whose group sync is logically
-    source-wide (Confluence, Jira), attempts triggered against any sibling
-    cc-pair sharing the source are included — see
-    ``get_relevant_external_group_sync_attempts_for_cc_pair``.
-    """
-    source = _get_cc_pair_source_or_raise(cc_pair_id, user, db_session)
-
-    source_requires_external_group_sync = fetch_ee_implementation_or_noop(
-        "onyx.external_permissions.sync_params",
-        "source_requires_external_group_sync",
-        noop_return_value=False,
-    )
-    if not source_requires_external_group_sync(source):
-        return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
-            applicable=False,
-            items=[],
-            total_items=0,
-        )
-
-    all_attempts = get_relevant_external_group_sync_attempts_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        source=source,
-        limit=_SYNC_ATTEMPTS_HISTORY_LIMIT,
-        db_session=db_session,
-    )
-    start_idx = page_num * page_size
-    end_idx = start_idx + page_size
-    return CCPairSyncAttemptsResponse[ExternalGroupSyncAttemptSnapshot](
-        applicable=True,
-        items=[
-            ExternalGroupSyncAttemptSnapshot.from_external_group_sync_attempt_db_model(
-                attempt
-            )
-            for attempt in all_attempts[start_idx:end_idx]
-        ],
-        total_items=len(all_attempts),
+    _cancel_index_attempt(db_session, attempt, reason="Canceled by a user.")
+    db_session.commit()
+    emit_audit_event(
+        AuditAction.CC_PAIR_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="cc_pair",
+        resource_id=attempt.connector_credential_pair_id,
+        extra={"canceled_index_attempt_id": index_attempt_id},
     )
 
 
@@ -591,21 +625,8 @@ def update_cc_pair_status(
 
         for attempt in active_attempts:
             try:
-                # A first attempt that waits for the capability checks has no
-                # task to see a cancel request, so end it now. It stays
-                # undispatched, so the next attempt still waits for the checks.
-                # The status commit below also commits this cancel.
-                if (
-                    attempt.celery_task_id is None
-                    and cancel_waiting_index_attempt__no_commit(
-                        db_session, attempt.id, reason="Connector paused."
-                    )
-                ):
-                    continue
-                IndexingCoordination.request_cancellation(db_session, attempt.id)
-                # Revoke the task to prevent it from running
-                if attempt.celery_task_id:
-                    client_app.control.revoke(attempt.celery_task_id)
+                # The status commit below also commits a waiting attempt's cancel.
+                _cancel_index_attempt(db_session, attempt, reason="Connector paused.")
                 logger.info(
                     "Requested cancellation for active indexing attempt %s due to connector pause: cc_pair=%s",
                     attempt.id,

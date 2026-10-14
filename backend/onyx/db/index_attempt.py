@@ -441,6 +441,7 @@ def mark_attempt_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.SUCCESS
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.celery_task_id = None
         db_session.commit()
 
@@ -472,6 +473,7 @@ def mark_attempt_partially_succeeded(
         ).scalar_one()
 
         attempt.status = IndexingStatus.COMPLETED_WITH_ERRORS
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.celery_task_id = None
         db_session.commit()
 
@@ -506,6 +508,7 @@ def mark_attempt_canceled(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.CANCELED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = reason
         db_session.commit()
 
@@ -540,6 +543,7 @@ def mark_attempt_failed(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.FAILED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = failure_reason
         attempt.full_exception_trace = full_exception_trace
         attempt.celery_task_id = None
@@ -584,6 +588,7 @@ def mark_attempt_interrupted(
         if not attempt.time_started:
             attempt.time_started = datetime.now(timezone.utc)
         attempt.status = IndexingStatus.INTERRUPTED
+        attempt.time_finished = datetime.now(timezone.utc)
         attempt.error_msg = reason
         attempt.celery_task_id = None
         db_session.commit()
@@ -1377,14 +1382,18 @@ def claim_waiting_index_attempt(
 def cancel_waiting_index_attempt__no_commit(
     db_session: Session, index_attempt_id: int, reason: str
 ) -> bool:
-    """Ends a waiting attempt as CANCELED. Leaves ``time_started`` unset
-    (unlike ``mark_attempt_canceled``), so the attempt still counts as never
-    dispatched and the pair's next attempt still waits for the checks. False
-    when the attempt is no longer waiting. The caller commits."""
+    """Ends a waiting attempt as CANCELED, finished now. Leaves ``time_started``
+    unset (unlike ``mark_attempt_canceled``), so the attempt still counts as
+    never dispatched and the pair's next attempt still waits for the checks.
+    False when the attempt is no longer waiting. The caller commits."""
     result = db_session.execute(
         update(IndexAttempt)
         .where(IndexAttempt.id == index_attempt_id, _is_waiting_attempt())
-        .values(status=IndexingStatus.CANCELED, error_msg=reason)
+        .values(
+            status=IndexingStatus.CANCELED,
+            error_msg=reason,
+            time_finished=func.now(),
+        )
     )
     return int(result.rowcount) == 1  # ty: ignore[unresolved-attribute]
 

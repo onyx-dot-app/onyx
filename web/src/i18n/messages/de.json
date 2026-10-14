@@ -2064,22 +2064,6 @@
         "description": "Dieser Fehler ist beim Versuch aufgetreten, den Konnektor zu löschen. Sie können das Löschen erneut versuchen, indem Sie auf die Schaltfläche \"Löschen\" klicken.",
         "title": "Löschfehler"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "Synchronisierte Dokumente",
-          "errorMessage": "Fehlermeldung",
-          "permissionErrors": "Berechtigungsfehler",
-          "status": "Status",
-          "timeStarted": "Startzeit"
-        },
-        "empty": {
-          "description": "Synchronisierungsläufe für Dokumentberechtigungen werden im Hintergrund geplant. Es kann etwas dauern, bis sie erscheinen — laden Sie die Seite in etwa 30 Sekunden neu.",
-          "title": "Noch keine Synchronisierungsversuche für Dokumentberechtigungen"
-        },
-        "errorModal": {
-          "title": "Fehler bei der Synchronisierung der Dokumentberechtigungen"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "In <link>unserer Dokumentation</link> findest du weitere Informationen zur Konfiguration dieses Konnektors."
@@ -2172,23 +2156,6 @@
           "heading": "{multiple, select, true {Ausgewählte Dateien} other {Ausgewählte Datei}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "Fehlermeldung",
-          "groups": "Gruppen",
-          "memberships": "Mitgliedschaften",
-          "status": "Status",
-          "timeStarted": "Startzeit",
-          "users": "Benutzer"
-        },
-        "empty": {
-          "description": "Synchronisierungsläufe für Gruppenmitgliedschaften werden im Hintergrund geplant. Es kann etwas dauern, bis sie erscheinen — laden Sie die Seite in etwa 30 Sekunden neu.",
-          "title": "Noch keine Synchronisierungsversuche für Gruppenmitgliedschaften"
-        },
-        "errorModal": {
-          "title": "Fehler bei der Synchronisierung der Gruppenmitgliedschaften"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "Alle behalten den aus der Quelle synchronisierten Zugriff.",
@@ -2208,33 +2175,6 @@
         "toggle": {
           "description": "Zugriff auf Mitglieder der ausgewählten Gruppen beschränken. Synchronisierte Berechtigungen gelten weiterhin.",
           "title": "Zugriff auf Gruppen beschränken"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "Fehlermeldung",
-          "newDocs": "Neue Dok.",
-          "status": "Status",
-          "timeStarted": "Startzeit",
-          "totalDocs": "Dok. gesamt",
-          "totalDocsTooltip": "Gesamtzahl der Dokumente, die bei diesem Indizierungsversuch im Index ersetzt wurden"
-        },
-        "docsPerMinute": "{rate} Dok. / Min.",
-        "docsRemoved": "(außerdem wurden {count} Dokumente entfernt, die in der Quelle als gelöscht erkannt wurden)",
-        "empty": {
-          "description": "Indizierungsversuche werden im Hintergrund geplant, und es kann etwas dauern, bis sie erscheinen. Laden Sie die Seite in etwa 30 Sekunden neu!",
-          "title": "Noch keine Indizierungsversuche geplant"
-        },
-        "noAdditionalDocs": "Keine weiteren Dokumente verarbeitet",
-        "reindexTooltip": {
-          "completed": "Dieser Indizierungsversuch war eine vollständige Neuindizierung. Alle Dokumente aus der Quelle wurden in das System synchronisiert.",
-          "inProgress": "Dieser Indizierungsversuch ist eine vollständige Neuindizierung. Alle Dokumente aus der Quelle werden in das System synchronisiert."
-        },
-        "stageMetricsButton": {
-          "tooltip": "Phasenmetriken anzeigen"
-        },
-        "viewTrace": {
-          "ariaLabel": "Vollständige Ablaufverfolgung anzeigen"
         }
       },
       "indexErrorsAlert": {
@@ -2492,30 +2432,6 @@
           "total": "/ {total}"
         }
       },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "Vollständige Fehlermeldung anzeigen"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "Synchronisierung der Dokumentberechtigungen",
-          "notApplicableDescription": "Dieser Konnektor verwendet keinen separaten Auftrag zur Synchronisierung der Dokumentberechtigungen."
-        },
-        "groupMembership": {
-          "label": "Synchronisierung der Gruppenmitgliedschaften",
-          "notApplicableDescription": "Dieser Konnektor verwendet keinen separaten Auftrag zur Synchronisierung der Gruppenmitgliedschaften."
-        },
-        "indexing": {
-          "label": "Indizierung"
-        },
-        "loadError": {
-          "title": "Die Synchronisierungsversuche konnten nicht geladen werden"
-        },
-        "notApplicable": {
-          "title": "Nicht zutreffend"
-        }
-      },
       "toasts": {
         "completeReindexStarted": "Vollständige Neuindizierung erfolgreich gestartet",
         "deletionScheduleFailed": "Das Löschen des Konnektors konnte nicht geplant werden - {message}",
@@ -2574,7 +2490,79 @@
         "prune": "Bereinigung alle **{every}**"
       },
       "runs": {
-        "title": "Indexläufe"
+        "kinds": {
+          "label": "Laufart",
+          "all": "Alle Arten",
+          "indexing": "Dokumentindex",
+          "doc_permission_sync": "Berechtigungssync",
+          "group_sync": "Gruppenmitgliedschaftssync"
+        },
+        "detail": {
+          "queued": "In Warteschlange",
+          "running": "Läuft",
+          "rate": "{rate} Dok./Min.",
+          "finished": "{time} ({minutes, number} Min.)"
+        },
+        "actions": {
+          "stages": "Phasenmetriken anzeigen",
+          "cancel": "Abbrechen",
+          "logs": "Logs anzeigen"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, one {# Dokument fehlgeschlagen} other {# Dokumente fehlgeschlagen}}"
+        },
+        "figures": {
+          "indexed": "indiziert",
+          "synced": "synchronisiert",
+          "memberships": "Mitgliedschaften"
+        },
+        "counts": {
+          "newDocs": "{count, plural, one {# neues Dokument} other {# neue Dokumente}}",
+          "updatedDocs": "Aktualisierte Dokumente",
+          "removedDocs": "{count, plural, one {# Dokument entfernt} other {# Dokumente entfernt}}",
+          "users": "{count, plural, one {# Benutzer} other {# Benutzer}}",
+          "groups": "{count, plural, one {# Gruppe} other {# Gruppen}}",
+          "running": "{count, plural, one {# Lauf aktiv} other {# Läufe aktiv}}",
+          "succeeded": "{count, plural, one {# Lauf erfolgreich} other {# Läufe erfolgreich}}",
+          "failed": "{count, plural, one {# Lauf fehlgeschlagen} other {# Läufe fehlgeschlagen}}"
+        },
+        "search": {
+          "placeholder": "Fehler in Läufen suchen..."
+        },
+        "window": {
+          "label": "Zeitraum",
+          "all": "Gesamter Zeitraum",
+          "h12": "Letzte 12 Stunden",
+          "h24": "Letzte 24 Stunden",
+          "d7": "Letzte 7 Tage",
+          "d30": "Letzte 30 Tage"
+        },
+        "statusGroups": {
+          "label": "Status",
+          "all": "Alle Status",
+          "running": "Läuft",
+          "succeeded": "Erfolgreich",
+          "failed": "Fehlgeschlagen",
+          "canceled": "Abgebrochen"
+        },
+        "loadError": {
+          "title": "Die Läufe konnten nicht geladen werden."
+        },
+        "empty": {
+          "title": "Noch keine Läufe",
+          "filteredTitle": "Keine Läufe entsprechen diesen Filtern.",
+          "description": "Läufe werden im Hintergrund geplant und erscheinen eventuell erst nach kurzer Zeit."
+        },
+        "units": "{count, plural, one {Lauf} other {Läufe}}",
+        "errorModal": {
+          "indexing": "Fehler beim Indexlauf",
+          "doc_permission_sync": "Fehler beim Dokumentberechtigungssync",
+          "group_sync": "Fehler beim Gruppenmitgliedschaftssync"
+        },
+        "toasts": {
+          "canceled": "Der Lauf wird abgebrochen.",
+          "cancelFailed": "Der Lauf konnte nicht abgebrochen werden. Versuchen Sie es erneut."
+        }
       }
     },
     "connectorTitle": {
@@ -7913,18 +7901,17 @@
         "deleting": "Wird gelöscht",
         "error": "Fehler",
         "failed": "Fehlgeschlagen",
-        "inProgress": "In Bearbeitung",
         "indexed": "Indexiert",
         "indexing": "Indexierung",
         "initialIndexing": "Erstindexierung",
         "interrupted": "Unterbrochen",
         "invalid": "Ungültig",
         "invalidConnectorTooltip": "Der Konnektor befindet sich in einem ungültigen Zustand. Aktualisieren Sie die Zugangsdaten oder erstellen Sie einen neuen Konnektor.",
-        "none": "Keine",
         "notStarted": "Nicht gestartet",
         "paused": "Pausiert",
         "scheduled": "Geplant",
-        "succeeded": "Erfolgreich"
+        "synced": "Synchronisiert",
+        "syncing": "Wird synchronisiert"
       }
     },
     "systemInfo": {

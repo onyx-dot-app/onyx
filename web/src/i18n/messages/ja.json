@@ -2064,22 +2064,6 @@
         "description": "コネクターの削除中にこのエラーが発生しました。「削除」ボタンをクリックすると、削除をもう一度実行できます。",
         "title": "削除エラー"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "同期済みドキュメント数",
-          "errorMessage": "エラーメッセージ",
-          "permissionErrors": "権限エラー",
-          "status": "ステータス",
-          "timeStarted": "開始時刻"
-        },
-        "empty": {
-          "description": "ドキュメント権限の同期は、バックグラウンドでスケジュールされます。表示されるまで少し時間がかかる場合があります。30 秒ほどで再読み込みしてください。",
-          "title": "ドキュメント権限の同期はまだ実行されていません"
-        },
-        "errorModal": {
-          "title": "ドキュメント権限の同期エラー"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "このコネクタの設定について詳しくは<link>ドキュメント</link>をご覧ください。"
@@ -2172,23 +2156,6 @@
           "heading": "{multiple, select, true {選択されたファイル} other {選択されたファイル}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "エラーメッセージ",
-          "groups": "グループ",
-          "memberships": "メンバーシップ",
-          "status": "ステータス",
-          "timeStarted": "開始時刻",
-          "users": "ユーザー"
-        },
-        "empty": {
-          "description": "グループメンバーシップの同期は、バックグラウンドでスケジュールされます。表示されるまで少し時間がかかる場合があります。30 秒ほどで再読み込みしてください。",
-          "title": "グループメンバーシップの同期はまだ実行されていません"
-        },
-        "errorModal": {
-          "title": "グループメンバーシップの同期エラー"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "全員がソースから同期されたアクセス権を保持します。",
@@ -2208,33 +2175,6 @@
         "toggle": {
           "description": "選択したグループのメンバーにアクセスを限定します。同期された権限も引き続き適用されます。",
           "title": "グループへのアクセス制限"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "エラーメッセージ",
-          "newDocs": "新規ドキュメント数",
-          "status": "ステータス",
-          "timeStarted": "開始時刻",
-          "totalDocs": "総ドキュメント数",
-          "totalDocsTooltip": "このインデックス作成の試行でインデックス内に置き換えられたドキュメントの総数"
-        },
-        "docsPerMinute": "{rate} ドキュメント / 分",
-        "docsRemoved": "（ソースで削除が検出された {count} 件のドキュメントも削除しました）",
-        "empty": {
-          "description": "インデックス作成の試行はバックグラウンドでスケジュールされるため、表示されるまで少し時間がかかる場合があります。30 秒ほどでページを再読み込みしてください。",
-          "title": "インデックス作成の試行はまだスケジュールされていません"
-        },
-        "noAdditionalDocs": "追加で処理されたドキュメントはありません",
-        "reindexTooltip": {
-          "completed": "このインデックス作成の試行は、完全な再インデックスでした。ソースのすべてのドキュメントがシステムに同期されました。",
-          "inProgress": "このインデックス作成の試行は、完全な再インデックスです。ソースのすべてのドキュメントがシステムに同期されています。"
-        },
-        "stageMetricsButton": {
-          "tooltip": "ステージメトリクスを表示"
-        },
-        "viewTrace": {
-          "ariaLabel": "完全なトレースを表示"
         }
       },
       "indexErrorsAlert": {
@@ -2492,30 +2432,6 @@
           "total": "/ {total}"
         }
       },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "エラーメッセージの全文を表示"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "ドキュメント権限の同期",
-          "notApplicableDescription": "このコネクターは、ドキュメント権限の同期ジョブを個別に使用しません。"
-        },
-        "groupMembership": {
-          "label": "グループメンバーシップの同期",
-          "notApplicableDescription": "このコネクターは、グループメンバーシップの同期ジョブを個別に使用しません。"
-        },
-        "indexing": {
-          "label": "インデックス作成"
-        },
-        "loadError": {
-          "title": "同期試行の読み込みに失敗しました"
-        },
-        "notApplicable": {
-          "title": "対象外"
-        }
-      },
       "toasts": {
         "completeReindexStarted": "完全な再インデックス作成を開始しました",
         "deletionScheduleFailed": "コネクターの削除をスケジュールできませんでした - {message}",
@@ -2574,7 +2490,79 @@
         "prune": "**{every}**ごとに整理"
       },
       "runs": {
-        "title": "インデックス実行"
+        "kinds": {
+          "label": "実行の種類",
+          "all": "すべての種類",
+          "indexing": "ドキュメントインデックス",
+          "doc_permission_sync": "権限の同期",
+          "group_sync": "グループメンバーシップの同期"
+        },
+        "detail": {
+          "queued": "待機中",
+          "running": "実行中",
+          "rate": "{rate} 件/分",
+          "finished": "{time}（{minutes, number} 分）"
+        },
+        "actions": {
+          "stages": "ステージの指標を表示",
+          "cancel": "キャンセル",
+          "logs": "ログを表示"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, other {# 件のドキュメントが失敗}}"
+        },
+        "figures": {
+          "indexed": "件インデックス済み",
+          "synced": "件同期済み",
+          "memberships": "件のメンバーシップ"
+        },
+        "counts": {
+          "newDocs": "{count, plural, other {# 件の新しいドキュメント}}",
+          "updatedDocs": "更新されたドキュメント",
+          "removedDocs": "{count, plural, other {# 件のドキュメントを削除}}",
+          "users": "{count, plural, other {# 人のユーザー}}",
+          "groups": "{count, plural, other {# 件のグループ}}",
+          "running": "{count, plural, other {# 件の実行が進行中}}",
+          "succeeded": "{count, plural, other {# 件の実行が成功}}",
+          "failed": "{count, plural, other {# 件の実行が失敗}}"
+        },
+        "search": {
+          "placeholder": "実行エラーを検索..."
+        },
+        "window": {
+          "label": "期間",
+          "all": "全期間",
+          "h12": "過去 12 時間",
+          "h24": "過去 24 時間",
+          "d7": "過去 7 日間",
+          "d30": "過去 30 日間"
+        },
+        "statusGroups": {
+          "label": "ステータス",
+          "all": "すべてのステータス",
+          "running": "実行中",
+          "succeeded": "成功",
+          "failed": "失敗",
+          "canceled": "キャンセル済み"
+        },
+        "loadError": {
+          "title": "実行を読み込めませんでした。"
+        },
+        "empty": {
+          "title": "まだ実行はありません",
+          "filteredTitle": "このフィルターに一致する実行はありません。",
+          "description": "実行はバックグラウンドでスケジュールされるため、表示されるまでに少し時間がかかる場合があります。"
+        },
+        "units": "{count, plural, other {件の実行}}",
+        "errorModal": {
+          "indexing": "インデックス実行のエラー",
+          "doc_permission_sync": "ドキュメント権限の同期エラー",
+          "group_sync": "グループメンバーシップの同期エラー"
+        },
+        "toasts": {
+          "canceled": "実行をキャンセルしています。",
+          "cancelFailed": "実行をキャンセルできませんでした。もう一度お試しください。"
+        }
       }
     },
     "connectorTitle": {
@@ -7913,18 +7901,17 @@
         "deleting": "削除中",
         "error": "エラー",
         "failed": "失敗",
-        "inProgress": "進行中",
         "indexed": "インデックス済み",
         "indexing": "インデックス作成中",
         "initialIndexing": "初回インデックス作成",
         "interrupted": "中断",
         "invalid": "無効",
         "invalidConnectorTooltip": "コネクタが無効な状態です。認証情報を更新するか、新しいコネクタを作成してください。",
-        "none": "なし",
         "notStarted": "未開始",
         "paused": "一時停止中",
         "scheduled": "予定済み",
-        "succeeded": "成功"
+        "synced": "同期済み",
+        "syncing": "同期中"
       }
     },
     "systemInfo": {

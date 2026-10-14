@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timezone
 from enum import Enum
-from typing import Annotated, Any, Generic, Self, TypeVar
+from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 from uuid import UUID
 
 from pydantic import (
@@ -22,6 +22,8 @@ from onyx.connectors.models import InputType
 from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
+    CCPairRunKind,
+    CCPairRunStatusGroup,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     HierarchyNodeType,
@@ -261,6 +263,9 @@ class IndexAttemptSnapshot(BaseModel):
     full_exception_trace: str | None
     time_started: str | None
     time_updated: str
+    # When a finished attempt ended. `time_updated` moves days later when
+    # checkpoint cleanup touches the row, so it is no stand-in.
+    time_finished: str | None
     poll_range_start: datetime | None = None
     poll_range_end: datetime | None = None
     # A one-off run over poll_range_start..poll_range_end outside the pair's
@@ -271,6 +276,16 @@ class IndexAttemptSnapshot(BaseModel):
     def from_index_attempt_db_model(
         cls, index_attempt: IndexAttempt, error_count: int
     ) -> "IndexAttemptSnapshot":
+        # Attempts from before time_finished existed end at their last heartbeat
+        # check, and at their start when they never reached one.
+        finished = (
+            index_attempt.time_finished
+            or index_attempt.last_heartbeat_time
+            or index_attempt.time_started
+            or index_attempt.time_created
+            if index_attempt.is_finished()
+            else None
+        )
         return IndexAttemptSnapshot(
             id=index_attempt.id,
             status=index_attempt.status,
@@ -287,6 +302,7 @@ class IndexAttemptSnapshot(BaseModel):
                 else None
             ),
             time_updated=index_attempt.time_updated.isoformat(),
+            time_finished=finished.isoformat() if finished else None,
             poll_range_start=index_attempt.poll_range_start,
             poll_range_end=index_attempt.poll_range_end,
             is_backfill=index_attempt.is_backfill,
@@ -494,21 +510,41 @@ class PaginatedReturn(BaseModel, Generic[PaginatedType]):
     total_items: int
 
 
-class CCPairSyncAttemptsResponse(BaseModel, Generic[PaginatedType]):
-    """Paginated response for the per-cc-pair sync-attempt history endpoints.
+class CCPairIndexRun(BaseModel):
+    kind: Literal[CCPairRunKind.INDEXING] = CCPairRunKind.INDEXING
+    time_created: datetime
+    attempt: IndexAttemptSnapshot
 
-    ``applicable`` is False when the cc-pair's source does not run the kind
-    of sync this endpoint reports on (e.g. Slack has no group sync; Salesforce
-    has neither doc sync nor group sync). The frontend uses this to render an
-    explanatory message instead of an empty-state — the two are distinct
-    states: ``applicable=True, items=[], total_items=0`` legitimately means
-    "no attempts yet" and must not be confused with "this kind of sync isn't
-    applicable for this source".
-    """
 
-    applicable: bool
-    items: list[PaginatedType]
+class CCPairDocPermissionSyncRun(BaseModel):
+    kind: Literal[CCPairRunKind.DOC_PERMISSION_SYNC] = CCPairRunKind.DOC_PERMISSION_SYNC
+    time_created: datetime
+    attempt: DocPermissionSyncAttemptSnapshot
+
+
+class CCPairGroupSyncRun(BaseModel):
+    kind: Literal[CCPairRunKind.GROUP_SYNC] = CCPairRunKind.GROUP_SYNC
+    time_created: datetime
+    attempt: ExternalGroupSyncAttemptSnapshot
+
+
+CCPairRun = Annotated[
+    CCPairIndexRun | CCPairDocPermissionSyncRun | CCPairGroupSyncRun,
+    Field(discriminator="kind"),
+]
+
+
+class CCPairRunsResponse(BaseModel):
+    """One page of the pair's runs, newest first."""
+
+    items: list[CCPairRun]
+    # Runs matching every filter, across the kinds asked for.
     total_items: int
+    # The kinds this pair runs, whatever was asked for.
+    kinds: list[CCPairRunKind]
+    # Per status group, ignoring the status filter, so the counts stay put
+    # while one is applied.
+    status_counts: dict[CCPairRunStatusGroup, int]
 
 
 class PendingBackfillSnapshot(BaseModel):

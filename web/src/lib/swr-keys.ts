@@ -6,6 +6,8 @@
  *
  * For dynamic keys (e.g. per-ID endpoints), use the builder functions.
  */
+import type { CCPairRunsQuery } from "@/lib/connectors/types";
+
 export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
   me: "/api/me",
@@ -293,25 +295,24 @@ export const SWR_KEYS = {
     `/api/manage/admin/cc-pair/${ccPairId}`,
 
   // ── Index Attempts ────────────────────────────────────────────────────────
-  ccPairIndexAttempts: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/index-attempts`,
   ccPairLatestIndexAttempt: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/index-attempts?page_num=0&page_size=1`,
+  ccPairRuns: (ccPairId: number, query: CCPairRunsQuery) => {
+    const params = new URLSearchParams({
+      page_num: String(query.pageNum),
+      page_size: String(query.pageSize),
+    });
+    if (query.since !== null) params.set("since", query.since);
+    for (const kind of query.kinds ?? []) params.append("kinds", kind);
+    for (const group of query.statusGroups ?? []) {
+      params.append("status_groups", group);
+    }
+    if (query.q) params.set("q", query.q);
+    return `/api/manage/admin/cc-pair/${ccPairId}/runs?${params.toString()}`;
+  },
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 
-  // ── CC-Pair Sync Attempts ─────────────────────────────────────────────────
-  // The `*Probe` variants are single-row reads used to surface the
-  // `applicable` flag without paying for a full page; see
-  // `useSyncAttemptsPaginatedFetch`.
-  ccPairPermissionSyncAttempts: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts`,
-  ccPairPermissionSyncAttemptsProbe: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/permission-sync-attempts?page_num=0&page_size=1`,
-  ccPairExternalGroupSyncAttempts: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts`,
-  ccPairExternalGroupSyncAttemptsProbe: (ccPairId: number) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts?page_num=0&page_size=1`,
   ccPairDataAccess: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/data-access`,
   ccPairManageAccess: (ccPairId: number) =>

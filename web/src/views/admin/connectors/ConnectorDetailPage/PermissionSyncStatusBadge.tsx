@@ -13,29 +13,7 @@ import {
 import { Section } from "@/layouts/general-layouts";
 import { PermissionSyncStatusEnum } from "@/lib/connectors/types";
 
-/**
- * Per-row status badge shown inside both the doc-permission and
- * external-group sync attempt tables in this folder.
- *
- * Functionally equivalent to the legacy `PermissionSyncStatus` component
- * in `web/src/components/Status.tsx`, but built on Opal `Tag` per the
- * `@/components/`-no-import rule (see `.cursor/skills/web/no-legacy-components`).
- *
- * Visual mapping:
- *   - SUCCESS → green Tag, "Succeeded"
- *   - COMPLETED_WITH_ERRORS → amber Tag, "Completed with errors"
- *   - FAILED → amber Tag with XOctagon icon, "Failed" (Opal's `Tag`
- *     palette has no red variant — amber + the Octagon icon is the
- *     closest "danger" treatment available without introducing a new
- *     Tag color)
- *   - IN_PROGRESS → blue Tag, "In Progress"
- *   - NOT_STARTED → gray Tag, "Scheduled"
- *   - null / unknown → gray Tag, "Not Started"
- *
- * Failed and completed-with-errors rows are wrapped in a Tooltip with
- * `errorMsg` when one is supplied — same affordance the legacy badge
- * offered.
- */
+/** The status card's permission sync tag. A failed or partly failed sync shows its error on hover. */
 
 /** Message keys inside the `admin.connector` namespace. */
 type BadgeLabelKey =

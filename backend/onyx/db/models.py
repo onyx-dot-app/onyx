@@ -2675,6 +2675,11 @@ class IndexAttempt(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    # When the attempt reached a final status. Unset on attempts that finished
+    # before this column existed.
+    time_finished: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     connector_credential_pair: Mapped[ConnectorCredentialPair] = relationship(
         "ConnectorCredentialPair", back_populates="index_attempts"

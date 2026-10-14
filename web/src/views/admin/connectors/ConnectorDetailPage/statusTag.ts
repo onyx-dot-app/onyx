@@ -11,8 +11,8 @@ import {
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import type { ValidStatuses } from "@/lib/types";
 
-/** One pair state as the status tag shows it. */
-export interface CCPairStatusTag {
+/** One pair or attempt state as its status tag shows it. */
+export interface StatusTag {
   icon: IconFunctionComponent;
   color: TagColor;
   /** Key under `admin.status.badges`. */
@@ -26,7 +26,11 @@ export interface CCPairStatusTag {
     | "indexing"
     | "canceled"
     | "interrupted"
-    | "indexed";
+    | "indexed"
+    | "failed"
+    | "completedWithErrors"
+    | "syncing"
+    | "synced";
 }
 
 const TAGS = {
@@ -45,14 +49,22 @@ const TAGS = {
   // Resumes on its own, so it reads neutral rather than as indexed.
   interrupted: { icon: SvgClock, color: "gray", labelKey: "interrupted" },
   indexed: { icon: SvgCheckCircle, color: "green", labelKey: "indexed" },
-} satisfies Record<CCPairStatusTag["labelKey"], CCPairStatusTag>;
+  failed: { icon: SvgXOctagon, color: "red", labelKey: "failed" },
+  completedWithErrors: {
+    icon: SvgAlertTriangle,
+    color: "amber",
+    labelKey: "completedWithErrors",
+  },
+  syncing: { icon: IconLoader, color: "blue", labelKey: "syncing" },
+  synced: { icon: SvgCheckCircle, color: "green", labelKey: "synced" },
+} satisfies Record<StatusTag["labelKey"], StatusTag>;
 
 /** The tag for the pair's own state, else the latest attempt's. A live attempt outranks the sticky error. */
 export function ccPairStatusTag(
   status: ConnectorCredentialPairStatus,
   inRepeatedErrorState: boolean,
   lastAttemptStatus: ValidStatuses | null | undefined
-): CCPairStatusTag {
+): StatusTag {
   if (status === ConnectorCredentialPairStatus.DELETING) return TAGS.deleting;
   if (status === ConnectorCredentialPairStatus.PAUSED) return TAGS.paused;
   if (inRepeatedErrorState && lastAttemptStatus !== "in_progress") {
@@ -74,5 +86,31 @@ export function ccPairStatusTag(
       return TAGS.interrupted;
     default:
       return TAGS.indexed;
+  }
+}
+
+/** One attempt's tag. A sync reads "Syncing" and "Synced" where indexing reads "Indexing" and "Indexed". */
+export function attemptStatusTag(
+  status: ValidStatuses | null,
+  isSync: boolean
+): StatusTag {
+  switch (status) {
+    case null:
+    case "not_started":
+      return TAGS.scheduled;
+    case "in_progress":
+      return isSync ? TAGS.syncing : TAGS.indexing;
+    case "success":
+      return isSync ? TAGS.synced : TAGS.indexed;
+    case "completed_with_errors":
+      return TAGS.completedWithErrors;
+    case "failed":
+      return TAGS.failed;
+    case "interrupted":
+      return TAGS.interrupted;
+    case "canceled":
+      return TAGS.canceled;
+    case "invalid":
+      return TAGS.invalid;
   }
 }

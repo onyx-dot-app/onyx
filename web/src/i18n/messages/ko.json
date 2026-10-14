@@ -2064,22 +2064,6 @@
         "description": "커넥터를 삭제하는 중에 이 오류가 발생했습니다. \"삭제\" 버튼을 클릭하여 삭제를 다시 시도할 수 있습니다.",
         "title": "삭제 오류"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "동기화된 문서",
-          "errorMessage": "오류 메시지",
-          "permissionErrors": "권한 오류",
-          "status": "상태",
-          "timeStarted": "시작 시간"
-        },
-        "empty": {
-          "description": "문서 권한 동기화 작업은 백그라운드에서 예약됩니다. 표시되기까지 시간이 걸릴 수 있습니다. 약 30초 후에 새로 고쳐 보세요.",
-          "title": "아직 문서 권한 동기화 시도가 없습니다"
-        },
-        "errorModal": {
-          "title": "문서 권한 동기화 오류"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "이 커넥터 구성에 대한 자세한 내용은 <link>문서</link>를 참조하세요."
@@ -2172,23 +2156,6 @@
           "heading": "{multiple, select, true {선택된 파일} other {선택된 파일}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "오류 메시지",
-          "groups": "그룹",
-          "memberships": "멤버십",
-          "status": "상태",
-          "timeStarted": "시작 시간",
-          "users": "사용자"
-        },
-        "empty": {
-          "description": "그룹 멤버십 동기화 작업은 백그라운드에서 예약됩니다. 표시되기까지 시간이 걸릴 수 있습니다. 약 30초 후에 새로 고쳐 보세요.",
-          "title": "아직 그룹 멤버십 동기화 시도가 없습니다"
-        },
-        "errorModal": {
-          "title": "그룹 멤버십 동기화 오류"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "모든 사용자가 소스에서 동기화된 접근 권한을 유지합니다.",
@@ -2208,33 +2175,6 @@
         "toggle": {
           "description": "선택한 그룹의 멤버로 접근을 제한합니다. 동기화된 권한은 계속 적용됩니다.",
           "title": "그룹으로 접근 제한"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "오류 메시지",
-          "newDocs": "새 문서",
-          "status": "상태",
-          "timeStarted": "시작 시간",
-          "totalDocs": "전체 문서",
-          "totalDocsTooltip": "이번 인덱싱 시도에서 인덱스에 교체된 전체 문서 수"
-        },
-        "docsPerMinute": "분당 {rate}개 문서",
-        "docsRemoved": "(소스에서 삭제된 것으로 확인된 문서 {count}개도 제거됨)",
-        "empty": {
-          "description": "인덱싱 시도는 백그라운드에서 예약되며 표시되기까지 시간이 걸릴 수 있습니다. 약 30초 후에 페이지를 새로 고쳐 보세요!",
-          "title": "아직 예약된 인덱싱 시도가 없습니다"
-        },
-        "noAdditionalDocs": "추가로 처리된 문서 없음",
-        "reindexTooltip": {
-          "completed": "이 인덱싱 시도는 전체 재인덱싱이었습니다. 소스의 모든 문서가 시스템에 동기화되었습니다.",
-          "inProgress": "이 인덱싱 시도는 전체 재인덱싱입니다. 소스의 모든 문서가 시스템에 동기화되고 있습니다."
-        },
-        "stageMetricsButton": {
-          "tooltip": "단계별 지표 보기"
-        },
-        "viewTrace": {
-          "ariaLabel": "전체 추적 보기"
         }
       },
       "indexErrorsAlert": {
@@ -2492,30 +2432,6 @@
           "total": "/ {total}"
         }
       },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "전체 오류 메시지 보기"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "문서 권한 동기화",
-          "notApplicableDescription": "이 커넥터는 별도의 문서 권한 동기화 작업을 사용하지 않습니다."
-        },
-        "groupMembership": {
-          "label": "그룹 멤버십 동기화",
-          "notApplicableDescription": "이 커넥터는 별도의 그룹 멤버십 동기화 작업을 사용하지 않습니다."
-        },
-        "indexing": {
-          "label": "인덱싱"
-        },
-        "loadError": {
-          "title": "동기화 시도를 불러오지 못했습니다"
-        },
-        "notApplicable": {
-          "title": "해당 없음"
-        }
-      },
       "toasts": {
         "completeReindexStarted": "전체 재인덱싱을 시작했습니다",
         "deletionScheduleFailed": "커넥터 삭제를 예약하지 못했습니다 - {message}",
@@ -2574,7 +2490,79 @@
         "prune": "**{every}**마다 정리"
       },
       "runs": {
-        "title": "인덱스 실행"
+        "kinds": {
+          "label": "실행 유형",
+          "all": "모든 유형",
+          "indexing": "문서 인덱스",
+          "doc_permission_sync": "권한 동기화",
+          "group_sync": "그룹 멤버십 동기화"
+        },
+        "detail": {
+          "queued": "대기 중",
+          "running": "실행 중",
+          "rate": "분당 {rate}개 문서",
+          "finished": "{time} ({minutes, number}분)"
+        },
+        "actions": {
+          "stages": "단계별 지표 보기",
+          "cancel": "취소",
+          "logs": "로그 보기"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, other {문서 #개 실패}}"
+        },
+        "figures": {
+          "indexed": "인덱싱됨",
+          "synced": "동기화됨",
+          "memberships": "멤버십"
+        },
+        "counts": {
+          "newDocs": "{count, plural, other {새 문서 #개}}",
+          "updatedDocs": "업데이트된 문서",
+          "removedDocs": "{count, plural, other {문서 #개 제거됨}}",
+          "users": "{count, plural, other {사용자 #명}}",
+          "groups": "{count, plural, other {그룹 #개}}",
+          "running": "{count, plural, other {실행 #개 진행 중}}",
+          "succeeded": "{count, plural, other {실행 #개 성공}}",
+          "failed": "{count, plural, other {실행 #개 실패}}"
+        },
+        "search": {
+          "placeholder": "실행 오류 검색..."
+        },
+        "window": {
+          "label": "기간",
+          "all": "전체 기간",
+          "h12": "최근 12시간",
+          "h24": "최근 24시간",
+          "d7": "최근 7일",
+          "d30": "최근 30일"
+        },
+        "statusGroups": {
+          "label": "상태",
+          "all": "모든 상태",
+          "running": "실행 중",
+          "succeeded": "성공",
+          "failed": "실패",
+          "canceled": "취소됨"
+        },
+        "loadError": {
+          "title": "실행 목록을 불러오지 못했습니다."
+        },
+        "empty": {
+          "title": "아직 실행이 없습니다",
+          "filteredTitle": "이 필터와 일치하는 실행이 없습니다.",
+          "description": "실행은 백그라운드에서 예약되며 표시되기까지 잠시 걸릴 수 있습니다."
+        },
+        "units": "{count, plural, other {실행}}",
+        "errorModal": {
+          "indexing": "인덱스 실행 오류",
+          "doc_permission_sync": "문서 권한 동기화 오류",
+          "group_sync": "그룹 멤버십 동기화 오류"
+        },
+        "toasts": {
+          "canceled": "실행을 취소하는 중입니다.",
+          "cancelFailed": "실행을 취소하지 못했습니다. 다시 시도하세요."
+        }
       }
     },
     "connectorTitle": {
@@ -7913,18 +7901,17 @@
         "deleting": "삭제 중",
         "error": "오류",
         "failed": "실패",
-        "inProgress": "진행 중",
         "indexed": "인덱싱됨",
         "indexing": "인덱싱 중",
         "initialIndexing": "초기 인덱싱",
         "interrupted": "중단됨",
         "invalid": "유효하지 않음",
         "invalidConnectorTooltip": "커넥터가 유효하지 않은 상태입니다. 자격 증명을 업데이트하거나 새 커넥터를 만드세요.",
-        "none": "없음",
         "notStarted": "시작되지 않음",
         "paused": "일시 중지됨",
         "scheduled": "예약됨",
-        "succeeded": "성공"
+        "synced": "동기화됨",
+        "syncing": "동기화 중"
       }
     },
     "systemInfo": {

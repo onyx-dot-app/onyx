@@ -1,9 +1,7 @@
 /**
  * Page Object Model for the connector detail page (/admin/connector/{ccPairId}).
- *
- * The page gates its whole render on the cc-pair AND index-attempts fetches, and the
- * paginated hook never clears isLoading on error — so a denied sub-resource shows as a
- * permanent spinner, not an error. `expectLoaded` is what distinguishes the two.
+ * The status card renders once the cc-pair and its latest attempt load, so
+ * `expectLoaded` tells a loaded page from one stuck on a refused fetch.
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
@@ -13,8 +11,14 @@ export class AdminConnectorDetailPage {
 
   /** Rendered only once the cc-pair has resolved. */
   readonly indexingSection: Locator;
-  /** The attempt history at the bottom of the page. */
+  /** The run list at the bottom of the page. */
   readonly runsSection: Locator;
+  /** The run-type filter, shown only when the pair runs more than indexing. */
+  readonly runKindFilter: Locator;
+  /** The logs action of every run that has logs, newest first. */
+  readonly runLogsButtons: Locator;
+  /** The run list's empty state, shown once the feed has loaded with no runs. */
+  readonly noRunsMessage: Locator;
   /** Opens the action menu. Present only when the caller may operate. */
   readonly manageButton: Locator;
   readonly deleteMenuItem: Locator;
@@ -28,7 +32,10 @@ export class AdminConnectorDetailPage {
   constructor(page: Page) {
     this.page = page;
     this.indexingSection = page.getByTestId("connector-indexing-status");
-    this.runsSection = page.getByText("Index Runs", { exact: true });
+    this.runsSection = page.getByTestId("connector-runs");
+    this.runKindFilter = page.getByRole("button", { name: "All Types" });
+    this.runLogsButtons = page.getByRole("button", { name: "View Logs" });
+    this.noRunsMessage = page.getByText("No runs yet", { exact: true });
     // without exact, a "managed-*" connector's title button also matches
     this.manageButton = page.getByRole("button", {
       name: "Manage Index",
@@ -72,6 +79,25 @@ export class AdminConnectorDetailPage {
 
   async expectRunsVisible(): Promise<void> {
     await expect(this.runsSection).toBeVisible({ timeout: 30000 });
+  }
+
+  /** Waits for the feed to load and show no runs. */
+  async expectNoRuns(): Promise<void> {
+    await expect(this.noRunsMessage).toBeVisible({ timeout: 30000 });
+  }
+
+  /** Opens the `index`-th logs button, newest first, and returns its trace dialog. */
+  async openRunLogs(index: number, title: string): Promise<Locator> {
+    await this.runLogsButtons.nth(index).click();
+    const dialog = this.page.getByRole("dialog", { name: title });
+    await expect(dialog).toBeVisible();
+    return dialog;
+  }
+
+  /** Closes an open logs dialog. */
+  async closeRunLogs(dialog: Locator): Promise<void> {
+    await this.page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
   }
 
   async openManageMenu(): Promise<void> {

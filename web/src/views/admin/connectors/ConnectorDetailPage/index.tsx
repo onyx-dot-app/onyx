@@ -46,27 +46,22 @@ import { statusIsNotCurrentlyActive } from "@/lib/connectors/utils";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-import type { IndexAttemptSnapshot } from "@/lib/types";
 import { useStatusChange } from "@/lib/connectors/ccPair/hooks";
 import { resolveAllErrorsForCCPair } from "@/lib/targeted_reindex";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { can } from "@/lib/permissions/resource-actions";
-import { isPermSynced } from "@/lib/connectors/accessType";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import IndexAttemptErrorsModal from "@/views/admin/connectors/ConnectorDetailPage/IndexAttemptErrorsModal";
-import { IndexAttemptsTable } from "@/views/admin/connectors/ConnectorDetailPage/IndexAttemptsTable";
 import PendingBackfills from "@/views/admin/connectors/ConnectorDetailPage/PendingBackfills";
-import { SyncAttemptsTabs } from "@/views/admin/connectors/ConnectorDetailPage/SyncAttemptsTabs";
 import StatusCard from "@/views/admin/connectors/ConnectorDetailPage/StatusCard";
 import PairChecksCard from "@/views/admin/connectors/ConnectorDetailPage/PairChecksCard";
 import AuthenticationAccountSection from "@/views/admin/connectors/ConnectorDetailPage/AuthenticationAccountSection";
 import IndexConfigurationsSection from "@/views/admin/connectors/ConnectorDetailPage/IndexConfigurationsSection";
 import SharingSettingsSection from "@/views/admin/connectors/ConnectorDetailPage/SharingSettingsSection";
 import ScheduleSection from "@/views/admin/connectors/ConnectorDetailPage/ScheduleSection";
+import RunsCard from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 
-const ITEMS_PER_PAGE = 8;
-const PAGES_PER_BATCH = 8;
 const CC_PAIR_POLL_MS = 5000;
 
 function Main({ ccPairId }: { ccPairId: number }) {
@@ -83,18 +78,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
     errorHandlingFetcher,
     { refreshInterval: CC_PAIR_POLL_MS }
   );
-
-  const {
-    currentPageData: indexAttempts,
-    isLoading: isLoadingIndexAttempts,
-    currentPage,
-    totalPages,
-    goToPage,
-  } = usePaginatedFetch<IndexAttemptSnapshot>({
-    itemsPerPage: ITEMS_PER_PAGE,
-    pagesPerBatch: PAGES_PER_BATCH,
-    endpoint: SWR_KEYS.ccPairIndexAttempts(ccPairId),
-  });
 
   // The error notice reads the latest attempt. The status card shares this key.
   const { data: latestIndexAttempts } = useSWR<PaginatedIndexAttempts>(
@@ -228,7 +211,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
     }
   };
 
-  if (isLoadingCCPair || isLoadingIndexAttempts) {
+  if (isLoadingCCPair) {
     return <PageLoader />;
   }
 
@@ -494,32 +477,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         <Divider paddingParallel={0} paddingPerpendicular={0} />
         <ScheduleSection ccPair={ccPair} editable={canOperate} />
 
-        {indexAttempts && (
-          <Section alignItems="stretch" gap={3} height="fit">
-            <Content
-              title={t("runs.title")}
-              sizePreset="main-content"
-              variant="section"
-            />
-            {isPermSynced(ccPair.access_type) ? (
-              <SyncAttemptsTabs
-                ccPair={ccPair}
-                indexAttempts={indexAttempts}
-                indexCurrentPage={currentPage}
-                indexTotalPages={totalPages}
-                onIndexPageChange={goToPage}
-              />
-            ) : (
-              <IndexAttemptsTable
-                ccPair={ccPair}
-                indexAttempts={indexAttempts}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={goToPage}
-              />
-            )}
-          </Section>
-        )}
+        <RunsCard ccPairId={ccPair.id} canOperate={canOperate} />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

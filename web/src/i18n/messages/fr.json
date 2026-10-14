@@ -2064,22 +2064,6 @@
         "description": "Cette erreur s'est produite lors de la tentative de suppression du connecteur. Vous pouvez réessayer la suppression en cliquant sur le bouton \"Supprimer\".",
         "title": "Erreur de suppression"
       },
-      "docPermissionsTable": {
-        "columns": {
-          "docsSynced": "Documents synchronisés",
-          "errorMessage": "Message d'erreur",
-          "permissionErrors": "Erreurs d'autorisation",
-          "status": "Statut",
-          "timeStarted": "Heure de début"
-        },
-        "empty": {
-          "description": "Les synchronisations des autorisations des documents sont planifiées en arrière-plan. Elles peuvent mettre un certain temps à apparaître — actualisez la page dans environ 30 secondes.",
-          "title": "Aucune tentative de synchronisation des autorisations des documents pour l'instant"
-        },
-        "errorModal": {
-          "title": "Erreur de synchronisation des autorisations des documents"
-        }
-      },
       "docsLink": {
         "checkOutDocs": {
           "text": "Consultez <link>notre documentation</link> pour plus d'informations sur la configuration de ce connecteur."
@@ -2172,23 +2156,6 @@
           "heading": "{multiple, select, true {Fichiers sélectionnés} other {Fichier sélectionné}}"
         }
       },
-      "groupMembershipTable": {
-        "columns": {
-          "errorMessage": "Message d'erreur",
-          "groups": "Groupes",
-          "memberships": "Appartenances",
-          "status": "Statut",
-          "timeStarted": "Heure de début",
-          "users": "Utilisateurs"
-        },
-        "empty": {
-          "description": "Les synchronisations de l'appartenance aux groupes sont planifiées en arrière-plan. Elles peuvent mettre un certain temps à apparaître — actualisez la page dans environ 30 secondes.",
-          "title": "Aucune tentative de synchronisation de l'appartenance aux groupes pour l'instant"
-        },
-        "errorModal": {
-          "title": "Erreur de synchronisation de l'appartenance aux groupes"
-        }
-      },
       "groupRestriction": {
         "empty": {
           "description": "Tout le monde conserve l'accès synchronisé depuis la source.",
@@ -2208,33 +2175,6 @@
         "toggle": {
           "description": "Limite l'accès aux membres des groupes sélectionnés. Les permissions synchronisées s'appliquent toujours.",
           "title": "Restreindre l'accès à des groupes"
-        }
-      },
-      "indexAttemptsTable": {
-        "columns": {
-          "errorMessage": "Message d'erreur",
-          "newDocs": "Nouveaux docs",
-          "status": "Statut",
-          "timeStarted": "Heure de début",
-          "totalDocs": "Total des docs",
-          "totalDocsTooltip": "Nombre total de documents remplacés dans l'index pendant cette tentative d'indexation"
-        },
-        "docsPerMinute": "{rate} docs / min",
-        "docsRemoved": "(a également supprimé {count} docs détectés comme supprimés dans la source)",
-        "empty": {
-          "description": "Les tentatives d'indexation sont planifiées en arrière-plan et peuvent mettre un certain temps à apparaître. Actualisez la page dans environ 30 secondes !",
-          "title": "Aucune tentative d'indexation planifiée pour l'instant"
-        },
-        "noAdditionalDocs": "Aucun doc supplémentaire traité",
-        "reindexTooltip": {
-          "completed": "Cette tentative d'indexation était une réindexation complète. Tous les documents de la source ont été synchronisés dans le système.",
-          "inProgress": "Cette tentative d'indexation est une réindexation complète. Tous les documents de la source sont en cours de synchronisation dans le système."
-        },
-        "stageMetricsButton": {
-          "tooltip": "Voir les métriques des étapes"
-        },
-        "viewTrace": {
-          "ariaLabel": "Voir la trace complète"
         }
       },
       "indexErrorsAlert": {
@@ -2492,30 +2432,6 @@
           "total": "/ {total}"
         }
       },
-      "syncTables": {
-        "errorCell": {
-          "ariaLabel": "Voir le message d'erreur complet"
-        }
-      },
-      "syncTabs": {
-        "docPermissions": {
-          "label": "Synchronisation des autorisations de documents",
-          "notApplicableDescription": "Ce connecteur n'utilise pas de tâche distincte de synchronisation des autorisations de documents."
-        },
-        "groupMembership": {
-          "label": "Synchronisation des appartenances aux groupes",
-          "notApplicableDescription": "Ce connecteur n'utilise pas de tâche distincte de synchronisation des appartenances aux groupes."
-        },
-        "indexing": {
-          "label": "Indexation"
-        },
-        "loadError": {
-          "title": "Échec du chargement des tentatives de synchronisation"
-        },
-        "notApplicable": {
-          "title": "Non applicable"
-        }
-      },
       "toasts": {
         "completeReindexStarted": "Réindexation complète démarrée avec succès",
         "deletionScheduleFailed": "Échec de la planification de la suppression du connecteur - {message}",
@@ -2574,7 +2490,79 @@
         "prune": "Nettoyage toutes les **{every}**"
       },
       "runs": {
-        "title": "Exécutions d'indexation"
+        "kinds": {
+          "label": "Type d'exécution",
+          "all": "Tous les types",
+          "indexing": "Index des documents",
+          "doc_permission_sync": "Synchronisation des autorisations",
+          "group_sync": "Synchronisation des membres des groupes"
+        },
+        "detail": {
+          "queued": "En file d'attente",
+          "running": "En cours",
+          "rate": "{rate} docs/min",
+          "finished": "{time} ({minutes, number} min)"
+        },
+        "actions": {
+          "stages": "Voir les métriques par étape",
+          "cancel": "Annuler",
+          "logs": "Voir les journaux"
+        },
+        "warnings": {
+          "tooltip": "{count, plural, one {# document en échec} other {# documents en échec}}"
+        },
+        "figures": {
+          "indexed": "indexés",
+          "synced": "synchronisés",
+          "memberships": "adhésions"
+        },
+        "counts": {
+          "newDocs": "{count, plural, one {# nouveau document} other {# nouveaux documents}}",
+          "updatedDocs": "Documents mis à jour",
+          "removedDocs": "{count, plural, one {# document supprimé} other {# documents supprimés}}",
+          "users": "{count, plural, one {# utilisateur} other {# utilisateurs}}",
+          "groups": "{count, plural, one {# groupe} other {# groupes}}",
+          "running": "{count, plural, one {# exécution en cours} other {# exécutions en cours}}",
+          "succeeded": "{count, plural, one {# exécution réussie} other {# exécutions réussies}}",
+          "failed": "{count, plural, one {# exécution en échec} other {# exécutions en échec}}"
+        },
+        "search": {
+          "placeholder": "Rechercher dans les erreurs d'exécution..."
+        },
+        "window": {
+          "label": "Période",
+          "all": "Toute la période",
+          "h12": "12 dernières heures",
+          "h24": "24 dernières heures",
+          "d7": "7 derniers jours",
+          "d30": "30 derniers jours"
+        },
+        "statusGroups": {
+          "label": "Statut",
+          "all": "Tous les statuts",
+          "running": "En cours",
+          "succeeded": "Réussies",
+          "failed": "En échec",
+          "canceled": "Annulées"
+        },
+        "loadError": {
+          "title": "Impossible de charger les exécutions."
+        },
+        "empty": {
+          "title": "Aucune exécution pour l'instant",
+          "filteredTitle": "Aucune exécution ne correspond à ces filtres.",
+          "description": "Les exécutions sont planifiées en arrière-plan et peuvent mettre un moment à apparaître."
+        },
+        "units": "{count, plural, one {exécution} other {exécutions}}",
+        "errorModal": {
+          "indexing": "Erreur de l'exécution d'indexation",
+          "doc_permission_sync": "Erreur de synchronisation des autorisations des documents",
+          "group_sync": "Erreur de synchronisation des membres des groupes"
+        },
+        "toasts": {
+          "canceled": "L'exécution est en cours d'annulation.",
+          "cancelFailed": "Impossible d'annuler l'exécution. Réessayez."
+        }
       }
     },
     "connectorTitle": {
@@ -7913,18 +7901,17 @@
         "deleting": "Suppression",
         "error": "Erreur",
         "failed": "Échec",
-        "inProgress": "En cours",
         "indexed": "Indexé",
         "indexing": "Indexation",
         "initialIndexing": "Indexation initiale",
         "interrupted": "Interrompu",
         "invalid": "Non valide",
         "invalidConnectorTooltip": "Le connecteur est dans un état non valide. Mettez à jour les identifiants ou créez un nouveau connecteur.",
-        "none": "Aucun",
         "notStarted": "Non démarré",
         "paused": "En pause",
         "scheduled": "Planifié",
-        "succeeded": "Réussi"
+        "synced": "Synchronisé",
+        "syncing": "Synchronisation"
       }
     },
     "systemInfo": {
