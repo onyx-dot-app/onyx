@@ -834,9 +834,7 @@ def test_compaction_identity_survives_suspension_and_resume(
         storage.save(
             captured.run_state,
             captured.agent_state,
-            CheckpointBinding(
-                tenant_id="tenant", branch_id="branch", context_version="1"
-            ),
+            CheckpointBinding(tenant_id="tenant", branch_id="branch"),
         )
     )
     # SQL history can carry an older summary or omit a transient truncation cutoff.

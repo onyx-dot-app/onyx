@@ -16,7 +16,7 @@ _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
 
 class SavedCheckpoint(BaseModel):
-    revision: int
+    ownership_version: int
     data: ResponseCheckpoint
 
 
@@ -37,28 +37,30 @@ def publish_checkpoint__no_commit(
     message_id: int,
     data: ResponseCheckpoint,
     *,
-    expected_revision: int | None,
+    expected_ownership_version: int | None,
 ) -> int:
     response = _lock_response(session, message_id)
     if response.response_status is None or response.response_status.is_terminal:
         raise ValueError("Only an active response can pause")
     row = session.get(ChatResponseCheckpoint, message_id, populate_existing=True)
     if row is None:
-        if expected_revision is not None:
+        if expected_ownership_version is not None:
             raise ValueError("Checkpoint was removed")
-        row = ChatResponseCheckpoint(chat_message_id=message_id, revision=1, state={})
+        row = ChatResponseCheckpoint(
+            chat_message_id=message_id, ownership_version=1, state={}
+        )
         session.add(row)
     else:
         if (
-            expected_revision != row.revision
+            expected_ownership_version != row.ownership_version
             or response.response_status != RunStatus.RUNNING
         ):
             raise ValueError("Checkpoint ownership changed")
-        row.revision += 1
+        row.ownership_version += 1
     row.state = _JSON_OBJECT.validate_python(data.model_dump(mode="json"))
     response.response_status = RunStatus.SUSPENDED
     session.flush()
-    return row.revision
+    return row.ownership_version
 
 
 def claim_checkpoint__no_commit(
@@ -68,33 +70,34 @@ def claim_checkpoint__no_commit(
     row = session.get(ChatResponseCheckpoint, message_id, populate_existing=True)
     if row is None or response.response_status != RunStatus.SUSPENDED:
         return None
-    row.revision += 1
+    row.ownership_version += 1
     response.response_status = RunStatus.RUNNING
     session.flush()
     return SavedCheckpoint(
-        revision=row.revision, data=ResponseCheckpoint.model_validate(row.state)
+        ownership_version=row.ownership_version,
+        data=ResponseCheckpoint.model_validate(row.state),
     )
 
 
 def check_checkpoint_owner__no_commit(
-    session: Session, message_id: int, revision: int | None
+    session: Session, message_id: int, ownership_version: int | None
 ) -> None:
     configure_response_transaction__no_commit(session)
     response = _lock_response(session, message_id)
     row = session.get(ChatResponseCheckpoint, message_id, populate_existing=True)
-    if (row is None) != (revision is None) or (
-        row is not None and row.revision != revision
+    if (row is None) != (ownership_version is None) or (
+        row is not None and row.ownership_version != ownership_version
     ):
         raise ValueError("Response ownership changed")
-    if revision is not None and response.response_status != RunStatus.RUNNING:
+    if ownership_version is not None and response.response_status != RunStatus.RUNNING:
         raise ValueError("Response is no longer owned by this runner")
 
 
 def release_checkpoint_claim__no_commit(
-    session: Session, message_id: int, revision: int
+    session: Session, message_id: int, ownership_version: int
 ) -> None:
     """Undo a failed reconstruction only before resumed execution starts."""
-    check_checkpoint_owner__no_commit(session, message_id, revision)
+    check_checkpoint_owner__no_commit(session, message_id, ownership_version)
     response = session.get(ChatMessage, message_id)
     if response is None:
         raise ValueError("Response is unavailable")
