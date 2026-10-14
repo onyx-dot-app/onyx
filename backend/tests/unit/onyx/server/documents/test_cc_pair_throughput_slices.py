@@ -1,6 +1,7 @@
 """A run's documents spread over the slices it ran in. A running one counts up
-to the window's end. A finished run ends at its last heartbeat, or is instant
-without one. A run before the window adds nothing."""
+to the window's end. A finished run ends at its recorded finish, an older one
+at its last heartbeat, and one with neither is instant. A run before the
+window adds nothing."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -15,13 +16,17 @@ _END = _START + timedelta(hours=4)
 def _attempt(
     status: IndexingStatus,
     started: timedelta,
-    heartbeat: timedelta | None,
+    finished: timedelta | None,
     docs: int,
+    # An attempt from before time_finished existed: its last heartbeat stands in.
+    legacy: bool = False,
 ) -> IndexAttempt:
+    ended = None if finished is None else _START + finished
     return IndexAttempt(
         status=status,
         time_started=_START + started,
-        last_heartbeat_time=None if heartbeat is None else _START + heartbeat,
+        time_finished=None if legacy else ended,
+        last_heartbeat_time=ended if legacy else None,
         # Cleanup can move this days later, so the slicer never reads it.
         time_updated=_END + timedelta(days=9),
         total_docs_indexed=docs,
@@ -57,11 +62,11 @@ def test_instant_runs_land_in_one_slice_and_an_earlier_run_adds_nothing() -> Non
     instant = _attempt(
         IndexingStatus.SUCCESS, timedelta(hours=3), timedelta(hours=3), 7
     )
-    no_heartbeat = _attempt(IndexingStatus.SUCCESS, timedelta(hours=1), None, 5)
+    unknown_end = _attempt(IndexingStatus.SUCCESS, timedelta(hours=1), None, 5)
+    legacy = _attempt(
+        IndexingStatus.SUCCESS, timedelta(hours=2), timedelta(hours=3), 10, legacy=True
+    )
 
-    assert docs_indexed_per_slice([before, instant, no_heartbeat], _START, _END, 4) == [
-        0,
-        5,
-        0,
-        7,
-    ]
+    assert docs_indexed_per_slice(
+        [before, instant, unknown_end, legacy], _START, _END, 4
+    ) == [0, 5, 10, 7]

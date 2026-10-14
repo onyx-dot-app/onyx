@@ -435,8 +435,11 @@ def test_throughput_counts_only_this_pairs_runs_in_the_window(
     ]:
         attempt.time_created = ended - ran_for
         attempt.time_started = ended - ran_for
-        attempt.last_heartbeat_time = ended
+        attempt.time_finished = ended
         attempt.total_docs_indexed = 100
+    # The overlapping run predates time_finished, so its heartbeat stands in.
+    overlapping.time_finished = None
+    overlapping.last_heartbeat_time = now - timedelta(hours=1)
     cleaned.time_updated = now - timedelta(minutes=5)
     db_session.commit()
 
