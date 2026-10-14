@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "Escribe en el índice de documentos los fragmentos convertidos en embeddings.",
             "label": "Escritura en la BD vectorial"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Espera por límite de embeddings",
+            "description": "Tiempo que las solicitudes de embedding esperaron por el límite configurado en Configuración de índice. Forma parte de Embedding y se suma entre los hilos de embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Espera por límite del proveedor",
+            "description": "Tiempo que las solicitudes de embedding esperaron después de que el proveedor de embeddings las limitara. Forma parte de Embedding y se suma entre los hilos de embedding."
           }
         }
       },

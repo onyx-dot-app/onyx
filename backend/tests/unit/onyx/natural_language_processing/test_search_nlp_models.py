@@ -787,6 +787,7 @@ def test_passage_model_server_requests_wait_for_the_rate_limit() -> None:
     model = _make_local_embedding_model()
     model.callback = callback
     limiter = MagicMock(spec=EmbeddingRateLimiter)
+    limiter.acquire.return_value = 0.0
 
     rate_limited = MagicMock(status_code=429, text="slow down")
     ok = MagicMock(status_code=200)
@@ -796,7 +797,7 @@ def test_passage_model_server_requests_wait_for_the_rate_limit() -> None:
         patch(
             f"{_SEARCH_NLP_MODULE}.load_embedding_rate_limiter", return_value=limiter
         ),
-        patch.object(EmbeddingRetryBackoff, "wait", lambda _self: wait_none()),
+        patch(f"{_SEARCH_NLP_MODULE}.wait_sleeps", return_value=iter([0.0])),
         patch(
             f"{_SEARCH_NLP_MODULE}.requests.post", side_effect=[rate_limited, ok]
         ) as post,
@@ -806,7 +807,7 @@ def test_passage_model_server_requests_wait_for_the_rate_limit() -> None:
     assert result == [[1.0]]
     assert post.call_count == 2
     assert limiter.acquire.call_count == 2
-    limiter.acquire.assert_called_with(callback.should_stop)
+    assert limiter.acquire.call_args.args[0] is callback.should_stop
 
 
 def test_query_embeddings_never_wait_for_the_rate_limit() -> None:

@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "embedding 済みのチャンクをドキュメントインデックスに書き込みます。",
             "label": "ベクトル DB への書き込み"
+          },
+          "embeddingRateLimitWait": {
+            "label": "埋め込みレート制限の待機",
+            "description": "インデックス設定で設定した埋め込みのレート制限により、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "プロバイダーの制限による待機",
+            "description": "埋め込みプロバイダーがリクエストを制限した後に、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
           }
         }
       },

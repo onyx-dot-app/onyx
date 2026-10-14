@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "Writes the embedded chunks into the document index.",
             "label": "Vector DB write"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Embedding rate limit wait",
+            "description": "Time embedding requests waited for the embedding rate limit set on Index Settings. Part of Embedding, summed over embedding threads."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Embedding provider throttle wait",
+            "description": "Time embedding requests waited after the embedding provider rate-limited them. Part of Embedding, summed over embedding threads."
           }
         }
       },

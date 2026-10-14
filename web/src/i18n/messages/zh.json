@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "将已生成 embedding 的文本块写入文档索引。",
             "label": "向量数据库写入"
+          },
+          "embeddingRateLimitWait": {
+            "label": "嵌入速率限制等待",
+            "description": "嵌入请求因索引设置中的嵌入速率限制而等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "提供商限流等待",
+            "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
           }
         }
       },

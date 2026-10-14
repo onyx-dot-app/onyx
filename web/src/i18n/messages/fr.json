@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "Écrit les segments et leurs embeddings dans l'index des documents.",
             "label": "Écriture DB vectorielle"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Attente de la limite d'embedding",
+            "description": "Temps d'attente des requêtes d'embedding pour la limite définie dans les paramètres d'index. Fait partie d'Embedding, additionné sur les threads d'embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Attente de limitation du fournisseur",
+            "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
           }
         }
       },

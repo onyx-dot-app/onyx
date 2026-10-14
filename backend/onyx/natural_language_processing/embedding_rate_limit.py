@@ -1,14 +1,15 @@
 """A global limit on indexing embedding requests.
 
 All docprocessing workers of a tenant share one window in Redis, so the limit
-holds across pods. A worker that finds the window full does not fail: it
-blocks with exponential backoff. With `worker_prefetch_multiplier = 1` and late
-acks, a blocked worker thread takes no new Celery task, which pushes back on
-the queue.
+holds across pods. A worker that finds the window full, or that a provider
+rate-limits, does not fail: it blocks and tries again about once a minute, for
+up to six hours. With `worker_prefetch_multiplier = 1` and late acks, a blocked
+worker thread takes no new Celery task, which pushes back on the queue.
 """
 
 import asyncio
 import random
+import threading
 import time
 from collections.abc import Callable, Iterator
 
@@ -45,11 +46,64 @@ redis.call('PEXPIRE', KEYS[1], period)
 return 0
 """
 
-_BACKOFF_SCALE_SECONDS = 1.0
-_BACKOFF_MAX_SECONDS = 30 * 60
-_BACKOFF_JITTER_RATIO = 0.1
+# A blocked request tries again about once a minute, for up to six hours.
+_RETRY_INTERVAL_SECONDS = 60.0
+_RETRY_INTERVAL_JITTER_SECONDS = 10.0
+_MAX_TOTAL_WAIT_SECONDS = 6 * 60 * 60
 # The longest single sleep, so that a blocked worker sees a stop signal soon.
 _STOP_CHECK_INTERVAL_SECONDS = 5.0
+
+
+class EmbeddingWaitTimeoutError(Exception):
+    """An embedding request waited the full time limit for a rate limit."""
+
+
+def wait_sleeps(
+    reason: str,
+    started_at: float,
+    should_stop: Callable[[], bool] | None,
+) -> Iterator[float]:
+    """Yields the sleeps of one jittered retry interval for a request that
+    started waiting at `started_at` (monotonic). Raises
+    EmbeddingWaitTimeoutError once the request has waited the time limit, and
+    ConnectorStopSignal when `should_stop` turns true."""
+    waited = time.monotonic() - started_at
+    if waited >= _MAX_TOTAL_WAIT_SECONDS:
+        raise EmbeddingWaitTimeoutError(
+            f"{reason}; gave up after waiting {waited / 3600:.1f} hours"
+        )
+    wait = _RETRY_INTERVAL_SECONDS + random.uniform(
+        -_RETRY_INTERVAL_JITTER_SECONDS, _RETRY_INTERVAL_JITTER_SECONDS
+    )
+    logger.info("%s; waiting %.1fs.", reason, wait)
+    deadline = time.monotonic() + wait
+    while (remaining := deadline - time.monotonic()) > 0:
+        if should_stop is not None and should_stop():
+            raise ConnectorStopSignal("Stop signal while waiting to embed")
+        yield min(remaining, _STOP_CHECK_INTERVAL_SECONDS)
+
+
+class EmbeddingWaitTotals:
+    """Thread-safe running totals of the time embedding requests spent
+    waiting, summed over all threads."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._rate_limit_seconds = 0.0
+        self._provider_throttle_seconds = 0.0
+
+    def add_rate_limit_wait(self, seconds: float) -> None:
+        with self._lock:
+            self._rate_limit_seconds += seconds
+
+    def add_provider_throttle_wait(self, seconds: float) -> None:
+        with self._lock:
+            self._provider_throttle_seconds += seconds
+
+    def snapshot(self) -> tuple[float, float]:
+        """(rate limit wait, provider throttle wait), in seconds."""
+        with self._lock:
+            return self._rate_limit_seconds, self._provider_throttle_seconds
 
 
 class EmbeddingRateLimiter:
@@ -63,17 +117,31 @@ class EmbeddingRateLimiter:
         self.period_seconds = period_seconds
         self._redis = get_redis_client(tenant_id=tenant_id)
 
-    def acquire(self, should_stop: Callable[[], bool] | None = None) -> None:
-        """Blocks until this request takes a slot in the window."""
-        for sleep_seconds in self._sleeps(should_stop):
+    def acquire(
+        self,
+        should_stop: Callable[[], bool] | None = None,
+        started_at: float | None = None,
+    ) -> float:
+        """Blocks until this request takes a slot in the window. The time limit
+        counts from `started_at` (monotonic), or from now. Returns the seconds
+        spent waiting."""
+        start = time.monotonic()
+        for sleep_seconds in self._sleeps(should_stop, started_at or start):
             time.sleep(sleep_seconds)
+        return time.monotonic() - start
 
     async def acquire_async(
-        self, should_stop: Callable[[], bool] | None = None
-    ) -> None:
-        """Blocks until this request takes a slot in the window."""
-        for sleep_seconds in self._sleeps(should_stop):
+        self,
+        should_stop: Callable[[], bool] | None = None,
+        started_at: float | None = None,
+    ) -> float:
+        """Blocks until this request takes a slot in the window. The time limit
+        counts from `started_at` (monotonic), or from now. Returns the seconds
+        spent waiting."""
+        start = time.monotonic()
+        for sleep_seconds in self._sleeps(should_stop, started_at or start):
             await asyncio.sleep(sleep_seconds)
+        return time.monotonic() - start
 
     def _try_acquire(self) -> float:
         """Takes a slot and returns 0, or returns the seconds until a slot frees."""
@@ -91,29 +159,17 @@ class EmbeddingRateLimiter:
             return 0
         return int(wait_ms) / 1000
 
-    def _sleeps(self, should_stop: Callable[[], bool] | None) -> Iterator[float]:
-        """Yields the sleeps until this request takes a slot. Each wait is the
-        longer of the exponential backoff and the time until a slot frees."""
-        attempt = 0
-        while (slot_wait := self._try_acquire()) > 0:
-            backoff = min(_BACKOFF_SCALE_SECONDS * 2**attempt, _BACKOFF_MAX_SECONDS)
-            wait = max(slot_wait, backoff) * random.uniform(
-                1, 1 + _BACKOFF_JITTER_RATIO
+    def _sleeps(
+        self, should_stop: Callable[[], bool] | None, started_at: float
+    ) -> Iterator[float]:
+        """Yields the sleeps until this request takes a slot."""
+        while self._try_acquire() > 0:
+            yield from wait_sleeps(
+                f"Embedding rate limit of {self.max_requests} requests per "
+                f"{self.period_seconds}s is full",
+                started_at,
+                should_stop,
             )
-            logger.info(
-                "Embedding rate limit of %s requests per %ss is full; waiting %.1fs.",
-                self.max_requests,
-                self.period_seconds,
-                wait,
-            )
-            deadline = time.monotonic() + wait
-            while (remaining := deadline - time.monotonic()) > 0:
-                if should_stop is not None and should_stop():
-                    raise ConnectorStopSignal(
-                        "Stop signal while waiting for the embedding rate limit"
-                    )
-                yield min(remaining, _STOP_CHECK_INTERVAL_SECONDS)
-            attempt += 1
 
 
 def load_embedding_rate_limiter() -> EmbeddingRateLimiter | None:

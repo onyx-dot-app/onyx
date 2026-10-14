@@ -2504,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "Schreibt die eingebetteten Chunks in den Dokumentenindex.",
             "label": "Schreiben in Vektor-DB"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Wartezeit Embedding-Ratenlimit",
+            "description": "Zeit, die Embedding-Anfragen auf das in den Index-Einstellungen festgelegte Ratenlimit gewartet haben. Teil von Embedding, summiert über Embedding-Threads."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Wartezeit Anbieter-Drosselung",
+            "description": "Zeit, die Embedding-Anfragen gewartet haben, nachdem der Embedding-Anbieter sie gedrosselt hat. Teil von Embedding, summiert über Embedding-Threads."
           }
         }
       },

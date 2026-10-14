@@ -11,7 +11,10 @@ import pytest
 from tenacity import wait_none
 
 from onyx.natural_language_processing.embedding_auth import build_embedding_auth
-from onyx.natural_language_processing.embedding_rate_limit import EmbeddingRateLimiter
+from onyx.natural_language_processing.embedding_rate_limit import (
+    EmbeddingRateLimiter,
+    EmbeddingWaitTotals,
+)
 from onyx.natural_language_processing.exceptions import (
     EmbeddingRequestFailedError,
     EmbeddingRequestRejectedError,
@@ -384,7 +387,7 @@ async def test_each_gemini_request_takes_a_rate_limit_slot() -> None:
         return None
 
     limiter = MagicMock(spec=EmbeddingRateLimiter)
-    limiter.acquire_async = AsyncMock()
+    limiter.acquire_async = AsyncMock(return_value=0.0)
     gateway = _FakeGateway(respond=limit_first_try_of_b)
     async with _bifrost(gateway, "https://bifrost.example") as embedding:
         embedding.policy = EmbeddingRequestPolicy(
@@ -400,3 +403,58 @@ async def test_each_gemini_request_takes_a_rate_limit_slot() -> None:
 
     assert len(gateway.requests) == 4
     assert limiter.acquire_async.await_count == 4
+
+
+@pytest.mark.asyncio
+async def test_indexing_blocks_on_provider_rate_limits_instead_of_failing() -> None:
+    """A 429 that outlasts the retry budget still ends in success for an
+    indexing request, and the time is counted as provider throttle wait."""
+    attempts: dict[str, int] = {}
+
+    def limit_b_five_times(payload: dict[str, Any]) -> httpx.Response | None:
+        text = payload["input"][0]
+        attempts[text] = attempts.get(text, 0) + 1
+        if text.endswith(": b") and attempts[text] <= 5:
+            return httpx.Response(429, json={"error": {"message": "slow down"}})
+        return None
+
+    wait_totals = EmbeddingWaitTotals()
+    gateway = _FakeGateway(respond=limit_b_five_times)
+    with patch(f"{_MODULE}.wait_sleeps", return_value=iter([0.0])):
+        async with _bifrost(gateway, "https://bifrost.example") as embedding:
+            embedding.policy = EmbeddingRequestPolicy(
+                retry_backoff=embedding.policy.retry_backoff,
+                retry_tries=2,
+                block_on_provider_rate_limit=True,
+                wait_totals=wait_totals,
+            )
+            result = await embedding.embed(
+                texts=["a", "b", "c"],
+                text_type=EmbedTextType.PASSAGE,
+                model_name="gemini/gemini-embedding-2",
+            )
+
+    assert len(result) == 3
+    assert attempts == {
+        "title: none | text: a": 1,
+        "title: none | text: b": 6,
+        "title: none | text: c": 1,
+    }
+    _, provider_throttle_seconds = wait_totals.snapshot()
+    assert provider_throttle_seconds > 0
+
+
+@pytest.mark.asyncio
+async def test_queries_still_fail_on_provider_rate_limits() -> None:
+    gateway = _FakeGateway(
+        respond=lambda _: httpx.Response(429, json={"error": {"message": "slow down"}})
+    )
+    async with _bifrost(gateway, "https://bifrost.example") as embedding:
+        embedding.policy = replace(embedding.policy, retry_tries=2)
+        with pytest.raises(EmbeddingRequestFailedError, match="HTTP 429"):
+            await embedding.embed(
+                texts=["a"],
+                text_type=EmbedTextType.QUERY,
+                model_name="openai/text-embedding-3-small",
+            )
+    assert len(gateway.requests) == 2

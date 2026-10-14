@@ -20,6 +20,9 @@ export const STAGE_LABEL_KEYS = {
   CHUNKING: "stageMetrics.stages.chunking.label",
   CONTEXTUAL_RAG: "stageMetrics.stages.contextualRag.label",
   EMBEDDING: "stageMetrics.stages.embedding.label",
+  EMBEDDING_RATE_LIMIT_WAIT: "stageMetrics.stages.embeddingRateLimitWait.label",
+  EMBEDDING_PROVIDER_THROTTLE_WAIT:
+    "stageMetrics.stages.embeddingProviderThrottleWait.label",
   DOC_LOCK_ACQUIRE_WAIT: "stageMetrics.stages.docLockAcquireWait.label",
   ENRICHMENT_PREP: "stageMetrics.stages.enrichmentPrep.label",
   VECTOR_DB_WRITE: "stageMetrics.stages.vectorDbWrite.label",
@@ -51,6 +54,10 @@ export const STAGE_DESCRIPTION_KEYS = {
   CHUNKING: "stageMetrics.stages.chunking.description",
   CONTEXTUAL_RAG: "stageMetrics.stages.contextualRag.description",
   EMBEDDING: "stageMetrics.stages.embedding.description",
+  EMBEDDING_RATE_LIMIT_WAIT:
+    "stageMetrics.stages.embeddingRateLimitWait.description",
+  EMBEDDING_PROVIDER_THROTTLE_WAIT:
+    "stageMetrics.stages.embeddingProviderThrottleWait.description",
   DOC_LOCK_ACQUIRE_WAIT: "stageMetrics.stages.docLockAcquireWait.description",
   ENRICHMENT_PREP: "stageMetrics.stages.enrichmentPrep.description",
   VECTOR_DB_WRITE: "stageMetrics.stages.vectorDbWrite.description",

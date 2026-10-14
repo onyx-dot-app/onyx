@@ -341,10 +341,15 @@ cloud provider directly. Failed passage calls retry with exponential backoff.
 The admin can set a global rate limit on passage requests on the Index Settings
 page (`embedding_rate_limit_*` in workspace `Settings`). Every outgoing request,
 retries included, takes a slot in a per-tenant sliding window in Redis
-(`embedding_rate_limit.py`). When the window is full the worker thread blocks
-with exponential backoff (up to 30 minutes) instead of failing, so it takes no
-new Celery task. `encode` reads the limit once per call, so a change applies to
-the next batch. Query embeddings are never limited. Titles
+(`embedding_rate_limit.py`). When the window is full, or a provider answers
+429, the worker thread blocks and tries again about once a minute (jittered)
+instead of failing, so the thread takes no new Celery task. After six hours of
+waiting the request fails, and every remaining document of the batch fails
+without per-document retries. The wait time is
+recorded as the `EMBEDDING_RATE_LIMIT_WAIT` and `EMBEDDING_PROVIDER_THROTTLE_WAIT`
+stage metrics, which are parts of `EMBEDDING`. `encode` reads the limit once
+per call, so a change applies to the next batch. Query embeddings are never
+limited or blocked. Titles
 get no separate embedding: the title reaches the vector only through the chunk's
 `title_prefix`.
 Each successfully embedded sub-batch is immediately pickled to disk via

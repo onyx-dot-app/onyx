@@ -7,6 +7,7 @@ objects stand in for separate docprocessing pods: they share only Redis.
 import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -15,8 +16,21 @@ from onyx.connectors.models import ConnectorStopSignal
 from onyx.natural_language_processing.embedding_rate_limit import (
     _WINDOW_KEY,
     EmbeddingRateLimiter,
+    EmbeddingWaitTimeoutError,
 )
 from onyx.redis.redis_pool import get_redis_client
+
+_MODULE = "onyx.natural_language_processing.embedding_rate_limit"
+
+
+@pytest.fixture(autouse=True)
+def _short_retry_interval() -> Iterator[None]:
+    """Retry every 0.5s instead of every minute."""
+    with (
+        patch(f"{_MODULE}._RETRY_INTERVAL_SECONDS", 0.5),
+        patch(f"{_MODULE}._RETRY_INTERVAL_JITTER_SECONDS", 0.0),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -59,9 +73,22 @@ def test_acquire_blocks_until_a_slot_frees(tenant_id: str) -> None:
     limiter.acquire()
     elapsed = time.monotonic() - start
 
-    # The first wait is the longer of the 1s backoff and the slot wait, plus
-    # up to 10% jitter.
+    # The window frees after 1s; retries come every 0.5s.
     assert 0.9 <= elapsed <= 2
+
+
+def test_wait_gives_up_at_the_time_limit(tenant_id: str) -> None:
+    limiter = EmbeddingRateLimiter(tenant_id, max_requests=1, period_seconds=60)
+    limiter.acquire()
+
+    start = time.monotonic()
+    with (
+        patch(f"{_MODULE}._MAX_TOTAL_WAIT_SECONDS", 1.2),
+        pytest.raises(EmbeddingWaitTimeoutError),
+    ):
+        limiter.acquire()
+    # Three 0.5s retries, then the limit check fails.
+    assert 1.2 <= time.monotonic() - start <= 2.5
 
 
 def test_stop_signal_ends_the_wait(tenant_id: str) -> None:
