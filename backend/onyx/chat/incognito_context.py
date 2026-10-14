@@ -678,7 +678,12 @@ def _response_records(
             local[run.agent_id] = saved
         if any(item.run_id == run.run_id for item in saved.responses):
             raise ValueError("Duplicate temporary agent run")
-        saved.responses.append(run.model_copy(deep=True, update={"child_runs": []}))
+        response = run.model_copy(deep=True, update={"child_runs": []})
+        # Temporary history retains model content; sources are stored separately.
+        for message in [*response.input_messages, *response.messages]:
+            if isinstance(message, ToolResultMessage):
+                message.details = None
+        saved.responses.append(response)
         saved.sources.update(sources_by_run.get(run.run_id, {}))
         for child in run.child_runs:
             append(child, run.agent_id)

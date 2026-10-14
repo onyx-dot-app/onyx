@@ -64,22 +64,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _saved_tool_metadata(result: ToolResultMessage) -> BaseModel | None:
-    data = result.details
-    if isinstance(data, SearchDocsResponse):
-        # Documents are stored through the tool call's search-document relation.
-        return SearchDocsResponse(
-            queries=data.queries,
-            sources=data.sources,
-            time_filter_start=data.time_filter_start,
-            time_filter_end=data.time_filter_end,
-            search_docs=[],
-            citation_mapping=data.citation_mapping,
-            displayed_docs=[] if data.displayed_docs == [] else None,
-        )
-    return data
-
-
 def _collect_tool_history(
     snapshot: RunState,
     tool_ids: Mapping[str, int],
@@ -159,8 +143,6 @@ def _tool_record(
     ):
         generated_file_ids = data.tool_result.file_ids or None
 
-    saved_metadata = _saved_tool_metadata(tool_response) if tool_response else None
-
     return ToolCallInfo(
         message_id=output.id or f"{snapshot.run_id}:{turn}",
         parent_message_id=snapshot.parent_message_id,
@@ -173,7 +155,6 @@ def _tool_record(
         reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
         tool_call_arguments=tool_call.arguments,
         tool_call_response=tool_response.text if tool_response else "",
-        result_metadata=saved_metadata,
         search_docs=displayed_docs if displayed_docs is not None else search_docs,
         generated_images=generated_images,
         generated_files=generated_files,

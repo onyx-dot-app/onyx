@@ -27,18 +27,16 @@ from onyx.coding_agent.tool_definitions import (
     CODING_AGENT_TOOL_NAME,
 )
 from onyx.configs.constants import MessageType
-from onyx.context.search.models import SavedSearchDoc, SearchDoc
+from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db.chat import (
     get_db_search_doc_by_id,
     translate_db_search_doc_to_saved_search_doc,
 )
 from onyx.db.chat_response import read_chat_execution
-from onyx.db.models import ChatMessage, Tool, ToolCall
+from onyx.db.models import ChatMessage, ToolCall
 from onyx.db.tools import (
     get_response_tool_records,
     get_tool_by_id,
-    get_tools_by_ids,
-    restore_tool_result,
 )
 from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
@@ -921,19 +919,6 @@ def _execution_packets(
             db_session,
         )
     }
-    tools = {
-        tool.id: tool
-        for tool in get_tools_by_ids(
-            list(
-                {
-                    record.tool_id
-                    for record in records.values()
-                    if record.tool_id is not None
-                }
-            ),
-            db_session,
-        )
-    }
     references = {
         (reference.message_id, reference.tool_call_id): records[reference.record_id]
         for reference in execution.tool_records
@@ -952,7 +937,6 @@ def _execution_packets(
     return _response_packets(
         execution.response,
         references,
-        tools,
         execution.presentation,
         documents,
     )
@@ -961,7 +945,6 @@ def _execution_packets(
 def _response_packets(
     response: ResponseRecord,
     records: dict[tuple[str, str], ToolCall],
-    tools: dict[int, Tool],
     settings: dict[str, MessageRendering],
     documents: Mapping[str, SearchDoc],
     layout: ResponseLayout | None = None,
@@ -982,11 +965,23 @@ def _response_packets(
         for call in calls:
             tool_placement = renderer.tool_placement(call.id)
             record = records.get((message_id, call.id))
-            tool = tools.get(record.tool_id) if record is not None else None
             execution = step.tools.get(call.id)
             result = execution.result if execution is not None else None
-            if result is not None and record is not None:
-                result = restore_tool_result(result, record, tool)
+            if (
+                result is not None
+                and isinstance(result.details, SearchDocsResponse)
+                and record is not None
+            ):
+                # Saved document IDs support citation and source-card links.
+                search = result.details.model_copy(
+                    update={
+                        "search_docs": [
+                            translate_db_search_doc_to_saved_search_doc(doc)
+                            for doc in record.search_docs
+                        ]
+                    }
+                )
+                result = result.model_copy(update={"details": search})
             tool_renderer = ToolRenderer(
                 call, tool_placement, record.tool_id if record is not None else None
             )
@@ -1007,7 +1002,6 @@ def _response_packets(
                     _response_packets(
                         child,
                         records,
-                        tools,
                         settings,
                         documents,
                         layout,

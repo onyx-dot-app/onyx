@@ -347,7 +347,7 @@ def test_deep_research_composes_plan_child_and_report() -> None:
     saved_reports = [
         packet
         for packet in _response_packets(
-            snapshot.response, {}, {}, snapshot.presentation, snapshot.all_search_docs
+            snapshot.response, {}, snapshot.presentation, snapshot.all_search_docs
         )
         if isinstance(packet.obj, IntermediateReportDelta)
     ]

@@ -42,6 +42,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tools.models import CustomToolCallSummary
 from tests.unit.onyx.agents.fakes import (
     FakeModelClient,
     ScriptedLLM,
@@ -164,7 +165,21 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
         result.content = "accepted"
         return result
 
-    agent = Agent(FakeModelClient(model), tools=[_tool()], after_tool_call=finalize)
+    agent = Agent(
+        FakeModelClient(model),
+        tools=[
+            _tool(
+                lambda _: ToolResult(
+                    content="original",
+                    details=CustomToolCallSummary(
+                        tool_name="lookup", response_type="json", tool_result={"id": 1}
+                    ),
+                    metadata=ExtraData(),
+                )
+            )
+        ],
+        after_tool_call=finalize,
+    )
     run = agent.start(max_steps=2)
     result = run.result()
     assert run.wait_for_idle(2)
@@ -176,9 +191,17 @@ def test_tool_finalization_has_one_commit_point(replace: bool) -> None:
         == snapshot.messages[1].text
         == "accepted"
     )
-    assert "private metadata" not in "".join(
-        item.model_dump_json() for item in response_record(snapshot).messages
-    )
+    record = response_record(snapshot)
+    assert "private metadata" not in record.model_dump_json()
+    saved_result = record.messages[1]
+    assert isinstance(saved_result, ToolResultMessage)
+    assert isinstance(saved_result.details, CustomToolCallSummary)
+    assert saved_result.details.tool_result == {"id": 1}
+    saved_result.details.tool_result = {"id": 2}
+    runtime_result = snapshot.messages[1]
+    assert isinstance(runtime_result, ToolResultMessage)
+    assert isinstance(runtime_result.details, CustomToolCallSummary)
+    assert runtime_result.details.tool_result == {"id": 1}
 
 
 @pytest.mark.parametrize("inherited", [False, True])

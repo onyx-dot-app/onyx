@@ -12,7 +12,7 @@ from onyx.agents.models import (
     ToolExecutionRecord,
 )
 from onyx.agents.tools import ToolInvocation, ToolResult
-from onyx.chat.presentation import _collect_tool_history
+from onyx.chat.presentation import project_response
 from onyx.db.memory import UserInfo, UserMemoryContext
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM
@@ -97,7 +97,10 @@ def test_memory_outcome_is_final_before_serialization(
             )
         ],
     )
-    projected = _collect_tool_history(snapshot, {"memory": 1})
+    projected = project_response(snapshot, tool_ids={"memory": 1})
     assert projected.tool_calls[0].tool_call_response == result.text
-    assert projected.tool_calls[0].result_metadata == result.details
+    assert projected.response is not None
+    saved_result = projected.response.steps[0].tools["memory-1"].result
+    assert saved_result is not None
+    assert saved_result.details == result.details
     assert write.call_count == (0 if outcome in {"incognito", "missing_user"} else 1)

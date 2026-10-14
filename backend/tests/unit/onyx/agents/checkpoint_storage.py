@@ -19,6 +19,7 @@ from onyx.llm.models import Message, ToolResult
 
 class SavedCheckpoint(BaseModel):
     response: ResponseRecord
+    response_details: list[JsonValue]
     checkpoint: ResponseCheckpoint | None
     history: list[dict[str, JsonValue]]
     context: AgentState
@@ -49,8 +50,19 @@ class CheckpointStorage:
                 if run_state.status == RunStatus.SUSPENDED
                 else None
             )
+        # Preserve typed result details independently, as the database column does.
+        response_details: list[JsonValue] = []
+        for message in [*response.input_messages, *response.messages]:
+            response_details.append(
+                self.serializer.encode_payload(message.details)
+                if isinstance(message, ToolResult)
+                else None
+            )
+            if isinstance(message, ToolResult):
+                message.details = None
         return SavedCheckpoint(
             response=response,
+            response_details=response_details,
             checkpoint=checkpoint,
             context=agent_state.model_copy(update={"messages": []}),
             history=[
@@ -64,6 +76,13 @@ class CheckpointStorage:
         self, serialized: str, *, expected_binding: CheckpointBinding | None = None
     ) -> ExecutionCheckpoint:
         saved = SavedCheckpoint.model_validate_json(serialized)
+        for message, details in zip(
+            [*saved.response.input_messages, *saved.response.messages],
+            saved.response_details,
+            strict=True,
+        ):
+            if isinstance(message, ToolResult):
+                message.details = self.serializer.decode_payload(details)
         context = saved.context
         for raw in saved.history:
             metadata = raw.pop("metadata", None)

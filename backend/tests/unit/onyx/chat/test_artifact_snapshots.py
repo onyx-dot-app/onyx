@@ -143,8 +143,13 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
         )
         assert file_record.generated_files == [generated]
         assert file_record.tool_call_response == "Created result.csv"
-        assert isinstance(file_record.result_metadata, LlmPythonExecutionResult)
-        assert file_record.result_metadata.generated_files == [generated]
+        file_response = (
+            snapshot.response.child_runs[0] if child_run else snapshot.response
+        )
+        file_result = file_response.steps[0].tools["file"].result
+        assert file_result is not None
+        assert isinstance(file_result.details, LlmPythonExecutionResult)
+        assert file_result.details.generated_files == [generated]
         if child_run:
             parent = next(
                 record
@@ -155,3 +160,4 @@ def test_stop_preserves_accepted_file_and_unfinished_parent(
             assert parent.tool_call_response == ""
             assert snapshot.response.child_runs
         file_record.generated_files = []
+        file_result.details.generated_files.clear()

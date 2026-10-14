@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.agents.execution_records import ExecutionStatus
-from onyx.agents.models import StepRecord
+from onyx.agents.models import StepRecord, ToolExecutionRecord
 from onyx.chat.incognito import delete_incognito_generated_files
 from onyx.chat.incognito_context import (
     append_incognito_message,
@@ -43,9 +43,16 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.models import AssistantMessage, TextContent, ToolDefinition, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    TextContent,
+    ToolCall,
+    ToolDefinition,
+    ToolResultMessage,
+    UserMessage,
+)
 from onyx.redis.redis_pool import get_redis_client
-from onyx.tools.models import ToolCallInfo
+from onyx.tools.models import CustomToolCallSummary, ToolCallInfo
 from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
@@ -304,6 +311,16 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
 
     session_id = uuid4()
     root_id, child_id = str(uuid4()), str(uuid4())
+    tool_result = ToolResultMessage(
+        tool_call_id="lookup",
+        tool_name="lookup",
+        content="private tool output",
+        details=CustomToolCallSummary(
+            tool_name="lookup",
+            response_type="json",
+            tool_result={"display_only": "private tool details"},
+        ),
+    )
     child = ResponseRecord(
         agent_id=child_id,
         agent_path="/root/research",
@@ -313,10 +330,21 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         input_messages=[UserMessage(content="private question")],
         steps=[
             StepRecord(
+                message=AssistantMessage(
+                    content=[ToolCall(id="lookup", name="lookup", arguments={})]
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    "lookup": ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE, result=tool_result
+                    )
+                },
+            ),
+            StepRecord(
                 message=AssistantMessage(content=[TextContent(text="private answer")]),
                 generation_status=ExecutionStatus.COMPLETE,
                 tools={},
-            )
+            ),
         ],
     )
     root = ResponseRecord(
@@ -353,8 +381,17 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         assert restored.previous_run_id == child.run_id
         assert [message.text for message in restored.messages] == [
             "private question",
+            "",
+            "private tool output",
             "private answer",
         ]
+        restored_result = restored.messages[2]
+        assert isinstance(restored_result, ToolResultMessage)
+        assert restored_result.details is None
+        assert tool_result.details is not None
+        saved = client.hget(key, "1")
+        assert saved is not None
+        assert b"private tool details" not in saved
         assert restored.sources[1].document_id == "private-source"
 
         next_child = child.model_copy(
@@ -384,8 +421,12 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         assert restored.previous_run_id == next_child.run_id
         assert [message.text for message in restored.messages] == [
             "private question",
+            "",
+            "private tool output",
             "private answer",
             "next question",
+            "",
+            "private tool output",
             "private answer",
         ]
         assert restored.sources[1].document_id == "private-source"

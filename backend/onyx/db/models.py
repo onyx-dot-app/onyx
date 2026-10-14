@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Any, Literal, NotRequired
+from typing import Annotated, Any, Literal, NotRequired
 from uuid import UUID, uuid4
 
 from fastapi_users_db_sqlalchemy import (
@@ -9,7 +9,7 @@ from fastapi_users_db_sqlalchemy import (
 )
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, Field, JsonValue, ValidationError
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -53,6 +53,7 @@ from typing_extensions import TypedDict  # noreorder
 
 from onyx.agents.execution_records import ExecutionStatus, RunFailure, RunStatus
 from onyx.auth.schemas import UserRole
+from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
     DEFAULT_BOOST,
@@ -66,6 +67,7 @@ from onyx.configs.constants import (
     TokenRateLimitScope,
 )
 from onyx.connectors.models import InputType
+from onyx.context.search.models import SearchDocsResponse
 from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
@@ -127,7 +129,7 @@ from onyx.db.enums import (
 )
 from onyx.db.index_attempt_metrics_models import IndexAttemptStage
 from onyx.db.pydantic_type import PydanticListType, PydanticType
-from onyx.deep_research.models import ResearchConfiguration
+from onyx.deep_research.models import ResearchAgentCallResult, ResearchConfiguration
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.file_store.models import FileDescriptor
 from onyx.kg.models import KGEntityTypeAttributes, KGStage
@@ -139,6 +141,15 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
+from onyx.tools.models import (
+    CustomToolCallSummary,
+    FileReadResult,
+    LlmBashExecutionResult,
+    LlmPythonExecutionResult,
+    MemoryUpdated,
+    ToolExecutionError,
+)
+from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -3290,7 +3301,7 @@ class ChatSession(Base):
     )
     agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
     restoration_config: Mapped[ResearchConfiguration | None] = mapped_column(
-        PydanticType(ResearchConfiguration), nullable=True
+        PydanticType(ResearchConfiguration, sanitize_strings=True), nullable=True
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
@@ -3419,7 +3430,7 @@ class ChatMessage(Base):
         nullable=True,
     )
     response_failure: Mapped[RunFailure | None] = mapped_column(
-        PydanticType(RunFailure), nullable=True
+        PydanticType(RunFailure, sanitize_strings=True), nullable=True
     )
     invoking_tool_call_id: Mapped[int | None] = mapped_column(
         ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True, index=True
@@ -3595,7 +3606,8 @@ class ChatResponseItem(Base):
     )
     step_index: Mapped[int] = mapped_column(Integer)
     message: Mapped[AssistantMessage | None] = mapped_column(
-        PydanticType(AssistantMessage, none_as_null=True), nullable=True
+        PydanticType(AssistantMessage, sanitize_strings=True, none_as_null=True),
+        nullable=True,
     )
     generation_status: Mapped[ExecutionStatus | None] = mapped_column(
         Enum(
@@ -3624,8 +3636,29 @@ class ChatResponseItem(Base):
     )
 
 
+class StoredToolResult(ToolResultMessage):
+    """Tool output with durable application details that can be restored from JSON."""
+
+    details: (
+        Annotated[
+            SearchDocsResponse
+            | ResearchAgentCallResult
+            | CodingAgentCallResult
+            | CustomToolCallSummary
+            | FileReadResult
+            | LlmBashExecutionResult
+            | LlmPythonExecutionResult
+            | MemoryUpdated
+            | ToolExecutionError
+            | FinalImageGenerationResponse,
+            Field(discriminator="type"),
+        ]
+        | None
+    ) = None
+
+
 class ToolCall(Base):
-    """Invocation arguments and artifacts, linked to their model-facing result."""
+    """Invocation arguments and their recorded output, with related search documents."""
 
     __tablename__ = "tool_call"
 
@@ -3639,8 +3672,8 @@ class ToolCall(Base):
         ),
         nullable=True,
     )
-    result: Mapped[ToolResultMessage | None] = mapped_column(
-        PydanticType(ToolResultMessage), nullable=True
+    result: Mapped[StoredToolResult | None] = mapped_column(
+        PydanticType(StoredToolResult, sanitize_strings=True), nullable=True
     )
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id", ondelete="CASCADE")

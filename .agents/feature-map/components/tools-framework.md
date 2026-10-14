@@ -113,19 +113,17 @@ The constructor takes an optional `Emitter`; `Tool.emitter` (`interface.py:emitt
 raises `ValueError` if it was never set, so a tool built without an emitter fails
 loudly on first emit rather than silently dropping packets.
 
-### 4.2 `ToolResponse`: two payloads, two audiences (`tools/models.py:ToolResponse`)
+### 4.2 Tool output: content and application details
 
-This is the load-bearing idea of the component. Every tool run produces exactly one
-`ToolResponse` with two fields that must never be confused:
+Tools return `ToolResultMessage` (`llm/models.py`). Its `content` is the text sent to the model.
+Its `details` carries structured data for application code and rendering: search documents,
+Python output, generated files, or another typed result. Provider serialization excludes `details`.
+Neither field can generally be derived from the other.
 
-- `llm_facing_response: str`: the only thing that goes back into the LLM's message
-  history as the tool's response. Whatever the model needs to keep reasoning must
-  be in this string.
-- `rich_response`: a discriminated union used **only** for UI rendering and DB
-  persistence: `FinalImageGenerationResponse`, `SearchDocsResponse`,
-  `MemoryToolResponse`, `CustomToolCallSummary`, `PythonToolRichResponse`, a bare
-  `str`, or `None`. The LLM never sees this value; it is read by `save_chat_turn`
-  (`[[chat-persistence]]`) and by the frontend renderer.
+Chat saves both fields in `ToolCall.result`. `StoredToolResult` (`db/models.py`)
+restores the concrete detail type from its discriminator. Add new durable detail types there.
+Search documents use their existing database relation; staged search files remain in execution state.
+Temporary incognito history retains model content and stores sources separately; it omits result details.
 
 ### 4.3 Built-in tool catalogue (`tools/built_in_tools.py`, `tool_name.py`)
 
@@ -244,10 +242,9 @@ are available; application tools do not manage browser packet placement.
    "not available" and logged, silently hiding a tool rather than failing the turn.
    A slow `is_available` runs on every tool construction, once per turn per
    persona-attached built-in tool.
-3. **`llm_facing_response` must never carry UI-only data**, and **`rich_response`
-   must never be sent to the LLM.** These are the only two channels a `ToolResponse`
-   has; mixing them either leaks internal structure to the model or drops
-   renderable data.
+3. **Providers receive `ToolResultMessage.content`, not `details`.** Keep model
+   instructions and evidence in content. Preserve structured application output in
+   details so live and saved rendering can use the same result types.
 4. **Citation-number ranges must not collide.** Any new citation-producing tool run
    through `run_tool_calls` must consume `starting_citation_num` and advance it,
    matching the pattern for `SearchTool`/`WebSearchTool`/`OpenURLTool`.
@@ -276,8 +273,8 @@ are available; application tools do not manage browser packet placement.
 **Depends on**
 - `[[streaming-protocol]]`: every tool's `emit_start`, argument-delta, and
   `SectionEnd` packets use the shared `Placement`/`Packet` vocabulary.
-- `[[chat-persistence]]`: `ToolResponse.rich_response` is what `save_chat_turn`
-  persists as `SearchDoc` rows, `ToolCall.tool_call_response`, and generated file records.
+- `[[chat-persistence]]`: saves result content and typed details in `ToolCall.result`.
+  Search-document links and generated-file records retain their existing storage.
 - `[[agents-personas]]`: `persona.tools` is the input to `construct_tools`; persona
   fields (document sets, attached documents, hierarchy nodes) shape `SearchTool`'s
   scope.
@@ -303,7 +300,7 @@ are available; application tools do not manage browser packet placement.
 |---|---|
 | adds a built-in tool | `BUILT_IN_TOOL_MAP`, a seeding migration for its `Tool` row, a construction branch in `tool_constructor.py`, a renderer case in `renderMessageComponent.tsx`, and whether it needs a `MERGEABLE_TOOL_FIELDS` entry |
 | renames a tool's `NAME` | Saved chat history stores the old name in `ToolCallSimple.tool_name`; a rename breaks replay of old sessions and the frontend's type-based renderer switch in `renderMessageComponent.tsx` |
-| changes `ToolResponse` (adds/removes a `rich_response` variant) | every tool that returns that variant, `save_chat_turn` (`[[chat-persistence]]`), and the frontend renderer that reads the persisted rich response |
+| changes a durable tool detail type | its tool implementation, `StoredToolResult`, checkpoint serialization, and live/saved rendering |
 | changes `is_available` for any built-in tool | the tool-listing/admin UI, and whether the change can raise (see §5 contract 2) |
 | changes error wrapping in `_safe_run_single_tool` | the exact `GENERIC_TOOL_ERROR_MESSAGE` string other code may pattern-match on, and whether `SectionEnd` still always fires |
 | changes `allowed_tool_ids` filtering | `MemoryTool`'s bypass and `should_disable_open_url_web_fetch`, both of which sit outside the main filter |

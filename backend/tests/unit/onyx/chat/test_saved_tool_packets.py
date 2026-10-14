@@ -1,27 +1,22 @@
-"""Saved tool output supports historical summaries and current result metadata."""
+"""Saved SDK results render without tool definitions; legacy history keeps its reader."""
 
 from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, JsonValue
 from sqlalchemy.orm import Session
 
 from onyx.agents.execution_records import ExecutionStatus, RunStatus
-from onyx.agents.models import (
-    RunState,
-    StepRecord,
-    ToolExecutionRecord,
-)
+from onyx.agents.models import RunState, StepRecord, ToolExecutionRecord
 from onyx.chat.models import ChatSearchResult
-from onyx.chat.presentation import _collect_tool_history, _saved_tool_metadata
+from onyx.chat.presentation import _collect_tool_history
 from onyx.chat.renderer import ToolRenderer
 from onyx.chat.response import response_record
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.models import ChatMessage, Tool, ToolCall
+from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
+from onyx.db.models import ChatMessage, StoredToolResult, Tool, ToolCall
 from onyx.db.models import SearchDoc as DbSearchDoc
-from onyx.db.tools import restore_tool_result
 from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.server.query_and_chat.placement import Placement
@@ -42,143 +37,20 @@ from onyx.tools.models import (
     ChatFile,
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
-    LlmPythonExecutionResult,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
-from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
-def _restored_result(call: ToolCall, tool: Tool) -> ToolResultMessage:
-    return restore_tool_result(
-        ToolResultMessage(
-            tool_call_id=str(call.id),
-            tool_name=tool.name,
-            content=call.tool_call_response or "",
-        ),
-        call,
-        tool,
-    )
-
-
 @pytest.mark.parametrize(
-    "response, expected_stdout, expected_files",
-    [
-        (
-            '{"stdout":"report ready","generated_files":[{"file_link":"/api/chat/file/report.csv"}]}',
-            "report ready",
-            ["report.csv"],
-        ),
-        ("execution output", "execution output", []),
-    ],
+    "kind", ["search", "custom", "error", "display_error", "no_details"]
 )
-def test_python_history_reads_partial_summaries_and_text(
-    response: str, expected_stdout: str, expected_files: list[str]
+def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
+    kind: str,
 ) -> None:
-    call = ToolCall(
-        tool_id=1,
-        turn_number=0,
-        tab_index=0,
-        tool_call_arguments={"code": "print('report ready')"},
-        tool_call_response=response,
-    )
-    item = _restored_result(
-        call, Tool(name="python", in_code_tool_id=PythonTool.__name__)
-    )
-    output = item.details
-    assert isinstance(output, LlmPythonExecutionResult)
-    assert output.stdout == expected_stdout
-    assert [file.filename for file in output.generated_files] == expected_files
-
-
-def test_custom_file_history_validates_references() -> None:
-    call = ToolCall(
-        tool_id=1,
-        turn_number=0,
-        tab_index=0,
-        tool_call_arguments={},
-        tool_call_response='{"tool_name":"export","response_type":"csv","tool_result":{"file_ids":["report.csv"]}}',
-    )
-    tool = Tool(name="export", display_name="Export", in_code_tool_id=None)
-    output = _restored_result(call, tool).details
-    assert isinstance(output, CustomToolCallSummary)
-    assert CustomToolUserFileSnapshot.model_validate(output.tool_result).file_ids == [
-        "report.csv"
-    ]
-    call.tool_call_response = (
-        '{"tool_name":"export","response_type":"csv","tool_result":{"file_ids":[42]}}'
-    )
-    with pytest.raises(ValidationError):
-        _restored_result(call, tool)
-
-
-def test_search_metadata_survives_storage() -> None:
-    details = SearchDocsResponse(
-        queries=["expanded query"],
-        sources=["file"],
-        search_docs=[],
-        citation_mapping={1: "doc-id"},
-        time_filter_start=datetime(2025, 1, 1, tzinfo=timezone.utc),
-    )
-    response = ToolResultMessage(
-        tool_call_id="search-1",
-        tool_name="internal_search",
-        content="model search output",
-        details=details,
-    )
-    metadata = _saved_tool_metadata(response)
-    assert metadata is not None
-    call = ToolCall(
-        tool_id=1,
-        turn_number=0,
-        tab_index=0,
-        tool_call_arguments={"queries": ["original query"]},
-        tool_call_response=metadata.model_dump_json(),
-        search_docs=[],
-    )
-    restored = _restored_result(
-        call, Tool(name="internal_search", in_code_tool_id=SearchTool.__name__)
-    ).details
-    assert isinstance(restored, SearchDocsResponse)
-    assert restored == details
-
-
-@pytest.mark.parametrize(
-    "implementation, output",
-    [
-        (PythonTool.__name__, '{"type":"python_execution","stdout":"partial"}'),
-        (SearchTool.__name__, '{"type":"search_result","queries":42}'),
-    ],
-)
-def test_corrupt_structured_metadata_is_rejected(
-    implementation: str, output: str
-) -> None:
-    call = ToolCall(
-        tool_id=1, tool_call_arguments={}, tool_call_response=output, search_docs=[]
-    )
-    with pytest.raises(ValidationError):
-        _restored_result(call, Tool(name="tool", in_code_tool_id=implementation))
-
-
-def test_legacy_search_model_output_uses_saved_arguments() -> None:
-    call = ToolCall(
-        tool_id=1,
-        tool_call_arguments={"queries": ["question"]},
-        tool_call_response='{"type":"internal_search","results":[]}',
-        search_docs=[],
-    )
-    result = _restored_result(
-        call, Tool(name="internal_search", in_code_tool_id=SearchTool.__name__)
-    ).details
-    assert isinstance(result, SearchDocsResponse)
-    assert result.queries == ["question"]
-
-
-@pytest.mark.parametrize("kind", ["search", "custom", "error"])
-def test_live_and_saved_tool_cards_share_public_content(kind: str) -> None:
     call = ModelToolCall(
         id="call",
         name="lookup",
@@ -188,6 +60,8 @@ def test_live_and_saved_tool_cards_share_public_content(kind: str) -> None:
     if kind == "search":
         details = ChatSearchResult(
             queries=["question"],
+            sources=["file"],
+            time_filter_start=datetime(2025, 1, 1, tzinfo=timezone.utc),
             search_docs=[],
             citation_mapping={},
             staged_files=[ChatFile(filename="private.txt", content=b"private content")],
@@ -196,71 +70,108 @@ def test_live_and_saved_tool_cards_share_public_content(kind: str) -> None:
         details = CustomToolCallSummary(
             tool_name="lookup", response_type="json", tool_result={"value": "found"}
         )
+    elif kind == "display_error":
+        details = ToolExecutionError(message="lookup failed")
     else:
         details = None
     result = ToolResultMessage(
         tool_call_id=call.id,
         tool_name=call.name,
-        content="lookup failed" if kind == "error" else "model output",
+        content="lookup failed" if "error" in kind else "model output",
         details=details,
-        is_error=kind == "error",
+        is_error="error" in kind,
     )
     renderer = ToolRenderer(call, Placement(turn_index=0), tool_id=1)
     live = renderer.start() + renderer.complete(result)
-
-    metadata = _saved_tool_metadata(result)
-    record = ToolCall(
-        id=1,
-        tool_id=1,
-        tool_call_arguments=call.arguments,
-        tool_call_response=metadata.model_dump_json() if metadata else result.text,
-        search_docs=[],
-    )
-    status = RunStatus.ERROR if result.is_error else RunStatus.COMPLETE
     response = response_record(
         RunState(
             run_id="run",
-            status=status,
+            status=RunStatus.COMPLETE,
             steps=[
                 StepRecord(
                     message=AssistantMessage(id="run:0", content=[call]),
                     generation_status=ExecutionStatus.COMPLETE,
                     tools={
                         call.id: ToolExecutionRecord(
-                            status=ExecutionStatus(status.value), result=result
+                            status=ExecutionStatus.COMPLETE, result=result
                         )
                     },
                 )
             ],
         )
     )
-    restored = _response_packets(
-        response,
-        {("run:0", call.id): record},
-        {
-            1: Tool(
-                name=call.name,
-                in_code_tool_id=SearchTool.__name__ if kind == "search" else None,
-            )
-        },
-        {},
-        {},
+    stored = response.steps[0].tools[call.id].result
+    assert stored is not None
+    response.steps[0].tools[call.id].result = StoredToolResult.model_validate_json(
+        stored.model_dump_json()
     )
+    record = ToolCall(
+        id=1,
+        tool_id=1,
+        tool_call_arguments=call.arguments,
+        search_docs=[],
+        tool_call_response='{"type":"search_result","queries":["stale"]}',
+    )
+    restored = _response_packets(response, {("run:0", call.id): record}, {}, {})
     assert [
-        packet.obj for packet in restored if not isinstance(packet.obj, OverallStop)
-    ] == [packet.obj for packet in live]
-    public_json = "".join(packet.model_dump_json() for packet in live)
+        packet.model_dump()
+        for packet in restored
+        if not isinstance(packet.obj, OverallStop)
+    ] == [packet.model_dump() for packet in live]
+    public_json = "".join(packet.model_dump_json() for packet in restored)
     assert "staged_files" not in public_json
     assert "private" not in public_json
+    assert "stale" not in public_json
     if kind == "error":
         errors = [
-            packet.obj for packet in live if isinstance(packet.obj, CustomToolDelta)
+            packet.obj for packet in restored if isinstance(packet.obj, CustomToolDelta)
         ]
         assert errors[-1].data == "lookup failed"
+    if kind == "display_error":
+        errors = [
+            packet.obj for packet in restored if isinstance(packet.obj, PacketException)
+        ]
+        assert len(errors) == 1
+        assert str(errors[0].exception) == "lookup failed"
+
+
+@pytest.mark.parametrize(
+    ("response_type", "payload"),
+    [
+        ("json", {"file_ids": ["report"], "other": 1}),
+        ("json", {"file_ids": ["report"]}),
+        ("image", {"file_ids": ["report"]}),
+        ("csv", {"file_ids": ["report"]}),
+    ],
+)
+def test_custom_result_file_type_survives_storage(
+    response_type: str, payload: dict[str, JsonValue]
+) -> None:
+    call = ModelToolCall(id="call", name="custom", arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="model output",
+        details=CustomToolCallSummary(
+            tool_name=call.name, response_type=response_type, tool_result=payload
+        ),
+    )
+    stored = StoredToolResult.model_validate_json(result.model_dump_json())
+    assert isinstance(stored.details, CustomToolCallSummary)
+    if response_type == "json":
+        assert stored.details.tool_result == payload
+    else:
+        assert isinstance(stored.details.tool_result, CustomToolUserFileSnapshot)
+        assert stored.details.tool_result.file_ids == ["report"]
+    live_packets = ToolRenderer(call, Placement(turn_index=0)).complete(result)
+    saved_packets = ToolRenderer(call, Placement(turn_index=0)).complete(stored)
+    assert [packet.model_dump() for packet in saved_packets] == [
+        packet.model_dump() for packet in live_packets
+    ]
 
 
 @pytest.mark.parametrize("select_none", [False, True])
-def test_empty_search_selection_survives_projection_and_reload(
+def test_saved_search_selection_uses_document_links_without_mutating_result(
     select_none: bool,
 ) -> None:
     doc = SearchDoc(
@@ -274,17 +185,16 @@ def test_empty_search_selection_survives_projection_and_reload(
         metadata={},
         match_highlights=[],
     )
-    details = SearchDocsResponse.model_validate_json(
-        SearchDocsResponse(
+    call = ModelToolCall(id="search-1", name=SearchTool.NAME, arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="result",
+        details=SearchDocsResponse(
             search_docs=[doc],
             displayed_docs=[] if select_none else None,
             citation_mapping={},
-        ).model_dump_json()
-    )
-    assert details.displayed_docs == ([] if select_none else None)
-    call = ModelToolCall(id="search-1", name=SearchTool.NAME, arguments={})
-    result = ToolResultMessage(
-        tool_call_id=call.id, tool_name=call.name, content="result", details=details
+        ),
     )
     state = RunState(
         run_id="run",
@@ -303,38 +213,46 @@ def test_empty_search_selection_survives_projection_and_reload(
     )
     history = _collect_tool_history(state, {call.name: 1})
     assert history.tool_calls[0].search_docs == ([] if select_none else [doc])
-    assert history.all_search_docs == {doc.document_id: doc}
-    metadata = _saved_tool_metadata(result)
-    assert metadata is not None
+    response = response_record(state)
+    saved_result = response.steps[0].tools[call.id].result
+    assert saved_result is not None
+    saved_result = StoredToolResult.model_validate_json(saved_result.model_dump_json())
+    response.steps[0].tools[call.id].result = saved_result
+    before = saved_result.model_dump_json()
     record = ToolCall(
         tool_id=1,
-        turn_number=0,
-        tab_index=0,
-        tool_call_arguments={},
-        tool_call_response=metadata.model_dump_json(),
-        search_docs=[],
+        search_docs=[]
+        if select_none
+        else [
+            DbSearchDoc(
+                id=42,
+                document_id=doc.document_id,
+                chunk_ind=0,
+                semantic_id=doc.semantic_identifier,
+                blurb=doc.blurb,
+                source_type=doc.source_type,
+                boost=1,
+                hidden=False,
+                doc_metadata={},
+                match_highlights=[],
+                is_internet=False,
+            )
+        ],
     )
-    with patch(
-        "onyx.db.tools.translate_db_search_doc_to_saved_search_doc", return_value=doc
-    ):
-        if not select_none:
-            record.search_docs = [DbSearchDoc()]
-        restored = _restored_result(
-            record, Tool(name=call.name, in_code_tool_id=SearchTool.__name__)
-        )
-    assert isinstance(restored.details, SearchDocsResponse)
-    assert restored.details.displayed_docs == ([] if select_none else None)
-    for output in [details, restored.details]:
-        packets = ToolRenderer(call, Placement(turn_index=0)).update(output)
-        docs = [
-            doc
-            for packet in packets
-            if isinstance(packet.obj, SearchToolDocumentsDelta)
-            for doc in packet.obj.documents
-        ]
-        assert [doc.document_id for doc in docs] == (
-            [] if select_none else ["retrieved"]
-        )
+    packets = _response_packets(response, {("message", call.id): record}, {}, {})
+    documents = [
+        doc
+        for packet in packets
+        if isinstance(packet.obj, SearchToolDocumentsDelta)
+        for doc in packet.obj.documents
+    ]
+    assert [doc.document_id for doc in documents] == (
+        [] if select_none else ["retrieved"]
+    )
+    if documents:
+        assert isinstance(documents[0], SavedSearchDoc)
+        assert documents[0].db_doc_id == 42
+    assert saved_result.model_dump_json() == before
 
 
 @pytest.mark.parametrize("display_error", [False, True])
