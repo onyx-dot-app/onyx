@@ -1,6 +1,8 @@
-"""Convert between live SDK snapshots and detached chat response records."""
+"""Project message content and detach SDK state for response persistence."""
 
 from collections.abc import Sequence
+
+from pydantic import TypeAdapter
 
 from onyx.agents.models import (
     AgentInfo,
@@ -10,7 +12,18 @@ from onyx.agents.models import (
 )
 from onyx.chat.models import ResponseRecord
 from onyx.deep_research.models import ResearchConfiguration
-from onyx.llm.models import Message, ToolResultMessage
+from onyx.llm.models import AssistantMessage, Message, ToolResultMessage
+
+_STRING = TypeAdapter(str)
+
+
+def message_thinking(message: AssistantMessage, think_tool: str | None = None) -> str:
+    """Collect model thinking and reasoning supplied through a configured think tool."""
+    thinking = message.thinking
+    for call in message.tool_calls:
+        if call.name == think_tool:
+            thinking += _STRING.validate_python(call.arguments.get("reasoning", ""))
+    return thinking
 
 
 def response_record(
