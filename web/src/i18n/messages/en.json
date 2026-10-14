@@ -975,6 +975,9 @@
         "s3": {
           "description": "AWS storage buckets"
         },
+        "azureDatalake": {
+          "description": "Azure datalake storage"
+        },
         "r2": {
           "description": "Cloud storage buckets"
         },

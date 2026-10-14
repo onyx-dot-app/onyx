@@ -360,4 +360,10 @@ CONNECTOR_CLASS_MAP = {
         class_name="MockConnector",
         config_class=MockConnectorConfig,
     ),
+    # Azure Datalake Connector
+    DocumentSource.AZURE_DATALAKE: ConnectorMapping(
+        module_path="onyx.connectors.azure_datalake.connector",
+        class_name="BlobStorageConnector",
+        config_class=BlobStorageConnectorConfig,
+    ),
 }

@@ -975,6 +975,9 @@
         "s3": {
           "description": "AWS 存储桶"
         },
+        "azureDatalake": {
+          "description": "Azure datalake storage"
+        },
         "r2": {
           "description": "云存储桶"
         },

@@ -446,6 +446,13 @@ export const CREDENTIAL_SPECS = {
       },
     ],
   }),
+  azure_datalake: defineCredentialSpec({
+    brandName: "Azure",
+    fields: {
+      adls_access_key_id: text("accessKeyId"),
+      adls_secret_access_key: text("secretAccessKey"),
+    },
+  }),
   r2: defineCredentialSpec({
     brandName: "R2",
     fields: {
