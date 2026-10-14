@@ -296,7 +296,7 @@ def _event_with_request_params(
     )
 
 
-class _GenerationSignal(CancellationSignal):
+class _DeadlineCancellationSignal(CancellationSignal):
     def __init__(self, parent: CancellationSignal, timeout: float) -> None:
         super().__init__()
         self.parent = parent
@@ -317,7 +317,7 @@ def _generation_scope(context: GenerationContext) -> Iterator[CancellationSignal
             parent.check()
             yield parent
         return
-    signal = _GenerationSignal(parent, context.total_timeout_s)
+    signal = _DeadlineCancellationSignal(parent, context.total_timeout_s)
     with (
         parent.on_cancel(signal.cancel),
         cancellation_scope(signal),
@@ -1787,8 +1787,8 @@ class LitellmLLM(LLM):
                 **(span.span_data.model_config or {}),
                 **cache_stats,
             }
-            signal.check()
             try:
+                signal.check()
                 response = self.invoke_raw(
                     messages,
                     tools=tools,
@@ -1799,7 +1799,12 @@ class LitellmLLM(LLM):
                     reasoning_effort=request.options.reasoning_effort,
                     user_identity=context.user_identity,
                 )
-            except Exception as error:
+                record_llm_response(span, response)
+                # A completed response survives its deadline, but explicit Stop wins.
+                if signal.cancelled:
+                    raise AgentCancelled()
+                return to_assistant_message(response, request)
+            except (Exception, AgentCancelled) as error:
                 span.set_error(
                     {
                         "message": self.redact_error(
@@ -1809,12 +1814,6 @@ class LitellmLLM(LLM):
                     }
                 )
                 raise
-            # A completed response survives its deadline, but explicit Stop wins.
-            if signal.cancelled:
-                raise AgentCancelled()
-            message = to_assistant_message(response, request)
-            record_llm_response(span, response)
-            return message
 
     @isolated_context
     def stream(
@@ -1842,26 +1841,27 @@ class LitellmLLM(LLM):
             started = time.monotonic()
             first_action = False
             request_params_sent = False
-            signal.check()
-            yield GenerationStartEvent()
-            events = accumulator.consume(
-                iter(
-                    self.stream_raw(
-                        messages,
-                        tools=tools,
-                        tool_choice=request.options.tool_choice,
-                        max_tokens=request.options.max_tokens,
-                        reasoning_effort=request.options.reasoning_effort,
-                        user_identity=context.user_identity,
-                        operation=operation,
-                        stall_timeout_s=context.stall_timeout_s
-                        or LLM_SOCKET_READ_TIMEOUT,
-                        structured_response_format=request.options.structured_response_format,
-                    )
-                ),
-                request,
-            )
+            events = None
             try:
+                signal.check()
+                yield GenerationStartEvent()
+                events = accumulator.consume(
+                    iter(
+                        self.stream_raw(
+                            messages,
+                            tools=tools,
+                            tool_choice=request.options.tool_choice,
+                            max_tokens=request.options.max_tokens,
+                            reasoning_effort=request.options.reasoning_effort,
+                            user_identity=context.user_identity,
+                            operation=operation,
+                            stall_timeout_s=context.stall_timeout_s
+                            or LLM_SOCKET_READ_TIMEOUT,
+                            structured_response_format=request.options.structured_response_format,
+                        )
+                    ),
+                    request,
+                )
                 for event in events:
                     signal.check()
                     if not first_action:
@@ -1928,7 +1928,8 @@ class LitellmLLM(LLM):
                 # Record partial content and usage on errors and GeneratorExit,
                 # not just clean completion. GeneratorExit is a BaseException,
                 # so it does not pass through the Exception handler above.
-                events.close()
+                if events is not None:
+                    events.close()
                 accumulator.finalize()
                 message = accumulator.message
                 record_llm_span_output(

@@ -150,10 +150,8 @@ class _CheckpointSerializer:
 
     def encode_progress(self, progress: RunProgress) -> dict[str, JsonValue]:
         data = _dump(progress, exclude={"human_tool_answers", "feature_state"})
-        # Keep checkpoint wire keys independent of Python field names.
-        data["pending"] = data.pop("pending_tool_calls")
         data["feature_state"] = self.encode_payload(progress.feature_state)
-        data["answers"] = {
+        data["human_tool_answers"] = {
             key: self.encode_answer(answer)
             for key, answer in progress.human_tool_answers.items()
         }
@@ -162,8 +160,7 @@ class _CheckpointSerializer:
     def decode_progress(self, value: JsonValue) -> RunProgress:
         raw = _object(value)
         feature_state = raw.pop("feature_state", None)
-        answers = raw.pop("answers", {})
-        raw["pending_tool_calls"] = raw.pop("pending", {})
+        answers = raw.pop("human_tool_answers", {})
         progress = RunProgress.model_validate(raw)
         progress.feature_state = self.decode_payload(feature_state)
         progress.human_tool_answers = {

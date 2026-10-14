@@ -63,7 +63,7 @@ class ResponseOwner(BaseModel):
     token: UUID
     message_id: int
     root_message_id: int
-    revision: int | None = None
+    ownership_version: int | None = None
 
 
 class _OwnershipLost(RuntimeError):
@@ -160,7 +160,6 @@ class ChatRunStore(RunStore, RunOwnership):
         return CheckpointBinding(
             tenant_id=self.tenant_id,
             branch_id=str(message_id),
-            context_version=f"response:{message_id}",
         )
 
     def bind(
@@ -263,7 +262,7 @@ class ChatRunStore(RunStore, RunOwnership):
             self._require_owner(owned)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 check_checkpoint_owner__no_commit(
-                    session, owned.owner.message_id, owned.owner.revision
+                    session, owned.owner.message_id, owned.owner.ownership_version
                 )
                 message_id = save_response_record__no_commit(
                     session, owned.owner.root_message_id, record
@@ -332,10 +331,12 @@ class ChatRunStore(RunStore, RunOwnership):
             with self._ownership_lock(run_id):
                 if self._owner(run_id) != lease.owner:
                     return
-                if lease.owner.revision is not None:
+                if lease.owner.ownership_version is not None:
                     with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                         release_checkpoint_claim__no_commit(
-                            session, lease.owner.message_id, lease.owner.revision
+                            session,
+                            lease.owner.message_id,
+                            lease.owner.ownership_version,
                         )
                         session.commit()
                 self.cache.delete(self._owner_key(run_id))
@@ -372,7 +373,7 @@ class ChatRunStore(RunStore, RunOwnership):
             self._require_owner(owned)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 check_checkpoint_owner__no_commit(
-                    session, owned.owner.message_id, owned.owner.revision
+                    session, owned.owner.message_id, owned.owner.ownership_version
                 )
             self._root_response.save(run)
 
@@ -476,7 +477,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 self._require_owner(owned)
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                     check_checkpoint_owner__no_commit(
-                        session, owned.owner.message_id, owned.owner.revision
+                        session, owned.owner.message_id, owned.owner.ownership_version
                     )
                     save_response_record__no_commit(
                         session,
@@ -496,7 +497,7 @@ class ChatRunStore(RunStore, RunOwnership):
                         session,
                         owned.owner.message_id,
                         data,
-                        expected_revision=owned.owner.revision,
+                        expected_ownership_version=owned.owner.ownership_version,
                     )
                     session.commit()
                     published = True
@@ -530,7 +531,7 @@ class ChatRunStore(RunStore, RunOwnership):
                 token=uuid4(),
                 message_id=saved.message_id,
                 root_message_id=saved.root_message_id,
-                revision=checkpoint.revision,
+                ownership_version=checkpoint.ownership_version,
             )
             lease = _OwnerLease(owner)
             try:
@@ -542,7 +543,7 @@ class ChatRunStore(RunStore, RunOwnership):
             except Exception:
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                     release_checkpoint_claim__no_commit(
-                        session, saved.message_id, checkpoint.revision
+                        session, saved.message_id, checkpoint.ownership_version
                     )
                     session.commit()
                 raise

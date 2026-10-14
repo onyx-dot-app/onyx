@@ -30,7 +30,6 @@ def test_response_status_reads_only_identity_and_status(db_session: Session) -> 
         parent_chat_message_id=root.id,
         turn_number=0,
         tool_call_id="research",
-        tool_name="research",
         tool_call_arguments={"question": "large tool arguments"},
         tool_call_tokens=3,
     )
@@ -93,7 +92,7 @@ def test_response_status_reads_only_identity_and_status(db_session: Session) -> 
         assert len(statements) == 6
         sql = "\n".join(statements).lower()
         for forbidden in (
-            "chat_response_message",
+            "chat_response_item",
             "tool_call.result",
             "tool_call.tool_call_arguments",
             "chat_message.message,",

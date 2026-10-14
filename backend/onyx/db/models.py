@@ -3387,7 +3387,10 @@ class ChatResponseCheckpoint(Base):
     chat_message_id: Mapped[int] = mapped_column(
         ForeignKey("chat_message.id", ondelete="CASCADE"), primary_key=True
     )
-    revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    # Ownership version; separate from the runtime revision stored in state.
+    ownership_version: Mapped[int] = mapped_column(
+        BigInteger, default=0, server_default="0"
+    )
     state: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
 
 
@@ -3424,10 +3427,10 @@ class ChatMessage(Base):
     invoking_tool_call: Mapped["ToolCall | None"] = relationship(
         "ToolCall", foreign_keys=[invoking_tool_call_id]
     )
-    response_messages: Mapped[list["ChatResponseMessage"]] = relationship(
-        "ChatResponseMessage",
+    response_items: Mapped[list["ChatResponseItem"]] = relationship(
+        "ChatResponseItem",
         back_populates="response",
-        order_by="ChatResponseMessage.position",
+        order_by="ChatResponseItem.step_index",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
@@ -3556,25 +3559,30 @@ class ChatMessage(Base):
     )
 
 
-class ChatResponseMessage(Base):
-    __tablename__ = "chat_response_message"
+class ChatResponseItem(Base):
+    __tablename__ = "chat_response_item"
     __table_args__ = (
-        UniqueConstraint("chat_message_id", "position"),
         UniqueConstraint("tool_call_id"),
-        CheckConstraint("position >= 0 AND step_index >= 0"),
+        CheckConstraint("step_index >= 0", name="ck_response_item_step_index"),
         CheckConstraint(
-            "(content IS NOT NULL AND tool_call_id IS NULL AND operation_status IS NOT NULL) OR "
-            "(content IS NULL AND tool_call_id IS NOT NULL AND operation_status IS NULL AND NOT is_answer)"
+            "(message IS NOT NULL AND tool_call_id IS NULL AND generation_status IS NOT NULL) OR "
+            "(message IS NULL AND tool_call_id IS NOT NULL AND generation_status IS NULL AND NOT is_answer)",
+            name="ck_response_item_kind",
         ),
         Index(
-            "uq_response_message_step",
+            "ix_response_item_step",
+            "chat_message_id",
+            "step_index",
+        ),
+        Index(
+            "uq_response_item_step",
             "chat_message_id",
             "step_index",
             unique=True,
-            postgresql_where=text("content IS NOT NULL"),
+            postgresql_where=text("message IS NOT NULL"),
         ),
         Index(
-            "uq_response_message_answer",
+            "uq_response_item_answer",
             "chat_message_id",
             unique=True,
             postgresql_where=text("is_answer"),
@@ -3582,14 +3590,13 @@ class ChatResponseMessage(Base):
     )
     id: Mapped[str] = mapped_column(String, primary_key=True)
     chat_message_id: Mapped[int] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE"), index=True
+        ForeignKey("chat_message.id", ondelete="CASCADE")
     )
-    position: Mapped[int] = mapped_column(Integer)
     step_index: Mapped[int] = mapped_column(Integer)
-    content: Mapped[AssistantMessage | None] = mapped_column(
+    message: Mapped[AssistantMessage | None] = mapped_column(
         PydanticType(AssistantMessage, none_as_null=True), nullable=True
     )
-    operation_status: Mapped[ExecutionStatus | None] = mapped_column(
+    generation_status: Mapped[ExecutionStatus | None] = mapped_column(
         Enum(
             ExecutionStatus,
             native_enum=False,
@@ -3608,7 +3615,7 @@ class ChatResponseMessage(Base):
     )
     response: Mapped["ChatMessage"] = relationship(
         "ChatMessage",
-        back_populates="response_messages",
+        back_populates="response_items",
         foreign_keys=[chat_message_id],
     )
     tool_call: Mapped["ToolCall | None"] = relationship(
@@ -3623,12 +3630,6 @@ class ToolCall(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
-    tool_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    argument_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    raw_arguments: Mapped[str | None] = mapped_column(Text, nullable=True)
-    arguments_complete: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="true"
-    )
     operation_status: Mapped[ExecutionStatus | None] = mapped_column(
         Enum(
             ExecutionStatus,

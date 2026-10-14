@@ -1,4 +1,4 @@
-"""The response-message migration preserves main's public response records."""
+"""The response-item migration preserves main's public response records."""
 
 from pathlib import Path
 from uuid import uuid4
@@ -19,6 +19,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
@@ -191,6 +192,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                     == "chat:42"
                 )
                 revision.module.upgrade()
+                _assert_response_schema_contract(connection, schema)
                 assert connection.execute(
                     text("""
                     SELECT oid, confdeltype FROM pg_constraint
@@ -210,7 +212,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                         "chat_session", schema=schema
                     )
                 }
-                assert "chat_response_message" in inspect(connection).get_table_names(
+                assert "chat_response_item" in inspect(connection).get_table_names(
                     schema=schema
                 )
                 assert "agent_run" not in inspect(connection).get_table_names(
@@ -295,12 +297,12 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                         (9, :grandchild, 202, 8, 1, 'Leaf result'),
                         (10, :root, 42, NULL, NULL, 'Control result');
                     INSERT INTO tool_call (id, chat_session_id, parent_chat_message_id, tool_id, tool_call_response, result) VALUES
-                        (11, :root, 42, 1, '', '{"content": [{"type": "text", "text": "Saved result"}]}');
+                        (11, :root, 42, 1, '', '{"content": "Saved result"}');
                     INSERT INTO chat_message (id, chat_session_id, parent_message_id, message, message_type, last_summarized_message_id) VALUES
                         (44, :root, 42, 'SDK summary', 'SUMMARY', 'generation:0'),
                         (45, :root, 42, 'Missing cutoff', 'SUMMARY', 'chat:999999999999999999999');
-                    INSERT INTO chat_response_message (id, chat_message_id, position, step_index, operation_status, content) VALUES
-                        ('leaf-message', 202, 0, 0, 'complete', '{"role": "assistant", "id": "leaf-message", "content": [{"type": "text", "text": "Grandchild output"}]}');
+                    INSERT INTO chat_response_item (id, chat_message_id, step_index, generation_status, message) VALUES
+                        ('leaf-message', 202, 0, 'complete', '{"role": "assistant", "id": "leaf-message", "content": [{"type": "text", "text": "Grandchild output"}]}');
                     INSERT INTO chat_feedback (id, chat_message_id) VALUES (1, 202);
                     INSERT INTO search_doc (id) VALUES (1);
                     INSERT INTO tool_call__search_doc VALUES (9, 1);
@@ -409,7 +411,7 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
                         "chat_session", schema=schema
                     )
                 }
-                assert "chat_response_message" in inspect(connection).get_table_names(
+                assert "chat_response_item" in inspect(connection).get_table_names(
                     schema=schema
                 )
         finally:
@@ -417,3 +419,58 @@ def test_response_storage_upgrade_downgrade_upgrade(db_session: Session) -> None
             connection.execute(DropSchema(schema, cascade=True, if_exists=True))
             connection.execute(text("RESET search_path"))
             connection.commit()
+
+
+def _assert_response_schema_contract(connection: Connection, schema: str) -> None:
+    inspector = inspect(connection)
+    response_columns = {
+        column["name"]
+        for column in inspector.get_columns("chat_response_item", schema=schema)
+    }
+    assert {"message", "generation_status"} <= response_columns
+    assert not {"content", "operation_status", "position"} & response_columns
+    tool_columns = {
+        column["name"] for column in inspector.get_columns("tool_call", schema=schema)
+    }
+    assert (
+        not {"argument_error", "raw_arguments", "arguments_complete", "tool_name"}
+        & tool_columns
+    )
+    assert "ix_chat_response_item_chat_message_id" not in {
+        index["name"]
+        for index in inspector.get_indexes("chat_response_item", schema=schema)
+    }
+    assert any(
+        index["column_names"] == ["chat_message_id", "step_index"]
+        and not index["unique"]
+        for index in inspector.get_indexes("chat_response_item", schema=schema)
+    )
+    checkpoint_columns = {
+        column["name"]
+        for column in inspector.get_columns("chat_response_checkpoint", schema=schema)
+    }
+    assert (
+        "ownership_version" in checkpoint_columns
+        and "revision" not in checkpoint_columns
+    )
+    connection.execute(
+        text("""
+        INSERT INTO chat_response_checkpoint (chat_message_id, state) VALUES (42, '{}');
+        INSERT INTO chat_response_item (id, chat_message_id, step_index, generation_status, message)
+        VALUES ('schema-contract', 42, 0, 'running', '{}');
+    """)
+    )
+    assert (
+        connection.scalar(
+            text(
+                "SELECT ownership_version FROM chat_response_checkpoint WHERE chat_message_id=42"
+            )
+        )
+        == 0
+    )
+    connection.execute(
+        text("""
+        DELETE FROM chat_response_checkpoint WHERE chat_message_id=42;
+        DELETE FROM chat_response_item WHERE id='schema-contract';
+    """)
+    )

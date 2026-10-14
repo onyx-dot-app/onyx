@@ -483,7 +483,6 @@ class CheckpointBinding(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     tenant_id: str
     branch_id: str
-    context_version: str
 
 
 class MessagePayload(BaseModel):

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.agents.execution_records import RunStatus, messages_for_model
+from onyx.agents.execution_records import ExecutionStatus, RunStatus, messages_for_model
 from onyx.chat.chat_utils import (
     _build_tool_call_response_history_message,
     capture_chat_history,
@@ -13,7 +13,7 @@ from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.db.models import (
     ChatMessage,
-    ChatResponseMessage,
+    ChatResponseItem,
     ChatSession,
 )
 from onyx.file_store.models import ChatFileType, ChatLoadedFile
@@ -193,14 +193,13 @@ def test_saved_response_history_preserves_generation_content() -> None:
         is_clarification=False,
         response_status=RunStatus.CANCELLED,
     )
-    response.response_messages = [
-        ChatResponseMessage(
+    response.response_items = [
+        ChatResponseItem(
             id="generation-1",
             chat_message_id=42,
-            position=0,
             step_index=0,
-            operation_status=RunStatus.CANCELLED,
-            content=AssistantMessage(
+            generation_status=ExecutionStatus.CANCELLED,
+            message=AssistantMessage(
                 id="generation-1", content=[TextContent(text="Accepted partial output")]
             ),
         ),

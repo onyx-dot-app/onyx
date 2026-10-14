@@ -61,7 +61,7 @@ from onyx.db.chat_response import (
     save_chat_response_to_db,
     save_response_content,
     save_response_record__no_commit,
-    write_response_messages,
+    write_response_items,
 )
 from onyx.db.chat_subagents import (
     ChatBranch,
@@ -70,7 +70,7 @@ from onyx.db.chat_subagents import (
     lookup_session_agent,
 )
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatResponseMessage, ChatSession, Tool
+from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, Tool
 from onyx.db.models import ToolCall as StoredToolCall
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.llm.models import (
@@ -291,7 +291,7 @@ def test_response_tools_flush_together_and_keep_result_links(
         flushes = 0
         event.listen(db_session, "before_flush", count_flush, named=True)
         try:
-            tools = write_response_messages(
+            tools = write_response_items(
                 db_session,
                 response,
                 ResponseRecord(
@@ -310,7 +310,7 @@ def test_response_tools_flush_together_and_keep_result_links(
         for call in calls:
             linked = [
                 row.tool_call_id
-                for row in response.response_messages
+                for row in response.response_items
                 if row.tool_call is not None and row.tool_call.tool_call_id == call.id
             ]
             assert len(linked) == 1
@@ -346,8 +346,10 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
     save_response_record__no_commit(db_session, response.id, record)
     db_session.flush()
     db_session.expire(response)
-    second_row = response.response_messages[1]
-    second_id, second_position = second_row.id, second_row.position
+    second_row = next(
+        row for row in response.response_items if row.tool_call_id is not None
+    )
+    second_id, second_tool_id = second_row.id, second_row.tool_call_id
     suspended = read_chat_execution(response)
     assert suspended is not None and suspended.response is not None
     assert suspended.response.steps == record.steps
@@ -381,14 +383,12 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
         "Second result",
         "Answer",
     ]
-    stored_second = next(
-        row for row in response.response_messages if row.id == second_id
-    )
-    assert stored_second.position == second_position
+    stored_second = next(row for row in response.response_items if row.id == second_id)
+    assert stored_second.tool_call_id == second_tool_id
     assert restored.response.answer_step_index == 1
 
 
-def test_response_messages_preserve_order_provider_metadata_and_tool_identity(
+def test_response_items_preserve_order_provider_metadata_and_tool_identity(
     db_session: Session, conversation: ChatSession
 ) -> None:
     response = _response(db_session, conversation)
@@ -424,6 +424,8 @@ def test_response_messages_preserve_order_provider_metadata_and_tool_identity(
 
     record.answer_step_index = answer_index
     _save(db_session, response, record)
+    # Storage row order must not change generation or tool-result order.
+    response.response_items.reverse()
     restored = (
         execution.response if (execution := read_chat_execution(response)) else None
     )
@@ -453,7 +455,7 @@ def test_response_messages_preserve_order_provider_metadata_and_tool_identity(
     assert all(tool.legacy_response == "" for tool in tools)
     result_ids = [
         row.tool_call_id
-        for row in response.response_messages
+        for row in response.response_items
         if row.tool_call_id is not None
     ]
     assert set(result_ids) == {tool.id for tool in tools}
@@ -516,13 +518,24 @@ def test_empty_generation_retains_outcome_and_rendering(
     execution = read_chat_execution(response)
     assert execution is not None
     assert execution.presentation["empty-generation"].text_as_thinking
-    saved_settings = response.response_messages[0].rendering
+    saved_settings = response.response_items[0].rendering
     assert saved_settings is not None
     assert "run_id" not in saved_settings and "step_index" not in saved_settings
 
 
-def test_partial_tool_arguments_survive_storage_without_executable_arguments(
-    db_session: Session, conversation: ChatSession
+@pytest.mark.parametrize(
+    ("raw_arguments", "arguments_complete", "argument_error"),
+    [
+        ('{"query": "half', False, None),
+        ('{"query":}', True, "Invalid JSON arguments"),
+    ],
+)
+def test_tool_argument_metadata_survives_storage_without_executable_arguments(
+    db_session: Session,
+    conversation: ChatSession,
+    raw_arguments: str,
+    arguments_complete: bool,
+    argument_error: str | None,
 ) -> None:
     response = _response(db_session, conversation)
     record = _record(response)
@@ -534,8 +547,9 @@ def test_partial_tool_arguments_survive_storage_without_executable_arguments(
                     id="partial",
                     name="search",
                     arguments={},
-                    raw_arguments='{"query": "half',
-                    arguments_complete=False,
+                    raw_arguments=raw_arguments,
+                    arguments_complete=arguments_complete,
+                    argument_error=argument_error,
                 )
             ]
         )
@@ -543,13 +557,59 @@ def test_partial_tool_arguments_survive_storage_without_executable_arguments(
     record.steps = _steps(record.run_id, messages, ExecutionStatus(record.status.value))
 
     _save(db_session, response, record)
+    db_session.expire_all()
     assistant = read_response_steps(response)[0].message
     assert isinstance(assistant, AssistantMessage)
     calls = assistant.tool_calls
     assert len(calls) == 1
-    assert calls[0].raw_arguments == '{"query": "half'
-    assert calls[0].arguments_complete is False
+    assert calls[0].raw_arguments == raw_arguments
+    assert calls[0].arguments_complete is arguments_complete
+    assert calls[0].argument_error == argument_error
     assert calls[0].arguments == {}
+
+
+def test_response_item_rejects_mismatched_embedded_identity(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    _save(db_session, response, _record(response))
+    row = response.response_items[0]
+    assert row.message is not None
+    row.message = row.message.model_copy(update={"id": "unrelated-message"})
+    db_session.flush()
+    db_session.expire_all()
+
+    with pytest.raises(ValueError, match="assistant identity"):
+        read_response_steps(response)
+
+
+@pytest.mark.parametrize("field", ["tool_call_id", "tool_name"])
+def test_response_rejects_result_that_does_not_match_invocation(
+    db_session: Session, conversation: ChatSession, field: str
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="search-1", name="search", arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="search-1", tool_name="search", content="Found"
+            ),
+        ],
+    )
+    _save(db_session, response, record)
+    assert response.tool_calls is not None and len(response.tool_calls) == 1
+    tool = response.tool_calls[0]
+    assert tool.result is not None
+    tool.result = tool.result.model_copy(update={field: "unrelated"})
+    db_session.flush()
+    db_session.expire_all()
+
+    with pytest.raises(ValueError, match="no matching call"):
+        read_response_steps(response)
 
 
 def test_content_free_response_does_not_write_items(
@@ -573,8 +633,8 @@ def test_content_free_response_does_not_write_items(
     assert (
         db_session.scalar(
             select(func.count())
-            .select_from(ChatResponseMessage)
-            .where(ChatResponseMessage.chat_message_id == response.id)
+            .select_from(ChatResponseItem)
+            .where(ChatResponseItem.chat_message_id == response.id)
         )
         == 0
     )
@@ -1310,8 +1370,8 @@ def test_session_delete_removes_reused_child_history_and_tool_items(
     assert (
         db_session.scalar(
             select(func.count())
-            .select_from(ChatResponseMessage)
-            .where(ChatResponseMessage.chat_message_id.in_(response_ids))
+            .select_from(ChatResponseItem)
+            .where(ChatResponseItem.chat_message_id.in_(response_ids))
         )
         == 0
     )
@@ -1336,7 +1396,7 @@ def test_unsettled_execution_is_rejected_before_saving(
     with pytest.raises(ValueError, match="terminal execution records"):
         _save(db_session, response, record)
     assert response.response_status is None
-    assert response.response_messages == []
+    assert response.response_items == []
 
 
 @pytest.mark.parametrize("child_count", [0, 1, 4])
@@ -1383,7 +1443,7 @@ def test_discovery_batches_response_metadata(
     assert sum(
         "WITH RECURSIVE session_ancestors" in query for query in executed_sql
     ) == bool(child_count)
-    assert not any("chat_response_message" in query for query in executed_sql)
+    assert not any("chat_response_item" in query for query in executed_sql)
 
 
 def test_child_reload_batches_siblings(
@@ -1487,7 +1547,7 @@ def test_plain_history_reload_query_count_does_not_grow_per_turn(
     assert query_counts[0] == query_counts[1]
 
 
-def test_public_message_read_does_not_fetch_response_messages(
+def test_public_message_read_does_not_fetch_response_items(
     db_session: Session,
     conversation: ChatSession,
     executed_sql: list[str],
@@ -1501,7 +1561,7 @@ def test_public_message_read_does_not_fetch_response_messages(
     message = get_chat_message(message_id, None, db_session)
 
     assert message.id == message_id
-    assert not any("chat_response_message" in query for query in executed_sql)
+    assert not any("chat_response_item" in query for query in executed_sql)
 
 
 def test_history_loads_items_only_for_selected_ancestry(
@@ -1531,12 +1591,12 @@ def test_history_loads_items_only_for_selected_ancestry(
 
     assert parent.id == selected_id
     assert [message.id for message in history] == [question.id, selected_id]
-    assert selected.response_messages
-    assert "response_messages" in inspect(sibling).unloaded
-    assert "response_messages" in inspect(later).unloaded
+    assert selected.response_items
+    assert "response_items" in inspect(sibling).unloaded
+    assert "response_items" in inspect(later).unloaded
     assert "tool_calls" in inspect(sibling).unloaded
     assert "tool_calls" in inspect(later).unloaded
-    assert sum("FROM chat_response_message" in query for query in executed_sql) == 1
+    assert sum("FROM chat_response_item" in query for query in executed_sql) == 1
 
 
 @pytest.mark.parametrize("invalid_character", ["\x00", "\ud800"])
@@ -1774,4 +1834,4 @@ def test_response_store_rejects_wrong_session_or_recording_mode_before_writes(
     db_session.refresh(row)
     assert row.message == ""
     assert row.error is None
-    assert not row.response_messages
+    assert not row.response_items

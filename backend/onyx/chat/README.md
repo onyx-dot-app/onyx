@@ -221,7 +221,7 @@ For the execution loop, tool calls, and cancellation contracts, see the [agent S
 
 - Message types serve different boundaries:
   - **ChatMessage** stores a user message, summary, or response anchor in the session tree.
-    **ChatResponseMessage** stores an assistant message or references a tool result within that response. Both live in [database models](../db/models.py).
+    **ChatResponseItem** stores an assistant message or references a tool result within that response. Both live in [database models](../db/models.py).
   - **Message** is the SDK conversation type, defined in [LLM models](../llm/models.py).
     Storage retains these shared types; history loading filters unfinished tool calls before agent execution.
   - **ChatCompletionMessage** is the LiteLLM request message type in [provider models](../llm/model_request.py).

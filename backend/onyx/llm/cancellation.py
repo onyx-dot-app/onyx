@@ -38,15 +38,17 @@ class CancellationSignal:
             callbacks = tuple(self._callbacks)
             self._callbacks.clear()
         for callback in callbacks:
-            try:
-                callback()
-            except Exception:
-                logger.exception("Agent cancellation callback failed")
+            callback()
 
     @contextmanager
     def on_cancel(self, callback: Callable[[], None]) -> Iterator[None]:
         def notify() -> None:
-            return callback()
+            try:
+                callback()
+            except AgentCancelled:
+                pass
+            except Exception:
+                logger.exception("Agent cancellation callback failed")
 
         with self._lock:
             cancelled = self.cancelled
@@ -54,7 +56,7 @@ class CancellationSignal:
                 self._callbacks.add(notify)
         try:
             if cancelled:
-                callback()
+                notify()
             yield
         finally:
             with self._lock:

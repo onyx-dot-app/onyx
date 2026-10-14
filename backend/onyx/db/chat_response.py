@@ -36,7 +36,7 @@ from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import (
     ChatMessage,
     ChatResponseCheckpoint,
-    ChatResponseMessage,
+    ChatResponseItem,
     ChatSession,
     ToolCall,
 )
@@ -391,12 +391,12 @@ def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatM
             .join(question, ChatMessage.parent_message_id == question.id)
             .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
             .join(
-                ChatResponseMessage,
-                (ChatResponseMessage.chat_message_id == ToolCall.parent_chat_message_id)
-                & (ChatResponseMessage.step_index == ToolCall.turn_number),
+                ChatResponseItem,
+                (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
+                & (ChatResponseItem.step_index == ToolCall.turn_number),
             )
             .where(
-                ChatResponseMessage.content.is_not(None),
+                ChatResponseItem.message.is_not(None),
                 ToolCall.parent_chat_message_id.in_(response_ids),
                 ChatMessage.response_status.is_not(None),
             )
@@ -408,11 +408,11 @@ def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatM
                 joinedload(ChatMessage.parent_message).joinedload(
                     ChatMessage.parent_message
                 ),
-                selectinload(ChatMessage.response_messages),
+                selectinload(ChatMessage.response_items),
                 selectinload(ChatMessage.tool_calls),
             )
             # Stable display order; predecessor links determine child history.
-            .order_by(ChatResponseMessage.position, ChatMessage.id)
+            .order_by(ChatResponseItem.step_index, ChatMessage.id)
             .limit(MAX_AGENT_HISTORY_RUNS + 1)
         )
     )
@@ -474,11 +474,11 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
         )
         message_ids_by_step = {
             row.step_index: row.id
-            for row in response.response_messages
-            if row.content is not None
+            for row in response.response_items
+            if row.message is not None
         }
         message_ids_by_tool: dict[int, str] = {}
-        for row in response.response_messages:
+        for row in response.response_items:
             if row.rendering:
                 presentation[row.id] = MessageRendering.model_validate(row.rendering)
         for tool in response.tool_calls or []:
@@ -604,7 +604,7 @@ class _ResponseWriter:
         response.response_failure = record.failure
         self.responses[record.run_id] = response
         self.tools.update(
-            write_response_messages(
+            write_response_items(
                 self.db_session,
                 response,
                 record,
@@ -738,22 +738,26 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
         for tool in response.tool_calls or []
     }
     calls: dict[str, str] = {}
-    for position, row in enumerate(response.response_messages):
-        if row.position != position or row.chat_message_id != response.id:
-            raise ValueError("Response message order or ownership is invalid")
-        if row.content is not None:
-            if row.content.id != row.id or row.step_index != len(steps):
+    # Tool completion order does not determine conversation order.
+    for row in sorted(
+        response.response_items,
+        key=lambda row: (row.step_index, row.message is None),
+    ):
+        if row.chat_message_id != response.id:
+            raise ValueError("Response item ownership is invalid")
+        if row.message is not None:
+            if row.message.id != row.id or row.step_index != len(steps):
                 raise ValueError("Response assistant identity or step is invalid")
-            if row.operation_status is None:
-                raise ValueError("Assistant message has no operation outcome")
+            if row.generation_status is None:
+                raise ValueError("Assistant message has no generation outcome")
             step = StepRecord(
-                message=row.content.model_copy(deep=True),
-                generation_status=row.operation_status,
+                message=row.message.model_copy(deep=True),
+                generation_status=row.generation_status,
             )
-            calls = {call.id: call.name for call in row.content.tool_calls}
-            for call in row.content.tool_calls:
+            calls = {call.id: call.name for call in row.message.tool_calls}
+            for call in row.message.tool_calls:
                 tool = tools.get((row.step_index, call.id))
-                if tool is None or tool.tool_name != call.name:
+                if tool is None:
                     raise ValueError(
                         "Assistant tool call has no matching stored invocation"
                     )
@@ -772,8 +776,7 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
             or tool.tool_call_id not in calls
             or tool.result is None
             or tool.result.tool_call_id != tool.tool_call_id
-            or tool.tool_name != calls.get(tool.tool_call_id)
-            or tool.result.tool_name != tool.tool_name
+            or tool.result.tool_name != calls[tool.tool_call_id]
             or tool.tool_call_id not in steps[-1].tools
         ):
             raise ValueError("Response tool result has no matching call")
@@ -787,16 +790,16 @@ def _invoking_message_id(invocation: ToolCall) -> str:
     if db_session is None:
         raise ValueError("Tool invocation must be attached to its database session")
     row = db_session.scalar(
-        select(ChatResponseMessage).where(
-            ChatResponseMessage.chat_message_id == invocation.parent_chat_message_id,
-            ChatResponseMessage.step_index == invocation.turn_number,
-            ChatResponseMessage.content.is_not(None),
+        select(ChatResponseItem).where(
+            ChatResponseItem.chat_message_id == invocation.parent_chat_message_id,
+            ChatResponseItem.step_index == invocation.turn_number,
+            ChatResponseItem.message.is_not(None),
         )
     )
     if (
         row is None
-        or row.content is None
-        or invocation.tool_call_id not in {call.id for call in row.content.tool_calls}
+        or row.message is None
+        or invocation.tool_call_id not in {call.id for call in row.message.tool_calls}
     ):
         raise ValueError("Tool invocation has no assistant message")
     return row.id
@@ -836,7 +839,7 @@ def read_response_record(
         ],
         steps=read_response_steps(response),
         answer_step_index=next(
-            (row.step_index for row in response.response_messages if row.is_answer),
+            (row.step_index for row in response.response_items if row.is_answer),
             None,
         ),
         status=response.response_status,
@@ -857,7 +860,7 @@ def read_response_record(
     )
 
 
-def write_response_messages(
+def write_response_items(
     db_session: Session,
     response: ChatMessage,
     record: ResponseRecord,
@@ -865,35 +868,30 @@ def write_response_messages(
 ) -> dict[tuple[str, str], ToolCall]:
     """Store message content and invocation records; the caller owns the transaction."""
     tools: dict[tuple[str, str], ToolCall] = {}
-    existing = {row.id: row for row in response.response_messages}
+    existing = {row.id: row for row in response.response_items}
     stored_tools = {
         (tool.turn_number, tool.tool_call_id): tool
         for tool in response.tool_calls or []
     }
     incoming_ids: set[str] = set()
-    next_position = len(existing)
     if record.answer_step_index is not None and not (
         0 <= record.answer_step_index < len(record.steps)
     ):
         raise ValueError("Selected answer is not a recorded step")
 
-    def message_row(message_id: str, step_index: int) -> ChatResponseMessage:
-        nonlocal next_position
-        if message_id in incoming_ids:
-            raise ValueError("Response contains duplicate message identities")
-        incoming_ids.add(message_id)
-        row = existing.get(message_id) or ChatResponseMessage(
-            id=message_id,
+    def item_row(item_id: str, step_index: int) -> ChatResponseItem:
+        if item_id in incoming_ids:
+            raise ValueError("Response contains duplicate item identities")
+        incoming_ids.add(item_id)
+        row = existing.get(item_id) or ChatResponseItem(
+            id=item_id,
             chat_message_id=response.id,
-            position=next_position,
             step_index=step_index,
         )
         if row.chat_message_id != response.id or row.step_index != step_index:
-            raise ValueError("Response message identity or order changed")
-        if message_id not in existing:
-            # Resumed tools append rows; model order comes from the assistant's calls.
-            next_position += 1
-            response.response_messages.append(row)
+            raise ValueError("Response item identity or step changed")
+        if item_id not in existing:
+            response.response_items.append(row)
         return row
 
     response_tools = response.tool_calls
@@ -905,9 +903,9 @@ def write_response_messages(
         message_id = message.id
         if message_id is None:
             raise ValueError("Saved assistant message has no identity")
-        row = message_row(message_id, step_index)
-        row.content = message
-        row.operation_status = step.generation_status
+        row = item_row(message_id, step_index)
+        row.message = message
+        row.generation_status = step.generation_status
         row.is_answer = step_index == record.answer_step_index
         setting = presentation.pop(message_id, None)
         if setting is not None:
@@ -926,18 +924,11 @@ def write_response_messages(
                 tab_index=len(tools),
                 tool_id=None,
                 tool_call_id=call.id,
-                tool_name=call.name,
                 tool_call_arguments=call.arguments,
-                argument_error=call.argument_error,
-                raw_arguments=call.raw_arguments,
-                arguments_complete=call.arguments_complete,
                 tool_call_tokens=count_tokens(json.dumps(call.arguments)),
                 tool_call_response="",
             )
             tool.tool_call_arguments = call.arguments
-            tool.argument_error = call.argument_error
-            tool.raw_arguments = call.raw_arguments
-            tool.arguments_complete = call.arguments_complete
             tool.operation_status = execution.status if execution is not None else None
             if (step_index, call.id) not in stored_tools:
                 response_tools.append(tool)
@@ -948,11 +939,11 @@ def write_response_messages(
                 if result.tool_call_id != call.id or result.tool_name != call.name:
                     raise ValueError("Tool result does not match its invocation")
                 tool.result = result
-                result_row = message_row(f"{message_id}:result:{call.id}", step_index)
+                result_row = item_row(f"{message_id}:result:{call.id}", step_index)
                 result_row.tool_call = tool
                 result_row.is_answer = False
     if existing.keys() - incoming_ids:
-        raise ValueError("Response update cannot discard recorded messages")
+        raise ValueError("Response update cannot discard recorded items")
     db_session.flush()
     return tools
 
@@ -1065,7 +1056,7 @@ def find_response__no_commit(session: Session, run_id: str) -> ChatMessage | Non
         select(ChatMessage)
         .where(predicate)
         .options(
-            selectinload(ChatMessage.response_messages),
+            selectinload(ChatMessage.response_items),
             selectinload(ChatMessage.tool_calls),
         )
     )
@@ -1137,8 +1128,8 @@ def save_response_record__no_commit(
     if parent is not None:
         message_ids_by_step = {
             row.step_index: row.id
-            for row in parent.response_messages
-            if row.content is not None
+            for row in parent.response_items
+            if row.message is not None
         }
         for tool in parent.tool_calls or []:
             assistant_message_id = message_ids_by_step.get(tool.turn_number)

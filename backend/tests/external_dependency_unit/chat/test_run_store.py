@@ -612,14 +612,14 @@ def test_competing_resume_claims_and_stale_writer(
             ) as session:
                 record = claim_checkpoint__no_commit(session, branch[1])
                 session.commit()
-                return record.revision if record else None
+                return record.ownership_version if record else None
 
         futures = [
             start_thread_future(lambda: claim(), name="checkpoint-claim")
             for _ in range(2)
         ]
-        revisions = [future.result(timeout=10) for future in futures]
-        winners = [revision for revision in revisions if revision is not None]
+        ownership_versions = [future.result(timeout=10) for future in futures]
+        winners = [version for version in ownership_versions if version is not None]
         assert len(winners) == 1
         with get_session_with_tenant(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
@@ -709,7 +709,6 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                 CheckpointBinding(
                     tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                     branch_id=str(branch[1]),
-                    context_version="1",
                 ),
             )
             restored = codec.load(encoded)

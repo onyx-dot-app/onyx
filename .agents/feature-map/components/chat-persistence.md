@@ -90,18 +90,21 @@ data being gone.
 
 ## 3. Data model
 
-Migration `7a03b6e90c12` adds `chat_response_item` for model generations.
-Items use `step_index` to identify their generation. The saved model message defines tool-call order.
-Each generation has at most one model message, and each response has at most one accepted answer.
-Each item requires a model message and generation status. Deleting a response removes its items.
-The unique `(chat_message_id, step_index)` index supports response lookups and step ordering.
-Existing tables, ORM mappings, and writers stay unchanged. Application adoption will start writing these items later.
+`chat_response_item.message` stores one complete or partial model message; alternative rows reference tool results.
+`generation_status` records the model generation outcome, independently of the whole response or tool outcome.
+`is_answer` identifies the step the runtime accepted as its answer. Partial output need not be an accepted answer.
+Response items use `step_index` for generation order and the assistant’s tool-call list for result order.
+The nonunique `(chat_message_id, step_index)` index supports response lookups.
+A separate partial unique index permits one assistant message per step.
 
-Migration `6b4e821c0a93` adds `chat_response_checkpoint` without changing existing tables or response items.
-Each checkpoint belongs to one response and is deleted with that response.
+Tool names and argument parsing details stay in the saved model message. Tool rows retain queryable arguments and execution results.
+Application enums define response, generation, and tool statuses; historical response and tool rows can have null statuses.
+
+`chat_response_checkpoint` stores resume progress alongside response history, rather than another copy of that history.
 Its `ownership_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
 The runtime revision inside `state` tracks execution changes and serves a separate purpose.
-Current application writers do not use checkpoints yet.
+Checkpoint bindings identify the tenant and response. Saved progress uses the runtime’s field names, including
+`pending_tool_calls` and `human_tool_answers`.
 
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 
