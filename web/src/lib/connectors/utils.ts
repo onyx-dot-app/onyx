@@ -277,10 +277,9 @@ export function createConnectorInitialValues(
 export function createConnectorValidationSchema(
   connector: ConfigurableSources,
   requireGroups: boolean = false,
-  messages: ConnectorValidationMessages = {},
-  // The translated config, so "required" messages name translated labels.
-  configuration: ConnectionConfiguration = connectorConfigs[connector]
+  messages: ConnectorValidationMessages = {}
 ): Yup.ObjectSchema<Record<string, any>> {
+  const configuration = connectorConfigs[connector];
   const fields = [...configuration.values, ...configuration.advanced_values];
 
   const fieldSchemas = fields.reduce<Record<string, Yup.Schema>>(

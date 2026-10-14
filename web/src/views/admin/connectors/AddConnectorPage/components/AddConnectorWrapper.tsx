@@ -690,8 +690,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
           ),
           stringPairEmptyKey: keyValueT("emptyKey"),
           stringPairDuplicateKey: keyValueT("duplicateKey"),
-        },
-        configuration
+        }
       ).shape({
         // Always checked, so its fields can show errors. With a saved pick
         // the typed account is not used, and Create ignores its errors (see
