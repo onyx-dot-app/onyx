@@ -90,6 +90,12 @@ data being gone.
 
 ## 3. Data model
 
+Migration `7a03b6e90c12` prepares storage for agent responses, child sessions, and checkpoints.
+It adds nullable identities and status fields, plus response-message and checkpoint tables.
+It also permits null tool IDs for agent control operations. Existing writers still supply their tool IDs.
+Current ORM mappings and writers do not use these additions. Canonical response writing requires the later SDK application change.
+The migration preserves existing answer, reasoning, tool-response, citation, and history columns.
+
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 
 | Column | Notes |
