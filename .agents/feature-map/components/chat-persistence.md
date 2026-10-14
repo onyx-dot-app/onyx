@@ -90,24 +90,12 @@ data being gone.
 
 ## 3. Data model
 
-Migration `7a03b6e90c12` prepares storage for agent responses, child sessions, and checkpoints.
-It adds nullable identities and status fields, plus response-item and checkpoint tables.
-It also permits null tool IDs for agent control operations. Existing writers still supply their tool IDs.
-Current ORM mappings and writers do not use these additions. Canonical response writing requires the later SDK application change.
-The migration preserves existing answer, reasoning, tool-response, citation, and history columns.
-
-`chat_response_item.message` stores one complete or partial model message; alternative rows reference tool results.
-`generation_status` records the model generation outcome, independently of the whole response or tool outcome.
-`is_answer` identifies the step the runtime accepted as its answer. Partial output need not be an accepted answer.
-Items use `step_index` to identify their model generation. Tool results follow the calls recorded in that generation.
-The `(chat_message_id, step_index)` index supports response lookups and step ordering. No separate position column is stored.
-
-Tool names and argument parsing details stay in the saved model message. Tool rows retain queryable arguments and execution results.
-Application enums define response, generation, and tool statuses; historical response and tool rows can have null statuses.
-
-`chat_response_checkpoint` stores resume progress alongside response history, rather than another copy of that history.
-Its `ownership_version` changes when a checkpoint is published or claimed, preventing stale owners from saving.
-The runtime revision inside `state` tracks execution changes and serves a separate purpose.
+Migration `7a03b6e90c12` adds `chat_response_item` for model messages and tool-result references.
+Items use `step_index` to identify their generation. The saved model message defines tool-call order.
+Each generation has at most one model message, and each response has at most one accepted answer.
+Foreign keys remove items when their response or referenced tool call is deleted.
+The `(chat_message_id, step_index)` index supports response lookups and step ordering.
+Existing tables, ORM mappings, and writers stay unchanged. Application adoption will start writing these items later.
 
 ### `ChatSession` (`db/models.py:ChatSession`, table `chat_session`)
 
