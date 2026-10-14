@@ -3094,6 +3094,15 @@
       },
       "optionsListInput": {
         "placeholder": "Escolha {label} na lista ou digite"
+      },
+      "atlassian": {
+        "siteUrl": {
+          "label": "URL do site"
+        },
+        "scopedToken": {
+          "label": "Este é um token de API com escopos",
+          "description": "Tokens com escopos são roteados pelo gateway de API da Atlassian. Deixe desativado para tokens clássicos."
+        }
       }
     },
     "costOverrides": {

@@ -3094,6 +3094,15 @@
       },
       "optionsListInput": {
         "placeholder": "اختر {label} من القائمة أو أدخله"
+      },
+      "atlassian": {
+        "siteUrl": {
+          "label": "عنوان URL للموقع"
+        },
+        "scopedToken": {
+          "label": "هذا رمز API بنطاقات",
+          "description": "تُوجَّه الرموز ذات النطاقات عبر بوابة API الخاصة بـ Atlassian. اتركه متوقفًا للرموز الكلاسيكية."
+        }
       }
     },
     "costOverrides": {

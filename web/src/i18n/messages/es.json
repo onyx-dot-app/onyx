@@ -3094,6 +3094,15 @@
       },
       "optionsListInput": {
         "placeholder": "Elige {label} de la lista o escríbelo"
+      },
+      "atlassian": {
+        "siteUrl": {
+          "label": "URL del sitio"
+        },
+        "scopedToken": {
+          "label": "Es un token de API con ámbitos",
+          "description": "Los tokens con ámbitos se enrutan a través de la puerta de enlace de API de Atlassian. Déjalo desactivado para los tokens clásicos."
+        }
       }
     },
     "costOverrides": {

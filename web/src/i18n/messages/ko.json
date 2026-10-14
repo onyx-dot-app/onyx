@@ -3094,6 +3094,15 @@
       },
       "optionsListInput": {
         "placeholder": "목록에서 {label} 선택 또는 입력"
+      },
+      "atlassian": {
+        "siteUrl": {
+          "label": "사이트 URL"
+        },
+        "scopedToken": {
+          "label": "범위가 지정된 API 토큰입니다",
+          "description": "범위가 지정된 토큰은 Atlassian API 게이트웨이를 통해 라우팅됩니다. 기존 토큰이면 끈 상태로 두세요."
+        }
       }
     },
     "costOverrides": {

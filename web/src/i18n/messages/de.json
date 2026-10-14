@@ -3094,6 +3094,15 @@
       },
       "optionsListInput": {
         "placeholder": "{label} aus der Liste wählen oder eingeben"
+      },
+      "atlassian": {
+        "siteUrl": {
+          "label": "Website-URL"
+        },
+        "scopedToken": {
+          "label": "Dies ist ein API-Token mit Bereichen",
+          "description": "Tokens mit Bereichen werden über das API-Gateway von Atlassian geleitet. Für klassische Tokens deaktiviert lassen."
+        }
       }
     },
     "costOverrides": {
