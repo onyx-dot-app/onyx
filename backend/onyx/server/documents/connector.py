@@ -1997,6 +1997,7 @@ def update_connector_from_model(
         connector_specific_config=updated_connector.connector_specific_config,
         refresh_freq=updated_connector.refresh_freq,
         prune_freq=updated_connector.prune_freq,
+        check_freq=updated_connector.check_freq,
         credential_ids=[
             association.credential.id for association in updated_connector.credentials
         ],
@@ -2272,6 +2273,7 @@ def get_connector_by_id(
         connector_specific_config=connector.connector_specific_config,
         refresh_freq=connector.refresh_freq,
         prune_freq=connector.prune_freq,
+        check_freq=connector.check_freq,
         credential_ids=[
             association.credential.id for association in connector.credentials
         ],

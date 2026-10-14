@@ -59,7 +59,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents import cc_pair as cc_pair_routes
 from onyx.server.documents.cc_pair import get_cc_pair_runs, release_indexing_hold
-from onyx.server.documents.models import CCPairRunsResponse
+from onyx.server.documents.models import CCPairRunsResponse, ConnectorSnapshot
 from tests.external_dependency_unit.conftest import create_test_user
 
 # The sync kinds come from the EE-only sync_params helpers.
@@ -442,6 +442,10 @@ def test_scheduled_checks_come_due_on_the_check_frequency(
     now = get_db_current_time(db_session)
     cc_pair.connector.time_created = now - timedelta(hours=2)
     db_session.commit()
+    # The page reads the schedule from the connector snapshot.
+    assert (
+        ConnectorSnapshot.from_connector_db_model(cc_pair.connector).check_freq == 3600
+    )
 
     scheduled = get_cc_pairs_with_check_schedule(db_session)
     assert cc_pair.id in {pair.id for pair in scheduled}
