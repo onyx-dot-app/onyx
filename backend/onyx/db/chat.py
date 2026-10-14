@@ -752,7 +752,7 @@ def get_chat_messages_by_session(
 
     if prefetch_message_details:
         stmt = stmt.options(
-            selectinload(ChatMessage.response_messages),
+            selectinload(ChatMessage.response_items),
             selectinload(ChatMessage.chat_message_feedbacks),
             selectinload(ChatMessage.search_docs),
         )
@@ -1384,7 +1384,7 @@ def load_message_branch(
             .where(ChatMessage.id.in_(response_ids))
             .options(
                 load_only(ChatMessage.id),
-                selectinload(ChatMessage.response_messages),
+                selectinload(ChatMessage.response_items),
                 selectinload(ChatMessage.tool_calls),
             )
         ).all()

@@ -138,7 +138,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
     encoded = CheckpointStorage(_checkpoint_model_types()).save(
         snapshot,
         AgentState(),
-        CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
+        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
     )
     del original, snapshot
     tool = CaptureContextTool()
@@ -241,7 +241,7 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
     encoded = CheckpointStorage(_checkpoint_model_types()).save(
         checkpoint.run_state,
         checkpoint.agent_state,
-        CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
+        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
     )
     del original, run, checkpoint
 
@@ -337,7 +337,7 @@ def test_real_feature_resumes_pending_control_call_after_json(kind: str) -> None
     encoded = CheckpointStorage(_checkpoint_model_types()).save(
         checkpoint.run_state,
         checkpoint.agent_state,
-        CheckpointBinding(tenant_id="tenant", branch_id="branch", context_version="1"),
+        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
     )
     saved_id = run.id
     del original, run, checkpoint
@@ -551,7 +551,6 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
         CheckpointBinding(
             tenant_id="tenant",
             branch_id="branch",
-            context_version="1",
         ),
     )
     del original, snapshot
@@ -601,9 +600,7 @@ def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> N
         assert run.wait_for_idle(timeout=5)
         checkpoint = run.handoff()
         codec = CheckpointStorage(_checkpoint_model_types())
-        binding = CheckpointBinding(
-            tenant_id="tenant", branch_id="branch", context_version="1"
-        )
+        binding = CheckpointBinding(tenant_id="tenant", branch_id="branch")
         encoded = codec.save(checkpoint.run_state, checkpoint.agent_state, binding)
         decoded = codec.load(encoded, expected_binding=binding)
         tool = CaptureContextTool()

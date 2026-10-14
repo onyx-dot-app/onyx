@@ -144,9 +144,7 @@ def test_json_round_trip_preserves_typed_payloads_at_every_execution_location() 
     serialized = codec().save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(
-            tenant_id="tenant", branch_id="branch", context_version="history-7"
-        ),
+        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
     )
     restored = codec().load(serialized)
     assert restored == captured
@@ -171,9 +169,7 @@ def test_coding_rendering_survives_checkpoint_round_trip(
     serialized = storage.save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(
-            tenant_id="tenant", branch_id="branch", context_version="history-7"
-        ),
+        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
     )
     restored = storage.load(serialized)
     metadata = restored.run_state.steps[0].message.metadata
@@ -188,16 +184,12 @@ def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
         CheckpointStorage({}).save(
             captured.run_state,
             captured.agent_state,
-            CheckpointBinding(
-                tenant_id="tenant", branch_id="branch", context_version="history-7"
-            ),
+            CheckpointBinding(tenant_id="tenant", branch_id="branch"),
         )
     serialized = codec().save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(
-            tenant_id="tenant", branch_id="branch", context_version="history-7"
-        ),
+        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
     )
     with pytest.raises(ValueError, match="Unknown checkpoint payload"):
         CheckpointStorage({}).load(serialized)
@@ -208,9 +200,7 @@ def test_unknown_payload_types_and_versions_fail_before_execution() -> None:
     with pytest.raises(ValueError, match="selected context"):
         codec().load(
             serialized,
-            expected_binding=CheckpointBinding(
-                tenant_id="tenant", branch_id="branch", context_version="history-7"
-            ).model_copy(update={"context_version": "other"}),
+            expected_binding=CheckpointBinding(tenant_id="tenant", branch_id="other"),
         )
 
 
@@ -342,9 +332,7 @@ def test_fresh_objects_resume_json_checkpoint_without_repeating_tools(
         codec().save(
             captured.run_state,
             captured.agent_state,
-            CheckpointBinding(
-                tenant_id="tenant", branch_id="branch", context_version="history"
-            ),
+            CheckpointBinding(tenant_id="tenant", branch_id="branch"),
         )
     )
     old_agent = weakref.ref(agent)
@@ -385,9 +373,7 @@ def test_checkpoint_restores_when_parallel_outcomes_load_in_call_order() -> None
     serialized = storage.save(
         captured.run_state,
         captured.agent_state,
-        CheckpointBinding(
-            tenant_id="tenant", branch_id="branch", context_version="history"
-        ),
+        CheckpointBinding(tenant_id="tenant", branch_id="branch"),
     )
     saved = SavedCheckpoint.model_validate_json(serialized)
     saved_tools = saved.response.steps[0].tools

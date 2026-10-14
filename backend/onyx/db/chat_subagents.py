@@ -34,7 +34,7 @@ from onyx.db.chat_response import (
     read_response_steps,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.models import ChatMessage, ChatResponseMessage, ChatSession, ToolCall
+from onyx.db.models import ChatMessage, ChatResponseItem, ChatSession, ToolCall
 from onyx.llm.models import Message, UserMessage
 
 MAX_AGENT_HISTORY_BYTES = 16 * 1024 * 1024
@@ -217,16 +217,16 @@ def _check_history_size(db_session: Session, response_ids: list[int]) -> None:
             func.coalesce(
                 func.sum(
                     func.coalesce(
-                        func.octet_length(cast(ChatResponseMessage.content, Text)), 0
+                        func.octet_length(cast(ChatResponseItem.message, Text)), 0
                     )
                     + func.coalesce(
-                        func.octet_length(cast(ChatResponseMessage.rendering, Text)), 0
+                        func.octet_length(cast(ChatResponseItem.rendering, Text)), 0
                     )
                 ),
                 0,
             )
         )
-        .where(ChatResponseMessage.chat_message_id.in_(response_ids))
+        .where(ChatResponseItem.chat_message_id.in_(response_ids))
         .scalar_subquery()
     )
     tool_bytes = (
@@ -273,7 +273,7 @@ def _load_history(
             .where(ChatMessage.id.in_(response_ids))
             .options(
                 joinedload(ChatMessage.parent_message),
-                selectinload(ChatMessage.response_messages),
+                selectinload(ChatMessage.response_items),
                 selectinload(ChatMessage.tool_calls),
             )
         )
@@ -319,7 +319,7 @@ def _load_history(
         documents = roots.get(root_id)
         if documents is None:
             raise ValueError("Root response is unavailable")
-        for item in response.response_messages:
+        for item in response.response_items:
             if item.rendering:
                 rendering = MessageRendering.model_validate(item.rendering)
                 for number, document_id in rendering.citation_documents.items():
@@ -361,7 +361,7 @@ def load_saved_run(
             select(ChatMessage)
             .where(ChatMessage.id == int(run_id))
             .options(
-                selectinload(ChatMessage.response_messages),
+                selectinload(ChatMessage.response_items),
                 selectinload(ChatMessage.tool_calls),
                 joinedload(ChatMessage.parent_message).joinedload(
                     ChatMessage.parent_message
