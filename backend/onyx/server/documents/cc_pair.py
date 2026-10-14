@@ -921,13 +921,19 @@ def release_indexing_hold(
         extra={"indexing_hold": "released"},
     )
     # The indexing beat would dispatch the waiting attempt within its interval.
-    # Firing it now starts sooner.
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_INDEXING,
-        kwargs={"tenant_id": tenant_id},
-        priority=OnyxCeleryPriority.HIGH,
-        expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
-    )
+    # Firing it now starts sooner. The release is saved, so a failed kick only
+    # logs and the beat picks it up.
+    try:
+        client_app.send_task(
+            OnyxCeleryTask.CHECK_FOR_INDEXING,
+            kwargs={"tenant_id": tenant_id},
+            priority=OnyxCeleryPriority.HIGH,
+            expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
+        )
+    except Exception:
+        logger.exception(
+            "Could not kick off indexing after a hold release: cc_pair=%s", cc_pair_id
+        )
     return StatusResponse(
         success=True, message="Indexing hold released", data=cc_pair_id
     )

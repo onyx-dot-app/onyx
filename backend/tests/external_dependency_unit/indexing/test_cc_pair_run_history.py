@@ -252,6 +252,8 @@ def test_prunes_and_check_runs_join_the_feed(db_session: Session) -> None:
     prunes = _runs(db_session, admin, cc_pair, kinds=[CCPairRunKind.PRUNING])
     by_prune_error = _runs(db_session, admin, cc_pair, q="quota")
     by_check_error = _runs(db_session, admin, cc_pair, q="broker")
+    # A completed run's check messages live in its report.
+    by_check_report = _runs(db_session, admin, cc_pair, q="connector scopes")
     with_doc_errors = _runs(
         db_session, admin, cc_pair, errors=CCPairRunErrors.UNRESOLVED
     )
@@ -288,6 +290,7 @@ def test_prunes_and_check_runs_join_the_feed(db_session: Session) -> None:
     ]
     assert _order(by_prune_error) == [(CCPairRunKind.PRUNING, prune_2.id)]
     assert _order(by_check_error) == [(CCPairRunKind.CHECKS, check_3.id)]
+    assert _order(by_check_report) == [(CCPairRunKind.CHECKS, check_1.id)]
     # Neither kind records document errors.
     assert _order(with_doc_errors) == []
 

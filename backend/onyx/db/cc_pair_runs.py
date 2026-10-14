@@ -10,6 +10,8 @@ from typing import TypeVar
 from sqlalchemy import (
     ColumnElement,
     Select,
+    Text,
+    cast,
     exists,
     false,
     func,
@@ -225,8 +227,10 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         stmt,
         run_filter,
         CapabilityCheckRun.time_created,
-        lambda query: CapabilityCheckRun.error_message.icontains(
-            query, autoescape=True
+        # A completed run keeps its check messages in the report, not in error_message.
+        lambda query: or_(
+            CapabilityCheckRun.error_message.icontains(query, autoescape=True),
+            cast(CapabilityCheckRun.report, Text).icontains(query, autoescape=True),
         ),
         CapabilityCheckRun.status,
         CapabilityCheckRunStatus,
