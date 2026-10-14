@@ -241,7 +241,11 @@ does the same enumeration as the full connector without downloading bodies.
    time; see §9).
 3. `factory.py:identify_connector_class` additionally validates the class
    against a requested `InputType` via `_validate_connector_supports_input_type`.
-4. `factory.py:instantiate_connector` builds the instance:
+4. `factory.py:instantiate_connector` first validates the config values that
+   the source's `ConnectorMapping.outbound_fields` declares
+   (`cross_connector_utils/outbound.py:validate_outbound_fields`: SSRF check by
+   the SSRF protection level, or one DNS label for a vendor subdomain). It then
+   builds the instance:
    `connector_class(**build_connector_kwargs(source, config))`, then branches on
    `isinstance(connector, CredentialsConnector)`:
    - **True**: builds an `OnyxDBCredentialsProvider` via
@@ -253,7 +257,8 @@ does the same enumeration as the full connector without downloading bodies.
      (`OnyxDBCredentialsProvider.LOCK_TTL = 900`), which matters for
      credentials that rotate mid-run.
    - **False**: decrypts `credential.credential_json` once, converts it with
-     `credential_families.py:to_source_credential_json`, calls
+     `credential_families.py:to_source_credential_json`, validates the declared
+     credential `outbound_fields`, calls
      `connector.load_credentials(credential_json)`, and if the connector
      returns a refreshed dict, writes it back via
      `backend_update_credential_json`.

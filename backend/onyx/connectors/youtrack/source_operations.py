@@ -19,6 +19,7 @@ from urllib3.util.retry import Retry
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.connector_config import BaseUrlCredentialBinding
+from onyx.connectors.cross_connector_utils.outbound import validate_connector_url
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -43,10 +44,7 @@ from onyx.connectors.youtrack.models import (
     YouTrackSlimIssue,
     YouTrackUser,
 )
-from onyx.server.security.models import web_connector_ssrf_enforced
-from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 
@@ -118,21 +116,7 @@ class YouTrackRequestError(RuntimeError):
 
 
 def validate_base_url(base_url: str) -> None:
-    """The SSRF protection level decides how strict this is, as for the web
-    connector: private hosts are reachable only when an admin relaxed it, and
-    cloud metadata stays blocked either way."""
-    enforced: bool = web_connector_ssrf_enforced(
-        get_security_settings().ssrf_protection_level
-    )
-    try:
-        validate_outbound_http_url(
-            base_url,
-            https_only=True,
-            allow_private_network=not enforced,
-            block_link_local_only=not enforced,
-        )
-    except (SSRFException, ValueError) as e:
-        raise ConnectorValidationError(f"Invalid YouTrack URL '{base_url}': {e}") from e
+    validate_connector_url(base_url, "YouTrack URL", https_only=True)
 
 
 def _api_root(base_url: str) -> str:

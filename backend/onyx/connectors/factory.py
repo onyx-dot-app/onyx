@@ -17,6 +17,7 @@ from onyx.connectors.capability_checks.recorder import (
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.credentials_provider import build_db_credentials_provider
+from onyx.connectors.cross_connector_utils.outbound import validate_outbound_fields
 from onyx.connectors.exceptions import ConnectorValidationError, ValidationError
 from onyx.connectors.interfaces import (
     BaseConnector,
@@ -27,6 +28,7 @@ from onyx.connectors.interfaces import (
     prune_listing_honors_indexing_start,
 )
 from onyx.connectors.models import InputType
+from onyx.connectors.outbound_fields import OutboundField, OutboundFieldSource
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import get_cc_pairs_using_credential
@@ -178,6 +180,15 @@ def build_connector_kwargs(
     return config.model_dump(exclude_unset=True)
 
 
+def _outbound_fields(
+    source: DocumentSource, field_source: OutboundFieldSource
+) -> list[OutboundField]:
+    mapping = CONNECTOR_CLASS_MAP.get(source)
+    if mapping is None:
+        return []
+    return [f for f in mapping.outbound_fields if f.source == field_source]
+
+
 def instantiate_connector(
     db_session: Session,
     source: DocumentSource,
@@ -187,6 +198,10 @@ def instantiate_connector(
     raw_file_callback: RawFileCallback | None = None,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
+    connector_specific_config = validate_outbound_fields(
+        _outbound_fields(source, OutboundFieldSource.CONFIG),
+        connector_specific_config,
+    )
 
     connector = connector_class(
         **build_connector_kwargs(source, connector_specific_config)
@@ -212,6 +227,9 @@ def instantiate_connector(
                 if credential.credential_json
                 else {}
             ),
+        )
+        credential_json = validate_outbound_fields(
+            _outbound_fields(source, OutboundFieldSource.CREDENTIAL), credential_json
         )
         new_credentials = connector.load_credentials(credential_json)
 

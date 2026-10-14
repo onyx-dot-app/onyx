@@ -136,7 +136,9 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
     supports_manual_credentials = True
 
     class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
+        # One DNS label, so the value cannot move the token request off Egnyte.
         egnyte_domain: str = Field(
+            pattern=r"^[A-Za-z0-9-]{1,63}$",
             title="Egnyte Domain",
             description=(
                 "The domain for the Egnyte instance (e.g. 'company' for company.egnyte.com)"
