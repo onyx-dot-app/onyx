@@ -75,6 +75,9 @@ def main() -> int:
     parser.add_argument("--base", default="origin/main")
     args: argparse.Namespace = parser.parse_args()
     try:
+        # Application release tags do not publish Helm charts.
+        if os.environ.get("GITHUB_REF", "").startswith("refs/tags/v"):
+            return 0
         branch: str = os.environ.get("GITHUB_BASE_REF") or git(
             "branch", "--show-current"
         )

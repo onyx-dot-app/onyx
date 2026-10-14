@@ -16,6 +16,11 @@ CHART: Path = Path("deployment/helm/charts/onyx/Chart.yaml")
 
 class HelmReleaseTest(unittest.TestCase):
     def setUp(self) -> None:
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        for key in ("GITHUB_BASE_REF", "GITHUB_REF"):
+            os.environ.pop(key, None)
         self.temp: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root: Path = Path(self.temp.name)
@@ -154,6 +159,22 @@ class HelmReleaseTest(unittest.TestCase):
         self.values.write_text("enabled: true\n")
         with patch.dict(os.environ, {"GITHUB_BASE_REF": "release/test"}):
             self.assertEqual(self.check().returncode, 0)
+
+    def test_application_release_tag_is_exempt(self) -> None:
+        self.values.write_text("enabled: true\n")
+        self.commit()
+        self.git("tag", "v1.0.0")
+        self.git("checkout", "--detach", "-q", "v1.0.0")
+        with patch.dict(os.environ, {"GITHUB_REF": "refs/tags/v1.0.0"}):
+            self.assertEqual(self.check().returncode, 0)
+
+    def test_other_detached_refs_still_require_release(self) -> None:
+        self.git("checkout", "--detach", "-q")
+        self.values.write_text("enabled: true\n")
+        for ref in ("refs/pull/123/merge", "refs/tags/helm/onyx-1.0.0"):
+            with self.subTest(ref=ref):
+                with patch.dict(os.environ, {"GITHUB_REF": ref}):
+                    self.assertEqual(self.check().returncode, 1)
 
     def test_malformed_metadata_fails(self) -> None:
         (self.root / CHART).write_text("version: [\n")

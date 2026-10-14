@@ -9,8 +9,8 @@ concurrency:
 # NOT overwrite an already-published version, so a chart change that reuses
 # main's version is silently never released. This gate prevents that.
 #
-# Uses native path filtering: the workflow only runs when watched chart files
-# change (onyx-cnpg-crds is bundled into the onyx chart via Chart.lock, so it
+# Uses native path filtering for chart files and the release checker
+# itself (onyx-cnpg-crds is bundled into the onyx chart via Chart.lock, so it
 # counts too). Because of this it cannot be a *required* branch-protection check
 # -- a required check that is filtered out on unrelated PRs stays stuck "pending"
 # and blocks merges. It is enforced as a visible failing check on chart PRs.
@@ -24,6 +24,9 @@ on:
     paths:
       - "deployment/helm/charts/onyx/**"
       - "deployment/helm/charts/onyx-cnpg-crds/**"
+      - "tools/helm/**"
+      - ".pre-commit-config.yaml"
+      - ".github/workflows/pr-helm-chart-version.yml"
 
 permissions:
   contents: read
@@ -38,6 +41,16 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # ratchet:actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Test the Helm release checker
+        run: |
+          python -m pip install PyYAML==6.0.3 semver==3.0.4
+          python -m unittest discover -s tools/helm -v
 
       - name: Refresh main release baseline
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main

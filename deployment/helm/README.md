@@ -308,22 +308,3 @@ If you would like to use KEDA ScaledObjects instead:
 2. Set `autoscaling.engine: keda` in your `values.yaml` and enable autoscaling for the components you want to scale.
 
 When `autoscaling.engine` is set to `keda`, the chart will render the existing ScaledObject templates; otherwise HPAs will be rendered.
-
-# Changing charts
-
-Changes under `charts/onyx/` or `charts/onyx-cnpg-crds/` require updates in
-`charts/onyx/Chart.yaml`:
-
-- Increase `version` above the version on `origin/main`.
-- Update the release descriptions under `annotations.artifacthub.io/changes`.
-  Describe the chart changes for users. Keep the general chart `description` unchanged
-  unless the chart's purpose changes.
-
-The `helm-release` pre-commit hook checks both requirements. Agent stop hooks
-also run pre-commit. CI uses the same check for chart pull requests.
-The check includes deletions and all files inside both chart directories.
-Changes to this README or `dev/` alone do not require a chart release.
-
-Run `git fetch origin main` to refresh the local release baseline, then run
-`pre-commit run helm-release --all-files`. One update covers all commits in a branch.
-Release branches do not publish charts and are exempt.
