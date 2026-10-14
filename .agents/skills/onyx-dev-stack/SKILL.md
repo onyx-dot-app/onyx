@@ -48,6 +48,7 @@ Read `"$ODS" stack up --help` before choosing a different profile:
 - `full` runs the full launch compound for integration work.
 
 Use `--local-model-server` only when changing model-server code. Other profiles use Compose inference and avoid a duplicate local model process.
+Repeat the profile and local-model flag with `start` or `restart`. Use `up` to change model mode or recover infrastructure.
 
 ## Multiple agents
 
