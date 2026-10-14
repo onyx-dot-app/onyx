@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import and_, delete, exists, func, select, update
 from sqlalchemy.orm import Session, aliased
@@ -73,6 +74,18 @@ def connector_by_name_source_exists(
     result = db_session.execute(stmt)
     connector = result.scalar_one_or_none()
     return connector is not None
+
+
+def fetch_other_connector_configs(
+    db_session: Session, connector_id: int, sources: list[DocumentSource]
+) -> list[tuple[DocumentSource, dict[str, Any]]]:
+    """The source and config of every connector of these sources but one."""
+    rows = db_session.execute(
+        select(Connector.source, Connector.connector_specific_config).where(
+            Connector.id != connector_id, Connector.source.in_(sources)
+        )
+    )
+    return [(source, config) for source, config in rows]
 
 
 def fetch_connector_by_id(connector_id: int, db_session: Session) -> Connector | None:

@@ -58,8 +58,12 @@ def _create_image_section(
     Returns:
         Tuple of (ImageSection, stored_file_name or None)
     """
-    # Create a unique identifier for the image
-    file_id = f"{parent_file_name}_embedded_{idx}" if idx > 0 else parent_file_name
+    if idx == 0:
+        # The image is the stored file itself; saving it again under its id
+        # would rewrite the record's origin.
+        return ImageSection(image_file_id=parent_file_name, link=link), parent_file_name
+
+    file_id = f"{parent_file_name}_embedded_{idx}"
 
     # Store the image and create a section
     try:

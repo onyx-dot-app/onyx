@@ -60,6 +60,12 @@ def load_checkpoint(
     """Load a checkpoint for a given index attempt from the file store"""
     checkpoint_pointer = _build_checkpoint_pointer(index_attempt_id)
     file_store = get_default_file_store()
+    record = file_store.read_file_record(checkpoint_pointer)
+    if record.file_origin != FileOrigin.INDEXING_CHECKPOINT:
+        raise ValueError(
+            f"{checkpoint_pointer} has origin {record.file_origin.value}, "
+            "not an indexing checkpoint"
+        )
     checkpoint_io = file_store.read_file(checkpoint_pointer, mode="rb")
     checkpoint_data = checkpoint_io.read().decode("utf-8")
     if isinstance(connector, CheckpointedConnector):

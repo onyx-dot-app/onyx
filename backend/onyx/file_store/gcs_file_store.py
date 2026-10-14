@@ -19,6 +19,7 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant_if_none,
 )
 from onyx.db.file_record import (
+    assert_file_id_writable,
     delete_filerecord_by_file_id,
     get_filerecord_by_file_id,
     get_filerecord_by_file_id_optional,
@@ -176,7 +177,38 @@ class GCSBackedFileStore(FileStore):
         db_session: Session | None = None,
     ) -> str:
         if file_id is None:
-            file_id = str(uuid.uuid4())
+            return self._write_file(
+                content,
+                display_name,
+                file_origin,
+                file_type,
+                file_metadata,
+                str(uuid.uuid4()),
+                db_session,
+            )
+        # The session holds the id's write lock until the record commits.
+        with get_session_with_current_tenant_if_none(db_session) as session:
+            assert_file_id_writable(file_id, file_origin, session)
+            return self._write_file(
+                content,
+                display_name,
+                file_origin,
+                file_type,
+                file_metadata,
+                file_id,
+                session,
+            )
+
+    def _write_file(
+        self,
+        content: IO,
+        display_name: str | None,
+        file_origin: FileOrigin,
+        file_type: str,
+        file_metadata: dict[str, Any] | None,
+        file_id: str,
+        db_session: Session | None,
+    ) -> str:
 
         client = self._get_gcs_client()
         bucket = client.bucket(self._bucket_name)

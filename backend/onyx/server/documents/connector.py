@@ -7,6 +7,7 @@ import zipfile
 from datetime import datetime
 from io import BytesIO
 from typing import IO, Any, cast
+from uuid import UUID
 
 from fastapi import (
     APIRouter,
@@ -144,6 +145,7 @@ from onyx.file_processing.zip_limits import (
 from onyx.file_store.constants import (
     CONTENT_SHA256_METADATA_KEY,
     STAGED_FOR_CC_PAIR_METADATA_KEY,
+    UPLOADED_BY_USER_ID_METADATA_KEY,
 )
 from onyx.file_store.file_store import (
     FILE_SIZE_MISSING_SENTINEL,
@@ -153,6 +155,9 @@ from onyx.file_store.file_store import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.cc_pair import authorize_pairing
+from onyx.server.documents.connector_file_ownership import (
+    assert_connector_file_ids_owned,
+)
 from onyx.server.documents.credential import (
     assert_credential_sharing_allowed,
     credential_ids_to_mask,
@@ -378,15 +383,19 @@ def _sha256_of_stream(stream: IO[bytes]) -> str:
 
 
 def _uploaded_file_metadata(
-    staged_for_cc_pair_id: int | None, content: IO[bytes] | None = None
+    staged_for_cc_pair_id: int | None,
+    content: IO[bytes] | None = None,
+    uploaded_by: UUID | None = None,
 ) -> dict[str, Any] | None:
     """The record metadata of an upload: the sha256 of ``content`` when given,
-    and the staged mark."""
+    the staged mark, and the uploader."""
     metadata: dict[str, Any] = {}
     if content is not None:
         metadata[CONTENT_SHA256_METADATA_KEY] = _sha256_of_stream(content)
     if staged_for_cc_pair_id is not None:
         metadata[STAGED_FOR_CC_PAIR_METADATA_KEY] = staged_for_cc_pair_id
+    if uploaded_by is not None:
+        metadata[UPLOADED_BY_USER_ID_METADATA_KEY] = str(uploaded_by)
     return metadata or None
 
 
@@ -395,10 +404,13 @@ def upload_files(
     file_origin: FileOrigin = FileOrigin.CONNECTOR,
     unzip: bool = True,
     staged_for_cc_pair_id: int | None = None,
+    uploaded_by: UUID | None = None,
 ) -> FileUploadResponse:
     """Saves the uploads to the file store. Connector files record the sha256
     of their bytes. ``staged_for_cc_pair_id`` marks every saved file as
-    staged for that pair's edit (see ``file_connector_staging``)."""
+    staged for that pair's edit (see ``file_connector_staging``).
+    ``uploaded_by`` records the uploader, whom a connector config may name the
+    files for (see ``assert_connector_file_ids_owned``)."""
 
     # Skip directories and known macOS metadata entries
     def should_process_file(file_path: str) -> bool:
@@ -431,7 +443,9 @@ def upload_files(
                             save_zip_metadata_to_file_store(
                                 zf,
                                 file_store,
-                                _uploaded_file_metadata(staged_for_cc_pair_id),
+                                _uploaded_file_metadata(
+                                    staged_for_cc_pair_id, uploaded_by=uploaded_by
+                                ),
                             )
                         )
                         for file_info in zf.namelist():
@@ -464,6 +478,7 @@ def upload_files(
                                 file_metadata=_uploaded_file_metadata(
                                     staged_for_cc_pair_id,
                                     sub_file if hashes_content else None,
+                                    uploaded_by,
                                 ),
                             )
                             deduped_file_paths.append(file_id)
@@ -478,7 +493,9 @@ def upload_files(
                     file_origin=file_origin,
                     file_type=file.content_type or "application/zip",
                     file_metadata=_uploaded_file_metadata(
-                        staged_for_cc_pair_id, file.file if hashes_content else None
+                        staged_for_cc_pair_id,
+                        file.file if hashes_content else None,
+                        uploaded_by,
                     ),
                 )
                 deduped_file_paths.append(file_id)
@@ -491,7 +508,9 @@ def upload_files(
                 file_origin=file_origin,
                 file_type=file.content_type or "text/plain",
                 file_metadata=_uploaded_file_metadata(
-                    staged_for_cc_pair_id, file.file if hashes_content else None
+                    staged_for_cc_pair_id,
+                    file.file if hashes_content else None,
+                    uploaded_by,
                 ),
             )
             deduped_file_paths.append(file_id)
@@ -551,13 +570,15 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
 def upload_files_api(
     files: list[UploadFile],
     unzip: bool = True,
-    _: User = Depends(
+    user: User = Depends(
         require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
     ),
 ) -> FileUploadResponse:
     # No GATE 2: there is no resource to scope yet, since this only stores bytes and
     # returns ids. The manager is held to their groups when the credential is associated.
-    return upload_files(files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip)
+    return upload_files(
+        files, FileOrigin.CONNECTOR_FILE_UPLOAD, unzip=unzip, uploaded_by=user.id
+    )
 
 
 @router.get("/admin/connector/{connector_id}/files", tags=PUBLIC_API_TAGS)
@@ -760,7 +781,7 @@ def update_connector_files(
     new_zip_metadata: dict[str, Any] = {}
 
     if files and len(files) > 0:
-        upload_response = upload_files(files, FileOrigin.CONNECTOR)
+        upload_response = upload_files(files, FileOrigin.CONNECTOR, uploaded_by=user.id)
         new_file_paths = upload_response.file_paths
         new_file_names_list = upload_response.file_names
         new_zip_metadata_file_id = upload_response.zip_metadata_file_id
@@ -828,6 +849,7 @@ def update_connector_files(
             display_name=ONYX_METADATA_FILENAME,
             file_origin=FileOrigin.CONNECTOR_METADATA,
             file_type="application/json",
+            file_metadata=_uploaded_file_metadata(None, uploaded_by=user.id),
         )
 
     # Update connector config
@@ -1618,6 +1640,12 @@ def create_connector_from_model(
 
     try:
         _validate_connector_request(connector_data)
+        assert_connector_file_ids_owned(
+            db_session,
+            user,
+            connector_data.source,
+            connector_data.connector_specific_config,
+        )
 
         connector_base = connector_data.to_connector_base()
         connector_response = create_connector(
@@ -1687,6 +1715,12 @@ def create_connector_with_mock_credential(
     credential_id: int | None = None
     try:
         _validate_connector_request(connector_data)
+        assert_connector_file_ids_owned(
+            db_session,
+            user,
+            connector_data.source,
+            connector_data.connector_specific_config,
+        )
         connector_response = create_connector(
             db_session=db_session,
             connector_data=connector_data,
@@ -1817,6 +1851,12 @@ def create_connector_with_credential(
     promoted_draft_id: int | None = None
     try:
         _validate_connector_request(connector_data)
+        assert_connector_file_ids_owned(
+            db_session,
+            user,
+            connector_data.source,
+            connector_data.connector_specific_config,
+        )
         connector_id = create_connector(
             db_session=db_session,
             connector_data=connector_data.to_connector_base(),
@@ -1972,6 +2012,14 @@ def update_connector_from_model(
         connector_base = connector_data.to_connector_base()
     except (ValueError, ConnectorValidationError) as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+    current_connector = fetch_connector_by_id(connector_id, db_session)
+    assert_connector_file_ids_owned(
+        db_session,
+        user,
+        connector_data.source,
+        connector_data.connector_specific_config,
+        current_connector.connector_specific_config if current_connector else None,
+    )
 
     # TODO(andrei, evan): Validate the updated config here like the creation
     # flows do (``validate_ccpair_for_user`` / ``validate_connector_settings``).

@@ -214,7 +214,10 @@ class TestExternalStorageFileStore:
             patch("onyx.file_store.file_store.S3_AWS_SECRET_ACCESS_KEY", "test-secret"),
         ):
             # Mock the database operation to avoid SQLAlchemy issues
-            with patch("onyx.db.file_record.upsert_filerecord") as mock_upsert:
+            with (
+                patch("onyx.db.file_record.upsert_filerecord") as mock_upsert,
+                patch("onyx.file_store.file_store.assert_file_id_writable"),
+            ):
                 mock_upsert.return_value = Mock()
 
                 file_store = S3BackedFileStore(bucket_name="test-bucket")
@@ -455,7 +458,10 @@ class TestGCSFileStore:
         mock_db_session.commit = Mock()
         mock_db_session.rollback = Mock()
 
-        with patch("onyx.db.file_record.upsert_filerecord") as mock_upsert:
+        with (
+            patch("onyx.db.file_record.upsert_filerecord") as mock_upsert,
+            patch("onyx.file_store.gcs_file_store.assert_file_id_writable"),
+        ):
             mock_upsert.return_value = Mock()
 
             file_store = GCSBackedFileStore(bucket_name="test-gcs-bucket")

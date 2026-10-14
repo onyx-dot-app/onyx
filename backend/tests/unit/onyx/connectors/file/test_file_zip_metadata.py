@@ -8,12 +8,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from onyx.configs.constants import FileOrigin
 from onyx.connectors.file import metadata
 from onyx.connectors.file.metadata import ZipMetadataError, load_zip_metadata
 
 
 def _store_holding(content: bytes) -> MagicMock:
     store = MagicMock()
+    store.read_file_record.return_value.file_origin = FileOrigin.CONNECTOR_METADATA
     store.read_file.return_value = BytesIO(content)
     return store
 

@@ -86,7 +86,7 @@ frontend changes a new connector requires.
 | POST | `/admin/connector/run-once` | On-demand index trigger. |
 | GET | `/admin/connector/status`, `/admin/connector/indexing-status` (POST) | Status and index-attempt history for the admin UI. |
 | GET | `/admin/connector/failed-indexing-status` | |
-| POST | `/admin/connector/file/upload`, GET/POST `/admin/connector/{id}/files*` | File-connector-specific upload and file-list management. |
+| POST | `/admin/connector/file/upload`, GET/POST `/admin/connector/{id}/files*` | File-connector-specific upload and file-list management. An upload records its uploader; a config may add only file ids the caller uploaded (`server/documents/connector_file_ownership.py`). |
 | GET | `/connector/{google-drive,gmail}/authorize/{credential_id}`, `/callback` | Google-specific OAuth flows in `connector.py`. |
 | GET | `/connector/oauth/authorize/{source}`, `/callback/{source}`, `/details/{source}` | Generic OAuth flow for every `OAuthConnector` implementation (`server/documents/standard_oauth.py`). |
 | POST/GET | `/admin/credential/{credential_id}/capability-check`, `/capability-report`, `/admin/credential/capability-reports`, `/admin/credential/{credential_id}/binding-check` | Run and read capability checks, and check credential-bound config fields (`server/documents/credential_capabilities.py`). A run applies the credential use rule (§4.9) to the config it uses. A `connector_specific_config` override needs credential visibility; only a run on the stored config of an existing pair is open to a pairing manager who cannot see the credential. |
