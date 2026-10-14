@@ -1751,9 +1751,6 @@
         "licenseSyncFailed": "许可证同步失败",
         "paymentMethodRequired": "请先添加付款方式，然后重试升级。",
         "syncLicenseFailed": "同步许可证失败"
-      },
-      "placeholders": {
-        "licenseKey": "eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
       }
     },
     "chatPreferences": {
@@ -7469,8 +7466,6 @@
           "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
           "openAICompatibleApiBase": "http://localhost:8000/v1",
           "litellmApiBase": "https://your-litellm-proxy.com",
-          "bedrockAccessKeyId": "AKIAIOSFODNN7EXAMPLE",
-          "bedrockSecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
           "apiBase": "https://"
         }
       },

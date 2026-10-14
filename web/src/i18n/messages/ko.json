@@ -1751,9 +1751,6 @@
         "licenseSyncFailed": "라이선스 동기화에 실패했습니다",
         "paymentMethodRequired": "먼저 결제 수단을 추가한 다음 다시 업그레이드하세요.",
         "syncLicenseFailed": "라이선스를 동기화하지 못했습니다"
-      },
-      "placeholders": {
-        "licenseKey": "eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
       }
     },
     "chatPreferences": {
@@ -7469,8 +7466,6 @@
           "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
           "openAICompatibleApiBase": "http://localhost:8000/v1",
           "litellmApiBase": "https://your-litellm-proxy.com",
-          "bedrockAccessKeyId": "AKIAIOSFODNN7EXAMPLE",
-          "bedrockSecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
           "apiBase": "https://"
         }
       },

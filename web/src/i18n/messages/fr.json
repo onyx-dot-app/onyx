@@ -1751,9 +1751,6 @@
         "licenseSyncFailed": "La synchronisation de la licence a échoué",
         "paymentMethodRequired": "Ajoutez d'abord un moyen de paiement, puis réessayez la mise à niveau.",
         "syncLicenseFailed": "Échec de la synchronisation de la licence"
-      },
-      "placeholders": {
-        "licenseKey": "eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
       }
     },
     "chatPreferences": {
@@ -7469,8 +7466,6 @@
           "azureTargetUri": "https://your-resource.cognitiveservices.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2025-01-01-preview",
           "openAICompatibleApiBase": "http://localhost:8000/v1",
           "litellmApiBase": "https://your-litellm-proxy.com",
-          "bedrockAccessKeyId": "AKIAIOSFODNN7EXAMPLE",
-          "bedrockSecretAccessKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
           "apiBase": "https://"
         }
       },

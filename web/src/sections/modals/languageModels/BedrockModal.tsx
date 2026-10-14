@@ -197,7 +197,7 @@ function BedrockModalInternals({
               <InputTypeInField
                 name={FIELD_AWS_ACCESS_KEY_ID}
                 // oxlint-disable-next-line i18n/no-raw-jsx-text -- AWS example key, not copy
-                placeholder={t("placeholders.bedrockAccessKeyId")}
+                placeholder="AKIAIOSFODNN7EXAMPLE"
               />
             </InputVertical>
             <InputVertical
@@ -206,7 +206,7 @@ function BedrockModalInternals({
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
-                placeholder={t("placeholders.bedrockSecretAccessKey")}
+                placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
               />
             </InputVertical>
           </Section>
