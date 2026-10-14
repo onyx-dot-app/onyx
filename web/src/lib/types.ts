@@ -225,9 +225,8 @@ export interface IndexAttemptSnapshot {
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
-// declaration order is the canonical pipeline order — the API serializes
-// stages in this order and the "Pipeline order" sort renders them as-is.
-// Keep in sync with the Python enum.
+// declaration order is the canonical pipeline order, which the API serializes
+// and the stage details popover renders. Keep in sync with the Python enum.
 export const INDEX_ATTEMPT_STAGES = [
   "CONNECTOR_VALIDATION",
   "PERMISSION_VALIDATION",

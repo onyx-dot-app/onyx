@@ -2263,145 +2263,86 @@
         "entityType": "无效连接器"
       },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "隐藏尝试开销"
-          },
-          "showButton": {
-            "label": "显示尝试开销"
-          }
-        },
-        "batchTotal": {
-          "empty": "尚无已完成的批次",
-          "summary": "平均批次：{avgLabel}，共 {count, plural, one {# 个批次} other {# 个批次}}——分布如下所示。"
-        },
-        "empty": {
-          "description": "尚未记录本次尝试的阶段耗时数据。在部署阶段埋点之前运行的旧尝试没有指标数据。"
-        },
         "loadError": {
-          "description": "无法加载本次尝试的阶段耗时数据。即使指标记录不可用，流水线仍会运行，因此这并不表示索引运行本身有问题。",
           "title": "加载阶段指标失败"
         },
-        "loading": "正在加载阶段指标…",
         "perBatch": {
-          "columns": {
-            "avgTime": "平均耗时",
-            "calls": "调用次数",
-            "max": "最大值",
-            "min": "最小值",
-            "stage": "阶段",
-            "totalTime": "总耗时"
-          },
           "empty": "未记录按批次的阶段数据。"
-        },
-        "sort": {
-          "label": "排序：",
-          "pipelineOrder": {
-            "label": "流水线顺序"
-          },
-          "timeTaken": {
-            "label": "耗时"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "将批次从对象存储读回工作进程内存。",
             "label": "批次加载"
           },
           "batchTotal": {
-            "description": "端到端处理单个批次所用的总实际时间。",
             "label": "批次总计"
           },
           "batchUnaccounted": {
-            "description": "未归入任何具名阶段的批次时间。数值偏大表示埋点缺失。",
             "label": "未归类"
           },
           "checkpointLoad": {
-            "description": "加载已保存的检查点，使本次尝试从上次运行停止的位置继续。",
             "label": "检查点加载"
           },
           "chunking": {
-            "description": "将每个文档拆分为用于生成 embedding 并建立索引的分块。",
             "label": "分块"
           },
           "connectorFetch": {
-            "description": "连接器调用来源 API 并产出原始文档所花费的时间。",
             "label": "连接器抓取"
           },
           "connectorValidation": {
-            "description": "在开始抓取前，验证连接器配置正确且可访问。",
             "label": "连接器验证"
           },
           "contextualRag": {
-            "description": "使用 LLM 为每个分块生成上下文摘要，以提升检索质量。",
             "label": "上下文 RAG"
           },
           "coordLockAcquireWait": {
-            "description": "等待保护本次尝试共享进度计数器的协调锁。",
             "label": "协调锁获取等待"
           },
           "coordinationUpdate": {
-            "description": "更新本次尝试的进度计数器，使界面反映已完成的批次。",
             "label": "协调更新"
           },
           "docBatchEnqueue": {
-            "description": "将已存储的批次发布到 Celery 队列，供 docprocessing 工作进程获取。",
             "label": "文档批次入队"
           },
           "docBatchStore": {
-            "description": "将抓取到的一批文档持久化到对象存储，供 docprocessing 工作进程使用。",
             "label": "文档批次存储"
           },
           "docDbPrepare": {
-            "description": "确定哪些文档是新增或已更新的，并准备相应的数据库行。",
             "label": "文档数据库准备"
           },
           "docLockAcquireWait": {
-            "description": "等待单个文档的锁，避免并发任务写入同一文档。",
             "label": "文档锁等待"
           },
           "docprocessingSetup": {
-            "description": "准备工作进程：加载搜索设置、embedding 模型和索引客户端。",
             "label": "文档处理初始化"
           },
           "embedding": {
-            "description": "调用 embedding 模型，将文本块转换为向量。通常是最慢的阶段。",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "在写入前，为每个文本块附加访问控制、权重提升和其他元数据。",
             "label": "元数据填充准备"
           },
           "finalization": {
-            "description": "处理完成后清理工作进程资源并释放该批次。",
             "label": "收尾"
           },
           "gcCollect": {
-            "description": "两个批次之间显式垃圾回收所用的时间。",
             "label": "垃圾回收"
           },
           "hierarchyUpsert": {
-            "description": "写入数据源的文件夹或空间层级，以便按位置筛选文档。",
             "label": "层级写入"
           },
           "imageProcessing": {
-            "description": "提取并总结图片，把图片内容转换为可搜索的文本。",
             "label": "图片处理"
           },
           "permissionValidation": {
-            "description": "确认该凭据具有读取数据源文档所需的权限。",
             "label": "权限校验"
           },
           "postIndexDbUpdate": {
-            "description": "索引写入成功后，更新 Postgres 中的文档记录。",
             "label": "索引后数据库更新"
           },
           "queueWait": {
-            "description": "批次在队列中等待文档处理工作进程启动它的时间。",
             "label": "队列等待"
           },
           "vectorDbWrite": {
-            "description": "将已生成 embedding 的文本块写入文档索引。",
             "label": "向量数据库写入"
           },
           "embeddingRateLimitWait": {
@@ -2413,10 +2354,6 @@
             "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "本次索引任务按批次和按尝试的耗时统计。",
-        "title": "索引阶段指标"
       },
       "statusCard": {
         "documentsIndexed": {
@@ -2568,6 +2505,16 @@
           "canceled": "正在取消运行。",
           "cancelFailed": "无法取消运行，请重试。"
         }
+      },
+      "stageDetails": {
+        "title": "阶段详情",
+        "batches": "批次",
+        "averageTime": "平均时间",
+        "maxTime": "最长时间",
+        "uneven": {
+          "tooltip": "此阶段各批次耗时差异很大"
+        },
+        "close": "关闭阶段详情"
       }
     },
     "connectorTitle": {

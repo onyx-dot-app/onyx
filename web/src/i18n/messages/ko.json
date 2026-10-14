@@ -2263,145 +2263,86 @@
         "entityType": "유효하지 않은 커넥터"
       },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "시도 오버헤드 숨기기"
-          },
-          "showButton": {
-            "label": "시도 오버헤드 표시"
-          }
-        },
-        "batchTotal": {
-          "empty": "완료된 배치가 아직 없습니다",
-          "summary": "평균 배치: {avgLabel}, {count, plural, one {배치 #개} other {배치 #개}} — 분포는 아래에 표시됩니다."
-        },
-        "empty": {
-          "description": "이 시도의 단계별 시간 데이터가 아직 기록되지 않았습니다. 단계 계측이 배포되기 전에 실행된 이전 시도에는 지표가 없습니다."
-        },
         "loadError": {
-          "description": "이 시도의 단계별 시간 데이터를 불러올 수 없습니다. 지표 기록을 사용할 수 없어도 파이프라인은 실행되므로, 인덱싱 실행 자체의 문제를 의미하지는 않습니다.",
           "title": "단계별 지표를 불러오지 못했습니다"
         },
-        "loading": "단계별 지표를 불러오는 중…",
         "perBatch": {
-          "columns": {
-            "avgTime": "평균 시간",
-            "calls": "호출 수",
-            "max": "최대",
-            "min": "최소",
-            "stage": "단계",
-            "totalTime": "총 시간"
-          },
           "empty": "배치별 단계 데이터가 기록되지 않았습니다."
-        },
-        "sort": {
-          "label": "정렬:",
-          "pipelineOrder": {
-            "label": "파이프라인 순서"
-          },
-          "timeTaken": {
-            "label": "소요 시간"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "객체 스토리지에서 배치를 다시 읽어 워커 메모리에 올립니다.",
             "label": "배치 로드"
           },
           "batchTotal": {
-            "description": "단일 배치를 처음부터 끝까지 처리하는 데 걸린 전체 실제 시간입니다.",
             "label": "배치 전체"
           },
           "batchUnaccounted": {
-            "description": "지정된 단계에 할당되지 않은 배치 시간입니다. 값이 크면 계측이 누락되었을 수 있습니다.",
             "label": "미분류"
           },
           "checkpointLoad": {
-            "description": "저장된 체크포인트를 불러와 이전 실행이 멈춘 지점부터 시도를 재개합니다.",
             "label": "체크포인트 로드"
           },
           "chunking": {
-            "description": "각 문서를 embedding과 인덱싱 대상이 되는 청크로 나눕니다.",
             "label": "청킹"
           },
           "connectorFetch": {
-            "description": "커넥터가 소스 API를 호출하고 원본 문서를 반환하는 데 걸리는 시간입니다.",
             "label": "커넥터 가져오기"
           },
           "connectorValidation": {
-            "description": "가져오기를 시작하기 전에 커넥터 구성이 올바르고 접근할 수 있는지 확인합니다.",
             "label": "커넥터 검증"
           },
           "contextualRag": {
-            "description": "검색 품질을 높이기 위해 LLM으로 청크별 컨텍스트 요약을 생성합니다.",
             "label": "컨텍스트 기반 RAG"
           },
           "coordLockAcquireWait": {
-            "description": "시도의 공유 진행 카운터를 보호하는 조정 잠금을 기다립니다.",
             "label": "조정 잠금 대기"
           },
           "coordinationUpdate": {
-            "description": "완료된 배치가 UI에 반영되도록 시도의 진행 카운터를 업데이트합니다.",
             "label": "조정 업데이트"
           },
           "docBatchEnqueue": {
-            "description": "docprocessing 워커가 가져갈 수 있도록 저장된 배치를 Celery 큐에 게시합니다.",
             "label": "문서 배치 큐 등록"
           },
           "docBatchStore": {
-            "description": "docprocessing 워커를 위해 가져온 문서 배치를 객체 스토리지에 저장합니다.",
             "label": "문서 배치 저장"
           },
           "docDbPrepare": {
-            "description": "어떤 문서가 새로 추가되었거나 업데이트되었는지 확인하고 데이터베이스 행을 준비합니다.",
             "label": "문서 DB 준비"
           },
           "docLockAcquireWait": {
-            "description": "문서별 잠금을 기다립니다. 동시에 실행되는 시도가 같은 문서를 쓰지 않도록 합니다.",
             "label": "문서 잠금 획득 대기"
           },
           "docprocessingSetup": {
-            "description": "워커를 준비합니다. 검색 설정, embedding 모델, 인덱스 클라이언트를 로드합니다.",
             "label": "문서 처리 설정"
           },
           "embedding": {
-            "description": "embedding 모델을 호출하여 청크를 벡터로 변환합니다. 보통 가장 느린 단계입니다.",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "쓰기 전에 각 청크에 접근 제어, 부스트, 기타 메타데이터를 추가합니다.",
             "label": "보강 준비"
           },
           "finalization": {
-            "description": "처리가 끝나면 워커 리소스를 정리하고 배치를 해제합니다.",
             "label": "마무리"
           },
           "gcCollect": {
-            "description": "배치 사이에 명시적 가비지 컬렉션에 사용한 시간입니다.",
             "label": "가비지 컬렉션"
           },
           "hierarchyUpsert": {
-            "description": "소스의 폴더 또는 스페이스 계층을 기록하여 위치로 문서를 필터링할 수 있게 합니다.",
             "label": "계층 업서트"
           },
           "imageProcessing": {
-            "description": "이미지를 추출하고 요약하여 내용을 검색 가능한 텍스트로 만듭니다.",
             "label": "이미지 처리"
           },
           "permissionValidation": {
-            "description": "자격 증명이 소스의 문서를 읽는 데 필요한 권한을 가지고 있는지 확인합니다.",
             "label": "권한 검증"
           },
           "postIndexDbUpdate": {
-            "description": "인덱스 쓰기가 성공한 후 Postgres의 문서 행을 업데이트합니다.",
             "label": "인덱싱 후 DB 업데이트"
           },
           "queueWait": {
-            "description": "문서 처리 워커가 배치를 시작하기 전까지 큐에서 대기한 시간입니다.",
             "label": "큐 대기"
           },
           "vectorDbWrite": {
-            "description": "embedding된 청크를 문서 인덱스에 기록합니다.",
             "label": "벡터 DB 쓰기"
           },
           "embeddingRateLimitWait": {
@@ -2413,10 +2354,6 @@
             "description": "임베딩 제공자가 요청을 제한한 후 임베딩 요청이 기다린 시간입니다. 임베딩의 일부이며 임베딩 스레드 전체의 합계입니다."
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "이 인덱싱 시도의 배치별, 시도별 소요 시간입니다.",
-        "title": "인덱싱 단계 지표"
       },
       "statusCard": {
         "documentsIndexed": {
@@ -2568,6 +2505,16 @@
           "canceled": "실행을 취소하는 중입니다.",
           "cancelFailed": "실행을 취소하지 못했습니다. 다시 시도하세요."
         }
+      },
+      "stageDetails": {
+        "title": "단계 세부 정보",
+        "batches": "배치",
+        "averageTime": "평균 시간",
+        "maxTime": "최대 시간",
+        "uneven": {
+          "tooltip": "이 단계의 배치 시간 편차가 큽니다"
+        },
+        "close": "단계 세부 정보 닫기"
       }
     },
     "connectorTitle": {

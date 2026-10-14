@@ -2263,145 +2263,86 @@
         "entityType": "Ungültiger Konnektor"
       },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "Zusatzaufwand des Versuchs ausblenden"
-          },
-          "showButton": {
-            "label": "Zusatzaufwand des Versuchs anzeigen"
-          }
-        },
-        "batchTotal": {
-          "empty": "Noch keine abgeschlossenen Batches",
-          "summary": "Durchschnittlicher Batch: {avgLabel}, {count, plural, one {# Batch} other {# Batches}} — Verteilung siehe unten."
-        },
-        "empty": {
-          "description": "Für diesen Versuch wurden noch keine Phasenzeiten aufgezeichnet. Ältere Versuche, die vor der Einführung der Phasenmessung liefen, haben keine Metriken."
-        },
         "loadError": {
-          "description": "Die Phasenzeiten für diesen Versuch konnten nicht geladen werden. Die Pipeline läuft auch dann, wenn die Aufzeichnung der Metriken nicht verfügbar ist. Das weist also nicht auf ein Problem mit dem Indizierungslauf selbst hin.",
           "title": "Die Phasenmetriken konnten nicht geladen werden"
         },
-        "loading": "Phasenmetriken werden geladen…",
         "perBatch": {
-          "columns": {
-            "avgTime": "Durchschn. Zeit",
-            "calls": "Aufrufe",
-            "max": "Max.",
-            "min": "Min.",
-            "stage": "Phase",
-            "totalTime": "Gesamtzeit"
-          },
           "empty": "Keine Phasendaten pro Batch aufgezeichnet."
-        },
-        "sort": {
-          "label": "Sortieren:",
-          "pipelineOrder": {
-            "label": "Pipeline-Reihenfolge"
-          },
-          "timeTaken": {
-            "label": "Benötigte Zeit"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "Liest den Batch aus dem Objektspeicher zurück in den Speicher des Workers.",
             "label": "Batch laden"
           },
           "batchTotal": {
-            "description": "Gesamte tatsächliche Zeit für die Verarbeitung eines einzelnen Batches von Anfang bis Ende.",
             "label": "Batch gesamt"
           },
           "batchUnaccounted": {
-            "description": "Batch-Zeit, die keiner benannten Phase zugeordnet ist. Ein hoher Wert deutet auf fehlende Messpunkte hin.",
             "label": "Nicht zugeordnet"
           },
           "checkpointLoad": {
-            "description": "Lädt den gespeicherten Checkpoint, damit der Versuch dort fortfährt, wo der vorherige Lauf endete.",
             "label": "Checkpoint laden"
           },
           "chunking": {
-            "description": "Teilt jedes Dokument in die Chunks auf, die eingebettet und indiziert werden.",
             "label": "Chunking"
           },
           "connectorFetch": {
-            "description": "Zeit, die der Konnektor mit Aufrufen der Quell-API und der Ausgabe von Rohdokumenten verbringt.",
             "label": "Konnektor-Abruf"
           },
           "connectorValidation": {
-            "description": "Prüft vor dem Abruf, ob der Konnektor korrekt konfiguriert und erreichbar ist.",
             "label": "Konnektor-Prüfung"
           },
           "contextualRag": {
-            "description": "Erzeugt mit einem LLM Kontextzusammenfassungen pro Chunk, um die Retrieval-Qualität zu verbessern.",
             "label": "Contextual RAG"
           },
           "coordLockAcquireWait": {
-            "description": "Wartet auf die Koordinationssperre, die die gemeinsamen Fortschrittszähler des Versuchs schützt.",
             "label": "Wartezeit auf Koordinationssperre"
           },
           "coordinationUpdate": {
-            "description": "Aktualisiert die Fortschrittszähler des Versuchs, damit die Oberfläche den abgeschlossenen Batch anzeigt.",
             "label": "Koordinationsaktualisierung"
           },
           "docBatchEnqueue": {
-            "description": "Stellt den gespeicherten Batch in die Celery-Warteschlange, damit ein Docprocessing-Worker ihn übernimmt.",
             "label": "Dokument-Batch einreihen"
           },
           "docBatchStore": {
-            "description": "Speichert einen abgerufenen Dokument-Batch für die Docprocessing-Worker im Objektspeicher.",
             "label": "Dokument-Batch speichern"
           },
           "docDbPrepare": {
-            "description": "Ermittelt, welche Dokumente neu oder aktualisiert sind, und bereitet die Datenbankzeilen vor.",
             "label": "Dokument-DB vorbereiten"
           },
           "docLockAcquireWait": {
-            "description": "Wartet auf Sperren pro Dokument, damit parallele Versuche nicht dasselbe Dokument schreiben.",
             "label": "Wartezeit auf Dokumentsperre"
           },
           "docprocessingSetup": {
-            "description": "Bereitet den Worker vor: lädt Sucheinstellungen, Embedding-Modell und Index-Clients.",
             "label": "Docprocessing-Einrichtung"
           },
           "embedding": {
-            "description": "Ruft das Embedding-Modell auf, um Chunks in Vektoren umzuwandeln. Meist die langsamste Phase.",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "Hängt vor dem Schreiben Zugriffssteuerung, Boosts und weitere Metadaten an jeden Chunk an.",
             "label": "Anreicherung vorbereiten"
           },
           "finalization": {
-            "description": "Räumt die Worker-Ressourcen auf und gibt den Batch frei, sobald die Verarbeitung endet.",
             "label": "Abschluss"
           },
           "gcCollect": {
-            "description": "Zeit für die ausdrückliche Garbage Collection zwischen Batches.",
             "label": "Garbage Collection"
           },
           "hierarchyUpsert": {
-            "description": "Schreibt die Ordner- oder Space-Hierarchie der Quelle, damit Dokumente nach Ort gefiltert werden können.",
             "label": "Hierarchie-Upsert"
           },
           "imageProcessing": {
-            "description": "Extrahiert Bilder und fasst sie zusammen, damit ihr Inhalt zu durchsuchbarem Text wird.",
             "label": "Bildverarbeitung"
           },
           "permissionValidation": {
-            "description": "Bestätigt, dass die Anmeldedaten die nötigen Berechtigungen haben, um die Dokumente der Quelle zu lesen.",
             "label": "Berechtigungsprüfung"
           },
           "postIndexDbUpdate": {
-            "description": "Aktualisiert die Dokumentzeilen in Postgres, nachdem das Schreiben in den Index erfolgreich war.",
             "label": "DB-Aktualisierung nach Indizierung"
           },
           "queueWait": {
-            "description": "Zeit, die ein Batch in der Warteschlange wartet, bis ein Docprocessing-Worker ihn startet.",
             "label": "Warteschlangenzeit"
           },
           "vectorDbWrite": {
-            "description": "Schreibt die eingebetteten Chunks in den Dokumentenindex.",
             "label": "Schreiben in Vektor-DB"
           },
           "embeddingRateLimitWait": {
@@ -2413,10 +2354,6 @@
             "description": "Zeit, die Embedding-Anfragen gewartet haben, nachdem der Embedding-Anbieter sie gedrosselt hat. Teil von Embedding, summiert über Embedding-Threads."
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "Zeiten pro Batch und pro Versuch für diesen Indizierungsversuch.",
-        "title": "Metriken der Indizierungsphasen"
       },
       "statusCard": {
         "documentsIndexed": {
@@ -2568,6 +2505,16 @@
           "canceled": "Der Lauf wird abgebrochen.",
           "cancelFailed": "Der Lauf konnte nicht abgebrochen werden. Versuchen Sie es erneut."
         }
+      },
+      "stageDetails": {
+        "title": "Phasendetails",
+        "batches": "Batches",
+        "averageTime": "Durchschnittszeit",
+        "maxTime": "Maximalzeit",
+        "uneven": {
+          "tooltip": "Die Batch-Zeiten dieser Phase schwanken stark"
+        },
+        "close": "Phasendetails schließen"
       }
     },
     "connectorTitle": {

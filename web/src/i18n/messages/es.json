@@ -2263,145 +2263,86 @@
         "entityType": "Conector no válido"
       },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "Ocultar la sobrecarga del intento"
-          },
-          "showButton": {
-            "label": "Mostrar la sobrecarga del intento"
-          }
-        },
-        "batchTotal": {
-          "empty": "Todavía no hay lotes completados",
-          "summary": "Lote medio: {avgLabel}, {count, plural, one {# lote} other {# lotes}} — la distribución se muestra abajo."
-        },
-        "empty": {
-          "description": "Todavía no se han registrado datos de tiempo por etapa para este intento. Los intentos antiguos, anteriores a la instrumentación de etapas, no tienen métricas."
-        },
         "loadError": {
-          "description": "No se pudieron cargar los datos de tiempo por etapa de este intento. El pipeline se ejecuta aunque el registro de métricas no esté disponible, así que esto no indica un problema con la indexación en sí.",
           "title": "No se pudieron cargar las métricas por etapa"
         },
-        "loading": "Cargando las métricas por etapa…",
         "perBatch": {
-          "columns": {
-            "avgTime": "Tiempo medio",
-            "calls": "Llamadas",
-            "max": "Máx.",
-            "min": "Mín.",
-            "stage": "Etapa",
-            "totalTime": "Tiempo total"
-          },
           "empty": "No se registraron datos de etapa por lote."
-        },
-        "sort": {
-          "label": "Ordenar:",
-          "pipelineOrder": {
-            "label": "Orden del pipeline"
-          },
-          "timeTaken": {
-            "label": "Tiempo empleado"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "Lee de vuelta el lote desde el almacenamiento de objetos a la memoria del worker.",
             "label": "Carga del lote"
           },
           "batchTotal": {
-            "description": "Tiempo real total transcurrido al procesar un solo lote de principio a fin.",
             "label": "Total del lote"
           },
           "batchUnaccounted": {
-            "description": "Tiempo del lote no atribuido a ninguna etapa con nombre. Un valor alto indica que falta instrumentación.",
             "label": "Sin asignar"
           },
           "checkpointLoad": {
-            "description": "Carga el checkpoint guardado para que el intento continúe donde se detuvo la ejecución anterior.",
             "label": "Carga del checkpoint"
           },
           "chunking": {
-            "description": "Divide cada documento en los fragmentos que se convierten en embeddings y se indexan.",
             "label": "División en fragmentos"
           },
           "connectorFetch": {
-            "description": "Tiempo que el conector dedica a llamar a la API de la fuente y entregar los documentos sin procesar.",
             "label": "Obtención del conector"
           },
           "connectorValidation": {
-            "description": "Comprueba que el conector está bien configurado y es accesible antes de empezar la obtención.",
             "label": "Validación del conector"
           },
           "contextualRag": {
-            "description": "Genera resúmenes de contexto por fragmento con un LLM para mejorar la calidad de la recuperación.",
             "label": "RAG contextual"
           },
           "coordLockAcquireWait": {
-            "description": "Espera al bloqueo de coordinación que protege los contadores de progreso compartidos del intento.",
             "label": "Espera del bloqueo de coordinación"
           },
           "coordinationUpdate": {
-            "description": "Actualiza los contadores de progreso del intento para que la interfaz refleje el lote completado.",
             "label": "Actualización de coordinación"
           },
           "docBatchEnqueue": {
-            "description": "Publica el lote guardado en la cola de Celery para que un worker de docprocessing lo recoja.",
             "label": "Encolado del lote de documentos"
           },
           "docBatchStore": {
-            "description": "Guarda un lote de documentos obtenidos en el almacenamiento de objetos para los workers de docprocessing.",
             "label": "Almacenamiento del lote de documentos"
           },
           "docDbPrepare": {
-            "description": "Determina qué documentos son nuevos o están actualizados y prepara las filas de la base de datos.",
             "label": "Preparación de la BD de documentos"
           },
           "docLockAcquireWait": {
-            "description": "Espera a los bloqueos por documento para que dos intentos simultáneos no escriban el mismo documento.",
             "label": "Espera del bloqueo de documento"
           },
           "docprocessingSetup": {
-            "description": "Prepara el worker: carga la configuración de búsqueda, el modelo de embeddings y los clientes del índice.",
             "label": "Preparación de docprocessing"
           },
           "embedding": {
-            "description": "Llama al modelo de embeddings para convertir los fragmentos en vectores. Suele ser la etapa más lenta.",
             "label": "Embeddings"
           },
           "enrichmentPrep": {
-            "description": "Añade el control de acceso, los impulsos y otros metadatos a cada fragmento antes de escribirlo.",
             "label": "Preparación del enriquecimiento"
           },
           "finalization": {
-            "description": "Libera los recursos del worker y el lote cuando termina el procesamiento.",
             "label": "Finalización"
           },
           "gcCollect": {
-            "description": "Tiempo dedicado a la recolección de basura explícita entre lotes.",
             "label": "Recolección de basura"
           },
           "hierarchyUpsert": {
-            "description": "Escribe la jerarquía de carpetas o espacios de la fuente para poder filtrar los documentos por ubicación.",
             "label": "Escritura de la jerarquía"
           },
           "imageProcessing": {
-            "description": "Extrae y resume las imágenes para que su contenido sea texto que se pueda buscar.",
             "label": "Procesamiento de imágenes"
           },
           "permissionValidation": {
-            "description": "Confirma que la credencial tiene los permisos necesarios para leer los documentos de la fuente.",
             "label": "Validación de permisos"
           },
           "postIndexDbUpdate": {
-            "description": "Actualiza las filas de documentos en Postgres después de que la escritura en el índice sea correcta.",
             "label": "Actualización de la BD tras la indexación"
           },
           "queueWait": {
-            "description": "Tiempo que un lote espera en la cola antes de que un worker de docprocessing lo empiece.",
             "label": "Espera en la cola"
           },
           "vectorDbWrite": {
-            "description": "Escribe en el índice de documentos los fragmentos convertidos en embeddings.",
             "label": "Escritura en la BD vectorial"
           },
           "embeddingRateLimitWait": {
@@ -2413,10 +2354,6 @@
             "description": "Tiempo que las solicitudes de embedding esperaron después de que el proveedor de embeddings las limitara. Forma parte de Embedding y se suma entre los hilos de embedding."
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "Tiempos por lote y por intento de este intento de indexación.",
-        "title": "Métricas por etapa de la indexación"
       },
       "statusCard": {
         "documentsIndexed": {
@@ -2568,6 +2505,16 @@
           "canceled": "Se está cancelando la ejecución.",
           "cancelFailed": "No se pudo cancelar la ejecución. Inténtalo de nuevo."
         }
+      },
+      "stageDetails": {
+        "title": "Detalles de etapas",
+        "batches": "Lotes",
+        "averageTime": "Tiempo medio",
+        "maxTime": "Tiempo máximo",
+        "uneven": {
+          "tooltip": "Los tiempos por lote varían mucho en esta etapa"
+        },
+        "close": "Cerrar detalles de etapas"
       }
     },
     "connectorTitle": {

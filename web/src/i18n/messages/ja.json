@@ -2263,145 +2263,86 @@
         "entityType": "無効なコネクター"
       },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "試行のオーバーヘッドを非表示"
-          },
-          "showButton": {
-            "label": "試行のオーバーヘッドを表示"
-          }
-        },
-        "batchTotal": {
-          "empty": "完了したバッチはまだありません",
-          "summary": "平均バッチ：{avgLabel}、{count, plural, one {# バッチ} other {# バッチ}} — 分布は以下のとおりです。"
-        },
-        "empty": {
-          "description": "この試行のステージ計測データは、まだ記録されていません。ステージ計測の導入前に実行された古い試行には、メトリクスがありません。"
-        },
         "loadError": {
-          "description": "この試行のステージ計測データを読み込めませんでした。メトリクスを記録できない場合でもパイプラインは実行されるため、インデックス作成そのものに問題があるとは限りません。",
           "title": "ステージメトリクスの読み込みに失敗しました"
         },
-        "loading": "ステージメトリクスを読み込んでいます…",
         "perBatch": {
-          "columns": {
-            "avgTime": "平均時間",
-            "calls": "呼び出し回数",
-            "max": "最大",
-            "min": "最小",
-            "stage": "ステージ",
-            "totalTime": "合計時間"
-          },
           "empty": "バッチごとのステージデータは記録されていません。"
-        },
-        "sort": {
-          "label": "並び替え：",
-          "pipelineOrder": {
-            "label": "パイプライン順"
-          },
-          "timeTaken": {
-            "label": "所要時間"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "オブジェクトストレージからバッチを読み戻し、ワーカーのメモリに展開します。",
             "label": "バッチ読み込み"
           },
           "batchTotal": {
-            "description": "1 つのバッチを最初から最後まで処理するのにかかった実時間の合計です。",
             "label": "バッチ合計"
           },
           "batchUnaccounted": {
-            "description": "どの名前付きステージにも割り当てられていないバッチ時間です。値が大きい場合は、計測の欠落が考えられます。",
             "label": "未計上"
           },
           "checkpointLoad": {
-            "description": "保存されたチェックポイントを読み込み、前回の実行が停止した位置から試行を再開します。",
             "label": "チェックポイント読み込み"
           },
           "chunking": {
-            "description": "各ドキュメントを、embedding 生成とインデックス登録の対象となるチャンクに分割します。",
             "label": "チャンク分割"
           },
           "connectorFetch": {
-            "description": "コネクターがソースの API を呼び出し、生のドキュメントを返すのにかかる時間です。",
             "label": "コネクター取得"
           },
           "connectorValidation": {
-            "description": "取得を開始する前に、コネクターが正しく設定され、到達可能であることを検証します。",
             "label": "コネクター検証"
           },
           "contextualRag": {
-            "description": "検索の精度を高めるため、LLM でチャンクごとのコンテキスト要約を生成します。",
             "label": "Contextual RAG"
           },
           "coordLockAcquireWait": {
-            "description": "試行の共有進捗カウンターを保護する調整ロックの取得を待機します。",
             "label": "調整ロック取得待ち"
           },
           "coordinationUpdate": {
-            "description": "完了したバッチが UI に反映されるよう、試行の進捗カウンターを更新します。",
             "label": "調整更新"
           },
           "docBatchEnqueue": {
-            "description": "保存したバッチを Celery キューに送信し、docprocessing ワーカーが取得できるようにします。",
             "label": "ドキュメントバッチのキュー投入"
           },
           "docBatchStore": {
-            "description": "取得したドキュメントのバッチを、docprocessing ワーカー向けにオブジェクトストレージへ保存します。",
             "label": "ドキュメントバッチ保存"
           },
           "docDbPrepare": {
-            "description": "どのドキュメントが新規または更新されたかを判別し、データベースの行を準備します。",
             "label": "ドキュメント DB の準備"
           },
           "docLockAcquireWait": {
-            "description": "ドキュメントごとのロックを待機し、同時に実行される試行が同じドキュメントに書き込まないようにします。",
             "label": "ドキュメントロックの取得待ち"
           },
           "docprocessingSetup": {
-            "description": "ワーカーを準備します。検索設定、embedding モデル、インデックスクライアントを読み込みます。",
             "label": "ドキュメント処理のセットアップ"
           },
           "embedding": {
-            "description": "embedding モデルを呼び出し、チャンクをベクトルに変換します。通常、最も時間のかかる段階です。",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "書き込みの前に、各チャンクへアクセス制御、ブースト、その他のメタデータを付与します。",
             "label": "エンリッチメントの準備"
           },
           "finalization": {
-            "description": "処理の完了後に、ワーカーのリソースを整理し、バッチを解放します。",
             "label": "最終処理"
           },
           "gcCollect": {
-            "description": "バッチ間の明示的なガベージコレクションに要した時間です。",
             "label": "ガベージコレクション"
           },
           "hierarchyUpsert": {
-            "description": "ソースのフォルダーまたはスペースの階層を書き込み、場所でドキュメントを絞り込めるようにします。",
             "label": "階層のアップサート"
           },
           "imageProcessing": {
-            "description": "画像を抽出して要約し、その内容を検索できるテキストにします。",
             "label": "画像処理"
           },
           "permissionValidation": {
-            "description": "認証情報にソースのドキュメントを読み取る権限があるか確認します。",
             "label": "権限の検証"
           },
           "postIndexDbUpdate": {
-            "description": "インデックスへの書き込みが成功した後、Postgres のドキュメント行を更新します。",
             "label": "インデックス後の DB 更新"
           },
           "queueWait": {
-            "description": "ドキュメント処理ワーカーが開始するまでに、バッチがキューで待機した時間です。",
             "label": "キューの待ち時間"
           },
           "vectorDbWrite": {
-            "description": "embedding 済みのチャンクをドキュメントインデックスに書き込みます。",
             "label": "ベクトル DB への書き込み"
           },
           "embeddingRateLimitWait": {
@@ -2413,10 +2354,6 @@
             "description": "埋め込みプロバイダーがリクエストを制限した後に、埋め込みリクエストが待機した時間。Embedding の一部で、埋め込みスレッド全体の合計です。"
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "このインデックス試行における、バッチ単位および試行単位の処理時間です。",
-        "title": "インデックス作成の段階メトリクス"
       },
       "statusCard": {
         "documentsIndexed": {
@@ -2568,6 +2505,16 @@
           "canceled": "実行をキャンセルしています。",
           "cancelFailed": "実行をキャンセルできませんでした。もう一度お試しください。"
         }
+      },
+      "stageDetails": {
+        "title": "ステージ詳細",
+        "batches": "バッチ",
+        "averageTime": "平均時間",
+        "maxTime": "最大時間",
+        "uneven": {
+          "tooltip": "このステージのバッチ時間は大きくばらついています"
+        },
+        "close": "ステージ詳細を閉じる"
       }
     },
     "connectorTitle": {

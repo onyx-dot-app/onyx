@@ -2263,145 +2263,86 @@
         "entityType": "le connecteur non valide"
       },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "Masquer le surcoût de la tentative"
-          },
-          "showButton": {
-            "label": "Afficher le surcoût de la tentative"
-          }
-        },
-        "batchTotal": {
-          "empty": "Aucun lot terminé pour l'instant",
-          "summary": "Lot moyen : {avgLabel}, {count, plural, one {# lot} other {# lots}} — distribution affichée ci-dessous."
-        },
-        "empty": {
-          "description": "Aucune donnée de durée des étapes n'a encore été enregistrée pour cette tentative. Les anciennes tentatives exécutées avant le déploiement de l'instrumentation des étapes n'ont pas de métriques."
-        },
         "loadError": {
-          "description": "Impossible de charger les données de durée des étapes pour cette tentative. Le pipeline s'exécute même quand l'enregistrement des métriques est indisponible ; cela n'indique donc pas un problème avec l'indexation elle-même.",
           "title": "Échec du chargement des métriques des étapes"
         },
-        "loading": "Chargement des métriques des étapes…",
         "perBatch": {
-          "columns": {
-            "avgTime": "Durée moy.",
-            "calls": "Appels",
-            "max": "Max",
-            "min": "Min",
-            "stage": "Étape",
-            "totalTime": "Durée totale"
-          },
           "empty": "Aucune donnée d'étape par lot enregistrée."
-        },
-        "sort": {
-          "label": "Trier :",
-          "pipelineOrder": {
-            "label": "Ordre du pipeline"
-          },
-          "timeTaken": {
-            "label": "Durée écoulée"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "Relit le lot depuis le stockage objet vers la mémoire du worker.",
             "label": "Chargement du lot"
           },
           "batchTotal": {
-            "description": "Temps réel écoulé total pour traiter un seul lot de bout en bout.",
             "label": "Total du lot"
           },
           "batchUnaccounted": {
-            "description": "Temps du lot non attribué à une étape nommée. Une valeur élevée indique une instrumentation manquante.",
             "label": "Non attribué"
           },
           "checkpointLoad": {
-            "description": "Charge le point de reprise enregistré pour que la tentative reprenne là où l'exécution précédente s'est arrêtée.",
             "label": "Chargement du point de reprise"
           },
           "chunking": {
-            "description": "Découpe chaque document en segments qui sont ensuite transformés en embeddings et indexés.",
             "label": "Segmentation"
           },
           "connectorFetch": {
-            "description": "Temps passé par le connecteur à appeler l'API de la source et à produire les documents bruts.",
             "label": "Récupération par le connecteur"
           },
           "connectorValidation": {
-            "description": "Vérifie que le connecteur est configuré correctement et joignable avant le début de la récupération.",
             "label": "Validation du connecteur"
           },
           "contextualRag": {
-            "description": "Génère des résumés de contexte par segment avec un LLM pour améliorer la qualité de la récupération.",
             "label": "RAG contextuel"
           },
           "coordLockAcquireWait": {
-            "description": "Attend le verrou de coordination qui protège les compteurs de progression partagés de la tentative.",
             "label": "Attente du verrou de coordination"
           },
           "coordinationUpdate": {
-            "description": "Met à jour les compteurs de progression de la tentative pour que l'interface reflète le lot terminé.",
             "label": "Mise à jour de la coordination"
           },
           "docBatchEnqueue": {
-            "description": "Publie le lot enregistré dans la file Celery pour qu'un worker docprocessing le prenne en charge.",
             "label": "Mise en file du lot de documents"
           },
           "docBatchStore": {
-            "description": "Enregistre un lot de documents récupérés dans le stockage objet pour les workers docprocessing.",
             "label": "Enregistrement du lot de documents"
           },
           "docDbPrepare": {
-            "description": "Détermine quels documents sont nouveaux ou mis à jour et prépare les lignes de la base de données.",
             "label": "Préparation DB des documents"
           },
           "docLockAcquireWait": {
-            "description": "Attend les verrous par document pour que des tentatives simultanées n'écrivent pas le même document.",
             "label": "Attente du verrou de document"
           },
           "docprocessingSetup": {
-            "description": "Prépare le worker : charge les paramètres de recherche, le modèle d'embedding et les clients d'index.",
             "label": "Configuration du docprocessing"
           },
           "embedding": {
-            "description": "Appelle le modèle d'embedding pour convertir les segments en vecteurs. Généralement l'étape la plus lente.",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "Attache le contrôle d'accès, les boosts et les autres métadonnées à chaque segment avant l'écriture.",
             "label": "Préparation de l'enrichissement"
           },
           "finalization": {
-            "description": "Libère les ressources du worker et relâche le lot une fois le traitement terminé.",
             "label": "Finalisation"
           },
           "gcCollect": {
-            "description": "Temps passé en garbage collection explicite entre les lots.",
             "label": "Garbage collection"
           },
           "hierarchyUpsert": {
-            "description": "Écrit la hiérarchie des dossiers ou des espaces de la source pour permettre de filtrer les documents par emplacement.",
             "label": "Upsert de la hiérarchie"
           },
           "imageProcessing": {
-            "description": "Extrait et résume les images pour que leur contenu devienne du texte consultable.",
             "label": "Traitement des images"
           },
           "permissionValidation": {
-            "description": "Confirme que l'identifiant dispose des autorisations requises pour lire les documents de la source.",
             "label": "Validation des autorisations"
           },
           "postIndexDbUpdate": {
-            "description": "Met à jour les lignes des documents dans Postgres après la réussite de l'écriture dans l'index.",
             "label": "Mise à jour DB après indexation"
           },
           "queueWait": {
-            "description": "Temps d'attente d'un lot dans la file avant qu'un worker docprocessing ne le démarre.",
             "label": "Attente en file"
           },
           "vectorDbWrite": {
-            "description": "Écrit les segments et leurs embeddings dans l'index des documents.",
             "label": "Écriture DB vectorielle"
           },
           "embeddingRateLimitWait": {
@@ -2413,10 +2354,6 @@
             "description": "Temps d'attente des requêtes d'embedding après une limitation par le fournisseur d'embedding. Fait partie d'Embedding, additionné sur les threads d'embedding."
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "Durées par lot et par tentative pour cette tentative d'indexation.",
-        "title": "Métriques des étapes d'indexation"
       },
       "statusCard": {
         "documentsIndexed": {
@@ -2568,6 +2505,16 @@
           "canceled": "L'exécution est en cours d'annulation.",
           "cancelFailed": "Impossible d'annuler l'exécution. Réessayez."
         }
+      },
+      "stageDetails": {
+        "title": "Détails des étapes",
+        "batches": "Lots",
+        "averageTime": "Temps moyen",
+        "maxTime": "Temps max",
+        "uneven": {
+          "tooltip": "Les temps par lot varient fortement pour cette étape"
+        },
+        "close": "Fermer les détails des étapes"
       }
     },
     "connectorTitle": {

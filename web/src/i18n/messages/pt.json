@@ -2263,145 +2263,86 @@
         "entityType": "Conector inválido"
       },
       "stageMetrics": {
-        "attemptOverhead": {
-          "hideButton": {
-            "label": "Ocultar o overhead da tentativa"
-          },
-          "showButton": {
-            "label": "Mostrar o overhead da tentativa"
-          }
-        },
-        "batchTotal": {
-          "empty": "Nenhum lote concluído ainda",
-          "summary": "Lote médio: {avgLabel}, {count, plural, one {# lote} other {# lotes}} — distribuição mostrada abaixo."
-        },
-        "empty": {
-          "description": "Nenhum dado de tempo por etapa foi registrado para esta tentativa ainda. Tentativas antigas, executadas antes da instrumentação de etapas, não têm métricas."
-        },
         "loadError": {
-          "description": "Não foi possível carregar os dados de tempo por etapa desta tentativa. O pipeline é executado mesmo quando o registro de métricas não está disponível, portanto isso não indica um problema na indexação em si.",
           "title": "Falha ao carregar as métricas por etapa"
         },
-        "loading": "Carregando as métricas por etapa…",
         "perBatch": {
-          "columns": {
-            "avgTime": "Tempo médio",
-            "calls": "Chamadas",
-            "max": "Máx",
-            "min": "Mín",
-            "stage": "Etapa",
-            "totalTime": "Tempo total"
-          },
           "empty": "Nenhum dado de etapa por lote registrado."
-        },
-        "sort": {
-          "label": "Ordenar:",
-          "pipelineOrder": {
-            "label": "Ordem do pipeline"
-          },
-          "timeTaken": {
-            "label": "Tempo gasto"
-          }
         },
         "stages": {
           "batchLoad": {
-            "description": "Lê o lote de volta do armazenamento de objetos para a memória do worker.",
             "label": "Carga do lote"
           },
           "batchTotal": {
-            "description": "Tempo total decorrido no processamento de um único lote do início ao fim.",
             "label": "Total do lote"
           },
           "batchUnaccounted": {
-            "description": "Tempo do lote não atribuído a nenhuma etapa nomeada. Um valor alto sugere falta de instrumentação.",
             "label": "Não contabilizado"
           },
           "checkpointLoad": {
-            "description": "Carrega o checkpoint salvo para que a tentativa continue de onde a execução anterior parou.",
             "label": "Carga do checkpoint"
           },
           "chunking": {
-            "description": "Divide cada documento nos chunks que são transformados em embeddings e indexados.",
             "label": "Divisão em chunks"
           },
           "connectorFetch": {
-            "description": "Tempo que o conector gasta chamando a API da origem e entregando os documentos brutos.",
             "label": "Busca do conector"
           },
           "connectorValidation": {
-            "description": "Verifica se o conector está configurado corretamente e acessível antes de começar a busca.",
             "label": "Validação do conector"
           },
           "contextualRag": {
-            "description": "Gera resumos de contexto por chunk com um LLM para melhorar a qualidade da recuperação.",
             "label": "RAG contextual"
           },
           "coordLockAcquireWait": {
-            "description": "Aguarda o bloqueio de coordenação que protege os contadores de progresso compartilhados da tentativa.",
             "label": "Espera pelo bloqueio de coordenação"
           },
           "coordinationUpdate": {
-            "description": "Atualiza os contadores de progresso da tentativa para que a interface reflita o lote concluído.",
             "label": "Atualização da coordenação"
           },
           "docBatchEnqueue": {
-            "description": "Publica o lote armazenado na fila do Celery para que um worker de docprocessing o processe.",
             "label": "Enfileiramento do lote de documentos"
           },
           "docBatchStore": {
-            "description": "Grava um lote de documentos buscados no armazenamento de objetos para os workers de docprocessing.",
             "label": "Armazenamento do lote de documentos"
           },
           "docDbPrepare": {
-            "description": "Determina quais documentos são novos ou atualizados e prepara as linhas do banco de dados.",
             "label": "Preparação do banco de documentos"
           },
           "docLockAcquireWait": {
-            "description": "Aguarda os bloqueios por documento para que tentativas simultâneas não gravem o mesmo documento.",
             "label": "Espera pelo bloqueio de documento"
           },
           "docprocessingSetup": {
-            "description": "Prepara o worker: carrega as configurações de pesquisa, o modelo de embedding e os clientes de índice.",
             "label": "Configuração do docprocessing"
           },
           "embedding": {
-            "description": "Chama o modelo de embedding para transformar os chunks em vetores. Normalmente é a etapa mais lenta.",
             "label": "Embedding"
           },
           "enrichmentPrep": {
-            "description": "Anexa o controle de acesso, os boosts e outros metadados a cada chunk antes da gravação.",
             "label": "Preparação do enriquecimento"
           },
           "finalization": {
-            "description": "Libera os recursos do worker e o lote assim que o processamento termina.",
             "label": "Finalização"
           },
           "gcCollect": {
-            "description": "Tempo gasto na coleta de lixo explícita entre os lotes.",
             "label": "Coleta de lixo"
           },
           "hierarchyUpsert": {
-            "description": "Grava a hierarquia de pastas ou espaços da origem para que os documentos possam ser filtrados por local.",
             "label": "Upsert da hierarquia"
           },
           "imageProcessing": {
-            "description": "Extrai e resume as imagens para que o conteúdo delas vire texto pesquisável.",
             "label": "Processamento de imagens"
           },
           "permissionValidation": {
-            "description": "Confirma que a credencial tem as permissões necessárias para ler os documentos da origem.",
             "label": "Validação de permissões"
           },
           "postIndexDbUpdate": {
-            "description": "Atualiza as linhas dos documentos no Postgres depois que a gravação no índice é concluída.",
             "label": "Atualização do banco após a indexação"
           },
           "queueWait": {
-            "description": "Tempo que um lote espera na fila até um worker de docprocessing começar.",
             "label": "Espera na fila"
           },
           "vectorDbWrite": {
-            "description": "Grava os chunks com embeddings no índice de documentos.",
             "label": "Gravação no banco vetorial"
           },
           "embeddingRateLimitWait": {
@@ -2413,10 +2354,6 @@
             "description": "Tempo que as requisições de embedding esperaram depois que o provedor de embedding as limitou. Parte de Embedding, somado entre as threads de embedding."
           }
         }
-      },
-      "stageMetricsModal": {
-        "description": "Tempos por lote e por tentativa desta tentativa de indexação.",
-        "title": "Métricas por etapa da indexação"
       },
       "statusCard": {
         "documentsIndexed": {
@@ -2568,6 +2505,16 @@
           "canceled": "A execução está sendo cancelada.",
           "cancelFailed": "Não foi possível cancelar a execução. Tente novamente."
         }
+      },
+      "stageDetails": {
+        "title": "Detalhes das etapas",
+        "batches": "Lotes",
+        "averageTime": "Tempo médio",
+        "maxTime": "Tempo máximo",
+        "uneven": {
+          "tooltip": "Os tempos por lote variam muito nesta etapa"
+        },
+        "close": "Fechar detalhes das etapas"
       }
     },
     "connectorTitle": {
