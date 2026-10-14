@@ -37,6 +37,9 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.capability_check_runs import (
     start_capability_checks_for_new_credential,
 )
+from onyx.server.documents.draft_credentials import (
+    validate_google_service_account_key,
+)
 from onyx.server.documents.models import (
     CredentialBase,
     CredentialDataUpdateRequest,
@@ -311,6 +314,14 @@ def create_credential_from_model(
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     assert_credential_share_within_scope(credential_info, user, db_session)
+    # A typed Google account can come here (the account dialog) as well as
+    # through a draft, so its key is checked the same way.
+    try:
+        validate_google_service_account_key(
+            credential_info.source, credential_info.credential_json
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
 
     credential = create_credential(credential_info, user, db_session)
     emit_audit_event(
