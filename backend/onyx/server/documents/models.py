@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum
 from typing import Annotated, Any, Generic, Literal, Self, TypeVar
 from uuid import UUID
@@ -545,6 +545,40 @@ class CCPairRunsResponse(BaseModel):
     # Per status group, ignoring the status filter, so the counts stay put
     # while one is applied.
     status_counts: dict[CCPairRunStatusGroup, int]
+
+
+class CCPairThroughputWindow(str, Enum):
+    """How far back the status card's throughput chart reaches."""
+
+    HOURS_12 = "12h"
+    HOURS_24 = "24h"
+    DAYS_7 = "7d"
+
+    def duration(self) -> timedelta:
+        match self:
+            case CCPairThroughputWindow.HOURS_12:
+                return timedelta(hours=12)
+            case CCPairThroughputWindow.HOURS_24:
+                return timedelta(hours=24)
+            case CCPairThroughputWindow.DAYS_7:
+                return timedelta(days=7)
+
+
+class CCPairThroughputRun(BaseModel):
+    started: datetime
+    status: IndexingStatus
+
+
+class CCPairThroughputResponse(BaseModel):
+    """A rough estimate of the documents indexed in each equal slice of the
+    window, oldest first (each run's total spread evenly over its span, since
+    nothing records when a document landed), and the runs that began in it. A
+    run that began earlier adds documents but is not listed."""
+
+    window_start: datetime
+    window_end: datetime
+    docs_indexed: list[int]
+    runs: list[CCPairThroughputRun]
 
 
 class PendingBackfillSnapshot(BaseModel):

@@ -2430,6 +2430,11 @@
         "documents": {
           "label": "Aktuell / Gesamt",
           "total": "/ {total}"
+        },
+        "throughput": {
+          "ariaLabel": "Indizierte Dokumente im Zeitverlauf",
+          "tooltip": "{count, plural, one {# Dokument} other {# Dokumente}}",
+          "loadError": "Das Diagramm konnte nicht geladen werden."
         }
       },
       "toasts": {

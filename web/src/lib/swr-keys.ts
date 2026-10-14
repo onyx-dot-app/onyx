@@ -6,7 +6,10 @@
  *
  * For dynamic keys (e.g. per-ID endpoints), use the builder functions.
  */
-import type { CCPairRunsQuery } from "@/lib/connectors/types";
+import type {
+  CCPairRunsQuery,
+  CCPairThroughputWindow,
+} from "@/lib/connectors/types";
 
 export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
@@ -310,6 +313,8 @@ export const SWR_KEYS = {
     if (query.q) params.set("q", query.q);
     return `/api/manage/admin/cc-pair/${ccPairId}/runs?${params.toString()}`;
   },
+  ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 

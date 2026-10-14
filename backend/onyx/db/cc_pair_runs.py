@@ -5,7 +5,7 @@ and one union pages every kind newest first, so no page loads the runs before it
 from datetime import datetime
 from typing import TypeVar
 
-from sqlalchemy import Select, func, literal, select, union_all
+from sqlalchemy import Select, func, literal, or_, select, union_all
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
@@ -67,21 +67,25 @@ def _narrowed(
     return stmt
 
 
-def _index_attempt_runs(
-    run_filter: CCPairRunFilter, with_status_filter: bool
-) -> Select:
-    # Targeted reindexes refetch chosen documents, not the pair, so they are not runs.
-    stmt = (
+def _index_runs_of_pair(cc_pair_id: int) -> Select:
+    """The pair's index runs under the current search settings. Targeted
+    reindexes refetch chosen documents, not the pair, so they are not runs."""
+    return (
         select(IndexAttempt)
         .join(SearchSettings)
         .where(
-            IndexAttempt.connector_credential_pair_id == run_filter.cc_pair_id,
+            IndexAttempt.connector_credential_pair_id == cc_pair_id,
             IndexAttempt.targeted_reindex_job_id.is_(None),
             SearchSettings.status == IndexModelStatus.PRESENT,
         )
     )
+
+
+def _index_attempt_runs(
+    run_filter: CCPairRunFilter, with_status_filter: bool
+) -> Select:
     return _narrowed(
-        stmt,
+        _index_runs_of_pair(run_filter.cc_pair_id),
         run_filter,
         IndexAttempt.time_created,
         IndexAttempt.error_msg,
@@ -224,3 +228,29 @@ def count_cc_pair_runs_by_status_group(
         ).all():
             counts[_STATUS_GROUPS[status.value]] += count
     return counts
+
+
+def get_index_runs_since(
+    db_session: Session, cc_pair_id: int, since: datetime
+) -> list[IndexAttempt]:
+    """The pair's index runs created or finished since ``since``, plus any
+    still active, oldest first. Attempts from before ``time_finished`` existed
+    end at their last heartbeat check. ``time_updated`` is left out of the
+    window because checkpoint cleanup touches old attempts days later."""
+    stmt = (
+        _index_runs_of_pair(cc_pair_id)
+        .where(
+            or_(
+                IndexAttempt.time_created >= since,
+                func.coalesce(
+                    IndexAttempt.time_finished, IndexAttempt.last_heartbeat_time
+                )
+                >= since,
+                IndexAttempt.status.in_(
+                    [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                ),
+            )
+        )
+        .order_by(IndexAttempt.time_created)
+    )
+    return list(db_session.scalars(stmt).all())

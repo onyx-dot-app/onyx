@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from http import HTTPStatus
 
 from fastapi import APIRouter, Depends, Query
@@ -30,6 +30,7 @@ from onyx.connectors.pairing_access import validate_pairing_access
 from onyx.db.cc_pair_runs import (
     count_cc_pair_runs_by_status_group,
     get_cc_pair_run_page,
+    get_index_runs_since,
 )
 from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.connector import fetch_connector_by_id
@@ -89,6 +90,7 @@ from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
+from onyx.server.documents.cc_pair_throughput import docs_indexed_per_slice
 from onyx.server.documents.credential import credential_ids_to_mask
 from onyx.server.documents.hierarchy_breakdown import build_cc_pair_hierarchy_breakdown
 from onyx.server.documents.models import (
@@ -99,6 +101,9 @@ from onyx.server.documents.models import (
     CCPairIndexRun,
     CCPairRun,
     CCPairRunsResponse,
+    CCPairThroughputResponse,
+    CCPairThroughputRun,
+    CCPairThroughputWindow,
     CCPropertyUpdateRequest,
     CCStatusUpdateRequest,
     ConnectorCredentialPairIdentifier,
@@ -335,6 +340,49 @@ def get_cc_pair_runs(
         ),
         kinds=pair_kinds,
         status_counts=status_counts,
+    )
+
+
+# 10 minute bars over the default 12 hour window. Longer windows get wider bars.
+_THROUGHPUT_SLICES = 72
+
+
+@router.get("/admin/cc-pair/{cc_pair_id}/throughput")
+def get_cc_pair_throughput(
+    cc_pair_id: int,
+    window: CCPairThroughputWindow = Query(CCPairThroughputWindow.HOURS_12),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CCPairThroughputResponse:
+    """Estimates the documents the pair indexed in each equal slice of the
+    window (see ``docs_indexed_per_slice``), and lists when each run in it
+    started."""
+    # Called directly: the route contract reaches the scope gate three calls deep.
+    if (
+        get_readable_connector_credential_pair_for_user(cc_pair_id, db_session, user)
+        is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "CC Pair not found for current user permissions",
+        )
+    window_end = datetime.now(timezone.utc)
+    window_start = window_end - window.duration()
+    attempts = get_index_runs_since(db_session, cc_pair_id, window_start)
+    return CCPairThroughputResponse(
+        window_start=window_start,
+        window_end=window_end,
+        docs_indexed=docs_indexed_per_slice(
+            attempts, window_start, window_end, _THROUGHPUT_SLICES
+        ),
+        # A queued run has no start yet, so its mark sits at its creation.
+        runs=[
+            CCPairThroughputRun(started=started, status=attempt.status)
+            for attempt in attempts
+            if (started := attempt.time_started or attempt.time_created) >= window_start
+        ],
     )
 
 
