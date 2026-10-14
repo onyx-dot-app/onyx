@@ -214,6 +214,11 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
     )
 
 
+def _report_text(path: str) -> ColumnElement[str]:
+    """The values at a JSON path of a run's report, as one text to search."""
+    return cast(func.jsonb_path_query_array(CapabilityCheckRun.report, path), Text)
+
+
 def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
     """The pair's connector-scoped check runs. A check that fails is not a
     document error, so the errors filter leaves the kind out."""
@@ -227,10 +232,17 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         stmt,
         run_filter,
         CapabilityCheckRun.time_created,
-        # A completed run keeps its check messages in the report, not in error_message.
+        # A completed run keeps its check messages in the report, not in
+        # error_message. Only the check names and messages are searched: the
+        # findings may be hidden from the response, so they stay out of it.
         lambda query: or_(
             CapabilityCheckRun.error_message.icontains(query, autoescape=True),
-            cast(CapabilityCheckRun.report, Text).icontains(query, autoescape=True),
+            _report_text("$.check_results[*].display_name").icontains(
+                query, autoescape=True
+            ),
+            _report_text("$.check_results[*].message").icontains(
+                query, autoescape=True
+            ),
         ),
         CapabilityCheckRun.status,
         CapabilityCheckRunStatus,

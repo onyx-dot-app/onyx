@@ -22,7 +22,10 @@ from onyx.connectors.capability_checks.indexing_hold_models import (
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
+    CheckFindingKey,
     CredentialCapabilityReport,
+    FindingOption,
+    OptionsFinding,
 )
 from onyx.connectors.capability_checks.registry import has_named_capability_checks
 from onyx.connectors.config_hash import compute_connector_config_hash
@@ -155,6 +158,14 @@ def _report(
                     else CapabilityCheckStatus.PASSED
                 ),
                 message="No page read access" if required_failed else "",
+                # Hidden from the response when the findings switch is off,
+                # so the feed search must not reach it.
+                findings=[
+                    OptionsFinding(
+                        key=CheckFindingKey.VISIBLE_SPACES,
+                        options=[FindingOption(value="HIDDEN1", label="Hidden space")],
+                    )
+                ],
             )
         ],
     )
@@ -254,6 +265,7 @@ def test_prunes_and_check_runs_join_the_feed(db_session: Session) -> None:
     by_check_error = _runs(db_session, admin, cc_pair, q="broker")
     # A completed run's check messages live in its report.
     by_check_report = _runs(db_session, admin, cc_pair, q="connector scopes")
+    by_finding = _runs(db_session, admin, cc_pair, q="Hidden space")
     with_doc_errors = _runs(
         db_session, admin, cc_pair, errors=CCPairRunErrors.UNRESOLVED
     )
@@ -291,6 +303,8 @@ def test_prunes_and_check_runs_join_the_feed(db_session: Session) -> None:
     assert _order(by_prune_error) == [(CCPairRunKind.PRUNING, prune_2.id)]
     assert _order(by_check_error) == [(CCPairRunKind.CHECKS, check_3.id)]
     assert _order(by_check_report) == [(CCPairRunKind.CHECKS, check_1.id)]
+    # A stored finding is not searchable: it can be hidden from the response.
+    assert _order(by_finding) == []
     # Neither kind records document errors.
     assert _order(with_doc_errors) == []
 
