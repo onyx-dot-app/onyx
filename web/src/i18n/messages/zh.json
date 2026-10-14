@@ -2089,11 +2089,6 @@
           "title": "文档权限同步错误"
         }
       },
-      "docsLink": {
-        "checkOutDocs": {
-          "text": "有关配置此连接器的更多信息，请查看<link>我们的文档</link>。"
-        }
-      },
       "errorsModal": {
         "columns": {
           "documentId": "失败 ID",
@@ -2689,17 +2684,8 @@
         "newAccountButton": {
           "label": "新建 {source} 账户"
         },
-        "oauthRedirectFailed": {
-          "message": "无法将您重定向到 {source} 登录页面。请重试。"
-        },
         "oauthStartFailed": {
           "toast": "无法启动 OAuth"
-        },
-        "oauthUrlFailed": {
-          "toast": "获取 OAuth URL 失败"
-        },
-        "retryButton": {
-          "label": "重试"
         },
         "savedAccounts": {
           "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}",

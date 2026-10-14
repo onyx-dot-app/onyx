@@ -2089,11 +2089,6 @@
           "title": "Erro na sincronização das permissões dos documentos"
         }
       },
-      "docsLink": {
-        "checkOutDocs": {
-          "text": "Confira <link>nossa documentação</link> para mais informações sobre como configurar este conector."
-        }
-      },
       "errorsModal": {
         "columns": {
           "documentId": "ID da falha",
@@ -2689,17 +2684,8 @@
         "newAccountButton": {
           "label": "Nova conta do {source}"
         },
-        "oauthRedirectFailed": {
-          "message": "Não foi possível redirecionar você para entrar com {source}. Tente novamente."
-        },
         "oauthStartFailed": {
           "toast": "Não foi possível iniciar o OAuth"
-        },
-        "oauthUrlFailed": {
-          "toast": "Falha ao buscar a URL do OAuth"
-        },
-        "retryButton": {
-          "label": "Tentar novamente"
         },
         "savedAccounts": {
           "label": "{count, plural, one {# conta salva} other {# contas salvas}}",

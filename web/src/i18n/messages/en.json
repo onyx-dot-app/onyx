@@ -2089,11 +2089,6 @@
           "title": "Document Permission Sync Error"
         }
       },
-      "docsLink": {
-        "checkOutDocs": {
-          "text": "Check out <link>our docs</link> for more info on configuring this connector."
-        }
-      },
       "errorsModal": {
         "columns": {
           "documentId": "Failure ID",
@@ -2689,17 +2684,8 @@
         "newAccountButton": {
           "label": "New {source} Account"
         },
-        "oauthRedirectFailed": {
-          "message": "We couldn't redirect you to sign in with {source}. Please try again."
-        },
         "oauthStartFailed": {
           "toast": "Unable to start OAuth"
-        },
-        "oauthUrlFailed": {
-          "toast": "Failed to fetch OAuth URL"
-        },
-        "retryButton": {
-          "label": "Retry"
         },
         "savedAccounts": {
           "label": "{count, plural, one {# Saved Account} other {# Saved Accounts}}",
