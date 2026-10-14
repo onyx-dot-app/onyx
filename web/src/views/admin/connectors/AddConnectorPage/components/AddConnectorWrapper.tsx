@@ -682,6 +682,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
         // Edit mode leaves the manage groups alone, so it needs none.
         isScopedManager && edit === undefined,
         {
+          required: (field) => tValidation("required", { field }),
           oneDriveUsersRequired: oneDriveT(
             "indexingScope.specific.users.required"
           ),

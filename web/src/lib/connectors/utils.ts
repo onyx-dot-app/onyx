@@ -183,6 +183,8 @@ export function splitCredentialBoundFields(
 }
 
 interface ConnectorValidationMessages {
+  /** A required field left empty, named by its label. */
+  required?: (field: string) => string;
   oneDriveUsersRequired?: string;
   specificGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
@@ -301,7 +303,11 @@ export function createConnectorValidationSchema(
                     : Yup.string();
 
       if (!field.optional) {
-        schema = schema.required(`${field.label} is required`);
+        const label =
+          typeof field.label === "function" ? field.label(null) : field.label;
+        schema = schema.required(
+          messages.required?.(label) ?? `${label} is required`
+        );
       }
 
       acc[field.name] = schema;
