@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   InputSingleUpload,
   InputPasswordTypeIn,
@@ -36,6 +36,7 @@ import type {
   CredentialFieldValues,
   CredentialSpec,
   CredentialSpecField,
+  CredentialSpecMethod,
 } from "@/lib/credentials/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 
@@ -97,6 +98,39 @@ function CredentialField({
         description={copy.description}
         values={fileValues}
       />
+    );
+  }
+
+  if (field.kind === "jsonFile") {
+    return (
+      <InputVertical
+        withLabel={name}
+        title={label}
+        subDescription={
+          copy.description === undefined
+            ? undefined
+            : markdown(copy.description)
+        }
+      >
+        <FormikField<string>
+          name={name}
+          render={(formikField, helper, _meta, status) => (
+            <InputSingleUpload
+              id={name}
+              name={name}
+              data-testid={fieldKey}
+              accept="application/json,.json"
+              value={formikField.value ?? ""}
+              setValue={(value) => {
+                void helper.setValue(value);
+                void helper.setTouched(true, false);
+              }}
+              onBlur={formikField.onBlur}
+              variant={status === "error" ? "error" : "primary"}
+            />
+          )}
+        />
+      </InputVertical>
     );
   }
 
@@ -303,6 +337,8 @@ interface CredentialFieldsRendererProps {
   exclude?: ReadonlySet<string>;
   /** How file fields hold their file. @default "typedFile" */
   fileValues?: CredentialFileValues;
+  /** The tab of a method that sets the account up on its own (`ownSetup`). */
+  renderOwnSetup?: (method: CredentialSpecMethod) => ReactNode;
 }
 
 export function CredentialFieldsRenderer({
@@ -313,6 +349,7 @@ export function CredentialFieldsRenderer({
   namePrefix,
   exclude,
   fileValues,
+  renderOwnSetup,
 }: CredentialFieldsRendererProps) {
   const t = useTranslations("admin");
   const { values, setValues, setFieldValue } =
@@ -360,6 +397,7 @@ export function CredentialFieldsRenderer({
         {methods.map((method) => (
           <Tabs.Content key={method.value} value={method.value}>
             <Section alignItems="stretch" gap={4}>
+              {method.ownSetup && renderOwnSetup?.(method)}
               {/* A method with nothing to fill in explains itself instead. */}
               {method.fields.length === 0 && method.description && (
                 <MessageCard

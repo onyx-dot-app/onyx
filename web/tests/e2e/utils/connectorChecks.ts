@@ -9,7 +9,7 @@ import type {
 
 const RUN_ID = "e2e-check-run";
 // The draft a real run would save a typed account as. Nothing stores it.
-const MOCK_DRAFT_CREDENTIAL_ID = 999_999;
+export const MOCK_DRAFT_CREDENTIAL_ID = 999_999;
 
 /**
  * The one check the mock knows: required, and it validates the credential, so

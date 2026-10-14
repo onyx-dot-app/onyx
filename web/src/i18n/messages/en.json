@@ -2809,10 +2809,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Your Google Drive credential was created. Manage or revoke it from the credential list.",
-          "title": "Authentication Complete"
-        },
         "authFailed": {
           "toast": "Failed to authenticate with Google Drive - {error}"
         },
@@ -2820,51 +2816,12 @@
           "label": "Authenticate with Google Drive",
           "pendingLabel": "Authenticating..."
         },
-        "createButton": {
-          "label": "Create Credential",
-          "pendingLabel": "Creating..."
-        },
-        "credentialsLoadError": {
-          "title": "Failed to load Google Drive credentials."
-        },
-        "invalidFile": {
-          "toast": "Invalid file provided - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Invalid file provided - expected a Service Account JSON key"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Please upload a service account key before creating a credential"
-        },
         "oauthOption": {
           "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
-          "title": "Option 1: OAuth app",
           "sharedScopesNote": "Google asks for Google Drive and Gmail access together, so one account can back both connectors. To use this account for Google Drive only, untick the Gmail scopes on the consent screen ([why we ask]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Upload or paste your OAuth app JSON"
-        },
-        "primaryAdmin": {
-          "description": "Enter the email of an admin or owner of the Google Organization that owns the Google Drive(s) you want to index.",
-          "invalidEmail": "Must be a valid email",
-          "label": "Primary Admin Email",
-          "placeholder": "admin@yourcompany.com",
-          "required": "Required"
-        },
-        "section": {
-          "title": "Google Drive Authentication"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Failed to create service account credential - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Successfully created service account credential"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2: Service account"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Upload or paste your service account JSON key"
         }
       },
       "gmail": {
@@ -3510,7 +3467,9 @@
         "isSandbox": "Is Sandbox Environment",
         "serviceUserEmail": "Service User Email",
         "zuliprcContent": "Zuliprc Content",
-        "authenticationMethod": "Authentication Method"
+        "authenticationMethod": "Authentication Method",
+        "primaryAdminEmail": "Primary Admin Email",
+        "serviceAccountKey": "Service Account Key"
       },
       "hints": {
         "boxUserEmail": "Optional. The Box user to impersonate.",
@@ -3520,7 +3479,8 @@
         "lumappsServiceUser": "The user to index on behalf of.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",
-        "testrailBaseUrl": "For example https://yourcompany.testrail.io."
+        "testrailBaseUrl": "For example https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "Upload or paste the `.json` key of a Google service account with domain-wide delegation."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3489,9 @@
           "certificate": "Certificate",
           "accessKeyAndSecret": "Access Key and Secret",
           "iamRole": "IAM Role",
-          "assumeRole": "Assume Role"
+          "assumeRole": "Assume Role",
+          "serviceAccount": "Service Account",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "If you select this mode, the SharePoint connector will use a client secret to authenticate. You will need to provide the client ID and client secret.",

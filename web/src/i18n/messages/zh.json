@@ -2809,10 +2809,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "已创建您的 Google Drive 凭据。您可以在凭据列表中管理或撤销它。",
-          "title": "认证完成"
-        },
         "authFailed": {
           "toast": "使用 Google Drive 认证失败 - {error}"
         },
@@ -2820,51 +2816,12 @@
           "label": "使用 Google Drive 认证",
           "pendingLabel": "正在认证…"
         },
-        "createButton": {
-          "label": "创建凭据",
-          "pendingLabel": "正在创建…"
-        },
-        "credentialsLoadError": {
-          "title": "加载 Google Drive 凭据失败。"
-        },
-        "invalidFile": {
-          "toast": "提供的文件无效 - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "提供的文件无效 - 需要服务账号 JSON 密钥"
-        },
-        "missingServiceAccountKey": {
-          "toast": "请先上传服务账号密钥，然后再创建凭据"
-        },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Drive 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用",
           "sharedScopesNote": "Google 会同时请求 Google Drive 和 Gmail 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Google Drive，请在同意屏幕上取消勾选 Gmail 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
-        },
-        "primaryAdmin": {
-          "description": "输入拥有目标 Google Drive 的 Google 组织的管理员或所有者邮箱。",
-          "invalidEmail": "必须是有效的邮箱地址",
-          "label": "主管理员邮箱",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必填"
-        },
-        "section": {
-          "title": "Google Drive 认证"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "创建服务账号凭据失败 - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "已成功创建服务账号凭据"
-        },
-        "serviceAccountOption": {
-          "title": "选项 2：服务账号"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "上传或粘贴您的服务账号 JSON 密钥"
         }
       },
       "gmail": {
@@ -3510,7 +3467,9 @@
         "isSandbox": "是否为沙盒环境",
         "serviceUserEmail": "服务用户邮箱",
         "zuliprcContent": "Zuliprc 内容",
-        "authenticationMethod": "身份验证方式"
+        "authenticationMethod": "身份验证方式",
+        "primaryAdminEmail": "主管理员邮箱",
+        "serviceAccountKey": "服务账号密钥"
       },
       "hints": {
         "boxUserEmail": "可选。要模拟的 Box 用户。",
@@ -3520,7 +3479,8 @@
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
         "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
-        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。"
+        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
+        "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。"
       },
       "methods": {
         "labels": {
@@ -3529,7 +3489,9 @@
           "certificate": "证书",
           "accessKeyAndSecret": "访问密钥和 Secret",
           "iamRole": "IAM 角色",
-          "assumeRole": "代入角色"
+          "assumeRole": "代入角色",
+          "serviceAccount": "服务账号",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "选择此模式后，SharePoint 连接器将使用客户端密钥进行身份验证。你需要提供客户端 ID 和客户端密钥。",

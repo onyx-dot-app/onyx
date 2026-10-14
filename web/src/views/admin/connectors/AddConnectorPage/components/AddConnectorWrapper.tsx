@@ -75,7 +75,6 @@ import {
   useCredentialFieldCopy,
   useGmailCredentials,
   useCredentialLoad,
-  useGoogleDriveCredentials,
   useResetSavedDraftCredential,
   useSavedDraftCredential,
   refreshSourceCredentials,
@@ -355,7 +354,6 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   }, []);
 
   // Hooks for Google Drive and Gmail credentials
-  const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
   const { liveGmailCredential } = useGmailCredentials(connector);
 
   // Sources without a credential spec skip the credential section.
@@ -379,14 +377,13 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
 
   /**
    * The chosen account for these form values: the saved pick; else the typed
-   * one when its values are valid (or Google's live account).
+   * one when its values are valid (or Gmail's live account).
    */
   const accountFor = (
     values: Record<string, unknown>
   ): Credential<any> | DraftCredential | null =>
     currentCredential ||
     typedDraft(connector, accountSchema, values) ||
-    liveGDriveCredential ||
     liveGmailCredential ||
     null;
 

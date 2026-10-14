@@ -2809,10 +2809,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Votre identifiant Google Drive a été créé. Gérez-le ou révoquez-le depuis la liste des identifiants.",
-          "title": "Authentification terminée"
-        },
         "authFailed": {
           "toast": "Échec de l'authentification avec Google Drive : {error}"
         },
@@ -2820,51 +2816,12 @@
           "label": "S'authentifier avec Google Drive",
           "pendingLabel": "Authentification en cours..."
         },
-        "createButton": {
-          "label": "Créer l'identifiant",
-          "pendingLabel": "Création..."
-        },
-        "credentialsLoadError": {
-          "title": "Échec du chargement des identifiants Google Drive."
-        },
-        "invalidFile": {
-          "toast": "Fichier fourni non valide : {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Fichier fourni non valide : une clé JSON de compte de service est attendue"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Téléversez une clé de compte de service avant de créer un identifiant"
-        },
         "oauthOption": {
           "description": "Téléversez le JSON de l'application OAuth depuis Google Cloud Console ([instructions de configuration]({docsUrl})), puis authentifiez-vous avec le compte Google dont vous voulez indexer le Drive.",
-          "title": "Option 1 : application OAuth",
           "sharedScopesNote": "Google demande l'accès à Google Drive et à Gmail en même temps, afin qu'un seul compte serve aux deux connecteurs. Pour utiliser ce compte uniquement avec Google Drive, décochez les autorisations Gmail sur l'écran de consentement ([pourquoi nous le demandons]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Téléversez ou collez le JSON de votre application OAuth"
-        },
-        "primaryAdmin": {
-          "description": "Saisissez l'e-mail d'un administrateur ou d'un propriétaire de l'organisation Google qui possède le ou les Google Drive que vous voulez indexer.",
-          "invalidEmail": "Doit être un e-mail valide",
-          "label": "E-mail de l'administrateur principal",
-          "placeholder": "admin@votreentreprise.com",
-          "required": "Obligatoire"
-        },
-        "section": {
-          "title": "Authentification Google Drive"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Échec de la création de l'identifiant du compte de service : {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Identifiant du compte de service créé avec succès"
-        },
-        "serviceAccountOption": {
-          "title": "Option 2 : compte de service"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Téléversez ou collez la clé JSON de votre compte de service"
         }
       },
       "gmail": {
@@ -3510,7 +3467,9 @@
         "isSandbox": "Environnement sandbox",
         "serviceUserEmail": "E-mail de l'utilisateur de service",
         "zuliprcContent": "Contenu de zuliprc",
-        "authenticationMethod": "Méthode d'authentification"
+        "authenticationMethod": "Méthode d'authentification",
+        "primaryAdminEmail": "E-mail de l’administrateur principal",
+        "serviceAccountKey": "Clé du compte de service"
       },
       "hints": {
         "boxUserEmail": "Facultatif. L'utilisateur Box à usurper.",
@@ -3520,7 +3479,8 @@
         "lumappsServiceUser": "L'utilisateur au nom duquel indexer.",
         "outlineBaseUrl": "Par exemple https://app.getoutline.com, ou l'URL de votre instance auto-hébergée.",
         "pfxFile": "Importez le fichier `.pfx` contenant la clé privée de l’inscription d’application. Doit faire moins de 10 Ko.",
-        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io."
+        "testrailBaseUrl": "Par exemple https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "Importez ou collez la clé `.json` d’un compte de service Google avec délégation au niveau du domaine."
       },
       "methods": {
         "labels": {
@@ -3529,7 +3489,9 @@
           "certificate": "Certificat",
           "accessKeyAndSecret": "Clé d'accès et secret",
           "iamRole": "Rôle IAM",
-          "assumeRole": "Endosser un rôle"
+          "assumeRole": "Endosser un rôle",
+          "serviceAccount": "Compte de service",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "Dans ce mode, le connecteur SharePoint s'authentifie avec un secret client. Vous devez fournir l'ID client et le secret client.",

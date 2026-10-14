@@ -33,11 +33,13 @@ import {
   type NewAccountValues,
 } from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
+import OwnAccountSetup from "@/views/admin/connectors/AddConnectorPage/form/OwnAccountSetup";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
 import {
   credentialMatchesBoundFields,
   getCredentialSpec,
   isDraftCredential,
+  isOwnSetupMethod,
   realmFields,
   shouldRedirectToOAuth,
   toCredentialRef,
@@ -146,6 +148,10 @@ export default function AuthenticationAccountSection({
     values,
     NEW_ACCOUNT_FIELD
   );
+  const newAccountMethod: string | undefined =
+    typeof newAccountValues?.authentication_method === "string"
+      ? newAccountValues.authentication_method
+      : undefined;
 
   // The credential-bound fields filled in first above, such as the realm,
   // restrict the saved accounts to the ones that work with them.
@@ -256,24 +262,27 @@ export default function AuthenticationAccountSection({
             fileValues="base64"
             // Asked for above this section, first.
             exclude={realmKeys}
-            authMethod={
-              typeof newAccountValues?.authentication_method === "string"
-                ? newAccountValues.authentication_method
-                : undefined
-            }
+            authMethod={newAccountMethod}
+            renderOwnSetup={() => <OwnAccountSetup source={connector} />}
           />
-          <Divider paddingParallel={0} paddingPerpendicular={0} />
-          {/* Opens once the account's own fields are valid. */}
-          <Disabled disabled={!newAccountReady}>
-            <Section alignItems="stretch" gap={4}>
-              <AccountNameField name={newAccountNameField} />
-              <ShareAccountField
-                namePrefix={NEW_ACCOUNT_FIELD}
-                disabled={!newAccountReady}
-                groupsLocked={!businessTier}
-              />
-            </Section>
-          </Disabled>
+          {/* A method that saves the account itself names and shares
+          nothing here. */}
+          {!isOwnSetupMethod(typedSpec, newAccountMethod) && (
+            <>
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              {/* Opens once the account's own fields are valid. */}
+              <Disabled disabled={!newAccountReady}>
+                <Section alignItems="stretch" gap={4}>
+                  <AccountNameField name={newAccountNameField} />
+                  <ShareAccountField
+                    namePrefix={NEW_ACCOUNT_FIELD}
+                    disabled={!newAccountReady}
+                    groupsLocked={!businessTier}
+                  />
+                </Section>
+              </Disabled>
+            </>
+          )}
         </Section>
       );
     }

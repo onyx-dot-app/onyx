@@ -39,8 +39,6 @@ import type {
   CredentialSetup,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
-  GoogleDriveCredentialJson,
-  GoogleDriveServiceAccountCredentialJson,
   OAuthDetails,
   SavedDraftCredential,
   SourceCredentialsResult,
@@ -365,38 +363,6 @@ export const useGmailCredentials = (connector: string) => {
 
   return {
     liveGmailCredential: liveGmailCredential,
-  };
-};
-
-export const useGoogleDriveCredentials = (connector: string) => {
-  // Only the Google Drive setup reads the admin list; other sources skip it.
-  const { data: credentialsData } = useAdminCredentials({
-    enabled: connector === ValidSources.GoogleDrive,
-  });
-
-  const googleDrivePublicCredential:
-    | Credential<GoogleDriveCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_tokens &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const googleDriveServiceAccountCredential:
-    | Credential<GoogleDriveServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGDriveCredential =
-    googleDrivePublicCredential || googleDriveServiceAccountCredential;
-
-  return {
-    liveGDriveCredential: liveGDriveCredential,
   };
 };
 
