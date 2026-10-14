@@ -2,8 +2,10 @@ import userEvent from "@testing-library/user-event";
 import { render, screen } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import { RenderField } from "@/views/admin/connectors/AddConnectorPage/form/FieldRendering";
+import englishMessages from "@/i18n/messages/en.json";
 import {
   connectorConfigs,
+  translateConfiguration,
   useConnectorConfiguration,
 } from "@/lib/connectors/connectors";
 import {
@@ -107,7 +109,25 @@ test("the rate limit share is an advanced number field", () => {
 });
 
 test("the plan has to be chosen", async () => {
-  const schema = createConnectorValidationSchema(ValidSources.Zoom);
+  // The form validates with the translated config, as the page does.
+  const englishZoom = translateConfiguration(connectorConfigs.zoom, (key) => {
+    const text = key
+      .split(".")
+      .reduce<unknown>(
+        (node, part) =>
+          typeof node === "object" && node !== null
+            ? (node as Record<string, unknown>)[part]
+            : undefined,
+        englishMessages.admin.connectorsList
+      );
+    return typeof text === "string" ? text : key;
+  });
+  const schema = createConnectorValidationSchema(
+    ValidSources.Zoom,
+    false,
+    {},
+    englishZoom
+  );
   const filled = {
     ...createConnectorInitialValues(ValidSources.Zoom),
     name: "zoom",
