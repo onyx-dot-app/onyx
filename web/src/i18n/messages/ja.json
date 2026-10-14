@@ -2538,6 +2538,7 @@
         "window": {
           "label": "期間",
           "all": "全期間",
+          "h1": "過去 1 時間",
           "h12": "過去 12 時間",
           "h24": "過去 24 時間",
           "d7": "過去 7 日間",
@@ -5899,6 +5900,20 @@
             "label": "すべて展開"
           }
         }
+      },
+      "overview": {
+        "connectors": {
+          "caption": "インデックス中 / 有効",
+          "label": "コネクタ"
+        },
+        "documents": {
+          "caption": "最近インデックス済み / 合計",
+          "label": "ドキュメント"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "概要を読み込めませんでした。"
       }
     },
     "languageModels": {

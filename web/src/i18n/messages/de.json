@@ -2538,6 +2538,7 @@
         "window": {
           "label": "Zeitraum",
           "all": "Gesamter Zeitraum",
+          "h1": "Letzte Stunde",
           "h12": "Letzte 12 Stunden",
           "h24": "Letzte 24 Stunden",
           "d7": "Letzte 7 Tage",
@@ -5899,6 +5900,20 @@
             "label": "Alle ausklappen"
           }
         }
+      },
+      "overview": {
+        "connectors": {
+          "caption": "Indexierend / aktiv",
+          "label": "Konnektoren"
+        },
+        "documents": {
+          "caption": "Kürzlich indexiert / gesamt",
+          "label": "Dokumente"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "Die Übersicht konnte nicht geladen werden."
       }
     },
     "languageModels": {

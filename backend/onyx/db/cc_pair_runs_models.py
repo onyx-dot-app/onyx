@@ -14,13 +14,11 @@ from onyx.db.models import (
 
 
 class CCPairRunFilter(BaseModel):
-    """What narrows a pair's runs. ``None`` leaves that axis open."""
+    """What narrows a run feed. ``None`` leaves that axis open. ``source`` widens
+    a single pair's group syncs to the history its source shares across pairs."""
 
-    cc_pair_id: int
-    # Check runs are keyed by the pair's credential and connector.
-    credential_id: int
-    connector_id: int
-    source: DocumentSource
+    cc_pair_ids: list[int]
+    source: DocumentSource | None
     since: datetime | None
     error_query: str | None
     status_groups: set[CCPairRunStatusGroup] | None

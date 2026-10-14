@@ -319,6 +319,11 @@ export const SWR_KEYS = {
   },
   ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
     `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
+
+  // ── Index Monitoring ──────────────────────────────────────────────────────
+  // The indexing status page's fleet-wide reads, over every readable pair.
+  indexMonitoringOverview: (window: CCPairThroughputWindow) =>
+    `/api/manage/admin/index-monitoring/overview?window=${window}`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 

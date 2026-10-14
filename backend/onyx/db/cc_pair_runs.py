@@ -11,6 +11,7 @@ from sqlalchemy import (
     ColumnElement,
     Select,
     Text,
+    and_,
     cast,
     exists,
     false,
@@ -36,6 +37,7 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     CapabilityCheckRun,
+    ConnectorCredentialPair,
     DocPermissionSyncAttempt,
     ExternalGroupPermissionSyncAttempt,
     IndexAttempt,
@@ -100,24 +102,33 @@ def _narrowed(
     return stmt
 
 
-def _index_runs_of_pair(cc_pair_id: int) -> Select:
-    """The pair's index runs under the current search settings. Targeted
+def _index_runs(cc_pair_ids: list[int]) -> Select:
+    """The pairs' index runs under the current search settings. Targeted
     reindexes refetch chosen documents, not the pair, so they are not runs."""
     return (
         select(IndexAttempt)
         .join(SearchSettings)
         .where(
-            IndexAttempt.connector_credential_pair_id == cc_pair_id,
+            IndexAttempt.connector_credential_pair_id.in_(cc_pair_ids),
             IndexAttempt.targeted_reindex_job_id.is_(None),
             SearchSettings.status == IndexModelStatus.PRESENT,
         )
     )
 
 
+def _group_sync_scope(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
+    """A single pair with a source reads the history its source shares. Any
+    other scope reads rows by pair id."""
+    ids = run_filter.cc_pair_ids
+    if len(ids) == 1 and run_filter.source is not None:
+        return relevant_external_group_sync_attempts_filter(ids[0], run_filter.source)
+    return ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(ids)
+
+
 def _index_attempt_runs(
     run_filter: CCPairRunFilter, with_status_filter: bool
 ) -> Select:
-    stmt = _index_runs_of_pair(run_filter.cc_pair_id)
+    stmt = _index_runs(run_filter.cc_pair_ids)
     own_errors = exists().where(IndexAttemptError.index_attempt_id == IndexAttempt.id)
     unresolved = own_errors.where(IndexAttemptError.is_resolved.is_(False))
     match run_filter.errors:
@@ -153,7 +164,9 @@ def _doc_permission_sync_runs(
     run_filter: CCPairRunFilter, with_status_filter: bool
 ) -> Select:
     stmt = select(DocPermissionSyncAttempt).where(
-        DocPermissionSyncAttempt.connector_credential_pair_id == run_filter.cc_pair_id
+        DocPermissionSyncAttempt.connector_credential_pair_id.in_(
+            run_filter.cc_pair_ids
+        )
     )
     # A sync counts the documents it could not read, and nothing resolves them.
     if run_filter.errors == CCPairRunErrors.UNRESOLVED:
@@ -175,9 +188,7 @@ def _doc_permission_sync_runs(
 
 def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
     stmt = select(ExternalGroupPermissionSyncAttempt).where(
-        relevant_external_group_sync_attempts_filter(
-            run_filter.cc_pair_id, run_filter.source
-        )
+        _group_sync_scope(run_filter)
     )
     # A group sync records no per-item errors, so it either fails or succeeds.
     if run_filter.errors is not None:
@@ -197,7 +208,7 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
 
 def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
     stmt = select(SyncRecord).where(
-        SyncRecord.entity_id == run_filter.cc_pair_id,
+        SyncRecord.entity_id.in_(run_filter.cc_pair_ids),
         SyncRecord.sync_type == SyncType.PRUNING,
     )
     # A prune records no per-document errors, so it either fails or succeeds.
@@ -220,11 +231,20 @@ def _report_text(path: str) -> ColumnElement[str]:
 
 
 def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
-    """The pair's connector-scoped check runs. A check that fails is not a
-    document error, so the errors filter leaves the kind out."""
-    stmt = select(CapabilityCheckRun).where(
-        CapabilityCheckRun.credential_id == run_filter.credential_id,
-        CapabilityCheckRun.connector_id == run_filter.connector_id,
+    """The pairs' connector-scoped check runs, keyed by each pair's credential
+    and connector. A check that fails is not a document error, so the errors
+    filter leaves the kind out."""
+    stmt = (
+        select(CapabilityCheckRun)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.credential_id
+                == CapabilityCheckRun.credential_id,
+                ConnectorCredentialPair.connector_id == CapabilityCheckRun.connector_id,
+            ),
+        )
+        .where(ConnectorCredentialPair.id.in_(run_filter.cc_pair_ids))
     )
     if run_filter.errors is not None:
         stmt = stmt.where(false())
@@ -386,15 +406,27 @@ def count_cc_pair_runs_by_status_group(
     return counts
 
 
+def count_pairs_indexing(db_session: Session, cc_pair_ids: list[int]) -> int:
+    """How many of the pairs have an index run in progress, backfills included,
+    as the throughput chart counts them."""
+    running = (
+        _index_runs(cc_pair_ids)
+        .where(IndexAttempt.status == IndexingStatus.IN_PROGRESS)
+        .subquery()
+    )
+    stmt = select(func.count(func.distinct(running.c.connector_credential_pair_id)))
+    return db_session.scalar(stmt) or 0
+
+
 def get_index_runs_since(
-    db_session: Session, cc_pair_id: int, since: datetime
+    db_session: Session, cc_pair_ids: list[int], since: datetime
 ) -> list[IndexAttempt]:
-    """The pair's index runs created or finished since ``since``, plus any
+    """The pairs' index runs created or finished since ``since``, plus any
     still active, oldest first. Attempts from before ``time_finished`` existed
     end at their last heartbeat check. ``time_updated`` is left out of the
     window because checkpoint cleanup touches old attempts days later."""
     stmt = (
-        _index_runs_of_pair(cc_pair_id)
+        _index_runs(cc_pair_ids)
         .where(
             or_(
                 IndexAttempt.time_created >= since,

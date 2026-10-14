@@ -2538,6 +2538,7 @@
         "window": {
           "label": "기간",
           "all": "전체 기간",
+          "h1": "최근 1시간",
           "h12": "최근 12시간",
           "h24": "최근 24시간",
           "d7": "최근 7일",
@@ -5899,6 +5900,20 @@
             "label": "모두 펼치기"
           }
         }
+      },
+      "overview": {
+        "connectors": {
+          "caption": "인덱싱 중 / 활성",
+          "label": "커넥터"
+        },
+        "documents": {
+          "caption": "최근 인덱싱 / 전체",
+          "label": "문서"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "개요를 불러올 수 없습니다."
       }
     },
     "languageModels": {

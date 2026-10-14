@@ -2538,6 +2538,7 @@
         "window": {
           "label": "Période",
           "all": "Toute la période",
+          "h1": "Dernière heure",
           "h12": "12 dernières heures",
           "h24": "24 dernières heures",
           "d7": "7 derniers jours",
@@ -5899,6 +5900,20 @@
             "label": "Tout développer"
           }
         }
+      },
+      "overview": {
+        "connectors": {
+          "caption": "En cours d'indexation / actifs",
+          "label": "Connecteurs"
+        },
+        "documents": {
+          "caption": "Indexés récemment / total",
+          "label": "Documents"
+        },
+        "ratio": {
+          "whole": "/ {whole}"
+        },
+        "loadError": "Impossible de charger la vue d'ensemble."
       }
     },
     "languageModels": {

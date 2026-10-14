@@ -3,9 +3,20 @@ it. Nothing records when each document landed: a run records only its total, so
 its documents spread evenly over the time it ran, and a slice's figure is that
 interpolation, not a count."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
+from sqlalchemy.orm import Session
+
+from onyx.db.cc_pair_runs import get_index_runs_since
 from onyx.db.models import IndexAttempt
+from onyx.server.documents.models import (
+    CCPairThroughputResponse,
+    CCPairThroughputRun,
+    CCPairThroughputWindow,
+)
+
+# Bars per chart whatever the window: 10 minutes each over 12 hours.
+THROUGHPUT_SLICES = 72
 
 
 def run_ended_at(attempt: IndexAttempt, started: datetime) -> datetime | None:
@@ -55,3 +66,34 @@ def docs_indexed_per_slice(
         running += total
         counts.append(round(running) - previous)
     return counts
+
+
+def throughput_of(
+    db_session: Session,
+    cc_pair_ids: list[int],
+    window: CCPairThroughputWindow,
+) -> CCPairThroughputResponse:
+    """The documents the pairs indexed in each equal slice of the window ending
+    now, and the runs that overlap it."""
+    window_end = datetime.now(timezone.utc)
+    window_start = window_end - window.duration()
+    attempts = get_index_runs_since(db_session, cc_pair_ids, window_start)
+    return CCPairThroughputResponse(
+        window_start=window_start,
+        window_end=window_end,
+        docs_indexed=docs_indexed_per_slice(
+            attempts, window_start, window_end, THROUGHPUT_SLICES
+        ),
+        # Every run the query gives overlaps the window, also one that began before it.
+        runs=[_throughput_run(attempt) for attempt in attempts],
+    )
+
+
+def _throughput_run(attempt: IndexAttempt) -> CCPairThroughputRun:
+    # A queued run has no start yet, so it starts at its creation.
+    started = attempt.time_started or attempt.time_created
+    return CCPairThroughputRun(
+        started=started,
+        ended=run_ended_at(attempt, started),
+        status=attempt.status,
+    )

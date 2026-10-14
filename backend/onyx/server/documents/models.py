@@ -649,14 +649,17 @@ class CCPairRunsResponse(BaseModel):
 
 
 class CCPairThroughputWindow(str, Enum):
-    """How far back the status card's throughput chart reaches."""
+    """How far back a throughput chart reaches."""
 
+    HOURS_1 = "1h"
     HOURS_12 = "12h"
     HOURS_24 = "24h"
     DAYS_7 = "7d"
 
     def duration(self) -> timedelta:
         match self:
+            case CCPairThroughputWindow.HOURS_1:
+                return timedelta(hours=1)
             case CCPairThroughputWindow.HOURS_12:
                 return timedelta(hours=12)
             case CCPairThroughputWindow.HOURS_24:
@@ -682,6 +685,18 @@ class CCPairThroughputResponse(BaseModel):
     window_end: datetime
     docs_indexed: list[int]
     runs: list[CCPairThroughputRun]
+
+
+class IndexingOverviewResponse(BaseModel):
+    """The pairs the caller can read at a glance: how many run an index now and
+    how many are active at all, the documents indexed in the window against the
+    documents held, and the window's throughput."""
+
+    indexing_connectors: int
+    active_connectors: int
+    recent_docs_indexed: int
+    total_docs_indexed: int
+    throughput: CCPairThroughputResponse
 
 
 class PendingBackfillSnapshot(BaseModel):

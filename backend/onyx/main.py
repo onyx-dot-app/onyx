@@ -79,6 +79,7 @@ from onyx.server.documents.credential_capabilities import (
     router as credential_capabilities_router,
 )
 from onyx.server.documents.document import router as document_router
+from onyx.server.documents.index_monitoring import router as index_monitoring_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
 from onyx.server.documents.targeted_reindex import router as targeted_reindex_router
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
@@ -578,6 +579,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
+    include_router_with_global_prefix_prepended(application, index_monitoring_router)
     include_router_with_global_prefix_prepended(application, connector_edit_router)
     include_router_with_global_prefix_prepended(application, targeted_reindex_router)
     include_router_with_global_prefix_prepended(application, projects_router)
