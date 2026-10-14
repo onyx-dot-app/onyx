@@ -9,6 +9,43 @@ import yaml
 from tests.external_dependency_unit.craft_helm.rendering import render_chart
 
 
+def test_without_iptables_network_policy_allows_only_proxy() -> None:
+    result = render_chart(
+        [
+            "--set",
+            "sandboxPod.netAdminLockdown=false",
+            "--set",
+            "craft.dnsExtraCIDRs[0]=169.254.20.10/32",
+            "--set",
+            "craft.proxyExtraCIDRs[0]=10.0.5.6/32",
+        ]
+    )
+    assert result.returncode == 0, result.stderr
+    resources: list[dict[str, Any]] = [
+        resource for resource in yaml.safe_load_all(result.stdout) if resource
+    ]
+    policy = next(
+        resource
+        for resource in resources
+        if resource["kind"] == "NetworkPolicy"
+        and resource["metadata"]["name"].endswith("sandbox-egress")
+    )
+    rules = policy["spec"]["egress"]
+    assert len(rules) == 2
+    assert rules[0]["to"][0]["podSelector"]["matchLabels"] == {
+        "app.kubernetes.io/component": "sandbox-proxy"
+    }
+    assert rules[1]["to"] == [{"ipBlock": {"cidr": "10.0.5.6/32"}}]
+    assert all(rule["ports"] == [{"protocol": "TCP", "port": 8080}] for rule in rules)
+
+
+@pytest.mark.parametrize("value", ["false", "true", "invalid"])
+def test_firewall_switch_rejects_strings(value: str) -> None:
+    result = render_chart(["--set-string", f"sandboxPod.netAdminLockdown={value}"])
+    assert result.returncode != 0
+    assert "sandboxPod.netAdminLockdown must be a boolean" in result.stderr
+
+
 @pytest.mark.parametrize(
     "setting",
     [

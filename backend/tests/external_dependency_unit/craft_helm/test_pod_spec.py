@@ -106,10 +106,10 @@ def _render_config_map_yaml(extra_args: list[str] | None = None) -> str:
     return result.stdout
 
 
-def _render_pod_template() -> client.V1PodTemplate:
+def _render_pod_template(extra_args: list[str] | None = None) -> client.V1PodTemplate:
     """Render the sandbox-pod PodTemplate from the chart and deserialize it
     into the same model the K8s API would return."""
-    rendered = yaml.safe_load(_render_pod_template_yaml())
+    rendered = yaml.safe_load(_render_pod_template_yaml(extra_args))
 
     class _Resp:
         def __init__(self, obj: dict) -> None:
@@ -270,8 +270,8 @@ def test_craft_helm_rejects_docker_sandbox_backend_override() -> None:
     assert 'configMap.SANDBOX_BACKEND must be "kubernetes"' in result.stderr
 
 
-def _build_pod() -> client.V1Pod:
-    pod_template = _render_pod_template()
+def _build_pod(extra_args: list[str] | None = None) -> client.V1Pod:
+    pod_template = _render_pod_template(extra_args)
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
     mgr._namespace = "onyx-sandboxes"
     mgr._core_api = _FakeCoreApi(pod_template)  # ty: ignore[invalid-assignment]
@@ -570,6 +570,44 @@ def test_init_containers_preserve_proxy_then_sidecar_order(pod: client.V1Pod) ->
     assert init_names == ["sandbox-init", "sidecar"]
     assert _init_container(pod, "sandbox-init").restart_policy is None
     assert _sidecar(pod).restart_policy == "Always"
+
+
+@pytest.mark.parametrize("runtime_class", ["", "gvisor", "kata"])
+@pytest.mark.parametrize("lockdown", [True, False])
+def test_runtime_and_firewall_settings_survive_pod_creation(
+    runtime_class: str, lockdown: bool
+) -> None:
+    configured_pod = _build_pod(
+        [
+            "--set-string",
+            f"sandboxPod.runtimeClassName={runtime_class}",
+            "--set",
+            f"sandboxPod.netAdminLockdown={str(lockdown).lower()}",
+        ]
+    )
+    assert configured_pod.spec.runtime_class_name == (runtime_class or None)
+    bootstrap = _init_container(configured_pod, "sandbox-init")
+    assert bootstrap.command == ["/workspace/firewall-init.sh"]
+    assert bootstrap.security_context.capabilities.drop == ["ALL"]
+    assert bootstrap.security_context.capabilities.add == (
+        ["NET_ADMIN"] if lockdown else None
+    )
+    env = {item.name: item.value for item in bootstrap.env}
+    assert env["SANDBOX_NET_ADMIN_LOCKDOWN"] == str(lockdown).lower()
+    assert env["SANDBOX_PROXY_CA_BUNDLE_DST"] == "/etc/ssl/sandbox/ca-bundle.crt"
+    assert [c.name for c in configured_pod.spec.init_containers] == [
+        "sandbox-init",
+        "sidecar",
+    ]
+
+
+def test_default_runtime_and_firewall_settings(pod: client.V1Pod) -> None:
+    assert pod.spec.runtime_class_name is None
+    bootstrap = _init_container(pod, "sandbox-init")
+    assert bootstrap.security_context.capabilities.add == ["NET_ADMIN"]
+    assert {item.name: item.value for item in bootstrap.env}[
+        "SANDBOX_NET_ADMIN_LOCKDOWN"
+    ] == "true"
 
 
 def test_sidecar_restart_policy_serializes_for_kubernetes_api(

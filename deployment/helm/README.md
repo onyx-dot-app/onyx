@@ -109,6 +109,55 @@ The chart fails during render/install on older clusters so the incompatibility
 is caught before sandbox provisioning. This guard does not apply to non-Craft
 installs.
 
+### Sandbox runtime and network enforcement
+
+The default sandbox uses the cluster's default runtime and installs iptables
+rules before any workload starts. You can select a cluster-provided RuntimeClass:
+
+```yaml
+sandboxPod:
+  runtimeClassName: your-runtime
+  netAdminLockdown: true
+```
+
+The cluster administrator must configure the runtime and compatible nodes.
+Runtime selection does not replace network restrictions. Test the chosen runtime
+with Craft. The current sandbox image uses nft-based iptables. With gVisor
+release-20261005.0 in its default configuration, firewall bootstrap fails with
+`Protocol not supported`. That tested configuration needs external network
+enforcement with lockdown disabled. Other firewall backends or runtime settings
+need separate validation.
+These settings apply to newly created sandbox pods after a Helm upgrade.
+
+For clusters that prohibit `NET_ADMIN`, set `sandboxPod.netAdminLockdown: false`
+only when the cluster enforces equivalent network restrictions from pod creation.
+This removes `NET_ADMIN` from `sandbox-init` and skips firewall commands and
+verification. CA installation still runs as root. This setting alone does not
+make the pod compatible with policies that prohibit root init containers.
+Use a sandbox image built with this option; older images still run iptables.
+
+In this mode, the chart's sandbox NetworkPolicy allows only the proxy endpoint.
+It omits direct DNS rules, including `craft.dnsExtraCIDRs`; the backend supplies
+the proxy address through pod `hostAliases`. Proxy environment variables, CA
+trust, destination checks, and approval handling remain active.
+
+The operator must use a CNI that enforces NetworkPolicy before workload startup.
+Other policies must not grant broader access. Verify IPv4 and IPv6 restrictions,
+including internal services, node addresses, and cloud metadata. Standard
+NetworkPolicy has node-traffic exceptions; additional cluster controls may be
+needed. A rendered policy cannot prove enforcement. Test direct connections with
+proxy variables removed, and confirm approved requests still work through the
+proxy. Do not disable lockdown solely because a sandboxed runtime is selected.
+
+The proxy also needs cluster access to the Kubernetes API, DNS, and Onyx services.
+Some CNIs exclude cluster destinations from IP-range rules; see
+[Cilium CIDR policies](https://docs.cilium.io/en/latest/security/policy/layer3/#cidr-based).
+Configure explicit proxy access for these destinations when required by the CNI.
+Keep those rules scoped to the proxy pods.
+
+Docker deployments retain mandatory iptables enforcement. The bootstrap rejects
+disabling lockdown in Docker entrypoint mode.
+
 ## Using an external Redis
 
 To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip

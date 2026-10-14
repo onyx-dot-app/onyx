@@ -28,6 +28,7 @@ kubelet evicts sandbox pods first under node disk pressure. */}}
 {{- $caConfigMap := (index $cm "SANDBOX_PROXY_CA_CONFIGMAP") | default "sandbox-proxy-ca-bundle" }}
 {{- $serverUrl := (index $cm "ONYX_SERVER_URL") }}
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
+{{- $netAdminLockdown := eq (include "onyx.sandboxNetAdminLockdown" .) "true" }}
 {{- $caBundleFile := "/etc/ssl/sandbox/ca-bundle.crt" }}
 apiVersion: v1
 kind: PodTemplate
@@ -44,6 +45,9 @@ template:
       app.kubernetes.io/managed-by: onyx
       admission.datadoghq.com/enabled: "false"
   spec:
+    {{- with $sandboxPod.runtimeClassName }}
+    runtimeClassName: {{ . | quote }}
+    {{- end }}
     serviceAccountName: {{ $saName }}
     automountServiceAccountToken: false
     restartPolicy: Never
@@ -72,6 +76,7 @@ template:
           - { name: SANDBOX_PROXY_HOST, value: "{{ $proxyHost }}" }
           - { name: SANDBOX_PROXY_PORT, value: "{{ $proxyPort }}" }
           - { name: SANDBOX_PROXY_BOOTSTRAP_MODE, value: "initcontainer" }
+          - { name: SANDBOX_NET_ADMIN_LOCKDOWN, value: {{ $netAdminLockdown | quote }} }
           - { name: SANDBOX_PROXY_CA_BUNDLE_SRC, value: "/sandbox-ca/ca.crt" }
           - { name: SANDBOX_PROXY_CA_BUNDLE_DST, value: "{{ $caBundleFile }}" }
         volumeMounts:
@@ -88,7 +93,9 @@ template:
           privileged: false
           capabilities:
             drop: ["ALL"]
+            {{- if $netAdminLockdown }}
             add: ["NET_ADMIN"]
+            {{- end }}
       - name: sidecar
         image: {{ $image }}
         imagePullPolicy: {{ $pullPolicy }}
