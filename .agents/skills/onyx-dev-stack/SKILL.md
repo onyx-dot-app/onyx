@@ -1,129 +1,89 @@
 ---
 name: onyx-dev-stack
-description: Start, inspect, restart, or stop the local Onyx development stack from a source checkout. Use for clean worktree setup, local Compose infrastructure, environment files, migrations, and background services. Do not use for Kubernetes development.
+description: Start, inspect, restart, or stop an isolated local Onyx development stack with ODS. Use for empty worktree setup, background services, dynamic ports, migrations, and coordinating agents across worktrees. Do not use for Kubernetes development.
 ---
 
 # Onyx dev stack
 
-Run commands from the current worktree root. Do not open an editor to launch services.
+Run from the worktree that contains the code being tested. ODS owns processes, ports, state, and logs.
 
-The helper uses `ods` for setup, Compose, migrations, and the web server. It reads Python service commands from `.vscode/launch.json`.
+## Select ODS
 
-## Rules
-
-- Keep `.vscode/.env` and `.vscode/.env.web` untracked.
-- Never print, commit, or replace an existing secret.
-- Use the current worktree's Compose project.
-- Preserve database and index volumes during a normal stop.
-- Do not delete volumes unless the user explicitly requests a data reset.
-- Do not kill a process that the helper did not start.
-- Use this helper on macOS or Linux. It fails closed on Windows.
-- Select available application ports and leave unrelated processes running.
-
-Set the helper path once:
+Check for `uv`, `bun`, and a running Docker daemon. Use the repository-pinned ODS when it provides the stack command:
 
 ```bash
-DEV_STACK=.agents/skills/onyx-dev-stack/scripts/dev_stack.py
+uv run --frozen --only-group ods ods stack --help
 ```
 
-## Start from an empty worktree
-
-Check the required system tools:
+If the pinned package predates `ods stack`, build the command from this checkout. This requires Go:
 
 ```bash
-command -v uv
-command -v bun
-command -v docker
-docker info >/dev/null
+ODS="$(git rev-parse --path-format=absolute --git-path ods-stack-bin)"
+go -C tools/ods build -o "$ODS" .
+"$ODS" stack --help
 ```
 
-Stop and report the missing prerequisite if a command fails. Do not install system software without a user request.
+Use the selected command for the remaining steps. Examples below use `"$ODS"`; replace that prefix with the pinned invocation when available.
 
-Start the stack:
+## Start and discover
+
+Start the default profile:
 
 ```bash
-python3 "$DEV_STACK" up
+"$ODS" stack up
+"$ODS" stack status --json
 ```
 
-`up` performs these actions:
+Use the reported web URL for browser tests and HTTP requests. Do not assume port `3000` or call a backend port directly.
 
-1. It creates missing environment files from the tracked templates.
-2. It converts environment symlinks into worktree-local files before `ods env` updates ports.
-3. It runs `uv sync --frozen` so backend dependencies match the lockfile.
-4. It starts isolated infrastructure with `ods compose dev --infra`.
-5. It writes the current Compose ports with `ods env`.
-6. It applies migrations with `ods db upgrade`.
-7. It starts the application processes in the background.
-8. It waits for `/api/auth/type` on the selected web port to return HTTP 200.
+`up` prepares local environment files and dependencies, starts isolated infrastructure, applies migrations, and reconciles background application services. Existing secrets stay private. Ask for a model key only when the requested test needs one.
 
-The helper keeps process state and logs inside this worktree's Git metadata. Multiple agents in one worktree share that state.
+Read `"$ODS" stack up --help` before choosing a different profile:
 
-A host lock prevents concurrent lifecycle operations across worktrees. Each worktree also gets a unique Compose project name.
+- `minimal` runs web and API for UI/API work.
+- `default` adds the workers needed for ordinary indexing and background tasks.
+- `full` runs the full launch compound for integration work.
 
-The helper selects available web, API, MCP, and model ports after infrastructure starts. It stores them in worktree state.
+Use `--local-model-server` only when changing model-server code. Other profiles use Compose inference and avoid a duplicate local model process.
 
-It updates the frontend proxy, model connection, MCP connection, and login callback URL for these ports. Read `status` for the actual URL.
+## Multiple agents
 
-The Slack bot has a hardcoded metrics port at `8000`. The helper skips this optional process if that port is occupied.
+- Agents in the same worktree share one stack. Reuse a healthy stack through `up` and `status`.
+- Different worktrees get separate state, ports, Compose projects, databases, queues, indexes, and object storage.
+- ODS persists port assignments and changes them only when necessary. Read status again after a restart.
+- A worktree lock coordinates lifecycle changes within that worktree. Other worktrees can start independently.
+- Do not stop another worktree's services or kill unrelated processes to free a port.
+- Keep `.vscode/.env` and `.vscode/.env.web` untracked. Do not print their contents.
 
-Add a model key only when the task needs model-backed behavior. Prefer `GEN_AI_API_KEY` in `.vscode/.env`. Never echo its value.
+Do not share writable databases or queues between branches. Treat shared model services as an explicit option, never an automatic fallback.
 
-## Inspect a running stack
-
-Show process and readiness state:
+## Inspect and recover
 
 ```bash
-python3 "$DEV_STACK" status
+"$ODS" stack status --json
+"$ODS" stack logs
 ```
 
-Show recent logs for all services:
+Inspect the reported phase, failed services, and logs when startup is incomplete. Re-run `up` to recover a partial start. Preserve healthy services and report optional integrations that remain unavailable.
+
+Run `"$ODS" stack logs --help` to select a service or follow logs. Follow logs in a background terminal when continued observation is needed.
+
+Successful startup requires the readiness check through the reported frontend URL. A process that exists is insufficient evidence.
+
+## Stop
+
+Stop managed application processes while keeping infrastructure available:
 
 ```bash
-python3 "$DEV_STACK" logs
+"$ODS" stack stop
 ```
 
-Follow one service log:
+Stop the worktree's application processes and infrastructure:
 
 ```bash
-python3 "$DEV_STACK" logs --service "API Server" --follow
+"$ODS" stack down
 ```
 
-Use the exact launch configuration name with `--service`.
+Normal shutdown preserves volumes. Delete database, index, or object-store data only when the user explicitly requests a reset.
 
-Print the resolved background commands without starting them:
-
-```bash
-python3 "$DEV_STACK" print-commands
-```
-
-## Stop or restart
-
-Stop only the background application processes. Keep infrastructure running for a quick restart:
-
-```bash
-python3 "$DEV_STACK" stop
-```
-
-Stop the application processes and Compose infrastructure:
-
-```bash
-python3 "$DEV_STACK" down
-```
-
-`down` uses `ods compose dev --down`. It preserves named volumes.
-
-Restart only the application processes:
-
-```bash
-python3 "$DEV_STACK" restart
-```
-
-## Diagnose failures
-
-- Run `status`, then inspect the failed service log.
-- Report skipped optional services. Do not kill unrelated processes to free ports.
-- Run `up` again after an interrupted setup. It replaces a partial managed start.
-- Run `up` after Compose recreates containers or after pulling migrations.
-- Ask for a required secret. Do not skip the affected verification.
-
-The full launch compound includes the Slack bot. Missing Slack credentials can stop that process while the web application remains usable. Report that state instead of fabricating credentials.
+After shutdown, inspect status to confirm the targeted stack stopped. Check that another running worktree remains available when testing isolation.
