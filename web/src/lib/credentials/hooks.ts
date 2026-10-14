@@ -12,6 +12,7 @@ import {
   adminDeleteCredential,
   deleteCredential,
   startCredentialCheckRun,
+  updateCredentialSharing,
 } from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
@@ -35,6 +36,7 @@ import type {
   AnyCredential,
   Credential,
   CredentialCheckReport,
+  CredentialSharing,
   SimilarCredential,
   CredentialSetup,
   GmailCredentialJson,
@@ -279,6 +281,19 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     }
   }
 
+  async function saveSharing(
+    credentialId: number,
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+  ): Promise<SimilarCredential> {
+    // The sharing route also renames: it allows group managers, and checks
+    // that the user may edit the account.
+    const response = await updateCredentialSharing(credentialId, update);
+    if (!response.ok) throw new Error(await response.text());
+    const saved: SimilarCredential = await response.json();
+    refresh();
+    return saved;
+  }
+
   async function authorize(invalidUrlMessage: string): Promise<string | null> {
     setIsAuthorizing(true);
     try {
@@ -314,6 +329,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     selectMethod,
     close,
     remove,
+    saveSharing,
     refresh,
     authorize,
     isAuthorizing,
@@ -380,8 +396,8 @@ export interface CredentialCheckReports {
     credentialId: number,
     connectorId?: number | null
   ) => CredentialCheckReport | null;
-  /** Starts the checks on one credential; resolves once the run is queued. */
-  rerun: (credentialId: number) => Promise<void>;
+  /** Starts the credential's checks, or its pairing's with `connectorId`. Resolves once queued. */
+  rerun: (credentialId: number, connectorId?: number | null) => Promise<void>;
 }
 
 /**
@@ -415,8 +431,8 @@ export function useCredentialCheckReports(
   );
   return {
     reportFor,
-    rerun: async (credentialId) => {
-      await startCredentialCheckRun(credentialId);
+    rerun: async (credentialId, connectorId = null) => {
+      await startCredentialCheckRun(credentialId, connectorId);
       await refresh();
     },
   };

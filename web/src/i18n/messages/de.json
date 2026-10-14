@@ -2036,23 +2036,11 @@
           "days": "{count, plural, one {# Tag} other {# Tage}}",
           "hours": "{count, plural, one {# Stunde} other {# Stunden}}",
           "minutes": "{count, plural, one {# Minute} other {# Minuten}}"
-        },
-        "indexingStart": {
-          "label": "Beginn der Indizierung"
-        },
-        "pruningFrequency": {
-          "label": "Bereinigungsintervall"
-        },
-        "refreshFrequency": {
-          "label": "Aktualisierungsintervall"
         }
       },
       "configItem": {
         "booleanFalse": "Falsch",
         "booleanTrue": "Wahr",
-        "edit": {
-          "tooltip": "Bearbeiten"
-        },
         "showAll": {
           "label": "Alle anzeigen ({count} Einträge)"
         },
@@ -2250,9 +2238,12 @@
         }
       },
       "indexErrorsAlert": {
-        "description": "Bei der Verarbeitung einiger Dokumente sind Probleme aufgetreten. <details>Details anzeigen.</details>",
+        "description": "Bei der Verarbeitung einiger Dokumente sind Probleme aufgetreten.",
         "resolvingStatus": "Fehler werden behoben",
-        "title": "Einige Dokumente konnten nicht indiziert werden"
+        "title": "Einige Dokumente konnten nicht indiziert werden",
+        "detailsButton": {
+          "label": "Details anzeigen"
+        }
       },
       "invalidState": {
         "description": "Dieser Konnektor befindet sich in einem ungültigen Zustand. Bitte aktualisieren Sie Ihre Anmeldedaten oder erstellen Sie einen neuen Konnektor, bevor Sie neu indizieren.",
@@ -2270,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "Neu indizieren",
           "tooltip": {
             "indexing": "Eine Neuindizierung ist nicht möglich, während bereits eine Indizierung läuft",
             "invalid": "Korrigieren Sie die Konnektorkonfiguration vor der Neuindizierung",
@@ -2279,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pausieren"
+            "label": "Indizierung pausieren",
+            "description": "Alle laufenden und künftigen Indexläufe und Synchronisationen abbrechen."
           },
           "resume": {
-            "label": "Fortsetzen"
+            "label": "Indizierung fortsetzen",
+            "description": "Geplante Indexläufe und Synchronisationen wieder zulassen."
           },
           "tooltip": {
             "updating": "Statusaktualisierung läuft"
           }
         },
         "trigger": {
-          "label": "Verwalten"
+          "label": "Index verwalten"
+        },
+        "updateIndex": {
+          "label": "Index aktualisieren",
+          "description": "Änderungen seit dem letzten erfolgreichen Indexlauf abrufen und indizieren."
+        },
+        "fullReindex": {
+          "label": "Vollständig neu indizieren",
+          "description": "Alle Dokumente der Quelle neu indizieren. Das kann je nach Umfang Stunden oder Tage dauern."
         }
       },
       "permissionSyncStatus": {
@@ -2315,56 +2315,12 @@
           "label": "Erfolgreich"
         }
       },
-      "pruningFrequencyModal": {
-        "description": "Wie oft der Konnektor bereinigt werden soll (in Stunden)",
-        "title": "Bereinigungsintervall"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Wieder aktivieren"
         },
         "additionalDetails": "Dieser Konnektor wurde zuvor als ungültig markiert. Bitte prüfen Sie, ob Ihre Konfiguration korrekt ist, bevor Sie ihn wieder aktivieren. Möchten Sie wirklich fortfahren?",
         "entityType": "Ungültiger Konnektor"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "Dadurch werden alle Dokumente aus der Quelle vollständig neu indiziert.",
-          "note": "<strong>HINWEIS:</strong> Je nach Anzahl der in der Quelle gespeicherten Dokumente kann dies lange dauern."
-        },
-        "fullReindexButton": {
-          "label": "Vollständige Neuindizierung ausführen"
-        },
-        "title": "Indizierung ausführen",
-        "update": {
-          "description": "Dadurch werden alle Dokumente abgerufen und indiziert, die sich seit dem letzten erfolgreichen Indizierungslauf geändert haben und/oder hinzugekommen sind."
-        },
-        "updateButton": {
-          "label": "Aktualisierung ausführen"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "Wie oft der Konnektor aktualisiert werden soll (in Minuten)",
-        "title": "Aktualisierungsintervall"
-      },
-      "sections": {
-        "advanced": {
-          "title": "Erweitert"
-        },
-        "advancedConfiguration": {
-          "title": "Erweiterte Konfiguration"
-        },
-        "connectorConfiguration": {
-          "title": "Konnektorkonfiguration"
-        },
-        "credential": {
-          "title": "Anmeldedaten"
-        },
-        "indexing": {
-          "title": "Indizierung"
-        },
-        "indexingAttempts": {
-          "title": "Indizierungsversuche"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2526,18 +2482,14 @@
         "documentsIndexed": {
           "label": "Indizierte Dokumente"
         },
-        "indexingSpeed": "({speed} Dok. / Min.)",
+        "indexingSpeed": "{speed} Dok./Min.",
         "lastIndexed": {
-          "label": "Zuletzt indiziert"
+          "value": "Zuletzt indiziert {when}"
         },
-        "lastSynced": {
-          "label": "Zuletzt synchronisiert"
-        },
-        "permissionSyncing": {
-          "label": "Berechtigungssynchronisierung"
-        },
-        "status": {
-          "label": "Status"
+        "title": "Indexierungsstatus",
+        "documents": {
+          "label": "Aktuell / Gesamt",
+          "total": "/ {total}"
         }
       },
       "syncTables": {
@@ -2566,15 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "Vollständige Neuindizierung erfolgreich gestartet",
-        "completeReindexStarting": "Vollständige Neuindizierung wird gestartet...",
         "deletionScheduleFailed": "Das Löschen des Konnektors konnte nicht geplant werden - {message}",
-        "indexingProcessStartFailed": "Der Indizierungsprozess konnte nicht gestartet werden",
         "indexingStartFailed": "Die Indizierung konnte nicht gestartet werden",
         "indexingStartUnexpectedError": "Beim Starten der Indizierung ist ein unerwarteter Fehler aufgetreten",
         "indexingUpdateStarted": "Indizierungsaktualisierung erfolgreich gestartet",
-        "indexingUpdateStarting": "Indizierungsaktualisierung wird gestartet...",
-        "invalidPruningFrequency": "Ungültiges Bereinigungsintervall: muss eine gültige Zahl sein",
-        "invalidRefreshFrequency": "Ungültiges Aktualisierungsintervall: muss eine ganze Zahl sein",
         "nameUpdateFailed": "Der Konnektorname konnte nicht aktualisiert werden",
         "nameUpdated": "Konnektorname erfolgreich aktualisiert",
         "noUnresolvedErrors": "Keine nicht behobenen Fehler für einen erneuten Versuch.",
@@ -2584,6 +2531,50 @@
         "refreshFrequencyUpdated": "Aktualisierungsintervall des Konnektors erfolgreich aktualisiert",
         "targetedReindexFailed": "Die gezielte Neuindizierung ist fehlgeschlagen: {message}",
         "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind."
+      },
+      "backButton": {
+        "label": "Alle Konnektoren"
+      },
+      "account": {
+        "title": "Authentifizierungskonto",
+        "editButton": {
+          "label": "Konto bearbeiten"
+        }
+      },
+      "configuration": {
+        "title": "Indexkonfiguration",
+        "description": "{source} • {count, plural, one {# Einstellung} other {# Einstellungen}}",
+        "editButton": {
+          "label": "Konfiguration bearbeiten"
+        }
+      },
+      "sharing": {
+        "title": "Freigabeeinstellungen",
+        "summary": {
+          "everyone": "Dokumente freigegeben für **alle**",
+          "groups": "Dokumente freigegeben für **{count, plural, one {# Gruppe} other {# Gruppen}}**",
+          "sync": "Dokumentzugriff **mit {source} synchronisiert**",
+          "managedByAdmins": "Verwaltet von **Admins**",
+          "managedByGroups": "Verwaltet von **{count, plural, one {# Gruppe} other {# Gruppen}}**",
+          "syncRestricted": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **{count, plural, one {# Gruppe} other {# Gruppen}}**",
+          "groupsPending": "Dokumente freigegeben für **bestimmte Gruppen**",
+          "syncRestrictedPending": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **bestimmte Gruppen**"
+        },
+        "manageAccess": {
+          "title": "Konnektor-Verwaltungszugriff",
+          "unavailable": "Sie können nicht sehen, wer diesen Konnektor verwaltet."
+        },
+        "editButton": {
+          "label": "Zugriff bearbeiten"
+        },
+        "groupsUnavailable": "Die Gruppen konnten nicht geladen werden."
+      },
+      "schedule": {
+        "refresh": "Aktualisierung alle **{every}**",
+        "prune": "Bereinigung alle **{every}**"
+      },
+      "runs": {
+        "title": "Indexläufe"
       }
     },
     "connectorTitle": {
@@ -2751,6 +2742,10 @@
           "deleteButton": {
             "label": "Konto löschen",
             "inUseTooltip": "Diese Zugangsdaten können nicht gelöscht werden, da andere Connectors sie verwenden."
+          },
+          "updateButton": {
+            "label": "Anmeldedaten aktualisieren",
+            "tooltip": "Ändert die gespeicherten Werte für jeden Connector, der dieses Konto nutzt."
           },
           "usedBy": {
             "label": "Verwendet von {count, plural, one {# Connector} other {# Connectors}}"
@@ -3361,9 +3356,6 @@
         },
         "createdOnBy": {
           "label": "Erstellt am <i>{date}</i> von <i>{email}</i>"
-        },
-        "unnamed": {
-          "label": "Anmeldedaten Nr. {id}"
         }
       },
       "create": {
@@ -3417,23 +3409,6 @@
           "label": "Bestätigen"
         },
         "confirmTitle": "Löschen bestätigen"
-      },
-      "edit": {
-        "name": {
-          "label": "Name (optional):"
-        },
-        "permissions": {
-          "note": "Stellen Sie sicher, dass Sie auf Anmeldedaten mit den richtigen Berechtigungen aktualisieren!"
-        },
-        "resetButton": {
-          "label": "Änderungen zurücksetzen"
-        },
-        "updateButton": {
-          "label": "Aktualisieren"
-        },
-        "updateError": {
-          "toast": "Fehler beim Aktualisieren der Anmeldedaten"
-        }
       },
       "displayNames": {
         "accessKeyId": "{source}-Zugriffsschlüssel-ID",
@@ -3514,34 +3489,12 @@
           "s3AssumeRole": "In diesem Modus übernimmt die Amazon-EC2-Instanz ihre vorhandene Rolle, um auf S3 zuzugreifen. Es sind keine weiteren Anmeldedaten erforderlich."
         }
       },
-      "modal": {
-        "createTitle": "{source}-Anmeldedaten erstellen",
-        "editTitle": "Anmeldedaten bearbeiten",
-        "updateTitle": "Anmeldedaten aktualisieren"
-      },
-      "modify": {
-        "createButton": {
-          "label": "Erstellen"
-        },
-        "instructions": {
-          "message": "Wählen Sie bei Bedarf Anmeldedaten aus! Stellen Sie sicher, dass Sie Anmeldedaten mit den richtigen Berechtigungen für diesen Konnektor ausgewählt haben!"
-        },
-        "selectButton": {
-          "label": "Auswählen"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "Verbinden"
         },
         "connectError": {
           "title": "Verbindung nicht möglich"
-        },
-        "redirectFailed": {
-          "message": "Wir konnten Sie nicht zur Anmeldung mit {source} weiterleiten. Bitte versuchen Sie es erneut."
-        },
-        "retryButton": {
-          "label": "Erneut versuchen"
         },
         "signIn": {
           "description": "{appName} benötigt Lesezugriff.",
@@ -3551,44 +3504,28 @@
           "message": "OAuth konnte nicht gestartet werden"
         }
       },
-      "swap": {
-        "error": {
-          "toast": "Problem beim Wechseln der Anmeldedaten: {detail}"
-        },
-        "success": {
-          "toast": "Anmeldedaten erfolgreich gewechselt!"
-        }
+      "validation": {
+        "authMethodRequired": "Bitte wählen Sie eine Authentifizierungsmethode aus",
+        "empty": "{field} darf nicht leer sein",
+        "fileRequired": "Bitte wählen Sie eine Datei für {field} aus",
+        "invalidEmail": "Bitte geben Sie für {field} eine gültige E-Mail-Adresse ein",
+        "required": "Bitte geben Sie {field} ein"
       },
-      "table": {
-        "actions": {
-          "label": "Aktionen"
-        },
-        "created": {
-          "header": "Erstellt"
-        },
-        "edit": {
-          "ariaLabel": "Anmeldedaten bearbeiten"
-        },
-        "empty": {
-          "message": "Für diesen Konnektor sind keine Anmeldedaten vorhanden!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "Zuletzt aktualisiert"
-        },
+      "edit": {
         "name": {
-          "header": "Name"
+          "label": "Name (optional):"
         },
-        "select": {
-          "label": "Auswählen"
+        "permissions": {
+          "note": "Stellen Sie sicher, dass Sie auf Anmeldedaten mit den richtigen Berechtigungen aktualisieren!"
         },
-        "selected": {
-          "badge": "ausgewählt"
+        "resetButton": {
+          "label": "Änderungen zurücksetzen"
         },
-        "untitled": {
-          "label": "Ohne Titel"
+        "updateButton": {
+          "label": "Aktualisieren"
+        },
+        "updateError": {
+          "toast": "Fehler beim Aktualisieren der Anmeldedaten"
         }
       },
       "update": {
@@ -3599,12 +3536,8 @@
           "toast": "Anmeldedaten aktualisiert"
         }
       },
-      "validation": {
-        "authMethodRequired": "Bitte wählen Sie eine Authentifizierungsmethode aus",
-        "empty": "{field} darf nicht leer sein",
-        "fileRequired": "Bitte wählen Sie eine Datei für {field} aus",
-        "invalidEmail": "Bitte geben Sie für {field} eine gültige E-Mail-Adresse ein",
-        "required": "Bitte geben Sie {field} ein"
+      "modal": {
+        "editTitle": "Anmeldedaten bearbeiten"
       }
     },
     "customAnalytics": {
@@ -11289,18 +11222,6 @@
         },
         "modifyAction": {
           "label": "ändern"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "{property} bearbeiten"
-        },
-        "submitButton": {
-          "label": "Eigenschaft aktualisieren",
-          "loadingLabel": "Wird aktualisiert..."
-        },
-        "valueInput": {
-          "placeholder": "Eigenschaftswert"
         }
       },
       "feedback": {

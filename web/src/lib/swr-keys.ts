@@ -293,6 +293,10 @@ export const SWR_KEYS = {
     `/api/manage/admin/cc-pair/${ccPairId}`,
 
   // ── Index Attempts ────────────────────────────────────────────────────────
+  ccPairIndexAttempts: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/index-attempts`,
+  ccPairLatestIndexAttempt: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/index-attempts?page_num=0&page_size=1`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 
@@ -310,6 +314,8 @@ export const SWR_KEYS = {
     `/api/manage/admin/cc-pair/${ccPairId}/external-group-sync-attempts?page_num=0&page_size=1`,
   ccPairDataAccess: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/data-access`,
+  ccPairManageAccess: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/manage-access`,
 
   // ── Indexing Errors ───────────────────────────────────────────────────────
   // Base key for the per-cc-pair errors endpoint. The page also reads

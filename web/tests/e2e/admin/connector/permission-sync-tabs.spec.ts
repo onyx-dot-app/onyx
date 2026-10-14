@@ -1,10 +1,10 @@
 /**
- * E2E coverage for the connector-detail "Advanced" → permission-sync tabs UX.
+ * E2E coverage for the connector-detail Index Runs permission-sync tabs UX.
  *
  * Three scenarios:
  *
- * 1. **Non-sync connector** (real file cc-pair): the legacy "Indexing
- *    Attempts" title + table render exactly as before. No tab UI.
+ * 1. **Non-sync connector** (real file cc-pair): the Index Runs section
+ *    renders the plain attempts table. No tab UI.
  * 2. **Sync connector** (route-mocked, since spinning up a real
  *    permission-synced cc-pair would require source-specific OAuth /
  *    credentials we don't have in CI): all three tabs render, the
@@ -28,6 +28,7 @@ import { test, expect } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
 
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import { AdminConnectorDetailPage } from "@tests/e2e/pages/AdminConnectorDetailPage";
 
 const MOCK_SYNC_CC_PAIR_ID = 99999;
 const MOCK_SOURCE = "google_drive";
@@ -168,7 +169,7 @@ async function mockSyncConnectorEndpoints(
 }
 
 test.describe("Permission sync tabs", () => {
-  test("non-sync connector: renders legacy Indexing Attempts table, no tabs", async ({
+  test("non-sync connector: renders the plain attempts table, no tabs", async ({
     page,
   }) => {
     const apiClient = new OnyxApiClient(page.request);
@@ -180,11 +181,7 @@ test.describe("Permission sync tabs", () => {
       await page.goto(`/admin/connector/${ccPairId}`);
       await page.waitForLoadState("networkidle");
 
-      await page.getByRole("button", { name: "Advanced" }).click();
-
-      await expect(
-        page.getByRole("heading", { name: "Indexing Attempts" })
-      ).toBeVisible();
+      await new AdminConnectorDetailPage(page).expectRunsVisible();
 
       // No tab triggers should appear for a non-sync (file) connector.
       await expect(page.getByRole("tab", { name: "Indexing" })).toHaveCount(0);
@@ -229,8 +226,6 @@ test.describe("Permission sync tabs", () => {
     await page.goto(`/admin/connector/${MOCK_SYNC_CC_PAIR_ID}`);
     await page.waitForLoadState("networkidle");
 
-    await page.getByRole("button", { name: "Advanced" }).click();
-
     const indexingTab = page.getByRole("tab", { name: "Indexing" });
     const docPermissionsTab = page.getByRole("tab", {
       name: "Document Permission Sync",
@@ -242,9 +237,7 @@ test.describe("Permission sync tabs", () => {
     await expect(indexingTab).toBeVisible();
     await expect(docPermissionsTab).toBeVisible();
     await expect(groupMembershipTab).toBeVisible();
-    // Indexing is the default — the legacy "Indexing Attempts" header
-    // does NOT render inside the tabbed flow; the tab triggers are the
-    // visual header now.
+    // Indexing is the default tab.
     await expect(indexingTab).toHaveAttribute("data-state", "active");
 
     await docPermissionsTab.click();
@@ -316,8 +309,6 @@ test.describe("Permission sync tabs", () => {
 
     await page.goto(`/admin/connector/${MOCK_SYNC_CC_PAIR_ID}`);
     await page.waitForLoadState("networkidle");
-
-    await page.getByRole("button", { name: "Advanced" }).click();
 
     await page.getByRole("tab", { name: "Document Permission Sync" }).click();
     // The error-message button is keyed on the cell's aria-label so the

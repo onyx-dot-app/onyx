@@ -2036,23 +2036,11 @@
           "days": "{count, plural, one {# dia} other {# dias}}",
           "hours": "{count, plural, one {# hora} other {# horas}}",
           "minutes": "{count, plural, one {# minuto} other {# minutos}}"
-        },
-        "indexingStart": {
-          "label": "Início da indexação"
-        },
-        "pruningFrequency": {
-          "label": "Frequência de limpeza"
-        },
-        "refreshFrequency": {
-          "label": "Frequência de atualização"
         }
       },
       "configItem": {
         "booleanFalse": "Falso",
         "booleanTrue": "Verdadeiro",
-        "edit": {
-          "tooltip": "Editar"
-        },
         "showAll": {
           "label": "Mostrar tudo ({count} itens)"
         },
@@ -2250,9 +2238,12 @@
         }
       },
       "indexErrorsAlert": {
-        "description": "Encontramos alguns problemas ao processar alguns documentos. <details>Ver detalhes.</details>",
+        "description": "Encontramos alguns problemas ao processar alguns documentos.",
         "resolvingStatus": "Resolvendo as falhas",
-        "title": "Alguns documentos não foram indexados"
+        "title": "Alguns documentos não foram indexados",
+        "detailsButton": {
+          "label": "Ver detalhes"
+        }
       },
       "invalidState": {
         "description": "Este conector está em um estado inválido. Atualize suas credenciais ou crie um novo conector antes de reindexar.",
@@ -2270,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "Reindexar",
           "tooltip": {
             "indexing": "Não é possível reindexar enquanto uma indexação está em andamento",
             "invalid": "Corrija a configuração do conector antes de reindexar",
@@ -2279,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "Pausar"
+            "label": "Pausar indexação",
+            "description": "Cancelar todas as indexações e sincronizações em andamento e futuras."
           },
           "resume": {
-            "label": "Retomar"
+            "label": "Retomar indexação",
+            "description": "Permitir novamente as indexações e sincronizações agendadas."
           },
           "tooltip": {
             "updating": "Atualização de status em andamento"
           }
         },
         "trigger": {
-          "label": "Gerenciar"
+          "label": "Gerenciar índice"
+        },
+        "updateIndex": {
+          "label": "Atualizar índice",
+          "description": "Buscar alterações e indexar os documentos desde a última indexação bem-sucedida."
+        },
+        "fullReindex": {
+          "label": "Reindexar tudo",
+          "description": "Reindexar todos os documentos da fonte. Pode levar horas ou dias dependendo do tamanho."
         }
       },
       "permissionSyncStatus": {
@@ -2315,56 +2315,12 @@
           "label": "Concluída com sucesso"
         }
       },
-      "pruningFrequencyModal": {
-        "description": "Com que frequência o conector deve fazer a limpeza (em horas)",
-        "title": "Frequência de limpeza"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "Reativar"
         },
         "additionalDetails": "Este conector foi marcado como inválido anteriormente. Confirme que sua configuração está correta antes de reativar. Tem certeza de que deseja continuar?",
         "entityType": "Conector inválido"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "Isso vai causar uma reindexação completa de todos os documentos da origem.",
-          "note": "<strong>OBSERVAÇÃO:</strong> dependendo do número de documentos armazenados na origem, isso pode demorar muito."
-        },
-        "fullReindexButton": {
-          "label": "Executar reindexação completa"
-        },
-        "title": "Executar indexação",
-        "update": {
-          "description": "Isso vai buscar e indexar todos os documentos que mudaram e/ou foram adicionados desde a última indexação bem-sucedida."
-        },
-        "updateButton": {
-          "label": "Executar atualização"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "Com que frequência o conector deve atualizar (em minutos)",
-        "title": "Frequência de atualização"
-      },
-      "sections": {
-        "advanced": {
-          "title": "Avançado"
-        },
-        "advancedConfiguration": {
-          "title": "Configuração avançada"
-        },
-        "connectorConfiguration": {
-          "title": "Configuração do conector"
-        },
-        "credential": {
-          "title": "Credencial"
-        },
-        "indexing": {
-          "title": "Indexação"
-        },
-        "indexingAttempts": {
-          "title": "Tentativas de indexação"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2526,18 +2482,14 @@
         "documentsIndexed": {
           "label": "Documentos indexados"
         },
-        "indexingSpeed": "({speed} documentos / min)",
+        "indexingSpeed": "{speed} documentos/min",
         "lastIndexed": {
-          "label": "Última indexação"
+          "value": "Última indexação {when}"
         },
-        "lastSynced": {
-          "label": "Última sincronização"
-        },
-        "permissionSyncing": {
-          "label": "Sincronização de permissões"
-        },
-        "status": {
-          "label": "Status"
+        "title": "Status da indexação",
+        "documents": {
+          "label": "Recentes / Total",
+          "total": "/ {total}"
         }
       },
       "syncTables": {
@@ -2566,15 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "Reindexação completa iniciada com sucesso",
-        "completeReindexStarting": "Iniciando a reindexação completa...",
         "deletionScheduleFailed": "Falha ao agendar a exclusão do conector - {message}",
-        "indexingProcessStartFailed": "Falha ao iniciar o processo de indexação",
         "indexingStartFailed": "Falha ao iniciar a indexação",
         "indexingStartUnexpectedError": "Ocorreu um erro inesperado ao tentar iniciar a indexação",
         "indexingUpdateStarted": "Atualização da indexação iniciada com sucesso",
-        "indexingUpdateStarting": "Iniciando a atualização da indexação...",
-        "invalidPruningFrequency": "Frequência de limpeza inválida: precisa ser um número válido",
-        "invalidRefreshFrequency": "Frequência de atualização inválida: precisa ser um número inteiro",
         "nameUpdateFailed": "Falha ao atualizar o nome do conector",
         "nameUpdated": "Nome do conector atualizado com sucesso",
         "noUnresolvedErrors": "Nenhum erro não resolvido para tentar novamente.",
@@ -2584,6 +2531,50 @@
         "refreshFrequencyUpdated": "Frequência de atualização do conector atualizada com sucesso",
         "targetedReindexFailed": "Falha na reindexação direcionada: {message}",
         "targetedReindexSubmitted": "Reindexação direcionada enviada para {count, plural, one {# documento} other {# documentos}}. Os erros vão sair da lista conforme os documentos terminarem de ser reindexados."
+      },
+      "backButton": {
+        "label": "Todos os conectores"
+      },
+      "account": {
+        "title": "Conta de autenticação",
+        "editButton": {
+          "label": "Editar conta"
+        }
+      },
+      "configuration": {
+        "title": "Configurações de indexação",
+        "description": "{source} • {count, plural, one {# configuração} other {# configurações}}",
+        "editButton": {
+          "label": "Editar configurações"
+        }
+      },
+      "sharing": {
+        "title": "Configurações de compartilhamento",
+        "summary": {
+          "everyone": "Documentos compartilhados com **todos**",
+          "groups": "Documentos compartilhados com **{count, plural, one {# grupo} other {# grupos}}**",
+          "sync": "Acesso aos documentos **sincronizado com {source}**",
+          "managedByAdmins": "Gerenciado por **administradores**",
+          "managedByGroups": "Gerenciado por **{count, plural, one {# grupo} other {# grupos}}**",
+          "syncRestricted": "Acesso aos documentos **sincronizado com {source}**, restrito a **{count, plural, one {# grupo} other {# grupos}}**",
+          "groupsPending": "Documentos compartilhados com **grupos específicos**",
+          "syncRestrictedPending": "Acesso aos documentos **sincronizado com {source}**, restrito a **grupos específicos**"
+        },
+        "manageAccess": {
+          "title": "Acesso de gerenciamento do conector",
+          "unavailable": "Você não pode ver quem gerencia este conector."
+        },
+        "editButton": {
+          "label": "Editar acesso"
+        },
+        "groupsUnavailable": "Não foi possível carregar os grupos."
+      },
+      "schedule": {
+        "refresh": "Atualizar a cada **{every}**",
+        "prune": "Limpar a cada **{every}**"
+      },
+      "runs": {
+        "title": "Execuções de indexação"
       }
     },
     "connectorTitle": {
@@ -2751,6 +2742,10 @@
           "deleteButton": {
             "label": "Excluir conta",
             "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a."
+          },
+          "updateButton": {
+            "label": "Atualizar credenciais",
+            "tooltip": "Altera os valores salvos para cada conector que usa esta conta."
           },
           "usedBy": {
             "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
@@ -3361,9 +3356,6 @@
         },
         "createdOnBy": {
           "label": "Criada em <i>{date}</i> por <i>{email}</i>"
-        },
-        "unnamed": {
-          "label": "Credencial nº {id}"
         }
       },
       "create": {
@@ -3417,23 +3409,6 @@
           "label": "Confirmar"
         },
         "confirmTitle": "Confirmar exclusão"
-      },
-      "edit": {
-        "name": {
-          "label": "Nome (opcional):"
-        },
-        "permissions": {
-          "note": "Certifique-se de atualizar para uma credencial com as permissões adequadas!"
-        },
-        "resetButton": {
-          "label": "Redefinir alterações"
-        },
-        "updateButton": {
-          "label": "Atualizar"
-        },
-        "updateError": {
-          "toast": "Erro ao atualizar a credencial"
-        }
       },
       "displayNames": {
         "accessKeyId": "ID da chave de acesso de {source}",
@@ -3514,34 +3489,12 @@
           "s3AssumeRole": "Neste modo, a instância do Amazon EC2 assume a função que já tem para acessar o S3. Nenhuma outra credencial é necessária."
         }
       },
-      "modal": {
-        "createTitle": "Criar credencial de {source}",
-        "editTitle": "Editar credencial",
-        "updateTitle": "Atualizar credenciais"
-      },
-      "modify": {
-        "createButton": {
-          "label": "Criar"
-        },
-        "instructions": {
-          "message": "Selecione uma credencial conforme necessário! Certifique-se de ter selecionado uma credencial com as permissões adequadas para este conector!"
-        },
-        "selectButton": {
-          "label": "Selecionar"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "Conectar"
         },
         "connectError": {
           "title": "Não foi possível conectar"
-        },
-        "redirectFailed": {
-          "message": "Não foi possível redirecionar você para entrar com {source}. Tente novamente."
-        },
-        "retryButton": {
-          "label": "Tentar novamente"
         },
         "signIn": {
           "description": "{appName} requer escopos somente leitura.",
@@ -3551,44 +3504,28 @@
           "message": "Não foi possível iniciar o OAuth"
         }
       },
-      "swap": {
-        "error": {
-          "toast": "Problema ao trocar a credencial: {detail}"
-        },
-        "success": {
-          "toast": "Credencial trocada com sucesso!"
-        }
+      "validation": {
+        "authMethodRequired": "Selecione um método de autenticação",
+        "empty": "O campo {field} não pode ficar vazio",
+        "fileRequired": "Selecione um arquivo para {field}",
+        "invalidEmail": "Informe um e-mail válido em {field}",
+        "required": "Preencha o campo {field}"
       },
-      "table": {
-        "actions": {
-          "label": "Ações"
-        },
-        "created": {
-          "header": "Criado"
-        },
-        "edit": {
-          "ariaLabel": "Editar credencial"
-        },
-        "empty": {
-          "message": "Não existem credenciais para este conector!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "Última atualização"
-        },
+      "edit": {
         "name": {
-          "header": "Nome"
+          "label": "Nome (opcional):"
         },
-        "select": {
-          "label": "Selecionar"
+        "permissions": {
+          "note": "Certifique-se de atualizar para uma credencial com as permissões adequadas!"
         },
-        "selected": {
-          "badge": "selecionada"
+        "resetButton": {
+          "label": "Redefinir alterações"
         },
-        "untitled": {
-          "label": "Sem título"
+        "updateButton": {
+          "label": "Atualizar"
+        },
+        "updateError": {
+          "toast": "Erro ao atualizar a credencial"
         }
       },
       "update": {
@@ -3599,12 +3536,8 @@
           "toast": "Credencial atualizada"
         }
       },
-      "validation": {
-        "authMethodRequired": "Selecione um método de autenticação",
-        "empty": "O campo {field} não pode ficar vazio",
-        "fileRequired": "Selecione um arquivo para {field}",
-        "invalidEmail": "Informe um e-mail válido em {field}",
-        "required": "Preencha o campo {field}"
+      "modal": {
+        "editTitle": "Editar credencial"
       }
     },
     "customAnalytics": {
@@ -11289,18 +11222,6 @@
         },
         "modifyAction": {
           "label": "modificar"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "Editar {property}"
-        },
-        "submitButton": {
-          "label": "Atualizar propriedade",
-          "loadingLabel": "Atualizando..."
-        },
-        "valueInput": {
-          "placeholder": "Valor da propriedade"
         }
       },
       "feedback": {

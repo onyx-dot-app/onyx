@@ -2036,23 +2036,11 @@
           "days": "{count, plural, one {#일} other {#일}}",
           "hours": "{count, plural, one {#시간} other {#시간}}",
           "minutes": "{count, plural, one {#분} other {#분}}"
-        },
-        "indexingStart": {
-          "label": "인덱싱 시작"
-        },
-        "pruningFrequency": {
-          "label": "정리 주기"
-        },
-        "refreshFrequency": {
-          "label": "새로 고침 주기"
         }
       },
       "configItem": {
         "booleanFalse": "아니요",
         "booleanTrue": "예",
-        "edit": {
-          "tooltip": "수정"
-        },
         "showAll": {
           "label": "전체 보기({count}개 항목)"
         },
@@ -2250,9 +2238,12 @@
         }
       },
       "indexErrorsAlert": {
-        "description": "일부 문서를 처리하는 중에 문제가 발생했습니다. <details>상세 보기.</details>",
+        "description": "일부 문서를 처리하는 중에 문제가 발생했습니다.",
         "resolvingStatus": "실패 해결 중",
-        "title": "일부 문서를 인덱싱하지 못했습니다"
+        "title": "일부 문서를 인덱싱하지 못했습니다",
+        "detailsButton": {
+          "label": "상세 보기"
+        }
       },
       "invalidState": {
         "description": "이 커넥터는 유효하지 않은 상태입니다. 재인덱싱하기 전에 자격 증명을 업데이트하거나 새 커넥터를 만드세요.",
@@ -2270,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "재인덱싱",
           "tooltip": {
             "indexing": "인덱싱이 이미 진행 중이면 재인덱싱할 수 없습니다",
             "invalid": "재인덱싱하기 전에 커넥터 구성을 수정하세요",
@@ -2279,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "일시 중지"
+            "label": "인덱싱 일시 중지",
+            "description": "진행 중이거나 예정된 모든 인덱싱 실행과 동기화를 취소합니다."
           },
           "resume": {
-            "label": "다시 시작"
+            "label": "인덱싱 재개",
+            "description": "예약된 인덱싱 실행과 동기화를 다시 허용합니다."
           },
           "tooltip": {
             "updating": "상태 업데이트 진행 중"
           }
         },
         "trigger": {
-          "label": "관리"
+          "label": "인덱스 관리"
+        },
+        "updateIndex": {
+          "label": "인덱스 업데이트",
+          "description": "마지막으로 성공한 인덱싱 이후의 변경 사항을 가져와 인덱싱합니다."
+        },
+        "fullReindex": {
+          "label": "전체 재인덱싱",
+          "description": "소스의 모든 문서를 다시 인덱싱합니다. 규모에 따라 몇 시간 또는 며칠이 걸릴 수 있습니다."
         }
       },
       "permissionSyncStatus": {
@@ -2315,56 +2315,12 @@
           "label": "성공"
         }
       },
-      "pruningFrequencyModal": {
-        "description": "커넥터를 정리할 주기(시간 단위)",
-        "title": "정리 주기"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "다시 활성화"
         },
         "additionalDetails": "이 커넥터는 이전에 유효하지 않음으로 표시되었습니다. 다시 활성화하기 전에 구성이 올바른지 확인하세요. 계속하시겠습니까?",
         "entityType": "유효하지 않은 커넥터"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "소스의 모든 문서를 전체 재인덱싱합니다.",
-          "note": "<strong>참고:</strong> 소스에 저장된 문서 수에 따라 시간이 오래 걸릴 수 있습니다."
-        },
-        "fullReindexButton": {
-          "label": "전체 재인덱싱 실행"
-        },
-        "title": "인덱싱 실행",
-        "update": {
-          "description": "마지막으로 성공한 인덱싱 이후 변경되거나 추가된 모든 문서를 가져와 인덱싱합니다."
-        },
-        "updateButton": {
-          "label": "업데이트 실행"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "커넥터를 새로 고칠 주기(분 단위)",
-        "title": "새로 고침 주기"
-      },
-      "sections": {
-        "advanced": {
-          "title": "고급"
-        },
-        "advancedConfiguration": {
-          "title": "고급 구성"
-        },
-        "connectorConfiguration": {
-          "title": "커넥터 구성"
-        },
-        "credential": {
-          "title": "자격 증명"
-        },
-        "indexing": {
-          "title": "인덱싱"
-        },
-        "indexingAttempts": {
-          "title": "인덱싱 시도"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2526,18 +2482,14 @@
         "documentsIndexed": {
           "label": "인덱싱된 문서"
         },
-        "indexingSpeed": "(분당 {speed}개 문서)",
+        "indexingSpeed": "분당 {speed}개 문서",
         "lastIndexed": {
-          "label": "마지막 인덱싱"
+          "value": "마지막 인덱싱 {when}"
         },
-        "lastSynced": {
-          "label": "마지막 동기화"
-        },
-        "permissionSyncing": {
-          "label": "권한 동기화"
-        },
-        "status": {
-          "label": "상태"
+        "title": "인덱싱 상태",
+        "documents": {
+          "label": "최근 / 전체",
+          "total": "/ {total}"
         }
       },
       "syncTables": {
@@ -2566,15 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "전체 재인덱싱을 시작했습니다",
-        "completeReindexStarting": "전체 재인덱싱을 시작하는 중...",
         "deletionScheduleFailed": "커넥터 삭제를 예약하지 못했습니다 - {message}",
-        "indexingProcessStartFailed": "인덱싱 프로세스를 시작하지 못했습니다",
         "indexingStartFailed": "인덱싱을 시작하지 못했습니다",
         "indexingStartUnexpectedError": "인덱싱을 시작하는 중 예기치 않은 오류가 발생했습니다",
         "indexingUpdateStarted": "인덱싱 업데이트를 시작했습니다",
-        "indexingUpdateStarting": "인덱싱 업데이트를 시작하는 중...",
-        "invalidPruningFrequency": "정리 주기가 올바르지 않습니다: 유효한 숫자여야 합니다",
-        "invalidRefreshFrequency": "새로 고침 주기가 올바르지 않습니다: 정수여야 합니다",
         "nameUpdateFailed": "커넥터 이름을 업데이트하지 못했습니다",
         "nameUpdated": "커넥터 이름을 업데이트했습니다",
         "noUnresolvedErrors": "다시 시도할 미해결 오류가 없습니다.",
@@ -2584,6 +2531,50 @@
         "refreshFrequencyUpdated": "커넥터 새로 고침 주기를 업데이트했습니다",
         "targetedReindexFailed": "대상 지정 재인덱싱에 실패했습니다: {message}",
         "targetedReindexSubmitted": "{count, plural, one {문서 #개} other {문서 #개}}에 대해 대상 지정 재인덱싱을 요청했습니다. 문서의 재인덱싱이 끝나면 목록에서 오류가 사라집니다."
+      },
+      "backButton": {
+        "label": "모든 커넥터"
+      },
+      "account": {
+        "title": "인증 계정",
+        "editButton": {
+          "label": "계정 편집"
+        }
+      },
+      "configuration": {
+        "title": "인덱스 구성",
+        "description": "{source} • {count, plural, one {설정 #개} other {설정 #개}}",
+        "editButton": {
+          "label": "구성 편집"
+        }
+      },
+      "sharing": {
+        "title": "공유 설정",
+        "summary": {
+          "everyone": "문서가 **모든 사용자**와 공유됨",
+          "groups": "문서가 **{count, plural, one {그룹 #개} other {그룹 #개}}**와 공유됨",
+          "sync": "문서 접근 권한이 **{source}와 동기화됨**",
+          "managedByAdmins": "**관리자**가 관리",
+          "managedByGroups": "**{count, plural, one {그룹 #개} other {그룹 #개}}**가 관리",
+          "syncRestricted": "문서 접근 권한이 **{source}와 동기화됨**, **{count, plural, one {그룹 #개} other {그룹 #개}}**로 제한됨",
+          "groupsPending": "문서가 **특정 그룹**과 공유됨",
+          "syncRestrictedPending": "문서 접근 권한이 **{source}와 동기화됨**, **특정 그룹**으로 제한됨"
+        },
+        "manageAccess": {
+          "title": "커넥터 관리 접근 권한",
+          "unavailable": "이 커넥터를 관리하는 사용자를 볼 수 없습니다."
+        },
+        "editButton": {
+          "label": "접근 권한 편집"
+        },
+        "groupsUnavailable": "그룹을 불러오지 못했습니다."
+      },
+      "schedule": {
+        "refresh": "**{every}**마다 새로 고침",
+        "prune": "**{every}**마다 정리"
+      },
+      "runs": {
+        "title": "인덱스 실행"
       }
     },
     "connectorTitle": {
@@ -2751,6 +2742,10 @@
           "deleteButton": {
             "label": "계정 삭제",
             "inUseTooltip": "다른 커넥터가 이 자격 증명을 사용하고 있어 삭제할 수 없습니다."
+          },
+          "updateButton": {
+            "label": "자격 증명 업데이트",
+            "tooltip": "이 계정을 사용하는 모든 커넥터의 저장된 값을 변경합니다."
           },
           "usedBy": {
             "label": "{count, plural, other {커넥터 #개}}에서 사용 중"
@@ -3361,9 +3356,6 @@
         },
         "createdOnBy": {
           "label": "<i>{date}</i>에 <i>{email}</i>이(가) 생성함"
-        },
-        "unnamed": {
-          "label": "자격 증명 #{id}"
         }
       },
       "create": {
@@ -3417,23 +3409,6 @@
           "label": "확인"
         },
         "confirmTitle": "삭제 확인"
-      },
-      "edit": {
-        "name": {
-          "label": "이름 (선택 사항):"
-        },
-        "permissions": {
-          "note": "적절한 권한이 있는 자격 증명으로 업데이트했는지 확인하세요!"
-        },
-        "resetButton": {
-          "label": "변경 사항 재설정"
-        },
-        "updateButton": {
-          "label": "업데이트"
-        },
-        "updateError": {
-          "toast": "자격 증명 업데이트 중 오류가 발생했습니다"
-        }
       },
       "displayNames": {
         "accessKeyId": "{source} 액세스 키 ID",
@@ -3514,34 +3489,12 @@
           "s3AssumeRole": "이 모드를 선택하면 Amazon EC2 인스턴스가 기존 역할을 수임하여 S3에 액세스합니다. 추가 자격 증명은 필요하지 않습니다."
         }
       },
-      "modal": {
-        "createTitle": "{source} 자격 증명 생성",
-        "editTitle": "자격 증명 편집",
-        "updateTitle": "자격 증명 업데이트"
-      },
-      "modify": {
-        "createButton": {
-          "label": "생성"
-        },
-        "instructions": {
-          "message": "필요에 따라 자격 증명을 선택하세요! 이 커넥터에 적절한 권한이 있는 자격 증명을 선택했는지 확인하세요!"
-        },
-        "selectButton": {
-          "label": "선택"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "연결"
         },
         "connectError": {
           "title": "연결할 수 없습니다"
-        },
-        "redirectFailed": {
-          "message": "{source} 로그인으로 리디렉션할 수 없습니다. 다시 시도해 주세요."
-        },
-        "retryButton": {
-          "label": "다시 시도"
         },
         "signIn": {
           "description": "{appName}에는 읽기 전용 범위가 필요합니다.",
@@ -3551,44 +3504,28 @@
           "message": "OAuth를 시작할 수 없습니다"
         }
       },
-      "swap": {
-        "error": {
-          "toast": "자격 증명 교체 중 문제가 발생했습니다: {detail}"
-        },
-        "success": {
-          "toast": "자격 증명을 성공적으로 교체했습니다!"
-        }
+      "validation": {
+        "authMethodRequired": "인증 방식을 선택하세요",
+        "empty": "{field}은(는) 비워 둘 수 없습니다",
+        "fileRequired": "{field} 파일을 선택하세요",
+        "invalidEmail": "{field}에 올바른 이메일 주소를 입력하세요",
+        "required": "{field}을(를) 입력하세요"
       },
-      "table": {
-        "actions": {
-          "label": "작업"
-        },
-        "created": {
-          "header": "생성됨"
-        },
-        "edit": {
-          "ariaLabel": "자격 증명 편집"
-        },
-        "empty": {
-          "message": "이 커넥터에 대한 자격 증명이 없습니다!"
-        },
-        "id": {
-          "header": "ID"
-        },
-        "lastUpdated": {
-          "header": "마지막 업데이트"
-        },
+      "edit": {
         "name": {
-          "header": "이름"
+          "label": "이름 (선택 사항):"
         },
-        "select": {
-          "label": "선택"
+        "permissions": {
+          "note": "적절한 권한이 있는 자격 증명으로 업데이트했는지 확인하세요!"
         },
-        "selected": {
-          "badge": "선택됨"
+        "resetButton": {
+          "label": "변경 사항 재설정"
         },
-        "untitled": {
-          "label": "제목 없음"
+        "updateButton": {
+          "label": "업데이트"
+        },
+        "updateError": {
+          "toast": "자격 증명 업데이트 중 오류가 발생했습니다"
         }
       },
       "update": {
@@ -3599,12 +3536,8 @@
           "toast": "자격 증명을 업데이트했습니다"
         }
       },
-      "validation": {
-        "authMethodRequired": "인증 방식을 선택하세요",
-        "empty": "{field}은(는) 비워 둘 수 없습니다",
-        "fileRequired": "{field} 파일을 선택하세요",
-        "invalidEmail": "{field}에 올바른 이메일 주소를 입력하세요",
-        "required": "{field}을(를) 입력하세요"
+      "modal": {
+        "editTitle": "자격 증명 편집"
       }
     },
     "customAnalytics": {
@@ -11289,18 +11222,6 @@
         },
         "modifyAction": {
           "label": "수정"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "{property} 편집"
-        },
-        "submitButton": {
-          "label": "속성 업데이트",
-          "loadingLabel": "업데이트 중..."
-        },
-        "valueInput": {
-          "placeholder": "속성 값"
         }
       },
       "feedback": {

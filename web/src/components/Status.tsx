@@ -12,10 +12,7 @@ import {
   FiMinus,
   FiPauseCircle,
 } from "react-icons/fi";
-import {
-  ConnectorCredentialPairStatus,
-  PermissionSyncStatusEnum,
-} from "@/lib/connectors/types";
+import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { Tooltip } from "@opal/components";
 
 // Wrap a status badge in a hover tooltip carrying its error/reason text, or
@@ -100,66 +97,6 @@ export function IndexAttemptStatus({
     badge = (
       <Badge variant="outline" icon={FiMinus}>
         {t("none")}
-      </Badge>
-    );
-  }
-
-  return <div>{badge}</div>;
-}
-
-export function PermissionSyncStatus({
-  status,
-  errorMsg,
-}: {
-  status: PermissionSyncStatusEnum | null;
-  errorMsg?: string | null;
-}) {
-  const t = useTranslations("admin.status.badges");
-  let badge;
-
-  if (status === PermissionSyncStatusEnum.FAILED) {
-    const icon = (
-      <Badge variant="destructive" icon={FiAlertTriangle}>
-        {t("failed")}
-      </Badge>
-    );
-    if (errorMsg) {
-      badge = (
-        <Tooltip tooltip={errorMsg} side="bottom">
-          <div className="cursor-pointer">{icon}</div>
-        </Tooltip>
-      );
-    } else {
-      badge = icon;
-    }
-  } else if (status === PermissionSyncStatusEnum.COMPLETED_WITH_ERRORS) {
-    badge = (
-      <Badge variant="secondary" icon={FiAlertTriangle}>
-        {t("completedWithErrors")}
-      </Badge>
-    );
-  } else if (status === PermissionSyncStatusEnum.SUCCESS) {
-    badge = (
-      <Badge variant="success" icon={FiCheckCircle}>
-        {t("succeeded")}
-      </Badge>
-    );
-  } else if (status === PermissionSyncStatusEnum.IN_PROGRESS) {
-    badge = (
-      <Badge variant="in_progress" icon={FiClock}>
-        {t("inProgress")}
-      </Badge>
-    );
-  } else if (status === PermissionSyncStatusEnum.NOT_STARTED) {
-    badge = (
-      <Badge variant="not_started" icon={FiClock}>
-        {t("scheduled")}
-      </Badge>
-    );
-  } else {
-    badge = (
-      <Badge variant="secondary" icon={FiClock}>
-        {t("notStarted")}
       </Badge>
     );
   }

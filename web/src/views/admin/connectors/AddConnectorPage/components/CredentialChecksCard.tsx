@@ -247,11 +247,13 @@ interface CheckCardViewProps {
   inProgressCount: number;
   /** Checks waiting on a form field before they can run. */
   expectedCount: number;
+  /** Starts folded, showing only the summary line. */
+  defaultCollapsed?: boolean;
   /** The run's checks, counted per state. */
   stateCounts: Record<DraftCheckStateKind, number>;
   onRerun: () => void;
 }
-function CheckCardView({
+export function CheckCardView({
   status,
   results,
   openChecks,
@@ -259,12 +261,13 @@ function CheckCardView({
   expectedCount,
   stateCounts,
   onRerun,
+  defaultCollapsed = false,
 }: CheckCardViewProps) {
   const t = useTranslations("admin.connectorChecks");
   // The same "Re-run Checks" label the saved account cards use.
   const tAccount = useTranslations("admin.connectorsList.add.account");
   const format = useFormatter();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   const lines: CheckLine[] = useMemo(
     () => [

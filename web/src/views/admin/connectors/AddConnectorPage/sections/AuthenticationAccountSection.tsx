@@ -21,7 +21,6 @@ import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { ShareAccountField } from "@/lib/credentials/components/ShareAccountField";
 import { AccountNameField } from "@/lib/credentials/components/AccountNameField";
-import { updateCredentialSharing } from "@/lib/credentials/svc";
 import { getIn, useFormikContext } from "formik";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
@@ -105,6 +104,7 @@ export default function AuthenticationAccountSection({
     selectMethod,
     close,
     remove,
+    saveSharing,
     refresh,
     authorize,
     isAuthorizing,
@@ -375,15 +375,7 @@ export default function AuthenticationAccountSection({
         checkReport={checkReports.reportFor(credential.id)}
         onRerunChecks={() => checkReports.rerun(credential.id)}
         groupsLocked={!businessTier}
-        // The sharing route also renames: it allows group managers, and
-        // checks that the user may edit the account.
-        onSaveAccount={async (update) => {
-          const response = await updateCredentialSharing(credential.id, update);
-          if (!response.ok) throw new Error(await response.text());
-          const saved: SimilarCredential = await response.json();
-          refresh();
-          return saved;
-        }}
+        onSaveAccount={(update) => saveSharing(credential.id, update)}
       />
     );
   }

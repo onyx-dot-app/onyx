@@ -24,22 +24,28 @@ Sticky page header with icon, title, optional description, and action slots.
 Automatically shows a scroll shadow when the page has scrolled down.
 Headers are only sticky when `actions` is non-empty.
 
-| Prop            | Type                    | Default | Description                                               |
-| --------------- | ----------------------- | ------- | --------------------------------------------------------- |
-| `icon`          | `IconFunctionComponent` | —       | Page icon (required)                                      |
-| `moreIcon1`     | `IconFunctionComponent` | —       | Second icon in the title's icon row (see `Content`)       |
-| `moreIcon2`     | `IconFunctionComponent` | —       | Third icon in the title's icon row (see `Content`)        |
-| `title`         | `string`                | —       | Page title (required)                                     |
-| `description`   | `string`                | —       | Subtitle below the title                                  |
-| `descriptionTag` | `TagProps`             | —       | Tag inline after the description, e.g. a status           |
-| `actions`       | `ReactNode[]`           | —       | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
-| `children`      | `ReactNode`             | —       | Content below the title row (e.g. search bar, filters)    |
-| `cancel`        | `boolean \| () => void` | `false` | Render a secondary Cancel as the first action; `true` goes back in history, a function overrides the destination |
-| `divider`       | `boolean`               | `false` | Show a horizontal divider at the bottom of the header     |
+| Prop             | Type                      | Default | Description                                                                                                                                               |
+| ---------------- | ------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `icon`           | `IconFunctionComponent`   | —       | Page icon (required)                                                                                                                                      |
+| `moreIcon1`      | `IconFunctionComponent`   | —       | Second icon in the title's icon row (see `Content`)                                                                                                       |
+| `moreIcon2`      | `IconFunctionComponent`   | —       | Third icon in the title's icon row (see `Content`)                                                                                                        |
+| `title`          | `string`                  | —       | Page title (required)                                                                                                                                     |
+| `description`    | `string`                  | —       | Subtitle below the title                                                                                                                                  |
+| `descriptionTag` | `TagProps`                | —       | Tag inline after the description, e.g. a status                                                                                                           |
+| `editable`       | `boolean`                 | `false` | The title can be edited in place (see `Content`)                                                                                                          |
+| `onTitleChange`  | `(title: string) => void` | —       | Called when the user commits a title edit                                                                                                                 |
+| `actions`        | `ReactNode[]`             | —       | Controls right of the title, left to right, each with a `key`; top-aligned row with a 0.5rem gap, 1rem from the title block. Also enables sticky behavior |
+| `children`       | `ReactNode`               | —       | Content below the title row (e.g. search bar, filters)                                                                                                    |
+| `cancel`         | `boolean \| () => void`   | `false` | Render a secondary Cancel as the first action; `true` goes back in history, a function overrides the destination                                          |
+| `divider`        | `boolean`                 | `false` | Show a horizontal divider at the bottom of the header                                                                                                     |
 
 ### Body
 
 Content container with consistent padding and vertical spacing.
+
+| Prop  | Type      | Default | Description                                        |
+| ----- | --------- | ------- | -------------------------------------------------- |
+| `gap` | `Spacing` | `8`     | Space between sections, as a spacing step (N/4 rem) |
 
 ## Usage
 

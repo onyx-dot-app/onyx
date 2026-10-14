@@ -2036,23 +2036,11 @@
           "days": "{count, plural, one {# يوم} other {# أيام}}",
           "hours": "{count, plural, one {# ساعة} other {# ساعات}}",
           "minutes": "{count, plural, one {# دقيقة} other {# دقائق}}"
-        },
-        "indexingStart": {
-          "label": "بدء الفهرسة"
-        },
-        "pruningFrequency": {
-          "label": "تكرار التقليم"
-        },
-        "refreshFrequency": {
-          "label": "تكرار التحديث"
         }
       },
       "configItem": {
         "booleanFalse": "خطأ",
         "booleanTrue": "صحيح",
-        "edit": {
-          "tooltip": "تعديل"
-        },
         "showAll": {
           "label": "عرض الكل ({count} عناصر)"
         },
@@ -2250,9 +2238,12 @@
         }
       },
       "indexErrorsAlert": {
-        "description": "واجهنا بعض المشكلات أثناء معالجة بعض المستندات. <details>عرض التفاصيل.</details>",
+        "description": "واجهنا بعض المشكلات أثناء معالجة بعض المستندات.",
         "resolvingStatus": "جارٍ حل الإخفاقات",
-        "title": "فشلت فهرسة بعض المستندات"
+        "title": "فشلت فهرسة بعض المستندات",
+        "detailsButton": {
+          "label": "عرض التفاصيل"
+        }
       },
       "invalidState": {
         "description": "هذا الموصل في حالة غير صالحة. يرجى تحديث بيانات الاعتماد أو إنشاء موصل جديد قبل إعادة الفهرسة.",
@@ -2270,7 +2261,6 @@
           }
         },
         "reIndex": {
-          "label": "إعادة الفهرسة",
           "tooltip": {
             "indexing": "لا يمكن إعادة الفهرسة أثناء وجود فهرسة قيد التنفيذ",
             "invalid": "أصلح إعدادات الموصل قبل إعادة الفهرسة",
@@ -2279,17 +2269,27 @@
         },
         "toggleStatus": {
           "pause": {
-            "label": "إيقاف مؤقت"
+            "label": "إيقاف الفهرسة مؤقتًا",
+            "description": "إلغاء كل عمليات الفهرسة والمزامنة الجارية والمستقبلية."
           },
           "resume": {
-            "label": "استئناف"
+            "label": "استئناف الفهرسة",
+            "description": "السماح بعمليات الفهرسة والمزامنة المجدولة مجددًا."
           },
           "tooltip": {
             "updating": "تحديث الحالة قيد التنفيذ"
           }
         },
         "trigger": {
-          "label": "إدارة"
+          "label": "إدارة الفهرسة"
+        },
+        "updateIndex": {
+          "label": "تحديث الفهرس",
+          "description": "جلب التحديثات وفهرسة المستندات منذ آخر عملية فهرسة ناجحة."
+        },
+        "fullReindex": {
+          "label": "إعادة فهرسة كاملة",
+          "description": "إعادة فهرسة كل المستندات من المصدر. قد يستغرق ذلك ساعات أو أيامًا حسب حجم المحتوى."
         }
       },
       "permissionSyncStatus": {
@@ -2315,56 +2315,12 @@
           "label": "نجحت"
         }
       },
-      "pruningFrequencyModal": {
-        "description": "عدد مرات تقليم الموصل (بالساعات)",
-        "title": "تكرار التقليم"
-      },
       "reEnableModal": {
         "actionButton": {
           "label": "إعادة التفعيل"
         },
         "additionalDetails": "سبق تعليم هذا الموصل كغير صالح. يرجى التحقق من صحة إعداداتك قبل إعادة التفعيل. هل أنت متأكد من رغبتك في المتابعة؟",
         "entityType": "موصل غير صالح"
-      },
-      "reIndexModal": {
-        "fullReindex": {
-          "description": "سيؤدي هذا إلى إعادة فهرسة كاملة لجميع المستندات من المصدر.",
-          "note": "<strong>ملاحظة:</strong> بحسب عدد المستندات المخزنة في المصدر، قد يستغرق هذا وقتًا طويلًا."
-        },
-        "fullReindexButton": {
-          "label": "تشغيل إعادة فهرسة كاملة"
-        },
-        "title": "تشغيل الفهرسة",
-        "update": {
-          "description": "سيجلب هذا ويفهرس جميع المستندات التي تغيرت أو أُضيفت منذ آخر عملية فهرسة ناجحة."
-        },
-        "updateButton": {
-          "label": "تشغيل التحديث"
-        }
-      },
-      "refreshFrequencyModal": {
-        "description": "عدد مرات تحديث الموصل (بالدقائق)",
-        "title": "تكرار التحديث"
-      },
-      "sections": {
-        "advanced": {
-          "title": "متقدم"
-        },
-        "advancedConfiguration": {
-          "title": "تهيئة متقدمة"
-        },
-        "connectorConfiguration": {
-          "title": "تهيئة الموصل"
-        },
-        "credential": {
-          "title": "بيانات الاعتماد"
-        },
-        "indexing": {
-          "title": "الفهرسة"
-        },
-        "indexingAttempts": {
-          "title": "محاولات الفهرسة"
-        }
       },
       "stageMetrics": {
         "attemptOverhead": {
@@ -2526,18 +2482,14 @@
         "documentsIndexed": {
           "label": "المستندات المفهرسة"
         },
-        "indexingSpeed": "({speed} مستند / دقيقة)",
+        "indexingSpeed": "{speed} مستند/دقيقة",
         "lastIndexed": {
-          "label": "آخر فهرسة"
+          "value": "آخر فهرسة {when}"
         },
-        "lastSynced": {
-          "label": "آخر مزامنة"
-        },
-        "permissionSyncing": {
-          "label": "مزامنة الأذونات"
-        },
-        "status": {
-          "label": "الحالة"
+        "title": "حالة الفهرسة",
+        "documents": {
+          "label": "الأخيرة / الإجمالي",
+          "total": "/ {total}"
         }
       },
       "syncTables": {
@@ -2566,15 +2518,10 @@
       },
       "toasts": {
         "completeReindexStarted": "بدأت إعادة الفهرسة الكاملة بنجاح",
-        "completeReindexStarting": "جارٍ بدء إعادة الفهرسة الكاملة...",
         "deletionScheduleFailed": "فشلت جدولة حذف الموصل - {message}",
-        "indexingProcessStartFailed": "فشل بدء عملية الفهرسة",
         "indexingStartFailed": "فشل بدء الفهرسة",
         "indexingStartUnexpectedError": "حدث خطأ غير متوقع أثناء محاولة بدء الفهرسة",
         "indexingUpdateStarted": "بدأ تحديث الفهرسة بنجاح",
-        "indexingUpdateStarting": "جارٍ بدء تحديث الفهرسة...",
-        "invalidPruningFrequency": "تكرار تقليم غير صالح: يجب أن يكون رقمًا صالحًا",
-        "invalidRefreshFrequency": "تكرار تحديث غير صالح: يجب أن يكون عددًا صحيحًا",
         "nameUpdateFailed": "فشل تحديث اسم الموصل",
         "nameUpdated": "تم تحديث اسم الموصل بنجاح",
         "noUnresolvedErrors": "لا توجد أخطاء غير محلولة لإعادة المحاولة.",
@@ -2584,6 +2531,50 @@
         "refreshFrequencyUpdated": "تم تحديث تكرار تحديث الموصل بنجاح",
         "targetedReindexFailed": "فشلت إعادة الفهرسة الموجهة: {message}",
         "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات."
+      },
+      "backButton": {
+        "label": "كل الموصلات"
+      },
+      "account": {
+        "title": "حساب المصادقة",
+        "editButton": {
+          "label": "تعديل الحساب"
+        }
+      },
+      "configuration": {
+        "title": "إعدادات الفهرسة",
+        "description": "{source} • {count, plural, one {# إعداد} other {# إعدادات}}",
+        "editButton": {
+          "label": "تعديل الإعدادات"
+        }
+      },
+      "sharing": {
+        "title": "إعدادات المشاركة",
+        "summary": {
+          "everyone": "المستندات مشاركة مع **الجميع**",
+          "groups": "المستندات مشاركة مع **{count, plural, one {# مجموعة} other {# مجموعات}}**",
+          "sync": "الوصول إلى المستندات **متزامن مع {source}**",
+          "managedByAdmins": "يديرها **المسؤولون**",
+          "managedByGroups": "تديرها **{count, plural, one {# مجموعة} other {# مجموعات}}**",
+          "syncRestricted": "الوصول إلى المستندات **متزامن مع {source}**، مقيد بـ **{count, plural, one {# مجموعة} other {# مجموعات}}**",
+          "groupsPending": "المستندات مشاركة مع **مجموعات محددة**",
+          "syncRestrictedPending": "الوصول إلى المستندات **متزامن مع {source}**، مقيد بـ **مجموعات محددة**"
+        },
+        "manageAccess": {
+          "title": "صلاحية إدارة الموصل",
+          "unavailable": "لا يمكنك معرفة من يدير هذا الموصل."
+        },
+        "editButton": {
+          "label": "تعديل الوصول"
+        },
+        "groupsUnavailable": "تعذر تحميل المجموعات."
+      },
+      "schedule": {
+        "refresh": "تحديث كل **{every}**",
+        "prune": "تنقية كل **{every}**"
+      },
+      "runs": {
+        "title": "عمليات الفهرسة"
       }
     },
     "connectorTitle": {
@@ -2751,6 +2742,10 @@
           "deleteButton": {
             "label": "حذف الحساب",
             "inUseTooltip": "لا يمكن حذف بيانات الاعتماد هذه لأن هناك موصلات أخرى تستخدمها."
+          },
+          "updateButton": {
+            "label": "تحديث بيانات الاعتماد",
+            "tooltip": "يغيّر القيم المحفوظة لكل موصل يستخدم هذا الحساب."
           },
           "usedBy": {
             "label": "مستخدم في {count, plural, zero {# موصلات} one {موصل واحد} two {موصلين} few {# موصلات} many {# موصلًا} other {# موصل}}"
@@ -3361,9 +3356,6 @@
         },
         "createdOnBy": {
           "label": "تم الإنشاء في <i>{date}</i> بواسطة <i>{email}</i>"
-        },
-        "unnamed": {
-          "label": "بيانات الاعتماد رقم {id}"
         }
       },
       "create": {
@@ -3417,23 +3409,6 @@
           "label": "تأكيد"
         },
         "confirmTitle": "تأكيد الحذف"
-      },
-      "edit": {
-        "name": {
-          "label": "الاسم (اختياري):"
-        },
-        "permissions": {
-          "note": "تأكد من التحديث إلى بيانات اعتماد ذات الأذونات المناسبة!"
-        },
-        "resetButton": {
-          "label": "إعادة تعيين التغييرات"
-        },
-        "updateButton": {
-          "label": "تحديث"
-        },
-        "updateError": {
-          "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
-        }
       },
       "displayNames": {
         "accessKeyId": "معرّف مفتاح الوصول إلى {source}",
@@ -3514,34 +3489,12 @@
           "s3AssumeRole": "إذا اخترت هذا الوضع، فسيتولّى مثيل Amazon EC2 دوره الحالي للوصول إلى S3. لا حاجة إلى بيانات اعتماد إضافية."
         }
       },
-      "modal": {
-        "createTitle": "إنشاء بيانات اعتماد {source}",
-        "editTitle": "تعديل بيانات الاعتماد",
-        "updateTitle": "تحديث بيانات الاعتماد"
-      },
-      "modify": {
-        "createButton": {
-          "label": "إنشاء"
-        },
-        "instructions": {
-          "message": "حدد بيانات اعتماد حسب الحاجة! تأكد من تحديد بيانات اعتماد ذات الأذونات المناسبة لهذا الموصّل!"
-        },
-        "selectButton": {
-          "label": "تحديد"
-        }
-      },
       "oauth": {
         "connectButton": {
           "label": "اتصال"
         },
         "connectError": {
           "title": "تعذر الاتصال"
-        },
-        "redirectFailed": {
-          "message": "تعذر إعادة توجيهك لتسجيل الدخول باستخدام {source}. يرجى المحاولة مرة أخرى."
-        },
-        "retryButton": {
-          "label": "إعادة المحاولة"
         },
         "signIn": {
           "description": "يتطلب {appName} نطاقات للقراءة فقط.",
@@ -3551,44 +3504,28 @@
           "message": "تعذر بدء OAuth"
         }
       },
-      "swap": {
-        "error": {
-          "toast": "مشكلة في تبديل بيانات الاعتماد: {detail}"
-        },
-        "success": {
-          "toast": "تم تبديل بيانات الاعتماد بنجاح!"
-        }
+      "validation": {
+        "authMethodRequired": "يُرجى اختيار طريقة المصادقة",
+        "empty": "لا يمكن ترك {field} فارغًا",
+        "fileRequired": "يُرجى اختيار ملف {field}",
+        "invalidEmail": "يُرجى إدخال بريد إلكتروني صالح في {field}",
+        "required": "يُرجى إدخال {field}"
       },
-      "table": {
-        "actions": {
-          "label": "الإجراءات"
-        },
-        "created": {
-          "header": "تاريخ الإنشاء"
-        },
-        "edit": {
-          "ariaLabel": "تعديل بيانات الاعتماد"
-        },
-        "empty": {
-          "message": "لا توجد بيانات اعتماد لهذا الموصّل!"
-        },
-        "id": {
-          "header": "المعرّف"
-        },
-        "lastUpdated": {
-          "header": "آخر تحديث"
-        },
+      "edit": {
         "name": {
-          "header": "الاسم"
+          "label": "الاسم (اختياري):"
         },
-        "select": {
-          "label": "تحديد"
+        "permissions": {
+          "note": "تأكد من التحديث إلى بيانات اعتماد ذات الأذونات المناسبة!"
         },
-        "selected": {
-          "badge": "محدد"
+        "resetButton": {
+          "label": "إعادة تعيين التغييرات"
         },
-        "untitled": {
-          "label": "بدون عنوان"
+        "updateButton": {
+          "label": "تحديث"
+        },
+        "updateError": {
+          "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
         }
       },
       "update": {
@@ -3599,12 +3536,8 @@
           "toast": "تم تحديث بيانات الاعتماد"
         }
       },
-      "validation": {
-        "authMethodRequired": "يُرجى اختيار طريقة المصادقة",
-        "empty": "لا يمكن ترك {field} فارغًا",
-        "fileRequired": "يُرجى اختيار ملف {field}",
-        "invalidEmail": "يُرجى إدخال بريد إلكتروني صالح في {field}",
-        "required": "يُرجى إدخال {field}"
+      "modal": {
+        "editTitle": "تعديل بيانات الاعتماد"
       }
     },
     "customAnalytics": {
@@ -11289,18 +11222,6 @@
         },
         "modifyAction": {
           "label": "تعديل"
-        }
-      },
-      "editProperty": {
-        "header": {
-          "title": "تعديل {property}"
-        },
-        "submitButton": {
-          "label": "تحديث الخاصية",
-          "loadingLabel": "جارٍ التحديث..."
-        },
-        "valueInput": {
-          "placeholder": "قيمة الخاصية"
         }
       },
       "feedback": {

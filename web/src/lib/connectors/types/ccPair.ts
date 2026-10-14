@@ -1,3 +1,4 @@
+import type { ConnectorManageRole } from "@/lib/connectors/accessType";
 import type { UUID } from "crypto";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 import type {
@@ -67,6 +68,21 @@ export interface CCPairFullInfo {
   pending_backfills: PendingBackfillSnapshot[];
 }
 
+/** Mirrors `CCPairDataAccess` in `backend/ee/onyx/server/documents/models.py`. */
+export interface CCPairDataAccess {
+  /** Only the groups the caller can see. */
+  groups: { id: number; name: string; is_default: boolean }[];
+}
+
+/** Mirrors `CCPairManageAccessRow` in `backend/ee/onyx/server/documents/manage_access.py`. */
+export interface CCPairManageAccessRow {
+  group_id: number;
+  group_name: string;
+  role: ConnectorManageRole;
+  /** Granted by a global connector-management grant: not stored, cannot be removed. */
+  is_fixed: boolean;
+}
+
 /** Mirrors `PendingBackfillSnapshot` in `backend/onyx/server/documents/models.py`. */
 export interface PendingBackfillSnapshot {
   window_start: string;
@@ -80,10 +96,10 @@ export interface PendingBackfillSnapshot {
   retry_after: string | null;
 }
 
+/** Mirrors `PaginatedReturn[IndexAttemptSnapshot]`. */
 export interface PaginatedIndexAttempts {
-  index_attempts: IndexAttemptSnapshot[];
-  page: number;
-  total_pages: number;
+  items: IndexAttemptSnapshot[];
+  total_items: number;
 }
 
 /**

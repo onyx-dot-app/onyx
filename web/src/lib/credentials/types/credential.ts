@@ -138,6 +138,11 @@ export interface CredentialSetup {
     credential: AnyCredential,
     failureMessage: string
   ) => Promise<string | null>;
+  /** Saves a credential's sharing (and name when given), then refetches. Rejects when the save fails. */
+  saveSharing: (
+    credentialId: number,
+    update: Pick<CredentialSharing, "admin_public" | "groups" | "name">
+  ) => Promise<SimilarCredential>;
   /** Refetches the credential list. */
   refresh: () => void;
   /** Opens the hosted OAuth popup. `invalidUrlMessage` is the caller's copy. */

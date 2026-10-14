@@ -16,8 +16,9 @@
   @apply cursor-not-allowed;
 }
 
-/* Keyboard focus shows as the Button's hover state, not the browser ring. */
-.opal-collapsible-header .interactive:focus-visible {
+/* Keyboard focus on the fold button shows as its hover state, not the
+   browser ring. Other header controls keep their ring. */
+.opal-collapsible-fold .interactive:focus-visible {
   outline: none;
 }
 

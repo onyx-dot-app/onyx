@@ -23,15 +23,16 @@ const [open, setOpen] = useState(false);
 
 ## Props
 
-| Prop           | Type                      | Default | Description                                              |
-| -------------- | ------------------------- | ------- | -------------------------------------------------------- |
-| `title`        | `string \| RichStr`       | —       | Section title, in the header                             |
-| `description`  | `string \| RichStr`       | —       | Line under the title, in the header                      |
-| `tag`          | `TagProps`                | —       | Tag next to the title                                    |
-| `open`         | `boolean`                 | —       | Controlled open state. Pair with `onOpenChange`          |
-| `onOpenChange` | `(open: boolean) => void` | —       | Called with the next state when the header is clicked    |
-| `defaultOpen`  | `boolean`                 | `true`  | Initial open state when uncontrolled                     |
-| `disabled`     | `boolean`                 | `false` | Locks the current open state; clicks and keys do nothing |
-| `children`     | `ReactNode`               | —       | The body that opens and closes                           |
+| Prop            | Type                      | Default | Description                                                  |
+| --------------- | ------------------------- | ------- | ------------------------------------------------------------ |
+| `title`         | `string \| RichStr`       | —       | Section title, in the header                                 |
+| `description`   | `string \| RichStr`       | —       | Line under the title, in the header                          |
+| `tag`           | `TagProps`                | —       | Tag next to the title                                        |
+| `open`          | `boolean`                 | —       | Controlled open state. Pair with `onOpenChange`              |
+| `onOpenChange`  | `(open: boolean) => void` | —       | Called with the next state when the header is clicked        |
+| `defaultOpen`   | `boolean`                 | `true`  | Initial open state when uncontrolled                         |
+| `disabled`      | `boolean`                 | `false` | Locks the current open state; clicks and keys do nothing     |
+| `rightChildren` | `ReactNode`               | —       | Controls before the fold button. Clicks inside do not toggle |
+| `children`      | `ReactNode`               | —       | The body that opens and closes                               |
 
 The whole header row toggles on click and drives the `Button`'s hover state. The `Button` is the keyboard control: Tab reaches it, keyboard focus shows as its hover state (no focus ring), and Enter or Space toggles. It carries `aria-expanded` and `aria-controls` pointing at the body. Its tooltip comes from `OpalStrings` (`collapsibleFold`, `collapsibleExpand`), and its accessible name includes the title (`collapsibleFoldSection`, `collapsibleExpandSection`), e.g. "Expand Schedule". The body renders from the first open and then stays mounted, so a section that starts closed does no work (fetches included) until it is opened. Reduced motion turns the animation off.
