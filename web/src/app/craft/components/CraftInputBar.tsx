@@ -57,7 +57,7 @@ export interface CraftInputBarProps {
   sandboxInitializing?: boolean;
   noBottomRounding?: boolean;
   queuedMessages?: readonly QueuedMessage[];
-  onQueueMessage?: (text: string, files: BuildFile[]) => void;
+  onQueueMessage?: (text: string, files: BuildFile[]) => boolean | void;
   onRemoveQueuedMessage?: (index: number) => void;
   onInterrupt?: () => void;
   isInterrupting?: boolean;
@@ -212,20 +212,22 @@ const CraftInputBar = memo(
             currentMessageFiles
           );
           setActiveEntries([]);
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
         },
         [activeEntries, currentMessageFiles, onSubmit, clearFiles]
       );
 
       const handleQueueMessage = useCallback(
         (message: string) => {
-          if (!onQueueMessage) return;
-          onQueueMessage(
+          if (!onQueueMessage) return false;
+          const accepted = onQueueMessage(
             withEntryPrefixes(message, activeEntries),
             currentMessageFiles
           );
+          if (accepted === false) return false;
           setActiveEntries([]);
-          clearFiles({ suppressRefetch: true });
+          clearFiles();
+          return true;
         },
         [activeEntries, currentMessageFiles, onQueueMessage, clearFiles]
       );

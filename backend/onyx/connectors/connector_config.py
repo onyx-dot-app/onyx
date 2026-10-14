@@ -1,8 +1,9 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict
 
 from onyx.connectors.field_policy import FieldClass, FieldPolicy
+from onyx.db.enums import HierarchyNodeType
 
 
 class CredentialBinding(BaseModel):
@@ -11,6 +12,12 @@ class CredentialBinding(BaseModel):
     host. A connector config inherits its binding model, so the stored config
     stays flat. Validated on its own from a full config, it ignores the other keys.
     """
+
+    # Fields whose value the form takes from the credential itself and that
+    # ``validate_credential`` pins to it, e.g. the credential's kind. They name
+    # no place to send the credential, so the credential use rule
+    # (``factory.assert_user_can_use_credential``) does not compare them.
+    credential_derived_fields: ClassVar[frozenset[str]] = frozenset()
 
     def validate_credential(
         self,
@@ -25,6 +32,25 @@ class BaseUrlCredentialBinding(CredentialBinding):
     """For sources whose only credential-bound field is the site URL."""
 
     base_url: Annotated[str, FieldPolicy(FieldClass.IDENTITY)]
+
+
+class HierarchyBreakdownSection(BaseModel):
+    """One node type that the cc-pair status page breaks the documents down by."""
+
+    model_config = ConfigDict(frozen=True)
+
+    node_type: HierarchyNodeType
+    # Keys (see ``ConnectorConfig.hierarchy_node_key``) of the nodes that the
+    # config names. Each one shows, also when no document is under it.
+    expected_node_keys: tuple[str, ...] = ()
+    # False shows only the expected nodes of this type.
+    include_unexpected_nodes: bool = True
+    # True matches the expected keys to the node keys without regard to case.
+    case_insensitive_keys: bool = False
+    # True when a node of this type can also be a document whose id is the
+    # node's raw id (e.g. a Confluence page). An expected node that has no
+    # hierarchy node then shows the document, with a count of 1.
+    nodes_can_be_documents: bool = False
 
 
 class ConnectorConfig(BaseModel):
@@ -52,3 +78,15 @@ class ConnectorConfig(BaseModel):
             ),
             None,
         )
+
+    def hierarchy_breakdown_sections(self) -> list[HierarchyBreakdownSection] | None:
+        """The node types that the status page breaks the documents down by.
+        None (the default) uses the top-level nodes: the children of the
+        source's root node."""
+        return None
+
+    @classmethod
+    def hierarchy_node_key(cls, node_type: HierarchyNodeType, raw_node_id: str) -> str:  # noqa: ARG003
+        """The id that the config uses for a node. The status page shows it and
+        matches it to ``HierarchyBreakdownSection.expected_node_keys``."""
+        return raw_node_id

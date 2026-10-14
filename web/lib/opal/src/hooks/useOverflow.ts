@@ -31,10 +31,13 @@ export default function useOverflow(element: HTMLElement | null): boolean {
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    document.fonts.addEventListener("loadingdone", measure);
+    // Absent without the Font Loading API (e.g. jsdom in tests); the
+    // resize observer still measures.
+    const fonts: FontFaceSet | undefined = document.fonts;
+    fonts?.addEventListener("loadingdone", measure);
     return () => {
       observer.disconnect();
-      document.fonts.removeEventListener("loadingdone", measure);
+      fonts?.removeEventListener("loadingdone", measure);
     };
   }, [element]);
 

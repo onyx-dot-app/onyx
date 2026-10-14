@@ -142,6 +142,20 @@ describe("CraftInputBar queued attachments", () => {
     fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
 
     expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
-    expect(mockClearFiles).toHaveBeenCalledWith({ suppressRefetch: true });
+    expect(mockClearFiles).toHaveBeenCalledWith();
+  });
+
+  it("keeps composer files when the queue rejects the handoff", () => {
+    const onQueueMessage = jest.fn().mockReturnValue(false);
+    render(
+      <CraftInputBar
+        onSubmit={jest.fn()}
+        isRunning
+        onQueueMessage={onQueueMessage}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Queue message" }));
+    expect(onQueueMessage).toHaveBeenCalledWith("queued prompt", attachedFiles);
+    expect(mockClearFiles).not.toHaveBeenCalled();
   });
 });

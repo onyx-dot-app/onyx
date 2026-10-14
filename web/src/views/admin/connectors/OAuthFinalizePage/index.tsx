@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getSourceMetadata, isValidSource } from "@/lib/connectors/utils";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@opal/components";
-import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ConfluenceAccessibleResource } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import CardSection from "@/components/admin/CardSection";

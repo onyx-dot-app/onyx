@@ -872,7 +872,7 @@
       },
       "family": "mistral-large",
       "limit": {
-        "context": 524288,
+        "context": 1048576,
         "output": 262144
       },
       "modalities": {
@@ -901,7 +901,7 @@
         "output": 2.09
       },
       "limit": {
-        "context": 524288
+        "context": 1048576
       },
       "modalities": {
         "input": [

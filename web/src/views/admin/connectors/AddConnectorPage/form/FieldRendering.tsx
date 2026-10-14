@@ -1,5 +1,6 @@
 import React, { FC, useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
 import type {
   BooleanOption,
   TabOption,
@@ -7,7 +8,7 @@ import type {
 } from "@/lib/connectors/types";
 import { MultiSelectField } from "@/components/Field";
 import type { ConfigurableSources } from "@/lib/connectors/types/source";
-import type { Credential } from "@/lib/credentials/types";
+import type { CredentialValues } from "@/lib/credentials/types";
 import CollapsibleSection from "@/app/admin/agents/CollapsibleSection";
 import {
   InputKeyValue,
@@ -18,15 +19,20 @@ import {
 import { useField, useFormikContext } from "formik";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { Content, InputHorizontal, InputVertical, Label } from "@opal/layouts";
-import { InputCheckboxField, InputSingleSelectField } from "@opal/form";
+import {
+  InputCheckboxField,
+  InputMultiUploadField,
+  InputSingleSelectField,
+  InputSingleUploadField,
+} from "@opal/form";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import TextListField from "@/refresh-components/form/TextListField";
-import FileDropzoneField from "@/refresh-components/form/FileDropzoneField";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { getSourceDisplayName } from "@/lib/sources";
+import FindingListField from "@/views/admin/connectors/AddConnectorPage/form/FindingListField";
+import type { StoredReportScope } from "@/lib/connectors/checks/findings";
 import { markdown } from "@opal/utils";
 
 // Define a general type for form values
@@ -36,7 +42,8 @@ interface TabsFieldProps {
   tabField: TabOption;
   values: any;
   connector: ConfigurableSources;
-  currentCredential: Credential<any> | null;
+  currentCredential: CredentialValues | null;
+  reportScope: StoredReportScope | null;
 }
 
 const TabsField: FC<TabsFieldProps> = ({
@@ -44,6 +51,7 @@ const TabsField: FC<TabsFieldProps> = ({
   values,
   connector,
   currentCredential,
+  reportScope,
 }) => {
   const t = useTranslations("admin.connectorsList");
   const { setFieldTouched, setFieldValue } = useFormikContext<FormValues>();
@@ -126,6 +134,7 @@ const TabsField: FC<TabsFieldProps> = ({
                       values={values}
                       connector={connector}
                       currentCredential={currentCredential}
+                      reportScope={reportScope}
                     />
                   );
                 })}
@@ -256,7 +265,9 @@ interface RenderFieldProps {
   field: any;
   values: any;
   connector: ConfigurableSources;
-  currentCredential: Credential<any> | null;
+  currentCredential: CredentialValues | null;
+  /** The stored check reports that can list a field's options. */
+  reportScope: StoredReportScope | null;
 }
 
 export const RenderField: FC<RenderFieldProps> = ({
@@ -264,6 +275,7 @@ export const RenderField: FC<RenderFieldProps> = ({
   values,
   connector,
   currentCredential,
+  reportScope,
 }) => {
   const t = useTranslations("admin.connectorsList");
   const { setFieldValue } = useFormikContext<FormValues>(); // Get Formik's context functions
@@ -315,15 +327,16 @@ export const RenderField: FC<RenderFieldProps> = ({
         values={values}
         connector={connector}
         currentCredential={currentCredential}
+        reportScope={reportScope}
       />
     );
   }
 
   const fieldContent = (
     <>
-      {field.type === "zip" || field.type === "file" ? (
-        // The field name ties the label to the file input's id and shows the
-        // field's Formik error under it.
+      {field.type === "file" ? (
+        // The field name ties the label to the upload and shows the field's
+        // Formik error under it.
         <InputVertical
           withLabel={field.name}
           disabled={disabled}
@@ -331,12 +344,20 @@ export const RenderField: FC<RenderFieldProps> = ({
           subDescription={richDescription}
           suffix={optionalSuffix}
         >
-          <FileDropzoneField
-            name={field.name}
-            isZip={field.type === "zip"}
-            aria-label={label}
-            disabled={disabled}
-          />
+          {field.multiple === false ? (
+            <InputSingleUploadField
+              name={field.name}
+              mode="file"
+              accept={field.accept}
+              variant={disabled ? "disabled" : undefined}
+            />
+          ) : (
+            <InputMultiUploadField
+              name={field.name}
+              accept={field.accept}
+              variant={disabled ? "disabled" : undefined}
+            />
+          )}
         </InputVertical>
       ) : field.type === "list" ? (
         <InputVertical
@@ -345,13 +366,30 @@ export const RenderField: FC<RenderFieldProps> = ({
           subDescription={richDescription}
           suffix={optionalSuffix}
         >
-          <TextListField
-            name={field.name}
-            placeholder={t("listInput.placeholder", {
-              label: label.toLowerCase(),
-            })}
-            disabled={disabled}
-          />
+          {field.optionsFinding !== undefined ? (
+            <FindingListField
+              name={field.name}
+              connector={connector}
+              findingKey={field.optionsFinding}
+              reportScope={reportScope}
+              plain={field.plainListCondition?.(values) === true}
+              placeholder={t("optionsListInput.placeholder", {
+                label: label.toLowerCase(),
+              })}
+              plainPlaceholder={t("listInput.placeholder", {
+                label: label.toLowerCase(),
+              })}
+              disabled={disabled}
+            />
+          ) : (
+            <TextListField
+              name={field.name}
+              placeholder={t("listInput.placeholder", {
+                label: label.toLowerCase(),
+              })}
+              disabled={disabled}
+            />
+          )}
         </InputVertical>
       ) : field.type === "string_pair_list" ? (
         <InputVertical

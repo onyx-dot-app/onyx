@@ -62,6 +62,22 @@ export interface CCPairFullInfo {
   // True if the connector implements `Resolver.reindex` (targeted reindex).
   // False -> Resolve All falls back to a full connector reindex.
   supports_targeted_reindex: boolean;
+
+  // Backfills that applied edits requested, until an attempt of each succeeds.
+  pending_backfills: PendingBackfillSnapshot[];
+}
+
+/** Mirrors `PendingBackfillSnapshot` in `backend/onyx/server/documents/models.py`. */
+export interface PendingBackfillSnapshot {
+  window_start: string;
+  window_end: string;
+  requested_at: string;
+  /** It runs with a config other than the saved one. */
+  scoped: boolean;
+  attempt_id: number | null;
+  failure_count: number;
+  /** A failed backfill is retried after this time. */
+  retry_after: string | null;
 }
 
 export interface PaginatedIndexAttempts {

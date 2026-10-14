@@ -90,7 +90,7 @@ def test_send_message_404_for_other_users_session(
     assert response.status_code == 404
 
 
-def test_turn_events_requires_active_turn(
+def test_turn_events_rejects_unknown_turn(
     shared_session: SharedSession,
 ) -> None:
     owner, session_id = shared_session
@@ -102,4 +102,4 @@ def test_turn_events_requires_active_turn(
     )
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Interactive turn is not running"
+    assert response.json()["detail"] == "Interactive turn is unavailable"

@@ -53,6 +53,7 @@ import {
 } from "@opal/icons";
 import SwitchField from "@/refresh-components/form/SwitchField";
 import { InputSingleSelect } from "@opal/components";
+import { InputSingleSelectField } from "@opal/form";
 import { Disabled } from "@opal/core";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -116,6 +117,8 @@ import {
 import type { RichStr } from "@opal/types";
 import { ProviderCredentialsModal } from "@/views/admin/IndexSettingsPage/modals";
 import ReindexProgressBanner from "@/views/admin/IndexSettingsPage/ReindexProgressBanner";
+import CCPairIdsBackfillCard from "@/views/admin/IndexSettingsPage/CCPairIdsBackfillCard";
+import EmbeddingRateLimitCard from "@/views/admin/IndexSettingsPage/EmbeddingRateLimitCard";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 const route = ADMIN_ROUTES.INDEX_SETTINGS;
@@ -165,7 +168,7 @@ function CloudDisabled({
     : tooltipProp;
 
   return (
-    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="right">
+    <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="end">
       {children}
     </Disabled>
   );
@@ -742,6 +745,7 @@ type BannerCopy =
   | "contextualDisableOnly"
   | "contextualModelOnly"
   | "doNotReindex"
+  | "quantizationOnly"
   | "reindex"
   | "default";
 
@@ -749,11 +753,17 @@ type BannerCopy =
 function bannerCopyFor(
   contextualRagModelMissing: boolean,
   mode: BannerMode,
-  strategyCopy: "doNotReindex" | "reindex" | null
+  strategyCopy: "doNotReindex" | "reindex" | null,
+  quantizationOnly: boolean
 ): BannerCopy {
   if (contextualRagModelMissing) return "contextualModelMissing";
   if (mode === "contextualDisableOnly" || mode === "contextualModelOnly") {
     return mode;
+  }
+  // A quantization-only change copies the stored vectors instead of
+  // re-embedding, so it gets its own, faster wording.
+  if (strategyCopy === "reindex" && quantizationOnly) {
+    return "quantizationOnly";
   }
   return strategyCopy ?? "default";
 }
@@ -1308,10 +1318,17 @@ export default function IndexSettingsPage() {
               // them. Do Not Re-index touches no index, so it reads as info
               // rather than as the warning the re-index strategies carry.
               const stagedVariant = saveOnly ? "info" : "warning";
+              const quantizationOnlyChange: boolean =
+                changes.quantizationChanged &&
+                !changes.embeddingChanged &&
+                !changes.contextualToggleChanged &&
+                !changes.contextualModelChanged &&
+                !changes.imageChanged;
               const bannerCopy = bannerCopyFor(
                 contextualRagModelMissing,
                 bannerMode,
-                strategyCopy
+                strategyCopy,
+                quantizationOnlyChange
               );
               const forwardModalKey = contextualDisableOnlyChange
                 ? "disableForwardModal"
@@ -1333,6 +1350,8 @@ export default function IndexSettingsPage() {
                 changes.contextualModelChanged
                   ? "warning"
                   : undefined;
+              const quantizationCardBorder: "warning" | undefined =
+                changes.quantizationChanged ? "warning" : undefined;
               const imageCardBorder = captioningModelMissing
                 ? "warning"
                 : changes.imageChanged
@@ -1548,6 +1567,8 @@ export default function IndexSettingsPage() {
                       </div>
                     </ConfirmationModalLayout>
                   </wontPortConsentModal.Provider>
+
+                  <CCPairIdsBackfillCard />
 
                   {isReindexing ? (
                     secondarySearchSettings?.use_port_flow ||
@@ -2041,6 +2062,55 @@ export default function IndexSettingsPage() {
                             </Tabs>
                           )
                         )}
+
+                        {!NEXT_PUBLIC_CLOUD_ENABLED && (
+                          <Card
+                            border="solid"
+                            borderColor={quantizationCardBorder}
+                            rounding={4}
+                          >
+                            <InputHorizontal
+                              title={t("vectorQuantization.title")}
+                              description={t("vectorQuantization.description")}
+                              withLabel
+                            >
+                              <InputSingleSelectField
+                                name="vector_quantization"
+                                defaultOption={VectorQuantization.NONE}
+                                placeholder={tInputSelect(
+                                  "placeholder.fallback"
+                                )}
+                                options={[
+                                  {
+                                    value: VectorQuantization.NONE,
+                                    title: t("vectorQuantization.none.label"),
+                                    description: t(
+                                      "vectorQuantization.none.description"
+                                    ),
+                                  },
+                                  {
+                                    value: VectorQuantization.SCALAR_7_BIT,
+                                    title: t(
+                                      "vectorQuantization.scalar7Bit.label"
+                                    ),
+                                    description: t(
+                                      "vectorQuantization.scalar7Bit.description"
+                                    ),
+                                  },
+                                  {
+                                    value: VectorQuantization.SCALAR_1_BIT,
+                                    title: t(
+                                      "vectorQuantization.scalar1Bit.label"
+                                    ),
+                                    description: t(
+                                      "vectorQuantization.scalar1Bit.description"
+                                    ),
+                                  },
+                                ]}
+                              />
+                            </InputHorizontal>
+                          </Card>
+                        )}
                       </GeneralLayouts.Section>
 
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
@@ -2295,6 +2365,10 @@ export default function IndexSettingsPage() {
                       </GeneralLayouts.Section>
                     </GeneralLayouts.Section>
                   </Disabled>
+
+                  {/* Outside the re-index lock: the limit matters most during a re-index. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
+                  <EmbeddingRateLimitCard />
                 </>
               );
             }}

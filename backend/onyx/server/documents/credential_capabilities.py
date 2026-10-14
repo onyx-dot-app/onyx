@@ -25,6 +25,9 @@ from onyx.connectors.capability_checks.draft_runs import (
     DraftRerunMode,
     read_draft_run_for_user,
 )
+from onyx.connectors.capability_checks.findings_setting import (
+    hide_findings_if_disabled,
+)
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
 from onyx.connectors.credential_families import is_credential_usable_for_source
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -94,6 +97,13 @@ class CapabilityReportSnapshot(BaseModel):
 
     @classmethod
     def from_row(cls, row: CredentialCapabilityReportRow) -> "CapabilityReportSnapshot":
+        report: CredentialCapabilityReport | None = (
+            CredentialCapabilityReport.model_validate(row.report)
+            if row.report is not None
+            else None
+        )
+        if report is not None:
+            hide_findings_if_disabled(report.check_results)
         return cls(
             credential_id=row.credential_id,
             connector_id=row.connector_id,
@@ -102,11 +112,7 @@ class CapabilityReportSnapshot(BaseModel):
             run_status=row.run_status,
             run_started_at=row.run_started_at,
             connector_config_hash=row.connector_config_hash,
-            report=(
-                CredentialCapabilityReport.model_validate(row.report)
-                if row.report is not None
-                else None
-            ),
+            report=report,
             time_updated=row.time_updated,
         )
 
@@ -194,10 +200,15 @@ def trigger_capability_check(
         db_session, request.connector_id, credential_id, user
     )
     credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    if credential is None and pairing_visible:
+    if (
+        credential is None
+        and pairing_visible
+        and request.connector_specific_config is None
+    ):
         # The run needs the credential row itself; the unfiltered fetch also
         # keeps an unknown credential a 404 for global managers, whose pairing
-        # shortcut checks nothing.
+        # shortcut checks nothing. An override config is a new use of the
+        # credential, so it needs credential visibility.
         credential = fetch_credential_by_id(credential_id, db_session)
     if credential is None:
         raise OnyxError(
@@ -235,6 +246,7 @@ def trigger_capability_check(
     try:
         row = start_capability_check_run(
             db_session,
+            user=user,
             credential_id=credential_id,
             connector_id=request.connector_id,
             source=run_source,
@@ -586,7 +598,8 @@ def start_draft_check_run(
     )
     try:
         return start_draft_capability_check_run(
-            user_id=user.id,
+            db_session,
+            user=user,
             credential=credential,
             source=request.source,
             config_class=mapping.config_class,

@@ -1857,9 +1857,6 @@
           "restoreTooltip": "恢复默认"
         },
         "description": "指定 {appName} 在您的组织中保留对话的时长。",
-        "enterprisePlanTag": {
-          "label": "企业版套餐"
-        },
         "forever": {
           "label": "永久"
         },
@@ -1875,16 +1872,11 @@
           "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
           "title": "缩短对话保留期？"
         },
-        "tierTooltip": "对话历史保留是企业版套餐的功能。",
         "title": "保留对话历史"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "商业版套餐"
-        },
         "description": "用于在组织内快速搜索文档的界面模式。",
         "noConnectorsTooltip": "设置连接器后才能使用搜索模式",
-        "tierTooltip": "搜索模式需要商业版或企业版套餐。",
         "title": "搜索模式"
       },
       "systemPrompt": {
@@ -2512,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "将已生成 embedding 的文本块写入文档索引。",
             "label": "向量数据库写入"
+          },
+          "embeddingRateLimitWait": {
+            "label": "嵌入速率限制等待",
+            "description": "嵌入请求因索引设置中的嵌入速率限制而等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "提供商限流等待",
+            "description": "嵌入提供商限流后嵌入请求等待的时间。属于嵌入阶段，为所有嵌入线程的总和。"
           }
         }
       },
@@ -2634,22 +2634,28 @@
           "description": "Microsoft Graph 主机。GCC High 或 DoD 请使用 https://graph.microsoft.us。"
         }
       },
+      "linear": {
+        "description": "配置 Linear 连接器",
+        "teams": {
+          "label": "团队",
+          "description": "要索引的 Linear 团队键（例如 ENG）。留空则索引已连接用户可见的所有团队。"
+        },
+        "projects": {
+          "label": "项目",
+          "description": "要索引的 Linear 项目名称或 URL。留空则索引所有项目。若同时设置了团队，问题必须同时匹配两者。"
+        },
+        "syncNotice": "请以属于您要索引的每个私有团队的工作区成员（而非访客）身份连接。Onyx 无法看到已连接用户不在其中的私有团队。公开团队的问题可由所有工作区成员搜索，私有或受限团队的问题仅可由其成员搜索。"
+      },
       "add": {
         "authorizeButton": {
           "label": "使用 {source} 授权",
           "pendingLabel": "正在授权…"
-        },
-        "collapseButton": {
-          "ariaLabel": "折叠"
         },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "新建"
-        },
-        "credentialDeleted": {
-          "toast": "已成功删除凭据！"
         },
         "credentialModal": {
           "title": "创建 {source} 凭据"
@@ -2662,14 +2668,8 @@
           "description": "使用共享服务账户。{appName} 将以此账户为内容建立索引。",
           "title": "身份验证账户"
         },
-        "credentialSwapped": {
-          "toast": "已成功更换凭据！"
-        },
         "error": {
           "toast": "错误：{detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "展开"
         },
         "federated": {
           "tooltip": {
@@ -2701,14 +2701,99 @@
         "retryButton": {
           "label": "重试"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# 个已保存账户} other {# 个已保存账户}}",
+          "expandButton": {
+            "ariaLabel": "显示已保存的账户"
+          },
+          "collapseButton": {
+            "ariaLabel": "隐藏已保存的账户"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(新账户)",
+          "editButton": {
+            "label": "编辑账户"
+          }
         },
         "timeout": {
           "toast": "操作在 {seconds} 秒后超时。请检查配置是否有误。"
         },
         "unknownError": {
           "toast": "发生未知错误"
+        },
+        "account": {
+          "untitled": {
+            "label": "未命名"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "添加于 {date}"
+          },
+          "selected": {
+            "label": "已选择"
+          },
+          "useButton": {
+            "label": "使用此账户"
+          },
+          "unsupportedRealm": {
+            "label": "不支持的网站域名"
+          },
+          "expandButton": {
+            "ariaLabel": "显示账户详情"
+          },
+          "collapseButton": {
+            "ariaLabel": "隐藏账户详情"
+          },
+          "deleteButton": {
+            "label": "删除账户",
+            "inUseTooltip": "无法删除此凭据，因为有其他连接器正在使用它。"
+          },
+          "usedBy": {
+            "label": "{count, plural, other {# 个连接器}}正在使用"
+          },
+          "owner": {
+            "you": "{name}（你）"
+          },
+          "lastTested": {
+            "title": "上次测试 {date}"
+          },
+          "notTested": {
+            "title": "尚未测试"
+          },
+          "details": {
+            "description": "已保存账户的凭据无法编辑，也无法指向其他主机。你可以在复用前测试该账户，或改为添加新账户。"
+          },
+          "rerunButton": {
+            "label": "重新运行检查"
+          },
+          "authenticationType": {
+            "label": "认证类型"
+          },
+          "rerunFailed": {
+            "toast": "无法启动检查，请重试。"
+          },
+          "shareSaved": {
+            "toast": "共享已更新。"
+          },
+          "shareFailed": {
+            "toast": "无法更改可使用此账户的人员。请重试。"
+          },
+          "renameSaved": {
+            "toast": "账号已重命名。"
+          },
+          "renameFailed": {
+            "toast": "无法重命名此账号。请重试。"
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "只有添加此账户的人才能将其设为私有。"
+          },
+          "shareLocked": {
+            "tooltip": "只有添加此账户的人或与其共享的管理员可以更改可使用此账户的人员。"
+          }
+        },
+        "accountUnavailable": {
+          "toast": "此账户已不可用。请选择其他账户。"
         }
       },
       "credentialRequired": {
@@ -2718,6 +2803,7 @@
         "enterField": "请输入“{field}”。",
         "fixField": "请检查“{field}”。",
         "awaitingCheck": "离开该字段后将使用凭据进行检查。",
+        "runChecks": "运行检查，以使用这些设置检查新账户。",
         "checking": "正在检查凭据…",
         "fieldInvalid": "请检查“{field}”：{detail}",
         "rejected": "此凭据无法与这些设置一起使用。{detail}"
@@ -2731,10 +2817,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "已创建您的 Google Drive 凭据。您可以在凭据列表中管理或撤销它。",
-          "title": "认证完成"
-        },
         "authFailed": {
           "toast": "使用 Google Drive 认证失败 - {error}"
         },
@@ -2742,51 +2824,12 @@
           "label": "使用 Google Drive 认证",
           "pendingLabel": "正在认证…"
         },
-        "createButton": {
-          "label": "创建凭据",
-          "pendingLabel": "正在创建…"
-        },
-        "credentialsLoadError": {
-          "title": "加载 Google Drive 凭据失败。"
-        },
-        "invalidFile": {
-          "toast": "提供的文件无效 - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "提供的文件无效 - 需要服务账号 JSON 密钥"
-        },
-        "missingServiceAccountKey": {
-          "toast": "请先上传服务账号密钥，然后再创建凭据"
-        },
         "oauthOption": {
           "description": "从 Google Cloud Console 上传 OAuth 应用 JSON（[设置说明]({docsUrl})），然后使用要索引其 Drive 的 Google 账号进行认证。",
-          "title": "选项 1：OAuth 应用",
           "sharedScopesNote": "Google 会同时请求 Google Drive 和 Gmail 的访问权限，这样一个账号可以同时用于两个连接器。如果只想将此账号用于 Google Drive，请在同意屏幕上取消勾选 Gmail 权限范围（[原因说明]({docsUrl})）。"
         },
         "oauthUpload": {
           "placeholder": "上传或粘贴您的 OAuth 应用 JSON"
-        },
-        "primaryAdmin": {
-          "description": "输入拥有目标 Google Drive 的 Google 组织的管理员或所有者邮箱。",
-          "invalidEmail": "必须是有效的邮箱地址",
-          "label": "主管理员邮箱",
-          "placeholder": "admin@yourcompany.com",
-          "required": "必填"
-        },
-        "section": {
-          "title": "Google Drive 认证"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "创建服务账号凭据失败 - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "已成功创建服务账号凭据"
-        },
-        "serviceAccountOption": {
-          "title": "选项 2：服务账号"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "上传或粘贴您的服务账号 JSON 密钥"
         }
       },
       "gmail": {
@@ -3056,6 +3099,9 @@
           "title": "连接器管理权限"
         },
         "title": "连接器设置"
+      },
+      "optionsListInput": {
+        "placeholder": "从列表中选择{label}或输入"
       }
     },
     "costOverrides": {
@@ -3321,6 +3367,10 @@
         "accountEmailField": {
           "subDescription": "请使用拥有该 API 令牌的账户邮箱。"
         },
+        "nameField": {
+          "title": "显示名称",
+          "placeholder": "为你的身份验证账户命名"
+        },
         "apiTokenField": {
           "subDescription": "粘贴你的 API 令牌以访问 {source}。"
         },
@@ -3425,7 +3475,9 @@
         "isSandbox": "是否为沙盒环境",
         "serviceUserEmail": "服务用户邮箱",
         "zuliprcContent": "Zuliprc 内容",
-        "authenticationMethod": "身份验证方式"
+        "authenticationMethod": "身份验证方式",
+        "primaryAdminEmail": "主管理员邮箱",
+        "serviceAccountKey": "服务账号密钥"
       },
       "hints": {
         "boxUserEmail": "可选。要模拟的 Box 用户。",
@@ -3434,8 +3486,9 @@
         "jiraUserEmail": "Jira Cloud 必填。",
         "lumappsServiceUser": "要代表其建立索引的用户。",
         "outlineBaseUrl": "例如 https://app.getoutline.com，或你的自托管 URL。",
-        "pfxFile": "PFX 文件。",
-        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。"
+        "pfxFile": "上传包含应用注册私钥的 `.pfx` 文件。必须小于 10 KB。",
+        "testrailBaseUrl": "例如 https://yourcompany.testrail.io。",
+        "googleServiceAccountKey": "上传或粘贴已启用全网域委派的 Google 服务账号的 `.json` 密钥。"
       },
       "methods": {
         "labels": {
@@ -3444,7 +3497,9 @@
           "certificate": "证书",
           "accessKeyAndSecret": "访问密钥和 Secret",
           "iamRole": "IAM 角色",
-          "assumeRole": "代入角色"
+          "assumeRole": "代入角色",
+          "serviceAccount": "服务账号",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "选择此模式后，SharePoint 连接器将使用客户端密钥进行身份验证。你需要提供客户端 ID 和客户端密钥。",
@@ -4426,6 +4481,7 @@
           "tooltip": "由于此用户组最近发生更改，正在更新文档 embedding。"
         },
         "systemGroup": {
+          "basicDescription": "此用户组由 {appName} 管理。它只包含成员，下方的权限适用于其中的所有人。",
           "description": "此用户组由 {appName} 管理。它只包含成员，您也只能更改成员。",
           "title": "系统用户组"
         },
@@ -5166,6 +5222,10 @@
         "orSeparator": {
           "label": "或"
         },
+        "quantizationOnly": {
+          "description": "仅更改了向量量化，因此 Onyx 会使用已存储的向量重建索引，无需重新嵌入。这比完整重新索引快得多。",
+          "title": "将重建索引。"
+        },
         "reindex": {
           "description": "重新索引可能需要*数小时或数天*，具体取决于语料库大小。[了解更多](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "将运行完整的重新索引。"
@@ -5386,7 +5446,9 @@
         "cancelButton": {
           "label": "取消重新索引并还原"
         },
+        "copyTitle": "正在重建索引…",
         "description": {
+          "copy": "Onyx 正在使用已存储的向量重建索引，无需重新嵌入。这比重新嵌入快得多。",
           "withModel": "随着重新索引的进行，新的 embedding 设置（**{model}**）正在生效。这可能需要**数小时或数天**，具体取决于语料库规模。",
           "withoutModel": "随着重新索引的进行，新的 embedding 设置正在生效。这可能需要**数小时或数天**，具体取决于语料库规模。"
         },
@@ -5508,17 +5570,17 @@
         "googleProjectRequired": "必须填写 GCP 项目 ID"
       },
       "vectorQuantization": {
-        "description": "使用更少的位存储文档向量，以减少内存占用。位数越少，搜索质量可能越低。",
+        "description": "使用更少的位存储文档向量，以减少向量搜索的内存占用。位数越少，搜索质量可能越低。仅更改此设置时，将使用已存储的向量重建索引，无需重新嵌入。",
         "none": {
           "description": "完整的 32 位精度。",
           "label": "无"
         },
         "scalar1Bit": {
-          "description": "内存占用降至 1/32。需要 OpenSearch 3.6 或更高版本。",
+          "description": "向量搜索内存占用最低，搜索质量略有下降。推荐用于大型索引。需要 OpenSearch 3.6 或更高版本。",
           "label": "1 位"
         },
         "scalar7Bit": {
-          "description": "内存占用降至 1/4，搜索质量几乎无损。",
+          "description": "向量搜索内存占用降至约 1/4，搜索质量几乎无损。",
           "label": "7 位"
         },
         "title": "向量量化"
@@ -5552,6 +5614,85 @@
         "e5SmallV2": "E5 系列模型中最小、最快的版本。如果您在资源受限的系统上运行 {appName}，这是一个不错的选择。",
         "multilingualE5Base": "如果语料库包含英语以外的语言，请选择此模型。",
         "multilingualE5Small": "如果语料库包含英语以外的语言，且系统资源受限，请选择此模型。"
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "搜索索引中的每个分块都有其连接器 ID。搜索使用连接器级访问。",
+            "off": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表。连接器级访问已关闭。",
+            "shadow": "搜索索引中的每个分块都有其连接器 ID。搜索使用文档访问列表，并将其与连接器级访问进行比较。"
+          },
+          "title": "连接器访问更新已完成"
+        },
+        "notStarted": {
+          "description": "后台任务将为搜索索引中的现有分块添加连接器 ID。它会在几分钟内开始。",
+          "title": "连接器访问更新尚未开始"
+        },
+        "progress": {
+          "ariaLabel": "连接器访问更新进度"
+        },
+        "running": {
+          "description": "后台任务正在为搜索索引中的现有分块添加连接器 ID。只有在完成后才能强制执行连接器级搜索访问。",
+          "title": "正在为连接器访问更新搜索索引…"
+        },
+        "status": {
+          "connectors": "已完成 {done, number}/{total, number} 个连接器",
+          "connectorsLeft": "{count, plural, one {剩余 # 个连接器} other {剩余 # 个连接器}}",
+          "current": "当前连接器：{name}",
+          "documentsLeft": "{count, plural, one {剩余 # 个文档} other {剩余 # 个文档}}"
+        },
+        "mode": {
+          "description": "搜索如何决定用户可以看到哪些文档。",
+          "enforcePending": "已设置强制，将在更新完成后开始。",
+          "enforceUnavailable": "搜索索引更新完成后可用。",
+          "label": "搜索访问模式",
+          "options": {
+            "enforce": {
+              "description": "搜索使用连接器级访问。",
+              "title": "强制"
+            },
+            "off": {
+              "description": "搜索使用文档访问列表。",
+              "title": "关闭"
+            },
+            "shadow": {
+              "description": "搜索使用文档访问列表，并记录连接器级访问结果不同的情况。",
+              "title": "影子"
+            }
+          },
+          "placeholder": "选择模式",
+          "toasts": {
+            "error": "无法更新搜索访问模式。",
+            "success": "搜索访问模式已设置为{mode}。"
+          }
+        },
+        "loadError": {
+          "description": "请重新加载页面后重试。",
+          "title": "无法加载连接器访问更新"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "嵌入请求速率限制",
+        "description": "限制索引在一个时间窗口内发送的嵌入请求数量，覆盖所有索引工作进程。达到限制时，索引会等待后重试而不是失败，因此工作进程会少接新任务。只有等待时间过长时，批次才会失败。搜索查询不受限制。",
+        "requests": {
+          "title": "每个窗口的请求数",
+          "description": "留空表示不限制。",
+          "placeholder": "不限制"
+        },
+        "period": {
+          "title": "窗口长度",
+          "description": "例如，每分钟限制填 60。",
+          "suffix": "（秒）"
+        },
+        "restoreDefault": "恢复默认值",
+        "validation": {
+          "requests": "请输入 1 到 {max, number} 之间的整数，或留空表示不限制。",
+          "period": "请输入 1 到 {max, number} 之间的整数秒数。"
+        },
+        "toasts": {
+          "saved": "速率限制已保存。",
+          "failed": "无法保存速率限制。"
+        }
       }
     },
     "indexing": {
@@ -8928,9 +9069,6 @@
           "description": "关闭后，所有网关端点都会拒绝请求，现有令牌将失效，令牌选择器中也会隐藏网关范围。Craft 沙箱流量由 Craft 设置单独控制。"
         }
       },
-      "businessPlanTag": {
-        "label": "商业版套餐"
-      },
       "tierTooltip": "LLM 网关需要商业版或企业版套餐。",
       "scopeNote": {
         "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
@@ -8970,17 +9108,11 @@
       "required": {
         "label": "必需"
       },
-      "running": {
-        "label": "正在运行检查…"
-      },
       "empty": {
         "label": "尚未运行任何检查。"
       },
       "docsLink": {
         "label": "文档"
-      },
-      "rerunButton": {
-        "label": "重新运行检查"
       },
       "foldButton": {
         "fold": "收起",
@@ -8998,8 +9130,236 @@
       "failedToRun": "检查未能运行。请重试。",
       "requiredFailed": "{count, plural, one {# 项必需检查失败} other {# 项必需检查失败}}",
       "state": {
-        "completed": "检查已完成",
-        "inProgress": "检查进行中…"
+        "completed": "检查已完成。",
+        "inProgress": "检查进行中...",
+        "waiting": "正在等待连接器设置..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "编辑连接器"
+      },
+      "header": {
+        "title": "编辑 {name}",
+        "description": "更改此 {source} 连接器的设置。应用更改前，你将先查看计划。",
+        "reviewButton": {
+          "label": "查看更改"
+        }
+      },
+      "loadError": {
+        "title": "无法加载连接器",
+        "description": "请重新加载页面，或返回连接器。",
+        "backButton": {
+          "label": "返回连接器"
+        }
+      },
+      "credentialSwap": {
+        "title": "你选择了其他凭据",
+        "description": "在计划中，你可以保留已索引的文档，或全部重新索引并清除新凭据无法访问的文档。"
+      },
+      "files": {
+        "title": "文件",
+        "description": "添加或移除文件。新文件仅在你应用计划后才会被索引。",
+        "empty": "该连接器没有文件。",
+        "addButton": {
+          "label": "添加文件"
+        },
+        "remove": {
+          "tooltip": "移除 {name}"
+        },
+        "uploadFailed": {
+          "toast": "无法上传文件：{detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "无法计算计划：{detail}"
+      },
+      "typedAccount": {
+        "toast": "请先保存新账户再查看更改，或选择一个已保存的账户。"
+      },
+      "applied": {
+        "toast": "更改已应用。"
+      },
+      "plan": {
+        "title": "查看计划",
+        "description": "{count, plural, other {该连接器有 # 个已索引的文档。}}",
+        "changes": {
+          "list": "已更改：{fields}",
+          "none": "没有任何更改。"
+        },
+        "stale": {
+          "title": "连接器已更改",
+          "description": "此计划计算后连接器发生了更改。请在应用前重新计算计划。",
+          "replanButton": {
+            "label": "重新计划"
+          }
+        },
+        "expired": {
+          "title": "计划已过期",
+          "description": "此计划已过期或已应用。请重新计算计划。"
+        },
+        "applyFailed": {
+          "title": "无法应用更改"
+        },
+        "validation": {
+          "title": "验证",
+          "blocks": "新设置未通过验证。请在应用前修复。",
+          "warns": "部分可选检查失败。你仍然可以应用。",
+          "error": {
+            "title": "设置无效"
+          }
+        },
+        "warnings": {
+          "title": "警告"
+        },
+        "notes": {
+          "title": "说明"
+        },
+        "reconciliation": {
+          "title": "选择如何协调范围更改",
+          "description": "计划无法判断对 {fields} 的更改会添加还是移除文档。请选择应用时的操作。",
+          "option": {
+            "prune": {
+              "title": "清除",
+              "description": "移除不再在范围内的文档。"
+            },
+            "full_reindex": {
+              "title": "完全重新索引",
+              "description": "从开始日期起重新索引全部内容，以添加现在在范围内的文档。"
+            },
+            "both": {
+              "title": "完全重新索引后清除",
+              "description": "重新索引全部内容，然后移除不再在范围内的文档。"
+            },
+            "nothing": {
+              "title": "不执行任何操作",
+              "description": "保留已索引的文档。之后的运行使用新设置。"
+            }
+          }
+        },
+        "credential": {
+          "title": "凭据更改",
+          "description": "选择如何处理使用旧凭据索引的文档。",
+          "option": {
+            "keep_indexed": {
+              "title": "保留已索引的文档",
+              "description": "之后的运行使用新凭据。这是快速方式。"
+            },
+            "full_reindex_and_prune": {
+              "title": "完全重新索引并清除",
+              "description": "使用新凭据重新索引全部内容，然后移除其无法访问的文档。"
+            }
+          }
+        },
+        "steps": {
+          "title": "步骤",
+          "description": "应用时按顺序执行的操作。你可以关闭可选步骤。",
+          "none": "应用会保存设置。无需索引工作。",
+          "required": {
+            "label": "必需"
+          },
+          "optional": {
+            "label": "可选"
+          },
+          "include": {
+            "ariaLabel": "运行步骤：{step}"
+          },
+          "fields": "字段：{fields}",
+          "window": "时间范围：{start} 至 {end}",
+          "windowFromStart": "时间范围：截至 {end} 的全部内容",
+          "kind": {
+            "access_groups": {
+              "title": "更新数据访问组",
+              "description": "搜索会立即应用新组。"
+            },
+            "access_type": {
+              "title": "更改访问类型",
+              "description": "可读取文档的人员会发生变化。"
+            },
+            "enter_perm_sync": {
+              "title": "开始权限同步",
+              "description": "在首次权限同步完成之前，文档保持隐藏。"
+            },
+            "leave_perm_sync": {
+              "title": "停止权限同步",
+              "description": "来源的权限不再决定谁可以读取文档。"
+            },
+            "restart_attempt": {
+              "title": "重新开始正在运行的索引尝试",
+              "description": "正在运行的尝试会停止，并使用新设置开始新的尝试。"
+            },
+            "full_reindex_then_prune": {
+              "title": "完全重新索引后清除",
+              "description": "重新索引全部内容，然后移除来源不再返回的文档。"
+            },
+            "full_reindex": {
+              "title": "完全重新索引",
+              "description": "从开始日期起重新索引全部内容。"
+            },
+            "scoped_backfill": {
+              "title": "回填新增项",
+              "description": "仅索引新增项的历史记录。"
+            },
+            "window_backfill": {
+              "title": "回填更早的时间范围",
+              "description": "索引新旧开始日期之间的时间段。"
+            },
+            "prune": {
+              "title": "清除",
+              "description": "移除来源不再返回的文档。"
+            }
+          },
+          "reason": {
+            "identity_changed": "文档 ID 发生变化",
+            "behavior_changed": "处理方式已更改",
+            "scope_widened": "范围扩大",
+            "scope_narrowed": "范围缩小",
+            "items_added_or_changed": "新增或更改的项",
+            "items_removed": "已移除的项",
+            "opaque_scope_choice": "你的范围选择",
+            "indexing_start_earlier": "更早的开始日期",
+            "credential_full_path": "凭据完整方式",
+            "access_changed": "访问权限已更改",
+            "permissions_fetched_during_indexing": "权限随索引获取",
+            "attempt_running": "有尝试正在运行",
+            "scoped_backfill_superseded": "替换之前的回填",
+            "admin_added": "由你添加",
+            "indexing_start_later": "更晚的开始日期"
+          }
+        },
+        "extra": {
+          "title": "额外工作",
+          "description": "添加计划不需要的工作。",
+          "fullReindex": {
+            "title": "添加完全重新索引",
+            "description": "从开始日期起重新索引全部内容。"
+          },
+          "prune": {
+            "title": "添加清除",
+            "description": "移除来源不再返回的文档。"
+          }
+        },
+        "backButton": {
+          "label": "返回编辑"
+        },
+        "applyButton": {
+          "label": "应用"
+        },
+        "blocked": {
+          "validation": "请先修复验证失败。",
+          "reconciliation": "请先选择如何协调范围更改。"
+        }
+      },
+      "pendingBackfills": {
+        "title": "待处理的回填",
+        "description": "某次编辑请求了这些运行。每项会保留在此，直到其运行成功。",
+        "window": "{start} 至 {end}",
+        "windowFromStart": "截至 {end} 的全部内容",
+        "waiting": "等待运行。",
+        "runningNow": "索引尝试正在运行它。",
+        "retry": "{count, plural, other {已失败 # 次。下次重试：{time}。}}",
+        "scoped": "仅限新增或更改的项目",
+        "failures": "{count, plural, other {失败 # 次}}"
       }
     }
   },
@@ -11500,12 +11860,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {选择文件} other {选择文件}}"
-      },
-      "prompt": "{multiple, select, true {或将文件拖放到此处。} other {或将文件拖放到此处。}}"
-    },
     "textListField": {
       "addButton": {
         "label": "新增"
@@ -12023,6 +12377,24 @@
         "empty": "此工作表为空。",
         "tooLarge": "此工作表过大，无法预览。请下载文件查看。"
       }
+    },
+    "plans": {
+      "free": {
+        "title": "免费版",
+        "tooltip": "所有版本均可用。"
+      },
+      "business": {
+        "title": "商业版",
+        "tooltip": "需要[商业版或企业版](/admin/billing)。"
+      },
+      "enterprise": {
+        "title": "企业版",
+        "tooltip": "需要[企业版](/admin/billing)。"
+      },
+      "upgrade": {
+        "label": "升级方案"
+      },
+      "availableFor": "{plan}可用"
     }
   },
   "craft": {
@@ -12366,6 +12738,17 @@
         "operationWait": "请等待当前操作完成。",
         "sandboxWait": "请等待沙箱初始化",
         "scheduledRunWait": "请等待计划运行结束。"
+      },
+      "loadError": {
+        "title": "无法加载会话",
+        "retry": "重试"
+      },
+      "queuedSendError": {
+        "title": "无法发送排队中的消息"
+      },
+      "settlementError": {
+        "title": "无法确认任务是否完成",
+        "description": "请重试以检查任务并加载已保存的回复。"
       }
     },
     "compaction": {
@@ -12376,22 +12759,6 @@
     "connectDataBanner": {
       "cta": {
         "label": "连接您的数据"
-      }
-    },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "正在打造您的工作区...",
-        "enchanting": "正在施加魔法附魔...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "正在收集资源...",
-        "miningDependencies": "正在挖掘依赖项...",
-        "placingBlocks": "正在放置方块...",
-        "punchingWood": "正在撸树...",
-        "smeltingCode": "正在熔炼代码...",
-        "worldGenerated": "世界生成完成..."
-      },
-      "tagline": {
-        "label": "正在打造您的下一个好点子..."
       }
     },
     "debugLogs": {
@@ -12483,6 +12850,12 @@
       "csv": {
         "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
         "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。"
+      },
+      "imageTooLarge": {
+        "description": "此图片过大，无法预览。请下载原始文件以打开它。"
+      },
+      "unsupported": {
+        "description": "此文件无法预览。请下载原文件后打开。"
       }
     },
     "filesTab": {
@@ -12499,9 +12872,37 @@
       "preparing": {
         "description": "正在设置您的开发环境",
         "title": "正在准备沙箱..."
+      },
+      "download": {
+        "label": "下载"
+      },
+      "partial": {
+        "label": "部分文件夹无法加载。请刷新后重试。"
+      },
+      "noMatches": {
+        "label": "没有匹配的文件"
+      },
+      "previousPage": {
+        "label": "上一页"
+      },
+      "nextPage": {
+        "label": "下一页"
+      },
+      "page": {
+        "label": "第{page}页，共{total}页"
+      },
+      "upload": {
+        "label": "上传文件",
+        "error": "无法上传文件。请重试。"
+      },
+      "emptyDirectory": {
+        "label": "此目录中没有文件"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "对比背景"
+      },
       "error": {
         "description": "无法显示该图片",
         "title": "图片加载失败"
@@ -12511,9 +12912,6 @@
       },
       "preview": {
         "ariaLabel": "{name} 的预览"
-      },
-      "background": {
-        "contrast": "对比背景"
       }
     },
     "inputBar": {
@@ -12671,6 +13069,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "PDF 控件"
+      },
+      "thumbnails": {
+        "toggle": "显示或隐藏页面缩略图",
+        "resize": "调整页面缩略图宽度",
+        "label": "页面缩略图"
+      },
+      "page": {
+        "previous": "上一页",
+        "next": "下一页",
+        "counter": "{current} / {total}",
+        "preview": "第 {page} 页预览",
+        "select": "转到第 {page} 页"
+      },
+      "zoom": {
+        "out": "缩小",
+        "in": "放大",
+        "label": "缩放",
+        "fitWidth": "适合宽度",
+        "fitPage": "适合页面"
+      },
       "error": {
         "description": "无法加载该 PDF 文件。",
         "title": "无法预览 PDF"
@@ -12683,6 +13103,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "演示文稿控件"
+      },
+      "thumbnails": {
+        "toggle": "显示或隐藏幻灯片缩略图"
+      },
+      "resize": {
+        "ariaLabel": "调整幻灯片缩略图宽度"
+      },
       "slides": {
         "label": "幻灯片"
       },
@@ -12693,7 +13122,7 @@
         "label": "下一张幻灯片"
       },
       "converting": {
-        "label": "正在转换演示文稿..."
+        "label": "正在准备预览..."
       },
       "empty": {
         "label": "此演示文稿中没有幻灯片"
@@ -12706,9 +13135,6 @@
       },
       "slide": {
         "counter": "幻灯片 {current} / {total}"
-      },
-      "resize": {
-        "ariaLabel": "调整幻灯片缩略图宽度"
       }
     },
     "previewTab": {
@@ -13142,7 +13568,8 @@
         "ariaLabel": "复制 URL：{url}"
       },
       "downloadFile": {
-        "tooltip": "下载文件"
+        "tooltip": "下载文件",
+        "label": "下载"
       },
       "export": {
         "button": "导出为 .docx",
@@ -13212,6 +13639,170 @@
     "welcome": {
       "input": {
         "placeholder": "分析我的数据并创建仪表板..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "所有文件"
+      },
+      "browser": {
+        "label": "应用"
+      },
+      "list": {
+        "label": "输出标签页"
+      },
+      "close": {
+        "label": "关闭{name}"
+      },
+      "reordered": {
+        "label": "标签页已移至第{position}个，共{count}个"
+      },
+      "open": {
+        "label": "打开标签页"
+      },
+      "outputs": {
+        "label": "输出"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "预览你的应用"
+      },
+      "home": {
+        "title": "应用",
+        "action": "应用"
+      },
+      "checking": {
+        "label": "正在检查网页应用"
+      },
+      "failed": {
+        "description": "无法检查本地网页应用。请重新加载后重试。"
+      },
+      "unavailable": {
+        "description": "网页应用不可用。请恢复沙盒或重新加载后重试。",
+        "label": "不可用"
+      },
+      "empty": {
+        "title": "没有可用的网页应用",
+        "description": "本地应用运行后会显示在这里。"
+      },
+      "starting": {
+        "label": "正在启动网页应用"
+      },
+      "loading": {
+        "label": "正在加载网页应用"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "打开输出"
+      },
+      "close": {
+        "ariaLabel": "关闭输出"
+      },
+      "expand": {
+        "ariaLabel": "展开输出"
+      },
+      "restore": {
+        "ariaLabel": "还原输出"
+      },
+      "resize": {
+        "ariaLabel": "调整输出大小"
+      },
+      "files": {
+        "search": {
+          "placeholder": "搜索文件"
+        },
+        "location": {
+          "label": "沙盒中的所有文件"
+        }
+      },
+      "browser": {
+        "placeholder": "沙箱中的网页应用"
+      },
+      "reload": {
+        "file": "重新加载文件",
+        "files": "刷新文件",
+        "browser": "刷新网页应用",
+        "unavailable": "请恢复沙盒以刷新"
+      },
+      "export": {
+        "failed": "无法导出此文件。请重试。"
+      },
+      "empty": {
+        "title": "选择工作区视图"
+      },
+      "status": {
+        "provisioning": "正在初始化沙盒",
+        "running": "沙盒正在运行",
+        "sleeping": "沙盒正在休眠",
+        "restoring": "正在恢复会话",
+        "terminated": "沙盒已终止",
+        "failed": "沙盒发生故障",
+        "ready": "沙盒已就绪",
+        "loading": "正在查找沙盒"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "全部标为已查看",
+        "error": "无法将输出标为已查看。请重试。"
+      },
+      "home": {
+        "description": "智能体创建的文件"
+      },
+      "empty": {
+        "description": "智能体创建的文件将显示在这里。"
+      },
+      "loading": {
+        "label": "正在加载输出…"
+      },
+      "unavailable": {
+        "description": "沙盒准备就绪后将显示输出。"
+      },
+      "error": {
+        "description": "无法刷新输出，请重试。"
+      },
+      "incomplete": {
+        "description": "部分输出无法加载。"
+      },
+      "filter": {
+        "label": "文件类型",
+        "all": "全部",
+        "folders": "文件夹",
+        "noExtension": "无扩展名"
+      },
+      "folders": {
+        "ariaLabel": "输出文件夹",
+        "root": "输出"
+      },
+      "filtered": {
+        "empty": "没有匹配的输出"
+      },
+      "search": {
+        "placeholder": "搜索输出"
+      },
+      "scope": {
+        "turn": "第 {turn, number} 轮输出",
+        "all": "所有输出"
+      },
+      "unseen": "新增或已更新"
+    },
+    "turnOutputs": {
+      "showAll": "查看全部 {count} 个输出",
+      "app": "应用",
+      "unavailable": "已不可用",
+      "appTitle": "预览你的应用"
+    },
+    "upgrade": {
+      "title": "Craft 需要商业版套餐",
+      "adminDescription": "Craft 适用于商业版和企业版套餐。在 Craft 并入主聊天之前，社区版不支持 Craft。",
+      "userDescription": "Craft 适用于商业版和企业版套餐。请联系管理员升级以使用 Craft。",
+      "backToChat": {
+        "label": "返回聊天"
+      },
+      "viewPlans": {
+        "label": "查看套餐"
       }
     }
   },
@@ -13552,8 +14143,19 @@
       "year": "年"
     },
     "inputFile": {
-      "attachFile": "附加文件",
       "clearFile": "清除文件"
+    },
+    "inputMultiUpload": {
+      "placeholder": "添加文件…",
+      "dropToAdd": "将文件拖放到此处以添加",
+      "dropToAddMore": "拖放到此处以添加更多文件"
+    },
+    "inputUpload": {
+      "placeholder": "添加文件…",
+      "pasted": "已粘贴的文本",
+      "attached": "已附加文件",
+      "dropToAdd": "将文件拖放到此处以添加",
+      "dropToReplace": "拖放到此处以替换文件"
     },
     "inputImage": {
       "alt": "图片",
@@ -14243,7 +14845,8 @@
         "title": "智能体"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "商业版"
       },
       "exploreAgents": {
         "label": "探索智能体"

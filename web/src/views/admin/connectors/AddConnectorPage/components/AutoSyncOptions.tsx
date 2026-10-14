@@ -1,5 +1,6 @@
 import { Text } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
+import { useTranslations } from "next-intl";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import type { ValidAutoSyncSource } from "@/lib/connectors/types/source";
 import { autoSyncConfigBySource } from "@/lib/connectors/AutoSyncOptionFields";
@@ -12,7 +13,12 @@ interface AutoSyncOptionsProps {
 export default function AutoSyncOptions({
   connectorType,
 }: AutoSyncOptionsProps) {
-  const { notice, fields } = autoSyncConfigBySource[connectorType];
+  const t = useTranslations("admin.connectorsList");
+  const noticeBySource: Partial<Record<ValidAutoSyncSource, string>> = {
+    linear: t("linear.syncNotice"),
+  };
+  const notice: string | undefined = noticeBySource[connectorType];
+  const { fields } = autoSyncConfigBySource[connectorType];
 
   if (!notice && !fields) {
     return null;

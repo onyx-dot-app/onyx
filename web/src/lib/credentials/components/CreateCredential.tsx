@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Divider } from "@opal/components";
+import { Disabled } from "@opal/core";
 import { AccessType } from "@/lib/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { submitCredential } from "@/lib/credentials/svc";
 import { Form, Formik, FormikHelpers } from "formik";
 import { Section, toast } from "@opal/layouts";
-import GDriveMain from "@/views/admin/connectors/AddConnectorPage/form/gdrive/GoogleDrivePage";
 import type { Connector } from "@/lib/connectors/types";
 import type { Credential } from "@/lib/credentials/types";
 import { GmailMain } from "@/views/admin/connectors/AddConnectorPage/form/gmail/GmailPage";
@@ -15,9 +15,11 @@ import {
   createValidationSchema,
   getCredentialSpec,
   initialCredentialValues,
+  isOwnSetupMethod,
 } from "@/lib/credentials/utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import OwnAccountSetup from "@/views/admin/connectors/AddConnectorPage/form/OwnAccountSetup";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import {
   DEFAULT_SHARE_AUDIENCE,
   ShareAccountField,
@@ -26,6 +28,7 @@ import {
 } from "@/lib/credentials/components/ShareAccountField";
 import { useCredentialFieldCopy } from "@/lib/credentials/hooks";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
+import { AccountNameField } from "@/lib/credentials/components/AccountNameField";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgPlusCircle } from "@opal/icons";
 
@@ -50,6 +53,8 @@ function CreateButton({ onClick, isSubmitting, isValid }: CreateButtonProps) {
 }
 
 type CreateCredentialFormValues = ShareAccountFormValues & {
+  /** The account's display name; blank leaves it "Untitled". */
+  name: string;
   [key: string]: unknown;
 };
 
@@ -109,7 +114,8 @@ export default function CreateCredential({
     setSubmitting(true);
     formikHelpers.setSubmitting(true);
 
-    const { share, groups, ...credentialValues } = values;
+    const { share, groups, name, ...credentialValues } = values;
+    const displayName: string = name.trim();
 
     let privateKey: TypedFile | null = null;
     const filteredCredentialValues = Object.fromEntries(
@@ -126,7 +132,7 @@ export default function CreateCredential({
       const response = await submitCredential({
         credential_json: filteredCredentialValues,
         ...shareAccountPayload({ share, groups }),
-        // No name: the credential list shows its "Untitled" fallback.
+        ...(displayName && { name: displayName }),
         source: sourceType,
         private_key: privateKey || undefined,
       });
@@ -145,8 +151,10 @@ export default function CreateCredential({
         }
         onClose();
       } else {
+        // With `onSwitch`, the new credential is picked at once, and the
+        // picked credential is the confirmation.
         if (isSuccess) {
-          toast.success(message);
+          if (!onSwitch) toast.success(message);
         } else {
           toast.error(message);
         }
@@ -172,10 +180,6 @@ export default function CreateCredential({
     return <GmailMain />;
   }
 
-  if (sourceType == "google_drive") {
-    return <GDriveMain />;
-  }
-
   const spec = getCredentialSpec(sourceType);
   if (!spec) {
     return null;
@@ -196,6 +200,7 @@ export default function CreateCredential({
     <Formik<CreateCredentialFormValues>
       initialValues={{
         ...initialCredentialValues(spec),
+        name: "",
         share: DEFAULT_SHARE_AUDIENCE,
         groups: [],
         ...(initialAuthMethod && {
@@ -216,6 +221,13 @@ export default function CreateCredential({
           formikProps.setFieldValue("authentication_method", authMethod);
         }
 
+        // A method that saves the account itself has no name, sharing or
+        // Create of its own.
+        const ownSetup: boolean = isOwnSetupMethod(
+          spec,
+          authMethod || initialAuthMethod
+        );
+
         return (
           // No card of its own: the form sits directly in its host (the
           // credential step's create card, or a modal).
@@ -226,29 +238,40 @@ export default function CreateCredential({
                 spec={spec}
                 authMethod={authMethod || initialAuthMethod}
                 setAuthMethod={setAuthMethod}
+                renderOwnSetup={() => <OwnAccountSetup source={sourceType} />}
               />
 
-              {/* Above: the fields the source needs. Below: optional sharing
-              and the Create button. */}
-              <Divider paddingParallel={0} paddingPerpendicular={0} />
+              {!ownSetup && (
+                <>
+                  {/* Above: the fields the source needs. Below: the optional
+                  name and sharing, then the Create button. */}
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-              {businessTier && (
-                <ShareAccountField disabled={!formikProps.isValid} />
+                  <Disabled disabled={!formikProps.isValid}>
+                    <Section alignItems="stretch" gap={4}>
+                      <AccountNameField name="name" />
+                      <ShareAccountField
+                        disabled={!formikProps.isValid}
+                        groupsLocked={!businessTier}
+                      />
+                    </Section>
+                  </Disabled>
+
+                  <Section flexDirection="row" justifyContent="end">
+                    <CreateButton
+                      onClick={() =>
+                        handleSubmit(
+                          formikProps.values,
+                          formikProps,
+                          swapConnector ? "createAndSwap" : "create"
+                        )
+                      }
+                      isSubmitting={formikProps.isSubmitting}
+                      isValid={formikProps.isValid}
+                    />
+                  </Section>
+                </>
               )}
-
-              <Section flexDirection="row" justifyContent="end">
-                <CreateButton
-                  onClick={() =>
-                    handleSubmit(
-                      formikProps.values,
-                      formikProps,
-                      swapConnector ? "createAndSwap" : "create"
-                    )
-                  }
-                  isSubmitting={formikProps.isSubmitting}
-                  isValid={formikProps.isValid}
-                />
-              </Section>
             </Section>
           </Form>
         );

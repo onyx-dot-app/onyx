@@ -1,10 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  getSourceDisplayName,
+  getSourceMetadata,
+} from "@/lib/connectors/utils";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
-import { adminDeleteCredential, deleteCredential } from "@/lib/credentials/svc";
+import {
+  adminDeleteCredential,
+  deleteCredential,
+  startCredentialCheckRun,
+} from "@/lib/credentials/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import {
@@ -13,7 +21,6 @@ import {
   shouldRedirectToOAuth,
 } from "@/lib/credentials/utils";
 import { CredentialCreationMethod } from "@/lib/credentials/types";
-import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { prepareOAuthAuthorizationRequest } from "@/lib/oauth_utils";
 import {
   EE_ENABLED,
@@ -27,12 +34,13 @@ import {
 import type {
   AnyCredential,
   Credential,
+  CredentialCheckReport,
+  SimilarCredential,
   CredentialSetup,
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
-  GoogleDriveCredentialJson,
-  GoogleDriveServiceAccountCredentialJson,
   OAuthDetails,
+  SavedDraftCredential,
   SourceCredentialsResult,
 } from "@/lib/credentials/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -128,7 +136,7 @@ export function useSourceCredentials(
   sourceType: ValidSources,
   { enabled = true }: CredentialFetchOptions = {}
 ): SourceCredentialsResult {
-  return useSWR<AnyCredential[], Error>(
+  return useSWR<SimilarCredential[], Error>(
     enabled ? SWR_KEYS.similarCredentials(sourceType) : null,
     errorHandlingFetcher,
     { refreshInterval: CREDENTIALS_REFRESH_INTERVAL_MS }
@@ -358,38 +366,107 @@ export const useGmailCredentials = (connector: string) => {
   };
 };
 
-export const useGoogleDriveCredentials = (connector: string) => {
-  // Only the Google Drive setup reads the admin list; other sources skip it.
-  const { data: credentialsData } = useAdminCredentials({
-    enabled: connector === ValidSources.GoogleDrive,
-  });
-
-  const googleDrivePublicCredential:
-    | Credential<GoogleDriveCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_tokens &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const googleDriveServiceAccountCredential:
-    | Credential<GoogleDriveServiceAccountCredentialJson>
-    | undefined = credentialsData?.find(
-    (credential) =>
-      credential.credential_json?.google_service_account_key &&
-      credential.admin_public &&
-      credential.source === connector
-  );
-
-  const liveGDriveCredential =
-    googleDrivePublicCredential || googleDriveServiceAccountCredential;
-
-  return {
-    liveGDriveCredential: liveGDriveCredential,
-  };
-};
-
 export const useGoogleCredentials = (
   source: ValidSources.Gmail | ValidSources.GoogleDrive
 ): SourceCredentialsResult => useSourceCredentials(source);
+
+/** How often the check reports refresh while a run is going. */
+const CREDENTIAL_CHECK_POLL_MS = 2000;
+
+/** What `useCredentialCheckReports` returns. */
+export interface CredentialCheckReports {
+  /** The credential's report for `connectorId`, or its own for null. */
+  reportFor: (
+    credentialId: number,
+    connectorId?: number | null
+  ) => CredentialCheckReport | null;
+  /** Starts the checks on one credential; resolves once the run is queued. */
+  rerun: (credentialId: number) => Promise<void>;
+}
+
+/**
+ * The stored capability reports of one source's credentials, polled while
+ * any run is going. Deployments without the checks report nothing, so a
+ * failed load shows as no reports.
+ */
+export function useCredentialCheckReports(
+  source: ValidSources
+): CredentialCheckReports {
+  const { data, mutate: refresh } = useSWR<CredentialCheckReport[]>(
+    SWR_KEYS.credentialCheckReports(source),
+    errorHandlingFetcher,
+    {
+      refreshInterval: (reports) =>
+        reports?.some((report) => report.run_status === "running")
+          ? CREDENTIAL_CHECK_POLL_MS
+          : 0,
+    }
+  );
+
+  // Stable per load, so a consumer can memoize on it.
+  const reportFor = useCallback(
+    (credentialId: number, connectorId: number | null = null) =>
+      data?.find(
+        (report) =>
+          report.credential_id === credentialId &&
+          report.connector_id === connectorId
+      ) ?? null,
+    [data]
+  );
+  return {
+    reportFor,
+    rerun: async (credentialId) => {
+      await startCredentialCheckRun(credentialId);
+      await refresh();
+    },
+  };
+}
+
+export interface SavedDraftCredentialState {
+  /** The draft a check run saved the typed account as; `null` before one. */
+  savedDraft: SavedDraftCredential | null;
+  /** Records the draft a check run saved `values` in. */
+  rememberDraft: (
+    credentialId: number,
+    values: Record<string, unknown>
+  ) => Promise<void>;
+}
+
+/**
+ * The draft credential that the add-connector form of `source` saved its
+ * typed account as. The checks card, the binding check and Create share it
+ * through the SWR cache.
+ */
+export function useSavedDraftCredential(
+  source: ValidSources
+): SavedDraftCredentialState {
+  const { mutate: mutateKey } = useSWRConfig();
+  const { data } = useSWR<SavedDraftCredential | null>(
+    SWR_KEYS.connectorDraftCredential(source),
+    null
+  );
+  const rememberDraft = useCallback(
+    async (credentialId: number, values: Record<string, unknown>) => {
+      await mutateKey<SavedDraftCredential>(
+        SWR_KEYS.connectorDraftCredential(source),
+        { credential_id: credentialId, sent_values: JSON.stringify(values) },
+        { revalidate: false }
+      );
+    },
+    [source, mutateKey]
+  );
+  return { savedDraft: data ?? null, rememberDraft };
+}
+
+/**
+ * Forgets the saved draft of `source` when the add-connector page mounts, so
+ * each visit saves its own. A draft left behind is deleted by the server.
+ */
+export function useResetSavedDraftCredential(source: ValidSources): void {
+  const { mutate: mutateKey } = useSWRConfig();
+  useEffect(() => {
+    void mutateKey(SWR_KEYS.connectorDraftCredential(source), undefined, {
+      revalidate: false,
+    });
+  }, [source, mutateKey]);
+}

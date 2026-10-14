@@ -90,7 +90,7 @@ docstring in `backend/ee/onyx/server/license/api.py`.
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| PATCH | `/admin/settings` | `admin_patch_settings` | Reads `global_version.is_ee_version()` to decide whether to call `ee.onyx.utils.tier.get_tier()` or default to `Tier.COMMUNITY`. Merges only the fields the caller sent (`model_fields_set`), under `settings_write_lock()`. |
+| PATCH | `/admin/settings` | `admin_patch_settings` | Resolves the tier via `tier_order.get_current_tier()` (`ee.onyx.utils.tier.get_tier()` when EE code is loaded, else `Tier.COMMUNITY`). Merges only the fields the caller sent (`model_fields_set`), under `settings_write_lock()`. |
 
 ### Feature flags
 

@@ -1,11 +1,14 @@
+from collections import defaultdict
+from collections.abc import Collection
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
-from sqlalchemy import Select, delete, exists, select, update
+from sqlalchemy import ColumnElement, Select, delete, exists, false, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
 
-from onyx.auth.permissions import get_effective_permissions
+from onyx.auth.permissions import has_permission
 from onyx.configs.constants import DocumentSource, NotificationType
 from onyx.connectors.credential_families import (
     credential_family_for_source,
@@ -16,7 +19,11 @@ from onyx.connectors.credential_families import (
     to_stored_credential_json,
 )
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
-from onyx.db.enums import ConnectorCredentialPairStatus, Permission
+from onyx.db.enums import (
+    ConnectorCredentialPairStatus,
+    Permission,
+    PermissionAuthority,
+)
 from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
@@ -29,6 +36,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
 
@@ -46,15 +54,39 @@ CREDENTIAL_PERMISSIONS_TO_IGNORE = {
 PUBLIC_CREDENTIAL_ID = 0
 
 
+class CredentialAccessLevel(str, Enum):
+    """What the caller needs to do with a credential. USE covers listing it and
+    pairing it with a connector; EDIT covers changing, sharing or deleting it."""
+
+    USE = "use"
+    EDIT = "edit"
+
+
+def _build_credential_group_access_clause(
+    user: User,  # noqa: ARG001
+) -> ColumnElement[bool]:
+    """CE has no user groups, so group sharing grants nothing.
+
+    NOTE: EE version in ee.onyx.db.credentials."""
+    return false()
+
+
 def _add_user_filters(
     stmt: Select,
     user: User,
     include_own_drafts: bool = False,
+    access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
 ) -> Select:
-    """Attaches filters to ensure the user can only access appropriate credentials.
+    """Limits ``stmt`` to the credentials the user may access.
 
-    Drafts are hidden; ``include_own_drafts`` shows the user's own, for the
-    connector form that made them."""
+    - The owner always has access.
+    - Global MANAGE_CONNECTORS holders (admins) also have access to credentials
+      with no owner or with ``admin_public``.
+    - For USE only: connector managers of a group the credential is shared
+      with (EE).
+
+    ``curator_public`` grants nothing. Drafts are hidden; ``include_own_drafts``
+    shows the user's own, for the connector form that made them."""
     if user.is_anonymous:
         raise ValueError("Anonymous users are not allowed to access credentials")
 
@@ -64,20 +96,68 @@ def _add_user_filters(
         else Credential.is_draft.is_(False)
     )
 
-    effective = get_effective_permissions(user)
+    authority = has_permission(user, Permission.MANAGE_CONNECTORS)
+    access_clauses: list[ColumnElement[bool]] = [Credential.user_id == user.id]
+    if authority is PermissionAuthority.GLOBAL:
+        access_clauses += [
+            Credential.user_id.is_(None),
+            Credential.admin_public.is_(True),
+            Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
+        ]
+    if (
+        access_level is CredentialAccessLevel.USE
+        and authority is not PermissionAuthority.NONE
+    ):
+        group_access_clause_fn = fetch_versioned_implementation(
+            "onyx.db.credentials", "_build_credential_group_access_clause"
+        )
+        access_clauses.append(group_access_clause_fn(user))
+    return stmt.where(or_(*access_clauses))
 
-    if Permission.MANAGE_CONNECTORS in effective:
-        return stmt.where(
-            or_(
-                Credential.user_id == user.id,
-                Credential.user_id.is_(None),
-                Credential.admin_public == True,  # noqa: E712
-                Credential.source.in_(CREDENTIAL_PERMISSIONS_TO_IGNORE),
-            )
+
+def validate_credential_group_ids(
+    db_session: Session,  # noqa: ARG001
+    group_ids: Collection[int],
+) -> None:
+    """CE has no user groups, so a credential cannot be shared with one.
+
+    NOTE: EE version in ee.onyx.db.credentials."""
+    if group_ids:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Sharing a credential with user groups needs the Enterprise Edition.",
         )
 
-    # All other users: only their own credentials
-    return stmt.where(Credential.user_id == user.id)
+
+def fetch_editable_credential_ids(
+    db_session: Session, user: User, credential_ids: Collection[int]
+) -> set[int]:
+    """The subset of ``credential_ids`` the user holds EDIT access on."""
+    if not credential_ids:
+        return set()
+    stmt = _add_user_filters(
+        select(Credential.id).where(Credential.id.in_(credential_ids)),
+        user,
+        include_own_drafts=True,
+        access_level=CredentialAccessLevel.EDIT,
+    )
+    return set(db_session.scalars(stmt).all())
+
+
+def fetch_credential_group_ids(
+    db_session: Session, credential_ids: Collection[int]
+) -> dict[int, list[int]]:
+    """The groups each credential is shared with, in one query."""
+    group_ids: defaultdict[int, list[int]] = defaultdict(list)
+    if not credential_ids:
+        return group_ids
+    for credential_id, group_id in db_session.execute(
+        select(Credential__UserGroup.credential_id, Credential__UserGroup.user_group_id)
+        .where(Credential__UserGroup.credential_id.in_(credential_ids))
+        .order_by(Credential__UserGroup.user_group_id)
+    ).all():
+        group_ids[credential_id].append(group_id)
+    return group_ids
 
 
 def _relate_credential_to_user_groups__no_commit(
@@ -113,6 +193,7 @@ def fetch_credential_by_id_for_user(
     user: User,
     db_session: Session,
     include_own_drafts: bool = False,
+    access_level: CredentialAccessLevel = CredentialAccessLevel.USE,
 ) -> Credential | None:
     stmt = select(Credential).distinct()
     stmt = stmt.where(Credential.id == credential_id)
@@ -120,6 +201,7 @@ def fetch_credential_by_id_for_user(
         stmt=stmt,
         user=user,
         include_own_drafts=include_own_drafts,
+        access_level=access_level,
     )
     result = db_session.execute(stmt)
     credential = result.scalar_one_or_none()
@@ -378,6 +460,37 @@ def promote_draft_credential(
     db_session.expire(credential)
 
 
+def lock_credential__no_commit(db_session: Session, credential_id: int) -> None:
+    """Row-locks the credential until the transaction ends, so concurrent
+    sharing changes run one after another."""
+    db_session.execute(
+        select(Credential.id).where(Credential.id == credential_id).with_for_update()
+    )
+
+
+def update_credential_sharing(
+    credential: Credential,
+    admin_public: bool,
+    curator_public: bool,
+    groups: list[int],
+    name: str | None,
+    db_session: Session,
+) -> None:
+    """Replaces a saved credential's sharing. Keeps the name when ``name`` is
+    None. The caller checks that the user may change it."""
+    credential.admin_public = admin_public
+    credential.curator_public = curator_public
+    if name is not None:
+        credential.name = name
+    _cleanup_credential__user_group_relationships__no_commit(db_session, credential.id)
+    _relate_credential_to_user_groups__no_commit(
+        db_session=db_session, credential_id=credential.id, user_group_ids=groups
+    )
+    db_session.commit()
+    # Expire to ensure credential_json is reloaded as SensitiveValue from DB
+    db_session.expire(credential)
+
+
 def restore_draft_credential(db_session: Session, credential_id: int) -> None:
     """Undoes ``promote_draft_credential`` after a failed connector creation,
     so the form can retry with the same draft. Leaves a credential that a
@@ -486,8 +599,9 @@ def alter_credential(
     user: User,
     db_session: Session,
 ) -> Credential | None:
-    # TODO: add user group relationship update
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(
+        credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
+    )
 
     if credential is None:
         return None
@@ -511,7 +625,6 @@ def alter_credential(
         )
     )
 
-    credential.user_id = user.id
     db_session.commit()
     # Expire to ensure credential_json is reloaded as SensitiveValue from DB
     db_session.expire(credential)
@@ -524,7 +637,9 @@ def update_credential(
     user: User,
     db_session: Session,
 ) -> Credential | None:
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(
+        credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
+    )
     if credential is None:
         return None
 
@@ -545,8 +660,6 @@ def update_credential(
             credential_data.source, credential_data.credential_json, current_stored_json
         )
     )
-    credential.user_id = user.id if user is not None else None
-
     db_session.commit()
     # Expire to ensure credential_json is reloaded as SensitiveValue from DB
     db_session.expire(credential)
@@ -559,7 +672,9 @@ def update_credential_json(
     user: User,
     db_session: Session,
 ) -> Credential | None:
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(
+        credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
+    )
     if credential is None:
         return None
 
@@ -653,7 +768,9 @@ def delete_credential_for_user(
     force: bool = False,
 ) -> None:
     """Delete a credential that belongs to a specific user"""
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    credential = fetch_credential_by_id_for_user(
+        credential_id, user, db_session, access_level=CredentialAccessLevel.EDIT
+    )
     if credential is None:
         raise OnyxError(
             OnyxErrorCode.CREDENTIAL_NOT_FOUND,

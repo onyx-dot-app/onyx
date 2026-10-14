@@ -27,13 +27,37 @@ export interface CredentialFieldOptions {
   /** The backend accepts the credential without this field. */
   optional?: boolean;
   hint?: CredentialHint;
+  /**
+   * Where the account works: its site, host or subdomain. Checks need it
+   * before anything else, so the add-connector page asks for it first, above
+   * the account, under the same key. It is a form-only field there: it stays
+   * in the credential and never goes into the connector config.
+   */
+  realm?: boolean;
+  /** For an optional field: what the backend uses when it is left blank. */
+  defaultValue?: string;
+  /**
+   * For a subdomain realm: the host after it, e.g. `.zendesk.com`, so a
+   * pasted host compares equal to the subdomain.
+   */
+  realmHostSuffix?: string;
 }
 
 interface CredentialFieldBase extends CredentialFieldOptions {
   displayName: CredentialDisplayName;
 }
 
-export type CredentialTextKind = "text" | "email" | "url" | "secret";
+/**
+ * A string field. `jsonFile` is a JSON key file (a Google service-account
+ * key): uploaded or pasted, the field holds its text, which the account
+ * stores as it is.
+ */
+export type CredentialTextKind =
+  | "text"
+  | "email"
+  | "url"
+  | "secret"
+  | "jsonFile";
 
 /** One field of a credential spec. `kind` picks how it renders. */
 export type CredentialSpecField =
@@ -52,6 +76,11 @@ export interface CredentialSpecMethod<TKey extends string = string> {
   fields: readonly TKey[];
   /** Hides the "Auto Sync Permissions" access type for this method. */
   disablePermSync?: boolean;
+  /**
+   * The method sets the account up on its own (an OAuth sign-in that saves
+   * it), so the form saves no typed account for it. It names no fields.
+   */
+  ownSetup?: boolean;
 }
 
 /** A source's credential: its fields and, optionally, its auth methods. */

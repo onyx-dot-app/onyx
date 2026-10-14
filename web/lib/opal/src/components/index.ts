@@ -91,11 +91,19 @@ export {
   type InputNumberProps,
 } from "@opal/components/inputs/input-number/components";
 
-/* InputFile */
+/* InputSingleUpload */
 export {
-  default as InputFile,
-  type InputFileProps,
-} from "@opal/components/inputs/input-file/components";
+  default as InputSingleUpload,
+  type InputSingleUploadProps,
+  type InputSingleUploadTextProps,
+  type InputSingleUploadFileProps,
+} from "@opal/components/inputs/uploads/input-single-upload/components";
+
+/* InputMultiUpload */
+export {
+  default as InputMultiUpload,
+  type InputMultiUploadProps,
+} from "@opal/components/inputs/uploads/input-multi-upload/components";
 
 /* InputList */
 export {

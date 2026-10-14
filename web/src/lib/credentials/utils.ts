@@ -1,6 +1,13 @@
 import * as Yup from "yup";
 
-import type { Credential } from "@/lib/credentials/types";
+import type {
+  Credential,
+  CredentialRef,
+  CredentialRequest,
+  CredentialValues,
+  DraftCredential,
+  SavedDraftCredential,
+} from "@/lib/credentials/types";
 import type {
   CredentialFieldValues,
   CredentialFormValues,
@@ -19,6 +26,26 @@ import type {
 } from "@/lib/credentials/types";
 import type { FileTypeCategory } from "@/lib/connectors/types/fileTypes";
 import { CREDENTIAL_SPECS } from "@/lib/credentials/constants";
+
+/**
+ * The kind of a Google credential, read from its keys: the client sees the
+ * credential JSON masked. Mirrors `google_credential_kind` in the backend.
+ */
+export function googleCredentialKind(
+  credential: CredentialValues | null
+): "service_account" | "oauth" | undefined {
+  const credentialJson = credential?.credential_json;
+  if (typeof credentialJson !== "object" || credentialJson === null) {
+    return undefined;
+  }
+  if ("google_service_account_key" in credentialJson) {
+    return "service_account";
+  }
+  if ("google_tokens" in credentialJson) {
+    return "oauth";
+  }
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Credential specs
@@ -44,6 +71,21 @@ export function getCredentialFileType(key: string): FileTypeCategory | null {
   return FILE_FIELD_TYPES.get(key) ?? null;
 }
 
+/**
+ * Whether the chosen auth method sets the account up on its own (Google
+ * Drive's OAuth sign-in), so nothing typed is saved for it.
+ */
+export function isOwnSetupMethod(
+  spec: CredentialSpec,
+  authMethod: string | undefined
+): boolean {
+  return (
+    spec.methods?.some(
+      (method) => method.value === authMethod && method.ownSetup === true
+    ) ?? false
+  );
+}
+
 /** The value a form starts a field at. */
 export function initialFieldValue(
   field: CredentialSpecField
@@ -51,6 +93,61 @@ export function initialFieldValue(
   if (field.kind === "toggle" || field.kind === "checkbox") return false;
   if (field.kind === "file" || field.optional) return null;
   return "";
+}
+
+/**
+ * The fields that say where an account works (its site, host or subdomain),
+ * in the spec's order.
+ */
+export function realmFields(
+  spec: CredentialSpec
+): [string, CredentialSpecField][] {
+  return Object.entries(spec.fields).filter(([, field]) => field.realm);
+}
+
+/**
+ * A realm as typed or stored, compared without case, scheme, a trailing slash
+ * or the field's host suffix.
+ */
+function normalizeRealm(value: string, hostSuffix?: string): string {
+  const host = value
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+    .replace(/\/+$/, "");
+  return hostSuffix && host.endsWith(hostSuffix)
+    ? host.slice(0, -hostSuffix.length)
+    : host;
+}
+
+/**
+ * Whether a saved account works with the credential-bound fields above it,
+ * such as its realm: for each one the form fills in with text, the account's
+ * value under the same key (or the realm's default when it stores none) is
+ * the same. A field the account has no value for cannot tell, so it does not
+ * restrict. The realm is form-only, so only this filter compares it.
+ */
+export function credentialMatchesBoundFields(
+  boundFieldNames: readonly string[],
+  specFields: Readonly<Record<string, CredentialSpecField>>,
+  credentialJson: Readonly<Record<string, unknown>>,
+  formValues: Readonly<Record<string, unknown>>
+): boolean {
+  return boundFieldNames.every((name) => {
+    const typed = formValues[name];
+    if (typeof typed !== "string" || typed.trim() === "") return true;
+    const field: CredentialSpecField | undefined = specFields[name];
+    const stored = credentialJson[name];
+    const accountValue =
+      typeof stored === "string" && stored.trim() !== ""
+        ? stored
+        : field?.defaultValue;
+    if (accountValue === undefined) return true;
+    return (
+      normalizeRealm(accountValue, field?.realmHostSuffix) ===
+      normalizeRealm(typed, field?.realmHostSuffix)
+    );
+  });
 }
 
 /** A method's fields, in the order the method lists them. */
@@ -122,7 +219,9 @@ function fieldSchema(
       .notRequired();
   }
   const required = (s: Yup.StringSchema) =>
-    s.min(1, messages.empty(title)).required(messages.required(title));
+    field.kind === "jsonFile"
+      ? s.required(messages.fileRequired(title))
+      : s.min(1, messages.empty(title)).required(messages.required(title));
   if (!selected) return required(base);
   return base.when(AUTHENTICATION_METHOD_KEY, {
     is: selected,
@@ -178,18 +277,35 @@ export function createEditingValidationSchema(
   return Yup.object().shape(schemaFields);
 }
 
+/**
+ * The method a stored credential uses: the one it names, else the first whose
+ * fields it holds, else the default.
+ */
+function findCredentialMethod(
+  credentialJson: Readonly<Record<string, unknown>>,
+  methods: readonly CredentialSpecMethod[],
+  storedAuthMethod: string | undefined
+): CredentialSpecMethod | undefined {
+  return (
+    methods.find((method) => method.value === storedAuthMethod) ??
+    methods.find((method) =>
+      method.fields.some((fieldKey) => fieldKey in credentialJson)
+    ) ??
+    methods[0]
+  );
+}
+
 function getAuthMethodFieldsForCredential(
   credentialJson: CredentialFieldValues,
   spec: CredentialSpec,
   methods: readonly CredentialSpecMethod[],
   storedAuthMethod: string | undefined
 ): CredentialFieldValues {
-  const selectedAuthMethod =
-    methods.find((method) => method.value === storedAuthMethod) ??
-    methods.find((method) =>
-      method.fields.some((fieldKey) => fieldKey in credentialJson)
-    ) ??
-    methods[0];
+  const selectedAuthMethod = findCredentialMethod(
+    credentialJson,
+    methods,
+    storedAuthMethod
+  );
 
   return {
     authentication_method: storedAuthMethod ?? selectedAuthMethod?.value ?? "",
@@ -202,9 +318,16 @@ function getAuthMethodFieldsForCredential(
 }
 
 function getStoredAuthMethod(
-  credentialJson: CredentialFieldValues,
+  credentialJson: Readonly<Record<string, unknown>>,
   sourceType: ValidSources
 ): string | undefined {
+  // Google stores "uploaded" for an uploaded OAuth app as well as for a
+  // service account, so its keys say which tab the account belongs to.
+  if (sourceType === ValidSources.GoogleDrive) {
+    const kind = googleCredentialKind({ credential_json: credentialJson });
+    if (kind === "service_account") return "uploaded";
+    if (kind === "oauth") return "oauth";
+  }
   const standardMethod = credentialJson[AUTHENTICATION_METHOD_KEY];
   if (typeof standardMethod === "string") {
     return standardMethod;
@@ -224,7 +347,7 @@ const OAUTH_MANAGED_CREDENTIAL_KEYS = new Set([
 ]);
 
 function isOAuthManagedCredentialJson(
-  credentialJson: CredentialFieldValues
+  credentialJson: Readonly<Record<string, unknown>>
 ): boolean {
   return Object.keys(credentialJson).some(
     (key) =>
@@ -382,4 +505,125 @@ export function getCredentialCreationActionLabel(
 
 export function shouldRedirectToOAuth(details: OAuthDetails): boolean {
   return details.additional_kwargs.length === 0;
+}
+
+/** What a saved credential shows of itself: its method and its text fields. */
+export interface CredentialDetails {
+  /** The method it uses, for a source with two or more. */
+  method: CredentialSpecMethod | null;
+  /** Its stored text fields, in the spec's order, with their values. */
+  fields: { key: string; field: CredentialSpecField; value: string }[];
+}
+
+/**
+ * The parts of a saved credential that can be shown: the method it uses and
+ * the text fields it stores. Files, toggles and an OAuth credential's tokens
+ * are left out. Values are as the server returns them, which may be masked.
+ */
+export function getCredentialDetails(
+  // A saved credential or a draft: both carry their values and source.
+  credential: {
+    credential_json: Readonly<Record<string, unknown>>;
+    source: ValidSources;
+  },
+  sourceType: ValidSources = credential.source
+): CredentialDetails {
+  const credentialJson = credential.credential_json ?? {};
+  const spec = getCredentialSpec(sourceType);
+  if (!spec || isOAuthManagedCredentialJson(credentialJson)) {
+    return { method: null, fields: [] };
+  }
+
+  const method = spec.methods
+    ? (findCredentialMethod(
+        credentialJson,
+        spec.methods,
+        getStoredAuthMethod(credentialJson, sourceType)
+      ) ?? null)
+    : null;
+  const entries = method
+    ? methodFields(spec, method)
+    : Object.entries(spec.fields);
+
+  return {
+    method,
+    fields: entries.flatMap(([key, field]) => {
+      const value = credentialJson[key];
+      if (
+        field.kind === "file" ||
+        field.kind === "jsonFile" ||
+        field.kind === "toggle" ||
+        field.kind === "checkbox" ||
+        typeof value !== "string" ||
+        value === ""
+      ) {
+        return [];
+      }
+      return [{ key, field, value }];
+    }),
+  };
+}
+
+export function isDraftCredential(
+  credential: Credential<unknown> | DraftCredential
+): credential is DraftCredential {
+  return !("id" in credential);
+}
+
+/** The request reference to a saved credential or a draft. */
+export function toCredentialRef(
+  credential: Credential<unknown> | DraftCredential | null
+): CredentialRef | null {
+  if (credential === null) return null;
+  return isDraftCredential(credential)
+    ? { credential_json: credential.credential_json }
+    : { credential_id: credential.id };
+}
+
+/**
+ * How a check run or Create names `credential`. A typed account goes by its
+ * saved draft once a run saved one, with its values only when they changed
+ * since.
+ */
+export function toCredentialRequest(
+  credential: CredentialRef,
+  savedDraft: SavedDraftCredential | null
+): CredentialRequest {
+  if ("credential_id" in credential || savedDraft === null) return credential;
+  return JSON.stringify(credential.credential_json) === savedDraft.sent_values
+    ? { credential_id: savedDraft.credential_id }
+    : {
+        credential_id: savedDraft.credential_id,
+        credential_json: credential.credential_json,
+      };
+}
+
+/**
+ * The credential a binding check may name. A binding check never sends
+ * values, so a typed account has one only while its saved draft holds its
+ * current values; `null` until a check run saves them.
+ */
+export function bindingCheckCredentialId(
+  credential: CredentialRef,
+  savedDraft: SavedDraftCredential | null
+): number | null {
+  const request = toCredentialRequest(credential, savedDraft);
+  return "credential_id" in request && request.credential_json === undefined
+    ? request.credential_id
+    : null;
+}
+
+/** A file's bytes as base64 text, as an account stores a .pfx certificate. */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    // A data URL is "data:<type>;base64,<content>"; the content follows the
+    // first comma.
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }

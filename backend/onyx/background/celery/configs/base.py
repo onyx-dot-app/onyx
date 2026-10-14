@@ -4,6 +4,7 @@ import urllib.parse
 from onyx.configs.app_configs import (
     CELERY_BROKER_POOL_LIMIT,
     CELERY_RESULT_EXPIRES,
+    EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS,
     REDIS_DB_NUMBER_CELERY,
     REDIS_DB_NUMBER_CELERY_RESULT_BACKEND,
     REDIS_HEALTH_CHECK_INTERVAL,
@@ -130,6 +131,10 @@ broker_transport_options = {
     "health_check_interval": REDIS_HEALTH_CHECK_INTERVAL,
     "socket_keepalive": True,
     "socket_keepalive_options": REDIS_SOCKET_KEEPALIVE_OPTIONS,
+    # Unacked (acks_late) tasks are redelivered after this long. A
+    # docprocessing batch can block on the embedding rate limit for up to
+    # EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS, so leave an hour for the rest.
+    "visibility_timeout": EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS + 60 * 60,
 }
 if USE_SENTINEL:
     broker_transport_options.update(_SENTINEL_TRANSPORT_OPTIONS)

@@ -6,6 +6,7 @@ import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
+import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -31,9 +32,7 @@ import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
-import { SourceMetadata } from "@/lib/search/types";
 import { FederatedConnectorDetail } from "@/lib/types";
-import { ValidSources } from "@/lib/connectors/types/source";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";

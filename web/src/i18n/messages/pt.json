@@ -1857,9 +1857,6 @@
           "restoreTooltip": "Restaurar padrão"
         },
         "description": "Especifique por quanto tempo o {appName} deve reter os chats na sua organização.",
-        "enterprisePlanTag": {
-          "label": "Plano Enterprise"
-        },
         "forever": {
           "label": "Para sempre"
         },
@@ -1875,16 +1872,11 @@
           "message": "Os chats sem atividade por mais de {days, plural, one {# dia} other {# dias}} serão excluídos permanentemente. Esta ação não pode ser desfeita.",
           "title": "Reduzir a retenção de chats?"
         },
-        "tierTooltip": "A retenção do histórico de chats é um recurso do Plano Enterprise.",
         "title": "Manter o histórico de chats"
       },
       "searchMode": {
-        "businessPlanTag": {
-          "label": "Plano Business"
-        },
         "description": "Modo de interface para pesquisa rápida de documentos em toda a sua organização.",
         "noConnectorsTooltip": "Configure conectores para usar o modo de pesquisa",
-        "tierTooltip": "O modo de pesquisa requer o plano Business ou Enterprise.",
         "title": "Modo de pesquisa"
       },
       "systemPrompt": {
@@ -2512,6 +2504,14 @@
           "vectorDbWrite": {
             "description": "Grava os chunks com embeddings no índice de documentos.",
             "label": "Gravação no banco vetorial"
+          },
+          "embeddingRateLimitWait": {
+            "label": "Espera pelo limite de embedding",
+            "description": "Tempo que as requisições de embedding esperaram pelo limite definido nas Configurações de índice. Parte de Embedding, somado entre as threads de embedding."
+          },
+          "embeddingProviderThrottleWait": {
+            "label": "Espera por limitação do provedor",
+            "description": "Tempo que as requisições de embedding esperaram depois que o provedor de embedding as limitou. Parte de Embedding, somado entre as threads de embedding."
           }
         }
       },
@@ -2634,22 +2634,28 @@
           "description": "Host do Microsoft Graph. Use https://graph.microsoft.us para GCC High ou DoD."
         }
       },
+      "linear": {
+        "description": "Configurar o conector do Linear",
+        "teams": {
+          "label": "Equipes",
+          "description": "Chaves de equipe do Linear (por ex. ENG) a indexar. Deixe vazio para indexar todas as equipes que o usuário conectado pode ver."
+        },
+        "projects": {
+          "label": "Projetos",
+          "description": "Nomes ou URLs de projetos do Linear a indexar. Deixe vazio para indexar todos os projetos. Com equipes definidas também, um issue deve corresponder a ambos."
+        },
+        "syncNotice": "Conecte-se como membro do workspace, não como convidado, que pertença a todas as equipes privadas que você quer indexar. O Onyx não vê equipes privadas das quais o usuário conectado não faz parte. Issues de equipes públicas podem ser pesquisados por todos os membros do workspace, e os de equipes privadas ou restritas, por seus membros."
+      },
       "add": {
         "authorizeButton": {
           "label": "Autorizar com {source}",
           "pendingLabel": "Autorizando..."
-        },
-        "collapseButton": {
-          "ariaLabel": "Recolher"
         },
         "connectWithTab": {
           "label": "OAuth"
         },
         "createCredentialButton": {
           "label": "Criar nova"
-        },
-        "credentialDeleted": {
-          "toast": "Credencial excluída com sucesso!"
         },
         "credentialModal": {
           "title": "Criar uma credencial do {source}"
@@ -2662,14 +2668,8 @@
           "description": "Use uma conta de serviço compartilhada. O {appName} indexa o conteúdo como esta conta.",
           "title": "Conta de autenticação"
         },
-        "credentialSwapped": {
-          "toast": "Credencial trocada com sucesso!"
-        },
         "error": {
           "toast": "Erro: {detail}"
-        },
-        "expandButton": {
-          "ariaLabel": "Expandir"
         },
         "federated": {
           "tooltip": {
@@ -2701,14 +2701,99 @@
         "retryButton": {
           "label": "Tentar novamente"
         },
-        "savedAccountsButton": {
-          "label": "{count, plural, one {# conta salva} other {# contas salvas}}"
+        "savedAccounts": {
+          "label": "{count, plural, one {# conta salva} other {# contas salvas}}",
+          "expandButton": {
+            "ariaLabel": "Mostrar contas salvas"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar contas salvas"
+          }
+        },
+        "accountSummary": {
+          "newAccountSuffix": "(Nova conta)",
+          "editButton": {
+            "label": "Editar conta"
+          }
         },
         "timeout": {
           "toast": "A operação expirou após {seconds} segundos. Verifique se há erros na sua configuração."
         },
         "unknownError": {
           "toast": "Ocorreu um erro desconhecido"
+        },
+        "account": {
+          "untitled": {
+            "label": "Sem título"
+          },
+          "sourceSuffix": "• {source}",
+          "addedOn": {
+            "label": "Adicionada em {date}"
+          },
+          "selected": {
+            "label": "Selecionada"
+          },
+          "useButton": {
+            "label": "Usar conta"
+          },
+          "unsupportedRealm": {
+            "label": "Domínio do site não compatível"
+          },
+          "expandButton": {
+            "ariaLabel": "Mostrar detalhes da conta"
+          },
+          "collapseButton": {
+            "ariaLabel": "Ocultar detalhes da conta"
+          },
+          "deleteButton": {
+            "label": "Excluir conta",
+            "inUseTooltip": "Não é possível excluir esta credencial porque há outros conectores usando-a."
+          },
+          "usedBy": {
+            "label": "Usada por {count, plural, one {# conector} other {# conectores}}"
+          },
+          "owner": {
+            "you": "{name} (você)"
+          },
+          "lastTested": {
+            "title": "Último teste {date}"
+          },
+          "notTested": {
+            "title": "Ainda não testada"
+          },
+          "details": {
+            "description": "As credenciais de uma conta salva não podem ser editadas nem redirecionadas para outro host. Você pode testar a conta antes de reutilizá-la ou adicionar uma nova conta."
+          },
+          "rerunButton": {
+            "label": "Executar verificações novamente"
+          },
+          "authenticationType": {
+            "label": "Tipo de autenticação"
+          },
+          "rerunFailed": {
+            "toast": "Não foi possível iniciar as verificações. Tente novamente."
+          },
+          "shareSaved": {
+            "toast": "Compartilhamento atualizado."
+          },
+          "shareFailed": {
+            "toast": "Não foi possível alterar quem pode usar esta conta. Tente novamente."
+          },
+          "renameSaved": {
+            "toast": "Conta renomeada."
+          },
+          "renameFailed": {
+            "toast": "Não foi possível renomear esta conta. Tente novamente."
+          },
+          "onlyMeOwnerOnly": {
+            "tooltip": "Somente quem adicionou esta conta pode torná-la privada."
+          },
+          "shareLocked": {
+            "tooltip": "Somente quem adicionou esta conta, ou um administrador com quem ela foi compartilhada, pode alterar quem pode usá-la."
+          }
+        },
+        "accountUnavailable": {
+          "toast": "Esta conta não está mais disponível para você. Escolha outra conta."
         }
       },
       "credentialRequired": {
@@ -2718,6 +2803,7 @@
         "enterField": "Insira o campo \"{field}\".",
         "fixField": "Verifique o campo \"{field}\".",
         "awaitingCheck": "Saia do campo para verificá-lo com a credencial.",
+        "runChecks": "Execute as verificações para verificar a nova conta com estas configurações.",
         "checking": "Verificando a credencial…",
         "fieldInvalid": "Verifique o campo \"{field}\": {detail}",
         "rejected": "Esta credencial não pode ser usada com estas configurações. {detail}"
@@ -2731,10 +2817,6 @@
         }
       },
       "gdrive": {
-        "authComplete": {
-          "description": "Sua credencial do Google Drive foi criada. Gerencie ou revogue essa credencial na lista de credenciais.",
-          "title": "Autenticação concluída"
-        },
         "authFailed": {
           "toast": "Falha na autenticação com o Google Drive - {error}"
         },
@@ -2742,51 +2824,12 @@
           "label": "Autenticar com o Google Drive",
           "pendingLabel": "Autenticando..."
         },
-        "createButton": {
-          "label": "Criar credencial",
-          "pendingLabel": "Criando..."
-        },
-        "credentialsLoadError": {
-          "title": "Falha ao carregar as credenciais do Google Drive."
-        },
-        "invalidFile": {
-          "toast": "Arquivo inválido - {error}"
-        },
-        "invalidServiceAccountFile": {
-          "toast": "Arquivo inválido - era esperada uma chave JSON de conta de serviço"
-        },
-        "missingServiceAccountKey": {
-          "toast": "Envie uma chave de conta de serviço antes de criar uma credencial"
-        },
         "oauthOption": {
           "description": "Envie o JSON do app OAuth do Google Cloud Console ([instruções de configuração]({docsUrl})) e depois autentique com a conta Google cujo Drive você quer indexar.",
-          "title": "Opção 1: app OAuth",
           "sharedScopesNote": "O Google solicita acesso ao Google Drive e ao Gmail juntos, para que uma conta atenda aos dois conectores. Para usar esta conta apenas com o Google Drive, desmarque os escopos do Gmail na tela de consentimento ([por que pedimos]({docsUrl}))."
         },
         "oauthUpload": {
           "placeholder": "Envie ou cole o JSON do seu app OAuth"
-        },
-        "primaryAdmin": {
-          "description": "Digite o e-mail de um administrador ou proprietário da organização Google que é dona dos Google Drives que você quer indexar.",
-          "invalidEmail": "Precisa ser um e-mail válido",
-          "label": "E-mail do administrador principal",
-          "placeholder": "admin@suaempresa.com",
-          "required": "Obrigatório"
-        },
-        "section": {
-          "title": "Autenticação do Google Drive"
-        },
-        "serviceAccountCreateFailed": {
-          "toast": "Falha ao criar a credencial de conta de serviço - {error}"
-        },
-        "serviceAccountCreated": {
-          "toast": "Credencial de conta de serviço criada com sucesso"
-        },
-        "serviceAccountOption": {
-          "title": "Opção 2: conta de serviço"
-        },
-        "serviceAccountUpload": {
-          "placeholder": "Envie ou cole a chave JSON da sua conta de serviço"
         }
       },
       "gmail": {
@@ -3056,6 +3099,9 @@
           "title": "Acesso de gerenciamento do conector"
         },
         "title": "Configurações do conector"
+      },
+      "optionsListInput": {
+        "placeholder": "Escolha {label} na lista ou digite"
       }
     },
     "costOverrides": {
@@ -3321,6 +3367,10 @@
         "accountEmailField": {
           "subDescription": "Use o e-mail da conta dona do token de API."
         },
+        "nameField": {
+          "title": "Nome de exibição",
+          "placeholder": "Dê um nome à sua conta de autenticação"
+        },
         "apiTokenField": {
           "subDescription": "Cole seu token de API para acessar {source}."
         },
@@ -3425,7 +3475,9 @@
         "isSandbox": "Ambiente de sandbox",
         "serviceUserEmail": "E-mail do usuário de serviço",
         "zuliprcContent": "Conteúdo do Zuliprc",
-        "authenticationMethod": "Método de autenticação"
+        "authenticationMethod": "Método de autenticação",
+        "primaryAdminEmail": "E-mail do administrador principal",
+        "serviceAccountKey": "Chave da conta de serviço"
       },
       "hints": {
         "boxUserEmail": "Opcional. O usuário do Box a ser representado.",
@@ -3434,8 +3486,9 @@
         "jiraUserEmail": "Obrigatório para o Jira Cloud.",
         "lumappsServiceUser": "O usuário em nome do qual indexar.",
         "outlineBaseUrl": "Por exemplo, https://app.getoutline.com ou a URL da sua instância própria.",
-        "pfxFile": "Um arquivo PFX.",
-        "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io."
+        "pfxFile": "Envie o arquivo `.pfx` com a chave privada do registro do aplicativo. Deve ter menos de 10 KB.",
+        "testrailBaseUrl": "Por exemplo, https://yourcompany.testrail.io.",
+        "googleServiceAccountKey": "Envie ou cole a chave `.json` de uma conta de serviço do Google com delegação em todo o domínio."
       },
       "methods": {
         "labels": {
@@ -3444,7 +3497,9 @@
           "certificate": "Certificado",
           "accessKeyAndSecret": "Chave de acesso e segredo",
           "iamRole": "Função do IAM",
-          "assumeRole": "Assumir função"
+          "assumeRole": "Assumir função",
+          "serviceAccount": "Conta de serviço",
+          "oauth": "OAuth"
         },
         "descriptions": {
           "sharepointClientSecret": "Neste modo, o conector do SharePoint usa um segredo do cliente para se autenticar. Você precisa informar o ID do cliente e o segredo do cliente.",
@@ -4426,6 +4481,7 @@
           "tooltip": "Os embeddings dos documentos estão sendo atualizados por causa de alterações recentes neste grupo."
         },
         "systemGroup": {
+          "basicDescription": "O {appName} gerencia este grupo. Ele contém apenas membros, e as permissões abaixo se aplicam a todos eles.",
           "description": "O {appName} gerencia este grupo. Ele contém apenas membros, e isso é a única coisa que você pode alterar.",
           "title": "Grupo do sistema"
         },
@@ -5166,6 +5222,10 @@
         "orSeparator": {
           "label": "ou"
         },
+        "quantizationOnly": {
+          "description": "Somente a quantização de vetores mudou, então o Onyx reconstrói o índice a partir dos vetores armazenados, sem gerar embeddings novamente. Isso é muito mais rápido do que uma reindexação completa.",
+          "title": "O índice será reconstruído."
+        },
         "reindex": {
           "description": "A reindexação pode levar *horas ou dias* dependendo do tamanho do corpus. [Saiba mais](https://docs.onyx.app/security/architecture/data_flows)",
           "title": "Uma reindexação completa será executada."
@@ -5386,7 +5446,9 @@
         "cancelButton": {
           "label": "Cancelar reindexação e reverter"
         },
+        "copyTitle": "Reconstruindo o índice…",
         "description": {
+          "copy": "O Onyx está reconstruindo o índice a partir dos vetores armazenados, sem gerar embeddings novamente. Isso é muito mais rápido do que gerar os embeddings de novo.",
           "withModel": "As novas configurações de embedding (**{model}**) são aplicadas conforme a reindexação avança. Isso pode levar **horas ou dias** dependendo do tamanho do corpus.",
           "withoutModel": "As novas configurações de embedding são aplicadas conforme a reindexação avança. Isso pode levar **horas ou dias** dependendo do tamanho do corpus."
         },
@@ -5508,17 +5570,17 @@
         "googleProjectRequired": "O ID do projeto GCP é obrigatório"
       },
       "vectorQuantization": {
-        "description": "Armazene os vetores dos documentos com menos bits para usar menos memória. Menos bits podem reduzir a qualidade da pesquisa.",
+        "description": "Armazene os vetores dos documentos com menos bits para que a pesquisa vetorial use menos memória. Menos bits podem reduzir a qualidade da pesquisa. Se você alterar apenas esta configuração, o índice será reconstruído a partir dos vetores armazenados, sem gerar embeddings novamente.",
         "none": {
           "description": "Precisão completa de 32 bits.",
           "label": "Nenhuma"
         },
         "scalar1Bit": {
-          "description": "32 vezes menos memória. Requer OpenSearch 3.6 ou posterior.",
+          "description": "O menor uso de memória para a pesquisa vetorial, com uma pequena perda na qualidade da pesquisa. Recomendado para índices grandes. Requer OpenSearch 3.6 ou posterior.",
           "label": "1 bit"
         },
         "scalar7Bit": {
-          "description": "4 vezes menos memória. Quase nenhuma perda na qualidade da pesquisa.",
+          "description": "Cerca de 4 vezes menos memória para a pesquisa vetorial. Quase nenhuma perda na qualidade da pesquisa.",
           "label": "7 bits"
         },
         "title": "Quantização de vetores"
@@ -5552,6 +5614,85 @@
         "e5SmallV2": "A versão menor e mais rápida da linha de modelos E5. Se você executa o {appName} em um sistema com recursos limitados, pode ser uma boa escolha.",
         "multilingualE5Base": "Para corpora em outros idiomas além do inglês, esta é a escolha certa.",
         "multilingualE5Small": "Para corpora em outros idiomas além do inglês em um sistema com recursos limitados, esta é a escolha certa."
+      },
+      "ccPairIdsBackfill": {
+        "complete": {
+          "description": {
+            "enforce": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa o acesso por conector.",
+            "off": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos. O acesso por conector está desativado.",
+            "shadow": "Todos os fragmentos do índice de pesquisa têm seus IDs de conector. A pesquisa usa as listas de acesso dos documentos e as compara com o acesso por conector."
+          },
+          "title": "Atualização do acesso por conector concluída"
+        },
+        "notStarted": {
+          "description": "Um trabalho em segundo plano adicionará os IDs de conector aos fragmentos existentes do índice de pesquisa. Ele começa em alguns minutos.",
+          "title": "A atualização do acesso por conector ainda não começou"
+        },
+        "progress": {
+          "ariaLabel": "Progresso da atualização do acesso por conector"
+        },
+        "running": {
+          "description": "Um trabalho em segundo plano adiciona os IDs de conector aos fragmentos existentes do índice de pesquisa. O acesso de pesquisa por conector só pode ser aplicado depois que ele terminar.",
+          "title": "Atualizando o índice de pesquisa para o acesso por conector…"
+        },
+        "status": {
+          "connectors": "{done, number} de {total, number} conectores concluídos",
+          "connectorsLeft": "{count, plural, one {# conector restante} other {# conectores restantes}}",
+          "current": "Conector atual: {name}",
+          "documentsLeft": "{count, plural, one {# documento restante} other {# documentos restantes}}"
+        },
+        "mode": {
+          "description": "Como a pesquisa decide quais documentos um usuário pode ver.",
+          "enforcePending": "Aplicar está definido e começa quando a atualização terminar.",
+          "enforceUnavailable": "Disponível depois que a atualização do índice de pesquisa terminar.",
+          "label": "Modo de acesso à pesquisa",
+          "options": {
+            "enforce": {
+              "description": "A pesquisa usa o acesso por conector.",
+              "title": "Aplicar"
+            },
+            "off": {
+              "description": "A pesquisa usa as listas de acesso dos documentos.",
+              "title": "Desativado"
+            },
+            "shadow": {
+              "description": "A pesquisa usa as listas de acesso dos documentos e registra onde o acesso por conector dá um resultado diferente.",
+              "title": "Sombra"
+            }
+          },
+          "placeholder": "Selecione um modo",
+          "toasts": {
+            "error": "Não foi possível atualizar o modo de acesso à pesquisa.",
+            "success": "Modo de acesso à pesquisa definido como {mode}."
+          }
+        },
+        "loadError": {
+          "description": "Recarregue a página para tentar novamente.",
+          "title": "Não foi possível carregar a atualização do acesso por conector"
+        }
+      },
+      "embeddingRateLimit": {
+        "title": "Limite de requisições de embedding",
+        "description": "Limita quantas requisições de embedding a indexação envia em uma janela de tempo, entre todos os workers de indexação. No limite, a indexação espera e tenta novamente em vez de falhar, então os workers pegam menos trabalho novo. Um lote só falha se esperar demais. Consultas de pesquisa não têm limite.",
+        "requests": {
+          "title": "Requisições por janela",
+          "description": "Deixe vazio para não ter limite.",
+          "placeholder": "Sem limite"
+        },
+        "period": {
+          "title": "Duração da janela",
+          "description": "Por exemplo, 60 para um limite por minuto.",
+          "suffix": "(segundos)"
+        },
+        "restoreDefault": "Restaurar padrão",
+        "validation": {
+          "requests": "Insira um número inteiro de 1 a {max, number}, ou deixe o campo vazio para não ter limite.",
+          "period": "Insira um número inteiro de segundos de 1 a {max, number}."
+        },
+        "toasts": {
+          "saved": "Limite salvo.",
+          "failed": "Não foi possível salvar o limite."
+        }
       }
     },
     "indexing": {
@@ -8928,9 +9069,6 @@
           "description": "Quando desativado, todos os endpoints do gateway rejeitam solicitações, os tokens existentes param de funcionar e o escopo do gateway fica oculto no seletor de tokens. O tráfego do sandbox do Craft é controlado separadamente nas configurações do Craft."
         }
       },
-      "businessPlanTag": {
-        "label": "Plano Business"
-      },
       "tierTooltip": "O LLM Gateway requer o plano Business ou Enterprise.",
       "scopeNote": {
         "title": "Cada usuário configura seu próprio token e os dados de conexão em Configurações → LLM Gateway."
@@ -8970,17 +9108,11 @@
       "required": {
         "label": "Obrigatória"
       },
-      "running": {
-        "label": "Executando verificações…"
-      },
       "empty": {
         "label": "Nenhuma verificação foi executada ainda."
       },
       "docsLink": {
         "label": "Documentação"
-      },
-      "rerunButton": {
-        "label": "Executar as verificações novamente"
       },
       "foldButton": {
         "fold": "Recolher",
@@ -8998,8 +9130,236 @@
       "failedToRun": "Não foi possível executar as verificações. Tente novamente.",
       "requiredFailed": "{count, plural, one {# verificação obrigatória falhou} other {# verificações obrigatórias falharam}}",
       "state": {
-        "completed": "Verificações concluídas",
-        "inProgress": "Verificações em andamento…"
+        "completed": "Verificações concluídas.",
+        "inProgress": "Verificações em andamento...",
+        "waiting": "Aguardando as configurações do conector..."
+      }
+    },
+    "connectorEdit": {
+      "editButton": {
+        "label": "Editar conector"
+      },
+      "header": {
+        "title": "Editar {name}",
+        "description": "Altere as configurações deste conector do {source}. Você revisa o plano antes de aplicar as alterações.",
+        "reviewButton": {
+          "label": "Revisar alterações"
+        }
+      },
+      "loadError": {
+        "title": "Não foi possível carregar o conector",
+        "description": "Recarregue a página ou volte ao conector.",
+        "backButton": {
+          "label": "Voltar ao conector"
+        }
+      },
+      "credentialSwap": {
+        "title": "Você escolheu outra credencial",
+        "description": "O plano permite manter os documentos indexados, ou reindexar tudo e remover os documentos que a nova credencial não consegue ver."
+      },
+      "files": {
+        "title": "Arquivos",
+        "description": "Adicione ou remova arquivos. Os novos arquivos são indexados somente depois que você aplica o plano.",
+        "empty": "O conector não tem arquivos.",
+        "addButton": {
+          "label": "Adicionar arquivos"
+        },
+        "remove": {
+          "tooltip": "Remover {name}"
+        },
+        "uploadFailed": {
+          "toast": "Não foi possível enviar os arquivos: {detail}"
+        }
+      },
+      "planFailed": {
+        "toast": "Não foi possível calcular o plano: {detail}"
+      },
+      "typedAccount": {
+        "toast": "Salve a nova conta antes de revisar as alterações ou escolha uma conta salva."
+      },
+      "applied": {
+        "toast": "As alterações foram aplicadas."
+      },
+      "plan": {
+        "title": "Revisar o plano",
+        "description": "{count, plural, one {O conector tem # documento indexado.} other {O conector tem # documentos indexados.}}",
+        "changes": {
+          "list": "Alterado: {fields}",
+          "none": "Nada mudou."
+        },
+        "stale": {
+          "title": "O conector mudou",
+          "description": "O conector mudou depois que este plano foi calculado. Calcule o plano novamente antes de aplicar.",
+          "replanButton": {
+            "label": "Planejar novamente"
+          }
+        },
+        "expired": {
+          "title": "O plano expirou",
+          "description": "Este plano expirou ou já foi aplicado. Calcule o plano novamente."
+        },
+        "applyFailed": {
+          "title": "Não foi possível aplicar as alterações"
+        },
+        "validation": {
+          "title": "Validação",
+          "blocks": "As novas configurações falharam na validação. Corrija-as antes de aplicar.",
+          "warns": "Algumas verificações opcionais falharam. Você ainda pode aplicar.",
+          "error": {
+            "title": "As configurações não são válidas"
+          }
+        },
+        "warnings": {
+          "title": "Avisos"
+        },
+        "notes": {
+          "title": "Observações"
+        },
+        "reconciliation": {
+          "title": "Escolha como conciliar a mudança de escopo",
+          "description": "O plano não consegue saber se a alteração em {fields} adiciona ou remove documentos. Escolha o que a aplicação faz.",
+          "option": {
+            "prune": {
+              "title": "Remover",
+              "description": "Remover os documentos que não estão mais no escopo."
+            },
+            "full_reindex": {
+              "title": "Reindexação completa",
+              "description": "Indexar tudo novamente desde a data de início para adicionar os documentos que agora estão no escopo."
+            },
+            "both": {
+              "title": "Reindexação completa e depois remoção",
+              "description": "Indexar tudo novamente e depois remover os documentos que não estão mais no escopo."
+            },
+            "nothing": {
+              "title": "Não fazer nada",
+              "description": "Manter os documentos indexados. As próximas execuções usam as novas configurações."
+            }
+          }
+        },
+        "credential": {
+          "title": "Alteração de credencial",
+          "description": "Escolha o que acontece com os documentos indexados com a credencial antiga.",
+          "option": {
+            "keep_indexed": {
+              "title": "Manter os documentos indexados",
+              "description": "As próximas execuções usam a nova credencial. Este é o caminho rápido."
+            },
+            "full_reindex_and_prune": {
+              "title": "Reindexação completa e remoção",
+              "description": "Indexar tudo novamente com a nova credencial e depois remover os documentos que ela não consegue ver."
+            }
+          }
+        },
+        "steps": {
+          "title": "Etapas",
+          "description": "O que a aplicação faz, em ordem. Você pode desativar as etapas opcionais.",
+          "none": "A aplicação salva as configurações. Nenhuma indexação é necessária.",
+          "required": {
+            "label": "Obrigatória"
+          },
+          "optional": {
+            "label": "Opcional"
+          },
+          "include": {
+            "ariaLabel": "Executar a etapa: {step}"
+          },
+          "fields": "Campos: {fields}",
+          "window": "Janela: de {start} a {end}",
+          "windowFromStart": "Janela: tudo até {end}",
+          "kind": {
+            "access_groups": {
+              "title": "Atualizar os grupos de acesso a dados",
+              "description": "A pesquisa aplica os novos grupos imediatamente."
+            },
+            "access_type": {
+              "title": "Alterar o tipo de acesso",
+              "description": "Muda quem pode ler os documentos."
+            },
+            "enter_perm_sync": {
+              "title": "Iniciar a sincronização de permissões",
+              "description": "Os documentos ficam ocultos até a primeira sincronização de permissões terminar."
+            },
+            "leave_perm_sync": {
+              "title": "Parar a sincronização de permissões",
+              "description": "As permissões da origem não decidem mais quem lê os documentos."
+            },
+            "restart_attempt": {
+              "title": "Reiniciar a tentativa de indexação em andamento",
+              "description": "A tentativa em andamento para, e uma nova começa com as novas configurações."
+            },
+            "full_reindex_then_prune": {
+              "title": "Reindexação completa e depois remoção",
+              "description": "Indexar tudo novamente e depois remover os documentos que a origem não retorna mais."
+            },
+            "full_reindex": {
+              "title": "Reindexação completa",
+              "description": "Indexar tudo novamente desde a data de início."
+            },
+            "scoped_backfill": {
+              "title": "Preencher os itens adicionados",
+              "description": "Indexar somente o histórico dos itens adicionados."
+            },
+            "window_backfill": {
+              "title": "Preencher a janela anterior",
+              "description": "Indexar o período entre a nova e a antiga data de início."
+            },
+            "prune": {
+              "title": "Remover",
+              "description": "Remover os documentos que a origem não retorna mais."
+            }
+          },
+          "reason": {
+            "identity_changed": "Os IDs dos documentos mudam",
+            "behavior_changed": "O processamento mudou",
+            "scope_widened": "Escopo ampliado",
+            "scope_narrowed": "Escopo reduzido",
+            "items_added_or_changed": "Itens adicionados ou alterados",
+            "items_removed": "Itens removidos",
+            "opaque_scope_choice": "Sua escolha de escopo",
+            "indexing_start_earlier": "Data de início anterior",
+            "credential_full_path": "Caminho completo da credencial",
+            "access_changed": "O acesso mudou",
+            "permissions_fetched_during_indexing": "As permissões vêm com a indexação",
+            "attempt_running": "Uma tentativa está em andamento",
+            "scoped_backfill_superseded": "Um preenchimento anterior é substituído",
+            "admin_added": "Adicionado por você",
+            "indexing_start_later": "Data de início posterior"
+          }
+        },
+        "extra": {
+          "title": "Trabalho extra",
+          "description": "Adicione trabalho de que o plano não precisa.",
+          "fullReindex": {
+            "title": "Adicionar uma reindexação completa",
+            "description": "Indexar tudo novamente desde a data de início."
+          },
+          "prune": {
+            "title": "Adicionar uma remoção",
+            "description": "Remover os documentos que a origem não retorna mais."
+          }
+        },
+        "backButton": {
+          "label": "Voltar à edição"
+        },
+        "applyButton": {
+          "label": "Aplicar"
+        },
+        "blocked": {
+          "validation": "Corrija primeiro as falhas de validação.",
+          "reconciliation": "Escolha primeiro como conciliar a mudança de escopo."
+        }
+      },
+      "pendingBackfills": {
+        "title": "Preenchimentos pendentes",
+        "description": "Uma edição solicitou estas execuções. Cada uma fica aqui até uma execução ser bem-sucedida.",
+        "window": "De {start} a {end}",
+        "windowFromStart": "Tudo até {end}",
+        "waiting": "Aguardando a execução.",
+        "runningNow": "Uma tentativa de indexação o executa agora.",
+        "retry": "{count, plural, one {Falhou uma vez. Próxima tentativa: {time}.} other {Falhou # vezes. Próxima tentativa: {time}.}}",
+        "scoped": "Apenas itens adicionados ou alterados",
+        "failures": "{count, plural, one {# falha} other {# falhas}}"
       }
     }
   },
@@ -11500,12 +11860,6 @@
     }
   },
   "common": {
-    "fileDropzoneField": {
-      "chooseButton": {
-        "label": "{multiple, select, true {Escolher arquivos} other {Escolher um arquivo}}"
-      },
-      "prompt": "{multiple, select, true {Ou arraste e solte arquivos aqui.} other {Ou arraste e solte um arquivo aqui.}}"
-    },
     "textListField": {
       "addButton": {
         "label": "Adicionar novo"
@@ -12023,6 +12377,24 @@
         "empty": "Esta folha está vazia.",
         "tooLarge": "Esta folha é grande demais para a pré-visualização. Baixe o arquivo para visualizá-la."
       }
+    },
+    "plans": {
+      "free": {
+        "title": "Plano gratuito",
+        "tooltip": "Disponível em todos os planos."
+      },
+      "business": {
+        "title": "Plano Business",
+        "tooltip": "Requer o [plano Business ou Enterprise](/admin/billing)."
+      },
+      "enterprise": {
+        "title": "Plano Enterprise",
+        "tooltip": "Requer o [plano Enterprise](/admin/billing)."
+      },
+      "upgrade": {
+        "label": "Fazer upgrade do plano"
+      },
+      "availableFor": "Disponível no {plan}"
     }
   },
   "craft": {
@@ -12366,6 +12738,17 @@
         "operationWait": "Aguarde a conclusão da operação atual.",
         "sandboxWait": "Aguarde a inicialização do sandbox",
         "scheduledRunWait": "Aguarde a conclusão da execução agendada."
+      },
+      "loadError": {
+        "title": "Não foi possível carregar a sessão",
+        "retry": "Tentar novamente"
+      },
+      "queuedSendError": {
+        "title": "Não foi possível enviar a mensagem na fila"
+      },
+      "settlementError": {
+        "title": "Não foi possível confirmar a conclusão da tarefa",
+        "description": "Tente novamente para verificar a tarefa e carregar a resposta salva."
       }
     },
     "compaction": {
@@ -12376,22 +12759,6 @@
     "connectDataBanner": {
       "cta": {
         "label": "Conecte seus dados"
-      }
-    },
-    "craftingLoader": {
-      "messages": {
-        "craftingWorkspace": "Criando seu espaço de trabalho...",
-        "enchanting": "Encantando com magia...",
-        "gamemode": "/gamemode 1",
-        "gatheringResources": "Coletando recursos...",
-        "miningDependencies": "Minerando dependências...",
-        "placingBlocks": "Colocando blocos...",
-        "punchingWood": "Socando madeira...",
-        "smeltingCode": "Fundindo o código...",
-        "worldGenerated": "Geração do mundo concluída..."
-      },
-      "tagline": {
-        "label": "Criando sua próxima grande ideia..."
       }
     },
     "debugLogs": {
@@ -12483,6 +12850,12 @@
       "csv": {
         "truncated": "Prévia limitada a {rows, number} linhas, {columns, number} colunas e {cells, number} células. Baixe o original para todos os dados.",
         "malformed": "Este CSV contém um campo entre aspas inválido. Baixe o original para verificá-lo."
+      },
+      "imageTooLarge": {
+        "description": "Esta imagem é muito grande para a prévia. Baixe o original para abri-la."
+      },
+      "unsupported": {
+        "description": "Não é possível visualizar este arquivo. Baixe o original para abri-lo."
       }
     },
     "filesTab": {
@@ -12499,9 +12872,37 @@
       "preparing": {
         "description": "Configurando seu ambiente de desenvolvimento",
         "title": "Preparando sandbox..."
+      },
+      "download": {
+        "label": "Baixar"
+      },
+      "partial": {
+        "label": "Não foi possível carregar algumas pastas. Atualize para tentar novamente."
+      },
+      "noMatches": {
+        "label": "Nenhum arquivo correspondente"
+      },
+      "previousPage": {
+        "label": "Página anterior"
+      },
+      "nextPage": {
+        "label": "Próxima página"
+      },
+      "page": {
+        "label": "Página {page} de {total}"
+      },
+      "upload": {
+        "label": "Enviar arquivos",
+        "error": "Não foi possível enviar os arquivos. Tente novamente."
+      },
+      "emptyDirectory": {
+        "label": "Não há arquivos neste diretório"
       }
     },
     "imagePreview": {
+      "background": {
+        "contrast": "Fundo de contraste"
+      },
       "error": {
         "description": "Não foi possível exibir a imagem",
         "title": "Falha ao carregar a imagem"
@@ -12511,9 +12912,6 @@
       },
       "preview": {
         "ariaLabel": "Pré-visualização de {name}"
-      },
-      "background": {
-        "contrast": "Fundo de contraste"
       }
     },
     "inputBar": {
@@ -12671,6 +13069,28 @@
       }
     },
     "pdfPreview": {
+      "controls": {
+        "label": "Controles de PDF"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar ou ocultar miniaturas",
+        "resize": "Redimensionar miniaturas das páginas",
+        "label": "Miniaturas das páginas"
+      },
+      "page": {
+        "previous": "Página anterior",
+        "next": "Próxima página",
+        "counter": "{current} / {total}",
+        "preview": "Prévia da página {page}",
+        "select": "Ir para a página {page}"
+      },
+      "zoom": {
+        "out": "Diminuir zoom",
+        "in": "Aumentar zoom",
+        "label": "Zoom",
+        "fitWidth": "Ajustar à largura",
+        "fitPage": "Ajustar à página"
+      },
       "error": {
         "description": "Não foi possível carregar o arquivo PDF.",
         "title": "Não é possível visualizar o PDF"
@@ -12683,6 +13103,15 @@
       }
     },
     "pptxPreview": {
+      "controls": {
+        "label": "Controles da apresentação"
+      },
+      "thumbnails": {
+        "toggle": "Mostrar ou ocultar miniaturas dos slides"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionar miniaturas dos slides"
+      },
       "slides": {
         "label": "Slides"
       },
@@ -12693,7 +13122,7 @@
         "label": "Próximo slide"
       },
       "converting": {
-        "label": "Convertendo apresentação..."
+        "label": "Preparando a prévia..."
       },
       "empty": {
         "label": "Esta apresentação não tem slides"
@@ -12706,9 +13135,6 @@
       },
       "slide": {
         "counter": "Slide {current} de {total}"
-      },
-      "resize": {
-        "ariaLabel": "Redimensionar miniaturas dos slides"
       }
     },
     "previewTab": {
@@ -13142,7 +13568,8 @@
         "ariaLabel": "Copiar URL: {url}"
       },
       "downloadFile": {
-        "tooltip": "Baixar arquivo"
+        "tooltip": "Baixar arquivo",
+        "label": "Baixar"
       },
       "export": {
         "button": "Exportar para .docx",
@@ -13212,6 +13639,170 @@
     "welcome": {
       "input": {
         "placeholder": "Analise meus dados e crie um painel..."
+      }
+    },
+    "resourceTabs": {
+      "files": {
+        "label": "Todos os arquivos"
+      },
+      "browser": {
+        "label": "Apps"
+      },
+      "list": {
+        "label": "Abas de resultados"
+      },
+      "close": {
+        "label": "Fechar {name}"
+      },
+      "reordered": {
+        "label": "Aba movida para a posição {position} de {count}"
+      },
+      "open": {
+        "label": "Abrir uma aba"
+      },
+      "outputs": {
+        "label": "Resultados"
+      }
+    },
+    "browserTab": {
+      "localApp": {
+        "label": "Visualize seu app"
+      },
+      "home": {
+        "title": "Apps",
+        "action": "Apps"
+      },
+      "checking": {
+        "label": "Verificando aplicativos web"
+      },
+      "failed": {
+        "description": "Não foi possível verificar os aplicativos web locais. Recarregue para tentar novamente."
+      },
+      "unavailable": {
+        "description": "O aplicativo web está indisponível. Restaure o ambiente isolado ou recarregue para tentar novamente.",
+        "label": "Indisponível"
+      },
+      "empty": {
+        "title": "Nenhum aplicativo web disponível",
+        "description": "Os aplicativos locais aparecem aqui quando estão em execução."
+      },
+      "starting": {
+        "label": "Iniciando aplicativo web"
+      },
+      "loading": {
+        "label": "Carregando aplicativo web"
+      }
+    },
+    "outputWorkspace": {
+      "open": {
+        "ariaLabel": "Abrir resultados"
+      },
+      "close": {
+        "ariaLabel": "Fechar resultados"
+      },
+      "expand": {
+        "ariaLabel": "Expandir resultados"
+      },
+      "restore": {
+        "ariaLabel": "Restaurar resultados"
+      },
+      "resize": {
+        "ariaLabel": "Redimensionar resultados"
+      },
+      "files": {
+        "search": {
+          "placeholder": "Buscar arquivos"
+        },
+        "location": {
+          "label": "Todos os arquivos do seu ambiente"
+        }
+      },
+      "browser": {
+        "placeholder": "Aplicativos web no seu sandbox"
+      },
+      "reload": {
+        "file": "Recarregar arquivo",
+        "files": "Atualizar arquivos",
+        "browser": "Atualizar aplicativos web",
+        "unavailable": "Restaure o ambiente isolado para atualizar"
+      },
+      "export": {
+        "failed": "Não foi possível exportar este arquivo. Tente novamente."
+      },
+      "empty": {
+        "title": "Escolha uma visualização do espaço de trabalho"
+      },
+      "status": {
+        "provisioning": "Inicializando ambiente isolado",
+        "running": "Ambiente isolado em execução",
+        "sleeping": "Ambiente isolado em repouso",
+        "restoring": "Restaurando sessão",
+        "terminated": "Ambiente isolado encerrado",
+        "failed": "Falha no ambiente isolado",
+        "ready": "Ambiente isolado pronto",
+        "loading": "Buscando ambiente isolado"
+      }
+    },
+    "outputsTab": {
+      "markAllViewed": {
+        "label": "Marcar todos como vistos",
+        "error": "Não foi possível marcar os resultados como vistos. Tente novamente."
+      },
+      "home": {
+        "description": "Arquivos criados pelo seu agente"
+      },
+      "empty": {
+        "description": "Os arquivos criados pelo seu agente aparecerão aqui."
+      },
+      "loading": {
+        "label": "Carregando resultados…"
+      },
+      "unavailable": {
+        "description": "Os resultados aparecerão quando seu ambiente estiver pronto."
+      },
+      "error": {
+        "description": "Não foi possível atualizar os resultados. Tente novamente."
+      },
+      "incomplete": {
+        "description": "Não foi possível carregar alguns resultados."
+      },
+      "filter": {
+        "label": "Tipo de arquivo",
+        "all": "Todos",
+        "folders": "Pastas",
+        "noExtension": "Sem extensão"
+      },
+      "folders": {
+        "ariaLabel": "Pastas de resultados",
+        "root": "Resultados"
+      },
+      "filtered": {
+        "empty": "Nenhum resultado correspondente"
+      },
+      "search": {
+        "placeholder": "Pesquisar resultados"
+      },
+      "scope": {
+        "turn": "Resultados do turno {turn, number}",
+        "all": "Todos os resultados"
+      },
+      "unseen": "Novo ou atualizado"
+    },
+    "turnOutputs": {
+      "showAll": "Ver todos os {count} resultados",
+      "app": "Aplicativo",
+      "unavailable": "Não está mais disponível",
+      "appTitle": "Prévia do seu aplicativo"
+    },
+    "upgrade": {
+      "title": "O Craft requer um plano Business",
+      "adminDescription": "O Craft está disponível nos planos Business e Enterprise. Ele não é compatível com a Community Edition até que o Craft seja integrado ao chat principal.",
+      "userDescription": "O Craft está disponível nos planos Business e Enterprise. Peça ao seu administrador para fazer o upgrade e usar o Craft.",
+      "backToChat": {
+        "label": "Voltar ao chat"
+      },
+      "viewPlans": {
+        "label": "Ver planos"
       }
     }
   },
@@ -13552,8 +14143,19 @@
       "year": "Ano"
     },
     "inputFile": {
-      "attachFile": "Anexar arquivo",
       "clearFile": "Limpar arquivo"
+    },
+    "inputMultiUpload": {
+      "placeholder": "Adicionar arquivos…",
+      "dropToAdd": "Solte os arquivos aqui para adicionar",
+      "dropToAddMore": "Solte aqui para adicionar mais arquivos"
+    },
+    "inputUpload": {
+      "placeholder": "Adicionar um arquivo…",
+      "pasted": "Texto colado",
+      "attached": "Arquivo anexado",
+      "dropToAdd": "Solte o arquivo aqui para adicionar",
+      "dropToReplace": "Solte aqui para substituir o arquivo"
     },
     "inputImage": {
       "alt": "Imagem",
@@ -14243,7 +14845,8 @@
         "title": "Agentes"
       },
       "craft": {
-        "label": "Craft"
+        "label": "Craft",
+        "businessTag": "Business"
       },
       "exploreAgents": {
         "label": "Explorar agentes"

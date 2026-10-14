@@ -4833,6 +4833,10 @@ class SecuritySettings(Base):
     allow_connector_group_restrictions: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    # Lets connector checks return what they find (spaces, drives, counts).
+    allow_connector_check_findings: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True, default=None
+    )
     valid_email_domains: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )
@@ -6617,11 +6621,11 @@ class Artifact(Base):
     # producing turn is unknown.
     turn_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    # Content hash from the sandbox manifest. Drives change detection: an
-    # upsert with a different hash bumps version and invalidates the archive.
-    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
-    # Bumped on every content change so a consumer holding an earlier
-    # version can detect that it was superseded.
+    # Metadata identity from the bounded sandbox inventory; not a content hash.
+    source_revision: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Highest revision opened by the session owner.
+    viewed_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Advances when the source revision changes or a deleted path returns.
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     # Deleted artifacts keep their row so stale cards grey out instead of 404ing.
     deleted: Mapped[bool] = mapped_column(

@@ -179,16 +179,19 @@ def _catalog_cost_cents(
     """
     # Most specific applicable rate card wins: the highest long-context
     # threshold the prompt clears. `context_over_200k` is the legacy single
-    # tier; `tiers` entries carry arbitrary context thresholds.
+    # tier; `tiers` entries carry arbitrary context thresholds. Upstream
+    # vendors the legacy block verbatim next to `tiers` — sometimes with a
+    # different (correct) tier threshold — so explicit tiers win and the
+    # legacy block only applies when no context tiers exist.
     candidates: list[tuple[float, dict[str, Any]]] = []
-    legacy_tier: dict[str, Any] | None = cost.get("context_over_200k")
-    if legacy_tier:
-        candidates.append((_LONG_CONTEXT_THRESHOLD_TOKENS, legacy_tier))
     for tier_entry in cost.get("tiers") or []:
         tier_meta: dict[str, Any] = tier_entry.get("tier") or {}
         size: Any = tier_meta.get("size")
         if tier_meta.get("type") == "context" and isinstance(size, (int, float)):
             candidates.append((float(size), tier_entry))
+    legacy_tier: dict[str, Any] | None = cost.get("context_over_200k")
+    if legacy_tier and not candidates:
+        candidates.append((_LONG_CONTEXT_THRESHOLD_TOKENS, legacy_tier))
     rates = cost
     best: float = -1.0
     for threshold, tier_rates in candidates:
@@ -197,13 +200,13 @@ def _catalog_cost_cents(
             rates = tier_rates
 
     def _rate(key: str, fallback: float | None = None) -> float:
-        value = rates.get(key)
-        if value is None:
-            value = cost.get(key)
-        # Negative rates are upstream "unknown price" sentinels, never real.
-        if value is not None and value < 0:
-            value = None
-        return float(value) if value is not None else (fallback or 0.0)
+        # Negative rates are upstream "unknown price" sentinels, never real —
+        # a negative tier rate defers to the base rate like a missing one.
+        for block in (rates, cost):
+            value = block.get(key)
+            if isinstance(value, (int, float)) and value >= 0:
+                return float(value)
+        return fallback or 0.0
 
     input_rate = _rate("input")
     output_rate = _rate("output")
@@ -237,11 +240,15 @@ def compute_cost_cents(
     flow: LLMFlow | str | None = None,
     image_count: int = 1,
     db_session: Session | None = None,
+    served_model: str | None = None,
 ) -> tuple[float, float]:
     """Return (input_cost_cents, output_cost_cents) for an LLM call.
 
     prompt_tokens is the cache-inclusive provider total; the cache counts are
     subsets of it, not additions to it.
+
+    served_model is the model a router (openrouter/auto) actually served; the
+    catalog is priced by it, while admin overrides on the configured model win.
 
     Resolution order: image pricing → admin override → model catalog → default
     fallback rates (0 unless set). Never raises (usage hot path)."""
@@ -260,28 +267,32 @@ def compute_cost_cents(
             prompt_tokens,
         )
 
+    catalog_model: str = served_model or model
     if db_session is not None:
-        try:
-            rates = cost_overrides.get_override(db_session, model, provider or "")
-        except Exception:
-            logger.exception("Override lookup failed for model %s", model)
-            rates = None
-        if rates is not None:
-            return _override_cost_cents(
-                rates,
-                prompt_tokens,
-                completion_tokens,
-                cache_read_tokens,
-                cache_creation_tokens,
-            )
+        for override_model in dict.fromkeys((model, catalog_model)):
+            try:
+                rates = cost_overrides.get_override(
+                    db_session, override_model, provider or ""
+                )
+            except Exception:
+                logger.exception("Override lookup failed for model %s", override_model)
+                rates = None
+            if rates is not None:
+                return _override_cost_cents(
+                    rates,
+                    prompt_tokens,
+                    completion_tokens,
+                    cache_read_tokens,
+                    cache_creation_tokens,
+                )
 
     if _is_locally_hosted(model, provider):
         return 0.0, 0.0
 
     try:
-        cost = find_model_cost(provider or "", model)
+        cost = find_model_cost(provider or "", catalog_model)
     except Exception:
-        logger.exception("Catalog lookup failed for model %s", model)
+        logger.exception("Catalog lookup failed for model %s", catalog_model)
         cost = None
 
     if cost is not None:
