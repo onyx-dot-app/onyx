@@ -24,6 +24,7 @@ import type {
   CCPairRunKind,
   CheckRunSnapshot,
 } from "@/lib/connectors/types";
+import type { IndexAttemptSnapshot } from "@/lib/types";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
 import { runStatusTag } from "@/views/admin/connectors/ConnectorDetailPage/statusTag";
 import CheckRunPopoverContent, {
@@ -210,6 +211,42 @@ function CountsRow({ children }: CountsRowProps) {
   );
 }
 
+export interface DocCountsProps {
+  attempt: IndexAttemptSnapshot;
+}
+/** An index attempt's new, updated and removed documents. */
+export function DocCounts({ attempt }: DocCountsProps) {
+  const t = useTranslations("admin.connector.runs");
+  return (
+    <CountsRow>
+      <Count
+        icon={SvgFilePlus}
+        value={attempt.new_docs_indexed}
+        tooltip={t("counts.newDocs", {
+          count: attempt.new_docs_indexed,
+        })}
+      />
+      <Count
+        icon={SvgFileRefresh}
+        value={Math.max(
+          0,
+          attempt.total_docs_indexed - attempt.new_docs_indexed
+        )}
+        tooltip={t("counts.updatedDocs")}
+      />
+      {attempt.docs_removed_from_index > 0 && (
+        <Count
+          icon={SvgFileMinus}
+          value={attempt.docs_removed_from_index}
+          tooltip={t("counts.removedDocs", {
+            count: attempt.docs_removed_from_index,
+          })}
+        />
+      )}
+    </CountsRow>
+  );
+}
+
 interface RunFiguresProps {
   run: CCPairRun;
 }
@@ -259,43 +296,16 @@ function RunFigures({ run }: RunFiguresProps) {
         </>
       );
     }
-    case "indexing": {
-      const attempt = run.attempt;
+    case "indexing":
       return (
         <>
           <Figure
-            value={attempt.total_docs_indexed}
+            value={run.attempt.total_docs_indexed}
             label={t("figures.indexed")}
           />
-          <CountsRow>
-            <Count
-              icon={SvgFilePlus}
-              value={attempt.new_docs_indexed}
-              tooltip={t("counts.newDocs", {
-                count: attempt.new_docs_indexed,
-              })}
-            />
-            <Count
-              icon={SvgFileRefresh}
-              value={Math.max(
-                0,
-                attempt.total_docs_indexed - attempt.new_docs_indexed
-              )}
-              tooltip={t("counts.updatedDocs")}
-            />
-            {attempt.docs_removed_from_index > 0 && (
-              <Count
-                icon={SvgFileMinus}
-                value={attempt.docs_removed_from_index}
-                tooltip={t("counts.removedDocs", {
-                  count: attempt.docs_removed_from_index,
-                })}
-              />
-            )}
-          </CountsRow>
+          <DocCounts attempt={run.attempt} />
         </>
       );
-    }
     case "doc_permission_sync":
       return (
         <Figure

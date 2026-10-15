@@ -5,6 +5,7 @@ import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { AdminAgentsPage } from "@tests/e2e/pages/AdminAgentsPage";
 import { ConnectorSetupPage } from "@tests/e2e/admin/connector/ConnectorSetupPage";
+import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
 
 /** After a timeout the context is closed, so an unguarded cleanup throws and
  *  replaces the real error. */
@@ -295,7 +296,9 @@ test.describe("Permission gating — MANAGE_CONNECTORS", () => {
       await expect(
         page.getByLabel("admin-page-title").getByText("Indexing Status")
       ).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole("table")).toBeVisible();
+      await expect(
+        new IndexingStatusPage(page).connectorRow(connectorName)
+      ).toBeVisible();
 
       // Also verify /admin/connectors is accessible
       await page.goto(ADMIN_ROUTES.CONNECTORS.path);

@@ -6806,149 +6806,8 @@
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "{source} から継承"
-          },
-          "organizationPublic": {
-            "label": "組織全体に公開"
-          },
-          "private": {
-            "label": "非公開"
-          }
-        },
-        "connectorCreated": {
-          "toast": "コネクターを作成しました"
-        },
-        "empty": {
-          "message": "コネクターがまだ設定されていないようです。[コネクターを追加](/admin/connectors) ページで開始してください。"
-        },
-        "federated": {
-          "access": {
-            "label": "フェデレーションアクセス"
-          },
-          "indexed": {
-            "label": "インデックス済み"
-          },
-          "notApplicable": {
-            "label": "該当なし"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "自動同期"
-            },
-            "private": {
-              "label": "非公開"
-            },
-            "public": {
-              "label": "公開"
-            },
-            "title": "アクセス種別"
-          },
-          "applyButton": {
-            "label": "適用"
-          },
-          "docCount": {
-            "placeholder": "件数",
-            "title": "ドキュメント数"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "エラーありで完了"
-            },
-            "failed": {
-              "label": "失敗"
-            },
-            "inProgress": {
-              "label": "実行中"
-            },
-            "interrupted": {
-              "label": "中断"
-            },
-            "notStarted": {
-              "label": "未開始"
-            },
-            "success": {
-              "label": "成功"
-            },
-            "title": "最終ステータス"
-          },
-          "title": "コネクターを絞り込む"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "アクセス：{values}"
-          },
-          "clearBadge": {
-            "label": "クリア"
-          },
-          "docsAnyBadge": {
-            "label": "ドキュメント数 {operator} 任意"
-          },
-          "docsBadge": {
-            "label": "ドキュメント数 {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "ステータス：{values}"
-          }
-        },
-        "loadError": {
-          "message": "インデックスステータスの読み込みでエラーが発生しました。"
-        },
-        "manageConnector": {
-          "tooltip": "コネクターを管理"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "フェデレーションコネクターを管理"
-        },
-        "search": {
-          "placeholder": "コネクターを検索..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "アクティブなコネクター"
-          },
-          "publicConnectors": {
-            "label": "公開コネクター"
-          },
-          "totalConnectors": {
-            "label": "コネクター合計"
-          },
-          "totalDocsIndexed": {
-            "label": "インデックス済みドキュメント合計"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "すべて確認済みです。表示するコネクターはこれ以上ありません"
-          },
-          "lastIndexed": {
-            "header": "最終インデックス日時"
-          },
-          "name": {
-            "header": "名前"
-          },
-          "permissions": {
-            "header": "権限 / アクセス"
-          },
-          "status": {
-            "header": "ステータス"
-          },
-          "totalDocs": {
-            "header": "ドキュメント合計"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "すべて折りたたむ"
-          },
-          "expand": {
-            "label": "すべて展開"
-          }
-        }
+      "connectorCreated": {
+        "toast": "コネクターを作成しました"
       },
       "overview": {
         "connectors": {
@@ -6963,6 +6822,50 @@
           "whole": "/ {whole}"
         },
         "loadError": "概要を読み込めませんでした。"
+      },
+      "list": {
+        "search": {
+          "placeholder": "コネクタを検索..."
+        },
+        "statusFilter": {
+          "label": "ステータス",
+          "all": "すべてのステータス"
+        },
+        "counts": {
+          "indexed": "{count, plural, other {# 件のコネクタがインデックス済み}}",
+          "indexing": "{count, plural, other {# 件のコネクタがインデックス中}}",
+          "failed": "{count, plural, other {# 件のコネクタが失敗}}",
+          "paused": "{count, plural, other {# 件のコネクタが一時停止中}}"
+        },
+        "access": {
+          "public": "公開",
+          "private": "非公開",
+          "sync": "自動同期",
+          "sync_restricted": "自動同期（制限付き）"
+        },
+        "detail": {
+          "queued": "キューの {position, selectordinal, other {#}} 番目",
+          "lastIndexed": "最終インデックス {when}",
+          "neverIndexed": "まだインデックスされていません"
+        },
+        "docs": {
+          "label": "ドキュメント",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "管理",
+          "manageFederated": "フェデレーテッドコネクタを管理"
+        },
+        "federated": {
+          "tag": "フェデレーテッド"
+        },
+        "empty": {
+          "title": "コネクタはまだありません",
+          "description": "[コネクタを追加](/admin/connectors) ページから始めてください。",
+          "filteredTitle": "これらのフィルターに一致するコネクタはありません。"
+        },
+        "loadError": "コネクタを読み込めませんでした。",
+        "units": "{count, plural, other {件のコネクタ}}"
       }
     },
     "languageModels": {

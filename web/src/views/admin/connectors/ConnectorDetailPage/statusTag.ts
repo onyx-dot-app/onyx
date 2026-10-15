@@ -12,6 +12,7 @@ import {
   type CCPairRun,
   type CheckRunStatus,
   ConnectorCredentialPairStatus,
+  type IndexingConnectorStatus,
   type PruneRunStatus,
 } from "@/lib/connectors/types";
 import type { ValidStatuses } from "@/lib/types";
@@ -143,6 +144,33 @@ export function runStatusTag(run: CCPairRun): StatusTag {
     case "checks":
       return checkRunStatusTag(run.attempt.status);
   }
+}
+
+/** The tag for a row of the status page: its bucket, unless the pair's own state or a stopped latest run says more. */
+export function connectorRowStatusTag(
+  ccPairStatus: ConnectorCredentialPairStatus,
+  status: IndexingConnectorStatus,
+  lastAttemptStatus: ValidStatuses | null | undefined
+): StatusTag {
+  if (ccPairStatus === ConnectorCredentialPairStatus.DELETING) {
+    return TAGS.deleting;
+  }
+  if (ccPairStatus === ConnectorCredentialPairStatus.INVALID) {
+    return TAGS.invalid;
+  }
+  if (
+    ccPairStatus === ConnectorCredentialPairStatus.INITIAL_INDEXING &&
+    status === "indexing"
+  ) {
+    return TAGS.initialIndexing;
+  }
+  if (status === "scheduled" && lastAttemptStatus === "canceled") {
+    return TAGS.canceled;
+  }
+  if (status === "scheduled" && lastAttemptStatus === "interrupted") {
+    return TAGS.interrupted;
+  }
+  return TAGS[status];
 }
 
 /** One attempt's tag. A sync reads "Syncing" and "Synced" where indexing reads "Indexing" and "Indexed". */

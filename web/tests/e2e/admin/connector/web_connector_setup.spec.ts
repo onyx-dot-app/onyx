@@ -59,14 +59,11 @@ test.describe("Web connector setup", () => {
     expect(ccPairId).not.toBeNull();
     await apiClient.pauseConnector(ccPairId!);
 
-    // The new connector is listed under the (collapsed) Web source group.
+    // The new connector is listed on the status page.
     const statusPage = new IndexingStatusPage(page);
-    await statusPage.expandSourceGroup("Web");
-    await expect(statusPage.connectorRow(connectorName)).toBeVisible({
-      timeout: 15_000,
-    });
+    await statusPage.waitForConnector(connectorName);
 
-    // Clicking the row opens the detail page for the same cc-pair. Its
+    // Its manage link opens the detail page for the same cc-pair. Its
     // folded index configurations show the configured base URL.
     const openedCcPairId = await statusPage.openConnector(connectorName);
     expect(openedCcPairId).toBe(ccPairId);

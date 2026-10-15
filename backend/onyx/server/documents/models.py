@@ -699,6 +699,53 @@ class IndexingOverviewResponse(BaseModel):
     throughput: CCPairThroughputResponse
 
 
+class IndexingConnectorStatus(str, Enum):
+    """How the status page buckets a pair, in the order the list sorts them."""
+
+    INDEXING = "indexing"
+    FAILED = "failed"
+    PAUSED = "paused"
+    SCHEDULED = "scheduled"
+    INDEXED = "indexed"
+
+
+class IndexingConnectorRow(BaseModel):
+    """One pair in the status page's list, with its latest index attempt."""
+
+    cc_pair_id: int
+    name: str
+    source: DocumentSource
+    access_type: AccessType
+    # The pair's own state, which names the tag for a pair that is deleting,
+    # invalid or on its first index. `status` is the bucket.
+    cc_pair_status: ConnectorCredentialPairStatus
+    status: IndexingConnectorStatus
+    creator_email: str | None
+    docs_indexed: int
+    last_success: datetime | None
+    latest_index_attempt: IndexAttemptSnapshot | None
+    # Place by age in the line of index attempts handed to the queue, from 1,
+    # while the latest waits there. The queue serves first runs ahead of
+    # repeats, so a repeat can wait a little longer than its place says.
+    queue_position: int | None
+    # per-action affordance map for the requesting user, from the same access
+    # decisions the write guards enforce
+    permissions: dict[str, bool]
+
+
+class IndexingConnectorsResponse(BaseModel):
+    """One page of the readable pairs, sorted by status then name."""
+
+    items: list[IndexingConnectorRow]
+    # Pairs matching the search and the status filter.
+    total_items: int
+    # Per status, ignoring the status filter, so the counts stay put while one is applied.
+    status_counts: dict[IndexingConnectorStatus, int]
+    # Federated connectors have no runs or documents. Admins see them after the
+    # pairs on the first page, under the search but outside the status filter.
+    federated_connectors: list[FederatedConnectorStatus]
+
+
 class PendingBackfillSnapshot(BaseModel):
     """A backfill an applied edit requested, until an attempt of it succeeds.
     The beat retries a failed one after ``retry_after``."""

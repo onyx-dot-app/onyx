@@ -70,7 +70,9 @@ deletion units.
 | POST | `/manage/admin/connector-with-mock-credential` | `create_connector_with_mock_credential`; `?paused=true` creates the pair paused and starts no indexing | `server/documents/connector.py` |
 | DELETE | `/manage/admin/connector/{connector_id}` | `delete_connector_by_id` | `server/documents/connector.py` |
 | POST | `/manage/admin/connector/run-once` | | Triggers one manual index attempt. |
-| POST | `/manage/admin/connector/indexing-status` | | Backs the indexing status admin page. |
+| POST | `/manage/admin/connector/indexing-status` | | Pairs grouped by source with per-source pages; backs the Index Settings page's connector list. |
+| GET | `/manage/admin/index-monitoring/overview` | `get_indexing_overview` | `server/documents/index_monitoring.py`. The indexing status page's overview card: how many readable pairs index now and are active, the documents indexed in a window (`1h`, `12h`, `24h`, `7d`) against the documents held, and the window's throughput across them. |
+| GET | `/manage/admin/index-monitoring/connectors` | `get_indexing_connectors` | `server/documents/index_monitoring.py`. The indexing status page's list: the readable pairs with their latest index attempt, each in one of five buckets (indexing, failed, paused, scheduled, indexed), sorted by bucket then name, searched by name and filtered by bucket, with the bucket counts and, for admins, the federated connectors. |
 | POST | `/manage/connector-request` | | Public "request a connector" form. |
 | POST | `/manage/credential`, `POST /manage/credential/private-key` | `create_credential_from_model` | `server/documents/credential.py` |
 | GET | `/manage/credential`, `/manage/credential/{id}` | `list_credentials`, `get_credential_by_id` | `server/documents/credential.py` |

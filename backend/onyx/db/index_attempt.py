@@ -726,6 +726,7 @@ def get_latest_index_attempts(
     eager_load_cc_pair: bool = False,
     only_finished: bool = False,
     ignore_targeted_reindex: bool = True,
+    ignore_backfill: bool = True,
 ) -> Sequence[IndexAttempt]:
     ids_stmt = select(
         IndexAttempt.connector_credential_pair_id,
@@ -736,7 +737,8 @@ def get_latest_index_attempts(
     ids_stmt = ids_stmt.where(SearchSettings.status == status)
     if ignore_targeted_reindex:
         ids_stmt = ids_stmt.where(IndexAttempt.targeted_reindex_job_id.is_(None))
-    ids_stmt = ids_stmt.where(IndexAttempt.is_backfill.is_(False))
+    if ignore_backfill:
+        ids_stmt = ids_stmt.where(IndexAttempt.is_backfill.is_(False))
 
     if only_finished:
         ids_stmt = _add_only_finished_clause(ids_stmt)
@@ -1394,6 +1396,22 @@ def cc_pair_has_dispatched_index_attempts(db_session: Session, cc_pair_id: int) 
             )
         )
     )
+
+
+def get_queued_index_attempts(db_session: Session) -> Sequence[IndexAttempt]:
+    """Every index attempt handed to the docfetching queue and not started,
+    oldest first, whatever its search settings and backfills included. An
+    attempt held for capability checks has no task yet, and a targeted
+    reindex runs on its own queue, so neither is in this line."""
+    return db_session.scalars(
+        select(IndexAttempt)
+        .where(
+            IndexAttempt.status == IndexingStatus.NOT_STARTED,
+            IndexAttempt.celery_task_id.isnot(None),
+            IndexAttempt.targeted_reindex_job_id.is_(None),
+        )
+        .order_by(IndexAttempt.time_created, IndexAttempt.id)
+    ).all()
 
 
 def get_waiting_index_attempt(

@@ -6806,149 +6806,8 @@
       }
     },
     "indexing": {
-      "status": {
-        "access": {
-          "inherited": {
-            "label": "Inherited from {source}"
-          },
-          "organizationPublic": {
-            "label": "Organization Public"
-          },
-          "private": {
-            "label": "Private"
-          }
-        },
-        "connectorCreated": {
-          "toast": "Connector created successfully"
-        },
-        "empty": {
-          "message": "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/connectors) page to get started!"
-        },
-        "federated": {
-          "access": {
-            "label": "Federated Access"
-          },
-          "indexed": {
-            "label": "Indexed"
-          },
-          "notApplicable": {
-            "label": "N/A"
-          }
-        },
-        "filterMenu": {
-          "accessType": {
-            "autoSync": {
-              "label": "Auto-Sync"
-            },
-            "private": {
-              "label": "Private"
-            },
-            "public": {
-              "label": "Public"
-            },
-            "title": "Access Type"
-          },
-          "applyButton": {
-            "label": "Apply"
-          },
-          "docCount": {
-            "placeholder": "Count",
-            "title": "Document Count"
-          },
-          "lastStatus": {
-            "completedWithErrors": {
-              "label": "Completed with Errors"
-            },
-            "failed": {
-              "label": "Failed"
-            },
-            "inProgress": {
-              "label": "In Progress"
-            },
-            "interrupted": {
-              "label": "Interrupted"
-            },
-            "notStarted": {
-              "label": "Not Started"
-            },
-            "success": {
-              "label": "Success"
-            },
-            "title": "Last Status"
-          },
-          "title": "Filter Connectors"
-        },
-        "filters": {
-          "accessBadge": {
-            "label": "Access: {values}"
-          },
-          "clearBadge": {
-            "label": "Clear"
-          },
-          "docsAnyBadge": {
-            "label": "Docs {operator} any"
-          },
-          "docsBadge": {
-            "label": "Docs {operator} {value}"
-          },
-          "statusBadge": {
-            "label": "Status: {values}"
-          }
-        },
-        "loadError": {
-          "message": "Error loading indexing status."
-        },
-        "manageConnector": {
-          "tooltip": "Manage Connector"
-        },
-        "manageFederatedConnector": {
-          "tooltip": "Manage Federated Connector"
-        },
-        "search": {
-          "placeholder": "Search connectors..."
-        },
-        "summary": {
-          "activeConnectors": {
-            "label": "Active Connectors"
-          },
-          "publicConnectors": {
-            "label": "Public Connectors"
-          },
-          "totalConnectors": {
-            "label": "Total Connectors"
-          },
-          "totalDocsIndexed": {
-            "label": "Total Docs Indexed"
-          }
-        },
-        "table": {
-          "allCaughtUp": {
-            "label": "All caught up! No more connectors to show"
-          },
-          "lastIndexed": {
-            "header": "Last Indexed"
-          },
-          "name": {
-            "header": "Name"
-          },
-          "permissions": {
-            "header": "Permissions / Access"
-          },
-          "status": {
-            "header": "Status"
-          },
-          "totalDocs": {
-            "header": "Total Docs"
-          }
-        },
-        "toggleAll": {
-          "collapse": {
-            "label": "Collapse All"
-          },
-          "expand": {
-            "label": "Expand All"
-          }
-        }
+      "connectorCreated": {
+        "toast": "Connector created successfully"
       },
       "overview": {
         "connectors": {
@@ -6963,6 +6822,50 @@
           "whole": "/ {whole}"
         },
         "loadError": "The overview could not load."
+      },
+      "list": {
+        "search": {
+          "placeholder": "Search connectors..."
+        },
+        "statusFilter": {
+          "label": "Status",
+          "all": "All Status"
+        },
+        "counts": {
+          "indexed": "{count, plural, one {# connector indexed} other {# connectors indexed}}",
+          "indexing": "{count, plural, one {# connector indexing} other {# connectors indexing}}",
+          "failed": "{count, plural, one {# connector failed} other {# connectors failed}}",
+          "paused": "{count, plural, one {# connector paused} other {# connectors paused}}"
+        },
+        "access": {
+          "public": "Public",
+          "private": "Private",
+          "sync": "Auto-sync",
+          "sync_restricted": "Auto-sync, restricted"
+        },
+        "detail": {
+          "queued": "{position, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} in queue",
+          "lastIndexed": "Last indexed {when}",
+          "neverIndexed": "Not indexed yet"
+        },
+        "docs": {
+          "label": "docs",
+          "recentOfTotal": "{recent} / {total}"
+        },
+        "actions": {
+          "manage": "Manage",
+          "manageFederated": "Manage federated connector"
+        },
+        "federated": {
+          "tag": "Federated"
+        },
+        "empty": {
+          "title": "No connectors yet",
+          "description": "Visit the [Add Connector](/admin/connectors) page to get started.",
+          "filteredTitle": "No connectors match these filters."
+        },
+        "loadError": "Couldn't load the connectors.",
+        "units": "{count, plural, one {connector} other {connectors}}"
       }
     },
     "languageModels": {
