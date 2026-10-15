@@ -20,6 +20,11 @@ class LeaseHeartbeat:
     the case when no renewal has succeeded for `max_silence` seconds: the
     reaper may already have failed the job, so `max_silence` must be shorter
     than the reaper's lease timeout.
+
+    After `max_duration` seconds the heartbeat stops renewing and sets `lost`.
+    A job whose thread hangs (e.g. in a source call that never returns) then
+    loses its lease and the reaper frees its row, instead of the lease living
+    as long as the process.
     """
 
     def __init__(
@@ -28,18 +33,29 @@ class LeaseHeartbeat:
         renew: Callable[[], bool],
         interval: float,
         max_silence: float,
+        max_duration: float,
     ):
         self.name = name
         self.lost = threading.Event()
         self._renew = renew
         self._interval = interval
         self._max_silence = max_silence
+        self._max_duration = max_duration
+        self._started = time.monotonic()
         self._last_renewed = time.monotonic()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
     def _loop(self) -> None:
         while not self._stop.wait(self._interval):
+            if time.monotonic() - self._started > self._max_duration:
+                logger.warning(
+                    "Lease not renewed past its maximum duration of %ss: %s",
+                    self._max_duration,
+                    self.name,
+                )
+                self.lost.set()
+                return
             try:
                 if not self._renew():
                     logger.warning("Lease lost: %s", self.name)
@@ -59,6 +75,7 @@ class LeaseHeartbeat:
         return False
 
     def start(self) -> None:
+        self._started = time.monotonic()
         self._last_renewed = time.monotonic()
         # contextvars (e.g. the tenant id) are not inherited by new threads
         context = contextvars.copy_context()

@@ -196,6 +196,9 @@ PERMISSION_SYNC_HEARTBEAT_INTERVAL = 60  # seconds
 PERMISSION_SYNC_LEASE_TIMEOUT = 15 * 60  # seconds
 # A worker that could not renew for this long stops writing, before the reaper
 # can fail its attempt and let a replacement start.
+# A sync still running this long past its time limit is hung (its own timeout
+# check never ran), so its lease stops renewing and the reaper frees its row.
+PERMISSION_SYNC_LEASE_OVERRUN = 10 * 60  # seconds
 PERMISSION_SYNC_LEASE_SELF_EXPIRY = (
     PERMISSION_SYNC_LEASE_TIMEOUT - 2 * PERMISSION_SYNC_HEARTBEAT_INTERVAL
 )

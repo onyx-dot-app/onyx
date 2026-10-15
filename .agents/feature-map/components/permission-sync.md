@@ -571,7 +571,9 @@ document to the wrong person.
    loop read through `LeaseHeartbeat.is_lost()`. `is_lost()` is also true when
    no renewal has succeeded for `PERMISSION_SYNC_LEASE_SELF_EXPIRY`, which is
    shorter than the reaper's timeout, so a worker that cannot reach the DB
-   stops first. Group sync writes (`upsert_external_groups`,
+   stops first. The heartbeat also stops renewing `PERMISSION_SYNC_LEASE_OVERRUN`
+   after the sync's time limit (`max_duration`), so a crawl thread that hangs
+   in a source call cannot hold the lease for the life of the process. Group sync writes (`upsert_external_groups`,
    `remove_stale_external_groups` with `owning_attempt_id`) take a share lock
    on the attempt row in the write's own transaction
    (`lock_external_group_sync_attempt_if_owned`). The reaper cannot fail the

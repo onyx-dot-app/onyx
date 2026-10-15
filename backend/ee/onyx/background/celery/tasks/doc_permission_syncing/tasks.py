@@ -45,6 +45,7 @@ from onyx.configs.constants import (
     CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
     PERMISSION_SYNC_HEARTBEAT_INTERVAL,
+    PERMISSION_SYNC_LEASE_OVERRUN,
     PERMISSION_SYNC_LEASE_SELF_EXPIRY,
     PERMISSION_SYNC_LEASE_TIMEOUT,
     DocumentSource,
@@ -668,6 +669,7 @@ def connector_permission_sync_generator_task(
                 renew=partial(_renew_doc_permission_sync_lease, attempt_id),
                 interval=PERMISSION_SYNC_HEARTBEAT_INTERVAL,
                 max_silence=PERMISSION_SYNC_LEASE_SELF_EXPIRY,
+                max_duration=JOB_TIMEOUT + PERMISSION_SYNC_LEASE_OVERRUN,
             )
             heartbeat.start()
 

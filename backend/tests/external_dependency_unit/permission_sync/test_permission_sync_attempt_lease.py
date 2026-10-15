@@ -201,7 +201,7 @@ def test_heartbeat_sets_lost_when_attempt_is_reaped(
             return kind.renew(attempt_id, thread_session)
 
     with LeaseHeartbeat(
-        "test", renew=renew, interval=0.05, max_silence=60
+        "test", renew=renew, interval=0.05, max_silence=60, max_duration=60
     ) as heartbeat:
         time.sleep(0.2)
         assert not heartbeat.lost.is_set()
@@ -218,7 +218,7 @@ def test_heartbeat_expires_when_renewals_keep_failing() -> None:
         raise ConnectionError("db unreachable")
 
     with LeaseHeartbeat(
-        "test", renew=renew, interval=0.05, max_silence=0.3
+        "test", renew=renew, interval=0.05, max_silence=0.3, max_duration=60
     ) as heartbeat:
         assert not heartbeat.is_lost()
         time.sleep(0.5)
@@ -259,3 +259,20 @@ def test_group_writes_are_refused_after_the_attempt_is_lost(
     ).all()
     assert len(remaining) == 1
     assert remaining[0].stale
+
+
+def test_heartbeat_stops_renewing_after_its_maximum_duration() -> None:
+    """A hung job must not hold its lease for as long as the process lives."""
+    renewals: list[float] = []
+
+    def renew() -> bool:
+        renewals.append(time.monotonic())
+        return True
+
+    with LeaseHeartbeat(
+        "test", renew=renew, interval=0.05, max_silence=60, max_duration=0.3
+    ) as heartbeat:
+        assert heartbeat.lost.wait(timeout=2)
+        count = len(renewals)
+        time.sleep(0.2)
+        assert len(renewals) == count
