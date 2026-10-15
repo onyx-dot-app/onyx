@@ -11,6 +11,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import date
 from enum import StrEnum
+from functools import cache
 from pathlib import Path, PurePosixPath
 from typing import NewType
 
@@ -75,7 +76,8 @@ class Scope:
         return _matches(path, self.paths) and not _matches(path, self.exclude)
 
 
-def _matches(path: str, globs: Iterable[str]) -> bool:
+@cache
+def _matches(path: str, globs: tuple[str, ...]) -> bool:
     posix = PurePosixPath(path)
     return any(posix.full_match(pattern) for pattern in globs)
 
