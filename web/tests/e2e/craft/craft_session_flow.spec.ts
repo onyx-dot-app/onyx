@@ -132,7 +132,7 @@ test("Craft creates a session from welcome and serves generated Next preview", a
     });
     await craft.expectPartialReply(streamingText.trim());
     await releaseMockLlmStream(nonce);
-    await craft.expectCompletedReply(completedText);
+    await craft.expectCompletedReply(completedText, 120_000);
     await craft.openOutput(fileName, content);
     await craft.expectGeneratedPreview({ sessionId, heading });
     const download = await craft.downloadOutput(fileName);

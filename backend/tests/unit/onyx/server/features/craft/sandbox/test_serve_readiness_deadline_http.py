@@ -12,6 +12,7 @@ from uuid import UUID
 import pytest
 
 from onyx.server.features.build.sandbox import serve_transport
+from onyx.server.features.build.sandbox.opencode.serve_client import ClientTimeouts
 from onyx.server.features.build.sandbox.serve_transport import (
     ServeConnectionInfo,
     _ServeMixin,
@@ -113,6 +114,22 @@ def test_readiness_accepts_http_success_before_deadline() -> None:
 
         assert manager._wait_for_opencode_serve_ready(_SANDBOX_ID, timeout=1.0)
         assert authorizations == ["Basic b3BlbmNvZGU6c3RhbGU="]
+
+
+def test_readiness_retries_when_response_headers_exceed_probe_timeout() -> None:
+    probe_timeout = ClientTimeouts().connect_timeout
+    with _health_server(
+        [_HealthResponse(200, delay=probe_timeout + 0.2), _HealthResponse(200)]
+    ) as (base_url, authorizations):
+        manager = _ReadinessManager(base_url)
+
+        assert manager._wait_for_opencode_serve_ready(
+            _SANDBOX_ID, timeout=probe_timeout + 2.0
+        )
+        assert authorizations == [
+            "Basic b3BlbmNvZGU6c3RhbGU=",
+            "Basic b3BlbmNvZGU6c3RhbGU=",
+        ]
 
 
 def test_password_refresh_authenticates_before_deadline(

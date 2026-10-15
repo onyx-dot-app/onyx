@@ -142,8 +142,10 @@ export class CraftSessionPage {
     ).toBeEnabled();
   }
 
-  async expectCompletedReply(text: string): Promise<void> {
-    await expect(this.page.getByText(text, { exact: false })).toBeVisible();
+  async expectCompletedReply(text: string, timeout?: number): Promise<void> {
+    await expect(this.page.getByText(text, { exact: false })).toBeVisible({
+      timeout,
+    });
     await expect(
       this.page.getByRole("button", { name: "Send", exact: true })
     ).toBeVisible();

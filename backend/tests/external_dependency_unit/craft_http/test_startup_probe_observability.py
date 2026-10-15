@@ -192,11 +192,14 @@ def test_session_creation_keeps_owned_empty_session_isolation(
 
 
 @pytest.mark.parametrize("status", [200, 401, 503, None])
-@pytest.mark.parametrize("timeout", [None, 0.75])
+@pytest.mark.parametrize(
+    "timeout,expected_timeout", [(None, 0.5), (0.25, 0.25), (0.75, 0.5)]
+)
 def test_health_probe_logs_only_safe_failure_metadata(
     caplog: pytest.LogCaptureFixture,
     status: int | None,
     timeout: float | None,
+    expected_timeout: float,
 ) -> None:
     caplog.set_level(logging.INFO, logger=serve_client.logger.name)
     with _http_server([_Reply(status)]) as (base_url, requests):
@@ -211,7 +214,7 @@ def test_health_probe_logs_only_safe_failure_metadata(
             "Basic " + base64.b64encode(f"opencode:{_PASSWORD}".encode()).decode()
         )
         assert [(request.method, request.path) for request in requests] == [
-            ("GET", "/doc")
+            ("GET", "/global/health")
         ]
         assert requests[0].authorization == authorization
         records = [
@@ -230,7 +233,7 @@ def test_health_probe_logs_only_safe_failure_metadata(
         )
         assert outcome in message
         assert re.search(r"elapsed=\d+\.\d+s", message)
-        assert f"timeout={0.5 if timeout is None else timeout:.3f}s" in message
+        assert f"timeout={expected_timeout:.3f}s" in message
         for private_value in (
             _PASSWORD,
             _TOKEN,
@@ -242,15 +245,24 @@ def test_health_probe_logs_only_safe_failure_metadata(
             assert private_value not in message
 
 
+@pytest.mark.parametrize(
+    "connect_timeout,remaining_timeout", [(0.5, 0.01), (0.01, 0.75)]
+)
 def test_health_probe_read_timeout_keeps_none_contract_and_safe_log(
     caplog: pytest.LogCaptureFixture,
+    connect_timeout: float,
+    remaining_timeout: float,
 ) -> None:
     caplog.set_level(logging.INFO, logger=serve_client.logger.name)
     with _http_server([_Reply(200, delay=0.05)]) as (base_url, requests):
-        with OpencodeServeClient(base_url=base_url, password=_PASSWORD) as client:
-            assert client.health_check_status(timeout=0.01) is None
+        with OpencodeServeClient(
+            base_url=base_url,
+            password=_PASSWORD,
+            timeouts=ClientTimeouts(connect_timeout=connect_timeout),
+        ) as client:
+            assert client.health_check_status(timeout=remaining_timeout) is None
         assert [(request.method, request.path) for request in requests] == [
-            ("GET", "/doc")
+            ("GET", "/global/health")
         ]
     messages = [
         record.getMessage()
@@ -270,6 +282,6 @@ def test_health_check_keeps_boolean_contract() -> None:
             assert client.health_check() is True
             assert client.health_check() is False
         assert [(request.method, request.path) for request in requests] == [
-            ("GET", "/doc"),
-            ("GET", "/doc"),
+            ("GET", "/global/health"),
+            ("GET", "/global/health"),
         ]

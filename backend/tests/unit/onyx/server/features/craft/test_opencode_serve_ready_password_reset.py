@@ -37,11 +37,11 @@ class _FakeProbeClient:
         password: str | None,
         *,
         event_bus: object = None,  # noqa: ARG002
-        timeouts: ClientTimeouts,
+        timeouts: ClientTimeouts | None = None,
     ) -> None:
         self.base_url = base_url
         self.password = password
-        self.timeouts = timeouts
+        self.timeouts = timeouts or ClientTimeouts()
         self.closed = False
         self.probe_timeouts: list[float] = []
         _FakeProbeClient.created.append(self)

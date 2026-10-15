@@ -127,6 +127,8 @@ helpers.
 
 Runtime health uses Pod readiness and authenticated OpenCode HTTP. A busy exec
 transport must not cause recovery of a healthy VM. All helper RPCs attach stdin.
+Direct manager health tests run inside the API pod; CRI port-forward reaches
+the host CNI namespace, not the guest listener.
 Protocol2 sends bounded64KiB frames and a zero-length terminator, without CRI
 stdin EOF. `run.has_stdin` records application payload presence. User commands
 receive ordinary EOF from a completed temporary input file.
@@ -134,7 +136,9 @@ receive ordinary EOF from a completed temporary input file.
 Readiness polls the Pod within the provisioning deadline. A Kubernetes watch
 must not inherit the client's shorter REST read timeout.
 OpenCode readiness counts metadata reads, retries, and password refresh in one
-deadline. Each HTTP probe uses the remaining budget. Late success is rejected.
+deadline. Authenticated `/global/health` avoids generating the OpenAPI document.
+Each probe uses the smaller of the remaining budget and configured connect timeout.
+Late success is rejected.
 Synchronous metadata reads and HTTPX I/O phases are not hard wall-clock cancellation.
 
 The manager rejects legacy short-name or sidecar-shaped pods before recovery.

@@ -29,7 +29,10 @@ from onyx.server.features.build.db.sandbox import (
 )
 from onyx.server.features.build.sandbox.manager import SandboxManager
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
-from onyx.server.features.build.session.models import SandboxStatusResponse
+from onyx.server.features.build.session.models import (
+    DetailedSessionResponse,
+    SandboxStatusResponse,
+)
 from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client as http_client
@@ -208,11 +211,14 @@ def test_idle_worker_snapshots_and_sleeps_before_api_resume(
     with get_session_with_current_tenant() as db_session:
         snapshot = get_latest_snapshot_for_session(db_session, owned.session_id)
         assert snapshot is not None
-    session = next(
-        session
-        for session in BuildSessionManager.list_sessions(owned.api_user)
-        if session.id == str(owned.session_id)
+    response = http_client.get(
+        f"{API_SERVER_URL}/build/sessions/{owned.session_id}",
+        headers=owned.api_user.headers,
+        cookies=owned.api_user.cookies,
     )
+    response.raise_for_status()
+    session = DetailedSessionResponse.model_validate(response.json())
+    assert session.id == str(owned.session_id)
     assert session.status == BuildSessionStatus.IDLE
     _assert_api_resume_restores_durable_state(k8s_client, owned, before)
 

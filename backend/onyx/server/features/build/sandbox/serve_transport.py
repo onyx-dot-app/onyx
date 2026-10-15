@@ -39,7 +39,6 @@ from onyx.server.features.build.sandbox.opencode.event_bus import (
     PodEventBus,
 )
 from onyx.server.features.build.sandbox.opencode.serve_client import (
-    ClientTimeouts,
     OpencodeServeClient,
     _TurnState,
     translate_opencode_event,
@@ -339,10 +338,10 @@ class _ServeMixin:
         sandbox_id: UUID,
         timeout: float,
     ) -> bool:
-        """Block until opencode-serve answers ``GET /doc`` with 200 (opencode
-        binds :4096 a few seconds after the pod is Ready). Probes the Service
-        ``base_url`` first, then the pod-IP health-check URL; succeeds as soon
-        as either answers.
+        """Block until opencode-serve answers ``GET /global/health`` with 200.
+
+        TCP readiness does not prove authenticated HTTP readiness. Probe the
+        Service ``base_url`` and any configured alternate health URL.
 
         On a 401 the cached password is stale (pod re-provisioned with a fresh
         Secret); reload it and rebuild the probe clients once. Provision-time
@@ -365,7 +364,6 @@ class _ServeMixin:
                         base_url=url,
                         password=conn.password,
                         event_bus=None,
-                        timeouts=ClientTimeouts(connect_timeout=timeout),
                     ),
                 )
                 for url in urls

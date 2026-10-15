@@ -1,10 +1,7 @@
 """Unit tests for ``_ServeMixin._wait_for_opencode_serve_ready``.
 
-Pins the multi-candidate probe contract: the readiness gate must succeed if
-EITHER the Service ``base_url`` (FQDN) OR the pod-IP health-check URL answers
-``GET /doc`` with 200. The FQDN is probed first (it routes in prod and under
-telepresence, which proxies cluster DNS but not raw pod IPs); the pod IP is the
-fallback for out-of-cluster CI (routes pod IPs, no cluster DNS).
+The mixin probes the Service URL before an optional alternate URL.
+The Kubernetes manager configures only the Service URL.
 """
 
 from __future__ import annotations
@@ -26,8 +23,7 @@ _PASSWORD = "hunter2"
 
 
 class _FakeManager(_ServeMixin):
-    """Minimal mixin host with a Service-FQDN base_url + a pod-IP health-check
-    URL, mirroring the K8s manager's split addressing."""
+    """Mixin host that can supply an alternate health URL."""
 
     def __init__(self, health_check_url: str | None) -> None:
         self._health_check_url = health_check_url

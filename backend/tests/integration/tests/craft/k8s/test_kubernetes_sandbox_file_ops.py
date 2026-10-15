@@ -3,30 +3,19 @@
 from __future__ import annotations
 
 import os
-import re
-import socket
 import subprocess
-import time
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
-from pathlib import Path
-from typing import override
+import textwrap
+from collections.abc import Callable
 from uuid import UUID
 
 import httpx
 import pytest
 from kubernetes import client
 
-from onyx.server.features.build.configs import (
-    OPENCODE_SERVE_PORT,
-    SANDBOX_NAMESPACE,
-)
-from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRuntime
+from onyx.server.features.build.configs import SANDBOX_NAMESPACE
 from onyx.server.features.build.sandbox.manager import (
     SandboxManager,
 )
-from onyx.server.features.build.sandbox.models import SandboxExecError
-from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client as http_client
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
@@ -50,75 +39,6 @@ def _artifact_response(user: DATestUser, session_id: UUID, path: str) -> httpx.R
     )
 
 
-class _ForwardedHealthManager(SandboxManager):
-    def __init__(self, sandbox_id: UUID, base_url: str) -> None:
-        super().__init__()
-        self._forwarded_sandbox_id = sandbox_id
-        self._forwarded_base_url = base_url
-
-    @override
-    def _load_serve_connection_info(
-        self, sandbox_id: UUID
-    ) -> ServeConnectionInfo | None:
-        info = super()._load_serve_connection_info(sandbox_id)
-        if info is None or sandbox_id != self._forwarded_sandbox_id:
-            return info
-        return ServeConnectionInfo(
-            base_url=self._forwarded_base_url, password=info.password
-        )
-
-
-@contextmanager
-def _forward_opencode_health_port(
-    pod_name: str, namespace: str, log_path: Path
-) -> Iterator[str]:
-    with log_path.open("w") as log:
-        process = subprocess.Popen(
-            [
-                "kubectl",
-                "--context",
-                os.environ["SANDBOX_TEST_KUBE_CONTEXT"],
-                "--namespace",
-                namespace,
-                "port-forward",
-                "--address",
-                "127.0.0.1",
-                f"pod/{pod_name}",
-                f":{OPENCODE_SERVE_PORT}",
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        try:
-            deadline = time.monotonic() + 10.0
-            while time.monotonic() < deadline:
-                output = log_path.read_text()
-                if process.poll() is not None:
-                    raise RuntimeError(f"OpenCode port-forward exited: {output}")
-                match = re.search(
-                    rf"^Forwarding from 127\.0\.0\.1:(\d+) -> {OPENCODE_SERVE_PORT}$",
-                    output,
-                    re.MULTILINE,
-                )
-                if match is not None:
-                    yield f"http://127.0.0.1:{match.group(1)}"
-                    return
-                time.sleep(0.1)
-            raise RuntimeError(
-                f"OpenCode port-forward did not start: {log_path.read_text()}"
-            )
-        finally:
-            if process.poll() is None:
-                process.terminate()
-            try:
-                process.wait(timeout=5.0)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5.0)
-
-
 class TestHealthCheck:
     def test_health_check_returns_true_for_provisioned_sandbox(
         self,
@@ -130,24 +50,30 @@ class TestHealthCheck:
 
     def test_http_health_survives_exec_transport_failure(
         self,
-        k8s_manager: SandboxManager,
         pool_session: PoolSession,
-        tmp_path: Path,
     ) -> None:
         """Only exec is fault-injected; Kubernetes readiness and HTTP remain real."""
         sandbox_id, _, pod_name = pool_session
-        wait_until_healthy(k8s_manager, sandbox_id)
-        namespace = kubernetes_runtime(k8s_manager).namespace
-        with _forward_opencode_health_port(
-            pod_name, namespace, tmp_path / "opencode-port-forward.log"
-        ) as base_url:
-            manager = _ForwardedHealthManager(sandbox_id, base_url)
+        contract = textwrap.dedent(
+            """\
+            import socket
+            import sys
+            from uuid import UUID
+
+            from onyx.server.features.build.sandbox.kubernetes_runtime import KubernetesRuntime
+            from onyx.server.features.build.sandbox.manager import SandboxManager
+            from onyx.server.features.build.sandbox.models import SandboxExecError
+
+            sandbox_id = UUID(sys.argv[1])
+            pod_name = sys.argv[2]
+            manager = SandboxManager()
             assert manager.health_check(sandbox_id, timeout=10.0)
             runtime = manager._runtime
             assert isinstance(runtime, KubernetesRuntime)
             before = runtime.get_pod(sandbox_id)
             assert before is not None
             assert before.metadata.name == pod_name
+            assert before.metadata.uid
 
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as unavailable:
                 unavailable.bind(("127.0.0.1", 0))
@@ -156,15 +82,48 @@ class TestHealthCheck:
                     f"http://127.0.0.1:{unavailable.getsockname()[1]}"
                 )
                 try:
-                    with pytest.raises(SandboxExecError):
+                    try:
                         runtime._exec.run(pod_name, ["true"], timeout=1.0)
+                    except SandboxExecError:
+                        pass
+                    else:
+                        raise AssertionError("Exec transport did not fail")
                     assert manager.health_check(sandbox_id, timeout=10.0)
                     after = runtime.get_pod(sandbox_id)
                     assert after is not None
+                    assert after.metadata.name == pod_name
                     assert after.metadata.uid == before.metadata.uid
                     assert after.metadata.deletion_timestamp is None
                 finally:
                     runtime._exec.configuration.host = original_host
+            """
+        )
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                os.environ["SANDBOX_TEST_KUBE_CONTEXT"],
+                "--namespace",
+                os.environ["HELM_RELEASE_NAMESPACE"],
+                "exec",
+                "deployment/onyx-api-server",
+                "--",
+                "python",
+                "-c",
+                contract,
+                str(sandbox_id),
+                pod_name,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60.0,
+            check=False,
+        )
+        if result.returncode != 0:
+            pytest.fail(
+                f"In-cluster HTTP health contract failed with exit {result.returncode}",
+                pytrace=False,
+            )
 
     def test_health_check_returns_false_after_terminate(
         self,

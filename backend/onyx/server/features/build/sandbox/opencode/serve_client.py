@@ -1042,15 +1042,20 @@ class OpencodeServeClient:
     # ----- session lifecycle ----------------------------------------
 
     def health_check_status(self, *, timeout: float | None = None) -> int | None:
-        """HTTP status from ``GET /doc``, or ``None`` on transport error — lets
-        the readiness probe tell a 401 (stale password) from a not-yet-listening
-        pod (transport error)."""
-        probe_timeout = self._timeouts.connect_timeout if timeout is None else timeout
+        """HTTP status from ``GET /global/health``, or ``None`` on transport error.
+
+        Readiness distinguishes stale credentials (401) from transport failures.
+        """
+        probe_timeout = (
+            self._timeouts.connect_timeout
+            if timeout is None
+            else min(self._timeouts.connect_timeout, timeout)
+        )
         started = time.monotonic()
         try:
             with self._http.stream(
                 "GET",
-                "/doc",
+                "/global/health",
                 timeout=probe_timeout,
             ) as response:
                 if response.status_code != 200:
