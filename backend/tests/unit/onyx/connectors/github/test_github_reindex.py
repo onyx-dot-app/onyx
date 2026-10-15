@@ -175,8 +175,8 @@ def test_reindex_files_apply_the_crawl_file_filters(
         "docs/huge.md": b"x" * (GITHUB_MAX_FILE_SIZE_BYTES + 1),
     }
     mock_source_operations.get_file_content.side_effect = (
-        lambda *, repo_full_name, path, ref: GitHubFileContent(  # noqa: ARG005
-            content=contents[path], encoding="base64"
+        lambda *, repo_full_name, path, ref: _file_content(  # noqa: ARG005
+            path, contents[path]
         )
     )
     good = f"{_REPO_URL}/blob/main/docs/guide.md"
@@ -193,6 +193,98 @@ def test_reindex_files_apply_the_crawl_file_filters(
 
     assert [d.id for d in docs] == [good]
     assert sorted(failed_ids) == sorted(excluded)
+
+
+def _file_content(
+    path: str, content: bytes, repo_url: str = _REPO_URL
+) -> GitHubFileContent:
+    return GitHubFileContent(
+        content=content,
+        encoding="base64",
+        path=path,
+        html_url=f"{repo_url}/blob/main/{path}",
+    )
+
+
+@pytest.mark.parametrize(
+    "doc_id",
+    [
+        # Dot segments that the HTTP client resolves into another repository.
+        f"{_REPO_URL}/blob/main/x/../../../../test-org/private-repo/contents/README.md",
+        f"{_REPO_URL}/blob/main/./README.md",
+        # Escaped dot segments.
+        f"{_REPO_URL}/blob/main/x/%2e%2e/%2E%2E/README.md",
+        # An escaped denylisted segment.
+        f"{_REPO_URL}/blob/main/node%5Fmodules/pkg/README.md",
+        # Empty segments.
+        f"{_REPO_URL}/blob/main/docs//README.md",
+        f"{_REPO_URL}/blob/main/docs/README.md/",
+        # Backslash and control characters.
+        f"{_REPO_URL}/blob/main/docs\\..\\README.md",
+        f"{_REPO_URL}/blob/main/docs/READ\nME.md",
+        # Unsafe owner or repository names.
+        "https://github.com/test-org/../private-repo/pull/1",
+        "https://github.com/test-org/test%2Drepo/issues/1",
+    ],
+)
+def test_reindex_refuses_unsafe_paths_without_fetching(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    create_repo: Callable[..., GitHubRepository],
+    doc_id: str,
+) -> None:
+    mock_source_operations.get_repository.return_value = create_repo()
+    connector = build_github_connector(include_files=True)
+
+    docs, failed_ids = _run(connector, [doc_id])
+
+    assert docs == []
+    assert failed_ids == [doc_id]
+    mock_source_operations.get_file_content.assert_not_called()
+    mock_source_operations.get_pull_request.assert_not_called()
+    mock_source_operations.get_issue.assert_not_called()
+
+
+def test_reindex_keeps_literal_percent_in_file_name(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    create_repo: Callable[..., GitHubRepository],
+) -> None:
+    # The crawl writes tree paths unescaped, so a git path may hold '%'.
+    mock_source_operations.get_repository.return_value = create_repo()
+    path = "docs/100%.md"
+    mock_source_operations.get_file_content.return_value = _file_content(path, b"x")
+    doc_id = f"{_REPO_URL}/blob/main/{path}"
+
+    docs, failed_ids = _run(build_github_connector(include_files=True), [doc_id])
+
+    assert failed_ids == []
+    assert [d.id for d in docs] == [doc_id]
+
+
+@pytest.mark.parametrize(
+    "returned",
+    [
+        _file_content("other/README.md", b"x"),
+        _file_content(
+            "docs/README.md", b"x", repo_url="https://github.com/test-org/private"
+        ),
+    ],
+)
+def test_reindex_refuses_content_from_another_location(
+    build_github_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    create_repo: Callable[..., GitHubRepository],
+    returned: GitHubFileContent,
+) -> None:
+    mock_source_operations.get_repository.return_value = create_repo()
+    mock_source_operations.get_file_content.return_value = returned
+    doc_id = f"{_REPO_URL}/blob/main/docs/README.md"
+
+    docs, failed_ids = _run(build_github_connector(include_files=True), [doc_id])
+
+    assert docs == []
+    assert failed_ids == [doc_id]
 
 
 def test_reindex_retries_rate_limit(
