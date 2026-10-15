@@ -131,6 +131,16 @@ type CardPlainProps = CardBaseProps & {
    * @default false
    */
   expandable?: false;
+
+  /**
+   * Height mode.
+   * - `"fit"`: the content's height.
+   * - `"full"`: fills the parent and shrinks to a capped one, laying the
+   *   children out as a column so one of them can scroll.
+   *
+   * @default "fit"
+   */
+  height?: "fit" | "full";
 };
 
 type CardExpandableProps = CardBaseProps & {
@@ -258,6 +268,7 @@ function Card(props: CardProps) {
         className="opal-card"
         style={{ ...paddingStyle, borderRadius: radius }}
         {...dataAttributes(props)}
+        data-height={props.height ?? "fit"}
         data-color={color}
         data-border={border}
         data-opal-status-border={borderColor}

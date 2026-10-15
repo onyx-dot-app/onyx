@@ -138,6 +138,37 @@ function SettingsHeader({
     return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, [isSticky]);
 
+  // Sticky content in the body (e.g. a side panel) reads these to pin under the header and fit the visible height.
+  useEffect(() => {
+    const header = headerRef.current;
+    const scrollContainer = document.getElementById(
+      "page-wrapper-scroll-container"
+    );
+    if (!header || !scrollContainer) return;
+
+    const publish = () => {
+      scrollContainer.style.setProperty(
+        "--settings-header-height",
+        isSticky ? `${header.offsetHeight}px` : "0px"
+      );
+      scrollContainer.style.setProperty(
+        "--settings-scroll-height",
+        `${scrollContainer.clientHeight}px`
+      );
+    };
+
+    publish();
+    const resizeObserver = new ResizeObserver(publish);
+    resizeObserver.observe(header);
+    resizeObserver.observe(scrollContainer);
+
+    return () => {
+      resizeObserver.disconnect();
+      scrollContainer.style.removeProperty("--settings-header-height");
+      scrollContainer.style.removeProperty("--settings-scroll-height");
+    };
+  }, [isSticky]);
+
   return (
     <div
       ref={headerRef}
