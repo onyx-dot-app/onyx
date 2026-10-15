@@ -237,6 +237,10 @@
         "createFailed": "OpenAPI 액션을 만들지 못했습니다",
         "invalidJson": "OpenAPI 스키마 정의의 JSON 형식이 잘못되었습니다",
         "updateFailed": "OpenAPI 액션을 업데이트하지 못했습니다"
+      },
+      "craft": {
+        "label": "Craft에서 활성화",
+        "description": "Craft 에이전트가 이러한 API와 도구를 사용하도록 허용합니다."
       }
     },
     "cardHeader": {
@@ -5333,6 +5337,9 @@
         "toggle": {
           "disableAriaLabel": "{name} 비활성화",
           "enableAriaLabel": "{name} 활성화"
+        },
+        "openApiSource": {
+          "label": "OpenAPI 작업 관리"
         }
       },
       "facts": {

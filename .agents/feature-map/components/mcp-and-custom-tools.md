@@ -93,6 +93,20 @@ optionally, static headers. Every operation in the schema (identified by its
 "passthrough auth" so the tool forwards the calling user's own Onyx login
 token to the third-party endpoint, instead of a static header.
 
+Full admins can select **Enable in Craft** during OpenAPI setup. This creates
+one linked custom external app, without a skill bundle or exported tool definitions.
+Craft uses the declared server URLs and shared headers through its egress proxy.
+The option supports static headers, no authentication, OAuth, and passthrough authentication.
+OAuth uses the same per-user connection as chat actions. Passthrough uses the caller's Onyx login token.
+Missing required user credentials block requests; shared headers do not replace them.
+
+OpenAPI setup owns the linked app's name, URL patterns, headers, and availability.
+The tool DB functions synchronize the app through `db/external_app.py` in one transaction.
+Tool mutations lock the source row before checking permissions, so publication cannot race with an owner's edit. Disabling the action
+or clearing the checkbox disables its app. Deleting the action deletes its app.
+Full admin access is required to change an action with a linked Craft app, even when disabled.
+Craft users still need API documentation or endpoint context to use the API.
+
 Once created, either kind of tool is attached to a persona (agent) the same
 way a built-in tool is, and shows up in chat as a tool call block. If the
 server is down or a credential is missing, the user sees a tool-call error
@@ -183,6 +197,7 @@ documented there. This component only ever writes the latter two shapes.
 | `passthrough_auth` | not used | `bool`, forwards the caller's login token |
 | `oauth_config_id` | null (MCP OAuth lives on `MCPServer`, not `Tool`) | optional FK to `OAuthConfig` |
 | `user_id` | null (ownership lives on the server, see §5) | the creating admin's id |
+| `available_in_craft` | not used | creates and maintains the linked Craft external app; defaults to false |
 | `enabled` | per-tool row, toggled via `/admin/tool/status` or `/admin/mcp` server status | same |
 
 ### `MCPServer` (`db/models.py:MCPServer`)

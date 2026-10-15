@@ -1,8 +1,10 @@
 """Composes recognition + policy resolution into a single verdict for an
 outbound request."""
 
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
@@ -17,6 +19,59 @@ from onyx.external_apps.providers.registry import (
     get_endpoint_catalog,
     get_provider_for_app,
 )
+from onyx.utils.logger import setup_logger
+from onyx.utils.url import normalized_request_path
+
+logger = setup_logger()
+
+
+class AmbiguousExternalAppTargetError(Exception):
+    """An OpenAPI app shares its credential scope with another enabled app."""
+
+    def __init__(self, apps: list[ExternalApp]) -> None:
+        self.apps = apps
+        super().__init__(
+            "Multiple apps match this URL. Ask an admin to remove the overlap."
+        )
+
+
+def resolve_app_for_url(url: str, apps: Iterable[ExternalApp]) -> ExternalApp | None:
+    """Attribute a URL once for both approvals and credential injection.
+
+    Existing app patterns keep their raw URL semantics and stable precedence.
+    OpenAPI scopes use the resolved path and reject ambiguous app ownership.
+    """
+    normalized_url: str | None = None
+    matches: list[ExternalApp] = []
+    for app in apps:
+        candidate_url = url
+        if app.openapi_tool_id is not None:
+            if normalized_url is None:
+                parsed = urlsplit(url)
+                normalized_url = urlunsplit(
+                    parsed._replace(
+                        path=quote(
+                            normalized_request_path(parsed.path),
+                            safe="/:@!$&'()*+,;=-._~",
+                        )
+                    )
+                )
+            candidate_url = normalized_url
+        for regex in app.upstream_url_regexes:
+            try:
+                if re.fullmatch(regex, candidate_url):
+                    matches.append(app)
+                    break
+            except re.error:
+                logger.warning(
+                    "skipping malformed upstream_url_pattern app_id=%s pattern=%r",
+                    app.id,
+                    regex,
+                )
+    if len(matches) > 1 and any(app.openapi_tool_id is not None for app in matches):
+        raise AmbiguousExternalAppTargetError(matches)
+    return matches[0] if matches else None
+
 
 # action_type for a domain-matched request that hit no catalog action.
 WHOLE_DOMAIN_ACTION_TYPE = "unspecified"
@@ -186,10 +241,24 @@ def apply_credential_gate(
 
     - ``is_available`` + a catalog action matched → those actions, unchanged.
     - ``is_available`` + nothing matched → gate the whole domain under a default ``ASK``.
-    - not ``is_available`` → keep only a recorded ``DENY`` (an explicit block fires with
-      or without a credential), else ``None`` (forward the request bare, no prompt).
+    - not ``is_available`` + OpenAPI app → deny until the user connects.
+    - Other unavailable apps → keep only a recorded ``DENY``, else ``None``.
     """
     if not is_available:
+        if app.openapi_tool_id is not None:
+            return AllMatchedActions(
+                actions=(
+                    MatchedAction(
+                        action_type="credentials_unavailable",
+                        display_name="Authentication required",
+                        description="Authenticate before using this OpenAPI action in Craft.",
+                        policy=EndpointPolicy.DENY,
+                    ),
+                ),
+                target=GatedTarget(
+                    kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
+                ),
+            )
         if matched_actions is None:
             return None
         deny = tuple(

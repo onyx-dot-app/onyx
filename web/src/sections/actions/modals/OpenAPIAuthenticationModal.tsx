@@ -46,7 +46,6 @@ interface OpenAPIAuthenticationModalProps {
   title: string;
   description?: string;
   skipOverlay?: boolean;
-  defaultMethod?: AuthMethod;
   oauthConfigId?: number | null;
   initialHeaders?: KeyValue[] | null;
   onConnect?: (values: OpenAPIAuthFormValues) => Promise<void> | void;
@@ -77,7 +76,6 @@ export default function OpenAPIAuthenticationModal({
   title,
   description,
   skipOverlay = false,
-  defaultMethod = "oauth",
   oauthConfigId = null,
   initialHeaders = null,
   passthroughOAuthEnabled = false,
@@ -241,7 +239,7 @@ export default function OpenAPIAuthenticationModal({
       };
     }
 
-    if (hasInitialHeaders && initialHeaders) {
+    if (hasInitialHeaders) {
       return {
         ...defaultValues,
         authMethod: "custom-header",
@@ -258,11 +256,9 @@ export default function OpenAPIAuthenticationModal({
 
     return {
       ...defaultValues,
-      authMethod: defaultMethod,
       headers: baseHeaders,
     };
   }, [
-    defaultMethod,
     existingOAuthConfig,
     hasInitialHeaders,
     initialHeaders,
@@ -374,7 +370,7 @@ export default function OpenAPIAuthenticationModal({
                             onValueChange={(value) =>
                               setFieldValue("authMethod", value)
                             }
-                            defaultOption="oauth"
+                            defaultOption={values.authMethod}
                             placeholder={t(
                               "openApiAuthModal.authMethod.placeholder"
                             )}

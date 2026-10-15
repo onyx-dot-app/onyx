@@ -474,11 +474,16 @@ Provider failures return HTTP 502 with a safe message; the user must start autho
 Database failures propagate separately from provider failures.
 Code exchange and token refresh share HTTP and response validation.
 Both reject redirects and apply a 30-second request timeout. Invalid responses do not replace saved tokens.
+Refresh updates only the original, unchanged token row. Concurrent disconnect or reconnection prevents the refresh result from being saved.
 Configuration snapshots check decrypted credential values, so cleared credentials are not shown as configured.
 
 Configuration creation, updates, and initiation reject reserved authorization parameters in endpoint queries and configured extras.
 Action configurations may still supply `resource` through additional parameters.
-Management keeps its owner-or-admin permission checks; initiation and callback require `BASIC_ACCESS` and bind tokens to the caller.
+Management keeps its owner-or-admin permission checks. Configurations used by OpenAPI-owned Craft apps require full admin access.
+Configuration writes and tool publication share row locks. Conflicting writes return a retryable conflict instead of waiting.
+Initiation and callback require `BASIC_ACCESS` and bind tokens to the caller.
+Craft reuses this flow and token store for OpenAPI-owned apps, including refresh and disconnect.
+The frontend callback selects setup-test mode only when the saved test state matches the returned state.
 
 ### Custom-action OAuth setup checks
 

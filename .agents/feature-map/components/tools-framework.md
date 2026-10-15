@@ -178,6 +178,7 @@ For each `db_tool_model` in `persona.tools`, in order:
 4. For a custom tool (`openapi_schema` set), resolve OAuth (per-tool OAuth config,
    then passthrough auth using the user's own login token) and build one `Tool`
    per operation via `build_custom_tools_from_openapi_schema_and_headers`.
+   Chat and Craft share `auth/oauth_token_manager.py:get_tool_access_token` for this selection and token refresh.
 5. For an MCP tool (`mcp_server_id` set), resolve credentials via
    `resolve_mcp_credentials`, list the server's tools via
    `get_all_mcp_tools_for_server`, and build an `MCPTool` per tool, caching by

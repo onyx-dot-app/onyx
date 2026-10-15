@@ -130,6 +130,23 @@ describe("ExternalAppsPage", () => {
     jest.mocked(externalAppsService.updateExternalApp).mockResolvedValue(APP);
   });
 
+  it("manages linked OpenAPI apps through their source action", () => {
+    mockSWRData({ apps: [{ ...APP, openapi_tool_id: 42 }] });
+    mockSearchParams = new URLSearchParams({ editAppId: "1" });
+
+    render(<ExternalAppsPage />);
+
+    expect(
+      screen.getByRole("link", { name: "Manage OpenAPI action" })
+    ).toHaveAttribute("href", "/admin/openapi-actions?toolId=42");
+    expect(appSwitch()).toBeDisabled();
+    expect(screen.queryByText(/no credentials/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Custom app actions" })
+    ).toBeDisabled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("keeps app controls disabled until the refreshed app state arrives", async () => {
     const user = setupUser();
     let finishRefresh: (() => void) | undefined;

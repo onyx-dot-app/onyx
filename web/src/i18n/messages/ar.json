@@ -237,6 +237,10 @@
         "createFailed": "فشل إنشاء إجراء OpenAPI",
         "invalidJson": "تنسيق JSON غير صالح في تعريف مخطط OpenAPI",
         "updateFailed": "فشل تحديث إجراء OpenAPI"
+      },
+      "craft": {
+        "label": "تفعيل في Craft",
+        "description": "اسمح لوكلاء Craft باستخدام هذه الواجهات والأدوات."
       }
     },
     "cardHeader": {
@@ -5333,6 +5337,9 @@
         "toggle": {
           "disableAriaLabel": "تعطيل {name}",
           "enableAriaLabel": "تفعيل {name}"
+        },
+        "openApiSource": {
+          "label": "إدارة إجراء OpenAPI"
         }
       },
       "facts": {

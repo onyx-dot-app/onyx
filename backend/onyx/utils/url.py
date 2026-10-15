@@ -1,9 +1,10 @@
 import ipaddress
+import posixpath
 import socket
 import unicodedata
 from collections.abc import Iterator
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse, urlunparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -35,6 +36,12 @@ _CLOUD_METADATA_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, .
     ipaddress.ip_network("169.254.0.0/16"),
     ipaddress.ip_network("fd00:ec2::254/128"),
 )
+
+
+def normalized_request_path(raw_path: str) -> str:
+    """Decode and normalize separators and dot segments before checking URL path scope."""
+    path = unquote(raw_path.split("?", 1)[0].split("#", 1)[0])
+    return posixpath.normpath(path.replace("\\", "/"))
 
 
 class SSRFException(Exception):

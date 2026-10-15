@@ -4155,6 +4155,16 @@ class Tool(Base):
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    available_in_craft: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    craft_external_app: Mapped["ExternalApp | None"] = relationship(
+        "ExternalApp",
+        back_populates="openapi_tool",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     oauth_config: Mapped["OAuthConfig | None"] = relationship(
         "OAuthConfig", back_populates="tools"
@@ -7393,6 +7403,13 @@ class ExternalApp(Base):
     __tablename__ = "external_app"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    openapi_tool_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool.id", ondelete="CASCADE"), nullable=True, unique=True
+    )
+    openapi_tool: Mapped["Tool | None"] = relationship(
+        "Tool", back_populates="craft_external_app"
+    )
+
     # App display metadata is independent of the linked skill's canonical name.
     name: Mapped[str] = mapped_column(String, nullable=False)
     # Discriminator for the OAuth-provider dispatch layer. Decoupled

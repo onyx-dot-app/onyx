@@ -522,6 +522,35 @@ they can never disagree about which server owns a request; see
 
 ---
 
+### OpenAPI-owned apps
+
+An OpenAPI action can publish a custom app without creating skills or importing tools.
+`external_apps/openapi.py` uses the existing OpenAPI parser to select the action's single root server.
+Craft rejects operation-level server overrides, which chat actions do not apply.
+Credentials cover the server's origin and base path, including descendant paths.
+Sibling paths and different hosts do not match. Shared URL matching normalizes
+request paths before checking OpenAPI boundaries, so dot segments cannot escape the base path.
+Server URLs must be absolute HTTP or HTTPS URLs without variables or embedded credentials.
+The proxy's existing destination restrictions still apply, including private-address restrictions.
+
+Shared headers become encrypted organization credentials. The authentication template
+contains placeholders, so header values never become template text.
+OpenAPI setup owns these credentials; users cannot replace them through the app credential API.
+OAuth apps reuse `OAuthConfig`, `OAuthUserToken`, and `OAuthTokenManager` from custom actions.
+Chat and Craft resolve the caller's token through the shared `get_tool_access_token` function.
+User app responses expose the source `oauth_config_id` and mark these apps as supporting OAuth.
+Connection status checks token presence and expiry or refreshability without contacting the provider.
+Craft starts `/oauth-config/initiate` and returns through `/oauth-config/callback` to the Craft Apps page.
+The Apps page checks connection status before completing the popup. Disconnect revokes the shared custom-action connection.
+Passthrough apps use the caller's Onyx login token and have no separate connection form.
+Missing required OAuth or passthrough credentials block requests, even when shared headers exist.
+OAuth takes precedence over passthrough and replaces any shared Authorization header.
+Requests use the existing custom-app approval flow, with `ASK` as the default.
+If multiple enabled apps match a URL and one belongs to OpenAPI, the proxy denies the request.
+Before injection, the proxy repeats attribution for every app, including checks for new OpenAPI overlaps.
+The check runs after token refresh in a fresh database session and compares the source authentication settings.
+This prevents an approval or refresh wait from using credentials after the destination or authentication mode changes.
+
 ## 5. Contracts and invariants
 
 1. **The agent must never be able to read an injected credential.** The
@@ -578,7 +607,8 @@ they can never disagree about which server owns a request; see
      `matching/engine.py:apply_credential_gate`), not `ALWAYS`. An app whose
      credentials are currently unavailable forwards bare (no prompt) unless a
      matched action is explicitly `DENY`, in which case the `DENY` still
-     applies without credentials.
+     applies without credentials. OpenAPI-owned apps are an exception: missing
+     required OAuth or passthrough credentials always produce `DENY`.
    - An MCP tool call with no admin override defaults to `ASK`
      (`request_evaluator.py:MCP_TOOL_DEFAULT_POLICY`).
 7. **MCP matching must fail closed when the body cannot be parsed.** Any
@@ -603,7 +633,8 @@ they can never disagree about which server owns a request; see
    security boundary, not the matcher.** A bug in `recognize_actions` must
    not become a way to reach an internal address or bypass the CA/identity
    layers; it only affects whether a request looks like an app action versus
-   general internet traffic. MCP is different. After `McpRequestEvaluator`
+   general internet traffic. An explicit ambiguous OpenAPI URL match produces `DENY`;
+   credential injection repeats this attribution check. MCP is different. After `McpRequestEvaluator`
    attributes a request to a server, an exception from
    `classify_mcp_request` becomes a synthetic `DENY` (fail closed).
 

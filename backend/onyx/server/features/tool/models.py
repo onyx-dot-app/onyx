@@ -37,6 +37,7 @@ class ToolSnapshot(BaseModel):
     user_id: str | None = None
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
+    available_in_craft: bool = False
     enabled: bool = True
 
     # Server-stamped affordance map; fail-closed empty (only the admin actions list stamps it).
@@ -69,6 +70,7 @@ class ToolSnapshot(BaseModel):
             oauth_config_id=tool.oauth_config_id,
             oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
             enabled=tool.enabled,
+            available_in_craft=tool.available_in_craft,
             # Populate visibility settings from config or use defaults
             chat_selectable=config.chat_selectable if config else True,
             agent_creation_selectable=(
@@ -84,6 +86,7 @@ class Header(BaseModel):
 
 
 class CustomToolCreate(BaseModel):
+    available_in_craft: bool = False
     name: str
     description: str | None = None
     definition: dict[str, Any]
@@ -93,6 +96,7 @@ class CustomToolCreate(BaseModel):
 
 
 class CustomToolUpdate(BaseModel):
+    available_in_craft: bool | None = None
     name: str | None = None
     description: str | None = None
     definition: dict[str, Any] | None = None

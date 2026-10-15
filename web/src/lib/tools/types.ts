@@ -39,6 +39,8 @@ export interface ToolSnapshot {
   // whether to pass through the user's OAuth token as Authorization header
   passthrough_auth: boolean;
 
+  available_in_craft?: boolean;
+
   // OAuth configuration for this tool
   oauth_config_id?: number | null;
   oauth_config_name?: string | null;

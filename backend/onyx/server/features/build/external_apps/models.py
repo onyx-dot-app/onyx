@@ -88,6 +88,7 @@ class ExternalAppAdminResponse(BaseModel):
     # Onyx-managed built-in (cloud): creds/config Onyx-owned and blanked above;
     # admin may only set availability and policies. UI hides the rest.
     is_onyx_managed: bool = False
+    openapi_tool_id: int | None = None
 
 
 class UpsertUserCredentialsRequest(BaseModel):
@@ -104,8 +105,9 @@ class ExternalAppUserResponse(BaseModel):
     has already filled in. `credential_values` are display-safe masked values
     for credentials the user has previously stored for those keys (intersection
     — stale keys from deleted/migrated templates are filtered out).
-    `authenticated` is true iff the user has a stored value for every key in
-    `credential_keys`.
+    `authenticated` reports whether the calling user's required credentials are
+    present. Linked OAuth actions also accept an expired token that can refresh;
+    passthrough actions require the user's Onyx login OAuth token.
 
     Admin-only fields (``organization_credentials``, ``auth_template``,
     ``upstream_url_patterns``, ``enabled``) are intentionally omitted.
@@ -120,6 +122,8 @@ class ExternalAppUserResponse(BaseModel):
     credential_values: dict[str, Any]
     authenticated: bool
     supports_oauth: bool
+    # Linked actions share Chat's OAuth flow and per-user token store.
+    oauth_config_id: int | None = None
 
 
 class OAuthStartResponse(BaseModel):

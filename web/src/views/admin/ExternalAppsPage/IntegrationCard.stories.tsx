@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { SvgSlack } from "@opal/logos";
 import { SvgPlug } from "@opal/icons";
 import IntegrationCard from "@/views/admin/ExternalAppsPage/IntegrationCard";
-import type { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/interfaces";
+import type { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/types";
 
 const APP: ConfiguredIntegration = {
   key: "app-1",

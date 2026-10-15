@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from onyx.auth import oauth_token_manager, permissions
 from onyx.auth.pkce import compute_s256_challenge
 from onyx.auth.users import current_user
-from onyx.db.enums import PermissionAuthority
+from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import OAuthConfig, User
 from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.server.features.oauth_config import api as oauth_config_api
@@ -75,7 +75,9 @@ def _configure_flow(
         oauth_config_api._TEST_AUTHORIZATION_ATTEMPTS,
     ):
         monkeypatch.setattr(store, "_cache_backend_provider", lambda: cache)
-    monkeypatch.setattr(oauth_config_api, "get_oauth_config", lambda *_: oauth_config)
+    monkeypatch.setattr(
+        oauth_config_api, "get_oauth_config", lambda *_, **__: oauth_config
+    )
     monkeypatch.setattr(oauth_config_api, "upsert_user_oauth_token", MagicMock())
     monkeypatch.setattr(
         oauth_token_manager, "validate_oauth_endpoint_url", lambda *_: None
@@ -166,6 +168,36 @@ def test_flow_omits_pkce_for_provider_without_support(
 
     assert result.redirect_url == "/app?action=17"
     assert "code_verifier" not in token_post.call_args.kwargs["data"]
+
+
+def test_craft_uses_existing_callback_and_returns_to_apps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
+    state, query = _initiate(
+        oauth_config=oauth_config,
+        user=user,
+        db_session=db_session,
+        return_path="/craft/v1/apps",
+    )
+    assert query["redirect_uri"] == [oauth_config_api._OAUTH_CALLBACK_URL]
+    result = oauth_config_api.handle_oauth_callback(
+        code="craft-code", state=state, db_session=db_session, user=user
+    )
+    assert result.redirect_url == "/craft/v1/apps"
+    assert (
+        token_post.call_args.kwargs["data"]["redirect_uri"] == query["redirect_uri"][0]
+    )
+    assert isinstance(oauth_config_api.upsert_user_oauth_token, MagicMock)
+    oauth_config_api.upsert_user_oauth_token.assert_called_once()
+    persisted_config, persisted_user, _, persisted_session = (
+        oauth_config_api.upsert_user_oauth_token.call_args.args
+    )
+    assert (persisted_config, persisted_user, persisted_session) == (
+        oauth_config.id,
+        user.id,
+        db_session,
+    )
 
 
 def test_attempt_is_owner_bound_and_claimed_before_failed_exchange(
@@ -598,7 +630,7 @@ def test_draft_cannot_read_another_owners_saved_credentials(
     monkeypatch.setattr(
         oauth_config_api,
         "get_tools_by_oauth_config",
-        lambda *_a: [SimpleNamespace(user_id=uuid4())],
+        lambda *_a: [SimpleNamespace(user_id=uuid4(), craft_external_app=None)],
     )
     with pytest.raises(OnyxError, match="only manage"):
         oauth_config_api.initiate_oauth_test(
@@ -611,6 +643,24 @@ def test_draft_cannot_read_another_owners_saved_credentials(
             user=user,
         )
     token_post.assert_not_called()
+
+
+def test_action_manager_cannot_edit_oauth_config_shared_with_craft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, owner, db_session, _ = _configure_flow(monkeypatch)
+    monkeypatch.setattr(
+        oauth_config_api,
+        "has_global_permission",
+        lambda _user, permission: permission is Permission.MANAGE_ACTIONS,
+    )
+    monkeypatch.setattr(
+        oauth_config_api,
+        "get_tools_by_oauth_config",
+        lambda *_: [SimpleNamespace(user_id=owner.id, craft_external_app=object())],
+    )
+    with pytest.raises(OnyxError, match="full admin"):
+        oauth_config_api._assert_can_manage_oauth_config(config, owner, db_session)
 
 
 def test_draft_state_cannot_be_used_in_normal_callback(

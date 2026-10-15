@@ -12,7 +12,17 @@ from mitmproxy import http
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import GatedAppKind
-from onyx.external_apps.credentials import resolve_injection_headers
+from onyx.db.external_app import get_external_app_by_id, get_external_apps
+from onyx.db.models import ExternalApp
+from onyx.external_apps.credentials import (
+    ExternalAppCredentialsError,
+    app_is_available,
+    resolve_injection_headers,
+)
+from onyx.external_apps.matching.engine import (
+    AmbiguousExternalAppTargetError,
+    resolve_app_for_url,
+)
 from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.sandbox_proxy.credential_injection import (
     CredentialResolver,
@@ -22,6 +32,15 @@ from onyx.sandbox_proxy.models import InjectionContext
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _openapi_auth_identity(
+    app: ExternalApp | None,
+) -> tuple[int, int | None, bool] | None:
+    tool = app.openapi_tool if app is not None else None
+    if tool is None:
+        return None
+    return tool.id, tool.oauth_config_id, tool.passthrough_auth
 
 
 class ExternalAppResolver(CredentialResolver):
@@ -62,14 +81,44 @@ class ExternalAppResolver(CredentialResolver):
         )
 
         with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
-            headers = resolve_injection_headers(
-                db, external_app_id, ctx.sandbox.user_id
+            auth_identity = _openapi_auth_identity(
+                get_external_app_by_id(db, external_app_id)
             )
+            try:
+                headers = resolve_injection_headers(
+                    db, external_app_id, ctx.sandbox.user_id
+                )
+            except ExternalAppCredentialsError as error:
+                raise CredentialUnavailableError(
+                    str(error), sandbox_detail=str(error)
+                ) from error
+
+        # OAuth refresh can wait on a remote server. Recheck ownership afterward
+        # in a fresh session so cached ORM rows cannot retain an obsolete scope.
+        with get_session_with_tenant(tenant_id=ctx.sandbox.tenant_id) as db:
+            try:
+                app = resolve_app_for_url(
+                    request.url, get_external_apps(db, enabled_only=True)
+                )
+            except AmbiguousExternalAppTargetError as error:
+                raise CredentialUnavailableError(
+                    str(error), sandbox_detail=str(error)
+                ) from error
+            if (
+                app is None
+                or app.id != external_app_id
+                or _openapi_auth_identity(app) != auth_identity
+                or (
+                    app.openapi_tool_id is not None
+                    and not app_is_available(db, app, ctx.sandbox.user_id)
+                )
+            ):
+                detail = "The app's configuration or availability changed; retry the request."
+                raise CredentialUnavailableError(detail, sandbox_detail=detail)
 
         # Per-app debug line so `external_app_id` survives in logs even when
         # the dispatcher's credential logs group by resolver.
-        # Empty `headers` means "app disabled / deleted / placeholders unfillable" —
-        # the request still forwards (upstream 401 surfaces to the user).
+        # Empty headers remain valid for apps that require no authentication.
         header_names = ",".join(sorted(headers)) or "-"
         logger.debug(
             "external_app_resolver.resolved external_app_id=%s host=%s "

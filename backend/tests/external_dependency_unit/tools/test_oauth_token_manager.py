@@ -21,9 +21,15 @@ from onyx.auth.oauth_token_manager import (
     oauth_flow_params_from_config,
 )
 from onyx.db.models import OAuthConfig
-from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
+from onyx.db.oauth_config import (
+    create_oauth_config,
+    delete_oauth_config,
+    delete_user_oauth_token,
+    get_user_oauth_token,
+    upsert_user_oauth_token,
+)
 from onyx.oauth.protocol import OAuthFlowParams, build_authorization_url
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 def _create_test_oauth_config(db_session: Session) -> OAuthConfig:
@@ -38,6 +44,68 @@ def _create_test_oauth_config(db_session: Session) -> OAuthConfig:
         additional_params=None,
         db_session=db_session,
     )
+
+
+@pytest.mark.parametrize("change", ["revoke", "replace", "recreate"])
+@patch("onyx.auth.oauth_token_manager.requests.post")
+def test_refresh_cannot_restore_revoked_or_replace_newer_grant(
+    mock_post: Mock, db_session: Session, change: str
+) -> None:
+    config = _create_test_oauth_config(db_session)
+    user = create_test_user(db_session, "oauth_refresh_race")
+    config_id, user_id = config.id, user.id
+    original = {
+        "access_token": "expired-access-token",
+        "refresh_token": "original-refresh-token",
+        "expires_at": 1,
+    }
+    replacement = {
+        "access_token": "new-grant-token",
+        "refresh_token": "new-grant-refresh-token",
+        "expires_at": int(time.time()) + 3600,
+    }
+    upsert_user_oauth_token(config_id, user_id, original, db_session)
+
+    def change_grant_during_http(*_args: object, **_kwargs: object) -> Mock:
+        with Session(db_session.get_bind()) as concurrent_session:
+            if change in {"revoke", "recreate"}:
+                delete_user_oauth_token(config_id, user_id, concurrent_session)
+            if change == "replace":
+                upsert_user_oauth_token(
+                    config_id, user_id, replacement, concurrent_session
+                )
+            elif change == "recreate":
+                # A new grant can have identical token data but a different row identity.
+                upsert_user_oauth_token(
+                    config_id, user_id, original, concurrent_session
+                )
+        response = Mock(spec=Response, status_code=200)
+        response.json.return_value = {
+            "access_token": "stale-refresh-result",
+            "expires_in": 3600,
+        }
+        return response
+
+    mock_post.side_effect = change_grant_during_http
+    try:
+        manager = OAuthTokenManager(config, user_id, db_session)
+        assert manager.get_valid_access_token() is None
+        mock_post.assert_called_once()
+        db_session.expire_all()
+        token = get_user_oauth_token(config_id, user_id, db_session)
+        if change == "revoke":
+            assert token is None
+        else:
+            assert token is not None
+            assert token.token_data is not None
+            assert token.token_data.get_value(apply_mask=False) == (
+                replacement if change == "replace" else original
+            )
+    finally:
+        db_session.rollback()
+        delete_oauth_config(config_id, db_session)
+        delete_test_user(db_session, user)
+        db_session.commit()
 
 
 class TestOAuthTokenManagerValidation:

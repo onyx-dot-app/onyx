@@ -206,9 +206,16 @@ def _assert_can_manage_oauth_config(
     """Owner-or-admin gate: a global actions-admin manages any OAuth config; a scoped manager
     manages one only when they own every action referencing it — editing shared credentials
     would otherwise affect the other creators."""
+    tools = get_tools_by_oauth_config(oauth_config.id, db_session)
+    if any(
+        tool.craft_external_app is not None for tool in tools
+    ) and not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only a full admin can manage OAuth configurations shared with Craft.",
+        )
     if has_global_permission(user, Permission.MANAGE_ACTIONS):
         return
-    tools = get_tools_by_oauth_config(oauth_config.id, db_session)
     if tools and all(tool.user_id == user.id for tool in tools):
         return
     raise OnyxError(
@@ -409,7 +416,7 @@ def update_oauth_config_endpoint(
     ),
 ) -> OAuthConfigSnapshot:
     """Update an OAuth configuration (owner or admin)."""
-    existing_config = get_oauth_config(oauth_config_id, db_session)
+    existing_config = get_oauth_config(oauth_config_id, db_session, for_update=True)
     if not existing_config:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,
@@ -461,7 +468,7 @@ def delete_oauth_config_endpoint(
     ),
 ) -> dict[str, str]:
     """Delete an OAuth configuration (owner or admin)."""
-    existing_config = get_oauth_config(oauth_config_id, db_session)
+    existing_config = get_oauth_config(oauth_config_id, db_session, for_update=True)
     if not existing_config:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,

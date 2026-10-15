@@ -48,6 +48,11 @@ credentials, so the admin can only toggle them on and set policy. Custom apps
 on Cloud keep a normal credential form, as does a built-in whose OAuth client
 cannot be Onyx-owned because it is registered per customer account (Zendesk).
 
+OpenAPI actions enabled in Craft appear as custom apps. Their configuration link
+returns to OpenAPI setup, which owns their URLs, authentication, and availability.
+Admins cannot edit or delete these linked apps through the Craft app API.
+Linked apps do not accept skill associations. See [[mcp-and-custom-tools]].
+
 On **Preferences**, the admin sets a workspace default model for Craft
 sessions and a free-text "organization instructions" block that every Craft
 agent sees, alongside a read-only preview of the base instructions template
@@ -107,6 +112,10 @@ permission. See §5 for why the flag alone is not the real gate.
   (`backend/onyx/db/models.py`, read through `backend/onyx/db/external_app.py`):
   the configured app, each user's stored per-user credential, and the skill(s)
   an app is wired to.
+- `ExternalApp.openapi_tool_id` links an app to its source OpenAPI `Tool`.
+  The unique foreign key deletes the app when its source action is deleted.
+  `Tool.available_in_craft` controls publication; the app is enabled only when
+  this flag and `Tool.enabled` are true.
 - `GatedApp` (`backend/onyx/db/models.py`, read through `backend/onyx/db/gated_app.py`):
   the shared identity row for anything policy-gated, keyed by
   `(kind, target_id)` where `kind` is `GatedAppKind.EXTERNAL_APP` or
@@ -176,7 +185,7 @@ the admin configured:
 
 ```
 outbound HTTPS request from a Craft sandbox
-  └─ resolve_app_for_url                 sandbox_proxy/request_evaluator.py
+  └─ resolve_app_for_url                 external_apps/matching/engine.py
        (matches request.url against enabled apps' upstream_url_patterns)
   └─ recognize_actions / apply_credential_gate
        external_apps/matching/engine.py
@@ -280,6 +289,8 @@ not cover:
    `external_apps/credentials.py:resolve_injection_headers`. That function
    returns `{}` when the app is missing or not `enabled`. Otherwise it merges the
    organization credentials with the user's `ExternalAppUserCredential`, if any.
+   OpenAPI-owned apps use organization headers and their source action's authentication.
+   OAuth uses the caller's custom-action token; passthrough uses their Onyx login token.
    An org-credentialed app needs no per-user row. Disabling an app does not
    delete stored user credentials.
 3. **A connected app's `DENY`-policied action is blocked before any upstream

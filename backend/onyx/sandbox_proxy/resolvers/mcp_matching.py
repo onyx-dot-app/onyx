@@ -9,13 +9,13 @@ attribution is defined once.
 
 from __future__ import annotations
 
-import posixpath
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 
 from mitmproxy import http
 from pydantic import BaseModel
 
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import normalized_request_path
 
 logger = setup_logger()
 
@@ -66,13 +66,6 @@ def parse_target(server_id: int, server_url: str) -> CraftMCPTarget | None:
         port=port,
         path_prefix=parsed.path.rstrip("/"),
     )
-
-
-def normalized_request_path(raw_path: str) -> str:
-    """Percent-decode and collapse `.`/`..` so prefix matching can't be escaped
-    by traversal (`/mcp/../admin`) the upstream would resolve to another path."""
-    path = unquote(raw_path.split("?", 1)[0].split("#", 1)[0])
-    return posixpath.normpath(path)
 
 
 def path_within_prefix(request_path: str, path_prefix: str) -> bool:

@@ -237,6 +237,10 @@
         "createFailed": "Échec de la création de l'action OpenAPI",
         "invalidJson": "Format JSON non valide dans la définition du schéma OpenAPI",
         "updateFailed": "Échec de la mise à jour de l'action OpenAPI"
+      },
+      "craft": {
+        "label": "Activer dans Craft",
+        "description": "Permettez à vos agents Craft d’utiliser ces API et outils."
       }
     },
     "cardHeader": {
@@ -5333,6 +5337,9 @@
         "toggle": {
           "disableAriaLabel": "Désactiver {name}",
           "enableAriaLabel": "Activer {name}"
+        },
+        "openApiSource": {
+          "label": "Gérer l’action OpenAPI"
         }
       },
       "facts": {

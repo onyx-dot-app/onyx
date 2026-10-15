@@ -2,8 +2,10 @@
 
 import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
-import { Modal } from "@opal/components";
+import { useSettings } from "@/lib/settings/hooks";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
+import { Modal, InputCheckbox, Text as OpalText } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
@@ -17,6 +19,7 @@ import {
   validateToolDefinition,
   createCustomTool,
   updateCustomTool,
+  type ToolUpdatePayload,
 } from "@/lib/tools/svc";
 import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
@@ -48,6 +51,7 @@ interface AddOpenAPIActionModalProps {
 
 interface OpenAPIActionFormValues {
   definition: string;
+  availableInCraft: boolean;
 }
 
 function parseJsonWithTrailingCommas(jsonString: string) {
@@ -70,10 +74,12 @@ interface FormContentProps {
   handleClose: () => void;
   existingTool: ToolSnapshot | null;
   onEditAuthentication?: (tool: ToolSnapshot) => void;
+  canEnableCraft: boolean;
   onDisconnectTool?: (tool: ToolSnapshot) => Promise<void> | void;
 }
 
 function FormContent({
+  canEnableCraft,
   handleClose,
   existingTool,
   onEditAuthentication,
@@ -335,6 +341,26 @@ function FormContent({
           />
         )}
 
+        {canEnableCraft && (
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2">
+              <InputCheckbox
+                checked={values.availableInCraft}
+                disabled={isSubmitting}
+                onCheckedChange={(checked) =>
+                  setFieldValue("availableInCraft", checked)
+                }
+              />
+              <OpalText font="main-ui-action">
+                {t("addOpenApiModal.craft.label")}
+              </OpalText>
+            </label>
+            <OpalText font="secondary-body" color="text-03">
+              {t("addOpenApiModal.craft.description")}
+            </OpalText>
+          </div>
+        )}
+
         {showAuthenticationStatus && (
           <Section
             flexDirection="row"
@@ -426,6 +452,14 @@ export default function AddOpenAPIActionModal({
 }: AddOpenAPIActionModalProps) {
   const t = useTranslations("actions");
   const { isOpen, toggle } = useModal();
+  const settings = useSettings();
+  const { isGlobalHolder } = usePermissionAuthority(
+    Permission.FULL_ADMIN_PANEL_ACCESS
+  );
+  const canEnableCraft =
+    isGlobalHolder &&
+    (settings.onyx_craft_available === true ||
+      Boolean(existingTool?.available_in_craft));
 
   const validationSchema = Yup.object().shape({
     definition: Yup.string().required(t("addOpenApiModal.definition.required")),
@@ -447,6 +481,7 @@ export default function AddOpenAPIActionModal({
 
   const initialValues: OpenAPIActionFormValues = useMemo(
     () => ({
+      availableInCraft: existingTool?.available_in_craft ?? false,
       definition: existingTool?.definition
         ? prettifyDefinition(existingTool.definition)
         : "",
@@ -469,18 +504,11 @@ export default function AddOpenAPIActionModal({
 
     if (existingTool) {
       try {
-        const updatePayload: {
-          name?: string;
-          description?: string;
-          definition: Record<string, any>;
-          custom_headers?: { key: string; value: string }[];
-          passthrough_auth?: boolean;
-          oauth_config_id?: number | null;
-        } = {
+        const updatePayload: ToolUpdatePayload = {
+          ...(canEnableCraft && {
+            available_in_craft: values.availableInCraft,
+          }),
           definition: parsedDefinition,
-          custom_headers: existingTool.custom_headers,
-          passthrough_auth: existingTool.passthrough_auth,
-          oauth_config_id: existingTool.oauth_config_id,
         };
 
         if (derivedName) {
@@ -516,6 +544,7 @@ export default function AddOpenAPIActionModal({
         definition: parsedDefinition,
         custom_headers: [],
         passthrough_auth: false,
+        ...(canEnableCraft && { available_in_craft: values.availableInCraft }),
       });
 
       if (response.error) {
@@ -543,6 +572,7 @@ export default function AddOpenAPIActionModal({
           enableReinitialize
         >
           <FormContent
+            canEnableCraft={canEnableCraft}
             handleClose={handleClose}
             existingTool={existingTool}
             onEditAuthentication={onEditAuthentication}

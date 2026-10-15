@@ -3,9 +3,9 @@
 import { ToolSnapshot } from "@/lib/tools/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { useCreateModal } from "@opal/components";
 import OpenAPIAuthenticationModal, {
-  AuthMethod,
   OpenAPIAuthFormValues,
 } from "./modals/OpenAPIAuthenticationModal";
 import AddOpenAPIActionModal from "./modals/AddOpenAPIActionModal";
@@ -28,6 +28,9 @@ export default function OpenApiPageContent() {
     isLoading: isOpenApiLoading,
   } = useOpenApiTools();
   const addOpenAPIActionModal = useCreateModal();
+  const searchParams = useSearchParams();
+  const requestedToolId = searchParams.get("toolId");
+  const [openedToolId, setOpenedToolId] = useState<string | null>(null);
   const openAPIAuthModal = useCreateModal();
   const disconnectModal = useCreateModal();
   const [selectedTool, setSelectedTool] = useState<ToolSnapshot | null>(null);
@@ -166,6 +169,16 @@ export default function OpenApiPageContent() {
     },
     [addOpenAPIActionModal]
   );
+
+  useEffect(() => {
+    if (!requestedToolId || requestedToolId === openedToolId) return;
+    const tool = openApiTools?.find(
+      (item) => item.id === Number(requestedToolId)
+    );
+    if (!tool) return;
+    setOpenedToolId(requestedToolId);
+    handleManageTool(tool);
+  }, [requestedToolId, openedToolId, openApiTools, handleManageTool]);
 
   const handleEditAuthenticationFromModal = useCallback(
     (tool: ToolSnapshot) => {
@@ -317,13 +330,6 @@ export default function OpenApiPageContent() {
         });
   }, [selectedTool, t]);
 
-  const authenticationDefaultMethod = useMemo<AuthMethod>(() => {
-    if (!selectedTool) {
-      return "oauth";
-    }
-    return selectedTool.custom_headers?.length ? "custom-header" : "oauth";
-  }, [selectedTool]);
-
   // Filter tools based on search query
   const filteredTools = useMemo(() => {
     if (!openApiTools) return [];
@@ -411,7 +417,6 @@ export default function OpenApiPageContent() {
           onClose={resetAuthModal}
           title={authenticationModalTitle}
           entityName={selectedTool?.name ?? null}
-          defaultMethod={authenticationDefaultMethod}
           oauthConfigId={selectedTool?.oauth_config_id ?? null}
           initialHeaders={selectedTool?.custom_headers ?? null}
           passthroughOAuthEnabled={selectedTool?.passthrough_auth ?? false}

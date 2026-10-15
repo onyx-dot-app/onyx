@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from onyx.auth.oauth_token_manager import OAuthTokenManager
+from onyx.auth.oauth_token_manager import get_tool_access_token
 from onyx.chat.emitter import Emitter
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
@@ -14,7 +14,6 @@ from onyx.context.search.models import BaseFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.models import User
-from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
@@ -204,7 +203,6 @@ def _construct_tools_impl(
     )
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
-    user_oauth_token: str | None = user.live_oauth_token
 
     search_settings = get_current_search_settings(db_session)
     document_index = get_default_document_index(search_settings, None)
@@ -397,38 +395,17 @@ def _construct_tools_impl(
             if not custom_tool_config:
                 custom_tool_config = CustomToolConfig()
 
-            # Determine which OAuth token to use
-            oauth_token_for_tool = None
-
-            # Priority 1: OAuth config (per-tool OAuth)
-            if db_tool_model.oauth_config_id:
-                if user.is_anonymous:
-                    logger.warning(
-                        "Anonymous user cannot use OAuth tool %s", db_tool_model.id
-                    )
-                    continue
-                oauth_config = get_oauth_config(
-                    db_tool_model.oauth_config_id, db_session
-                )
-                if oauth_config:
-                    token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
-                    oauth_token_for_tool = token_manager.get_valid_access_token()
-                    if not oauth_token_for_tool:
-                        logger.warning(
-                            "No valid OAuth token found for tool %s with OAuth config %s",
-                            db_tool_model.id,
-                            db_tool_model.oauth_config_id,
-                        )
-
-            # Priority 2: Passthrough auth (user's login OAuth token)
-            elif db_tool_model.passthrough_auth:
-                if user.is_anonymous:
-                    logger.warning(
-                        "Anonymous user cannot use passthrough auth tool %s",
-                        db_tool_model.id,
-                    )
-                    continue
-                oauth_token_for_tool = user_oauth_token
+            if user.is_anonymous and (
+                db_tool_model.oauth_config_id is not None
+                or db_tool_model.passthrough_auth
+            ):
+                continue
+            oauth_token_for_tool = get_tool_access_token(
+                oauth_config_id=db_tool_model.oauth_config_id,
+                passthrough_auth=db_tool_model.passthrough_auth,
+                user=user,
+                db_session=db_session,
+            )
 
             tool_dict[db_tool_model.id] = cast(
                 list[Tool],

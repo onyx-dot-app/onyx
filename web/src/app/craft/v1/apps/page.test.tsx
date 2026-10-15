@@ -15,6 +15,7 @@ import {
 import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
 
+let mockSearchParams = new URLSearchParams();
 const mockUseSWR = jest.fn();
 const mockUseUserSkills = jest.fn();
 const mockUseCraftMcpServers = jest.fn();
@@ -32,7 +33,7 @@ jest.mock("swr", () => ({
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
   usePathname: () => "/craft/v1/apps",
-  useSearchParams: () => ({ get: () => null, has: () => false }),
+  useSearchParams: () => mockSearchParams,
 }));
 
 jest.mock("@/providers/UserProvider", () => ({
@@ -154,6 +155,7 @@ function activeTab() {
 
 describe("Apps associated-skill setup notice", () => {
   beforeEach(() => {
+    mockSearchParams = new URLSearchParams();
     mockMutateApps.mockReset();
     mockRefreshMcp.mockReset();
     mockRefreshSkills.mockReset();
@@ -234,6 +236,7 @@ describe("Apps associated-skill setup notice", () => {
 
   it("refreshes app and skill state after disconnecting", async () => {
     const user = setupUser();
+    mockEndpoints([{ ...ACME_CRM_APP, credential_keys: ["api_key"] }]);
     mockUseUserSkills.mockReturnValue({
       data: skills(true),
       refresh: mockRefreshSkills,
@@ -253,6 +256,7 @@ describe("Apps associated-skill setup notice", () => {
 
 describe("Apps vs MCP servers", () => {
   beforeEach(() => {
+    mockSearchParams = new URLSearchParams();
     mockMutateApps.mockReset();
     mockRefreshMcp.mockReset();
     mockRefreshSkills.mockReset();
@@ -310,6 +314,60 @@ describe("Apps vs MCP servers", () => {
     expect(
       activeTab().getByText(/Not available for your account/)
     ).toBeInTheDocument();
+  });
+
+  it("signals the OAuth opener only after the server confirms the app connection", () => {
+    const postMessage = jest.fn();
+    const close = jest.spyOn(window, "close").mockImplementation(() => {});
+    const previousOpener: Window | null = window.opener;
+    window.opener = { postMessage };
+    try {
+      mockSearchParams = new URLSearchParams({ oauthConnectedAppId: "42" });
+      mockEndpoints([{ ...ACME_CRM_APP, authenticated: false }]);
+      const { rerender } = render(<ExternalAppsPage />);
+      expect(postMessage).not.toHaveBeenCalled();
+
+      mockEndpoints([ACME_CRM_APP]);
+      rerender(<ExternalAppsPage />);
+      expect(postMessage).toHaveBeenCalledWith(
+        { source: "onyx-external-app-oauth", externalAppId: 42 },
+        window.location.origin
+      );
+      expect(close).toHaveBeenCalled();
+    } finally {
+      window.opener = previousOpener;
+      close.mockRestore();
+    }
+  });
+
+  it("shows login-token apps without credential or disconnect actions", () => {
+    mockEndpoints([
+      appFixture({
+        id: 1,
+        name: "Available API",
+        app_type: "CUSTOM",
+        credential_keys: [],
+        authenticated: true,
+        supports_oauth: false,
+      }),
+      appFixture({
+        id: 2,
+        name: "Unavailable API",
+        app_type: "CUSTOM",
+        credential_keys: [],
+        authenticated: false,
+        supports_oauth: false,
+      }),
+    ]);
+
+    render(<ExternalAppsPage />);
+
+    expect(
+      activeTab().getByText("Not available for your account — ask an admin")
+    ).toBeInTheDocument();
+    expect(
+      activeTab().queryByRole("button", { name: /Connect|Disconnect/ })
+    ).not.toBeInTheDocument();
   });
 
   it("leads with connected cards, then orders the rest by name", () => {

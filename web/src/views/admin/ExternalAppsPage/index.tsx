@@ -29,7 +29,7 @@ import {
   useConnectableTab,
 } from "@/app/craft/v1/apps/connectableApps";
 import { compareByName } from "@/lib/skills/picker";
-import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/interfaces";
+import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/types";
 import {
   externalAppToIntegration,
   type IntegrationLabels,
@@ -159,7 +159,8 @@ function AppsAdminContent({
     : undefined;
   const activeCustomModal =
     customModal ??
-    (deepLinkedApp?.app_type === "CUSTOM"
+    (deepLinkedApp?.app_type === "CUSTOM" &&
+    deepLinkedApp.openapi_tool_id == null
       ? { existingApp: deepLinkedApp }
       : null);
   const activeProviderModal =

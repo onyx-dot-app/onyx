@@ -27,6 +27,7 @@ import { SvgNoResult, SvgUnPlugged } from "@opal/illustrations";
 import { SvgAlertCircle, SvgPlug, SvgSettings } from "@opal/icons";
 import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import {
+  OAUTH_CONNECTED_APP_PARAM,
   ConnectableApp,
   ConnectableKind,
   externalAppToConnectable,
@@ -35,6 +36,7 @@ import {
   parseConnectableTab,
   useConnectableTab,
 } from "@/app/craft/v1/apps/connectableApps";
+import { completeExternalAppOAuthPopup } from "@/app/craft/services/externalAppsService";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -112,6 +114,14 @@ function AppConnections({ query }: AppConnectionsProps) {
   const searchParams = useSearchParams();
   const connectParam = searchParams.get("connect");
   const [tab, setTab] = useConnectableTab();
+  const completedAppId = searchParams.get(OAUTH_CONNECTED_APP_PARAM);
+  useEffect(() => {
+    if (!completedAppId) return;
+    const app = externalApps?.find(
+      (item) => item.id === Number(completedAppId)
+    );
+    if (app?.authenticated) completeExternalAppOAuthPopup(app.id);
+  }, [completedAppId, externalApps]);
 
   // Apps with at least one associated skill switched off. Both skill lists
   // matter: a built-in provider's associated skill is a built-in row, so

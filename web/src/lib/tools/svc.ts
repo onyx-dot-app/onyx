@@ -78,6 +78,7 @@ export async function createCustomTool(toolData: {
   definition: Record<string, any>;
   custom_headers: { key: string; value: string }[];
   passthrough_auth: boolean;
+  available_in_craft?: boolean;
 }): Promise<ApiResponse<ToolSnapshot>> {
   try {
     const response = await fetch("/api/admin/tool/custom", {
@@ -101,12 +102,13 @@ export async function createCustomTool(toolData: {
   }
 }
 
-type ToolUpdatePayload = {
+export type ToolUpdatePayload = {
   name?: string;
   description?: string;
   definition?: Record<string, any>;
   custom_headers?: { key: string; value: string }[] | null;
   passthrough_auth?: boolean;
+  available_in_craft?: boolean;
   oauth_config_id?: number | null;
 };
 

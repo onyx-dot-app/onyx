@@ -13,9 +13,8 @@ export default function OAuthConfigCallbackPage() {
     { kind: "test"; state: string } | { kind: "normal" | "completed" } | null
   >(null);
   useEffect(() => {
-    const completed = new URLSearchParams(window.location.search).has(
-      "oauth_test_completed"
-    );
+    const params = new URLSearchParams(window.location.search);
+    const completed = params.has("oauth_test_completed");
     let state: string | null = null;
     try {
       state = window.sessionStorage.getItem(OAUTH_TEST_ACTIVE_KEY);
@@ -25,7 +24,7 @@ export default function OAuthConfigCallbackPage() {
     setMode(
       completed
         ? { kind: "completed" }
-        : state
+        : state && state === params.get("state")
           ? { kind: "test", state }
           : { kind: "normal" }
     );

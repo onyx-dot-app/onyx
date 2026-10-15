@@ -10,18 +10,15 @@ import { cn } from "@opal/utils";
 import {
   ConnectAppDecision,
   postConnectAppDecision,
-  startExternalAppOAuth,
   upsertUserCredentials,
 } from "@/app/craft/services/externalAppsService";
 import CometEdge from "@/app/craft/components/CometEdge";
-import {
-  OAUTH_POPUP_MESSAGE_SOURCE,
-  OAuthPopupMessage,
-} from "@/app/craft/types/setupRequests";
+import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
 import {
   ExternalAppUserResponse,
   getAppTypeLogo,
 } from "@/app/craft/v1/apps/registry";
+import { externalAppToConnectable } from "@/app/craft/v1/apps/connectableApps";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -52,6 +49,7 @@ export default function SetupCard({
   userApp,
 }: SetupCardProps) {
   const t = useTranslations("craft.setupCard");
+  const appStatus = useTranslations("craft.apps.page.status");
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +71,8 @@ export default function SetupCard({
 
   const appName =
     userApp?.name ?? t("appFallback.label", { id: externalAppId });
-  const supportsOauth = userApp?.supports_oauth ?? false;
+  const connectable = userApp ? externalAppToConnectable(userApp) : null;
+  const connectMode = connectable?.connectMode ?? null;
   const appLoading = userApp === undefined;
 
   const resolve = useCallback(
@@ -127,11 +126,19 @@ export default function SetupCard({
   function awaitOAuthCompletion(popup: Window) {
     let settled = false;
 
-    function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      const data = event.data as Partial<OAuthPopupMessage> | undefined;
-      if (data?.source !== OAUTH_POPUP_MESSAGE_SOURCE) return;
-      if (data.externalAppId !== externalAppId) return;
+    function onMessage(event: MessageEvent<unknown>) {
+      if (event.origin !== window.location.origin || event.source !== popup)
+        return;
+      const data = event.data;
+      if (
+        !data ||
+        typeof data !== "object" ||
+        !("source" in data) ||
+        data.source !== OAUTH_POPUP_MESSAGE_SOURCE ||
+        !("externalAppId" in data) ||
+        data.externalAppId !== externalAppId
+      )
+        return;
       finish(true);
     }
 
@@ -169,34 +176,49 @@ export default function SetupCard({
     setError(null);
     // Capabilities are unknown until the app row loads (the button is disabled).
     if (appLoading) return;
-    if (!userApp) {
+    if (!connectable) {
       setError(t("error.notConfigurable"));
       return;
     }
-    if (userApp.authenticated) {
+    if (connectable.authenticated) {
       await resolve("connected");
       return;
     }
-    if (!supportsOauth) {
+    if (connectMode === null) {
+      setError(t("error.notConfigurable"));
+      return;
+    }
+    if (connectMode === "credentials") {
       // Lock the actions so "Not now" can't decline while the form is open.
       setBusy(true);
       setCredModalOpen(true);
       return;
     }
 
+    // Open during the click, before the request consumes browser user activation.
+    const popup = window.open("", "_blank", POPUP_FEATURES);
+    if (!popup) {
+      setError(t("error.popupBlocked"));
+      return;
+    }
     setBusy(true);
+    cleanupRef.current = () => popup.close();
     try {
-      const { authorize_url } = await startExternalAppOAuth(externalAppId);
-      const popup = window.open(authorize_url, "_blank", POPUP_FEATURES);
-      if (!popup) {
-        setBusy(false);
-        setError(t("error.popupBlocked"));
+      const authorizationUrl = await connectable.startOAuth();
+      if (!mountedRef.current || popup.closed) {
+        cleanupRef.current = null;
+        if (mountedRef.current) setBusy(false);
         return;
       }
+      popup.location.href = authorizationUrl;
       awaitOAuthCompletion(popup);
     } catch (e) {
-      setBusy(false);
-      setError(e instanceof Error ? e.message : t("error.startFailed"));
+      popup.close();
+      cleanupRef.current = null;
+      if (mountedRef.current) {
+        setBusy(false);
+        setError(e instanceof Error ? e.message : t("error.startFailed"));
+      }
     }
   }
 
@@ -247,6 +269,11 @@ export default function SetupCard({
           title={t("connect.title", { app: appName })}
           description={reason ?? t("reason.fallback", { app: appName })}
         />
+        {!appLoading && !userApp?.authenticated && connectMode === null && (
+          <Text font="secondary-body" color="text-03">
+            {appStatus("notAvailable")}
+          </Text>
+        )}
         {error && (
           <Text font="secondary-body" color="text-03">
             {error}
@@ -264,7 +291,11 @@ export default function SetupCard({
           <Button
             prominence="primary"
             size="sm"
-            disabled={busy || appLoading}
+            disabled={
+              busy ||
+              appLoading ||
+              (!userApp?.authenticated && connectMode === null)
+            }
             onClick={() => void connect()}
           >
             {busy

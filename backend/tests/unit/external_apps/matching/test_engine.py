@@ -99,3 +99,12 @@ def test_apply_gate_not_serveable_keeps_only_deny() -> None:
     )
     assert gated is not None
     assert [a.policy for a in gated.actions] == [EndpointPolicy.DENY]
+
+
+def test_openapi_missing_credentials_deny_instead_of_forwarding_bare() -> None:
+    app = _app(ExternalAppType.CUSTOM)
+    app.openapi_tool_id = 1
+    result = apply_credential_gate(app, _request(), None, is_available=False)
+    assert result is not None
+    assert result.governing_action.policy is EndpointPolicy.DENY
+    assert result.governing_action.action_type == "credentials_unavailable"

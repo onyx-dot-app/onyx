@@ -1,4 +1,4 @@
-import { initiateOAuthFlow } from "@/lib/oauth/api";
+import { getOAuthAuthorizationUrl, initiateOAuthFlow } from "@/lib/oauth/api";
 
 const location = { href: "https://onyx.example.com/app" };
 
@@ -40,3 +40,27 @@ test.each(["javascript:alert(1)", "data:text/html,test", "//example.com/auth"])(
     expect(location.href).toBe("https://example.com/auth");
   }
 );
+
+test("returns a validated authorization URL without navigating", async () => {
+  const fetch = jest.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        authorization_url: "https://provider.example/auth",
+        state: "test",
+      })
+    )
+  );
+  await expect(getOAuthAuthorizationUrl(7, "/craft/v1/apps")).resolves.toBe(
+    "https://provider.example/auth"
+  );
+  expect(location.href).toBe("https://onyx.example.com/app");
+  expect(fetch).toHaveBeenCalledWith(
+    "/api/oauth-config/initiate",
+    expect.objectContaining({
+      body: JSON.stringify({
+        oauth_config_id: 7,
+        return_path: "/craft/v1/apps",
+      }),
+    })
+  );
+});

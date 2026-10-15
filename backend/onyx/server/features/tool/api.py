@@ -12,6 +12,7 @@ from onyx.auth.permissions import (
 )
 from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.db.constants import UNSET
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.mcp import get_mcp_servers_accessible_to_user
@@ -27,7 +28,8 @@ from onyx.db.tools import (
     get_tool_ids_connected_to_groups,
     get_tools,
     get_tools_by_ids,
-    update_tool,
+    set_tool_enabled__no_commit,
+    update_tool__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -148,11 +150,19 @@ def _resolve_masked_headers(
     return resolved
 
 
+def _require_craft_admin(user: User) -> None:
+    if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only a full admin can manage actions shared with Craft.",
+        )
+
+
 def _get_manageable_custom_tool(tool_id: int, db_session: Session, user: User) -> Tool:
     """Fetch a custom tool and assert the caller may manage it (owner or admin) — the gate for
     every action on it: edit, delete, toggle, and OAuth config."""
     try:
-        tool = get_tool_by_id(tool_id, db_session)
+        tool = get_tool_by_id(tool_id, db_session, for_update=True)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     if tool.in_code_tool_id is not None:
@@ -203,6 +213,8 @@ def create_custom_tool(
         require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
     ),
 ) -> ToolSnapshot:
+    if tool_data.available_in_craft:
+        _require_craft_admin(user)
     _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data, user)
     _assert_can_link_oauth_config(tool_data.oauth_config_id, db_session, user)
@@ -217,6 +229,7 @@ def create_custom_tool(
         passthrough_auth=tool_data.passthrough_auth,
         oauth_config_id=tool_data.oauth_config_id,
         enabled=True,
+        available_in_craft=tool_data.available_in_craft,
     )
     db_session.commit()
     return ToolSnapshot.from_model(tool)
@@ -232,6 +245,8 @@ def update_custom_tool(
     ),
 ) -> ToolSnapshot:
     existing_tool = _get_manageable_custom_tool(tool_id, db_session, user)
+    if tool_data.available_in_craft:
+        _require_craft_admin(user)
     if tool_data.definition is not None:
         _validate_tool_definition(tool_data.definition)
     _validate_auth_settings(tool_data, user, existing_tool)
@@ -241,7 +256,7 @@ def update_custom_tool(
         user,
         current_oauth_config_id=existing_tool.oauth_config_id,
     )
-    updated_tool = update_tool(
+    updated_tool = update_tool__no_commit(
         tool_id=tool_id,
         name=tool_data.name,
         description=tool_data.description,
@@ -252,8 +267,14 @@ def update_custom_tool(
         user_id=existing_tool.user_id,
         db_session=db_session,
         passthrough_auth=tool_data.passthrough_auth,
-        oauth_config_id=tool_data.oauth_config_id,
+        oauth_config_id=(
+            tool_data.oauth_config_id
+            if "oauth_config_id" in tool_data.model_fields_set
+            else UNSET
+        ),
+        available_in_craft=tool_data.available_in_craft,
     )
+    db_session.commit()
     return ToolSnapshot.from_model(updated_tool)
 
 
@@ -268,6 +289,8 @@ def delete_custom_tool(
     _ = _get_manageable_custom_tool(tool_id, db_session, user)
     try:
         delete_tool__no_commit(tool_id, db_session)
+    except OnyxError:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -302,7 +325,7 @@ def update_tools_status(
     if not update_data.tool_ids:
         raise HTTPException(status_code=400, detail="No tool IDs provided")
 
-    tools = get_tools_by_ids(update_data.tool_ids, db_session)
+    tools = get_tools_by_ids(update_data.tool_ids, db_session, for_update=True)
     tools_by_id = {tool.id: tool for tool in tools}
 
     updated_tools = []
@@ -317,7 +340,7 @@ def update_tools_status(
                     "You can only enable or disable actions you created, or ones "
                     "belonging to an MCP server you own.",
                 )
-            tool.enabled = update_data.enabled
+            set_tool_enabled__no_commit(db_session, tool, update_data.enabled)
             updated_tools.append(tool_id)
         else:
             missing_tools.append(tool_id)

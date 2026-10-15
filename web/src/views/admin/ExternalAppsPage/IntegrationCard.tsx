@@ -16,7 +16,7 @@ import { cn } from "@opal/utils";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
 import { ConfirmationModalLayout, toast } from "@opal/layouts";
 import { SvgEdit, SvgMoreHorizontal, SvgTrash } from "@opal/icons";
-import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/interfaces";
+import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/types";
 
 interface IntegrationCardProps {
   integration: ConfiguredIntegration;
@@ -109,6 +109,11 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {integration.sourceHref && (
+              <Button href={integration.sourceHref} prominence="secondary">
+                {t("card.openApiSource.label")}
+              </Button>
+            )}
             {/* Toggles org-wide availability, never a single member's
                 connection; the label fades in on hover or focus. */}
             <Hoverable.Item group="integration-row" variant="appear-on-hover">
@@ -123,6 +128,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
             <InputSwitch
               checked={enabled}
               onCheckedChange={() =>
+                toggleEnabled &&
                 run(
                   toggleEnabled,
                   enabled
@@ -130,7 +136,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                     : t("card.toasts.enableFailed", { name })
                 )
               }
-              disabled={isMutating}
+              disabled={isMutating || !toggleEnabled}
               aria-label={
                 enabled
                   ? t("card.toggle.disableAriaLabel", { name })

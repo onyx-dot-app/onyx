@@ -237,6 +237,10 @@
         "createFailed": "创建 OpenAPI 操作失败",
         "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
         "updateFailed": "更新 OpenAPI 操作失败"
+      },
+      "craft": {
+        "label": "在 Craft 中启用",
+        "description": "允许您的 Craft 智能体使用这些 API 和工具。"
       }
     },
     "cardHeader": {
@@ -5333,6 +5337,9 @@
         "toggle": {
           "disableAriaLabel": "禁用 {name}",
           "enableAriaLabel": "启用 {name}"
+        },
+        "openApiSource": {
+          "label": "管理 OpenAPI 操作"
         }
       },
       "facts": {

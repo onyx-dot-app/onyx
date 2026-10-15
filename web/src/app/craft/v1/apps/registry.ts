@@ -87,6 +87,7 @@ export interface BuiltInExternalAppDescriptor {
 }
 
 export interface ExternalAppAdminResponse {
+  openapi_tool_id?: number | null;
   id: number;
   name: string;
   app_type: ExternalAppType;
@@ -109,6 +110,7 @@ export interface ExternalAppAdminResponse {
 }
 
 export interface ExternalAppUserResponse {
+  oauth_config_id?: number | null;
   id: number;
   name: string;
   app_type: ExternalAppType;

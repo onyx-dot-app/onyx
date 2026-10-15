@@ -1,3 +1,4 @@
+import re
 from typing import TypedDict
 
 from fastapi.datastructures import Headers
@@ -10,6 +11,13 @@ from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+
+
+def is_valid_header_name(name: str) -> bool:
+    """Check the RFC 9110 field-name syntax."""
+    return _HTTP_FIELD_NAME_RE.fullmatch(name) is not None
 
 
 class HeaderItemDict(TypedDict):

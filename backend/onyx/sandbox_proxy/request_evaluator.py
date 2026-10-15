@@ -6,9 +6,8 @@ lockdown, not this heuristic.
 """
 
 import json
-import re
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import Any, Protocol
 from urllib.parse import parse_qs
 from uuid import UUID
@@ -21,15 +20,17 @@ from onyx.db.enums import EndpointPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
 from onyx.db.gated_app import get_action_policies
 from onyx.db.mcp import get_craft_enabled_mcp_servers
-from onyx.db.models import ExternalApp, MCPServer
+from onyx.db.models import MCPServer
 from onyx.db.users import fetch_user_by_id
 from onyx.external_apps.credentials import app_is_available
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
+    AmbiguousExternalAppTargetError,
     GatedTarget,
     MatchedAction,
     apply_credential_gate,
     recognize_actions,
+    resolve_app_for_url,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.sandbox_proxy.mcp_jsonrpc import classify_mcp_request
@@ -78,31 +79,6 @@ class CompositeRequestEvaluator(RequestEvaluator):
         return None
 
 
-def resolve_app_for_url(
-    url: str,
-    apps: Iterable[ExternalApp],
-) -> ExternalApp | None:
-    """Return the first ``app`` whose any ``upstream_url_patterns`` entry matches
-    ``url``, or ``None`` if no connected app claims it.
-
-    ``apps`` is expected id-ordered (as ``get_external_apps`` returns it), so the
-    lowest-id app wins when patterns overlap. A malformed built-in regex is
-    skipped rather than failing resolution for every other app.
-    """
-    for app in apps:
-        for regex in app.upstream_url_regexes:
-            try:
-                if re.fullmatch(regex, url):
-                    return app
-            except re.error:
-                logger.warning(
-                    "skipping malformed upstream_url_pattern app_id=%s pattern=%r",
-                    app.id,
-                    regex,
-                )
-    return None
-
-
 class ExternalAppRequestEvaluator(RequestEvaluator):
     """Matches a request against the tenant's connected external apps.
 
@@ -117,7 +93,23 @@ class ExternalAppRequestEvaluator(RequestEvaluator):
     ) -> AllMatchedActions | None:
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             apps = get_external_apps(db, enabled_only=True)
-            app = resolve_app_for_url(request.url, apps)
+            try:
+                app = resolve_app_for_url(request.url, apps)
+            except AmbiguousExternalAppTargetError as error:
+                app = error.apps[0]
+                return AllMatchedActions(
+                    target=GatedTarget(
+                        kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=app.name
+                    ),
+                    actions=(
+                        MatchedAction(
+                            action_type="ambiguous_app",
+                            display_name="Conflicting app URLs",
+                            description=str(error),
+                            policy=EndpointPolicy.DENY,
+                        ),
+                    ),
+                )
             if app is None:
                 return None
 

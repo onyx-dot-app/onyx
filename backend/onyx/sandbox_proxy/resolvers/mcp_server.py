@@ -41,7 +41,6 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     CraftMCPTarget,
     host_targets,
     match_request,
-    normalized_request_path,
     parse_target,
 )
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
@@ -53,6 +52,7 @@ from onyx.server.features.mcp.credentials import (
 from onyx.server.features.mcp.oauth import refresh_mcp_oauth_token_if_expired
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import normalized_request_path
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()

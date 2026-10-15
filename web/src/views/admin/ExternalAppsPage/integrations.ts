@@ -10,7 +10,7 @@ import {
   deleteExternalApp,
   updateExternalApp,
 } from "@/app/craft/services/externalAppsService";
-import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/interfaces";
+import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/types";
 
 /** Translated fact and warning copy, supplied by the rendering component
  * because this module cannot call translation hooks. */
@@ -49,7 +49,9 @@ function externalAppFacts(
   if (app.is_onyx_managed) facts.push(labels.providedByOnyx);
   if (app.app_type === "CUSTOM") {
     facts.push(labels.upstreamPatternCount(app.upstream_url_patterns.length));
-    facts.push(customCredentialFact(app, labels));
+    // Linked actions own authentication outside the app credential template.
+    if (app.openapi_tool_id == null)
+      facts.push(customCredentialFact(app, labels));
   }
   if (app.actions.length > 0) {
     facts.push(labels.actionCount(app.actions.length));
@@ -78,6 +80,7 @@ export function externalAppToIntegration(
   labels: IntegrationLabels
 ): ConfiguredIntegration {
   const isCustom = app.app_type === "CUSTOM";
+  const isOpenApiOwned = app.openapi_tool_id != null;
   const orphaned = !isCustom && descriptor === undefined;
   const warnings: string[] = [];
   if (app.associated_skills.some((skill) => skill.is_valid === false)) {
@@ -92,27 +95,35 @@ export function externalAppToIntegration(
     facts: externalAppFacts(app, labels),
     warnings,
     enabled: app.enabled,
-    toggleEnabled: async () => {
-      await updateExternalApp(app.id, { enabled: !app.enabled });
-      await onChange();
-    },
+    sourceHref: isOpenApiOwned
+      ? `/admin/openapi-actions?toolId=${app.openapi_tool_id}`
+      : undefined,
+    toggleEnabled: isOpenApiOwned
+      ? null
+      : async () => {
+          await updateExternalApp(app.id, { enabled: !app.enabled });
+          await onChange();
+        },
     // Edit only works for custom apps and built-ins whose descriptor still
     // exists; orphan app_types can only be disabled/deleted.
-    edit: isCustom
-      ? () => onEditCustom(app)
-      : descriptor
-        ? () => onEdit(descriptor)
-        : null,
-    // Onyx-managed built-ins are provisioned by Onyx.
-    remove: app.is_onyx_managed
+    edit: isOpenApiOwned
       ? null
-      : {
-          retainedCustomSkillCount: app.associated_skills.length,
-          run: async () => {
-            await deleteExternalApp(app.id);
-            await onChange();
+      : isCustom
+        ? () => onEditCustom(app)
+        : descriptor
+          ? () => onEdit(descriptor)
+          : null,
+    // Onyx-managed built-ins are provisioned by Onyx.
+    remove:
+      app.is_onyx_managed || isOpenApiOwned
+        ? null
+        : {
+            retainedCustomSkillCount: app.associated_skills.length,
+            run: async () => {
+              await deleteExternalApp(app.id);
+              await onChange();
+            },
           },
-        },
   };
 }
 

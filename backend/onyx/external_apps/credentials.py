@@ -3,11 +3,18 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.auth.oauth_token_manager import get_tool_access_token
 from onyx.db.external_app import (
     get_external_app_by_id,
     get_external_app_user_credential,
+    is_user_authenticated_for_app,
 )
 from onyx.db.models import ExternalApp
+from onyx.db.users import fetch_user_by_id
+
+
+class ExternalAppCredentialsError(Exception):
+    """An app requires a user credential that is missing or cannot be refreshed."""
 
 
 def build_auth_headers(
@@ -46,7 +53,9 @@ def resolve_injection_headers(
     Returns ``{}`` when the app is gone or disabled, or when no header's
     placeholders can be filled. Merges the app's organization credentials with
     the user's stored credentials (the user's win on key conflicts), then
-    renders the ``auth_template`` via :func:`build_auth_headers`.
+    renders the ``auth_template`` via :func:`build_auth_headers`. OpenAPI apps
+    use their source action's per-user OAuth or login token when configured.
+    Missing required user authentication raises ``ExternalAppCredentialsError``.
     """
     app = get_external_app_by_id(db_session, external_app_id)
     if app is None or not app.enabled:
@@ -55,13 +64,35 @@ def resolve_injection_headers(
     credentials: dict[str, Any] = dict(
         app.organization_credentials.get_value(apply_mask=False)
     )
-    user_cred = get_external_app_user_credential(
-        db_session, external_app_id=external_app_id, user_id=user_id
-    )
-    if user_cred is not None:
-        credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
+    if app.openapi_tool_id is None:
+        user_cred = get_external_app_user_credential(
+            db_session, external_app_id=external_app_id, user_id=user_id
+        )
+        if user_cred is not None:
+            credentials.update(user_cred.user_credentials.get_value(apply_mask=False))
 
-    return build_auth_headers(app.auth_template, credentials)
+    headers = build_auth_headers(app.auth_template, credentials)
+    tool = app.openapi_tool
+    if tool is not None and (tool.oauth_config_id is not None or tool.passthrough_auth):
+        access_token = get_tool_access_token(
+            oauth_config_id=tool.oauth_config_id,
+            passthrough_auth=tool.passthrough_auth,
+            user=fetch_user_by_id(db_session, user_id),
+            db_session=db_session,
+        )
+        if not access_token:
+            raise ExternalAppCredentialsError(
+                "Connect or reconnect this app before using its OpenAPI action in Craft."
+                if tool.oauth_config_id is not None
+                else "Sign in to Onyx with your organization's OAuth provider before using this action in Craft."
+            )
+        headers = {
+            key: value
+            for key, value in headers.items()
+            if key.lower() != "authorization"
+        }
+        headers["Authorization"] = f"Bearer {access_token}"
+    return headers
 
 
 def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bool:
@@ -76,6 +107,10 @@ def app_is_available(db_session: Session, app: ExternalApp, user_id: UUID) -> bo
     """
     if not app.enabled:
         return False
+    if app.openapi_tool_id is not None:
+        return is_user_authenticated_for_app(
+            app, None, db_session=db_session, user_id=user_id
+        )
     if not app.auth_template:
         return True
     return bool(resolve_injection_headers(db_session, app.id, user_id))

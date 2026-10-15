@@ -10,6 +10,12 @@ import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
 import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
+const mockGetOAuthAuthorizationUrl = jest.fn();
+jest.mock("@/lib/oauth/api", () => ({
+  getOAuthAuthorizationUrl: (...args: unknown[]) =>
+    mockGetOAuthAuthorizationUrl(...args),
+}));
+
 const mockMutate = jest.fn();
 const mockPostConnectAppDecision = jest.fn();
 
@@ -50,6 +56,98 @@ describe("SetupCard", () => {
     mockMutate.mockReset();
     mockPostConnectAppDecision.mockReset();
     mockPostConnectAppDecision.mockResolvedValue(undefined);
+  });
+
+  it("connects source OAuth in a popup and accepts completion only from that popup", async () => {
+    const user = setupUser();
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const popup = iframe.contentWindow;
+    if (!popup) throw new Error("Missing popup test window");
+    const open = jest.spyOn(window, "open").mockReturnValue(popup);
+    let authorize: ((url: string) => void) | undefined;
+    mockGetOAuthAuthorizationUrl.mockReturnValue(
+      new Promise<string>((resolve) => {
+        authorize = resolve;
+      })
+    );
+    try {
+      render(
+        <StrictMode>
+          <SetupCard
+            requestId="request-id"
+            externalAppId={42}
+            reason={null}
+            userApp={{
+              ...userApp,
+              credential_keys: [],
+              supports_oauth: true,
+              oauth_config_id: 7,
+            }}
+          />
+        </StrictMode>
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Connect Acme CRM" })
+      );
+      expect(open).toHaveBeenCalledWith(
+        "",
+        "_blank",
+        "popup,width=520,height=720"
+      );
+      await act(async () => authorize?.(`${popup.location.href}#authorized`));
+      expect(mockGetOAuthAuthorizationUrl).toHaveBeenCalledWith(
+        7,
+        "/craft/v1/apps?oauthConnectedAppId=42"
+      );
+      const data = { source: "onyx-external-app-oauth", externalAppId: 42 };
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: window.location.origin,
+            source: window,
+            data,
+          })
+        );
+      });
+      expect(mockPostConnectAppDecision).not.toHaveBeenCalled();
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: window.location.origin,
+            source: popup,
+            data,
+          })
+        );
+      });
+      expect(mockPostConnectAppDecision).toHaveBeenCalledWith(
+        "request-id",
+        "connected"
+      );
+    } finally {
+      open.mockRestore();
+      iframe.remove();
+    }
+  });
+
+  it("does not offer an empty credential form for unavailable login-token apps", () => {
+    render(
+      <SetupCard
+        requestId="request-id"
+        externalAppId={42}
+        reason={null}
+        userApp={{ ...userApp, credential_keys: [] }}
+      />
+    );
+    expect(
+      screen.getByRole("button", { name: "Connect Acme CRM" })
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Not available for your account — ask an admin")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save credentials" })
+    ).not.toBeInTheDocument();
   });
 
   it("waits for the pending request to resolve before showing an existing connection", async () => {
@@ -114,7 +212,7 @@ describe("SetupCard", () => {
           requestId="request-id"
           externalAppId={42}
           reason={null}
-          userApp={{ ...userApp, authenticated: true }}
+          userApp={{ ...userApp, authenticated: true, credential_keys: [] }}
         />
       );
       const connect = await screen.findByRole("button", {

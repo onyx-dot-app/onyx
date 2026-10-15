@@ -8,6 +8,7 @@ from sqlalchemy import and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.auth.oauth_token_manager import OAuthTokenManager
 from onyx.db.enums import (
     EndpointPolicy,
     ExternalAppType,
@@ -23,12 +24,15 @@ from onyx.db.models import (
     ExternalApp__Skill,
     ExternalAppUserCredential,
     Skill,
+    Tool,
     User,
     UserSkillPreference,
 )
+from onyx.db.users import fetch_user_by_id
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.openapi import openapi_auth_configuration, openapi_url_patterns
 from onyx.external_apps.providers.registry import PROVIDERS, get_provider_for_app
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.encryption import is_masked_credential
@@ -124,10 +128,28 @@ def resolve_masked_credentials(
 def is_user_authenticated_for_app(
     app: ExternalApp,
     user_cred: ExternalAppUserCredential | None,
+    *,
+    db_session: Session,
+    user_id: UUID,
 ) -> bool:
     """True iff the user has supplied every credential parameter the app's
     ``auth_template`` requires that the org hasn't pre-filled. Apps with no
     user-required keys need no credential row."""
+    if app.openapi_tool is not None:
+        tool = app.openapi_tool
+        if tool.oauth_config_id is not None:
+            if tool.oauth_config is None:
+                return False
+            return OAuthTokenManager(
+                tool.oauth_config, user_id, db_session
+            ).has_usable_access_token()
+        if tool.passthrough_auth:
+            user = fetch_user_by_id(db_session, user_id)
+            return (
+                user is not None
+                and not user.is_anonymous
+                and bool(user.live_oauth_token)
+            )
     required = required_user_credential_keys(
         app.auth_template, app.organization_credentials.get_value(apply_mask=False)
     )
@@ -197,8 +219,17 @@ def get_connectable_apps_for_user(
     user_creds_by_app = get_user_credentials_by_app_id(db_session, user.id)
     return [
         app
-        for app in get_external_apps(db_session, enabled_only=True)
-        if not is_user_authenticated_for_app(app, user_creds_by_app.get(app.id))
+        for app in get_external_apps(
+            db_session, enabled_only=True, include_openapi_auth=True
+        )
+        if not (
+            app.openapi_tool is not None
+            and app.openapi_tool.passthrough_auth
+            and app.openapi_tool.oauth_config_id is None
+        )
+        and not is_user_authenticated_for_app(
+            app, user_creds_by_app.get(app.id), db_session=db_session, user_id=user.id
+        )
     ]
 
 
@@ -235,7 +266,10 @@ def get_skill_external_app_dependencies(
             external_app_id=app.id,
             name=app.name,
             enabled=app.enabled,
-            ready=app.enabled and is_user_authenticated_for_app(app, credential),
+            ready=app.enabled
+            and is_user_authenticated_for_app(
+                app, credential, db_session=db_session, user_id=user.id
+            ),
         )
         for skill_id, app, credential in rows
     }
@@ -245,6 +279,7 @@ def get_external_apps(
     db_session: Session,
     *,
     enabled_only: bool = False,
+    include_openapi_auth: bool = False,
 ) -> list[ExternalApp]:
     stmt = (
         select(ExternalApp)
@@ -253,6 +288,10 @@ def get_external_apps(
     )
     if enabled_only:
         stmt = stmt.where(ExternalApp.enabled.is_(True))
+    if include_openapi_auth:
+        stmt = stmt.options(
+            selectinload(ExternalApp.openapi_tool).joinedload(Tool.oauth_config)
+        )
     return list(db_session.scalars(stmt).all())
 
 
@@ -665,6 +704,45 @@ def set_external_app_organization_credentials(
     # EncryptedJson column accepts a plain dict and encrypts on write (same
     # assignment shape as update_external_app's masked-credential restore).
     app.organization_credentials = organization_credentials  # ty: ignore[invalid-assignment]
+    db_session.flush()
+
+
+def sync_openapi_external_app__no_commit(db_session: Session, tool: Tool) -> None:
+    """Flush the action's derived gateway; the caller owns the commit."""
+    app = tool.craft_external_app
+    if not tool.available_in_craft:
+        if app is not None:
+            app.enabled = False
+        db_session.flush()
+        return
+    if tool.openapi_schema is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Craft requires an OpenAPI action definition.",
+        )
+    patterns = openapi_url_patterns(tool.openapi_schema)
+    template, credentials = openapi_auth_configuration(tool.custom_headers)
+    if app is None:
+        app = create_external_app(
+            db_session,
+            name=tool.name,
+            app_type=ExternalAppType.CUSTOM,
+            upstream_url_patterns=patterns,
+            auth_template=template,
+            organization_credentials=credentials,
+        )
+        tool.craft_external_app = app
+    else:
+        update_external_app(
+            db_session,
+            app.id,
+            ExternalAppType.CUSTOM,
+            name=tool.name,
+            upstream_url_patterns=patterns,
+            auth_template=template,
+        )
+        set_external_app_organization_credentials(db_session, app, credentials)
+    app.enabled = tool.enabled
     db_session.flush()
 
 

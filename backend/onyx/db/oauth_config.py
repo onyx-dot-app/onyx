@@ -1,10 +1,14 @@
 from typing import Any
 from uuid import UUID
 
+from psycopg2.errors import LockNotAvailable
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import OAuthConfig, OAuthUserToken, Tool
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -40,11 +44,28 @@ def create_oauth_config(
     return oauth_config
 
 
-def get_oauth_config(oauth_config_id: int, db_session: Session) -> OAuthConfig | None:
-    """Get OAuth configuration by ID"""
-    return db_session.scalar(
-        select(OAuthConfig).where(OAuthConfig.id == oauth_config_id)
+def get_oauth_config(
+    oauth_config_id: int, db_session: Session, *, for_update: bool = False
+) -> OAuthConfig | None:
+    """Read a configuration, optionally serializing credential and tool changes."""
+    statement = select(OAuthConfig).where(OAuthConfig.id == oauth_config_id)
+    if not for_update:
+        return db_session.scalar(statement)
+    # Tool edits already hold tool locks. Never wait in the reverse order of
+    # config deletion, whose foreign key updates those same tool rows.
+    statement = statement.with_for_update(nowait=True).execution_options(
+        populate_existing=True
     )
+    try:
+        with db_session.no_autoflush:
+            return db_session.scalar(statement)
+    except OperationalError as error:
+        if not isinstance(error.orig, LockNotAvailable):
+            raise
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "This OAuth configuration is being changed. Retry the request.",
+        ) from error
 
 
 def get_oauth_configs(db_session: Session) -> list[OAuthConfig]:
@@ -185,6 +206,31 @@ def delete_user_oauth_token(
     db_session.commit()
 
 
+def update_user_oauth_token_if_unchanged(
+    user_token_id: int,
+    expected_token_data: dict[str, Any],
+    token_data: dict[str, Any],
+    db_session: Session,
+) -> bool:
+    """Commit a refresh only if its original grant still exists and is unchanged."""
+    with db_session.no_autoflush:
+        user_token = db_session.scalar(
+            select(OAuthUserToken)
+            .where(OAuthUserToken.id == user_token_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    unchanged = (
+        user_token is not None
+        and user_token.token_data is not None
+        and user_token.token_data.get_value(apply_mask=False) == expected_token_data
+    )
+    if unchanged and user_token is not None:
+        user_token.token_data = token_data  # ty: ignore[invalid-assignment]
+    db_session.commit()
+    return unchanged
+
+
 # Helper operations
 
 
@@ -192,6 +238,8 @@ def get_tools_by_oauth_config(oauth_config_id: int, db_session: Session) -> list
     """Get all tools that use a specific OAuth configuration"""
     return list(
         db_session.scalars(
-            select(Tool).where(Tool.oauth_config_id == oauth_config_id)
+            select(Tool)
+            .where(Tool.oauth_config_id == oauth_config_id)
+            .execution_options(populate_existing=True)
         ).all()
     )

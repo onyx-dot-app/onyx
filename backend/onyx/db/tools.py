@@ -9,6 +9,10 @@ from onyx.auth.permissions import has_permission
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.constants import UNSET, UnsetType
 from onyx.db.enums import MCPServerStatus, Permission, PermissionAuthority
+from onyx.db.external_app import (
+    delete_external_app,
+    sync_openapi_external_app__no_commit,
+)
 from onyx.db.models import (
     MCPServer,
     OAuthConfig,
@@ -19,6 +23,9 @@ from onyx.db.models import (
     ToolCall,
     User,
 )
+from onyx.db.oauth_config import get_oauth_config
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.tool.models import Header
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.tools.models import PersonaToolConfiguration, ToolConfiguration
@@ -98,15 +105,24 @@ def get_tools_by_mcp_server_id(
     return list(db_session.scalars(query).all())
 
 
-def get_tools_by_ids(tool_ids: list[int], db_session: Session) -> list[Tool]:
+def get_tools_by_ids(
+    tool_ids: list[int], db_session: Session, *, for_update: bool = False
+) -> list[Tool]:
     if not tool_ids:
         return []
-    stmt = select(Tool).where(Tool.id.in_(tool_ids))
+    stmt = select(Tool).where(Tool.id.in_(tool_ids)).order_by(Tool.id)
+    if for_update:
+        stmt = stmt.with_for_update()
     return list(db_session.scalars(stmt).all())
 
 
-def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
-    tool = db_session.scalar(select(Tool).where(Tool.id == tool_id))
+def get_tool_by_id(
+    tool_id: int, db_session: Session, *, for_update: bool = False
+) -> Tool:
+    stmt = select(Tool).where(Tool.id == tool_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    tool = db_session.scalar(stmt)
     if not tool:
         raise ValueError("Tool by specified id does not exist")
     return tool
@@ -114,15 +130,20 @@ def get_tool_by_id(tool_id: int, db_session: Session) -> Tool:
 
 def can_manage_own_tool(user: User, tool: Tool) -> bool:
     """Owner-or-admin gate for every action on a custom action (edit, delete, toggle, OAuth
-    config), matching the routes' ``allow_scope`` guard: a global actions-admin manages any
-    action, a scoped manager only one they created. No MANAGE_ACTIONS authority — or a built-in
+    config), matching the routes' ``allow_scope`` guard. Linked Craft apps require full admin
+    access; other actions allow global action managers or their scoped creator. No MANAGE_ACTIONS authority — or a built-in
     tool (no owner) — never passes."""
     authority = has_permission(user, Permission.MANAGE_ACTIONS)
-    if authority is PermissionAuthority.GLOBAL:
-        return True
-    if authority is PermissionAuthority.SCOPED:
-        return tool.user_id is not None and tool.user_id == user.id
-    return False
+    if authority is not PermissionAuthority.GLOBAL and not (
+        authority is PermissionAuthority.SCOPED and tool.user_id == user.id
+    ):
+        return False
+    # Full admins need no app lookup; other managers cannot change shared credentials.
+    return (
+        has_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
+        is PermissionAuthority.GLOBAL
+        or tool.craft_external_app is None
+    )
 
 
 def can_manage_mcp_server(user: User, server: MCPServer) -> bool:
@@ -219,6 +240,12 @@ def get_tool_by_name(tool_name: str, db_session: Session) -> Tool:
     return tool
 
 
+def _lock_oauth_configs(db_session: Session, *config_ids: int | None) -> None:
+    for config_id in sorted({value for value in config_ids if value is not None}):
+        if get_oauth_config(config_id, db_session, for_update=True) is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "OAuth configuration not found.")
+
+
 def create_tool__no_commit(
     name: str,
     description: str | None,
@@ -231,7 +258,9 @@ def create_tool__no_commit(
     mcp_server_id: int | None = None,
     oauth_config_id: int | None = None,
     enabled: bool = True,
+    available_in_craft: bool = False,
 ) -> Tool:
+    _lock_oauth_configs(db_session, oauth_config_id)
     new_tool = Tool(
         name=name,
         description=description,
@@ -245,13 +274,14 @@ def create_tool__no_commit(
         mcp_server_id=mcp_server_id,
         oauth_config_id=oauth_config_id,
         enabled=enabled,
+        available_in_craft=available_in_craft,
     )
     db_session.add(new_tool)
-    db_session.flush()  # Don't commit yet, let caller decide when to commit
+    sync_openapi_external_app__no_commit(db_session, new_tool)
     return new_tool
 
 
-def update_tool(
+def update_tool__no_commit(
     tool_id: int,
     name: str | None,
     description: str | None,
@@ -261,10 +291,17 @@ def update_tool(
     db_session: Session,
     passthrough_auth: bool | None,
     oauth_config_id: int | None | UnsetType = UNSET,
+    available_in_craft: bool | None = None,
 ) -> Tool:
     tool = get_tool_by_id(tool_id, db_session)
     if tool is None:
         raise ValueError(f"Tool with ID {tool_id} does not exist")
+
+    _lock_oauth_configs(
+        db_session,
+        tool.oauth_config_id,
+        oauth_config_id if not isinstance(oauth_config_id, UnsetType) else None,
+    )
 
     if name is not None:
         tool.name = name
@@ -299,8 +336,16 @@ def update_tool(
             if oauth_config:
                 db_session.delete(oauth_config)
 
-    db_session.commit()
+    if available_in_craft is not None:
+        tool.available_in_craft = available_in_craft
+    sync_openapi_external_app__no_commit(db_session, tool)
     return tool
+
+
+def set_tool_enabled__no_commit(db_session: Session, tool: Tool, enabled: bool) -> None:
+    _lock_oauth_configs(db_session, tool.oauth_config_id)
+    tool.enabled = enabled
+    sync_openapi_external_app__no_commit(db_session, tool)
 
 
 def delete_tool__no_commit(tool_id: int, db_session: Session) -> None:
@@ -309,6 +354,11 @@ def delete_tool__no_commit(tool_id: int, db_session: Session) -> None:
         raise ValueError(f"Tool with ID {tool_id} does not exist")
 
     oauth_config_id = tool.oauth_config_id
+    _lock_oauth_configs(db_session, oauth_config_id)
+
+    if tool.craft_external_app is not None:
+        delete_external_app(db_session, tool.craft_external_app.id)
+        tool.craft_external_app = None
 
     db_session.delete(tool)
     db_session.flush()

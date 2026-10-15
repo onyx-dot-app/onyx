@@ -22,6 +22,7 @@ import {
   MCPServer,
 } from "@/lib/mcp/types";
 import { getActionIcon } from "@/lib/tools/utils";
+import { getOAuthAuthorizationUrl } from "@/lib/oauth/api";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 
 /** Which system a connectable came from. Surfaced to the user: the two are
@@ -31,6 +32,7 @@ export type ConnectableKind = "app" | "mcp";
 /** Query param selecting the Apps page tab. Exported so deep-link producers
  * (e.g. the input-bar picker) and the page can't disagree on the contract. */
 export const CRAFT_APPS_TAB_PARAM = "tab";
+export const OAUTH_CONNECTED_APP_PARAM = "oauthConnectedAppId";
 
 /** Tab order shared by the member and admin Apps pages. */
 export const KIND_ORDER: ConnectableKind[] = ["app", "mcp"];
@@ -81,6 +83,11 @@ export interface ConnectableApp {
 export function externalAppToConnectable(
   app: ExternalAppUserResponse
 ): ConnectableApp {
+  const connectMode = app.supports_oauth
+    ? "oauth"
+    : app.credential_keys.length > 0
+      ? "credentials"
+      : null;
   return {
     key: `app-${app.id}`,
     kind: "app",
@@ -92,12 +99,18 @@ export function externalAppToConnectable(
     connectId: String(app.id),
     authenticated: app.authenticated,
     logo: getAppTypeLogo(app.app_type),
-    connectMode: app.supports_oauth ? "oauth" : "credentials",
+    connectMode,
     credentialKeys: app.credential_keys,
     credentialValues: app.credential_values,
-    startOAuth: async () => (await startExternalAppOAuth(app.id)).authorize_url,
+    startOAuth: async () =>
+      app.oauth_config_id != null
+        ? getOAuthAuthorizationUrl(
+            app.oauth_config_id,
+            `${CRAFT_APPS_PATH}?${OAUTH_CONNECTED_APP_PARAM}=${app.id}`
+          )
+        : (await startExternalAppOAuth(app.id)).authorize_url,
     saveCredentials: (values) => upsertUserCredentials(app.id, values),
-    disconnect: () => disconnectUserFromApp(app.id),
+    disconnect: connectMode ? () => disconnectUserFromApp(app.id) : null,
   };
 }
 

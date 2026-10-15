@@ -237,6 +237,10 @@
         "createFailed": "OpenAPI アクションの作成に失敗しました",
         "invalidJson": "OpenAPI スキーマ定義の JSON 形式が無効です",
         "updateFailed": "OpenAPI アクションの更新に失敗しました"
+      },
+      "craft": {
+        "label": "Craft で有効にする",
+        "description": "Craft エージェントがこれらの API とツールを使えるようにします。"
       }
     },
     "cardHeader": {
@@ -5333,6 +5337,9 @@
         "toggle": {
           "disableAriaLabel": "{name} を無効にする",
           "enableAriaLabel": "{name} を有効にする"
+        },
+        "openApiSource": {
+          "label": "OpenAPI アクションを管理"
         }
       },
       "facts": {

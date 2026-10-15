@@ -25,11 +25,10 @@ from onyx.oauth.models import (
     SafeOAuthReturnPath,
 )
 from onyx.oauth.protocol import validate_authorization_params
+from onyx.utils.headers import is_valid_header_name
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
-# RFC 9110 field-name syntax: a non-empty sequence of HTTP token characters.
-_HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
 
 
 def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
@@ -161,7 +160,7 @@ class MCPAuthTemplate(BaseModel):
         seen: set[str] = set()
         for name in self.headers:
             lowered = name.lower()
-            if _HTTP_FIELD_NAME_RE.fullmatch(name) is None:
+            if not is_valid_header_name(name):
                 raise ValueError(f"Invalid MCP header name: {name!r}")
             if lowered in DENYLISTED_MCP_HEADERS:
                 raise ValueError(f"MCP header {name!r} is not allowed")

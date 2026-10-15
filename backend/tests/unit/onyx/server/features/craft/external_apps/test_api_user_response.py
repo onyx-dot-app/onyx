@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 from typing import Any, cast
+from uuid import UUID
+
+from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
 from onyx.db.models import ExternalApp, ExternalAppUserCredential
@@ -31,6 +34,7 @@ def _external_app(
             id=1,
             name="Test App",
             app_type=app_type,
+            openapi_tool=None,
             auth_template=auth_template,
             organization_credentials=_sensitive_dict(organization_credentials),
         ),
@@ -62,7 +66,12 @@ def test_user_response_masks_stored_user_credentials() -> None:
         "refresh_token": "USER_REFRESH_TOKEN",
     }
 
-    response = _to_user_response(app, _user_credential(user_credentials))
+    response = _to_user_response(
+        app,
+        _user_credential(user_credentials),
+        db_session=Session(),
+        user_id=UUID(int=1),
+    )
 
     assert response.authenticated is True
     assert response.credential_keys == ["access_token", "cloud_id", "refresh_token"]
@@ -85,7 +94,12 @@ def test_user_response_masks_built_in_oauth_bearer_token() -> None:
         "refresh_token": "unused-refresh-token",
     }
 
-    response = _to_user_response(app, _user_credential(user_credentials))
+    response = _to_user_response(
+        app,
+        _user_credential(user_credentials),
+        db_session=Session(),
+        user_id=UUID(int=1),
+    )
 
     assert response.authenticated is True
     assert response.credential_keys == ["access_token"]
@@ -108,7 +122,10 @@ def test_user_response_uses_raw_presence_for_authentication() -> None:
     )
 
     response = _to_user_response(
-        app, _user_credential({"access_token": "USER_ACCESS_TOKEN"})
+        app,
+        _user_credential({"access_token": "USER_ACCESS_TOKEN"}),
+        db_session=Session(),
+        user_id=UUID(int=1),
     )
 
     assert response.authenticated is False

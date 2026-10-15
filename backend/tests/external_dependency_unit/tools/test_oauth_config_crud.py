@@ -22,7 +22,7 @@ from onyx.db.oauth_config import (
     update_oauth_config,
     upsert_user_oauth_token,
 )
-from onyx.db.tools import delete_tool__no_commit, update_tool
+from onyx.db.tools import delete_tool__no_commit, update_tool__no_commit
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -361,7 +361,7 @@ class TestOAuthConfigCRUD:
         tool = _create_test_tool_with_oauth(db_session, old_config)
         old_config_id = old_config.id
 
-        update_tool(
+        update_tool__no_commit(
             tool_id=tool.id,
             name=None,
             description=None,
@@ -400,7 +400,7 @@ class TestOAuthConfigCRUD:
         shared_config_id = shared_config.id
 
         # Move tool_a to a new config; tool_b still references shared_config
-        update_tool(
+        update_tool__no_commit(
             tool_id=tool_a.id,
             name=None,
             description=None,

@@ -1,7 +1,6 @@
 /**
- * HTTP service for External Apps endpoints. UI components import from
- * here instead of calling `fetch` directly, so error shape + URL
- * construction live in one place.
+ * External app requests and OAuth popup completion. UI components share
+ * endpoint URLs, error handling, and the callback message contract here.
  */
 
 import {
@@ -10,6 +9,7 @@ import {
   ExternalAppType,
 } from "@/app/craft/v1/apps/registry";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
+import { OAUTH_POPUP_MESSAGE_SOURCE } from "@/app/craft/types/setupRequests";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
 async function readErrorDetail(
@@ -204,4 +204,15 @@ export async function disconnectUserFromApp(
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to disconnect app"));
   }
+}
+
+/** Notify the requesting window after the server confirms authentication. */
+export function completeExternalAppOAuthPopup(externalAppId: number): boolean {
+  if (!window.opener) return false;
+  window.opener.postMessage(
+    { source: OAUTH_POPUP_MESSAGE_SOURCE, externalAppId },
+    window.location.origin
+  );
+  window.close();
+  return true;
 }

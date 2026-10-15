@@ -6,8 +6,12 @@ from uuid import UUID
 import requests
 from sqlalchemy.orm import Session
 
-from onyx.db.models import OAuthConfig, OAuthUserToken
-from onyx.db.oauth_config import get_user_oauth_token, upsert_user_oauth_token
+from onyx.db.models import OAuthConfig, OAuthUserToken, User
+from onyx.db.oauth_config import (
+    get_oauth_config,
+    get_user_oauth_token,
+    update_user_oauth_token_if_unchanged,
+)
 from onyx.oauth.protocol import (
     OAuthFlowParams,
     build_authorization_code_token_body,
@@ -100,6 +104,24 @@ def _post_oauth_token_request(token_url: str, data: dict[str, str]) -> dict[str,
     return token_data
 
 
+def get_tool_access_token(
+    *,
+    oauth_config_id: int | None,
+    passthrough_auth: bool,
+    user: User | None,
+    db_session: Session,
+) -> str | None:
+    """Resolve custom-action authentication for both chat and Craft."""
+    if user is None or user.is_anonymous:
+        return None
+    if oauth_config_id is not None:
+        config = get_oauth_config(oauth_config_id, db_session)
+        if config is None:
+            return None
+        return OAuthTokenManager(config, user.id, db_session).get_valid_access_token()
+    return user.live_oauth_token if passthrough_auth else None
+
+
 class OAuthTokenManager:
     """Manages OAuth token retrieval, refresh, and validation"""
 
@@ -107,6 +129,19 @@ class OAuthTokenManager:
         self.oauth_config = oauth_config
         self.user_id = user_id
         self.db_session = db_session
+
+    def has_usable_access_token(self) -> bool:
+        """Check stored credentials without refreshing or contacting the provider."""
+        user_token = get_user_oauth_token(
+            self.oauth_config.id, self.user_id, self.db_session
+        )
+        if user_token is None or not user_token.token_data:
+            return False
+        token_data = self._unwrap_token_data(user_token.token_data)
+        return bool(token_data.get("access_token")) and (
+            not self.is_token_expired(token_data)
+            or bool(token_data.get("refresh_token"))
+        )
 
     def get_valid_access_token(self) -> str | None:
         """Get valid access token, refreshing if necessary"""
@@ -163,13 +198,10 @@ class OAuthTokenManager:
         if "refresh_token" not in new_token_data and "refresh_token" in token_data:
             new_token_data["refresh_token"] = token_data["refresh_token"]
 
-        # Update token in DB
-        upsert_user_oauth_token(
-            self.oauth_config.id,
-            self.user_id,
-            new_token_data,
-            self.db_session,
-        )
+        if not update_user_oauth_token_if_unchanged(
+            user_token.id, token_data, new_token_data, self.db_session
+        ):
+            raise ValueError("OAuth connection changed during token refresh")
 
         return new_token_data["access_token"]
 

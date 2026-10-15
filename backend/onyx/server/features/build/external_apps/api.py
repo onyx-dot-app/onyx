@@ -22,6 +22,7 @@ from onyx.db.external_app import (
     get_external_apps,
     get_skills_for_external_app,
     get_user_credentials_by_app_id,
+    is_user_authenticated_for_app,
     placeholders_in_template,
     replace_custom_skill_associations__no_commit,
     required_user_credential_keys,
@@ -31,6 +32,7 @@ from onyx.db.external_app import (
 )
 from onyx.db.gated_app import get_action_policies
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
+from onyx.db.oauth_config import delete_user_oauth_token, get_user_oauth_token
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -88,6 +90,7 @@ def _to_admin_response(
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
     return ExternalAppAdminResponse(
         id=app.id,
+        openapi_tool_id=app.openapi_tool_id,
         name=app.name,
         app_type=app.app_type,
         # Managed built-ins: hide Onyx-owned config/creds. Else mask secrets — the
@@ -118,7 +121,11 @@ def _to_admin_response(
 
 
 def _to_user_response(
-    app: ExternalApp, user_cred: ExternalAppUserCredential | None
+    app: ExternalApp,
+    user_cred: ExternalAppUserCredential | None,
+    *,
+    db_session: Session,
+    user_id: UUID,
 ) -> ExternalAppUserResponse:
     """User-facing view of an app. ``credential_keys`` = auth_template keys the
     org hasn't pre-filled; ``credential_values`` = the user's masked stored
@@ -137,7 +144,12 @@ def _to_user_response(
         for key in required_keys
         if key in stored_raw
     }
-    authenticated = all(key in stored_raw for key in required_keys)
+    oauth_config_id = (
+        app.openapi_tool.oauth_config_id if app.openapi_tool is not None else None
+    )
+    authenticated = is_user_authenticated_for_app(
+        app, user_cred, db_session=db_session, user_id=user_id
+    )
 
     return ExternalAppUserResponse(
         id=app.id,
@@ -146,7 +158,9 @@ def _to_user_response(
         credential_keys=required_keys,
         credential_values=credential_values,
         authenticated=authenticated,
-        supports_oauth=isinstance(get_provider_for_app(app), OAuthExternalAppProvider),
+        supports_oauth=oauth_config_id is not None
+        or isinstance(get_provider_for_app(app), OAuthExternalAppProvider),
+        oauth_config_id=oauth_config_id,
     )
 
 
@@ -212,6 +226,21 @@ def update_external_app_admin(
     are Onyx-owned and ignored — only ``enabled`` and ``action_policies`` apply.
     """
     app = _get_app_or_404(db_session, external_app_id)
+    if app.openapi_tool_id is not None and any(
+        value is not None
+        for value in (
+            request.enabled,
+            request.name,
+            request.upstream_url_patterns,
+            request.auth_template,
+            request.organization_credentials,
+            request.associated_skill_ids,
+        )
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Manage this app from its OpenAPI action. Linked apps do not support skill associations.",
+        )
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
 
     # Custom apps author URL patterns as globs; validate them (built-ins author
@@ -347,6 +376,11 @@ def delete_external_app_admin(
     """
     # Resolve affected users before deleting the associations.
     app = _get_app_or_404(db_session, external_app_id)
+    if app.openapi_tool_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Disable Craft or delete the source OpenAPI action to remove access.",
+        )
     if MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -380,6 +414,11 @@ def upsert_user_credentials(
     Returns 404 if no app with `external_app_id` exists.
     """
     app = _get_app_or_404(db_session, external_app_id)
+    if app.openapi_tool_id is not None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "OpenAPI app credentials are managed by an admin on the source action.",
+        )
     if not app.enabled:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -406,7 +445,17 @@ def disconnect_user_from_external_app(
     db_session: Session = Depends(get_session),
 ) -> None:
     """Disconnect the calling user and disable the app's associated skills."""
-    _get_app_or_404(db_session, external_app_id)
+    app = _get_app_or_404(db_session, external_app_id)
+    if app.openapi_tool is not None:
+        oauth_config_id = app.openapi_tool.oauth_config_id
+        if oauth_config_id is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "This app uses organization credentials or your Onyx login. There is no separate app connection to remove.",
+            )
+        if get_user_oauth_token(oauth_config_id, user.id, db_session) is not None:
+            delete_user_oauth_token(oauth_config_id, user.id, db_session)
+        return
     disconnect_external_app_for_user(
         db_session,
         external_app_id=external_app_id,
@@ -426,11 +475,18 @@ def list_external_apps(
     ``authenticated`` flag. Org credentials and the raw auth template aren't
     exposed.
     """
-    apps = get_external_apps(db_session=db_session, enabled_only=True)
+    apps = get_external_apps(
+        db_session=db_session, enabled_only=True, include_openapi_auth=True
+    )
     user_creds_by_app = get_user_credentials_by_app_id(
         db_session=db_session, user_id=user.id
     )
-    return [_to_user_response(app, user_creds_by_app.get(app.id)) for app in apps]
+    return [
+        _to_user_response(
+            app, user_creds_by_app.get(app.id), db_session=db_session, user_id=user.id
+        )
+        for app in apps
+    ]
 
 
 @router.post("/apps/connect/{request_id}/decision")

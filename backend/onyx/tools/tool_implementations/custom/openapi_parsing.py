@@ -159,22 +159,16 @@ def openapi_to_method_specs(openapi_spec: dict[str, Any]) -> list[MethodSpec]:
     return method_specs
 
 
-def openapi_to_url(openapi_schema: dict[str, dict | str]) -> str:
-    """
-    Extract URLs from the servers section of an OpenAPI schema.
-
-    Args:
-        openapi_schema (Dict[str, Union[Dict, str, List]]): The OpenAPI schema in dictionary format.
-
-    Returns:
-        List[str]: A list of base URLs.
-    """
+def openapi_to_url(openapi_schema: dict[str, Any]) -> str:
+    """Read the single root server URL supported by custom actions."""
     urls: list[str] = []
 
     servers = cast(list[dict[str, Any]], openapi_schema.get("servers", []))
     for server in servers:
         url = server.get("url")
         if url:
+            if not isinstance(url, str):
+                raise ValueError("OpenAPI server URLs must be strings")
             urls.append(url)
 
     if len(urls) != 1:

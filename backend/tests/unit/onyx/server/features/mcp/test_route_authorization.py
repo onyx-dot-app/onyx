@@ -70,7 +70,7 @@ def test_scoped_manager_cannot_configure_tool_passthrough(
         patch.object(tool_api, "_get_manageable_custom_tool", return_value=existing),
         patch.object(tool_api, "_assert_can_link_oauth_config"),
         patch.object(tool_api, "create_tool__no_commit"),
-        patch.object(tool_api, "update_tool"),
+        patch.object(tool_api, "update_tool__no_commit"),
         patch.object(tool_api.ToolSnapshot, "from_model"),
         pytest.raises(OnyxError) as error,
     ):
@@ -129,7 +129,7 @@ def test_global_manager_can_configure_passthrough(
         ),
         patch.object(tool_api, "_assert_can_link_oauth_config"),
         patch.object(tool_api, "create_tool__no_commit") as create,
-        patch.object(tool_api, "update_tool") as update,
+        patch.object(tool_api, "update_tool__no_commit") as update,
         patch.object(tool_api.ToolSnapshot, "from_model"),
         patch.object(api, "_upsert_mcp_server") as upsert,
         patch.object(api, "MCPServerCreateResponse"),
@@ -265,7 +265,7 @@ def test_scoped_manager_can_save_nonredirecting_passthrough_action(
     with (
         patch.object(tool_api, "_get_manageable_custom_tool", return_value=existing),
         patch.object(tool_api, "_assert_can_link_oauth_config"),
-        patch.object(tool_api, "update_tool") as update,
+        patch.object(tool_api, "update_tool__no_commit") as update,
         patch.object(tool_api.ToolSnapshot, "from_model"),
     ):
         tool_api.update_custom_tool(
@@ -294,7 +294,7 @@ def test_scoped_manager_cannot_change_passthrough_destination(
     with (
         patch.object(tool_api, "_get_manageable_custom_tool", return_value=existing),
         patch.object(tool_api, "_assert_can_link_oauth_config"),
-        patch.object(tool_api, "update_tool") as update,
+        patch.object(tool_api, "update_tool__no_commit") as update,
         patch.object(tool_api.ToolSnapshot, "from_model"),
         pytest.raises(OnyxError) as error,
     ):
@@ -312,7 +312,7 @@ def test_scoped_manager_cannot_change_passthrough_headers(
     with (
         patch.object(tool_api, "_get_manageable_custom_tool", return_value=existing),
         patch.object(tool_api, "_assert_can_link_oauth_config"),
-        patch.object(tool_api, "update_tool") as update,
+        patch.object(tool_api, "update_tool__no_commit") as update,
         patch.object(tool_api.ToolSnapshot, "from_model"),
         pytest.raises(OnyxError) as error,
     ):
@@ -343,7 +343,7 @@ def test_scoped_manager_can_preserve_masked_passthrough_headers(
     with (
         patch.object(tool_api, "_get_manageable_custom_tool", return_value=existing),
         patch.object(tool_api, "_assert_can_link_oauth_config"),
-        patch.object(tool_api, "update_tool") as update,
+        patch.object(tool_api, "update_tool__no_commit") as update,
         patch.object(tool_api.ToolSnapshot, "from_model"),
     ):
         tool_api.update_custom_tool(
@@ -379,7 +379,7 @@ def test_scoped_manager_cannot_relax_passthrough_host_constraints(
     with (
         patch.object(tool_api, "_get_manageable_custom_tool", return_value=existing),
         patch.object(tool_api, "_assert_can_link_oauth_config"),
-        patch.object(tool_api, "update_tool") as update,
+        patch.object(tool_api, "update_tool__no_commit") as update,
         patch.object(tool_api.ToolSnapshot, "from_model"),
         pytest.raises(OnyxError) as error,
     ):
