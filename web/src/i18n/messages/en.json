@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "Cannot remove all files from a connector. Delete the connector if this is desired.",
           "filesUpdated": "Files updated successfully! Document index is being updated in the background. New files are being indexed and removed files will be pruned from the search results.",
           "updateFailed": "Failed to update files"
-        }
+        },
+        "units": "{count, plural, one {file} other {files}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "Could not upload the files: {detail}"
-        }
+        },
+        "units": "{count, plural, one {file} other {files}}"
       },
       "planFailed": {
         "toast": "Could not compute the plan: {detail}"

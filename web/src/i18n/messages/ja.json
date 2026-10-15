@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "コネクターからすべてのファイルを削除することはできません。必要な場合はコネクター自体を削除してください。",
           "filesUpdated": "ファイルを更新しました。ドキュメントインデックスはバックグラウンドで更新されています。新しいファイルはインデックス作成中で、削除したファイルは検索結果から除外されます。",
           "updateFailed": "ファイルの更新に失敗しました"
-        }
+        },
+        "units": "{count, plural, other {件のファイル}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "ファイルをアップロードできませんでした: {detail}"
-        }
+        },
+        "units": "{count, plural, other {件のファイル}}"
       },
       "planFailed": {
         "toast": "プランを作成できませんでした: {detail}"

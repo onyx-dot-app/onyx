@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "无法移除连接器中的所有文件。如需如此，请删除该连接器。",
           "filesUpdated": "文件更新成功！文档索引正在后台更新。新文件正在建立索引，已移除的文件将从搜索结果中清理。",
           "updateFailed": "更新文件失败"
-        }
+        },
+        "units": "{count, plural, other {个文件}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "无法上传文件：{detail}"
-        }
+        },
+        "units": "{count, plural, other {个文件}}"
       },
       "planFailed": {
         "toast": "无法计算计划：{detail}"

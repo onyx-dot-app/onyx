@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "No se pueden quitar todos los archivos de un conector. Si es lo que quieres, elimina el conector.",
           "filesUpdated": "¡Archivos actualizados! El índice de documentos se está actualizando en segundo plano. Los archivos nuevos se están indexando y los archivos quitados se purgarán de los resultados de búsqueda.",
           "updateFailed": "No se pudieron actualizar los archivos"
-        }
+        },
+        "units": "{count, plural, one {archivo} other {archivos}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "No se pudieron subir los archivos: {detail}"
-        }
+        },
+        "units": "{count, plural, one {archivo} other {archivos}}"
       },
       "planFailed": {
         "toast": "No se pudo calcular el plan: {detail}"

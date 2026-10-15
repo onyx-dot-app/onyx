@@ -2125,7 +2125,8 @@
           "cannotRemoveAllFiles": "Impossible de retirer tous les fichiers d'un connecteur. Supprimez le connecteur si c'est ce que vous voulez.",
           "filesUpdated": "Fichiers mis à jour avec succès ! L'index de documents est mis à jour en arrière-plan. Les nouveaux fichiers sont en cours d'indexation et les fichiers retirés seront élagués des résultats de recherche.",
           "updateFailed": "Échec de la mise à jour des fichiers"
-        }
+        },
+        "units": "{count, plural, one {fichier} other {fichiers}}"
       },
       "fileUpload": {
         "dropzone": {
@@ -10237,7 +10238,8 @@
         },
         "uploadFailed": {
           "toast": "Impossible de téléverser les fichiers : {detail}"
-        }
+        },
+        "units": "{count, plural, one {fichier} other {fichiers}}"
       },
       "planFailed": {
         "toast": "Impossible de calculer le plan : {detail}"
