@@ -1,10 +1,14 @@
+import re
+import time
 from base64 import urlsafe_b64decode
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from typing import Any, Dict, cast
 
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError
+from googleapiclient.http import BatchHttpRequest
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -16,6 +20,7 @@ from onyx.connectors.google_utils.google_utils import (
     execute_paginated_retrieval,
     execute_paginated_retrieval_with_max_pages,
     execute_single_retrieval,
+    is_access_denied,
 )
 from onyx.connectors.google_utils.resources import (
     GmailService,
@@ -34,6 +39,7 @@ from onyx.connectors.interfaces import (
     CheckpointOutput,
     ConnectorFailure,
     GenerateSlimDocumentOutput,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnectorWithPermSync,
 )
@@ -62,6 +68,11 @@ PAYLOAD_FIELDS = f"payload(headers, {PARTS_FIELDS})"
 MESSAGES_FIELDS = f"messages(id, {PAYLOAD_FIELDS})"
 THREADS_FIELDS = f"threads(id, {MESSAGES_FIELDS})"
 THREAD_FIELDS = f"id, {MESSAGES_FIELDS}"
+# Reindex also reads labels, to skip the threads the crawl does not list.
+REINDEX_THREAD_FIELDS = f"id, messages(id, labelIds, {PAYLOAD_FIELDS})"
+# threads.list leaves out Spam and Trash unless includeSpamTrash is set, and
+# the crawl does not set it.
+_CRAWL_EXCLUDED_LABELS = frozenset({"SPAM", "TRASH"})
 
 EMAIL_FIELDS = [
     "cc",
@@ -79,6 +90,15 @@ PAGES_PER_CHECKPOINT = 1
 MAX_SLIM_PAGES_PER_USER = 100_000
 
 add_retries = retry_builder(tries=50, max_delay=30)
+
+# Gmail thread ids are lowercase hex strings.
+_THREAD_ID_RE = re.compile(r"^[0-9a-f]+$")
+# Crawl failures link to the mailbox that holds the thread. Reindex reads the
+# mailbox back from this link.
+_MAILBOX_LINK_RE = re.compile(r"^https://mail\.google\.com/mail/u/([^/#]+@[^/#]+)/#")
+# Google advises at most 50 requests in one Gmail batch.
+_MAX_GMAIL_BATCH_SIZE = 50
+_GMAIL_BATCH_TRIES = 5
 
 
 def _is_mail_service_disabled_error(error: HttpError) -> bool:
@@ -190,6 +210,34 @@ def _get_message_body(payload: dict[str, Any]) -> str:
 
 def _build_document_link(thread_id: str) -> str:
     return f"https://mail.google.com/mail/u/0/#inbox/{thread_id}"
+
+
+def _build_mailbox_document_link(thread_id: str, user_email: str) -> str:
+    """Link that opens the thread in the mailbox it was read from."""
+    return f"https://mail.google.com/mail/u/{user_email}/#all/{thread_id}"
+
+
+def _mailbox_from_document_link(document_link: str | None) -> str | None:
+    if not document_link:
+        return None
+    match = _MAILBOX_LINK_RE.match(document_link)
+    return match.group(1).lower() if match else None
+
+
+def _build_thread_failure(
+    thread_id: str,
+    user_email: str,
+    failure_message: str,
+    exception: Exception | None = None,
+) -> ConnectorFailure:
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=thread_id,
+            document_link=_build_mailbox_document_link(thread_id, user_email),
+        ),
+        failure_message=failure_message,
+        exception=exception,
+    )
 
 
 def message_to_section(message: Dict[str, Any]) -> tuple[TextSection, dict[str, str]]:
@@ -345,13 +393,103 @@ def _full_thread_from_id(
             raise ValueError(f"Thread {thread_id} not found")
         return thread_to_document(thread, user_email)
     except Exception as e:
-        return ConnectorFailure(
-            failed_document=DocumentFailure(
-                document_id=thread_id, document_link=_build_document_link(thread_id)
-            ),
-            failure_message=f"Failed to retrieve thread {thread_id}",
-            exception=e,
+        return _build_thread_failure(
+            thread_id, user_email, f"Failed to retrieve thread {thread_id}", e
         )
+
+
+def _pop_labels_and_check_crawl_listing(thread: dict[str, Any]) -> bool:
+    """Remove the labels a reindex fetch adds, so the document matches the
+    crawl's. Returns False if the crawl's threads.list leaves the thread out:
+    every message is in Spam or Trash."""
+    listed = False
+    for message in thread.get("messages", []):
+        labels = set(message.pop("labelIds", None) or [])
+        if not labels & _CRAWL_EXCLUDED_LABELS:
+            listed = True
+    return listed
+
+
+def _is_retryable_batch_error(error: HttpError) -> bool:
+    status = error.resp.status
+    return (
+        status == 429
+        or status >= 500
+        or (status == 403 and not is_access_denied(error))
+    )
+
+
+def _batch_get_threads(
+    gmail_service: GmailService,
+    user_email: str,
+    thread_ids: list[str],
+) -> tuple[dict[str, dict[str, Any]], dict[str, Exception]]:
+    """threads.get for many threads of one mailbox, in batch requests.
+
+    Returns (threads found, per-thread errors). A thread that is not in this
+    mailbox is in neither dict. Rate limits and server errors are retried; if
+    they persist, they become per-thread errors, never "not found".
+    """
+    found: dict[str, dict[str, Any]] = {}
+    errors: dict[str, Exception] = {}
+    retry: list[str] = []
+
+    def callback(
+        request_id: str,
+        response: dict[str, Any],
+        exception: Exception | None,
+    ) -> None:
+        if exception is None:
+            found[request_id] = response
+        elif not isinstance(exception, HttpError):
+            errors[request_id] = exception
+        elif is_access_denied(exception) or _is_mail_service_disabled_error(exception):
+            # Not in this mailbox.
+            return
+        elif _is_retryable_batch_error(exception):
+            retry.append(request_id)
+        else:
+            errors[request_id] = exception
+
+    pending = list(thread_ids)
+    for attempt in range(1, _GMAIL_BATCH_TRIES + 1):
+        retry.clear()
+        for start in range(0, len(pending), _MAX_GMAIL_BATCH_SIZE):
+            batch = cast(
+                BatchHttpRequest,
+                gmail_service.new_batch_http_request(  # ty: ignore[unresolved-attribute]
+                    callback=callback
+                ),
+            )
+            for thread_id in pending[start : start + _MAX_GMAIL_BATCH_SIZE]:
+                batch.add(
+                    gmail_service.users()  # ty: ignore[unresolved-attribute]
+                    .threads()
+                    .get(
+                        userId=user_email,
+                        id=thread_id,
+                        fields=REINDEX_THREAD_FIELDS,
+                    ),
+                    request_id=thread_id,
+                )
+            batch.execute()
+
+        if not retry:
+            break
+        if attempt == _GMAIL_BATCH_TRIES:
+            for thread_id in retry:
+                errors[thread_id] = RuntimeError(
+                    f"Gmail kept rate limiting or failing threads.get for {thread_id}"
+                )
+            break
+        logger.info(
+            "Retrying %s rate-limited Gmail thread reads for %s",
+            len(retry),
+            user_email,
+        )
+        time.sleep(2**attempt)
+        pending = list(retry)
+    return found, errors
 
 
 def _slim_thread_from_id(
@@ -378,7 +516,9 @@ class GmailCheckpoint(ConnectorCheckpoint):
 
 
 class GmailConnector(
-    SlimConnectorWithPermSync, CheckpointedConnectorWithPermSync[GmailCheckpoint]
+    SlimConnectorWithPermSync,
+    CheckpointedConnectorWithPermSync[GmailCheckpoint],
+    Resolver,
 ):
     slim_listing_honors_indexing_start = True
 
@@ -691,6 +831,148 @@ class GmailConnector(
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
+
+    def _reindex_from_mailbox(
+        self,
+        user_email: str,
+        pending: dict[str, None],
+    ) -> Iterator[Document | ConnectorFailure]:
+        """Fetch the pending threads that are in this mailbox. Removes each
+        thread that resolves (to a document or a failure) from ``pending``."""
+        gmail_service = get_gmail_service(self.creds, user_email)
+        try:
+            found, errors = _batch_get_threads(gmail_service, user_email, list(pending))
+        except RefreshError as e:
+            # The admin's mailbox failing means the credential is bad. Any
+            # other user may be suspended or deleted; the thread can still be
+            # in a later mailbox.
+            if user_email == self.primary_admin_email:
+                raise
+            logger.warning(
+                "Skipping mailbox %s during Gmail reindex: %s", user_email, e
+            )
+            return
+
+        for thread_id, thread in found.items():
+            pending.pop(thread_id, None)
+            if not _pop_labels_and_check_crawl_listing(thread):
+                yield _build_thread_failure(
+                    thread_id,
+                    user_email,
+                    f"Thread {thread_id} is in Spam or Trash; the crawl does "
+                    "not index it",
+                )
+                continue
+            try:
+                doc = thread_to_document(thread, user_email)
+            except Exception as e:
+                yield _build_thread_failure(
+                    thread_id,
+                    user_email,
+                    f"Failed to convert thread {thread_id} during reindex",
+                    e,
+                )
+                continue
+            if doc is None:
+                yield _build_thread_failure(
+                    thread_id,
+                    user_email,
+                    f"Thread {thread_id} has no messages; nothing to reindex",
+                )
+                continue
+            yield doc
+
+        for thread_id, error in errors.items():
+            pending.pop(thread_id, None)
+            yield _build_thread_failure(
+                thread_id,
+                user_email,
+                f"Failed to retrieve thread {thread_id} during reindex: {error}",
+                error,
+            )
+
+    def _reindex(
+        self, errors: list[ConnectorFailure]
+    ) -> Iterator[Document | ConnectorFailure]:
+        # Thread ids are per mailbox, and the id alone does not name the
+        # mailbox. Crawl failures carry it in their document link. Other ids
+        # are looked up in every mailbox, the admin's first.
+        pending: dict[str, None] = {}
+        hinted_ids_by_mailbox: dict[str, list[str]] = {}
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            thread_id = failure.failed_document.document_id
+            if thread_id in pending:
+                continue
+            if not _THREAD_ID_RE.match(thread_id):
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=thread_id,
+                        document_link=failure.failed_document.document_link,
+                    ),
+                    failure_message=(
+                        f"'{thread_id}' is not a Gmail thread id; targeted "
+                        "reindex expects the hex thread id the crawl indexes"
+                    ),
+                )
+                continue
+            pending[thread_id] = None
+            mailbox = _mailbox_from_document_link(failure.failed_document.document_link)
+            if mailbox is not None:
+                hinted_ids_by_mailbox.setdefault(mailbox, []).append(thread_id)
+
+        if not pending:
+            return
+
+        user_emails = self._get_all_user_emails()
+        # Only the mailboxes the crawl reads are in scope.
+        mailbox_by_lower_email = {email.lower(): email for email in user_emails}
+        for hinted_mailbox, hinted_ids in hinted_ids_by_mailbox.items():
+            user_email = mailbox_by_lower_email.get(hinted_mailbox)
+            if user_email is None:
+                continue
+            hinted_pending = {tid: None for tid in hinted_ids if tid in pending}
+            yield from self._reindex_from_mailbox(user_email, hinted_pending)
+            for thread_id in hinted_ids:
+                if thread_id not in hinted_pending:
+                    pending.pop(thread_id, None)
+
+        # The admin's mailbox first, but only if the crawl reads it.
+        search_order = sorted(
+            user_emails, key=lambda email: email != self.primary_admin_email
+        )
+        for user_email in search_order:
+            if not pending:
+                break
+            yield from self._reindex_from_mailbox(user_email, pending)
+
+        for thread_id in pending:
+            yield ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=thread_id,
+                    document_link=_build_document_link(thread_id),
+                ),
+                failure_message=(
+                    f"Gmail thread {thread_id} is not in any mailbox the "
+                    "connector reads (deleted, or the user is gone)"
+                ),
+            )
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,  # noqa: ARG002
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        # Like the crawl, every document carries external_access (the mailbox
+        # owner), so include_permissions changes nothing.
+        logger.info("Reindexing %s Gmail threads from errors", len(errors))
+        try:
+            yield from self._reindex(errors)
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
+            raise
 
     def build_dummy_checkpoint(self) -> GmailCheckpoint:
         return GmailCheckpoint(has_more=True)
