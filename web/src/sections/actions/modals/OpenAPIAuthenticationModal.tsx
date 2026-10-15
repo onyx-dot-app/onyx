@@ -23,20 +23,20 @@ import {
 } from "@opal/components";
 import { OAuthConfig } from "@/lib/tools/types";
 import { getOAuthConfig } from "@/lib/oauth/api";
+import {
+  MASKED_OAUTH_CREDENTIAL,
+  type OAuthConfigFields,
+} from "@/lib/oauth/config";
+import OAuthPKCESupport from "@/sections/actions/oauth/OAuthPKCESupport";
+import OAuthConnectionCheck from "@/sections/actions/oauth/OAuthConnectionCheck";
 import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 
 export type AuthMethod = "oauth" | "custom-header" | "pt-oauth";
 
-export interface OpenAPIAuthFormValues {
+export interface OpenAPIAuthFormValues extends OAuthConfigFields {
   authMethod: AuthMethod;
-  authorizationUrl: string;
-  tokenUrl: string;
-  clientId: string;
-  clientSecret: string;
-  scopes: string;
-  supportsPkce: boolean;
   headers: KeyValue[];
 }
 
@@ -54,8 +54,6 @@ interface OpenAPIAuthenticationModalProps {
   entityName?: string | null;
   passthroughOAuthEnabled?: boolean;
 }
-
-const MASKED_CREDENTIAL_VALUE = "********";
 
 const defaultValues: OpenAPIAuthFormValues = {
   authMethod: "oauth",
@@ -235,8 +233,8 @@ export default function OpenAPIAuthenticationModal({
           existingOAuthConfig?.authorization_url ||
           defaultValues.authorizationUrl,
         tokenUrl: existingOAuthConfig?.token_url || defaultValues.tokenUrl,
-        clientId: shouldMaskCredentials ? MASKED_CREDENTIAL_VALUE : "",
-        clientSecret: shouldMaskCredentials ? MASKED_CREDENTIAL_VALUE : "",
+        clientId: shouldMaskCredentials ? MASKED_OAUTH_CREDENTIAL : "",
+        clientSecret: shouldMaskCredentials ? MASKED_OAUTH_CREDENTIAL : "",
         scopes: existingOAuthConfig?.scopes?.join(", ") || "",
         supportsPkce: existingOAuthConfig?.supports_pkce ?? false,
         headers: baseHeaders,
@@ -281,26 +279,8 @@ export default function OpenAPIAuthenticationModal({
         formikHelpers.setSubmitting(false);
         return;
       }
-      const sanitizeCredentials = (
-        formValues: OpenAPIAuthFormValues
-      ): OpenAPIAuthFormValues => {
-        if (!isEditingOAuthConfig || formValues.authMethod !== "oauth") {
-          return formValues;
-        }
-
-        const sanitizeValue = (value: string) =>
-          value === MASKED_CREDENTIAL_VALUE ? "" : value;
-
-        return {
-          ...formValues,
-          clientId: sanitizeValue(formValues.clientId),
-          clientSecret: sanitizeValue(formValues.clientSecret),
-        };
-      };
-
       try {
-        const sanitizedValues = sanitizeCredentials(values);
-        await onConnect?.(sanitizedValues);
+        await onConnect?.(values);
         onClose();
       } finally {
         formikHelpers.setSubmitting(false);
@@ -504,6 +484,11 @@ export default function OpenAPIAuthenticationModal({
                           />
                         </FormField>
 
+                        <OAuthPKCESupport
+                          authorizationUrl={values.authorizationUrl}
+                          tokenUrl={values.tokenUrl}
+                        />
+
                         <FormField
                           name="clientId"
                           state={
@@ -628,10 +613,13 @@ export default function OpenAPIAuthenticationModal({
                           </div>
                         </FormField>
 
+                        <OAuthConnectionCheck
+                          values={values}
+                          configId={oauthConfigId}
+                          disabled={!isValid || isSubmitting}
+                        />
+
                         <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">
-                          <Text as="p" text03 secondaryBody>
-                            {t("openApiAuthModal.oauthLoginNotice.description")}
-                          </Text>
                           <div className="flex flex-col gap-2 w-full">
                             <Text
                               as="p"

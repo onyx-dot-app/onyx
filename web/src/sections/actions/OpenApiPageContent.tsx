@@ -12,6 +12,7 @@ import AddOpenAPIActionModal from "./modals/AddOpenAPIActionModal";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import { toast } from "@opal/layouts";
 import OpenApiActionCard from "./OpenApiActionCard";
+import { oauthConfigRequest } from "@/lib/oauth/config";
 import { createOAuthConfig, updateOAuthConfig } from "@/lib/oauth/api";
 import { updateCustomTool, deleteCustomTool } from "@/lib/tools/svc";
 import { updateToolStatus } from "@/lib/tools/svc";
@@ -73,33 +74,19 @@ export default function OpenApiPageContent() {
 
       try {
         if (values.authMethod === "oauth") {
-          const parsedScopes = values.scopes
-            .split(",")
-            .map((scope) => scope.trim())
-            .filter(Boolean);
-          const trimmedClientId = values.clientId.trim();
-          const trimmedClientSecret = values.clientSecret.trim();
-
           let oauthConfigId = selectedTool.oauth_config_id ?? null;
+          const config = oauthConfigRequest(values, Boolean(oauthConfigId));
 
           if (oauthConfigId) {
             await updateOAuthConfig(oauthConfigId, {
-              authorization_url: values.authorizationUrl,
-              token_url: values.tokenUrl,
-              scopes: parsedScopes,
-              supports_pkce: values.supportsPkce,
-              client_id: trimmedClientId || undefined,
-              client_secret: trimmedClientSecret || undefined,
+              ...config,
+              client_id: config.client_id || undefined,
+              client_secret: config.client_secret || undefined,
             });
           } else {
             const oauthConfig = await createOAuthConfig({
+              ...config,
               name: `${selectedTool.name} OAuth`,
-              authorization_url: values.authorizationUrl,
-              token_url: values.tokenUrl,
-              client_id: trimmedClientId,
-              client_secret: trimmedClientSecret,
-              scopes: parsedScopes.length ? parsedScopes : undefined,
-              supports_pkce: values.supportsPkce,
             });
             oauthConfigId = oauthConfig.id;
           }

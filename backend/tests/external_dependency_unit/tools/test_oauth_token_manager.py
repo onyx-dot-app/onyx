@@ -286,6 +286,38 @@ class TestOAuthTokenManagerRefresh:
             manager.refresh_token(user_token)
 
 
+@pytest.mark.parametrize(
+    ("status", "payload"),
+    [
+        (307, {"access_token": "redirected"}),
+        (200, {"error": "invalid_grant"}),
+        (200, {"access_token": "new", "expires_in": -1}),
+    ],
+)
+@patch("onyx.auth.oauth_token_manager.requests.post")
+def test_refresh_rejects_unsafe_response_without_overwriting_tokens(
+    mock_post: Mock, db_session: Session, status: int, payload: dict[str, object]
+) -> None:
+    config = _create_test_oauth_config(db_session)
+    user = create_test_user(db_session, "oauth_user")
+    original = {"access_token": "old", "refresh_token": "refresh", "expires_at": 1}
+    token = upsert_user_oauth_token(config.id, user.id, original, db_session)
+    response = Mock(spec=Response, status_code=status)
+    response.json.return_value = payload
+    mock_post.return_value = response
+
+    with pytest.raises(ValueError):
+        OAuthTokenManager(config, user.id, db_session).refresh_token(token)
+
+    assert mock_post.call_args.kwargs["timeout"] == 30
+    assert mock_post.call_args.kwargs["allow_redirects"] is False
+    if status == 307:
+        response.json.assert_not_called()
+    db_session.expire_all()
+    assert token.token_data is not None
+    assert token.token_data.get_value(apply_mask=False) == original
+
+
 class TestOAuthTokenManagerExpiration:
     """Tests for token expiration checking"""
 

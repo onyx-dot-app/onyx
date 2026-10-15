@@ -447,7 +447,10 @@ Accounts & Access lists the user's grants and requires confirmation to disconnec
 The store resolves the tenant cache for each operation. Attempts bind an owner,
 namespace, random state, expiry, and typed feature payload. Consumption uses
 `getdel` before token exchange, so each attempt can complete only once.
-Payloads may contain PKCE verifiers, but must not contain client secrets.
+Payloads may contain PKCE verifiers. Saved authorization flows keep client secrets outside the attempt.
+Draft connection tests protect unsaved settings with the deployment's credential encryption mechanism.
+This mechanism encrypts values in EE; CE stores them without encryption.
+Draft settings expire in a separate attempt namespace. Provider access and refresh tokens are never cached for tests.
 
 `backend/onyx/oauth/protocol.py` owns pure authorization URL and token-body
 construction. Endpoint query parameters and configured extras cannot override
@@ -469,10 +472,33 @@ The shared exchange helper sends the stored verifier when PKCE is enabled.
 The route stores the resulting token for the caller and returns the validated return path.
 Provider failures return HTTP 502 with a safe message; the user must start authorization again.
 Database failures propagate separately from provider failures.
+Code exchange and token refresh share HTTP and response validation.
+Both reject redirects and apply a 30-second request timeout. Invalid responses do not replace saved tokens.
+Configuration snapshots check decrypted credential values, so cleared credentials are not shown as configured.
 
 Configuration creation, updates, and initiation reject reserved authorization parameters in endpoint queries and configured extras.
 Action configurations may still supply `resource` through additional parameters.
 Management keeps its owner-or-admin permission checks; initiation and callback require `BASIC_ACCESS` and bind tokens to the caller.
+
+### Custom-action OAuth setup checks
+
+`POST /admin/oauth-config/pkce-support` checks OAuth or OpenID Connect provider metadata.
+The authorization and token endpoints must match the submitted pair before metadata can establish support.
+The result distinguishes advertised S256 support, no advertised S256 support, and unknown support.
+Discovery observes the outbound URL policy and does not send client credentials.
+The manual PKCE setting remains available; detection does not prove that a provider enforces PKCE.
+
+`POST /admin/oauth-config/test/initiate` tests unsaved form values.
+An optional existing configuration ID permits reuse of masked credentials after an ownership check.
+Tests preserve an explicit empty client secret, matching saved authorization; token exchange omits that secret.
+The server applies the deployment's credential protection to the draft configuration.
+It stores the result in an owner-bound, tenant-scoped authorization attempt.
+The test uses the same registered callback URI as saved action authorization.
+A popup session-storage marker selects `POST /admin/oauth-config/test/callback` on return.
+That route consumes the test attempt, exchanges the code, and discards the tokens.
+It returns success and the PKCE setting used, without saving configuration or user tokens.
+Both test endpoints require action-management permission; the popup marker grants no access.
+Provider consent can still create a grant, even though Onyx discards the tokens.
 
 ## 5. Contracts and invariants
 

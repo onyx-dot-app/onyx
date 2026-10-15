@@ -199,7 +199,8 @@ so verify the callers rather than a single component.
 | `web/src/app/admin/tracing/`, `admin/systeminfo/` | observability |
 | `web/src/app/admin/web-search/` | web-search |
 | `web/src/app/admin/voice/`, `admin/image-generation/`, `admin/code-interpreter/` | voice, image-generation, code-execution |
-| `web/src/app/auth/`, `web/src/app/oauth-config/` | auth-and-identity |
+| `web/src/app/auth/`, `web/src/app/oauth-config/`, `web/src/lib/oauth/` | auth-and-identity |
+| `web/src/sections/actions/` | mcp-and-custom-tools |
 | `web/src/app/api/` | the component owning the proxied endpoint |
 | `web/src/refresh-components/`, `web/src/components/` | the calling component. Also see the Opal migration rule in `web/AGENTS.md`. |
 | `web/tests/e2e/` | the component the test covers |

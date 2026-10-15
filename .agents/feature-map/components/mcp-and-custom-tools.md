@@ -222,6 +222,21 @@ OpenAPI action can require its own OAuth login independent of `passthrough_auth`
 
 The action authentication form exposes `supports_pkce` as **Use PKCE**, disabled by default.
 Enable it only for providers that support S256 PKCE.
+The form checks provider metadata for S256 support after both HTTPS endpoints are entered.
+The result appears directly below Token URL, before the credential fields.
+The result is supported, unsupported, or unknown; missing metadata does not prove lack of support.
+The manual setting remains available when detection cannot establish support.
+
+**Test connection** authorizes the current form values in a popup without saving the form.
+Saving and testing use the same field conversion in `web/src/lib/oauth/`.
+Endpoint whitespace is removed. Masked credentials are reused only when editing an existing configuration.
+Existing masked credentials are resolved on the server after checking configuration ownership.
+The test exchanges the authorization code and discards the returned tokens.
+It does not create or update an `OAuthConfig` or `OAuthUserToken` row.
+The popup reports results through a same-origin channel bound to the attempt state, with an opener-message fallback.
+A disconnected popup can still report a result until the test expires or the admin changes settings or retries.
+A test can create a grant at the provider. Success confirms the exchange, not PKCE enforcement.
+
 Authorization uses the shared tenant-aware attempt store and protocol helpers described in [[auth-and-identity]] §4.
 The action route owns configuration validation and per-user token storage; MCP keeps its separate credential model.
 
@@ -542,6 +557,7 @@ each operation and consumes state before exchanging the authorization code.
 | changes name disambiguation | `_disambiguate_mcp_tool_names`, `MCPTool.use_disambiguated_name`, and any saved chat history that stored the pre- or post-disambiguation name (`[[tools-framework]]` §7's tool-rename row applies here too) |
 | changes the `Tool` discriminator (adds a fourth kind, or changes column semantics) | `[[tools-framework]]`'s `BUILT_IN_TOOL_MAP`/dispatch, `get_tools` (`db/tools.py`, its `only_openapi`/`only_connected_mcp` filters), `_upsert_db_tools`, `create_tool__no_commit` |
 | changes `passthrough_auth` or per-tool OAuth resolution order | `tool_constructor.py`'s priority-1-then-2 logic (§4.5 step 5-6), `_validate_auth_settings` (`tool/api.py`) |
+| changes custom-action OAuth setup | the PKCE metadata check, draft test endpoints, masked credential handling, popup callback routing, and saved per-user authorization in [[auth-and-identity]] |
 | changes MCP OAuth token storage shape | `extract_connection_data`, `mcp_token_expired`, `ResolvedMCPCredentials.build_headers`, and the SSRF-safe httpx factory that every one of these calls flows through |
 | changes tool sync (`_sync_mcp_server_tools`) | admin-visible tool list going stale, the `with_for_update()` lock's contention behavior under concurrent refresh triggers |
 
@@ -578,6 +594,16 @@ See `backend/AGENTS.md` for authoritative env/secrets setup. Test helpers:
    appears in the reply.
 5. For an OAuth or per-user-key server, repeat as a second user and confirm
    the second user must connect independently (proves per-user scope, §4.3).
+
+### Checking OAuth settings without saving
+
+1. Open an action's OAuth settings and enter the authorization and token endpoints.
+2. Check the detected S256 status. Change the endpoints and confirm the old status disappears.
+3. Run **Test connection** and complete provider consent in the popup.
+4. Confirm the result identifies whether the test used PKCE.
+5. Confirm the test did not change saved configuration or the user's saved token.
+6. Change a form value and confirm the previous test result no longer applies.
+7. Repeat with denied consent and a closed popup. Neither case must report success.
 
 ### Adding an OpenAPI action and confirming the LLM can call them
 

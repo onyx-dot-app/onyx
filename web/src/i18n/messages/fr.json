@@ -581,6 +581,30 @@
       "pkce": {
         "label": "Utiliser PKCE",
         "description": "Activez cette option uniquement si le fournisseur OAuth prend en charge PKCE avec la méthode de défi S256."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Saisissez des URL HTTPS valides pour vérifier la prise en charge de PKCE.",
+          "checking": "Vérification de la prise en charge annoncée de PKCE…",
+          "supported": "Le fournisseur annonce la prise en charge de S256 PKCE.",
+          "unsupported": "Le fournisseur n’annonce pas la prise en charge de S256 PKCE.",
+          "unknown": "Impossible de vérifier la prise en charge de PKCE. Vous pouvez choisir le réglage manuellement."
+        },
+        "description": "Teste ces réglages non enregistrés sans sauvegarder la configuration ni les jetons. Le consentement peut autoriser cette application à accéder à votre compte.",
+        "testing": "Test de connexion…",
+        "test": "Tester la connexion",
+        "successPkce": "Autorisation réussie avec les paramètres PKCE. Cela ne prouve pas que le fournisseur impose PKCE.",
+        "success": "Autorisation réussie sans PKCE.",
+        "result": {
+          "blocked": "Autorisez les fenêtres contextuelles et réessayez.",
+          "closed": "La fenêtre de test a été fermée ou déconnectée. Terminez tout test encore ouvert ou réessayez.",
+          "stale": "Les réglages ont changé. Testez les réglages actuels.",
+          "failed": "Le test d’autorisation a échoué. Vérifiez les réglages et réessayez.",
+          "denied": "L’autorisation du fournisseur a été refusée ou annulée.",
+          "interrupted": "Le test a expiré ou a été interrompu. Lancez un nouveau test."
+        },
+        "returnToSettings": "Revenez à la fenêtre des réglages pour voir le résultat.",
+        "close": "Fermer la fenêtre"
       }
     },
     "openApiCard": {

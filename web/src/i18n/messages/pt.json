@@ -581,6 +581,30 @@
       "pkce": {
         "label": "Usar PKCE",
         "description": "Ative apenas se o provedor OAuth oferecer suporte a PKCE com o método de desafio S256."
+      },
+      "connectionCheck": {
+        "discovery": {
+          "idle": "Insira endereços HTTPS válidos para verificar o suporte a PKCE.",
+          "checking": "Verificando o suporte anunciado a PKCE…",
+          "supported": "O provedor anuncia suporte a S256 PKCE.",
+          "unsupported": "O provedor não anuncia suporte a S256 PKCE.",
+          "unknown": "Não foi possível verificar o suporte a PKCE. Você ainda pode escolher a configuração manualmente."
+        },
+        "description": "Testa estas configurações não salvas sem salvar configurações ou tokens. O consentimento do provedor pode conceder a este aplicativo acesso à sua conta.",
+        "testing": "Testando conexão…",
+        "test": "Testar conexão",
+        "successPkce": "Autorização concluída com parâmetros PKCE. Isso não prova que o provedor exige PKCE.",
+        "success": "Autorização concluída sem PKCE.",
+        "result": {
+          "blocked": "Permita janelas pop-up e tente novamente.",
+          "closed": "A janela de teste foi fechada ou desconectada. Conclua qualquer teste aberto ou tente novamente.",
+          "stale": "As configurações mudaram. Teste as configurações atuais novamente.",
+          "failed": "O teste de autorização falhou. Verifique as configurações e tente novamente.",
+          "denied": "A autorização do provedor foi recusada ou cancelada.",
+          "interrupted": "O teste expirou ou foi interrompido. Inicie um novo teste."
+        },
+        "returnToSettings": "Volte à janela de configurações para ver o resultado.",
+        "close": "Fechar janela"
       }
     },
     "openApiCard": {

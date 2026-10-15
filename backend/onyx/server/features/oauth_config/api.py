@@ -1,7 +1,9 @@
 """API endpoints for OAuth configuration management."""
 
+import base64
 import secrets
 from collections.abc import Mapping
+from typing import Any
 
 import requests
 from fastapi import APIRouter, Depends
@@ -37,6 +39,7 @@ from onyx.oauth.authorization_attempt import (
     canonical_json_fingerprint,
     generate_authorization_state,
 )
+from onyx.oauth.discovery import detect_pkce_support
 from onyx.oauth.models import (
     OAuthConfigurationFingerprint,
     PKCECodeVerifier,
@@ -54,7 +57,12 @@ from onyx.server.features.oauth_config.models import (
     OAuthConfigUpdate,
     OAuthInitiateRequest,
     OAuthInitiateResponse,
+    OAuthPKCESupportRequest,
+    OAuthPKCESupportResponse,
+    OAuthTestCallbackResponse,
+    OAuthTestInitiateRequest,
 )
+from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException
 
@@ -82,6 +90,53 @@ _AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
 )
 
 
+class _OAuthTestAttemptPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    encrypted_params: str
+    code_verifier: PKCECodeVerifier | None = None
+    oauth_config_id: int | None = None
+    saved_configuration_fingerprint: OAuthConfigurationFingerprint | None = None
+
+
+_TEST_AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
+    cache_backend_provider=lambda: get_cache_backend(),
+    namespace="oauth-config-test",
+    payload_type=_OAuthTestAttemptPayload,
+)
+
+
+def _build_authorization_request(
+    params: OAuthFlowParams, supports_pkce: bool
+) -> tuple[OAuthInitiateResponse, str | None]:
+    code_verifier: str | None = None
+    code_challenge: str | None = None
+    if supports_pkce:
+        code_verifier, code_challenge = generate_pkce_pair()
+    state = generate_authorization_state()
+    authorization_url = build_oauth_authorization_url(
+        params, _OAUTH_CALLBACK_URL, state, code_challenge=code_challenge
+    )
+    return OAuthInitiateResponse(
+        authorization_url=authorization_url, state=state
+    ), code_verifier
+
+
+def _exchange_authorization_code(
+    params: OAuthFlowParams, code: str, code_verifier: str | None
+) -> dict[str, Any]:
+    try:
+        return exchange_oauth_code_for_token(
+            params, code, _OAUTH_CALLBACK_URL, code_verifier=code_verifier
+        )
+    except (requests.RequestException, SSRFException, ValueError) as error:
+        logger.warning("OAuth token exchange failed (%s)", type(error).__name__)
+        raise OnyxError(
+            OnyxErrorCode.BAD_GATEWAY,
+            "OAuth token exchange failed. Start authorization again.",
+        ) from error
+
+
 def _oauth_config_fingerprint(params: OAuthFlowParams, supports_pkce: bool) -> str:
     return canonical_json_fingerprint(
         {
@@ -106,6 +161,7 @@ def _oauth_config_to_snapshot(
 ) -> OAuthConfigSnapshot:
     """Convert OAuthConfig model to API snapshot."""
     tools = get_tools_by_oauth_config(oauth_config.id, db_session)
+    params = oauth_flow_params_from_config(oauth_config, allow_missing_credentials=True)
     return OAuthConfigSnapshot(
         id=oauth_config.id,
         name=oauth_config.name,
@@ -113,9 +169,7 @@ def _oauth_config_to_snapshot(
         token_url=oauth_config.token_url,
         scopes=oauth_config.scopes,
         supports_pkce=oauth_config.supports_pkce,
-        has_client_credentials=bool(
-            oauth_config.client_id and oauth_config.client_secret
-        ),
+        has_client_credentials=bool(params.client_id and params.client_secret),
         tool_count=len(tools),
         created_at=oauth_config.created_at,
         updated_at=oauth_config.updated_at,
@@ -155,6 +209,130 @@ def _assert_can_manage_oauth_config(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
         "You can only manage OAuth configurations for actions that you created.",
     )
+
+
+@admin_router.post("/pkce-support")
+def check_pkce_support(
+    request: OAuthPKCESupportRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)),
+) -> OAuthPKCESupportResponse:
+    """Check advertised support without sending client credentials."""
+    _validate_oauth_endpoint_urls(request.authorization_url, request.token_url)
+    return OAuthPKCESupportResponse(
+        status=detect_pkce_support(request.authorization_url, request.token_url)
+    )
+
+
+@admin_router.post("/test/initiate")
+def initiate_oauth_test(
+    request: OAuthTestInitiateRequest,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
+) -> OAuthInitiateResponse:
+    """Authorize draft settings without changing configuration or saved tokens."""
+    _validate_oauth_endpoint_urls(request.authorization_url, request.token_url)
+    saved_params: OAuthFlowParams | None = None
+    saved_fingerprint: str | None = None
+    if request.oauth_config_id is not None:
+        config = get_oauth_config(request.oauth_config_id, db_session)
+        if config is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "OAuth configuration not found")
+        _assert_can_manage_oauth_config(config, user, db_session)
+        try:
+            saved_params = oauth_flow_params_from_config(
+                config, allow_missing_credentials=True
+            )
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+        saved_fingerprint = _oauth_config_fingerprint(
+            saved_params, config.supports_pkce
+        )
+
+    params = OAuthFlowParams(
+        authorization_url=request.authorization_url,
+        token_url=request.token_url,
+        client_id=(
+            request.client_id
+            if request.client_id is not None
+            else saved_params.client_id
+            if saved_params
+            else ""
+        ),
+        client_secret=(
+            request.client_secret
+            if request.client_secret is not None
+            else saved_params.client_secret
+            if saved_params
+            else None
+        ),
+        scopes=request.scopes,
+        additional_params=saved_params.additional_params if saved_params else None,
+    )
+    if not params.client_id or params.client_secret is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "Client ID and client secret are required"
+        )
+    _validate_authorization_configuration(
+        params.authorization_url, params.additional_params
+    )
+    response, verifier = _build_authorization_request(params, request.supports_pkce)
+    encrypted_params = base64.b64encode(
+        encrypt_string_to_bytes(params.model_dump_json())
+    ).decode("ascii")
+    _TEST_AUTHORIZATION_ATTEMPTS.store(
+        owner_id=str(user.id),
+        state=response.state,
+        payload=_OAuthTestAttemptPayload(
+            encrypted_params=encrypted_params,
+            code_verifier=verifier,
+            oauth_config_id=request.oauth_config_id,
+            saved_configuration_fingerprint=saved_fingerprint,
+        ),
+    )
+    return response
+
+
+@admin_router.post("/test/callback")
+def complete_oauth_test(
+    code: str,
+    state: str,
+    db_session: Session = Depends(get_session),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_ACTIONS, allow_scope=True)
+    ),
+) -> OAuthTestCallbackResponse:
+    """Validate a draft authorization exchange and discard the returned tokens."""
+    attempt = _TEST_AUTHORIZATION_ATTEMPTS.consume(owner_id=str(user.id), state=state)
+    payload = attempt.payload
+    if payload.oauth_config_id is not None:
+        config = get_oauth_config(payload.oauth_config_id, db_session)
+        if config is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "OAuth configuration not found")
+        _assert_can_manage_oauth_config(config, user, db_session)
+        try:
+            fingerprint = _oauth_config_fingerprint(
+                oauth_flow_params_from_config(config, allow_missing_credentials=True),
+                config.supports_pkce,
+            )
+        except ValueError as error:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "OAuth configuration changed while the test was pending.",
+            ) from error
+        if not secrets.compare_digest(
+            payload.saved_configuration_fingerprint or "", fingerprint
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "OAuth configuration changed while the test was pending.",
+            )
+    params = OAuthFlowParams.model_validate_json(
+        decrypt_bytes_to_string(base64.b64decode(payload.encrypted_params))
+    )
+    _exchange_authorization_code(params, code, payload.code_verifier)
+    return OAuthTestCallbackResponse(supports_pkce=payload.code_verifier is not None)
 
 
 @admin_router.post("/create")
@@ -320,21 +498,12 @@ def initiate_oauth_flow(
         params = oauth_flow_params_from_config(oauth_config)
     except ValueError as error:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
-    code_verifier: str | None = None
-    code_challenge: str | None = None
-    if oauth_config.supports_pkce:
-        code_verifier, code_challenge = generate_pkce_pair()
-    state = generate_authorization_state()
-
-    authorization_url = build_oauth_authorization_url(
-        params,
-        _OAUTH_CALLBACK_URL,
-        state,
-        code_challenge=code_challenge,
+    response, code_verifier = _build_authorization_request(
+        params, oauth_config.supports_pkce
     )
     _AUTHORIZATION_ATTEMPTS.store(
         owner_id=str(user.id),
-        state=state,
+        state=response.state,
         payload=_OAuthConfigAttemptPayload(
             oauth_config_id=oauth_config.id,
             return_path=request.return_path,
@@ -345,7 +514,7 @@ def initiate_oauth_flow(
         ),
     )
 
-    return OAuthInitiateResponse(authorization_url=authorization_url, state=state)
+    return response
 
 
 @router.post("/callback")
@@ -386,19 +555,7 @@ def handle_oauth_callback(
             "OAuth configuration changed while authorization was pending.",
         )
 
-    try:
-        token_data = exchange_oauth_code_for_token(
-            params,
-            code,
-            _OAUTH_CALLBACK_URL,
-            code_verifier=payload.code_verifier,
-        )
-    except (requests.RequestException, SSRFException, ValueError) as error:
-        logger.warning("OAuth token exchange failed (%s)", type(error).__name__)
-        raise OnyxError(
-            OnyxErrorCode.BAD_GATEWAY,
-            "OAuth token exchange failed. Start authorization again.",
-        ) from error
+    token_data = _exchange_authorization_code(params, code, payload.code_verifier)
 
     upsert_user_oauth_token(oauth_config.id, user.id, token_data, db_session)
     return OAuthCallbackResponse(redirect_url=payload.return_path)
