@@ -1,10 +1,15 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.clients.keenable_client import (
     KEENABLE_MAX_SNIPPET_CHARS,
     KeenableClient,
 )
+from onyx.tools.tool_implementations.web_search.models import WebSearchResult
 from onyx.tools.tool_implementations.web_search.providers import (
     build_search_provider_from_config,
     provider_requires_api_key,
@@ -112,3 +117,65 @@ def test_build_keenable_provider_without_api_key() -> None:
     )
 
     assert isinstance(provider, KeenableClient)
+
+
+@pytest.mark.parametrize(
+    ("error_msg", "expected"),
+    [
+        (
+            "Keenable search failed (status 401): Invalid API key",
+            "Invalid Keenable API key",
+        ),
+        (
+            "Keenable search failed (status 402): Payment Required",
+            "insufficient credits",
+        ),
+        (
+            "Keenable search failed (status 429): Too many requests",
+            "rate limit exceeded",
+        ),
+        ("Keenable search failed (status 400): Bad request", "validation failed"),
+    ],
+)
+def test_test_connection_raises_onyx_error(
+    monkeypatch: pytest.MonkeyPatch, error_msg: str, expected: str
+) -> None:
+    client = KeenableClient(api_key="test-key")
+
+    def _mock_search(query: str) -> list[WebSearchResult]:  # noqa: ARG001
+        raise ValueError(error_msg)
+
+    monkeypatch.setattr(client, "search", _mock_search)
+
+    with pytest.raises(OnyxError, match=expected) as exc_info:
+        client.test_connection()
+
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+
+
+def test_test_connection_fails_on_empty_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = KeenableClient()
+
+    def _mock_search(query: str) -> list[WebSearchResult]:  # noqa: ARG001
+        return []
+
+    monkeypatch.setattr(client, "search", _mock_search)
+
+    with pytest.raises(OnyxError, match="returned no results"):
+        client.test_connection()
+
+
+def test_test_connection_propagates_unexpected_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = KeenableClient()
+
+    def _mock_search(query: str) -> list[WebSearchResult]:  # noqa: ARG001
+        raise RuntimeError("unexpected parsing bug")
+
+    monkeypatch.setattr(client, "search", _mock_search)
+
+    with pytest.raises(RuntimeError, match="unexpected parsing bug"):
+        client.test_connection()

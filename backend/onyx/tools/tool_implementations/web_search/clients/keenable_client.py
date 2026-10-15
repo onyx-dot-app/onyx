@@ -3,8 +3,9 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import requests
-from fastapi import HTTPException
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
     WebSearchResult,
@@ -137,11 +138,11 @@ class KeenableClient(WebSearchProvider):
         try:
             test_results = self.search("test")
             if not test_results or not any(result.link for result in test_results):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Keenable validation failed: search returned no results.",
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "Keenable validation failed: search returned no results.",
                 )
-        except HTTPException:
+        except OnyxError:
             raise
         except (ValueError, requests.RequestException) as e:
             error_msg = str(e)
@@ -150,20 +151,25 @@ class KeenableClient(WebSearchProvider):
                 "status 401" in lower
                 or "status 403" in lower
                 or "api key" in lower
-                or "auth" in lower
+                or "unauthorized" in lower
             ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid Keenable API key: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Invalid Keenable API key: {error_msg}",
+                ) from e
+            if "status 402" in lower or "payment" in lower or "credits" in lower:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Keenable account has insufficient credits: {error_msg}",
                 ) from e
             if "status 429" in lower or "rate limit" in lower:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Keenable rate limit exceeded: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"Keenable rate limit exceeded: {error_msg}",
                 ) from e
-            raise HTTPException(
-                status_code=400,
-                detail=f"Keenable validation failed: {error_msg}",
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Keenable validation failed: {error_msg}",
             ) from e
 
         logger.info("Web search provider test succeeded for Keenable.")
