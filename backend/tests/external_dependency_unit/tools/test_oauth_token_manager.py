@@ -16,13 +16,12 @@ from requests import HTTPError, Response
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import (
-    OAuthFlowParams,
     OAuthTokenManager,
-    build_oauth_authorization_url,
     exchange_oauth_code_for_token,
 )
 from onyx.db.models import OAuthConfig
 from onyx.db.oauth_config import create_oauth_config, upsert_user_oauth_token
+from onyx.oauth.protocol import OAuthFlowParams, build_oauth_authorization_url
 from onyx.utils.sensitive import SensitiveValue
 from tests.external_dependency_unit.conftest import create_test_user
 
@@ -109,7 +108,7 @@ class TestOAuthTokenManagerValidation:
         upsert_user_oauth_token(oauth_config.id, user.id, token_data, db_session)
 
         # Mock the refresh token response
-        mock_response = Mock(spec=Response)
+        mock_response = Mock(spec=Response, status_code=200)
         mock_response.json.return_value = {
             "access_token": "new_access_token",
             "refresh_token": "new_refresh_token",
@@ -198,7 +197,7 @@ class TestOAuthTokenManagerRefresh:
 
         # Mock successful refresh
         new_expires_in = 3600
-        mock_response = Mock(spec=Response)
+        mock_response = Mock(spec=Response, status_code=200)
         mock_response.json.return_value = {
             "access_token": "new_token",
             "refresh_token": "new_refresh",
@@ -240,7 +239,7 @@ class TestOAuthTokenManagerRefresh:
         )
 
         # Mock refresh response WITHOUT refresh_token
-        mock_response = Mock(spec=Response)
+        mock_response = Mock(spec=Response, status_code=200)
         mock_response.json.return_value = {
             "access_token": "new_token",
             "expires_in": 3600,
@@ -277,7 +276,7 @@ class TestOAuthTokenManagerRefresh:
         )
 
         # Mock HTTP error
-        mock_response = Mock(spec=Response)
+        mock_response = Mock(spec=Response, status_code=200)
         mock_response.raise_for_status.side_effect = HTTPError("Invalid refresh token")
         mock_post.return_value = mock_response
 
@@ -351,7 +350,7 @@ class TestOAuthTokenManagerCodeExchange:
         user = create_test_user(db_session, "oauth_user")
 
         # Mock successful token exchange
-        mock_response = Mock(spec=Response)
+        mock_response = Mock(spec=Response, status_code=200)
         mock_response.json.return_value = {
             "access_token": "new_access_token",
             "refresh_token": "new_refresh_token",
@@ -396,7 +395,7 @@ class TestOAuthTokenManagerCodeExchange:
         user = create_test_user(db_session, "oauth_user")
 
         # Mock HTTP error
-        mock_response = Mock(spec=Response)
+        mock_response = Mock(spec=Response, status_code=200)
         mock_response.raise_for_status.side_effect = HTTPError("Invalid code")
         mock_post.return_value = mock_response
 
@@ -571,7 +570,7 @@ class TestSharedOAuthPrimitives:
     ) -> None:
         # Placeholder host can't resolve; SSRF guard is covered in test_mcp_ssrf.
         del mock_validate
-        mock_response = Mock(spec=Response)
+        mock_response = Mock(spec=Response, status_code=200)
         mock_response.json.return_value = {
             "access_token": "tok",
             "token_type": "Bearer",
@@ -601,7 +600,7 @@ class TestSharedOAuthPrimitives:
         self, mock_post: Mock, mock_validate: Mock
     ) -> None:
         del mock_validate
-        mock_response = Mock(spec=Response)
+        mock_response = Mock(spec=Response, status_code=200)
         mock_response.raise_for_status.side_effect = HTTPError("bad code")
         mock_post.return_value = mock_response
         with pytest.raises(HTTPError):

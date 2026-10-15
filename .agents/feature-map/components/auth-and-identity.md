@@ -440,6 +440,21 @@ Accounts & Access lists the user's grants and requires confirmation to disconnec
 
 ---
 
+### Shared outgoing OAuth primitives
+
+`backend/onyx/oauth/authorization_attempt.py` owns pending authorization attempts.
+The store resolves the tenant cache for each operation. Attempts bind an owner,
+namespace, random state, expiry, and typed feature payload. Consumption uses
+`getdel` before token exchange, so each attempt can complete only once.
+Payloads may contain PKCE verifiers, but must not contain client secrets.
+
+`backend/onyx/oauth/protocol.py` owns pure authorization URL and token-body
+construction. Endpoint query parameters and configured extras cannot override
+state, client identity, redirect URI, response type, scope, or PKCE fields.
+MCP also owns `resource`; action configurations may supply it as an extension.
+Provider adapters retain scope spelling, client authentication, and token parsing.
+Feature routes own permissions, configuration snapshots, and credential storage.
+
 ## 5. Contracts and invariants
 
 This area is security-critical. Claims here are stated at the confidence the

@@ -3,7 +3,7 @@ asks for offline access; these params must be injected into every flow."""
 
 from urllib.parse import parse_qs, urlparse
 
-from onyx.auth.oauth_token_manager import (
+from onyx.oauth.protocol import (
     OAuthFlowParams,
     build_oauth_authorization_url,
     ensure_offline_access_auth_params,
