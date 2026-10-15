@@ -489,3 +489,33 @@ func TestSyncAlerts_dryRunChangesNothing(t *testing.T) {
 		t.Fatalf("expected only the issue list call, got %q", got)
 	}
 }
+
+func TestSync_failingListsEveryBlockingAlertWithItsImages(t *testing.T) {
+	bin := fakeBinDir(t)
+	chdirNewRepo(t)
+	known := renderAlertBody(Alert{Key: "Debian:13/chromium", Advisories: []Advisory{{ID: "DEBIAN-CVE-1"}}})
+	fakeIssueGH(t, bin, []map[string]any{{"number": 5, "url": "u5", "body": known}})
+	dir := t.TempDir()
+	chromium := Finding{ID: "DEBIAN-CVE-1", Ecosystem: "Debian:13", Package: "chromium", Severity: SeverityCritical}
+	sandbox := writeResultFile(t, dir, "image-sandbox.json", chromium)
+	backend := writeResultFile(t, dir, "image-backend.json", chromium)
+	deps := writeResultFile(t, dir, "deps.json", Finding{ID: "GHSA-n", Ecosystem: "npm", Package: "next", Severity: SeverityCritical})
+
+	res, err := Sync(SyncAlertsOptions{ResultFiles: []string{deps, sandbox, backend}, DryRun: true})
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(res.Announce) != 1 || res.Announce[0].Key != "npm/next" {
+		t.Fatalf("expected only the new package announced, got %+v", res.Announce)
+	}
+	if len(res.Failing) != 2 {
+		t.Fatalf("expected both blocking packages failing, got %+v", res.Failing)
+	}
+	got := res.Failing[0]
+	if got.Key != "Debian:13/chromium" || got.Issue != 5 || !reflect.DeepEqual(got.Advisories[0].Images, []string{"backend", "sandbox"}) {
+		t.Fatalf("expected the known alert with its issue and both images, got %+v", got)
+	}
+	if res.Failing[1].Advisories[0].Images != nil {
+		t.Fatalf("a lockfile finding names no image, got %+v", res.Failing[1].Advisories[0].Images)
+	}
+}
