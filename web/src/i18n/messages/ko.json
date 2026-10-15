@@ -4286,8 +4286,7 @@
           "label": "입력 요금(100만 token당 USD)"
         },
         "model": {
-          "label": "모델",
-          "placeholder": "모델 선택"
+          "label": "모델"
         },
         "outputRate": {
           "label": "출력 요금(100만 token당 USD)"
@@ -12740,11 +12739,6 @@
         "row": {
           "caption": "모델의 응답이 얼마나 예측 가능한지 또는 창의적인지 정합니다",
           "title": "온도"
-        }
-      },
-      "trigger": {
-        "noSelection": {
-          "label": "모델 선택"
         }
       },
       "unsupportedSetting": {

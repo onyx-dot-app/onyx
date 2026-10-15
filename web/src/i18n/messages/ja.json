@@ -4286,8 +4286,7 @@
           "label": "入力単価（100 万 tokens あたりの USD）"
         },
         "model": {
-          "label": "モデル",
-          "placeholder": "モデルを選択"
+          "label": "モデル"
         },
         "outputRate": {
           "label": "出力単価（100 万 tokens あたりの USD）"
@@ -12740,11 +12739,6 @@
         "row": {
           "caption": "モデルの応答をどれだけ予測可能または創造的にするか",
           "title": "温度"
-        }
-      },
-      "trigger": {
-        "noSelection": {
-          "label": "モデルを選択"
         }
       },
       "unsupportedSetting": {

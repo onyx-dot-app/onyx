@@ -18,26 +18,6 @@ import type {
 } from "@/lib/languageModels/types";
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/**
- * Sentinel option representing "no explicit model — use the global default."
- * Identified by modelConfigurationId === null and an empty modelName.
- * Callers that support this option (e.g. AgentEditorPage) pass it back via
- * onChange; the handler should treat modelConfigurationId === null as "clear."
- */
-export const GLOBAL_DEFAULT_LLM_OPTION: LLMOption = {
-  name: "",
-  provider: "",
-  providerDisplayName: "",
-  modelName: "",
-  modelConfigurationId: null,
-  displayName: "Global Default",
-  vendor: null,
-};
-
-// ---------------------------------------------------------------------------
 // llmOptionKey
 // ---------------------------------------------------------------------------
 

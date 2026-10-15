@@ -4286,8 +4286,7 @@
           "label": "Taxa de entrada (USD por 1M de tokens)"
         },
         "model": {
-          "label": "Modelo",
-          "placeholder": "Selecione um modelo"
+          "label": "Modelo"
         },
         "outputRate": {
           "label": "Taxa de saída (USD por 1M de tokens)"
@@ -12740,11 +12739,6 @@
         "row": {
           "caption": "Quão previsível ou criativo o modelo deve responder",
           "title": "Temperatura"
-        }
-      },
-      "trigger": {
-        "noSelection": {
-          "label": "Selecionar modelo"
         }
       },
       "unsupportedSetting": {

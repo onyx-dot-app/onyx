@@ -4286,8 +4286,7 @@
           "label": "Input rate (USD per 1M tokens)"
         },
         "model": {
-          "label": "Model",
-          "placeholder": "Select a model"
+          "label": "Model"
         },
         "outputRate": {
           "label": "Output rate (USD per 1M tokens)"
@@ -12740,11 +12739,6 @@
         "row": {
           "caption": "How predictable or creative the model should respond",
           "title": "Temperature"
-        }
-      },
-      "trigger": {
-        "noSelection": {
-          "label": "Select Model"
         }
       },
       "unsupportedSetting": {
