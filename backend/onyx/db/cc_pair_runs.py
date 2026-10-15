@@ -148,6 +148,8 @@ def _index_attempt_runs(
             stmt = stmt.where(unresolved)
         case CCPairRunErrors.RESOLVED:
             stmt = stmt.where(own_errors, ~unresolved)
+        case CCPairRunErrors.NONE:
+            stmt = stmt.where(~own_errors)
         case None:
             pass
 
@@ -181,10 +183,16 @@ def _doc_permission_sync_runs(
         )
     )
     # A sync counts the documents it could not read, and nothing resolves them.
-    if run_filter.errors == CCPairRunErrors.UNRESOLVED:
-        stmt = stmt.where(DocPermissionSyncAttempt.docs_with_permission_errors > 0)
-    elif run_filter.errors == CCPairRunErrors.RESOLVED:
-        stmt = stmt.where(false())
+    unreadable = func.coalesce(DocPermissionSyncAttempt.docs_with_permission_errors, 0)
+    match run_filter.errors:
+        case CCPairRunErrors.UNRESOLVED:
+            stmt = stmt.where(unreadable > 0)
+        case CCPairRunErrors.RESOLVED:
+            stmt = stmt.where(false())
+        case CCPairRunErrors.NONE:
+            stmt = stmt.where(unreadable == 0)
+        case None:
+            pass
     return _narrowed(
         stmt,
         run_filter,
@@ -203,7 +211,7 @@ def _group_sync_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> S
         _group_sync_scope(run_filter)
     )
     # A group sync records no per-item errors, so it either fails or succeeds.
-    if run_filter.errors is not None:
+    if run_filter.errors not in (None, CCPairRunErrors.NONE):
         stmt = stmt.where(false())
     return _narrowed(
         stmt,
@@ -224,7 +232,7 @@ def _prune_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         SyncRecord.sync_type == SyncType.PRUNING,
     )
     # A prune records no per-document errors, so it either fails or succeeds.
-    if run_filter.errors is not None:
+    if run_filter.errors not in (None, CCPairRunErrors.NONE):
         stmt = stmt.where(false())
     return _narrowed(
         stmt,
@@ -244,8 +252,8 @@ def _report_text(path: str) -> ColumnElement[str]:
 
 def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select:
     """The pairs' connector-scoped check runs, keyed by each pair's credential
-    and connector. A check that fails is not a document error, so the errors
-    filter leaves the kind out."""
+    and connector. A check that fails is not a document error, so only the
+    open and resolved error filters leave the kind out."""
     stmt = (
         select(CapabilityCheckRun)
         .join(
@@ -258,7 +266,7 @@ def _check_runs(run_filter: CCPairRunFilter, with_status_filter: bool) -> Select
         )
         .where(ConnectorCredentialPair.id.in_(run_filter.cc_pair_ids))
     )
-    if run_filter.errors is not None:
+    if run_filter.errors not in (None, CCPairRunErrors.NONE):
         stmt = stmt.where(false())
     return _narrowed(
         stmt,

@@ -138,10 +138,12 @@ class CCPairRunStatusGroup(str, PyEnum):
 
 
 class CCPairRunErrors(str, PyEnum):
-    """Runs with document errors: some still open, or all of them resolved."""
+    """Runs by their document errors: some still open, all of them resolved,
+    or none at all."""
 
     UNRESOLVED = "unresolved"
     RESOLVED = "resolved"
+    NONE = "none"
 
 
 class PortAttemptStatus(str, PyEnum):

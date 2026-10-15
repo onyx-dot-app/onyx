@@ -2571,9 +2571,10 @@
         },
         "filter": {
           "label": "Mostrar",
-          "all": "Falhas e erros",
+          "all": "Todos os níveis",
           "failures": "Falhas",
-          "errors": "Erros"
+          "errors": "Erros",
+          "other": "Outros"
         },
         "resolved": {
           "label": "Resolvidos"
@@ -2581,7 +2582,8 @@
         "groups": {
           "failures": "{count, plural, one {# falha} other {# falhas}}",
           "errors": "{count, plural, one {# erro} other {# erros}}",
-          "resolved": "{count, plural, one {# resolvido} other {# resolvidos}}"
+          "resolved": "{count, plural, one {# resolvido} other {# resolvidos}}",
+          "other": "Outros"
         },
         "title": {
           "indexing": {
@@ -2589,35 +2591,50 @@
             "running": "Indexação em andamento com erros",
             "stopped": "Indexação interrompida com erros",
             "errors": "Indexação concluída com erros",
-            "resolved": "Erros de indexação resolvidos"
+            "resolved": "Erros de indexação resolvidos",
+            "succeeded": "Indexação concluída com sucesso",
+            "inProgress": "Indexação em andamento",
+            "canceled": "Indexação interrompida"
           },
           "doc_permission_sync": {
             "failed": "A sincronização de permissões falhou",
             "running": "Sincronização de permissões em andamento com erros",
             "stopped": "Sincronização de permissões interrompida com erros",
             "errors": "Permissões sincronizadas com erros",
-            "resolved": "Erros de sincronização de permissões resolvidos"
+            "resolved": "Erros de sincronização de permissões resolvidos",
+            "succeeded": "Permissões sincronizadas com sucesso",
+            "inProgress": "Sincronizando permissões",
+            "canceled": "Sincronização de permissões interrompida"
           },
           "group_sync": {
             "failed": "A sincronização de membros de grupos falhou",
             "running": "Sincronização de membros de grupos em andamento com erros",
             "stopped": "Sincronização de membros de grupos interrompida com erros",
             "errors": "Membros de grupos sincronizados com erros",
-            "resolved": "Erros de sincronização de membros de grupos resolvidos"
+            "resolved": "Erros de sincronização de membros de grupos resolvidos",
+            "succeeded": "Associações de grupo sincronizadas com sucesso",
+            "inProgress": "Sincronizando associações de grupo",
+            "canceled": "Sincronização de grupos interrompida"
           },
           "pruning": {
             "failed": "A limpeza falhou",
             "running": "Limpeza em andamento com erros",
             "stopped": "Limpeza interrompida com erros",
             "errors": "Limpeza concluída com erros",
-            "resolved": "Erros de limpeza resolvidos"
+            "resolved": "Erros de limpeza resolvidos",
+            "succeeded": "Limpeza concluída com sucesso",
+            "inProgress": "Limpeza em andamento",
+            "canceled": "Limpeza interrompida"
           },
           "checks": {
             "failed": "As verificações do conector falharam",
             "running": "Verificações do conector em andamento com erros",
             "stopped": "Verificações do conector interrompidas com erros",
             "errors": "Verificações do conector concluídas com erros",
-            "resolved": "Erros das verificações do conector resolvidos"
+            "resolved": "Erros das verificações do conector resolvidos",
+            "succeeded": "Verificações do conector aprovadas",
+            "inProgress": "Verificações do conector em andamento",
+            "canceled": "Verificações do conector interrompidas"
           }
         },
         "description": {
@@ -2643,7 +2660,8 @@
           "resolved": "Sem erros resolvidos",
           "filtered": "Nada corresponde a esta pesquisa.",
           "failures": "Sem falhas",
-          "errors": "Sem erros"
+          "errors": "Sem erros",
+          "other": "Nenhuma outra execução"
         },
         "loadError": {
           "title": "Não foi possível carregar a atividade."
@@ -6824,7 +6842,13 @@
         "loadError": "Não foi possível carregar a visão geral."
       },
       "activities": {
-        "title": "Atividades"
+        "title": "Atividades",
+        "history": "Histórico completo de atividades",
+        "viewLogs": "Ver o histórico de atividades",
+        "panel": {
+          "title": "Histórico de atividades",
+          "close": "Ocultar o histórico de atividades"
+        }
       },
       "list": {
         "search": {

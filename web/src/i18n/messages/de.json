@@ -2571,9 +2571,10 @@
         },
         "filter": {
           "label": "Anzeigen",
-          "all": "Fehlschläge und Fehler",
+          "all": "Alle Stufen",
           "failures": "Fehlschläge",
-          "errors": "Fehler"
+          "errors": "Fehler",
+          "other": "Sonstige"
         },
         "resolved": {
           "label": "Behoben"
@@ -2581,7 +2582,8 @@
         "groups": {
           "failures": "{count, plural, one {# Fehlschlag} other {# Fehlschläge}}",
           "errors": "{count, plural, one {# Fehler} other {# Fehler}}",
-          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}"
+          "resolved": "{count, plural, one {# Behoben} other {# Behoben}}",
+          "other": "Sonstige"
         },
         "title": {
           "indexing": {
@@ -2589,35 +2591,50 @@
             "running": "Indexierung läuft mit Fehlern",
             "stopped": "Indexierung mit Fehlern abgebrochen",
             "errors": "Indexierung mit Fehlern abgeschlossen",
-            "resolved": "Indexierungsfehler behoben"
+            "resolved": "Indexierungsfehler behoben",
+            "succeeded": "Indexierung erfolgreich abgeschlossen",
+            "inProgress": "Indexierung läuft",
+            "canceled": "Indexierung gestoppt"
           },
           "doc_permission_sync": {
             "failed": "Berechtigungssynchronisierung fehlgeschlagen",
             "running": "Berechtigungen werden mit Fehlern synchronisiert",
             "stopped": "Berechtigungssynchronisierung mit Fehlern abgebrochen",
             "errors": "Berechtigungen mit Fehlern synchronisiert",
-            "resolved": "Fehler der Berechtigungssynchronisierung behoben"
+            "resolved": "Fehler der Berechtigungssynchronisierung behoben",
+            "succeeded": "Berechtigungen erfolgreich synchronisiert",
+            "inProgress": "Berechtigungen werden synchronisiert",
+            "canceled": "Berechtigungssynchronisierung gestoppt"
           },
           "group_sync": {
             "failed": "Gruppenmitgliedschaftssynchronisierung fehlgeschlagen",
             "running": "Gruppenmitgliedschaften werden mit Fehlern synchronisiert",
             "stopped": "Gruppenmitgliedschaftssynchronisierung mit Fehlern abgebrochen",
             "errors": "Gruppenmitgliedschaften mit Fehlern synchronisiert",
-            "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben"
+            "resolved": "Fehler der Gruppenmitgliedschaftssynchronisierung behoben",
+            "succeeded": "Gruppenmitgliedschaften erfolgreich synchronisiert",
+            "inProgress": "Gruppenmitgliedschaften werden synchronisiert",
+            "canceled": "Gruppensynchronisierung gestoppt"
           },
           "pruning": {
             "failed": "Bereinigung fehlgeschlagen",
             "running": "Bereinigung läuft mit Fehlern",
             "stopped": "Bereinigung mit Fehlern gestoppt",
             "errors": "Bereinigung mit Fehlern abgeschlossen",
-            "resolved": "Bereinigungsfehler behoben"
+            "resolved": "Bereinigungsfehler behoben",
+            "succeeded": "Bereinigung erfolgreich abgeschlossen",
+            "inProgress": "Bereinigung läuft",
+            "canceled": "Bereinigung gestoppt"
           },
           "checks": {
             "failed": "Connector-Prüfungen fehlgeschlagen",
             "running": "Connector-Prüfungen laufen mit Fehlern",
             "stopped": "Connector-Prüfungen mit Fehlern gestoppt",
             "errors": "Connector-Prüfungen mit Fehlern abgeschlossen",
-            "resolved": "Fehler der Connector-Prüfungen behoben"
+            "resolved": "Fehler der Connector-Prüfungen behoben",
+            "succeeded": "Connector-Prüfungen bestanden",
+            "inProgress": "Connector-Prüfungen laufen",
+            "canceled": "Connector-Prüfungen gestoppt"
           }
         },
         "description": {
@@ -2643,7 +2660,8 @@
           "resolved": "Keine behobenen Fehler",
           "filtered": "Nichts passt zu dieser Suche.",
           "failures": "Keine Fehlschläge",
-          "errors": "Keine Fehler"
+          "errors": "Keine Fehler",
+          "other": "Keine weiteren Läufe"
         },
         "loadError": {
           "title": "Die Aktivität konnte nicht geladen werden."
@@ -6824,7 +6842,13 @@
         "loadError": "Die Übersicht konnte nicht geladen werden."
       },
       "activities": {
-        "title": "Aktivitäten"
+        "title": "Aktivitäten",
+        "history": "Vollständiger Aktivitätsverlauf",
+        "viewLogs": "Aktivitätsverlauf anzeigen",
+        "panel": {
+          "title": "Aktivitätsverlauf",
+          "close": "Aktivitätsverlauf ausblenden"
+        }
       },
       "list": {
         "search": {

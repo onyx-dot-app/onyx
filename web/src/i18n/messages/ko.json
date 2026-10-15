@@ -2571,9 +2571,10 @@
         },
         "filter": {
           "label": "표시",
-          "all": "실패 및 오류",
+          "all": "모든 수준",
           "failures": "실패",
-          "errors": "오류"
+          "errors": "오류",
+          "other": "기타"
         },
         "resolved": {
           "label": "해결됨"
@@ -2581,7 +2582,8 @@
         "groups": {
           "failures": "{count, plural, other {실패 #개}}",
           "errors": "{count, plural, other {오류 #개}}",
-          "resolved": "{count, plural, other {해결됨 #개}}"
+          "resolved": "{count, plural, other {해결됨 #개}}",
+          "other": "기타"
         },
         "title": {
           "indexing": {
@@ -2589,35 +2591,50 @@
             "running": "오류와 함께 인덱싱 진행 중",
             "stopped": "오류와 함께 인덱싱 중단됨",
             "errors": "오류와 함께 인덱싱 완료",
-            "resolved": "인덱싱 오류 해결됨"
+            "resolved": "인덱싱 오류 해결됨",
+            "succeeded": "인덱싱이 성공적으로 완료됨",
+            "inProgress": "인덱싱 진행 중",
+            "canceled": "인덱싱 중지됨"
           },
           "doc_permission_sync": {
             "failed": "권한 동기화 실패",
             "running": "오류와 함께 권한 동기화 중",
             "stopped": "오류와 함께 권한 동기화 중단됨",
             "errors": "오류와 함께 권한 동기화됨",
-            "resolved": "권한 동기화 오류 해결됨"
+            "resolved": "권한 동기화 오류 해결됨",
+            "succeeded": "권한 동기화가 성공적으로 완료됨",
+            "inProgress": "권한 동기화 중",
+            "canceled": "권한 동기화 중지됨"
           },
           "group_sync": {
             "failed": "그룹 멤버십 동기화 실패",
             "running": "오류와 함께 그룹 멤버십 동기화 중",
             "stopped": "오류와 함께 그룹 멤버십 동기화 중단됨",
             "errors": "오류와 함께 그룹 멤버십 동기화됨",
-            "resolved": "그룹 멤버십 동기화 오류 해결됨"
+            "resolved": "그룹 멤버십 동기화 오류 해결됨",
+            "succeeded": "그룹 멤버십 동기화가 성공적으로 완료됨",
+            "inProgress": "그룹 멤버십 동기화 중",
+            "canceled": "그룹 동기화 중지됨"
           },
           "pruning": {
             "failed": "정리 실패",
             "running": "오류와 함께 정리 진행 중",
             "stopped": "오류와 함께 정리 중지됨",
             "errors": "오류와 함께 정리 완료됨",
-            "resolved": "정리 오류 해결됨"
+            "resolved": "정리 오류 해결됨",
+            "succeeded": "정리가 성공적으로 완료됨",
+            "inProgress": "정리 진행 중",
+            "canceled": "정리 중지됨"
           },
           "checks": {
             "failed": "커넥터 검사 실패",
             "running": "오류와 함께 커넥터 검사 진행 중",
             "stopped": "오류와 함께 커넥터 검사 중지됨",
             "errors": "오류와 함께 커넥터 검사 완료됨",
-            "resolved": "커넥터 검사 오류 해결됨"
+            "resolved": "커넥터 검사 오류 해결됨",
+            "succeeded": "커넥터 검사 통과",
+            "inProgress": "커넥터 검사 진행 중",
+            "canceled": "커넥터 검사 중지됨"
           }
         },
         "description": {
@@ -2643,7 +2660,8 @@
           "resolved": "해결된 오류가 없습니다",
           "filtered": "이 검색과 일치하는 항목이 없습니다.",
           "failures": "실패가 없습니다",
-          "errors": "오류가 없습니다"
+          "errors": "오류가 없습니다",
+          "other": "다른 실행이 없습니다"
         },
         "loadError": {
           "title": "활동을 불러올 수 없습니다."
@@ -6824,7 +6842,13 @@
         "loadError": "개요를 불러올 수 없습니다."
       },
       "activities": {
-        "title": "활동"
+        "title": "활동",
+        "history": "전체 활동 기록",
+        "viewLogs": "활동 기록 보기",
+        "panel": {
+          "title": "활동 기록",
+          "close": "활동 기록 숨기기"
+        }
       },
       "list": {
         "search": {

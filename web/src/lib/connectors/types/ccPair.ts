@@ -255,8 +255,8 @@ export interface CCPairHierarchyBreakdown {
   config_fields: string[];
 }
 
-/** Mirrors `CCPairRunErrors`: runs with open document errors, or with all of them resolved. */
-export type CCPairRunErrors = "unresolved" | "resolved";
+/** Mirrors `CCPairRunErrors`: runs with open document errors, with all of them resolved, or with none. */
+export type CCPairRunErrors = "unresolved" | "resolved" | "none";
 
 /** One run of a pair, told apart by `kind`. Mirrors `CCPairRun`. */
 export type CCPairRun =
@@ -292,7 +292,7 @@ export interface CCPairRunsQuery {
   statusGroups: CCPairRunStatusGroup[] | null;
   /** Matched against error messages. */
   q: string;
-  /** Keeps only runs with document errors, open or resolved. */
+  /** Keeps only runs with document errors, open or resolved, or only runs without any. */
   errors: CCPairRunErrors | null;
 }
 

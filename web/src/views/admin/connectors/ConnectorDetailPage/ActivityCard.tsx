@@ -51,6 +51,11 @@ const GROUP_STYLE: Record<
     icon: SvgAlertTriangle,
     stroke: "stroke-theme-amber-05",
   },
+  other: {
+    color: "background-tint-00",
+    icon: SvgCheckCircle,
+    stroke: "stroke-status-success-05",
+  },
   resolved: {
     color: "background-tint-01",
     icon: SvgCheckCircle,
@@ -67,11 +72,20 @@ const WARNING_ICONS = {
   checks: SvgXOctagon,
 } satisfies Record<CCPairRunKind, IconFunctionComponent>;
 
+type CardState =
+  | "failed"
+  | "running"
+  | "stopped"
+  | "errors"
+  | "resolved"
+  | "inProgress"
+  | "canceled"
+  | "succeeded";
+
 /** The title's state key: how the run stands in its group. */
-function cardState(
-  run: CCPairRun,
-  group: ActivityGroup
-): "failed" | "running" | "stopped" | "errors" | "resolved" {
+function cardState(run: CCPairRun, group: ActivityGroup): CardState {
+  const stopped =
+    run.attempt.status === "canceled" || run.attempt.status === "interrupted";
   switch (group) {
     case "failures":
       return "failed";
@@ -79,10 +93,10 @@ function cardState(
       return "resolved";
     case "errors":
       if (isActive(run)) return "running";
-      return run.attempt.status === "canceled" ||
-        run.attempt.status === "interrupted"
-        ? "stopped"
-        : "errors";
+      return stopped ? "stopped" : "errors";
+    case "other":
+      if (isActive(run)) return "inProgress";
+      return stopped ? "canceled" : "succeeded";
   }
 }
 
@@ -100,7 +114,7 @@ export interface ActivityCardProps {
   resolving: boolean;
 }
 
-/** One failed run, or one run with document errors: when, which kind, how it ended, its trace and failed documents. */
+/** One run in an activity list: when, which kind, how it stands in its group, its trace and failed documents. */
 export default function ActivityCard({
   ccPairId,
   run,

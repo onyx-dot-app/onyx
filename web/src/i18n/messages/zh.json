@@ -2571,9 +2571,10 @@
         },
         "filter": {
           "label": "显示",
-          "all": "失败和错误",
+          "all": "所有级别",
           "failures": "失败",
-          "errors": "错误"
+          "errors": "错误",
+          "other": "其他"
         },
         "resolved": {
           "label": "已解决"
@@ -2581,7 +2582,8 @@
         "groups": {
           "failures": "{count, plural, other {# 次失败}}",
           "errors": "{count, plural, other {# 个错误}}",
-          "resolved": "{count, plural, other {# 个已解决}}"
+          "resolved": "{count, plural, other {# 个已解决}}",
+          "other": "其他"
         },
         "title": {
           "indexing": {
@@ -2589,35 +2591,50 @@
             "running": "索引进行中，存在错误",
             "stopped": "索引已停止，存在错误",
             "errors": "索引已完成，存在错误",
-            "resolved": "索引错误已解决"
+            "resolved": "索引错误已解决",
+            "succeeded": "索引成功完成",
+            "inProgress": "索引进行中",
+            "canceled": "索引已停止"
           },
           "doc_permission_sync": {
             "failed": "权限同步失败",
             "running": "权限同步进行中，存在错误",
             "stopped": "权限同步已停止，存在错误",
             "errors": "权限已同步，存在错误",
-            "resolved": "权限同步错误已解决"
+            "resolved": "权限同步错误已解决",
+            "succeeded": "权限同步成功",
+            "inProgress": "正在同步权限",
+            "canceled": "权限同步已停止"
           },
           "group_sync": {
             "failed": "群组成员同步失败",
             "running": "群组成员同步进行中，存在错误",
             "stopped": "群组成员同步已停止，存在错误",
             "errors": "群组成员已同步，存在错误",
-            "resolved": "群组成员同步错误已解决"
+            "resolved": "群组成员同步错误已解决",
+            "succeeded": "群组成员同步成功",
+            "inProgress": "正在同步群组成员",
+            "canceled": "群组同步已停止"
           },
           "pruning": {
             "failed": "清理失败",
             "running": "清理进行中，但有错误",
             "stopped": "清理已停止，但有错误",
             "errors": "清理已完成，但有错误",
-            "resolved": "清理错误已解决"
+            "resolved": "清理错误已解决",
+            "succeeded": "清理成功完成",
+            "inProgress": "清理进行中",
+            "canceled": "清理已停止"
           },
           "checks": {
             "failed": "连接器检查失败",
             "running": "连接器检查进行中，但有错误",
             "stopped": "连接器检查已停止，但有错误",
             "errors": "连接器检查已完成，但有错误",
-            "resolved": "连接器检查错误已解决"
+            "resolved": "连接器检查错误已解决",
+            "succeeded": "连接器检查通过",
+            "inProgress": "连接器检查进行中",
+            "canceled": "连接器检查已停止"
           }
         },
         "description": {
@@ -2643,7 +2660,8 @@
           "resolved": "没有已解决的错误",
           "filtered": "没有与此搜索匹配的内容。",
           "failures": "没有失败",
-          "errors": "没有错误"
+          "errors": "没有错误",
+          "other": "没有其他运行"
         },
         "loadError": {
           "title": "无法加载活动。"
@@ -6824,7 +6842,13 @@
         "loadError": "无法加载概览。"
       },
       "activities": {
-        "title": "活动"
+        "title": "活动",
+        "history": "完整活动历史",
+        "viewLogs": "查看活动历史",
+        "panel": {
+          "title": "活动历史",
+          "close": "隐藏活动历史"
+        }
       },
       "list": {
         "search": {

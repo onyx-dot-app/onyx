@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { mutate } from "swr";
 import {
   Button,
   Card,
@@ -15,66 +14,87 @@ import {
   Tag,
 } from "@opal/components";
 import { useDebouncedValue } from "@opal/hooks";
-import { IllustrationContent, Section, toast } from "@opal/layouts";
+import { Content, IllustrationContent, Section } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
 import {
   SvgActivity,
   SvgAlertTriangle,
   SvgEyeClosed,
+  SvgFold,
   SvgXCircle,
 } from "@opal/icons";
+import type { RichStr } from "@opal/types";
+import { cn } from "@opal/utils";
 import {
-  useActivityGroup,
+  useActivityItems,
+  useResolveRunErrors,
+  type ActivityGroup,
   type ActivityGroupState,
+  type ActivityItem,
+  type ActivityScope,
 } from "@/lib/connectors/ccPair/hooks";
-import type { CCPairRun } from "@/lib/connectors/types";
-import { SWR_KEYS } from "@/lib/swr-keys";
-import {
-  resolveAllErrorsForCCPair,
-  resolveErrors,
-} from "@/lib/targeted_reindex";
 import ActivityCard from "@/views/admin/connectors/ConnectorDetailPage/ActivityCard";
 import {
   RUNS_POLL_MS,
   SEARCH_DELAY_MS,
+  SEARCH_MAX_LENGTH,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunsCard";
 
 const LOADER_ROWS = 2;
-// The runs route refuses a longer search.
-const SEARCH_MAX_LENGTH = 200;
 
-/** Which groups the filter shows. Resolved runs replace both when toggled on. */
-type Shown = "all" | "failures" | "errors";
-const SHOWN: Shown[] = ["all", "failures", "errors"];
+/** Which groups the filter shows. Resolved runs replace them all when toggled on. */
+type Shown = "all" | "failures" | "errors" | "other";
+
+export interface ActivityCountTagsProps {
+  failures: number;
+  errors: number;
+}
+/** The failed runs and the runs with document errors, as two counts. */
+export function ActivityCountTags({
+  failures,
+  errors,
+}: ActivityCountTagsProps) {
+  const t = useTranslations("admin.connector.activity");
+  const format = useFormatter();
+  return (
+    <>
+      <Tag
+        icon={SvgXCircle}
+        title={format.number(failures)}
+        tooltip={t("counts.failures", { count: failures })}
+        color="red"
+      />
+      <Tag
+        icon={SvgAlertTriangle}
+        title={format.number(errors)}
+        tooltip={t("counts.errors", { count: errors })}
+        color="amber"
+      />
+    </>
+  );
+}
 
 interface GroupListProps {
-  ccPairId: number;
-  state: ActivityGroupState<CCPairRun>;
-  canResolve: boolean;
+  state: ActivityGroupState;
   resolving: boolean;
-  onResolve: (indexAttemptId: number, errorIds: number[] | null) => void;
+  onResolve: (item: ActivityItem, errorIds: number[] | null) => void;
 }
-function GroupList({
-  ccPairId,
-  state,
-  canResolve,
-  resolving,
-  onResolve,
-}: GroupListProps) {
+function GroupList({ state, resolving, onResolve }: GroupListProps) {
   const t = useTranslations("admin.connector.activity");
   if (state.runs.length === 0) return null;
   return (
     <Section alignItems="stretch" gap={1} height="fit">
       <Divider title={t(`groups.${state.group}`, { count: state.total })} />
-      {state.runs.map((run) => (
+      {state.runs.map((item) => (
         <ActivityCard
-          key={`${run.kind}-${run.attempt.id}`}
-          ccPairId={ccPairId}
-          run={run}
+          key={`${item.run.kind}-${item.run.attempt.id}`}
+          ccPairId={item.ccPairId}
+          run={item.run}
           group={state.group}
-          canResolve={canResolve}
+          connector={item.connector}
+          canResolve={item.canResolve}
           resolving={resolving}
-          onResolve={(errorIds) => onResolve(run.attempt.id, errorIds)}
+          onResolve={(errorIds) => onResolve(item, errorIds)}
         />
       ))}
       {state.hasMore && (
@@ -89,53 +109,67 @@ function GroupList({
 }
 
 export interface ActivityPanelProps {
-  ccPairId: number;
-  /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
-  canResolve: boolean;
+  /** One pair's runs, or every readable pair's. */
+  scope: ActivityScope;
+  /** A heading above the search. */
+  title?: string | RichStr;
+  /** Shows a close button beside the title. */
+  onClose?: () => void;
+  className?: string;
 }
 
-/** The pair's failed runs and runs with document errors, newest first, with the resolved ones a toggle away. */
+/** The scope's failed runs and runs with document errors, newest first, with the resolved ones a filter away, and every other run too for the fleet. */
 export default function ActivityPanel({
-  ccPairId,
-  canResolve,
+  scope,
+  title,
+  onClose,
+  className,
 }: ActivityPanelProps) {
   const t = useTranslations("admin.connector.activity");
-  const tToasts = useTranslations("admin.connector.toasts");
-  const format = useFormatter();
+  const tPanel = useTranslations("admin.indexing.activities.panel");
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DELAY_MS);
   const [shown, setShown] = useState<Shown>("all");
   const [resolved, setResolved] = useState(false);
-  const [resolving, setResolving] = useState(false);
+  const { resolving, resolve } = useResolveRunErrors();
+  // The fleet panel lists every run. A pair's page has its run list for that.
+  const shownOptions: Shown[] =
+    scope === "fleet"
+      ? ["all", "failures", "errors", "other"]
+      : ["all", "failures", "errors"];
+  const isShown = (group: ActivityGroup) =>
+    group === "resolved"
+      ? resolved
+      : !resolved &&
+        shownOptions.includes(group) &&
+        (shown === "all" || shown === group);
 
   // The failures and errors totals head the panel, so both always poll.
-  const failures = useActivityGroup(
-    ccPairId,
+  const failures = useActivityItems(
+    scope,
     "failures",
     search,
     true,
     RUNS_POLL_MS
   );
-  const errors = useActivityGroup(
-    ccPairId,
-    "errors",
+  const errors = useActivityItems(scope, "errors", search, true, RUNS_POLL_MS);
+  const other = useActivityItems(
+    scope,
+    "other",
     search,
-    true,
+    isShown("other"),
     RUNS_POLL_MS
   );
-  const resolvedRuns = useActivityGroup(
-    ccPairId,
+  const resolvedRuns = useActivityItems(
+    scope,
     "resolved",
     search,
-    resolved,
+    isShown("resolved"),
     RUNS_POLL_MS
   );
-  const groups = resolved
-    ? [resolvedRuns]
-    : [
-        ...(shown !== "errors" ? [failures] : []),
-        ...(shown !== "failures" ? [errors] : []),
-      ];
+  const groups = [failures, errors, other, resolvedRuns].filter((group) =>
+    isShown(group.group)
+  );
   const loading = groups.some((group) => group.isLoading && !group.loaded);
   const failed = groups.some((group) => group.failed);
   const empty = groups.every(
@@ -150,48 +184,43 @@ export default function ActivityPanel({
           ? t("empty.title")
           : t(`empty.${shown}`);
 
-  // Awaits only the submit. The errors and runs feeds poll, so rows clear as documents land.
-  async function resolve(indexAttemptId: number, errorIds: number[] | null) {
-    if (resolving) return;
-    setResolving(true);
-    try {
-      const result =
-        errorIds === null
-          ? await resolveAllErrorsForCCPair(ccPairId, indexAttemptId)
-          : await resolveErrors(errorIds);
-      if (result.total_error_ids === 0) {
-        toast.success(tToasts("noUnresolvedErrors"));
-      } else {
-        toast.success(
-          tToasts("targetedReindexSubmitted", { count: result.total_error_ids })
-        );
-      }
-      await mutate(
-        (key) =>
-          typeof key === "string" &&
-          (key.startsWith(SWR_KEYS.ccPairIndexingErrors(ccPairId)) ||
-            key.startsWith(SWR_KEYS.ccPairRunsPrefix(ccPairId)))
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error(tToasts("targetedReindexFailed", { message }));
-    } finally {
-      setResolving(false);
-    }
-  }
-
   // Full width once the page stacks its columns, the panel's own width beside them.
   return (
     <Section
       alignItems="stretch"
       width="full"
       height="fit"
-      className="lg:max-w-104 lg:shrink-0"
+      className={cn("lg:max-w-104 lg:shrink-0", className)}
       data-testid="connector-activity"
     >
       <Card border="solid" rounding={4} padding={2}>
         <Section alignItems="stretch" gap={3} height="fit">
           <Section alignItems="stretch" gap={1} height="fit">
+            {title !== undefined && (
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                alignItems="center"
+                gap={1}
+                height="fit"
+              >
+                <Content
+                  icon={SvgActivity}
+                  title={title}
+                  sizePreset="main-ui"
+                  variant="section"
+                />
+                {onClose !== undefined && (
+                  <Button
+                    icon={SvgFold}
+                    prominence="tertiary"
+                    tooltip={tPanel("close")}
+                    aria-label={tPanel("close")}
+                    onClick={onClose}
+                  />
+                )}
+              </Section>
+            )}
             <Section
               flexDirection="row"
               justifyContent="between"
@@ -217,17 +246,9 @@ export default function ActivityPanel({
                 width="fit"
                 height="fit"
               >
-                <Tag
-                  icon={SvgXCircle}
-                  title={format.number(failures.total)}
-                  tooltip={t("counts.failures", { count: failures.total })}
-                  color="red"
-                />
-                <Tag
-                  icon={SvgAlertTriangle}
-                  title={format.number(errors.total)}
-                  tooltip={t("counts.errors", { count: errors.total })}
-                  color="amber"
+                <ActivityCountTags
+                  failures={failures.total}
+                  errors={errors.total}
                 />
               </Section>
             </Section>
@@ -253,11 +274,12 @@ export default function ActivityPanel({
                   value={shown}
                   onSelect={(option) =>
                     setShown(
-                      SHOWN.find((candidate) => candidate === option.value) ??
-                        "all"
+                      shownOptions.find(
+                        (candidate) => candidate === option.value
+                      ) ?? "all"
                     )
                   }
-                  items={SHOWN.map((candidate) => ({
+                  items={shownOptions.map((candidate) => ({
                     kind: "option" as const,
                     value: candidate,
                     title: t(`filter.${candidate}`),
@@ -295,13 +317,9 @@ export default function ActivityPanel({
             groups.map((group) => (
               <GroupList
                 key={group.group}
-                ccPairId={ccPairId}
                 state={group}
-                canResolve={canResolve}
                 resolving={resolving}
-                onResolve={(indexAttemptId, errorIds) =>
-                  void resolve(indexAttemptId, errorIds)
-                }
+                onResolve={(item, errorIds) => void resolve(item, errorIds)}
               />
             ))
           )}
