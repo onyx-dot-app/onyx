@@ -6823,6 +6823,9 @@
         },
         "loadError": "概要を読み込めませんでした。"
       },
+      "activities": {
+        "title": "アクティビティ"
+      },
       "list": {
         "search": {
           "placeholder": "コネクタを検索..."

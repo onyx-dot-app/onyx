@@ -12,6 +12,22 @@ import type {
   IndexingConnectorsQuery,
 } from "@/lib/connectors/types";
 
+/** The query string a runs feed takes, for one pair or the fleet. */
+function runsQueryParams(query: CCPairRunsQuery): string {
+  const params = new URLSearchParams({
+    page_num: String(query.pageNum),
+    page_size: String(query.pageSize),
+  });
+  if (query.since !== null) params.set("since", query.since);
+  for (const kind of query.kinds ?? []) params.append("kinds", kind);
+  for (const group of query.statusGroups ?? []) {
+    params.append("status_groups", group);
+  }
+  if (query.q) params.set("q", query.q);
+  if (query.errors !== null) params.set("errors", query.errors);
+  return params.toString();
+}
+
 export const SWR_KEYS = {
   // ── User ──────────────────────────────────────────────────────────────────
   me: "/api/me",
@@ -304,20 +320,8 @@ export const SWR_KEYS = {
   // Every runs feed query of one pair starts with this, so `mutate` can match them all.
   ccPairRunsPrefix: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/runs?`,
-  ccPairRuns: (ccPairId: number, query: CCPairRunsQuery) => {
-    const params = new URLSearchParams({
-      page_num: String(query.pageNum),
-      page_size: String(query.pageSize),
-    });
-    if (query.since !== null) params.set("since", query.since);
-    for (const kind of query.kinds ?? []) params.append("kinds", kind);
-    for (const group of query.statusGroups ?? []) {
-      params.append("status_groups", group);
-    }
-    if (query.q) params.set("q", query.q);
-    if (query.errors !== null) params.set("errors", query.errors);
-    return `${SWR_KEYS.ccPairRunsPrefix(ccPairId)}${params.toString()}`;
-  },
+  ccPairRuns: (ccPairId: number, query: CCPairRunsQuery) =>
+    `${SWR_KEYS.ccPairRunsPrefix(ccPairId)}${runsQueryParams(query)}`,
   ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
     `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
 
@@ -337,6 +341,10 @@ export const SWR_KEYS = {
     if (query.status !== null) params.set("status", query.status);
     return `${SWR_KEYS.indexMonitoringConnectorsPrefix}${params.toString()}`;
   },
+  // Every fleet runs feed query starts with this, so `mutate` can match them all.
+  indexMonitoringRunsPrefix: "/api/manage/admin/index-monitoring/runs?",
+  indexMonitoringRuns: (query: CCPairRunsQuery) =>
+    `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query)}`,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 

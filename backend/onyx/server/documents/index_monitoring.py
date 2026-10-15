@@ -1,21 +1,37 @@
 """The indexing status page's fleet-wide reads: every pair the caller can read
 as one population, where the pair routes in cc_pair.py read one pair."""
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from onyx.auth.permission_projection import cc_pair_permissions
-from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.configs.constants import DEFAULT_CC_PAIR_ID
+from onyx.auth.permissions import (
+    has_global_permission,
+    has_permission,
+    require_permission,
+)
+from onyx.configs.constants import DEFAULT_CC_PAIR_ID, DocumentSource
 from onyx.db.cc_pair_runs import count_pairs_indexing
+from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
+    get_connector_credential_pair_from_id,
     get_connector_credential_pairs_for_user,
     get_managed_cc_pair_ids,
 )
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ConnectorCredentialPairStatus, IndexingStatus, Permission
+from onyx.db.enums import (
+    CCPairRunErrors,
+    CCPairRunKind,
+    CCPairRunStatusGroup,
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    Permission,
+    PermissionAuthority,
+)
 from onyx.db.federated import fetch_all_federated_connectors
 from onyx.db.index_attempt import (
     get_error_counts_for_index_attempts,
@@ -24,8 +40,13 @@ from onyx.db.index_attempt import (
     get_queued_index_attempts,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt, User
+from onyx.server.documents.cc_pair_runs_feed import (
+    connector_supports_targeted_reindex,
+    fetch_run_feed,
+)
 from onyx.server.documents.cc_pair_throughput import throughput_of
 from onyx.server.documents.models import (
+    CCPairRef,
     CCPairThroughputWindow,
     ConnectorCredentialPairIdentifier,
     IndexAttemptSnapshot,
@@ -33,12 +54,16 @@ from onyx.server.documents.models import (
     IndexingConnectorsResponse,
     IndexingConnectorStatus,
     IndexingOverviewResponse,
+    IndexingRun,
+    IndexingRunsResponse,
 )
 from onyx.server.federated.models import FederatedConnectorStatus
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 router = APIRouter(prefix="/manage/admin/index-monitoring")
 
 _CONNECTORS_MAX_PAGE_SIZE = 100
+_RUNS_MAX_PAGE_SIZE = 50
 _SEARCH_MAX_LENGTH = 200
 
 # Rank per bucket, in enum order.
@@ -303,4 +328,146 @@ def get_indexing_connectors(
             if is_connectors_admin and page_num == 0 and status is None
             else []
         ),
+    )
+
+
+def _shared_group_sync_sources() -> set[DocumentSource]:
+    """The sources whose group sync covers every pair of the source at once."""
+    sources: set[DocumentSource] = fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "get_all_cc_pair_agnostic_group_sync_sources",
+        noop_return_value=set(),
+    )()
+    return sources
+
+
+def _pair_of_run(
+    db_session: Session,
+    page: CCPairRunPage,
+    pairs: dict[int, ConnectorCredentialPair],
+    kind: CCPairRunKind,
+    run_id: int,
+) -> ConnectorCredentialPair:
+    """The readable pair a run belongs to. A shared group sync logged against a
+    pair the caller cannot read belongs to their lowest pair of that source."""
+    match kind:
+        case CCPairRunKind.INDEXING:
+            cc_pair_id = page.index_attempts[run_id].connector_credential_pair_id
+        case CCPairRunKind.DOC_PERMISSION_SYNC:
+            cc_pair_id = page.doc_permission_syncs[run_id].connector_credential_pair_id
+        case CCPairRunKind.GROUP_SYNC:
+            cc_pair_id = page.group_syncs[run_id].connector_credential_pair_id
+        case CCPairRunKind.PRUNING:
+            cc_pair_id = page.prune_runs[run_id].entity_id
+        case CCPairRunKind.CHECKS:
+            # A check run is keyed by credential and connector, which name one pair.
+            check_run = page.check_runs[run_id]
+            cc_pair_id = next(
+                (
+                    cc_pair.id
+                    for cc_pair in pairs.values()
+                    if cc_pair.credential_id == check_run.credential_id
+                    and cc_pair.connector_id == check_run.connector_id
+                ),
+                None,
+            )
+    if cc_pair_id is not None and cc_pair_id in pairs:
+        return pairs[cc_pair_id]
+    recorder = (
+        None
+        if cc_pair_id is None or kind is not CCPairRunKind.GROUP_SYNC
+        else get_connector_credential_pair_from_id(db_session, cc_pair_id)
+    )
+    sibling = (
+        None
+        if recorder is None
+        else min(
+            (
+                cc_pair
+                for cc_pair in pairs.values()
+                if cc_pair.connector.source == recorder.connector.source
+            ),
+            key=lambda cc_pair: cc_pair.id,
+            default=None,
+        )
+    )
+    # The filter scopes every kind to the readable pairs or their shared sources.
+    if sibling is None:
+        raise ValueError(f"{kind.value} run {run_id} names no readable pair")
+    return sibling
+
+
+@router.get("/runs")
+def get_indexing_runs(
+    page_num: int = Query(0, ge=0),
+    page_size: int = Query(10, ge=1, le=_RUNS_MAX_PAGE_SIZE),
+    since: datetime | None = Query(None),
+    kinds: list[CCPairRunKind] | None = Query(None),
+    status_groups: list[CCPairRunStatusGroup] | None = Query(None),
+    q: str | None = Query(None, max_length=_SEARCH_MAX_LENGTH),
+    errors: CCPairRunErrors | None = Query(None),
+    user: User = Depends(
+        require_permission(Permission.READ_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> IndexingRunsResponse:
+    """The readable pairs' index attempts and permission syncs as one feed,
+    newest first, filtered as a pair's own feed is. Each run names its pair."""
+    pairs = _readable_cc_pairs(db_session, user)
+    wanted = [kind for kind in CCPairRunKind if kinds is None or kind in kinds]
+    groups = None if status_groups is None else set(status_groups)
+    # A source with one group sync for all its pairs logs it against whichever
+    # pair ran it. A reader of any pair of that source sees it on their pair's
+    # page, so the feed includes it too and names a pair they can read.
+    readable_sources = {cc_pair.connector.source for cc_pair in pairs.values()}
+    shared_sources = _shared_group_sync_sources() & readable_sources
+    run_filter = CCPairRunFilter(
+        cc_pair_ids=list(pairs),
+        source=None,
+        shared_sources=shared_sources,
+        since=since,
+        error_query=(q or "").strip() or None,
+        status_groups=groups,
+        errors=errors,
+    )
+    feed = fetch_run_feed(db_session, wanted, run_filter, page_num, page_size)
+    page = feed.page
+    is_connectors_admin = has_global_permission(user, Permission.MANAGE_CONNECTORS)
+    # The targeted reindex route takes MANAGE_CONNECTORS, global or scoped, on top
+    # of operating the pair, so a reader who merely created a pair cannot resolve.
+    may_submit = (
+        has_permission(user, Permission.MANAGE_CONNECTORS)
+        is not PermissionAuthority.NONE
+    )
+    run_pairs = {
+        (kind, run_id): _pair_of_run(db_session, page, pairs, kind, run_id)
+        for kind, run_id in page.order
+    }
+    operate_ids = _managed_ids(
+        db_session,
+        user,
+        {cc_pair.id for cc_pair in run_pairs.values()},
+        CCPairAccessLevel.OPERATE,
+        is_connectors_admin,
+    )
+
+    def ref(cc_pair: ConnectorCredentialPair) -> CCPairRef:
+        return CCPairRef(
+            id=cc_pair.id,
+            name=cc_pair.name,
+            source=cc_pair.connector.source,
+            can_resolve=may_submit
+            and cc_pair.id in operate_ids
+            and connector_supports_targeted_reindex(
+                cc_pair.connector.source, cc_pair.connector.input_type
+            ),
+        )
+
+    return IndexingRunsResponse(
+        items=[
+            IndexingRun(cc_pair=ref(run_pairs[key]), run=item)
+            for key, item in zip(page.order, feed.items, strict=True)
+        ],
+        total_items=feed.total_items,
+        status_counts=feed.status_counts,
     )

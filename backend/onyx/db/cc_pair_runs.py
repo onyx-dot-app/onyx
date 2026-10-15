@@ -37,6 +37,7 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     CapabilityCheckRun,
+    Connector,
     ConnectorCredentialPair,
     DocPermissionSyncAttempt,
     ExternalGroupPermissionSyncAttempt,
@@ -118,11 +119,22 @@ def _index_runs(cc_pair_ids: list[int]) -> Select:
 
 def _group_sync_scope(run_filter: CCPairRunFilter) -> ColumnElement[bool]:
     """A single pair with a source reads the history its source shares. Any
-    other scope reads rows by pair id."""
+    other scope reads rows by pair id, plus every row of its shared sources."""
     ids = run_filter.cc_pair_ids
     if len(ids) == 1 and run_filter.source is not None:
         return relevant_external_group_sync_attempts_filter(ids[0], run_filter.source)
-    return ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(ids)
+    own = ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(ids)
+    if not run_filter.shared_sources:
+        return own
+    siblings = (
+        select(ConnectorCredentialPair.id)
+        .join(ConnectorCredentialPair.connector)
+        .where(Connector.source.in_(run_filter.shared_sources))
+    )
+    return or_(
+        own,
+        ExternalGroupPermissionSyncAttempt.connector_credential_pair_id.in_(siblings),
+    )
 
 
 def _index_attempt_runs(

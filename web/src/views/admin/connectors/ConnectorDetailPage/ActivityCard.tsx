@@ -16,8 +16,13 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import type { CardColor, IconFunctionComponent } from "@opal/types";
-import type { CCPairRun, CCPairRunKind } from "@/lib/connectors/types";
+import type {
+  CCPairRef,
+  CCPairRun,
+  CCPairRunKind,
+} from "@/lib/connectors/types";
 import type { ActivityGroup } from "@/lib/connectors/ccPair/hooks";
+import { getSourceMetadata } from "@/lib/connectors/utils";
 import CheckRunPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/CheckRunPopover";
 import FailedDocsPopoverContent from "@/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover";
 import StackTracePopoverContent from "@/views/admin/connectors/ConnectorDetailPage/StackTracePopover";
@@ -85,6 +90,8 @@ export interface ActivityCardProps {
   ccPairId: number;
   run: CCPairRun;
   group: ActivityGroup;
+  /** Names the pair in place of the run's kind, for a feed across pairs. */
+  connector?: CCPairRef;
   /** Whether the viewer may re-fetch single documents of this pair. Hides the resolve actions otherwise. */
   canResolve: boolean;
   /** Resolves these errors of the run, or every open one when `null`. */
@@ -98,6 +105,7 @@ export default function ActivityCard({
   ccPairId,
   run,
   group,
+  connector,
   canResolve,
   onResolve,
   resolving,
@@ -108,7 +116,12 @@ export default function ActivityCard({
   const active = isActive(run);
   const style = GROUP_STYLE[group];
   const StatusIcon = active ? IconLoader : style.icon;
-  const KindIcon = RUN_KIND_ICONS[run.kind];
+  const IdentityIcon =
+    connector === undefined
+      ? RUN_KIND_ICONS[run.kind]
+      : getSourceMetadata(connector.source).icon;
+  const identity =
+    connector === undefined ? tRuns(`kinds.${run.kind}`) : connector.name;
   const minutes = runMinutes(run);
   const warnings = runWarnings(run);
   const trace = runTrace(run);
@@ -180,10 +193,10 @@ export default function ActivityCard({
                 width="fit"
                 height="fit"
               >
-                <Text font="secondary-body" color="text-03">
-                  {tRuns(`kinds.${run.kind}`)}
+                <Text font="secondary-body" color="text-03" maxLines={1}>
+                  {identity}
                 </Text>
-                <KindIcon size={12} className="stroke-text-03" />
+                <IdentityIcon size={12} className="stroke-text-03" />
               </Section>
             </Section>
             <Section alignItems="stretch" gap={0} padding={0.5} height="fit">

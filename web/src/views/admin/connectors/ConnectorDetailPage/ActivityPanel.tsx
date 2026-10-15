@@ -27,6 +27,7 @@ import {
   useActivityGroup,
   type ActivityGroupState,
 } from "@/lib/connectors/ccPair/hooks";
+import type { CCPairRun } from "@/lib/connectors/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   resolveAllErrorsForCCPair,
@@ -48,7 +49,7 @@ const SHOWN: Shown[] = ["all", "failures", "errors"];
 
 interface GroupListProps {
   ccPairId: number;
-  state: ActivityGroupState;
+  state: ActivityGroupState<CCPairRun>;
   canResolve: boolean;
   resolving: boolean;
   onResolve: (indexAttemptId: number, errorIds: number[] | null) => void;

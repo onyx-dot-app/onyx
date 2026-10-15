@@ -6823,6 +6823,9 @@
         },
         "loadError": "تعذر تحميل النظرة العامة."
       },
+      "activities": {
+        "title": "الأنشطة"
+      },
       "list": {
         "search": {
           "placeholder": "البحث في الموصلات..."

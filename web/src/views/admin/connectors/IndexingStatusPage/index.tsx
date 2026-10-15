@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { Section, SettingsLayouts, useToastFromQuery } from "@opal/layouts";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import ActivitiesCard from "@/views/admin/connectors/IndexingStatusPage/ActivitiesCard";
 import ConnectorList from "@/views/admin/connectors/IndexingStatusPage/ConnectorList";
 import OverviewCard from "@/views/admin/connectors/IndexingStatusPage/OverviewCard";
 
@@ -30,7 +31,31 @@ export default function IndexingStatusPage() {
       />
       <SettingsLayouts.Body>
         <Section alignItems="stretch" gap={4} height="fit">
-          <OverviewCard />
+          {/* The overview takes the wider share; both wrap to full width on a narrow screen. */}
+          <Section
+            flexDirection="row"
+            alignItems="stretch"
+            gap={2}
+            height="fit"
+            wrap
+          >
+            <Section
+              alignItems="stretch"
+              width="auto"
+              height="auto"
+              className="min-w-80 grow-[8] basis-0"
+            >
+              <OverviewCard />
+            </Section>
+            <Section
+              alignItems="stretch"
+              width="auto"
+              height="auto"
+              className="min-w-72 grow-[5] basis-0"
+            >
+              <ActivitiesCard />
+            </Section>
+          </Section>
           <ConnectorList />
         </Section>
       </SettingsLayouts.Body>

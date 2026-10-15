@@ -6823,6 +6823,9 @@
         },
         "loadError": "개요를 불러올 수 없습니다."
       },
+      "activities": {
+        "title": "활동"
+      },
       "list": {
         "search": {
           "placeholder": "커넥터 검색..."

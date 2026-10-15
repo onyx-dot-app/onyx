@@ -6823,6 +6823,9 @@
         },
         "loadError": "Impossible de charger la vue d'ensemble."
       },
+      "activities": {
+        "title": "Activités"
+      },
       "list": {
         "search": {
           "placeholder": "Rechercher des connecteurs..."
