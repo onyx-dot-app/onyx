@@ -33,6 +33,7 @@ jest.mock("@/lib/languageModels/hooks", () => ({
 }));
 
 const settings: AppSettings = {
+  default_language: "en",
   anonymous_user_enabled: false,
   invite_only_enabled: false,
   notifications: [],
