@@ -136,6 +136,8 @@ def test_onedrive_source_operation_inventory_includes_permission_sync() -> None:
         "list_users",
         "get_user",
         "get_default_drive",
+        "get_personal_site_drive",
+        "get_drive_item",
         "get_delta_page",
         "download_item",
         "list_permissions",

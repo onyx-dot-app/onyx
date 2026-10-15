@@ -66,6 +66,20 @@ class OneDriveDrive(BaseModel):
     web_url: str | None = None
 
 
+class OneDrivePersonalDrive(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    drive: OneDriveDrive
+    owner_id: str | None = None
+
+
+class OneDriveUserDrive(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    user: OneDriveUser
+    drive: OneDriveDrive
+
+
 class OneDriveTokenInfo(BaseModel):
     expires_in: int | None = None
 
