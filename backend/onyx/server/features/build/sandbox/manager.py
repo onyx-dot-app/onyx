@@ -110,6 +110,28 @@ _DOCUMENT_PREVIEW_MOUNT: str = (
 )
 
 
+def _build_agents_md_attachments_script(agents_md_path: str) -> str:
+    attachments_content_b64 = base64.b64encode(
+        ATTACHMENTS_SECTION_CONTENT.encode()
+    ).decode()
+    quoted_path = shlex.quote(agents_md_path)
+    quoted_temp_path = shlex.quote(f"{agents_md_path}.tmp")
+    return f"""
+if [ -f {quoted_path} ] && ! grep -q "## Attachments (PRIORITY)" {quoted_path} 2>/dev/null; then
+    if grep -q '^## Connectable apps' {quoted_path}; then
+        ATTACHMENTS_CONTENT="$(echo {shlex.quote(attachments_content_b64)} | base64 -d)" awk '
+            !inserted && /^## Connectable apps/ {{ print ENVIRON["ATTACHMENTS_CONTENT"]; print ""; inserted = 1 }}
+            {{ print }}
+        ' {quoted_path} > {quoted_temp_path}
+        mv {quoted_temp_path} {quoted_path}
+    else
+        printf '\\n\\n' >> {quoted_path}
+        echo {shlex.quote(attachments_content_b64)} | base64 -d >> {quoted_path}
+    fi
+fi
+"""
+
+
 def document_preview_command(
     document_path: str,
     cache_dir: str,
@@ -525,9 +547,9 @@ class SandboxManager(_ServeMixin):
             if session_opencode_config is not None
             else ""
         )
-        attachments_content_b64 = base64.b64encode(
-            ATTACHMENTS_SECTION_CONTENT.encode()
-        ).decode()
+        attachments_script = _build_agents_md_attachments_script(
+            f"/workspace/sessions/{session_id}/AGENTS.md"
+        )
         config_script = f"""
 set -e
 mkdir -p {session_path}/.opencode
@@ -537,8 +559,7 @@ ln -sfn /workspace/managed/user_library {session_path}/user_library
 printf '%s' {shlex.quote(agent_instructions)} > {session_path}/AGENTS.md
 {session_opencode_config_setup}
 if [ -n "$(find {session_path}/attachments -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
-    printf '\\n\\n' >> {session_path}/AGENTS.md
-    echo '{attachments_content_b64}' | base64 -d >> {session_path}/AGENTS.md
+    {attachments_script}
 fi
 echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
 """
@@ -906,18 +927,9 @@ echo "{SESSION_CONFIG_COMPLETE_SENTINEL}"
     def _ensure_agents_md_attachments_section(
         self, sandbox_id: UUID, session_id: UUID
     ) -> None:
-        session_path = f"/workspace/sessions/{session_id}"
-        agents_md_path = f"{session_path}/AGENTS.md"
-        attachments_content_b64 = base64.b64encode(
-            ATTACHMENTS_SECTION_CONTENT.encode()
-        ).decode()
-        script = f"""
-set -e
-if [ -f {shlex.quote(agents_md_path)} ] && ! grep -q "## Attachments (PRIORITY)" {shlex.quote(agents_md_path)} 2>/dev/null; then
-    printf '\\n\\n' >> {shlex.quote(agents_md_path)}
-    echo {shlex.quote(attachments_content_b64)} | base64 -d >> {shlex.quote(agents_md_path)}
-fi
-"""
+        script = "set -e\n" + _build_agents_md_attachments_script(
+            f"/workspace/sessions/{session_id}/AGENTS.md"
+        )
         try:
             self._run_script(sandbox_id, script)
         except Exception:
