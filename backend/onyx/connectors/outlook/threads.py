@@ -11,6 +11,7 @@ first message names the builder, whose copy is the thread document, and
 import base64
 import binascii
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from onyx.connectors.outlook.models import (
@@ -63,6 +64,70 @@ def is_thread_root(conversation_index: str) -> bool:
 
 def thread_document_id(key: str) -> str:
     return f"{THREAD_DOCUMENT_ID_PREFIX}{key}"
+
+
+def _key_bytes(key: str) -> bytes | None:
+    """The thread root a key encodes, None when it is not one."""
+    try:
+        raw = base64.urlsafe_b64decode(key + "=" * (-len(key) % 4))
+    except (binascii.Error, ValueError):
+        return None
+    return raw if len(raw) == _ROOT_BYTES else None
+
+
+@dataclass(frozen=True)
+class ThreadDocumentRef:
+    """What a thread document id names: the thread, and for a copy or an own
+    document the mailbox in its id."""
+
+    key: str
+    mailbox_id: str | None = None
+    own: bool = False
+
+
+def parse_thread_document_id(document_id: str) -> ThreadDocumentRef | None:
+    """The parts of an id made by ``thread_document_id``, ``copy_document_id``
+    or ``own_document_id``. None for anything else."""
+    if not document_id.startswith(THREAD_DOCUMENT_ID_PREFIX):
+        return None
+    parts = document_id.removeprefix(THREAD_DOCUMENT_ID_PREFIX).split(":")
+    own = len(parts) == 3 and f":{parts[2]}" == OWN_DOCUMENT_SUFFIX
+    if len(parts) > 2 and not own:
+        return None
+    if any(not part for part in parts) or _key_bytes(parts[0]) is None:
+        return None
+    return ThreadDocumentRef(
+        key=parts[0], mailbox_id=parts[1] if len(parts) > 1 else None, own=own
+    )
+
+
+# Graph writes ids in base64 with "-" for "/" and "_" for "+".
+_GRAPH_ID_ALPHABET = str.maketrans("-_", "/+")
+_BASE64_TO_GRAPH_ID = str.maketrans("/+", "-_")
+# Exchange's conversation id ends with the GUID of the thread's conversation
+# index, which follows its reserved byte and five time bytes.
+_CONVERSATION_GUID = slice(6, _ROOT_BYTES)
+_GUID_BYTES = 16
+
+
+def conversation_id_for(sample_conversation_id: str, key: str) -> str | None:
+    """The Graph conversation id of a thread in the mailbox another of its
+    conversation ids comes from. The id carries the mailbox's own prefix,
+    then the GUID the thread's conversation index holds, so threads that
+    share a GUID share the id. None for a malformed sample or key."""
+    root = _key_bytes(key)
+    if root is None:
+        return None
+    try:
+        sample = base64.b64decode(
+            sample_conversation_id.translate(_GRAPH_ID_ALPHABET), validate=True
+        )
+    except (binascii.Error, ValueError):
+        return None
+    if len(sample) <= _GUID_BYTES:
+        return None
+    rebuilt = sample[:-_GUID_BYTES] + root[_CONVERSATION_GUID]
+    return base64.b64encode(rebuilt).decode().translate(_BASE64_TO_GRAPH_ID)
 
 
 def copy_document_id(key: str, mailbox: OutlookMailbox) -> str:
@@ -150,6 +215,12 @@ def designated_builder(
     return next((m for m in candidates if is_available(m)), None)
 
 
+def thread_root(rows: Iterable[ThreadListing]) -> ThreadListing | None:
+    """The copy's first message of the thread, the one that names its builder."""
+    roots: list[ThreadListing] = [row for row in rows if row.is_root]
+    return min(roots, key=_row_order) if roots else None
+
+
 def _named_ids(row: ThreadListing) -> set[str]:
     return {mailbox.id for mailbox in row.named}
 
@@ -178,8 +249,7 @@ def plan_documents(
     if not kept:
         return []
     key: str = kept[0].key
-    roots: list[ThreadListing] = [row for row in rows if row.is_root]
-    root: ThreadListing | None = min(roots, key=_row_order) if roots else None
+    root: ThreadListing | None = thread_root(rows)
     builder: OutlookMailbox | None = (
         designated_builder(root, is_available) if root is not None else None
     )

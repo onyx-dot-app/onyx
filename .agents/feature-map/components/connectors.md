@@ -380,6 +380,20 @@ shape the table above does not cover:
   in memory one mailbox per worker, and yields the ids and readers
   `plan_documents` gives, so the slim diff (§4.5) and the doc sync see the
   documents indexing built.
+- **Targeted reindex.** `OutlookConnector` is a `Resolver`. `reindex` finds
+  the mailbox that writes each failed document and builds that mailbox's copy
+  with `_build_conversation`, so ids, text and readers match the walk. An own
+  document names its writer. A thread or copy document goes to the builder,
+  found from the first message in the copy document's mailbox, else in the
+  walked mailboxes, a few at a time. A thread's Graph `conversationId` is
+  rebuilt from a sample id of the mailbox and the GUID in the thread key
+  (`threads.py:conversation_id_for`), since Graph cannot filter on
+  `conversationIndex`. Only messages in the walked folder tree are read
+  (`_OutsideFolders`). An event is read by id through
+  `get_default_calendar_event`, which refuses events outside the default
+  calendar. Occurrences, cancelled, private and confidential events fail, as
+  do events while Include Calendar is off. The calendar window is not applied.
+  Entity failures are skipped.
 
 ### 4.6.2 Teams: channels side by side, then organizers
 

@@ -4,6 +4,7 @@ The gateway is autospecced, so these tests drive the real checkpoint state
 machine and document assembly against the gateway's plain models.
 """
 
+import base64
 import json
 import threading
 from collections.abc import Callable, Sequence
@@ -35,6 +36,8 @@ from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
+    EntityFailure,
     HierarchyNode,
     SlimDocument,
 )
@@ -79,8 +82,10 @@ from onyx.connectors.outlook.models import (
 from onyx.connectors.outlook.source_operations import OutlookSourceOperations
 from onyx.connectors.outlook.threads import (
     MAX_MESSAGES_PER_CONVERSATION,
+    conversation_id_for,
     copy_document_id,
     own_document_id,
+    thread_key,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.process_isolation import IsolatedProcessError
@@ -92,6 +97,7 @@ from tests.unit.onyx.connectors.outlook.outlook_api_shapes import (
     attachment,
     change,
     change_of,
+    conversation_index,
     event,
     folder,
     graph_error,
@@ -2695,3 +2701,222 @@ def test_plain_walks_carry_no_readership() -> None:
 
     assert pruned and all(i.external_access is None for i in pruned)
     assert indexed and all(i.external_access is None for i in indexed)
+
+
+# Targeted reindex.
+
+# A Graph conversation id of the shape Exchange writes: a mailbox prefix, then
+# the 16-byte GUID of the thread's conversation index.
+_CONVERSATION_PREFIX = b"\x00\x04$\x00mailbox-guid\x00\x10\x00"
+SAMPLE_CONVERSATION_ID = (
+    base64.b64encode(_CONVERSATION_PREFIX + bytes(16))
+    .decode()
+    .translate(str.maketrans("/+", "-_"))
+)
+OUTSIDE_TREE_ID = "folder-outside-tree"
+
+
+def _held(*, mailbox_id: str, conversation_ids: list[str]) -> set[str]:
+    del mailbox_id
+    return set(conversation_ids)
+
+
+def _reindex_gateway() -> MagicMock:
+    gateway = _happy_gateway()
+    gateway.sample_conversation_id.return_value = SAMPLE_CONVERSATION_ID
+    gateway.held_conversation_ids.side_effect = _held
+    return gateway
+
+
+def _reindex(
+    connector: OutlookConnector, document_ids: list[str], **kwargs: Any
+) -> tuple[list[Document], list[ConnectorFailure], list[HierarchyNode]]:
+    errors = [
+        ConnectorFailure(
+            failed_document=DocumentFailure(document_id=document_id),
+            failure_message="failed",
+        )
+        for document_id in document_ids
+    ]
+    items = list(connector.reindex(errors, **kwargs))
+    return (
+        [i for i in items if isinstance(i, Document)],
+        [i for i in items if isinstance(i, ConnectorFailure)],
+        [i for i in items if isinstance(i, HierarchyNode)],
+    )
+
+
+def _failed(failures: list[ConnectorFailure]) -> dict[str, str]:
+    return {
+        f.failed_document.document_id: f.failure_message
+        for f in failures
+        if f.failed_document is not None
+    }
+
+
+def _key() -> str:
+    key = thread_key(conversation_index(CONVERSATION_ID))
+    assert key is not None
+    return key
+
+
+def test_conversation_id_keeps_the_mailbox_prefix_and_takes_the_threads_guid() -> None:
+    rebuilt = conversation_id_for(SAMPLE_CONVERSATION_ID, _key())
+
+    assert rebuilt is not None
+    raw = base64.b64decode(rebuilt.translate(str.maketrans("-_", "/+")))
+    assert raw[: len(_CONVERSATION_PREFIX)] == _CONVERSATION_PREFIX
+    assert raw[-16:] == base64.b64decode(conversation_index(CONVERSATION_ID))[6:22]
+    assert conversation_id_for("not base64!", _key()) is None
+
+
+def test_reindex_rebuilds_a_thread_like_the_walk_does() -> None:
+    walked = [
+        d
+        for d in _run(_connector(_happy_gateway(), mailboxes=[MAILBOX_ADDRESS]))
+        if isinstance(d, Document)
+    ]
+    connector = _connector(_reindex_gateway(), mailboxes=[MAILBOX_ADDRESS])
+
+    docs, failures, nodes = _reindex(connector, [thread_doc_id(CONVERSATION_ID)])
+
+    assert not failures
+    assert [d.id for d in docs] == [d.id for d in walked]
+    assert docs[0].sections == walked[0].sections
+    assert {n.raw_node_id for n in nodes} == {
+        mailbox_node_id(mailbox()),
+        INBOX_ID,
+        ARCHIVE_ID,
+        PROJECTS_ID,
+    }
+
+
+def test_reindex_reads_no_message_the_walk_would_skip() -> None:
+    gateway = _reindex_gateway()
+    page = gateway.fetch_conversation_messages_page.return_value
+    page.messages.append(
+        message(id="msg-outside", parent_folder_id=OUTSIDE_TREE_ID, body_text="Outside")
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    docs, failures, _ = _reindex(connector, [thread_doc_id(CONVERSATION_ID)])
+
+    assert not failures and len(docs) == 1
+    # The junk, trashed, hidden, draft and outside-the-tree copies are left out.
+    assert docs[0].metadata["message_count"] == "2"
+    text = "".join(section.text or "" for section in docs[0].sections)
+    assert "Outside" not in text
+
+
+def test_reindex_writes_the_own_document_of_a_copy_without_its_first_message() -> None:
+    gateway = _reindex_gateway()
+
+    def replies_only(**_: Any) -> OutlookDeltaPage:
+        return OutlookDeltaPage(changes=[change(reply=True)])
+
+    gateway.fetch_conversation_outline_page.side_effect = replies_only
+    gateway.fetch_conversation_messages_page.return_value = OutlookMessagePage(
+        messages=[message()]
+    )
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    own_id = own_document_id(_key(), mailbox())
+
+    docs, failures, _ = _reindex(
+        connector, [own_id, thread_doc_id(CONVERSATION_ID)], include_permissions=True
+    )
+
+    assert [d.id for d in docs] == [own_id]
+    assert docs[0].external_access is not None
+    assert docs[0].external_access.external_user_emails == {MAILBOX_ADDRESS}
+    assert set(_failed(failures)) == {thread_doc_id(CONVERSATION_ID)}
+
+
+@pytest.mark.parametrize(
+    "found, reason",
+    [
+        (None, "default calendar"),
+        (event(event_type="occurrence", series_master_id="series-1"), "occurrence"),
+        (event(sensitivity="private"), "private"),
+        (event(is_cancelled=True), "cancelled"),
+    ],
+)
+def test_reindex_refuses_events_the_walk_skips(
+    found: OutlookEvent | None, reason: str
+) -> None:
+    gateway = _reindex_gateway()
+    gateway.get_default_calendar_event.return_value = found
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], include_calendar=True)
+    target = event_document_id(mailbox(), "evt-1")
+
+    docs, failures, _ = _reindex(connector, [target])
+
+    assert not docs
+    assert reason in _failed(failures)[target]
+
+
+def test_reindex_reads_an_event_with_its_readers() -> None:
+    gateway = _reindex_gateway()
+    gateway.get_default_calendar_event.return_value = event()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS], include_calendar=True)
+    target = event_document_id(mailbox(), "evt-1")
+
+    docs, failures, nodes = _reindex(connector, [target], include_permissions=True)
+
+    assert not failures
+    assert [d.id for d in docs] == [target]
+    assert docs[0].external_access is not None
+    assert docs[0].external_access.external_user_emails == {
+        MAILBOX_ADDRESS,
+        "bob@contoso.com",
+    }
+    assert calendar_node_id(mailbox()) in {n.raw_node_id for n in nodes}
+
+
+def test_reindex_fails_ids_it_cannot_parse_or_that_are_out_of_scope() -> None:
+    connector = _connector(_reindex_gateway(), mailboxes=[MAILBOX_ADDRESS])
+    targets = [
+        "not-an-outlook-id",
+        "outlook-thread:not-a-key",
+        own_document_id(_key(), mailbox(id="someone-else")),
+        event_document_id(mailbox(), "evt-1"),
+    ]
+
+    docs, failures, _ = _reindex(connector, targets)
+
+    assert not docs
+    failed = _failed(failures)
+    assert set(failed) == set(targets)
+    assert "not one this connector walks" in failed[targets[2]]
+    assert "Include Calendar is off" in failed[targets[3]]
+
+
+def test_reindex_fails_the_targets_of_a_refused_mailbox() -> None:
+    gateway = _reindex_gateway()
+    gateway.probe_mailbox.side_effect = graph_error(403)
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    own_id = own_document_id(_key(), mailbox())
+
+    docs, failures, _ = _reindex(connector, [own_id])
+
+    assert not docs
+    assert set(_failed(failures)) == {own_id}
+
+
+def test_reindex_raises_when_graph_throttles() -> None:
+    gateway = _reindex_gateway()
+    gateway.sample_conversation_id.side_effect = graph_error(429, "TooManyRequests")
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+
+    with pytest.raises(RateLimitTriedTooManyTimesError):
+        _reindex(connector, [thread_doc_id(CONVERSATION_ID)])
+
+
+def test_reindex_ignores_entity_failures() -> None:
+    gateway = _reindex_gateway()
+    connector = _connector(gateway, mailboxes=[MAILBOX_ADDRESS])
+    entity = ConnectorFailure(
+        failed_entity=EntityFailure(entity_id=MAILBOX_ADDRESS), failure_message="x"
+    )
+
+    assert list(connector.reindex([entity])) == []
+    gateway.resolve_mailbox.assert_not_called()
