@@ -185,14 +185,14 @@ export default function ActivityPanel({
           ? t("empty.title")
           : t(`empty.${shown}`);
 
-  // Full width once the page stacks its columns. Beside them it pins under the settings header and fits the visible height, so a long list scrolls inside the panel instead of lengthening the page. 4.5rem is the body's bottom padding, so the panel still fits when the page ends.
+  // Full width once the page stacks its columns. Beside them it pins 1.5rem under the settings header and fits the visible height, so a long list scrolls inside the panel instead of lengthening the page. 6rem is that gap plus the body's 4.5rem bottom padding, so the panel still fits when the page ends.
   return (
     <Section
       alignItems="stretch"
       width="full"
       height="fit"
       className={cn(
-        "lg:max-w-104 lg:shrink-0 lg:sticky lg:top-[max(var(--settings-header-height,0px),1.5rem)] lg:max-h-[calc(var(--settings-scroll-height,100dvh)_-_max(var(--settings-header-height,0px),1.5rem)_-_4.5rem)]",
+        "lg:max-w-104 lg:shrink-0 lg:sticky lg:top-[calc(var(--settings-header-height,0px)_+_1.5rem)] lg:max-h-[calc(var(--settings-scroll-height,100dvh)_-_var(--settings-header-height,0px)_-_6rem)]",
         className
       )}
       data-testid="connector-activity"
