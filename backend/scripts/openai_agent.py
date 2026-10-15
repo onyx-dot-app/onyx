@@ -5,8 +5,9 @@ with bare python3 (no uv, no deps). Each task script only writes its prompt,
 output schema, and validation; this module owns the API plumbing.
 
 `call_responses_api` submits in background mode and polls — research calls
-with web_search routinely exceed what a synchronous request tolerates. It
-returns the completed response object; `extract_output_text` turns it into
+with web_search routinely exceed what a synchronous request tolerates.
+`call_responses_sync` sends one plain request with no tools, for short calls.
+Both return the completed response object; `extract_output_text` turns it into
 the JSON text the caller parses and validates.
 
 Usage:
@@ -54,24 +55,9 @@ def call_responses_api(
     `response_id` to resume polling an existing background response."""
     if response_id is None:
         body = {
-            "model": model,
+            **_structured_body(prompt, model, schema, reasoning_effort),
             "background": True,
-            "reasoning": {"effort": reasoning_effort},
-            "input": [
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": prompt}],
-                }
-            ],
             "tools": [WEB_SEARCH_TOOL],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "task_output",
-                    "schema": schema,
-                    "strict": True,
-                }
-            },
         }
         submitted: dict[str, Any] = api_request("", api_key, 60.0, body)
         response_id = submitted.get("id")
@@ -101,6 +87,45 @@ def call_responses_api(
         submitted = api_request(f"/{response_id}", api_key, min(60.0, remaining))
         status = submitted.get("status")
         print(f"  response {response_id}: {status}", flush=True)
+
+
+def call_responses_sync(
+    prompt: str,
+    model: str,
+    api_key: str,
+    schema: dict[str, Any],
+    timeout: float,
+    reasoning_effort: str = "low",
+) -> dict[str, Any]:
+    """One synchronous structured-output request with no tools.
+
+    `schema` is a strict-mode JSON schema for structured output."""
+    return api_request(
+        "", api_key, timeout, _structured_body(prompt, model, schema, reasoning_effort)
+    )
+
+
+def _structured_body(
+    prompt: str, model: str, schema: dict[str, Any], reasoning_effort: str
+) -> dict[str, Any]:
+    return {
+        "model": model,
+        "reasoning": {"effort": reasoning_effort},
+        "input": [
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": prompt}],
+            }
+        ],
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "task_output",
+                "schema": schema,
+                "strict": True,
+            }
+        },
+    }
 
 
 def extract_output_text(response: dict[str, Any]) -> str:
