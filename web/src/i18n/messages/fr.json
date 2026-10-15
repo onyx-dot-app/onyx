@@ -2075,33 +2075,6 @@
           "text": "Consultez <link>notre documentation</link> pour plus d'informations sur la configuration de ce connecteur."
         }
       },
-      "errorsModal": {
-        "columns": {
-          "documentId": "ID de l’échec",
-          "errorMessage": "Message d'erreur",
-          "status": "Statut",
-          "time": "Heure"
-        },
-        "description": "Voici les erreurs rencontrées pendant l'indexation. Chaque ligne représente un document ou une entité en échec.",
-        "empty": {
-          "description": "Aucune erreur trouvée sur cette page"
-        },
-        "fullReindex": {
-          "description": "Cliquez sur le bouton ci-dessous pour lancer une réindexation complète et tenter de résoudre ces erreurs. Cette réindexation complète peut prendre beaucoup plus de temps qu'une mise à jour normale."
-        },
-        "resolveAllButton": {
-          "label": "Tout résoudre"
-        },
-        "status": {
-          "resolved": "Résolue",
-          "unresolved": "Non résolue"
-        },
-        "targetedReindex": {
-          "description": "Cliquez sur le bouton ci-dessous pour récupérer à nouveau uniquement les documents en échec. Bien plus rapide qu'une réindexation complète."
-        },
-        "title": "Erreurs d'indexation",
-        "unknownDocument": "Inconnu"
-      },
       "fileManagement": {
         "addFilesButton": {
           "label": "Ajouter des fichiers"
@@ -2181,14 +2154,6 @@
         "toggle": {
           "description": "Limite l'accès aux membres des groupes sélectionnés. Les permissions synchronisées s'appliquent toujours.",
           "title": "Restreindre l'accès à des groupes"
-        }
-      },
-      "indexErrorsAlert": {
-        "description": "Nous avons rencontré des problèmes lors du traitement de certains documents.",
-        "resolvingStatus": "Résolution des échecs",
-        "title": "L'indexation de certains documents a échoué",
-        "detailsButton": {
-          "label": "Voir les détails"
         }
       },
       "invalidState": {
