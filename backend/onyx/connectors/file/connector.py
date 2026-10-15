@@ -26,7 +26,11 @@ from onyx.connectors.models import (
     TabularSection,
     TextSection,
 )
-from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
+from onyx.file_processing.extract_file_text import (
+    ExtractionResult,
+    extract_text_and_images,
+    get_file_ext,
+)
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
@@ -157,13 +161,24 @@ def _process_file(
     # 2) Otherwise: text-based approach. Possibly with embedded images.
     file.seek(0)
 
-    # Extract text and images from the file
-    extraction_result = extract_text_and_images(
-        file=file,
-        file_name=file_name,
-        pdf_pass=pdf_pass,
-        content_type=file_type,
-    )
+    # Extract text and images from the file. A skipped spreadsheet is not
+    # parsed: its content is replaced, and xlsx extraction yields no metadata.
+    # CSV/TSV still go through extraction, which reads their ONYX_METADATA.
+    extraction_result: ExtractionResult
+    if (
+        skip_spreadsheet_content
+        and extension in OnyxFileExtensions.SPREADSHEET_EXTENSIONS
+    ):
+        extraction_result = ExtractionResult(
+            text_content="", embedded_images=[], metadata={}
+        )
+    else:
+        extraction_result = extract_text_and_images(
+            file=file,
+            file_name=file_name,
+            pdf_pass=pdf_pass,
+            content_type=file_type,
+        )
 
     # Each file may have file-specific ONYX_METADATA https://docs.onyx.app/admins/connectors/official/file
     # If so, we should add it to any metadata processed so far
