@@ -159,10 +159,7 @@ def handle_send_search_message(
 
         def resolve_selection_llm() -> LLM:
             selection_llm = get_search_selection_llm(fallback=selection_fallback)
-            if (
-                not request.run_query_expansion
-                or selection_llm.config.api_key != selection_fallback.config.api_key
-            ):
+            if selection_llm is selection_fallback and not request.run_query_expansion:
                 check_llm_cost_limit_for_provider(
                     db_session=db_session,
                     tenant_id=get_current_tenant_id(),

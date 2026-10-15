@@ -162,10 +162,7 @@ def search(
 
     def resolve_selection_llm() -> LLM:
         selection_llm = get_search_selection_llm(fallback=llm)
-        if (
-            not primary_provider_checked
-            or selection_llm.config.api_key != llm.config.api_key
-        ):
+        if selection_llm is llm and not primary_provider_checked:
             check_llm_cost_limit_for_provider(
                 db_session=db_session,
                 tenant_id=get_current_tenant_id(),

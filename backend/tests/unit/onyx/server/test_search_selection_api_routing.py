@@ -77,7 +77,7 @@ def test_public_search_keeps_rewrites_primary_and_resolves_selection_lazily(
         resolver.assert_called_once_with(fallback=primary)
         assert [
             call.kwargs["llm_provider_api_key"] for call in cost.call_args_list
-        ] == (["primary-key", "selection-key"] if configured else ["primary-key"])
+        ] == ["primary-key"]
 
 
 def test_public_search_explicit_model_bypasses_selection_default() -> None:
@@ -101,13 +101,17 @@ def test_public_search_explicit_model_bypasses_selection_default() -> None:
         ] == ["explicit-key"]
 
 
-def test_public_search_does_not_check_unused_primary_provider() -> None:
+@pytest.mark.parametrize("configured", [False, True])
+def test_public_search_does_not_check_unused_primary_provider(
+    configured: bool,
+) -> None:
     primary, selection = MagicMock(), MagicMock()
     primary.config.api_key = "primary-key"
     selection.config.api_key = "selection-key"
+    resolved = selection if configured else primary
     with (
         public_search_dependencies(primary) as constructor,
-        patch.object(api, "get_search_selection_llm", return_value=selection),
+        patch.object(api, "get_search_selection_llm", return_value=resolved),
         patch.object(api, "check_llm_cost_limit_for_provider") as cost,
     ):
         api.search(
@@ -116,10 +120,10 @@ def test_public_search_does_not_check_unused_primary_provider() -> None:
             MagicMock(),
         )
         cost.assert_not_called()
-        assert constructor.call_args.kwargs["selection_llm_factory"]() is selection
+        assert constructor.call_args.kwargs["selection_llm_factory"]() is resolved
         assert [
             call.kwargs["llm_provider_api_key"] for call in cost.call_args_list
-        ] == ["selection-key"]
+        ] == ([] if configured else ["primary-key"])
 
 
 @pytest.mark.parametrize("configured", [False, True])
@@ -178,9 +182,11 @@ def test_ee_search_expansion_uses_primary_and_selection_uses_its_own_default(
 
 @pytest.mark.parametrize("has_results", [False, True])
 @pytest.mark.parametrize("run_query_expansion", [False, True])
+@pytest.mark.parametrize("configured", [False, True])
 def test_ee_endpoint_checks_selection_provider_only_when_selection_runs(
     has_results: bool,
     run_query_expansion: bool,
+    configured: bool,
 ) -> None:
     primary, selection = MagicMock(), MagicMock()
     primary.config.api_key = "primary-key"
@@ -190,7 +196,9 @@ def test_ee_endpoint_checks_selection_provider_only_when_selection_runs(
     with (
         patch.object(search_backend, "get_default_llm", return_value=primary),
         patch.object(
-            search_backend, "get_search_selection_llm", return_value=selection
+            search_backend,
+            "get_search_selection_llm",
+            return_value=selection if configured else primary,
         ) as resolver,
         patch.object(search_backend, "check_token_rate_limits") as quota,
         patch.object(search_backend, "check_llm_cost_limit_for_provider") as cost,
@@ -226,8 +234,8 @@ def test_ee_endpoint_checks_selection_provider_only_when_selection_runs(
         else:
             resolver.assert_not_called()
         expected_keys = ["primary-key"] if run_query_expansion else []
-        if has_results:
-            expected_keys.append("selection-key")
+        if has_results and not configured and not run_query_expansion:
+            expected_keys.append("primary-key")
         assert [
             call.kwargs["llm_provider_api_key"] for call in cost.call_args_list
         ] == expected_keys

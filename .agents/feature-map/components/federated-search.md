@@ -189,7 +189,7 @@ sections than be deduplicated. See §9.
 
 The Slack lane uses the search tool's primary session client for date extraction
 and query expansion. Neither CHAT_NAMING nor SEARCH_SELECTION changes these calls.
-Both calls request reasoning OFF and retain existing prompt limits and fallbacks.
+Both calls use the default reasoning options and retain existing prompt limits and fallbacks.
 Retrieved Slack sections later enter the same independent SEARCH_SELECTION and
 context-expansion path as indexed sections.
 
