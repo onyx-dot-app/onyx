@@ -4,7 +4,7 @@ import { GET } from "@/app/admin/connectors/[connector]/auth/callback/route";
 
 jest.mock("next/headers", () => ({ cookies: jest.fn() }));
 jest.mock("@/lib/redirectSS", () => ({
-  getDomain: () => "https://tritongpt-canvas-dev.ucsd.edu",
+  getDomain: () => "https://tutor.example.edu",
 }));
 jest.mock("@/lib/utilsSS", () => ({
   buildUrl: (path: string) => `https://backend.example${path}`,
@@ -17,7 +17,7 @@ const mockFetch = jest.fn();
 
 function callbackRequest(state: string): NextRequest {
   const url = new URL(
-    `https://tritongpt-canvas-dev.ucsd.edu/admin/connectors/google-drive/auth/callback?code=google-code&state=${state}`
+    `https://tutor.example.edu/admin/connectors/google-drive/auth/callback?code=google-code&state=${state}`
   );
   return { url: url.toString(), nextUrl: url } as NextRequest;
 }
