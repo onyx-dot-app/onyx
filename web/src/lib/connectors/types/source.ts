@@ -104,6 +104,7 @@ export const validAutoSyncSources = [
   ValidSources.Zoom,
   ValidSources.Linear,
   ValidSources.Hubspot,
+  ValidSources.YouTrack,
 ] as const;
 
 // Create a type from the array elements

@@ -27,6 +27,8 @@ from ee.onyx.configs.app_configs import (
     SLACK_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_DOC_SYNC_FREQUENCY,
     TEAMS_PERMISSION_GROUP_SYNC_FREQUENCY,
+    YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY,
+    YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
     ZOOM_PERMISSION_DOC_SYNC_FREQUENCY,
     ZOOM_PERMISSION_GROUP_SYNC_FREQUENCY,
 )
@@ -230,6 +232,18 @@ def _load_linear_group_sync() -> GroupSyncFuncType:
     return linear_group_sync
 
 
+def _load_youtrack_doc_sync() -> DocSyncFuncType:
+    from ee.onyx.external_permissions.youtrack.doc_sync import youtrack_doc_sync
+
+    return youtrack_doc_sync
+
+
+def _load_youtrack_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.youtrack.group_sync import youtrack_group_sync
+
+    return youtrack_group_sync
+
+
 def _load_zoom_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.zoom.doc_sync import zoom_doc_sync
 
@@ -413,6 +427,20 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
         group_sync_config=GroupSyncConfig(
             group_sync_frequency=LINEAR_PERMISSION_GROUP_SYNC_FREQUENCY,
             group_sync_func=_lazy_group_sync(_load_linear_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
+        ),
+    ),
+    DocumentSource.YOUTRACK: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=_lazy_doc_sync(_load_youtrack_doc_sync),
+            # Indexing carries no access, so an issue stays private until the
+            # first doc sync lists it.
+            initial_index_should_sync=False,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_youtrack_group_sync),
             group_sync_is_cc_pair_agnostic=False,
         ),
     ),
