@@ -18,6 +18,7 @@ import * as Yup from "yup";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import InputTypeInElementField from "@/refresh-components/form/InputTypeInElementField";
+import InputSelect from "@/refresh-components/inputs/InputSelect";
 import Separator from "@/refresh-components/Separator";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SimpleTooltip from "@/refresh-components/SimpleTooltip";
@@ -40,6 +41,9 @@ import ConfirmationModalLayout from "@/refresh-components/layouts/ConfirmationMo
 import { useCreateModal } from "@/refresh-components/contexts/ModalContext";
 import { deleteAgent } from "@/refresh-pages/admin/AgentsPage/svc";
 import { useFormikContext } from "formik";
+import type { LLMProviderDescriptor } from "@/interfaces/llm";
+import { useLLMProviders } from "@/hooks/useLLMProviders";
+import { parseLlmDescriptor, structureValue } from "@/lib/llmConfig/utils";
 import {
   TEACHING_STYLES,
   TEACHING_STYLE_OPTIONS,
@@ -57,6 +61,96 @@ import {
   MAX_CHARACTERS_STARTER_MESSAGE,
   MAX_CHARACTERS_AGENT_DESCRIPTION,
 } from "@/lib/constants";
+
+// ---------------------------------------------------------------------------
+// Tutor Model Selector (inside Formik context)
+// ---------------------------------------------------------------------------
+
+interface TutorModelSelectorProps {
+  llmProviders: LLMProviderDescriptor[];
+}
+
+function TutorModelSelector({ llmProviders }: TutorModelSelectorProps) {
+  const { values, setFieldValue } = useFormikContext<{
+    llm_model_provider_override: string | null;
+    llm_model_version_override: string | null;
+  }>();
+
+  const currentLlm =
+    values.llm_model_provider_override && values.llm_model_version_override
+      ? structureValue(
+          values.llm_model_provider_override,
+          llmProviders.find(
+            (provider) => provider.name === values.llm_model_provider_override
+          )?.provider ?? "",
+          values.llm_model_version_override
+        )
+      : null;
+  const providersWithModels = llmProviders
+    .map((provider) => ({
+      provider,
+      models: provider.model_configurations.filter(
+        (model) =>
+          model.is_visible ||
+          (provider.name === values.llm_model_provider_override &&
+            model.name === values.llm_model_version_override)
+      ),
+    }))
+    .filter(({ models }) => models.length > 0);
+
+  function handleModelChange(value: string) {
+    if (value === "default") {
+      setFieldValue("llm_model_provider_override", null);
+      setFieldValue("llm_model_version_override", null);
+      return;
+    }
+
+    const { modelName, name } = parseLlmDescriptor(value);
+    if (modelName && name) {
+      setFieldValue("llm_model_provider_override", name);
+      setFieldValue("llm_model_version_override", modelName);
+    }
+  }
+
+  return (
+    <InputSelect
+      value={currentLlm ?? "default"}
+      onValueChange={handleModelChange}
+    >
+      <InputSelect.Trigger
+        id="llm_model"
+        name="llm_model"
+        placeholder="User Default"
+      />
+      <InputSelect.Content>
+        <InputSelect.Item value="default">User Default</InputSelect.Item>
+        {providersWithModels.map(({ provider, models }) => (
+          <InputSelect.Group key={provider.id}>
+            <InputSelect.Label>
+              {provider.provider_display_name || provider.name}
+            </InputSelect.Label>
+            {models.map((model) => (
+              <InputSelect.Item
+                key={structureValue(
+                  provider.name,
+                  provider.provider,
+                  model.name
+                )}
+                value={structureValue(
+                  provider.name,
+                  provider.provider,
+                  model.name
+                )}
+              >
+                {model.display_name || model.name}
+              </InputSelect.Item>
+            ))}
+          </InputSelect.Group>
+        ))}
+      </InputSelect.Content>
+    </InputSelect>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Teaching Style Selector (inside Formik context)
@@ -243,6 +337,7 @@ export default function TutorEditorPage({
 
   const { tools: availableTools, isLoading: isToolsLoading } =
     useAvailableTools();
+  const { llmProviders } = useLLMProviders(existingTutor?.id);
   const searchTool = availableTools?.find(
     (t) => t.in_code_tool_id === SEARCH_TOOL_ID
   );
@@ -290,6 +385,10 @@ export default function TutorEditorPage({
   const initialValues = {
     name: existingTutor?.name ?? "",
     description: existingTutor?.description ?? "",
+    llm_model_provider_override:
+      existingTutor?.llm_model_provider_override ?? null,
+    llm_model_version_override:
+      existingTutor?.llm_model_version_override ?? null,
 
     // Teaching style
     teaching_style: detectedStyle as TeachingStyle,
@@ -323,6 +422,8 @@ export default function TutorEditorPage({
         `Description must be ${MAX_CHARACTERS_AGENT_DESCRIPTION} characters or less`
       )
       .optional(),
+    llm_model_provider_override: Yup.string().nullable().optional(),
+    llm_model_version_override: Yup.string().nullable().optional(),
     system_prompt: Yup.string().optional(),
     starter_messages: Yup.array().of(
       Yup.string().max(
@@ -397,8 +498,8 @@ export default function TutorEditorPage({
         datetime_aware: false,
         document_set_ids: [],
         is_public: true,
-        llm_model_provider_override: null,
-        llm_model_version_override: null,
+        llm_model_provider_override: values.llm_model_provider_override,
+        llm_model_version_override: values.llm_model_version_override,
         starter_messages: finalStarterMessages,
         groups: [],
         tool_ids: toolIds,
@@ -629,7 +730,22 @@ export default function TutorEditorPage({
 
                       <Separator noPadding />
 
-                      {/* Section 3: Knowledge */}
+                      {/* Section 3: Model */}
+                      <GeneralLayouts.Section>
+                        <InputLayouts.Vertical
+                          name="llm_model"
+                          title="Tutor Model"
+                          description="Choose the model that responds to students, or use User Default to let each student use their configured model."
+                        >
+                          <TutorModelSelector
+                            llmProviders={llmProviders ?? []}
+                          />
+                        </InputLayouts.Vertical>
+                      </GeneralLayouts.Section>
+
+                      <Separator noPadding />
+
+                      {/* Section 4: Knowledge */}
                       <TutorKnowledgePane
                         onSelectionPendingChange={
                           setIsKnowledgeSelectionPending
@@ -653,7 +769,7 @@ export default function TutorEditorPage({
 
                       <Separator noPadding />
 
-                      {/* Section 4: Starter Messages */}
+                      {/* Section 5: Starter Messages */}
                       <GeneralLayouts.Section>
                         <InputLayouts.Vertical
                           name="starter_messages"
@@ -665,7 +781,7 @@ export default function TutorEditorPage({
                         </InputLayouts.Vertical>
                       </GeneralLayouts.Section>
 
-                      {/* Section 5: Advanced */}
+                      {/* Section 6: Advanced */}
                       <SimpleCollapsible defaultOpen={false}>
                         <SimpleCollapsible.Header
                           title="Advanced"

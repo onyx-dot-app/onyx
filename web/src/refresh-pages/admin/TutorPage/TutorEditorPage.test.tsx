@@ -214,6 +214,43 @@ test("new tutors default to the Canvas course", async () => {
   ).toHaveAttribute("aria-checked", "true");
 });
 
+test.each([undefined, "course-provider"])(
+  "preserves the tutor model override %s when saving",
+  async (provider) => {
+    const model = provider ? "course-model" : undefined;
+    renderEditor({
+      ...tutor,
+      llm_model_provider_override: provider,
+      llm_model_version_override: model,
+    });
+    await screen.findByRole("checkbox", {
+      name: "Select document File in folder 1",
+    });
+    fireEvent.change(screen.getByDisplayValue("Course tutor"), {
+      target: { value: "Updated tutor" },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    });
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        'Tutor "Course tutor" updated successfully'
+      )
+    );
+
+    const call = jest
+      .mocked(global.fetch)
+      .mock.calls.find(([url]) => url === "/api/persona/77");
+    if (!call || typeof call[1]?.body !== "string") {
+      throw new Error("Missing tutor PATCH request");
+    }
+    const saved: PersonaUpsertParameters = JSON.parse(call[1].body);
+    expect(saved.llm_model_provider_override).toBe(provider ?? null);
+    expect(saved.llm_model_version_override).toBe(model ?? null);
+  }
+);
+
 test("a tutor with only an individual document keeps the course unselected", async () => {
   renderEditor({
     ...tutor,
