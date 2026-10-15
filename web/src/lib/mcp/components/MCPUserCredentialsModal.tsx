@@ -177,7 +177,7 @@ export function MCPUserCredentialsContent({
               </Button>
             )}
           </Modal.Header>
-          <form onSubmit={submit} className="w-full">
+          <form onSubmit={submit} className="flex min-h-0 w-full flex-col">
             <Modal.Body alignItems="stretch">
               {error && (
                 <div role="alert">

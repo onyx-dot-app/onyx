@@ -67,6 +67,8 @@ ask for confirmation before discarding edited credentials. The confirmation
 replaces the form in the same dialog; keeping edits restores the entered values.
 Unchanged forms can leave without confirmation. Submission blocks dismissal.
 Successful credential saves return to the list with the server marked connected.
+Credential fields scroll within the dialog on short screens; the submit button stays visible.
+OAuth connection controls stay busy until navigation leaves the page, or a request fails.
 
 
 **OpenAPI (custom) action.** The admin pastes an OpenAPI 3.x schema and,

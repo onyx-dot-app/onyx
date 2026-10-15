@@ -8,7 +8,11 @@ import {
   type MCPServer,
 } from "@/lib/mcp/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { saveMCPUserCredentials, startMCPUserOAuth } from "@/lib/mcp/svc";
+import {
+  getMCPUserOAuthNavigationUrl,
+  saveMCPUserCredentials,
+  startMCPUserOAuth,
+} from "@/lib/mcp/svc";
 
 jest.mock("@/lib/fetcher", () => ({ errorHandlingFetcher: jest.fn() }));
 jest.mock("@/lib/mcp/svc", () => ({
@@ -113,6 +117,26 @@ describe("useMcpAuthentication", () => {
       expect(result.current.credentialRequest).toBeNull();
     }
   );
+  it("keeps OAuth loading and blocks a second request while navigation is pending", async () => {
+    jest.mocked(startMCPUserOAuth).mockResolvedValue({
+      status: "authorization_required",
+      server_id: server.id,
+      authorization_url: "#oauth-provider",
+      redirect_url: "/app",
+    });
+    jest
+      .mocked(getMCPUserOAuthNavigationUrl)
+      .mockReturnValue("#oauth-provider");
+    const { result } = renderHook(() => useMcpAuthentication(0), {
+      wrapper: makeWrapper(),
+    });
+    await act(() => result.current.authenticate(server));
+    expect(result.current.loadingServerId).toBe(server.id);
+    expect(window.location.hash).toBe("#oauth-provider");
+    await act(() => result.current.authenticate(server));
+    expect(startMCPUserOAuth).toHaveBeenCalledTimes(1);
+    window.history.replaceState(null, "", "/");
+  });
   it("surfaces OAuth failure and clears the pending state", async () => {
     const failure = new Error("Authorization unavailable");
     jest.mocked(startMCPUserOAuth).mockRejectedValue(failure);

@@ -265,8 +265,9 @@ export function useMcpAuthentication(
         { forceReauthentication }
       );
       window.location.href = getMCPUserOAuthNavigationUrl(result);
-    } finally {
+    } catch (error) {
       setLoadingServerId(null);
+      throw error;
     }
   }
 
@@ -274,6 +275,7 @@ export function useMcpAuthentication(
     server: MCPAuthenticationServer,
     forceReauthentication = false
   ) {
+    if (loadingServerId !== null) return;
     const flow = getMcpAuthenticationFlow(server);
     if (!flow) return;
     setAuthenticationError(null);
