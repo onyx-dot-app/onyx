@@ -1,3 +1,4 @@
+import json
 import os
 import socket
 import subprocess
@@ -5,6 +6,7 @@ import sys
 import time
 from collections.abc import Generator
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -15,8 +17,15 @@ from onyx.db.enums import (
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
+from tests.integration.mock_services.mock_llm_server.models import (
+    Reply,
+    RequestConditions,
+    ToolCall,
+)
 
 # TODO: update mcp client tests to use constants in common_utils/constants.py
 # NOTE: the tests for client should be independent of the Onyx MCP server
@@ -114,7 +123,7 @@ def test_mcp_client_no_auth_flow(
     )
     tools_response.raise_for_status()
     tool_entries = tools_response.json()["tools"]
-    assert len(tool_entries) == 101
+    assert len(tool_entries) == 102
 
     # Update server status to CONNECTED
     status_response = client.patch(
@@ -156,3 +165,87 @@ def test_mcp_client_no_auth_flow(
     )
     persona_tool_ids = {tool["id"] for tool in persona_entry["tools"]}
     assert tool_id in persona_tool_ids
+
+
+def test_mcp_json_tool_result_reaches_llm_encoded_once(
+    mcp_no_auth_server: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+) -> None:
+    """A tool result that the MCP server sends as JSON text reaches the LLM as
+    JSON inside `tool_result`, not as an escaped string."""
+    create_response = client.post(
+        f"{API_SERVER_URL}/admin/mcp/servers/create",
+        json={
+            "name": f"integration-mcp-json-{uuid4().hex[:8]}",
+            "description": "Integration test MCP server",
+            "server_url": MCP_SERVER_URL,
+            "transport": MCPTransport.STREAMABLE_HTTP.value,
+            "auth_type": MCPAuthenticationType.NONE.value,
+            "auth_performer": MCPAuthenticationPerformer.ADMIN.value,
+        },
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    create_response.raise_for_status()
+    server_id = create_response.json()["server_id"]
+    client.get(
+        f"{API_SERVER_URL}/admin/mcp/server/{server_id}/tools",
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    ).raise_for_status()
+    client.patch(
+        f"{API_SERVER_URL}/admin/mcp/server/{server_id}/status",
+        params={"status": "CONNECTED"},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    ).raise_for_status()
+    db_tools_response = client.get(
+        f"{API_SERVER_URL}/admin/mcp/server/{server_id}/db-tools",
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    db_tools_response.raise_for_status()
+    tool_id = next(
+        tool["id"]
+        for tool in db_tools_response.json()["tools"]
+        if tool["name"] == "get_ticket"
+    )
+
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="call_ticket", name="get_ticket", arguments={"ticket_id": 12}
+                )
+            ],
+            conditions=RequestConditions(offers=["get_ticket"]),
+        ),
+        Reply(
+            text="Ticket 12 is about the widget parser.",
+            conditions=RequestConditions(has_results_for=["call_ticket"]),
+        ),
+    )
+    persona = PersonaManager.create(
+        tool_ids=[tool_id], user_performing_action=admin_user
+    )
+    chat_session = ChatSessionManager.create(
+        persona_id=persona.id, user_performing_action=admin_user
+    )
+    ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="What is ticket 12 about?",
+        user_performing_action=admin_user,
+        forced_tool_ids=[tool_id],
+    )
+
+    tool_result = mock_llm.requests_in("chat")[-1].tool_result("call_ticket")
+    assert tool_result is not None
+    assert json.loads(tool_result) == {
+        "tool_result": {
+            "id": 12,
+            "title": 'Fix the "widget" parser',
+            "labels": ["bug"],
+        }
+    }
