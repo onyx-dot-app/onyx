@@ -2,16 +2,21 @@ import csv
 import gc
 import json
 import os
+import re
 import sys
 import tempfile
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
 from pydantic import Field
+from simple_salesforce.exceptions import (
+    SalesforceAuthenticationFailed,
+    SalesforceExpiredSession,
+)
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
@@ -32,14 +37,17 @@ from onyx.connectors.interfaces import (
     LoadConnector,
     OAuthConnector,
     PollConnector,
+    Resolver,
     SecondsSinceUnixEpoch,
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
+    ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
     HierarchyNode,
     SlimDocument,
     TextSection,
@@ -57,7 +65,10 @@ from onyx.connectors.salesforce.models import (
     SalesforceChildFields,
     SalesforceMyDomainUrl,
 )
-from onyx.connectors.salesforce.onyx_salesforce import OnyxSalesforce
+from onyx.connectors.salesforce.onyx_salesforce import (
+    OnyxSalesforce,
+    is_salesforce_rate_limit_error,
+)
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.connectors.salesforce.utils import (
@@ -114,6 +125,50 @@ _DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
         MODIFIED_FIELD: "last_modified_date",
     },
 }
+
+
+_ESSENTIAL_TYPES = (USER_OBJECT_TYPE, ACCOUNT_OBJECT_TYPE)
+
+# Salesforce record ids are 15 (case-sensitive) or 18 (case-safe) alphanumerics.
+# The first 3 characters are the key prefix of the record's object type.
+_SF_RECORD_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$")
+_SF_KEY_PREFIX_LENGTH = 3
+
+
+def _get_prefix_to_type(sf_client: OnyxSalesforce) -> dict[str, str]:
+    """Maps each record id key prefix to its object type."""
+    global_description = sf_client.describe()
+    if not global_description:
+        raise RuntimeError("sf_client.describe failed")
+
+    prefix_to_type: dict[str, str] = {}
+    for sobject in global_description["sobjects"]:
+        if sobject["keyPrefix"]:
+            prefix_to_type[sobject["keyPrefix"]] = sobject["name"]
+
+    logger.info("Describe: num_prefixes=%s", len(prefix_to_type))
+    return prefix_to_type
+
+
+def _record_id_from_document_id(document_id: str) -> str | None:
+    if not document_id.startswith(ID_PREFIX):
+        return None
+    record_id = document_id[len(ID_PREFIX) :]
+    if not _SF_RECORD_ID_PATTERN.match(record_id):
+        return None
+    return record_id
+
+
+def _fails_the_whole_run(e: Exception) -> bool:
+    """Errors that the normal crawl cannot recover from either."""
+    return isinstance(
+        e,
+        (
+            ConnectorMissingCredentialError,
+            SalesforceAuthenticationFailed,
+            SalesforceExpiredSession,
+        ),
+    ) or is_salesforce_rate_limit_error(e)
 
 
 class SalesforceCheckpoint(ConnectorCheckpoint):
@@ -204,6 +259,7 @@ class SalesforceConnector(
     SlimConnectorWithPermSync,
     CredentialsConnector,
     OAuthConnector,
+    Resolver,
 ):
     """Approach outline
 
@@ -838,129 +894,14 @@ class SalesforceConnector(
                 # the parent record itself or a child record was updated.
                 now = time.monotonic()
 
-                # query salesforce for the changed parent id record
-                # NOTE(rkuo): we only know the record id and its possible types,
-                # so we actually need to check each type until we succeed
-                # to be entirely correct
-                # this may be a source of inefficiency and thinking about
-                # caching the most likely parent record type might be helpful
-
-                # actual_parent_type: str | None = None
-                # for possible_parent_type in possible_parent_types:
-                #     queryable_fields = ctx.queryable_fields_by_type[
-                #         possible_parent_type
-                #     ]
-                #     query = _get_object_by_id_query(
-                #         parent_id, possible_parent_type, queryable_fields
-                #     )
-                #     result = self._sf_client.query(query)
-                #     if result:
-                #         actual_parent_type = possible_parent_type
-                #         print(result)
-                #         break
-
-                # get the parent record fields
-                record = self._sf_client.query_object(
-                    actual_parent_type, parent_id, ctx.type_to_queryable_fields
-                )
-                if not record:
+                doc = self._build_parent_doc(parent_id, actual_parent_type, ctx)
+                if doc is None:
                     continue
-
-                # queryable_fields = ctx.type_to_queryable_fields[
-                #     actual_parent_type
-                # ]
-                # query = get_object_by_id_query(
-                #     parent_id, actual_parent_type, queryable_fields
-                # )
-                # result = self._sf_client.query(query)
-                # if not result:
-                #     continue
-
-                # # print(result)
-                # record: dict[str, Any] = {}
-
-                # record_0 = result["records"][0]
-                # for record_key, record_value in record_0.items():
-                #     if record_key == "attributes":
-                #         continue
-
-                #     record[record_key] = record_value
 
                 # for this parent type, increment the counter on the stats object
                 type_to_processed[actual_parent_type] = (
                     type_to_processed.get(actual_parent_type, 0) + 1
                 )
-
-                # get the child records
-                child_relationships = ctx.parent_to_child_relationships[
-                    actual_parent_type
-                ]
-                child_records = self.sf_client.get_child_objects_by_id(
-                    parent_id,
-                    actual_parent_type,
-                    list(child_relationships),
-                    ctx.parent_to_relationship_fields[actual_parent_type],
-                )
-
-                # NOTE(rkuo): does using the parent last modified make sense if the update
-                # is being triggered because a child object changed?
-                primary_owner_list: list[BasicExpertInfo] | None = None
-                if "LastModifiedById" in record:
-                    try:
-                        last_modified_by_id = record["LastModifiedById"]
-                        user_record = self.sf_client.query_object(
-                            USER_OBJECT_TYPE,
-                            last_modified_by_id,
-                            ctx.type_to_queryable_fields,
-                        )
-                        if user_record:
-                            primary_owner = BasicExpertInfo.from_dict(user_record)
-                            primary_owner_list = [primary_owner]
-                    except Exception:
-                        pass
-
-                # for child_record_key, child_record in child_records.items():
-                #     if not child_record:
-                #         continue
-
-                #     child_text_section = _extract_section(
-                #         child_record,
-                #         f"https://{self._sf_client.sf_instance}/{child_record_key}",
-                #     )
-                #     sections.append(child_text_section)
-
-                # for parent_relationship_field in parent_relationship_fields:
-                #     parent_relationship_id
-                # json.loads(parent_object.data)
-
-                # create and yield a document from the salesforce query
-                doc = convert_sf_query_result_to_doc(
-                    parent_id,
-                    record,
-                    child_records,
-                    primary_owner_list,
-                    self._sf_client,
-                )
-
-                # doc = Document(
-                #     id=ID_PREFIX + parent_id,
-                #     sections=cast(list[TextSection | ImageSection], sections),
-                #     source=DocumentSource.SALESFORCE,
-                #     semantic_identifier=parent_semantic_identifier,
-                #     doc_updated_at=time_str_to_utc(parent_last_modified_date),
-                #     primary_owners=primary_owner_list,
-                #     metadata={},
-                # )
-
-                # Add default attributes to the metadata
-                for (
-                    sf_attribute,
-                    canonical_attribute,
-                ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(actual_parent_type, {}).items():
-                    if sf_attribute in record:
-                        doc.metadata[canonical_attribute] = _convert_to_metadata_value(
-                            record[sf_attribute]
-                        )
 
                 doc_sizeof = sys.getsizeof(doc)
                 docs_to_yield_bytes += doc_sizeof
@@ -1006,6 +947,66 @@ class SalesforceConnector(
 
             sf_db.close()
 
+    def _build_parent_doc(
+        self,
+        parent_id: str,
+        parent_type: str,
+        ctx: SalesforceConnectorContext,
+    ) -> Document | None:
+        """Queries one parent record and its children from Salesforce and
+        converts them to a document. Returns None if the record is not found."""
+        record = self.sf_client.query_object(
+            parent_type, parent_id, ctx.type_to_queryable_fields
+        )
+        if not record:
+            return None
+
+        child_records = self.sf_client.get_child_objects_by_id(
+            parent_id,
+            parent_type,
+            list(ctx.parent_to_child_relationships[parent_type]),
+            ctx.parent_to_relationship_fields[parent_type],
+        )
+
+        # NOTE(rkuo): does using the parent last modified make sense if the update
+        # is being triggered because a child object changed?
+        primary_owner_list: list[BasicExpertInfo] | None = None
+        if "LastModifiedById" in record:
+            try:
+                last_modified_by_id = record["LastModifiedById"]
+                user_record = self.sf_client.query_object(
+                    USER_OBJECT_TYPE,
+                    last_modified_by_id,
+                    ctx.type_to_queryable_fields,
+                )
+                if user_record:
+                    primary_owner = BasicExpertInfo.from_dict(user_record)
+                    primary_owner_list = [primary_owner]
+            except Exception:
+                pass
+
+        doc = convert_sf_query_result_to_doc(
+            parent_id,
+            record,
+            child_records,
+            primary_owner_list,
+            self.sf_client,
+        )
+
+        doc.metadata["object_type"] = parent_type
+
+        # Add default attributes to the metadata
+        for (
+            sf_attribute,
+            canonical_attribute,
+        ) in _DEFAULT_ATTRIBUTES_TO_KEEP.get(parent_type, {}).items():
+            if sf_attribute in record:
+                doc.metadata[canonical_attribute] = _convert_to_metadata_value(
+                    record[sf_attribute]
+                )
+
+        return doc
+
     def _make_context(
         self,
         start: SecondsSinceUnixEpoch | None,
@@ -1017,6 +1018,70 @@ class SalesforceConnector(
         """NOTE: I suspect we're doing way too many queries here. Likely fewer queries
         and just parsing all the info we need in less passes will work."""
 
+        full_sync = start is None and end is None
+
+        # Step 1 - make a list of all the types to download (parent + direct child + USER_OBJECT_TYPE)
+        ctx = self._describe_parent_types(parent_object_list, sf_client)
+        ctx.prefix_to_type = _get_prefix_to_type(sf_client)
+        parent_types = ctx.parent_types
+        child_types = ctx.child_types
+        type_to_queryable_fields = ctx.type_to_queryable_fields
+
+        # for a given object, the fields reference parent objects
+        parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
+
+        all_types: set[str] = set(parent_types)
+        all_types.update(child_types)
+
+        # NOTE(rkuo): should this be an implicit parent type?
+        all_types.add(USER_OBJECT_TYPE)  # Always add User for permissioning purposes
+        all_types.add(ACCOUNT_OBJECT_TYPE)  # Always add Account for reference purposes
+
+        logger.info("All object types: num=%s list=%s", len(all_types), all_types)
+
+        # 1.1 - Detect all fields in child types which reference a parent type.
+        # build dicts to detect relationships between parent and child
+        for child_type in child_types.union(_ESSENTIAL_TYPES):
+            # onyx_sf_type = OnyxSalesforceType(child_type, sf_client)
+            parent_reference_fields = sf_client.get_parent_reference_fields(
+                child_type, parent_types
+            )
+
+            parent_reference_fields_by_type[child_type] = parent_reference_fields
+
+        # Only add time filter if there is at least one object of the type
+        # in the database. We aren't worried about partially completed object update runs
+        # because this occurs after we check for existing csvs which covers this case
+        # NOTE(rkuo):
+        all_types_to_filter: dict[str, bool] = {}
+        for sf_type in all_types:
+            # onyx_sf_type = OnyxSalesforceType(sf_type, sf_client)
+
+            # NOTE(rkuo): I'm not convinced it makes sense to restrict filtering at all
+            # all_types_to_filter[sf_type] = sf_db.object_type_count(sf_type) > 0
+            all_types_to_filter[sf_type] = not full_sync
+
+        # Step 1.2 - bulk download the CSV's for each object type
+        SalesforceConnector._download_object_csvs(
+            all_types_to_filter,
+            type_to_queryable_fields,
+            temp_dir,
+            sf_client,
+            start,
+            end,
+        )
+
+        ctx.parent_reference_fields_by_type = parent_reference_fields_by_type
+        return ctx
+
+    def _describe_parent_types(
+        self,
+        parent_object_list: list[str],
+        sf_client: OnyxSalesforce,
+    ) -> SalesforceConnectorContext:
+        """Describes the parent types, their child relationships and the
+        essential types. Downloads no records. Does not set prefix_to_type or
+        parent_reference_fields_by_type."""
         parent_types = set(parent_object_list)
         child_types: set[str] = set()
         parent_to_child_types: dict[
@@ -1026,11 +1091,7 @@ class SalesforceConnector(
             str, set[str]
         ] = {}  # map from child to parent types
 
-        parent_reference_fields_by_type: dict[
-            str, dict[str, list[str]]
-        ] = {}  # for a given object, the fields reference parent objects
         type_to_queryable_fields: dict[str, set[str]] = {}
-        prefix_to_type: dict[str, str] = {}
 
         parent_to_child_relationships: dict[
             str, set[str]
@@ -1040,26 +1101,6 @@ class SalesforceConnector(
         parent_to_relationship_fields: dict[str, dict[str, SalesforceChildFields]] = {}
 
         parent_child_names_to_relationships: dict[str, str] = {}
-
-        full_sync = start is None and end is None
-
-        # Step 1 - make a list of all the types to download (parent + direct child + USER_OBJECT_TYPE)
-        # prefixes = {}
-
-        global_description = sf_client.describe()
-        if not global_description:
-            raise RuntimeError("sf_client.describe failed")
-
-        for sobject in global_description["sobjects"]:
-            if sobject["keyPrefix"]:
-                prefix_to_type[sobject["keyPrefix"]] = sobject["name"]
-                # prefixes[sobject['keyPrefix']] = {
-                #     'object_name': sobject['name'],
-                #     'label': sobject['label'],
-                #     'is_custom': sobject['custom']
-                # }
-
-        logger.info("Describe: num_prefixes=%s", len(prefix_to_type))
 
         logger.info(
             "Parent object types: num=%s list=%s", len(parent_types), parent_types
@@ -1179,63 +1220,19 @@ class SalesforceConnector(
             "Final child object types: num=%s list=%s", len(child_types), child_types
         )
 
-        all_types: set[str] = set(parent_types)
-        all_types.update(child_types)
-
-        # NOTE(rkuo): should this be an implicit parent type?
-        all_types.add(USER_OBJECT_TYPE)  # Always add User for permissioning purposes
-        all_types.add(ACCOUNT_OBJECT_TYPE)  # Always add Account for reference purposes
-
-        logger.info("All object types: num=%s list=%s", len(all_types), all_types)
-
         # Ensure User and Account have queryable fields if they weren't already processed
-        essential_types = [USER_OBJECT_TYPE, ACCOUNT_OBJECT_TYPE]
-        for essential_type in essential_types:
+        for essential_type in _ESSENTIAL_TYPES:
             if essential_type not in type_to_queryable_fields:
                 type_to_queryable_fields[essential_type] = (
                     sf_client.get_queryable_fields_by_type(essential_type)
                 )
-
-        # 1.1 - Detect all fields in child types which reference a parent type.
-        # build dicts to detect relationships between parent and child
-        for child_type in child_types.union(essential_types):
-            # onyx_sf_type = OnyxSalesforceType(child_type, sf_client)
-            parent_reference_fields = sf_client.get_parent_reference_fields(
-                child_type, parent_types
-            )
-
-            parent_reference_fields_by_type[child_type] = parent_reference_fields
-
-        # Only add time filter if there is at least one object of the type
-        # in the database. We aren't worried about partially completed object update runs
-        # because this occurs after we check for existing csvs which covers this case
-        # NOTE(rkuo):
-        all_types_to_filter: dict[str, bool] = {}
-        for sf_type in all_types:
-            # onyx_sf_type = OnyxSalesforceType(sf_type, sf_client)
-
-            # NOTE(rkuo): I'm not convinced it makes sense to restrict filtering at all
-            # all_types_to_filter[sf_type] = sf_db.object_type_count(sf_type) > 0
-            all_types_to_filter[sf_type] = not full_sync
-
-        # Step 1.2 - bulk download the CSV's for each object type
-        SalesforceConnector._download_object_csvs(
-            all_types_to_filter,
-            type_to_queryable_fields,
-            temp_dir,
-            sf_client,
-            start,
-            end,
-        )
 
         return_context = SalesforceConnectorContext()
         return_context.parent_types = parent_types
         return_context.child_types = child_types
         return_context.parent_to_child_types = parent_to_child_types
         return_context.child_to_parent_types = child_to_parent_types
-        return_context.parent_reference_fields_by_type = parent_reference_fields_by_type
         return_context.type_to_queryable_fields = type_to_queryable_fields
-        return_context.prefix_to_type = prefix_to_type
 
         return_context.parent_to_child_relationships = parent_to_child_relationships
         return_context.parent_to_relationship_fields = parent_to_relationship_fields
@@ -1262,6 +1259,98 @@ class SalesforceConnector(
         # Always use a temp directory - see comment in load_from_state()
         with tempfile.TemporaryDirectory() as temp_dir:
             yield from self._delta_sync(temp_dir, start, end)
+
+    def reindex(
+        self,
+        errors: list[ConnectorFailure],
+        include_permissions: bool = False,  # noqa: ARG002
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Rebuilds each failed parent record document from live SOQL queries
+        for the record and its children. Skips the bulk CSV download.
+
+        `include_permissions` has no effect. Salesforce has no doc sync: access
+        is enforced at query time by chunk censoring, so documents keep
+        `external_access=None`, the same as the normal crawl.
+        """
+        targets: dict[str, str] = {}  # document id -> record id
+        for failure in errors:
+            if failure.failed_document is None:
+                continue
+            document_id = failure.failed_document.document_id
+            record_id = _record_id_from_document_id(document_id)
+            if record_id is None:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=document_id),
+                    failure_message=(
+                        f"'{document_id}' is not a Salesforce document id "
+                        f"('{ID_PREFIX}' followed by a 15 or 18 character record id)"
+                    ),
+                )
+                continue
+            targets[document_id] = record_id
+
+        if not targets:
+            return
+
+        # the key prefix of a record id names its object type; SOQL names
+        # are case-insensitive, so match configured types the same way
+        prefix_to_type = _get_prefix_to_type(self.sf_client)
+        configured_types = {t.lower(): t for t in self.parent_object_list}
+        target_types: dict[str, str] = {}  # document id -> parent type
+        for document_id, record_id in targets.items():
+            object_type = prefix_to_type.get(record_id[:_SF_KEY_PREFIX_LENGTH])
+            parent_type = (
+                configured_types.get(object_type.lower()) if object_type else None
+            )
+            if parent_type is None:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=document_id),
+                    failure_message=(
+                        f"Salesforce record {record_id} has object type "
+                        f"{object_type or 'unknown'}, which is not one of this "
+                        f"connector's parent object types {self.parent_object_list}"
+                    ),
+                )
+                continue
+            target_types[document_id] = parent_type
+
+        if not target_types:
+            return
+
+        ctx = self._describe_parent_types(
+            sorted(set(target_types.values())), self.sf_client
+        )
+
+        for document_id, parent_type in target_types.items():
+            record_id = targets[document_id]
+            try:
+                doc = self._build_parent_doc(record_id, parent_type, ctx)
+            except Exception as e:
+                # one bad target must not cost the rest of the batch their retry
+                if _fails_the_whole_run(e):
+                    raise
+                logger.exception(
+                    "Failed to reindex Salesforce document %s", document_id
+                )
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=document_id),
+                    failure_message=(
+                        f"Failed to reindex Salesforce document {document_id}: {e}"
+                    ),
+                    exception=e,
+                )
+                continue
+
+            if doc is None:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=document_id),
+                    failure_message=(
+                        f"Salesforce returned no {parent_type} record for id "
+                        f"{record_id} (deleted or not visible to this user)"
+                    ),
+                )
+                continue
+            yield doc
 
     def retrieve_all_slim_docs_perm_sync(
         self,
