@@ -39,3 +39,21 @@ def test_exchange_rejects_invalid_token_payload(
             "code",
             "https://onyx.example/callback",
         )
+
+
+def test_exchange_uses_bounded_network_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(oauth_token_manager, "validate_oauth_endpoint_url", Mock())
+    response = Mock()
+    response.json.return_value = {"access_token": "token"}
+    post = Mock(return_value=response)
+    monkeypatch.setattr(oauth_token_manager.requests, "post", post)
+    oauth_token_manager.exchange_oauth_code_for_token(
+        OAuthFlowParams(
+            authorization_url="https://provider.example/auth",
+            token_url="https://provider.example/token",
+            client_id="client",
+        ),
+        "code",
+        "https://onyx.example/callback",
+    )
+    assert post.call_args.kwargs["timeout"] == 30
