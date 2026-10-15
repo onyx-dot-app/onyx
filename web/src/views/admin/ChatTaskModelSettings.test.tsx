@@ -8,6 +8,9 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import { toast } from "@opal/layouts";
+import { NextIntlClientProvider } from "next-intl";
+import OpalStringsBridge from "@/i18n/OpalStringsBridge";
+import frenchMessages from "@/i18n/messages/fr.json";
 import ChatTaskModelSettings from "@/views/admin/ChatTaskModelSettings";
 import type { DefaultModel, LLMProviderView } from "@/lib/languageModels/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -154,6 +157,19 @@ describe("ChatTaskModelSettings", () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  test("translates both optional suffixes through the Opal strings bridge", async () => {
+    render(
+      <NextIntlClientProvider locale="fr" messages={frenchMessages}>
+        <OpalStringsBridge>
+          <ChatTaskModelSettings />
+        </OpalStringsBridge>
+      </NextIntlClientProvider>
+    );
+
+    expect(await screen.findAllByText("(Facultatif)")).toHaveLength(2);
+    expect(screen.queryByText("(Optional)")).not.toBeInTheDocument();
   });
 
   test("waits for provider data before rendering task controls", async () => {
