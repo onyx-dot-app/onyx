@@ -590,7 +590,8 @@ _ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
 # "off" is not a level they can be asked for.
 _ANTHROPIC_ALWAYS_THINKING_TIERS = ("fable", "mythos")
 
-# Opus joins them from 5.5: it answers thinking.type=disabled with the same 400.
+# Opus from 5.5 belongs with them. Sonnet 5.5 also rejects disabled thinking
+# but has its own off level (thinking.type=between_tools), so it stays out.
 _ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION = (5, 5)
 
 

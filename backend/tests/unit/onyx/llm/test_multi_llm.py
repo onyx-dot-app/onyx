@@ -662,14 +662,14 @@ def test_reasoning_off_disables_adaptive_thinking(
 )
 def test_reasoning_off_floors_always_thinking_models_at_low(model_name: str) -> None:
     # These reject disabled thinking, so off lands on the least they accept
-    # instead of silence, which the API would fill with its high default.
+    # instead of silence, which the API would fill with its own default.
     kwargs = _anthropic_completion_kwargs(model_name, ReasoningEffort.OFF)
     assert kwargs["thinking"] == {"type": "adaptive"}
     assert kwargs["output_config"] == {"effort": "low"}
 
 
 def test_reasoning_off_follows_deployment_alias_over_model_name() -> None:
-    # The alias is the model that answers, and Opus accepts disabled thinking.
+    # The alias is the model that answers, and Opus 5 accepts disabled thinking.
     kwargs = _anthropic_completion_kwargs(
         "claude-fable-5", ReasoningEffort.OFF, deployment_name="claude-opus-5"
     )

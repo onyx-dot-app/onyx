@@ -820,8 +820,8 @@ class LitellmLLM(LLM):
             self._api_surface,
         )
 
-        # Fable and Mythos never stop thinking, so off there means the least
-        # reasoning they take rather than the API's own default.
+        # Always-thinking Claude models reject thinking.type=disabled, so off
+        # there means the least reasoning they take rather than the API's default.
         if (
             reasoning_effort is ReasoningEffort.OFF
             and reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE
