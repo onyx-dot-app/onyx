@@ -38,8 +38,8 @@ export class McpCredentialsModal {
   constructor(page: Page) {
     this.page = page;
     this.dialog = page.getByRole("dialog");
-    this.apiKeyField = this.dialog.locator("input#api_key");
-    this.usernameField = this.dialog.locator("input#username");
+    this.apiKeyField = this.dialog.getByLabel("API Key", { exact: true });
+    this.usernameField = this.dialog.getByLabel("username", { exact: true });
     this.saveButton = this.dialog.getByRole("button", {
       name: /Save Credentials/i,
     });

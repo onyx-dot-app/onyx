@@ -66,6 +66,8 @@ without refresh tokens also require reconnection. Temporary failures do not chan
 the connection state. Successful replacement credentials clear the rejection marker;
 OAuth header edits and authorization attempts retain it until authorization succeeds.
 A new user connection does not inherit the admin connection's rejection history.
+For no-auth servers, missing required header values mean first-time setup, even
+with stored headers. A confirmed rejection still requires reauthentication.
 Pass-through OAuth rejection does not mark extra headers stale, since the failure
 may concern the user's Onyx login token.
 `connection_status` reports credential state, not whether a Connect button should appear.

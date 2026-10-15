@@ -254,6 +254,10 @@ class ResolvedMCPCredentials(BaseModel):
             return MCPConnectionStatus.CONNECTED
         if self.needs_reauth():
             return MCPConnectionStatus.REAUTH_REQUIRED
+        if self.auth_type in (None, MCPAuthenticationType.NONE) and (
+            self.auth_template is not None and not self._has_required_substitutions()
+        ):
+            return MCPConnectionStatus.NOT_CONNECTED
         data = self.connection_data
         # OAuth setup stores registration and headers before the first grant.
         if self.auth_type == MCPAuthenticationType.OAUTH:

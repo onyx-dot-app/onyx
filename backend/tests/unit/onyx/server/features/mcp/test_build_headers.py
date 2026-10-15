@@ -225,3 +225,29 @@ def test_existing_api_key_missing_new_required_field_needs_reauth() -> None:
         ),
     )
     assert credentials.connection_status() == MCPConnectionStatus.REAUTH_REQUIRED
+
+
+@pytest.mark.parametrize("auth_type", [None, MCPAuthenticationType.NONE])
+@pytest.mark.parametrize("rejected", [False, True])
+def test_none_auth_missing_template_values_requires_setup(
+    auth_type: MCPAuthenticationType | None, rejected: bool
+) -> None:
+    credentials = ResolvedMCPCredentials(
+        connection_config_id=1,
+        connection_data={
+            "headers": {"X-Client": "onyx"},
+            "header_substitutions": {"workspace": "existing"},
+            "reauth_required": rejected,
+        },
+        user_oauth_token=None,
+        auth_type=auth_type,
+        auth_template=MCPAuthTemplate(
+            headers={"X-Workspace": "{workspace}", "X-Org": "{organization}"}
+        ),
+    )
+    assert not credentials.can_authenticate()
+    assert credentials.connection_status() == (
+        MCPConnectionStatus.REAUTH_REQUIRED
+        if rejected
+        else MCPConnectionStatus.NOT_CONNECTED
+    )
