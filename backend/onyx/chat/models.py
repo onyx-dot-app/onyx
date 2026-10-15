@@ -473,6 +473,7 @@ class ChatTurnSetup(BaseModel):
     admission: ChatTurnAdmission
     # Execution params forwarded to per-model tool construction
     slack_context: SlackContext | None
+    litellm_additional_headers: dict[str, str] | None = None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None
 

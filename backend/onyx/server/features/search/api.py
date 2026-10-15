@@ -228,9 +228,13 @@ def search(
                 original_query=request.query,
                 message_history=request.message_history
                 or [
-                    ChatMinimalTextMessage(message=request.query, message_type=MessageType.USER)
+                    ChatMinimalTextMessage(
+                        message=request.query, message_type=MessageType.USER
+                    )
                 ],
-                context=ToolContext(skip_search_query_expansion=request.skip_query_expansion),
+                context=ToolContext(
+                    skip_search_query_expansion=request.skip_query_expansion
+                ),
             )
         except Exception as e:
             # Type only: provider errors can carry credentials, and nothing

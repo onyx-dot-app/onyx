@@ -53,7 +53,7 @@ downstream, so it should not hand-craft time or source scoping into the query te
 
 | Method | Path | Handler | Notes |
 |---|---|---|---|
-| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.run()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns the LLM-selected and expanded sections, no LLM answer. Opens its own `search_api` trace and `internal_search` function span, because it does not pass through the chat loop or `tool_runner.py`; see [[observability]]. |
+| POST | `/search` | `search` (`server/features/search/api.py`) | Runs the same `SearchTool.search()` pipeline as chat, for programmatic callers (onyx-cli, Craft sandbox, integrations). Returns the LLM-selected and expanded sections, no LLM answer. Opens its own `search_api` trace and `internal_search` function span, because it does not pass through the chat runtime or `tools/interface.py`; see [[observability]]. |
 | POST | `/admin/search` | `admin_search` (`server/query_and_chat/query_backend.py`) | Admin-only. Calls `document_index.keyword_retrieval` or `random_retrieval` directly, bypassing this whole pipeline. Used for admin document inspection, not for chat. |
 | GET | `/query/valid-tags` | `get_tags` (`server/query_and_chat/query_backend.py`) | Tag autocomplete for the filter UI. |
 

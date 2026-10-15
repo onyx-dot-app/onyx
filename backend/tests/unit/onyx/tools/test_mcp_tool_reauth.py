@@ -1,18 +1,21 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest
 
+from onyx.agents.tools import ToolInvocation
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
 )
 from onyx.db.models import MCPServer
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import ToolResult
 from onyx.server.features.mcp.credentials import ResolvedMCPCredentials
 from onyx.server.features.mcp.models import MCPAuthTemplate
 from onyx.server.metrics.mcp_common import MCPToolCallStatus
-from onyx.server.query_and_chat.placement import Placement
+from onyx.tools.interface import ToolContext
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 
 MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
@@ -88,7 +91,6 @@ def test_only_rejected_user_headers_mark_reauth(
     )
     tool = MCPTool(
         tool_id=1,
-        emitter=MagicMock(),
         mcp_server=MCPServer(
             id=1,
             name="test",
@@ -108,15 +110,24 @@ def test_only_rejected_user_headers_mark_reauth(
         patch(f"{MODULE}.mark_connection_config_reauth_required") as mark,
         patch(f"{MODULE}.record_mcp_client_tool_outcome") as record_outcome,
     ):
-        response = tool.run(Placement(turn_index=0))
+        response = tool.run(
+            ToolInvocation(
+                call_id="call",
+                arguments={},
+                cancellation=CancellationSignal(),
+                update=lambda _: None,
+            ),
+            ToolContext(),
+        )
+    assert isinstance(response, ToolResult)
 
-    assert "error" in response.llm_facing_response
+    assert "error" in response.text
     unauthorized = (
         isinstance(error, httpx.HTTPStatusError) and error.response.status_code == 401
     )
     wrapped_unauthorized = error.__cause__ is not None
     if unauthorized or wrapped_unauthorized:
-        assert "Authentication failed" in response.llm_facing_response
+        assert "Authentication failed" in response.text
         assert record_outcome.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
     if replaceable and (
         should_mark or (auth_type == MCPAuthenticationType.NONE and unauthorized)

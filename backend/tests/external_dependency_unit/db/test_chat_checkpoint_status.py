@@ -20,7 +20,6 @@ def test_response_status_reads_only_identity_and_status(db_session: Session) -> 
         message="large response content",
         token_count=3,
         message_type=MessageType.ASSISTANT,
-        run_id=str(uuid4()),
         response_status=RunStatus.RUNNING,
     )
     db_session.add(root)
@@ -53,15 +52,12 @@ def test_response_status_reads_only_identity_and_status(db_session: Session) -> 
         message="large child response",
         token_count=3,
         message_type=MessageType.ASSISTANT,
-        run_id=str(uuid4()),
         response_status=RunStatus.SUSPENDED,
     )
     db_session.add(child)
     db_session.flush()
     root_id, child_id = root.id, child.id
-    root_run_id, child_run_id = root.run_id, child.run_id
     root_session_id = root_session.id
-    assert root_run_id is not None and child_run_id is not None
     db_session.expunge_all()
     statements: list[str] = []
 
@@ -72,10 +68,9 @@ def test_response_status_reads_only_identity_and_status(db_session: Session) -> 
     engine = db_session.get_bind()
     event.listen(engine, "before_cursor_execute", capture_statement, named=True)
     try:
-        root_status = read_response_status__no_commit(db_session, root_run_id)
-        child_status = read_response_status__no_commit(db_session, child_run_id)
-        archived_status = read_response_status__no_commit(db_session, str(child_id))
-        missing = read_response_status__no_commit(db_session, str(uuid4()))
+        root_status = read_response_status__no_commit(db_session, root_id)
+        child_status = read_response_status__no_commit(db_session, child_id)
+        missing = read_response_status__no_commit(db_session, -1)
         assert root_status is not None
         assert root_status.message_id == root_id
         assert root_status.root_message_id == root_id
@@ -87,9 +82,8 @@ def test_response_status_reads_only_identity_and_status(db_session: Session) -> 
         assert child_status.root_session_id == root_session_id
         assert child_status.parent_agent_id == str(root_session_id)
         assert child_status.status == RunStatus.SUSPENDED
-        assert archived_status == child_status
         assert missing is None
-        assert len(statements) == 6
+        assert len(statements) == 4
         sql = "\n".join(statements).lower()
         for forbidden in (
             "chat_response_item",

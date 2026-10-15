@@ -246,13 +246,13 @@ directly via `add_trace_processor`, independent of Braintrust/Langfuse.
 
 A span opened with no trace in scope becomes a `NoOpSpan` and reaches no
 processor (`framework/provider.py:create_span`), so every entry point that runs
-LLM work must open a root trace first. Today those are `chat/llm_loop.py`
-(`run_llm_loop`), `deep_research/dr_loop.py`, `chat/compression.py`,
+LLM work must open a root trace first. Chat opens it in `chat/execution.py`;
+child agents and compaction inherit that trace. Other entry points include
 `server/query_and_chat/chat_backend.py` (`chat_session_naming`),
 `server/features/build/session/naming.py`, `indexing/indexing_pipeline.py`,
 `indexing/port_reembed.py`, `server/gateway/tracing.py:llm_gateway_trace`, and
 `server/features/search/api.py` (`search_api`, with an `internal_search`
-function span around `SearchTool.run` so the trace shape matches chat's). Trace
+function span around `SearchTool.search` so the trace shape matches chat's). Trace
 metadata uses `framework/create.py:ChatTraceMetadata` where a chat session
 exists and `SearchTraceMetadata` (tenant, user, persona) where none does.
 

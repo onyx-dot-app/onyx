@@ -21,7 +21,8 @@ class SearchPromptBudget:
             max(1, available_tokens // 4),
         )
         self.input_tokens = min(
-            budget.input_tokens, available_tokens - self.output_tokens
+            max(0, llm.config.max_input_tokens - budget.safety_tokens),
+            available_tokens - self.output_tokens,
         )
         self.token_counter = get_llm_token_counter(llm)
 

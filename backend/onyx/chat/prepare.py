@@ -84,7 +84,11 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingResponse,
 )
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
-from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import (
+    get_llm_for_persona,
+    get_llm_token_counter,
+    get_search_selection_llm,
+)
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.llm.override_models import LLMOverride
@@ -566,6 +570,7 @@ def prepare_chat_turn(
             cache=get_cache_backend(),
             admission=admission,
             slack_context=slack_context,
+            litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
             mcp_headers=mcp_headers,
         )
@@ -616,6 +621,14 @@ def create_chat_agent(
             configuration=setup.tool_configuration,
             user=user,
             llm=llm,
+            selection_llm_factory=partial(
+                get_search_selection_llm,
+                fallback=llm,
+                additional_headers=setup.litellm_additional_headers,
+                policy_fn=partial(
+                    incognito_llm_request_policy, setup.incognito_record_mode
+                ),
+            ),
             search_tool_config=SearchToolConfig(
                 user_selected_filters=setup.new_msg_req.internal_search_filters,
                 project_id_filter=setup.search_params.project_id_filter,

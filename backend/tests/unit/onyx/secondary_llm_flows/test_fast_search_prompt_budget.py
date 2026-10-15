@@ -174,7 +174,6 @@ def test_selection_allows_reasoning_without_consuming_context(
     sections = [_section(0, "unrelated evidence"), _section(1, "onboarding steps")]
     llm = _reasoning_llm("[1]", max_input_tokens)
     native_budget = TokenBudget(
-        input_tokens=max_input_tokens,
         max_output_tokens=128000,
         context_tokens=context_tokens,
         safety_tokens=safety_tokens,
@@ -207,7 +206,7 @@ def test_selection_reserves_native_output_and_context_capacity() -> None:
     section = _section(0, "evidence " * 12000)
     llm = _llm("[0]", max_input_tokens=65536)
     native_budget = TokenBudget(
-        input_tokens=65500, max_output_tokens=128, context_tokens=4096, safety_tokens=64
+        max_output_tokens=128, context_tokens=4096, safety_tokens=64
     )
     with patch(
         "onyx.secondary_llm_flows.search_prompt_budget.resolve_token_budget",

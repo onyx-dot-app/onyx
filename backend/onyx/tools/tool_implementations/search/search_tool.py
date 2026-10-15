@@ -412,6 +412,9 @@ class SearchTool(Tool):
             enable_slack_search=self.enable_slack_search,
             auto_detect_filters=self.auto_detect_filters,
             include_link=self.include_link,
+            selection_llm_factory=self._selection_llm_factory,
+            enforce_selection_input_budget=self._enforce_selection_input_budget,
+            primary_llm_cost_checked=self._primary_llm_cost_checked,
         )
 
     def _prefetch_slack_data(

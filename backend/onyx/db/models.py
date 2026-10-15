@@ -3430,7 +3430,9 @@ class ChatMessage(Base):
         PydanticType(RunFailure, sanitize_strings=True), nullable=True
     )
     invoking_tool_call_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True, index=True
+        ForeignKey("tool_call.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
+        index=True,
     )
     invoking_tool_call: Mapped["ToolCall | None"] = relationship(
         "ToolCall", foreign_keys=[invoking_tool_call_id]

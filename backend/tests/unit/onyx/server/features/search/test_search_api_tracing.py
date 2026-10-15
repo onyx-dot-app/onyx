@@ -15,10 +15,10 @@ from uuid import uuid4
 import pytest
 
 from onyx.db.models import User
+from onyx.llm.models import ToolResult
 from onyx.server.features.search.api import search
 from onyx.server.features.search.models import SearchRequest
 from onyx.tools.constants import SEARCH_TOOL_ID
-from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.framework import set_trace_processors
 from onyx.tracing.framework.create import generation_span
@@ -75,7 +75,7 @@ def user() -> MagicMock:
 
 @pytest.fixture
 def search_dependencies() -> Generator[MagicMock, None, None]:
-    """Stub out everything the endpoint needs to reach ``SearchTool.run``."""
+    """Stub out everything the endpoint needs to reach ``SearchTool.search``."""
     tool = MagicMock()
     tool.id = 7
     tool.in_code_tool_id = SEARCH_TOOL_ID
@@ -108,14 +108,14 @@ def test_search_records_pipeline_spans_under_one_trace(
     user: MagicMock,
     search_dependencies: MagicMock,
 ) -> None:
-    def run(**_kwargs: Any) -> ToolResponse:
+    def run(*_args: Any, **_kwargs: Any) -> ToolResult:
         # Stands in for the query expansion / rerank / selection calls the real
         # pipeline makes; each opens a generation span.
         with generation_span(model="some-model"):
             pass
-        return ToolResponse(rich_response=None, llm_facing_response=_LLM_FACING)
+        return ToolResult(content=_LLM_FACING)
 
-    search_dependencies.run.side_effect = run
+    search_dependencies.search.side_effect = run
 
     _run_search(user)
 
@@ -148,9 +148,7 @@ def test_search_records_persona_id_on_the_trace(
     user: MagicMock,
     search_dependencies: MagicMock,
 ) -> None:
-    search_dependencies.run.return_value = ToolResponse(
-        rich_response=None, llm_facing_response=_LLM_FACING
-    )
+    search_dependencies.search.return_value = ToolResult(content=_LLM_FACING)
 
     with patch(f"{_API}.get_persona_by_id"), patch(f"{_API}.get_llm_for_persona"):
         _run_search(user, persona_id=42)
@@ -164,7 +162,7 @@ def test_search_failure_is_recorded_on_the_tool_span(
     user: MagicMock,
     search_dependencies: MagicMock,
 ) -> None:
-    search_dependencies.run.side_effect = RuntimeError("index unreachable")
+    search_dependencies.search.side_effect = RuntimeError("index unreachable")
 
     with pytest.raises(RuntimeError):
         _run_search(user)

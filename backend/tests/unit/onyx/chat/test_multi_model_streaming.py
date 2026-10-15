@@ -114,7 +114,7 @@ def _restore_ee_version() -> Generator[None, None, None]:
 @pytest.fixture(autouse=True)
 def _search_selection_model() -> Generator[MagicMock, None, None]:
     with patch(
-        "onyx.chat.process_message.get_search_selection_llm",
+        "onyx.chat.prepare.get_search_selection_llm",
         side_effect=lambda *, fallback, **_kwargs: fallback,
     ) as resolve:
         yield resolve
@@ -495,21 +495,17 @@ class TestRunModels:
         fast_llm = MagicMock()
         _search_selection_model.side_effect = None
         _search_selection_model.return_value = fast_llm
-        with (
-            patch("onyx.chat.process_message.run_llm_loop") as answer,
-            patch(
-                "onyx.chat.process_message.construct_tools", return_value={}
-            ) as tools,
-            patch("onyx.chat.process_message.llm_loop_completion_handle"),
-            patch(
-                "onyx.chat.process_message.get_llm_token_counter",
-                return_value=lambda _: 0,
-            ),
-        ):
-            _run_models_collect(setup)
+        from onyx.chat.prepare import create_chat_agent
 
-        assert answer.call_args.kwargs["llm"] is setup.llms[0]
-        assert tools.call_args.kwargs["llm"] is setup.llms[0]
+        with (
+            patch("onyx.chat.prepare.ChatAgent") as answer,
+            patch("onyx.chat.prepare.construct_tools", return_value={}) as tools,
+            patch("onyx.chat.prepare.get_llm_token_counter", return_value=lambda _: 0),
+        ):
+            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+
+        assert answer.call_args.kwargs["llm"] is setup.responses[0].llm
+        assert tools.call_args.kwargs["llm"] is setup.responses[0].llm
         _search_selection_model.assert_not_called()
         assert tools.call_args.kwargs["selection_llm_factory"]() is fast_llm
         resolved = _search_selection_model.call_args.kwargs

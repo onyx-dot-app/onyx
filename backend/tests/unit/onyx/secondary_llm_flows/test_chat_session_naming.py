@@ -4,13 +4,14 @@ from uuid import uuid4
 import pytest
 from fastapi import Request
 
-from onyx.chat.models import ChatMessageSimple
+from onyx.chat.prompt_formatting import PromptMetadata
 from onyx.configs.constants import MessageType
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import ChatMessage, LLMProvider, ModelConfiguration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.interfaces import LLM, LLMConfig
+from onyx.llm.models import AssistantMessage, TextContent
 from onyx.secondary_llm_flows.chat_session_naming import (
     DEFAULT_CHAT_SESSION_NAME,
     get_fallback_chat_session_name,
@@ -173,11 +174,9 @@ def test_configured_naming_model_names_chat_without_session_model(
     }
     generate.assert_called_once_with(
         chat_history=[
-            ChatMessageSimple(
-                message="Charge for tokens used",
-                message_type=MessageType.ASSISTANT,
-                token_count=2000,
-                image_files=None,
+            AssistantMessage(
+                content=[TextContent(text="Charge for tokens used")],
+                metadata=PromptMetadata(token_count=2000),
             )
         ],
         llm=naming_llm,
