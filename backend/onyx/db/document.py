@@ -386,6 +386,7 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     user_email: str | None,
     external_group_ids: list[str],
     limit: int,
+    connector_credential_pairs: list[tuple[int, int]] | None = None,
     # Sort options
     sort_by_name: bool = False,
     sort_ascending: bool = False,
@@ -401,7 +402,136 @@ def get_accessible_documents_for_hierarchy_node_paginated(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
     stmt = apply_document_access_filter(stmt, user_email, external_group_ids)
+    if connector_credential_pairs is not None:
+        if not connector_credential_pairs:
+            return []
+        stmt = stmt.where(
+            exists()
+            .where(DocumentByConnectorCredentialPair.id == DbDocument.id)
+            .where(
+                tuple_(
+                    DocumentByConnectorCredentialPair.connector_id,
+                    DocumentByConnectorCredentialPair.credential_id,
+                ).in_(connector_credential_pairs)
+            )
+            .correlate(DbDocument)
+        )
 
+    return _paginate_hierarchy_node_documents(
+        db_session=db_session,
+        stmt=stmt,
+        limit=limit,
+        sort_by_name=sort_by_name,
+        sort_ascending=sort_ascending,
+        cursor_last_modified=cursor_last_modified,
+        cursor_last_synced=cursor_last_synced,
+        cursor_name=cursor_name,
+        cursor_document_id=cursor_document_id,
+    )
+
+
+def get_lti_course_website_documents_for_hierarchy_node_paginated(
+    db_session: Session,
+    parent_hierarchy_node_id: int,
+    connector_credential_pairs: list[tuple[int, int]],
+    limit: int,
+    sort_by_name: bool = False,
+    sort_ascending: bool = False,
+    cursor_last_modified: datetime | None = None,
+    cursor_last_synced: datetime | None = None,
+    cursor_name: str | None = None,
+    cursor_document_id: str | None = None,
+) -> list[DbDocument]:
+    """List private website pages after the caller verifies the LTI course scope."""
+    if not connector_credential_pairs:
+        return []
+
+    stmt = (
+        select(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id,
+            tuple_(
+                DocumentByConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id,
+            ).in_(connector_credential_pairs),
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+    )
+    return _paginate_hierarchy_node_documents(
+        db_session=db_session,
+        stmt=stmt,
+        limit=limit,
+        sort_by_name=sort_by_name,
+        sort_ascending=sort_ascending,
+        cursor_last_modified=cursor_last_modified,
+        cursor_last_synced=cursor_last_synced,
+        cursor_name=cursor_name,
+        cursor_document_id=cursor_document_id,
+    )
+
+
+def get_lti_course_website_document_ids(
+    db_session: Session,
+    document_ids: list[str],
+    hierarchy_node_ids: set[int],
+    connector_credential_pairs: list[tuple[int, int]],
+) -> set[str]:
+    """Validate private website pages against their course-owned nodes and pairs."""
+    if not document_ids or not hierarchy_node_ids or not connector_credential_pairs:
+        return set()
+
+    stmt = (
+        select(DbDocument.id)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DbDocument.id.in_(document_ids),
+            DbDocument.parent_hierarchy_node_id.in_(hierarchy_node_ids),
+            tuple_(
+                DocumentByConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id,
+            ).in_(connector_credential_pairs),
+            ConnectorCredentialPair.status != ConnectorCredentialPairStatus.DELETING,
+        )
+    )
+    return set(db_session.execute(stmt).scalars().all())
+
+
+def _paginate_hierarchy_node_documents(
+    db_session: Session,
+    stmt: Select[tuple[DbDocument]],
+    limit: int,
+    sort_by_name: bool,
+    sort_ascending: bool,
+    cursor_last_modified: datetime | None,
+    cursor_last_synced: datetime | None,
+    cursor_name: str | None,
+    cursor_document_id: str | None,
+) -> list[DbDocument]:
     # Apply cursor filter based on sort type and direction
     if sort_by_name:
         if sort_ascending:

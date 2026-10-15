@@ -69,6 +69,25 @@ export type HierarchyItem =
   | { type: "folder"; data: HierarchyNodeSummary }
   | { type: "document"; data: DocumentSummary };
 
+export type HierarchySelectionState = "checked" | "mixed" | "unchecked";
+
+export interface HierarchySelection {
+  folderIds: number[];
+  documentIds: string[];
+}
+
+export interface HierarchyFolderDocuments {
+  documents: DocumentSummary[];
+  complete: boolean;
+}
+
+export interface HierarchySelectionContext {
+  nodes: HierarchyNodeSummary[];
+  selection: HierarchySelection;
+  documentDetails: Map<string, DocumentSummary>;
+  folderDocuments: Map<number, HierarchyFolderDocuments>;
+}
+
 // Props for hierarchy breadcrumb navigation
 export interface HierarchyBreadcrumbProps {
   source: ValidSources;

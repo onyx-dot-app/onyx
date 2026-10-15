@@ -64,6 +64,9 @@ PUBLIC_ENDPOINT_SPECS = [
     # Canvas OAuth consent popup lands here without an Onyx session (the LTI
     # cookie is Partitioned); the single-use `state` param is the auth.
     ("/auth/lti/canvas-oauth/callback", {"GET"}),
+    # The Google consent popup also uses a single-use state instead of the
+    # Partitioned LTI session cookie.
+    ("/auth/lti/google-drive/callback", {"POST"}),
     # anonymous user on cloud
     ("/tenants/anonymous-user", {"POST"}),
     ("/metrics", {"GET"}),  # added by prometheus_fastapi_instrumentator

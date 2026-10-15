@@ -1950,6 +1950,12 @@ class Credential(Base):
 
     curator_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Internal provenance marker. This is deliberately not exposed through
+    # CredentialBase so user-controlled credential fields cannot claim LTI origin.
+    is_lti_credential: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+
     connectors: Mapped[list["ConnectorCredentialPair"]] = relationship(
         "ConnectorCredentialPair",
         back_populates="credential",

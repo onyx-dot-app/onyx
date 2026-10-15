@@ -3,19 +3,47 @@ import re
 import uuid
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.canvas import oauth
+from onyx.db import connector as connector_db
+from onyx.db import credentials as credential_db
+from onyx.db import lti_knowledge as knowledge
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.server.documents.models import ConnectorBase
 from onyx.server.lti import api
 from onyx.server.lti.utils import LtiLaunchContext
+
+
+@pytest.mark.asyncio
+@patch("onyx.db.lti.get_async_session_context_manager")
+async def test_find_canvas_course_node_id_uses_stable_canvas_id(
+    mock_session_context: MagicMock,
+) -> None:
+    mock_session = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = 456
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session_context.return_value.__aenter__.return_value = mock_session
+
+    from onyx.db.lti import find_canvas_course_node_id
+
+    assert await find_canvas_course_node_id(123) == 456
+
+    statement = mock_session.execute.call_args.args[0]
+    assert "canvas-course-123" in str(
+        statement.compile(compile_kwargs={"literal_binds": True})
+    )
 
 
 def test_canvas_base_url_from_lti_claims_uses_launch_return_url() -> None:
@@ -80,6 +108,217 @@ def test_google_drive_oauth_app_not_configured_when_admin_credentials_missing(
     mock_get_google_app_cred.side_effect = KvKeyNotFoundError()
 
     assert api._google_drive_oauth_app_is_configured() is False
+
+
+@patch("onyx.server.lti.api.fetch_credentials_by_source_for_user")
+def test_get_lti_google_drive_credential_returns_current_users_lti_credential(
+    mock_fetch_credentials_for_user: MagicMock,
+) -> None:
+    credential_json = MagicMock()
+    credential_json.get_value.return_value = {
+        api.DB_CREDENTIALS_DICT_TOKEN_KEY: "oauth-token"
+    }
+    current_instructor = SimpleNamespace(id=uuid4())
+    instructor_credential = SimpleNamespace(
+        id=10,
+        user_id=current_instructor.id,
+        name=api._LTI_GOOGLE_DRIVE_CREDENTIAL_NAME,
+        credential_json=credential_json,
+        admin_public=False,
+        curator_public=False,
+        is_lti_credential=True,
+    )
+    db_session = MagicMock()
+    mock_fetch_credentials_for_user.return_value = [instructor_credential]
+
+    credential = api._get_lti_google_drive_credential(
+        db_session=db_session,
+        user=current_instructor,
+    )
+
+    assert credential is instructor_credential
+    mock_fetch_credentials_for_user.assert_called_once_with(
+        db_session=db_session,
+        user=current_instructor,
+        document_source=api.DocumentSource.GOOGLE_DRIVE,
+        get_editable=False,
+    )
+    db_session.commit.assert_not_called()
+
+
+@patch("onyx.server.lti.api.fetch_credentials_by_source_for_user")
+def test_get_lti_google_drive_credential_does_not_reuse_other_users_credential(
+    mock_fetch_credentials_for_user: MagicMock,
+) -> None:
+    credential_json = MagicMock()
+    credential_json.get_value.return_value = {
+        api.DB_CREDENTIALS_DICT_TOKEN_KEY: "oauth-token"
+    }
+    other_users_credential = SimpleNamespace(
+        id=10,
+        user_id=uuid4(),
+        name=api._LTI_GOOGLE_DRIVE_CREDENTIAL_NAME,
+        credential_json=credential_json,
+        admin_public=True,
+        curator_public=True,
+        is_lti_credential=True,
+    )
+    mock_fetch_credentials_for_user.return_value = [other_users_credential]
+    db_session = MagicMock()
+
+    credential = api._get_lti_google_drive_credential(
+        db_session=db_session,
+        user=SimpleNamespace(id=uuid4()),
+    )
+
+    assert credential is None
+    db_session.commit.assert_not_called()
+
+
+@patch("onyx.server.lti.api.fetch_credentials_by_source_for_user")
+def test_get_lti_google_drive_credential_ignores_non_lti_google_credential(
+    mock_fetch_credentials_for_user: MagicMock,
+) -> None:
+    current_instructor = SimpleNamespace(id=uuid4())
+    regular_google_credential = SimpleNamespace(
+        id=10,
+        user_id=current_instructor.id,
+        name="My other Google Drive connector",
+        credential_json=MagicMock(),
+        admin_public=False,
+        curator_public=False,
+        is_lti_credential=False,
+    )
+    mock_fetch_credentials_for_user.return_value = [regular_google_credential]
+
+    credential = api._get_lti_google_drive_credential(
+        db_session=MagicMock(),
+        user=current_instructor,
+    )
+
+    assert credential is None
+
+
+def test_update_owned_credential_json_uses_explicit_user_ownership() -> None:
+    user = SimpleNamespace(id=uuid4())
+    credential = SimpleNamespace(credential_json={})
+    db_session = MagicMock()
+    db_session.scalar.return_value = credential
+    new_credential_json = {"token": "per-user-oauth-token"}
+
+    result = credential_db.update_owned_credential_json(
+        credential_id=10,
+        credential_json=new_credential_json,
+        user=user,
+        db_session=db_session,
+    )
+
+    assert result is credential
+    assert credential.credential_json == new_credential_json
+    statement = db_session.scalar.call_args.args[0]
+    compiled_query = str(statement.compile(dialect=postgresql.dialect()))
+    assert "credential.id =" in compiled_query
+    assert "credential.user_id =" in compiled_query
+    db_session.commit.assert_called_once_with()
+    db_session.expire.assert_called_once_with(credential)
+
+
+@patch("onyx.server.lti.api.create_credential")
+@patch("onyx.server.lti.api._get_lti_google_drive_credential", return_value=None)
+def test_create_lti_google_drive_credential_is_private_to_instructor(
+    mock_get_credential: MagicMock,
+    mock_create_credential: MagicMock,
+) -> None:
+    user = MagicMock()
+    db_session = MagicMock()
+    mock_create_credential.return_value = MagicMock()
+
+    api._get_or_create_lti_google_drive_credential(
+        db_session=db_session,
+        user=user,
+    )
+
+    mock_get_credential.assert_called_once_with(
+        db_session=db_session,
+        user=user,
+    )
+    credential_data = mock_create_credential.call_args.kwargs["credential_data"]
+    assert credential_data.admin_public is False
+    assert credential_data.curator_public is False
+    assert mock_create_credential.call_args.kwargs["is_lti_credential"] is True
+
+
+@patch("onyx.db.lti_knowledge.fetch_lti_course_google_drive_cc_pairs")
+def test_lti_course_knowledge_includes_every_course_google_drive_source(
+    mock_fetch_cc_pairs: MagicMock,
+) -> None:
+    course_cc_pairs = [MagicMock(), MagicMock()]
+    mock_fetch_cc_pairs.return_value = course_cc_pairs
+    db_session = MagicMock()
+
+    result = knowledge._course_cc_pairs(
+        db_session=db_session,
+        course_id="opaque-lti-context",
+        source=api.DocumentSource.GOOGLE_DRIVE,
+    )
+
+    assert result == course_cc_pairs
+    mock_fetch_cc_pairs.assert_called_once_with(
+        db_session=db_session,
+        lti_context_id="opaque-lti-context",
+    )
+
+
+def test_lti_google_drive_cc_pair_query_enforces_credential_ownership() -> None:
+    user_id = uuid4()
+    db_session = MagicMock()
+    db_session.scalars.return_value.unique.return_value.all.return_value = []
+
+    connector_db.fetch_lti_course_google_drive_cc_pairs(
+        db_session=db_session,
+        lti_context_id="opaque-lti-context",
+        credential_owner_id=user_id,
+    )
+
+    statement = db_session.scalars.call_args.args[0]
+    compiled_query = str(statement.compile(dialect=postgresql.dialect()))
+    assert "credential.is_lti_credential IS true" in compiled_query
+    assert "connector_credential_pair.creator_id = credential.user_id" in compiled_query
+    assert "credential.user_id =" in compiled_query
+
+
+@patch("onyx.server.lti.api._lti_google_drive_snapshot")
+@patch("onyx.server.lti.api.fetch_lti_course_google_drive_cc_pair_for_user")
+@patch("onyx.server.lti.api._get_lti_google_drive_credential")
+@patch("onyx.server.lti.api.lti_roles_include_instructor", return_value=True)
+@patch("onyx.server.lti.api._get_launch_context_for_course_or_raise")
+def test_get_lti_course_google_drive_only_loads_current_users_source(
+    mock_get_launch_context: MagicMock,
+    mock_roles_include_instructor: MagicMock,
+    mock_get_credential: MagicMock,
+    mock_fetch_cc_pair_for_user: MagicMock,
+    mock_snapshot: MagicMock,
+) -> None:
+    user = SimpleNamespace(id=uuid4())
+    db_session = MagicMock()
+    launch_context = SimpleNamespace(roles=[])
+    mock_get_launch_context.return_value = launch_context
+    mock_get_credential.return_value = MagicMock()
+    mock_fetch_cc_pair_for_user.return_value = MagicMock()
+    mock_snapshot.return_value = MagicMock()
+
+    api.get_lti_course_google_drive(
+        course_id="opaque-lti-context",
+        user=user,
+        db_session=db_session,
+    )
+
+    mock_roles_include_instructor.assert_called_once_with(launch_context.roles)
+    mock_fetch_cc_pair_for_user.assert_called_once_with(
+        db_session=db_session,
+        lti_context_id="opaque-lti-context",
+        user_id=user.id,
+    )
 
 
 def test_canvas_base_url_for_launch_context_uses_local_lti_endpoint_config(
@@ -780,3 +1019,75 @@ def test_callback_exchanges_code_and_stores_tokens(
     assert stored_json[oauth.CANVAS_REFRESH_TOKEN_KEY] == "refresh-1"
     assert stored_json[oauth.CANVAS_USER_NAME_KEY] == "Ada Instructor"
     assert stored_json[oauth.CANVAS_OAUTH_CLIENT_ID_KEY] == "client-1"
+
+
+@patch("onyx.server.lti.api.client_app.send_task")
+@patch("onyx.server.lti.api.get_current_tenant_id", return_value="tenant-id")
+@patch("onyx.server.lti.api.mark_ccpair_with_indexing_trigger")
+@patch("onyx.server.lti.api.add_credential_to_connector")
+@patch("onyx.server.lti.api.create_credential")
+@patch("onyx.server.lti.api.create_connector")
+@patch("onyx.server.lti.api._build_canvas_connector_name")
+@patch("onyx.server.lti.api._validate_canvas_token_and_resolve_course")
+@patch("onyx.server.lti.api._canvas_base_url_for_launch_context")
+@patch("onyx.server.lti.api.fetch_canvas_cc_pair_for_lti_course")
+@patch("onyx.server.lti.api.lti_roles_include_instructor", return_value=True)
+@patch("onyx.server.lti.api._get_launch_context_for_course_or_raise")
+def test_setup_lti_course_canvas_connector_sets_refresh_and_prune_freq(
+    mock_get_launch_context: MagicMock,
+    mock_roles_include_instructor: MagicMock,
+    mock_fetch_cc_pair: MagicMock,
+    mock_canvas_base_url: MagicMock,
+    mock_validate_canvas_token: MagicMock,
+    mock_build_name: MagicMock,
+    mock_create_connector: MagicMock,
+    mock_create_credential: MagicMock,
+    mock_add_credential: MagicMock,
+    mock_mark_indexing_trigger: MagicMock,
+    mock_get_current_tenant_id: MagicMock,
+    mock_send_task: MagicMock,
+) -> None:
+    launch_context = LtiLaunchContext(
+        course_id="opaque-lti-context",
+        roles=[],
+    )
+    mock_get_launch_context.return_value = launch_context
+    mock_fetch_cc_pair.return_value = None
+    mock_canvas_base_url.return_value = "https://school.instructure.com"
+    mock_validate_canvas_token.return_value = api.CanvasCourse(
+        id=123,
+        name="Intro Biology",
+        course_code="BIO101",
+    )
+    mock_build_name.return_value = "Canvas Intro Biology"
+    mock_create_connector.return_value = SimpleNamespace(id=20)
+    mock_create_credential.return_value = SimpleNamespace(id=30)
+    mock_add_credential.return_value = SimpleNamespace(
+        success=True,
+        message="created",
+        data=40,
+    )
+
+    response = api.setup_lti_course_canvas_connector(
+        setup_request=api.LtiCanvasConnectorSetupRequest(
+            canvas_access_token="canvas-token"
+        ),
+        course_id="opaque-lti-context",
+        user=MagicMock(),
+        db_session=MagicMock(),
+    )
+
+    connector_data = mock_create_connector.call_args.kwargs["connector_data"]
+    assert isinstance(connector_data, ConnectorBase)
+    assert connector_data.refresh_freq == 1800
+    assert connector_data.prune_freq == 2592000
+    assert connector_data.connector_specific_config == {
+        "canvas_base_url": "https://school.instructure.com",
+        "course_ids": [123],
+        "lti_context_id": "opaque-lti-context",
+    }
+    assert response.created is True
+    mock_roles_include_instructor.assert_called_once_with(launch_context.roles)
+    mock_mark_indexing_trigger.assert_called_once()
+    mock_get_current_tenant_id.assert_called_once()
+    mock_send_task.assert_called_once()

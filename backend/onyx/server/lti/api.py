@@ -17,7 +17,6 @@ import secrets
 import uuid
 from datetime import datetime
 from typing import Any
-from urllib.parse import quote
 from urllib.parse import urlencode
 from urllib.parse import urlparse
 
@@ -37,6 +36,7 @@ from pydantic import Field
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
+from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.auth.users import auth_backend
 from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
@@ -79,16 +79,20 @@ from onyx.connectors.canvas.oauth import refresh_canvas_credential_json_if_neede
 from onyx.connectors.canvas.oauth import revoke_canvas_access_token
 from onyx.connectors.google_utils.google_kv import get_auth_url
 from onyx.connectors.google_utils.google_kv import get_google_app_cred
+from onyx.connectors.google_utils.google_kv import update_credential_access_tokens
 from onyx.connectors.google_utils.shared_constants import DB_CREDENTIALS_DICT_TOKEN_KEY
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
+)
+from onyx.connectors.google_utils.shared_constants import (
+    GoogleOAuthAuthenticationMethod,
 )
 from onyx.connectors.models import InputType
 from onyx.connectors.web.connector import WEB_CONNECTOR_VALID_SETTINGS
 from onyx.db.connector import connector_by_name_source_exists
 from onyx.db.connector import create_connector
 from onyx.db.connector import fetch_canvas_cc_pair_for_lti_course
-from onyx.db.connector import fetch_lti_course_google_drive_cc_pair
+from onyx.db.connector import fetch_lti_course_google_drive_cc_pair_for_user
 from onyx.db.connector import fetch_lti_course_website_cc_pairs
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector import update_connector
@@ -112,12 +116,18 @@ from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.index_attempt import get_latest_index_attempt_for_cc_pair_id
 from onyx.db.lti import fetch_canvas_cc_pairs_for_credential
 from onyx.db.lti import fetch_canvas_course_node_id_for_cc_pair
+from onyx.db.lti import find_canvas_course_node_id
 from onyx.db.lti import pause_cc_pairs_for_revoked_credential
 from onyx.db.lti import swap_lti_canvas_cc_pair_credential
+from onyx.db.lti_knowledge import (
+    get_lti_course_accessible_documents_for_hierarchy_node,
+)
+from onyx.db.lti_knowledge import get_lti_course_accessible_hierarchy_nodes
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import User
 from onyx.db.persona import get_tutor_persona_snapshots_for_course
+from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -126,12 +136,22 @@ from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import CredentialBase
+from onyx.server.features.hierarchy.constants import DOCUMENT_PAGE_SIZE
+from onyx.server.features.hierarchy.models import DocumentPageCursor
+from onyx.server.features.hierarchy.models import DocumentSortField
+from onyx.server.features.hierarchy.models import DocumentSummary
+from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsRequest
+from onyx.server.features.hierarchy.models import HierarchyNodeDocumentsResponse
+from onyx.server.features.hierarchy.models import HierarchyNodesResponse
+from onyx.server.features.hierarchy.models import HierarchyNodeSummary
 from onyx.server.features.persona.models import MinimalPersonaSnapshot
 from onyx.server.lti.jwks import get_public_jwks
+from onyx.server.lti.models import LtiGoogleDriveCallbackRequest
+from onyx.server.lti.models import LtiGoogleDriveCallbackResponse
+from onyx.server.lti.models import LtiGoogleDriveOAuthState
 from onyx.server.lti.utils import _extract_email_from_claims
 from onyx.server.lti.utils import extract_lti_context
 from onyx.server.lti.utils import extract_nrps_url
-from onyx.server.lti.utils import find_canvas_course_node_id
 from onyx.server.lti.utils import find_tutor_personas_for_course
 from onyx.server.lti.utils import get_lti_launch_context
 from onyx.server.lti.utils import get_or_create_lti_course_project
@@ -150,6 +170,8 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 router = APIRouter(prefix="/auth/lti")
 _CHECK_FOR_INDEXING_EXPIRES_SECONDS = 15 * 60
+_LTI_CANVAS_REFRESH_FREQ_SECONDS = 30 * 60
+_LTI_CANVAS_PRUNE_FREQ_SECONDS = 30 * 24 * 60 * 60
 _LTI_LAUNCH_PRESENTATION_CLAIM = (
     "https://purl.imsglobal.org/spec/lti/claim/launch_presentation"
 )
@@ -214,6 +236,9 @@ class LtiCanvasOAuthState(BaseModel):
 
 
 _LTI_CANVAS_OAUTH_STATE_PREFIX = "lti_canvas_oauth_state:"
+_LTI_GOOGLE_DRIVE_OAUTH_STATE_PREFIX = "lti_google_drive_"
+_LTI_GOOGLE_DRIVE_OAUTH_REDIS_PREFIX = "lti_google_drive_oauth_state:"
+_LTI_GOOGLE_DRIVE_OAUTH_STATE_TTL_SECONDS = 10 * 60
 _LTI_CANVAS_OAUTH_CREDENTIAL_NAME = "Canvas instructor connection"
 _LTI_CANVAS_OAUTH_PURPOSE = "Onyx Virtual Tutor"
 _LTI_CANVAS_OAUTH_MESSAGE_TYPE = "onyx:lti-canvas-oauth"
@@ -235,8 +260,6 @@ _ALLOWED_WEBSITE_CRAWL_TYPES = {
     WEB_CONNECTOR_VALID_SETTINGS.SINGLE.value,
     WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value,
 }
-_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME = "google_drive_credential_id"
-_LTI_GOOGLE_DRIVE_OAUTH_COOKIE_NAME = "lti_google_drive_oauth"
 _GOOGLE_DRIVE_FOLDER_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _LTI_GOOGLE_DRIVE_CREDENTIAL_NAME = "Canvas instructor Google Drive"
 _LEGACY_LTI_GOOGLE_DRIVE_CREDENTIAL_NAME_RE = re.compile(
@@ -1192,6 +1215,8 @@ def setup_lti_course_canvas_connector(
                     "course_ids": [canvas_course.id],
                     "lti_context_id": launch_context.course_id,
                 },
+                refresh_freq=_LTI_CANVAS_REFRESH_FREQ_SECONDS,
+                prune_freq=_LTI_CANVAS_PRUNE_FREQ_SECONDS,
             ),
         )
     except ValueError as e:
@@ -1623,8 +1648,12 @@ def _get_lti_google_drive_credential(
         document_source=DocumentSource.GOOGLE_DRIVE,
         get_editable=False,
     )
+    # Admin credential queries can include credentials owned by other users, so
+    # ownership is enforced explicitly in addition to the server-managed marker.
     user_credentials = [
-        credential for credential in credentials if credential.user_id == user.id
+        credential
+        for credential in credentials
+        if credential.user_id == user.id and _is_lti_google_drive_credential(credential)
     ]
     connected_credentials = [
         credential
@@ -1648,6 +1677,10 @@ def _get_lti_google_drive_credential(
         )
         return credential
     return None
+
+
+def _is_lti_google_drive_credential(credential: Credential) -> bool:
+    return credential.is_lti_credential
 
 
 def _normalize_lti_google_drive_credential_name(
@@ -1682,6 +1715,7 @@ def _get_or_create_lti_google_drive_credential(
         ),
         user=user,
         db_session=db_session,
+        is_lti_credential=True,
     )
 
 
@@ -1887,17 +1921,7 @@ def add_lti_course_website(
         )
 
     cc_pair_id = int(cc_pair_response.data)
-    mark_ccpair_with_indexing_trigger(
-        cc_pair_id=cc_pair_id,
-        indexing_mode=IndexingMode.REINDEX,
-        db_session=db_session,
-    )
-    client_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_INDEXING,
-        priority=OnyxCeleryPriority.HIGH,
-        kwargs={"tenant_id": get_current_tenant_id()},
-        expires=_CHECK_FOR_INDEXING_EXPIRES_SECONDS,
-    )
+    _trigger_cc_pair_reindex(cc_pair_id, db_session)
 
     cc_pair = get_connector_credential_pair_from_id(
         db_session=db_session,
@@ -1910,6 +1934,37 @@ def add_lti_course_website(
             "Website connector was created but could not be loaded",
         )
     return _website_snapshot(cc_pair, db_session)
+
+
+@router.post("/course/{course_id}/websites/{cc_pair_id}/sync")
+def sync_lti_course_website(
+    course_id: str = Path(..., min_length=1),
+    cc_pair_id: int = Path(...),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can sync course websites",
+        )
+
+    course_website_cc_pairs = fetch_lti_course_website_cc_pairs(
+        db_session=db_session,
+        lti_context_id=course_id,
+    )
+    if not any(
+        cc_pair.id == cc_pair_id
+        and cc_pair.status != ConnectorCredentialPairStatus.DELETING
+        for cc_pair in course_website_cc_pairs
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "No active course website found with that id for this course",
+        )
+
+    _trigger_cc_pair_reindex(cc_pair_id, db_session)
 
 
 @router.delete("/course/{course_id}/websites/{cc_pair_id}")
@@ -1958,6 +2013,97 @@ def delete_lti_course_website(
     )
 
 
+@router.get("/course/{course_id}/knowledge/hierarchy-nodes")
+def list_lti_course_knowledge_hierarchy_nodes(
+    source: DocumentSource,
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> HierarchyNodesResponse:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can view course tutor knowledge",
+        )
+
+    external_group_ids = get_user_external_group_ids(db_session, user)
+    nodes = get_lti_course_accessible_hierarchy_nodes(
+        db_session=db_session,
+        course_id=course_id,
+        source=source,
+        user_email=user.email,
+        external_group_ids=external_group_ids,
+    )
+    node_ids = {node.id for node in nodes}
+    return HierarchyNodesResponse(
+        nodes=[
+            HierarchyNodeSummary(
+                id=node.id,
+                title=node.display_name,
+                link=node.link,
+                parent_id=node.parent_id if node.parent_id in node_ids else None,
+            )
+            for node in nodes
+        ]
+    )
+
+
+@router.post("/course/{course_id}/knowledge/hierarchy-nodes/documents")
+def list_lti_course_knowledge_hierarchy_node_documents(
+    documents_request: HierarchyNodeDocumentsRequest,
+    course_id: str = Path(..., min_length=1),
+    user: User = Depends(current_chat_accessible_user),
+    db_session: Session = Depends(get_session),
+) -> HierarchyNodeDocumentsResponse:
+    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
+    if not lti_roles_include_instructor(launch_context.roles):
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            "Only instructors can view course tutor knowledge",
+        )
+
+    cursor = documents_request.cursor
+    documents = get_lti_course_accessible_documents_for_hierarchy_node(
+        db_session=db_session,
+        course_id=course_id,
+        parent_hierarchy_node_id=documents_request.parent_hierarchy_node_id,
+        user_email=user.email,
+        external_group_ids=get_user_external_group_ids(db_session, user),
+        cursor=cursor,
+        sort_field=documents_request.sort_field,
+        sort_direction=documents_request.sort_direction,
+    )
+    document_summaries = [
+        DocumentSummary(
+            id=document.id,
+            title=document.semantic_id,
+            link=document.link,
+            parent_id=document.parent_hierarchy_node_id,
+            last_modified=document.last_modified,
+            last_synced=document.last_synced,
+        )
+        for document in documents[:DOCUMENT_PAGE_SIZE]
+    ]
+    next_cursor = None
+    if len(documents) > DOCUMENT_PAGE_SIZE and document_summaries:
+        last_document = document_summaries[-1]
+        sort_by_name = documents_request.sort_field == DocumentSortField.NAME
+        can_create_cursor = sort_by_name or last_document.last_modified is not None
+        if can_create_cursor:
+            next_cursor = DocumentPageCursor.from_document(
+                last_document,
+                documents_request.sort_field,
+            )
+    return HierarchyNodeDocumentsResponse(
+        documents=document_summaries,
+        next_cursor=next_cursor,
+        sort_field=documents_request.sort_field,
+        sort_direction=documents_request.sort_direction,
+        folder_position=documents_request.folder_position,
+    )
+
+
 @router.post("/course/{course_id}/google-drive/connect")
 def connect_lti_course_google_drive(
     course_id: str = Path(..., min_length=1),
@@ -1981,9 +2127,23 @@ def connect_lti_course_google_drive(
         db_session=db_session,
         user=user,
     )
-    auth_url = (
-        f"{WEB_DOMAIN}/api/auth/lti/course/{quote(course_id, safe='')}"
-        f"/google-drive/authorize/{credential.id}"
+    state = f"{_LTI_GOOGLE_DRIVE_OAUTH_STATE_PREFIX}{secrets.token_urlsafe(32)}"
+    try:
+        auth_url = get_auth_url(credential.id, DocumentSource.GOOGLE_DRIVE, state=state)
+    except KvKeyNotFoundError as e:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Google Drive OAuth app credentials have not been configured",
+        ) from e
+    get_raw_redis_client().set(
+        f"{_LTI_GOOGLE_DRIVE_OAUTH_REDIS_PREFIX}{state}",
+        LtiGoogleDriveOAuthState(
+            user_id=str(user.id),
+            course_id=course_id,
+            credential_id=credential.id,
+            tenant_id=get_current_tenant_id(),
+        ).model_dump_json(),
+        ex=_LTI_GOOGLE_DRIVE_OAUTH_STATE_TTL_SECONDS,
     )
     return LtiGoogleDriveConnectResponse(
         credential_id=credential.id,
@@ -1991,52 +2151,51 @@ def connect_lti_course_google_drive(
     )
 
 
-@router.get("/course/{course_id}/google-drive/authorize/{credential_id}")
-def authorize_lti_course_google_drive(
-    course_id: str = Path(..., min_length=1),
-    credential_id: int = Path(...),
-    user: User = Depends(current_chat_accessible_user),
-    db_session: Session = Depends(get_session),
-) -> RedirectResponse:
-    launch_context = _get_launch_context_for_course_or_raise(user, course_id)
-    if not lti_roles_include_instructor(launch_context.roles):
-        raise OnyxError(
-            OnyxErrorCode.UNAUTHORIZED,
-            "Only instructors can connect Google Drive",
+@router.post("/google-drive/callback")
+def lti_google_drive_oauth_callback(
+    callback: LtiGoogleDriveCallbackRequest,
+) -> LtiGoogleDriveCallbackResponse:
+    """Finish a Canvas instructor's Google consent without a popup session cookie."""
+    if not callback.state.startswith(_LTI_GOOGLE_DRIVE_OAUTH_STATE_PREFIX):
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "Invalid OAuth state")
+
+    raw_state = get_raw_redis_client().getdel(
+        f"{_LTI_GOOGLE_DRIVE_OAUTH_REDIS_PREFIX}{callback.state}"
+    )
+    if not isinstance(raw_state, (str, bytes)):
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "OAuth state expired or used")
+    state_data = LtiGoogleDriveOAuthState.model_validate_json(raw_state)
+
+    with get_session_with_tenant(tenant_id=state_data.tenant_id) as db_session:
+        user = fetch_user_by_id(db_session, uuid.UUID(state_data.user_id))
+        credential = fetch_credential_by_id(state_data.credential_id, db_session)
+        if (
+            user is None
+            or not user.is_active
+            or credential is None
+            or credential.user_id != user.id
+            or credential.source != DocumentSource.GOOGLE_DRIVE
+        ):
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED,
+                "Google Drive connection is no longer available",
+            )
+
+        credentials = update_credential_access_tokens(
+            callback.code,
+            credential.id,
+            user,
+            db_session,
+            DocumentSource.GOOGLE_DRIVE,
+            GoogleOAuthAuthenticationMethod.UPLOADED,
         )
+        if credentials is None:
+            raise OnyxError(
+                OnyxErrorCode.UNAUTHENTICATED,
+                "Google Drive credential is no longer owned by this instructor",
+            )
 
-    credential = _get_lti_google_drive_credential(
-        db_session=db_session,
-        user=user,
-    )
-    if credential is None or credential.id != credential_id:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "Google Drive credential not found for this instructor",
-        )
-
-    try:
-        auth_url = get_auth_url(credential.id, DocumentSource.GOOGLE_DRIVE)
-    except KvKeyNotFoundError as e:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "Google Drive OAuth app credentials have not been configured",
-        ) from e
-
-    redirect_response = RedirectResponse(url=auth_url, status_code=302)
-    redirect_response.set_cookie(
-        key=_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME,
-        value=str(credential.id),
-        httponly=True,
-        max_age=600,
-    )
-    redirect_response.set_cookie(
-        key=_LTI_GOOGLE_DRIVE_OAUTH_COOKIE_NAME,
-        value="true",
-        httponly=True,
-        max_age=600,
-    )
-    return redirect_response
+    return LtiGoogleDriveCallbackResponse(success=True)
 
 
 @router.get("/course/{course_id}/google-drive")
@@ -2053,9 +2212,10 @@ def get_lti_course_google_drive(
         )
 
     credential = _get_lti_google_drive_credential(db_session=db_session, user=user)
-    cc_pair = fetch_lti_course_google_drive_cc_pair(
+    cc_pair = fetch_lti_course_google_drive_cc_pair_for_user(
         db_session=db_session,
         lti_context_id=course_id,
+        user_id=user.id,
     )
     return _lti_google_drive_snapshot(
         credential=credential,
@@ -2094,9 +2254,10 @@ def save_lti_course_google_drive_folders(
         user_group_id=course_group_id,
     )
 
-    cc_pair = fetch_lti_course_google_drive_cc_pair(
+    cc_pair = fetch_lti_course_google_drive_cc_pair_for_user(
         db_session=db_session,
         lti_context_id=course_id,
+        user_id=user.id,
     )
     connector_config = {
         "shared_folder_urls": ",".join(folder_urls),
@@ -2193,9 +2354,10 @@ def sync_lti_course_google_drive(
         )
 
     credential = _get_lti_google_drive_credential(db_session=db_session, user=user)
-    cc_pair = fetch_lti_course_google_drive_cc_pair(
+    cc_pair = fetch_lti_course_google_drive_cc_pair_for_user(
         db_session=db_session,
         lti_context_id=course_id,
+        user_id=user.id,
     )
     if cc_pair is None:
         raise OnyxError(
@@ -2224,9 +2386,10 @@ def delete_lti_course_google_drive(
             "Only instructors can disconnect course Google Drive folders",
         )
 
-    cc_pair = fetch_lti_course_google_drive_cc_pair(
+    cc_pair = fetch_lti_course_google_drive_cc_pair_for_user(
         db_session=db_session,
         lti_context_id=course_id,
+        user_id=user.id,
     )
     if cc_pair is None:
         return None
@@ -2455,12 +2618,11 @@ async def lti_launch(
                 is_curator=lti_roles_include_instructor(lti_roles),
             )
 
-    # Try to resolve the Canvas course's indexed hierarchy node so the editor
-    # can scope its knowledge picker to just this course's contents. Optional:
-    # if the connector hasn't indexed the course (or two courses share a
-    # title) we leave it out and fall back to the full hierarchy.
-    if course_title:
-        canvas_node_id = await find_canvas_course_node_id(course_title)
+    # Resolve by the stable numeric Canvas course ID, not the mutable course
+    # title. If indexing has not emitted the node yet, the LTI tutor editor
+    # prevents saving an unscoped Virtual Tutor.
+    if canvas_course_id is not None:
+        canvas_node_id = await find_canvas_course_node_id(canvas_course_id)
         if canvas_node_id is not None:
             redirect_params["lti_canvas_course_node_id"] = str(canvas_node_id)
 

@@ -49,6 +49,7 @@ from onyx.server.features.persona.models import PersonaLabelCreate
 from onyx.server.features.persona.models import PersonaLabelResponse
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
+from onyx.server.lti.knowledge import validate_lti_course_knowledge_selection
 from onyx.server.manage.llm.api import get_valid_model_names_for_persona
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.settings.store import load_settings
@@ -305,6 +306,14 @@ def create_persona(
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
     _validate_vector_db_knowledge(persona_upsert_request)
+    if persona_upsert_request.lti_context_id is not None:
+        validate_lti_course_knowledge_selection(
+            db_session=db_session,
+            course_id=persona_upsert_request.lti_context_id,
+            user=user,
+            hierarchy_node_ids=persona_upsert_request.hierarchy_node_ids,
+            document_ids=persona_upsert_request.document_ids,
+        )
 
     persona_snapshot = create_update_persona(
         persona_id=None,
@@ -333,6 +342,14 @@ def update_persona(
 ) -> PersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
     _validate_vector_db_knowledge(persona_upsert_request)
+    if persona_upsert_request.lti_context_id is not None:
+        validate_lti_course_knowledge_selection(
+            db_session=db_session,
+            course_id=persona_upsert_request.lti_context_id,
+            user=user,
+            hierarchy_node_ids=persona_upsert_request.hierarchy_node_ids,
+            document_ids=persona_upsert_request.document_ids,
+        )
 
     persona_snapshot = create_update_persona(
         persona_id=persona_id,

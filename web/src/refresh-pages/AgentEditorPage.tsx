@@ -463,6 +463,8 @@ export default function AgentEditorPage({
   const canUpdateFeaturedStatus = isAdmin || isCurator;
   const vectorDbEnabled = useVectorDbEnabled();
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const [isKnowledgeSelectionPending, setIsKnowledgeSelectionPending] =
+    useState(false);
 
   // LLM Model Selection
   const getCurrentLlm = useCallback(
@@ -732,6 +734,7 @@ export default function AgentEditorPage({
   });
 
   async function handleSubmit(values: typeof initialValues) {
+    if (isKnowledgeSelectionPending) return;
     try {
       // Map conversation starters
       const starterMessages = values.starter_messages
@@ -1224,19 +1227,22 @@ export default function AgentEditorPage({
                             tooltip={
                               isSubmitting
                                 ? "Saving changes..."
-                                : !isValid
-                                  ? "Please fix the errors in the form before saving."
-                                  : !dirty
-                                    ? "No changes have been made."
-                                    : hasUploadingFiles
-                                      ? "Please wait for files to finish uploading."
-                                      : undefined
+                                : isKnowledgeSelectionPending
+                                  ? "Updating knowledge selection..."
+                                  : !isValid
+                                    ? "Please fix the errors in the form before saving."
+                                    : !dirty
+                                      ? "No changes have been made."
+                                      : hasUploadingFiles
+                                        ? "Please wait for files to finish uploading."
+                                        : undefined
                             }
                             side="bottom"
                           >
                             <OpalButton
                               disabled={
                                 isSubmitting ||
+                                isKnowledgeSelectionPending ||
                                 !isValid ||
                                 !dirty ||
                                 hasUploadingFiles
@@ -1317,6 +1323,9 @@ export default function AgentEditorPage({
                       <Separator noPadding />
 
                       <AgentKnowledgePane
+                        onSelectionPendingChange={
+                          setIsKnowledgeSelectionPending
+                        }
                         enableKnowledge={values.enable_knowledge}
                         onEnableKnowledgeChange={(enabled) =>
                           setFieldValue("enable_knowledge", enabled)
