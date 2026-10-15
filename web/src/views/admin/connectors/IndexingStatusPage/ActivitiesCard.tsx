@@ -12,7 +12,7 @@ import {
 } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { CardLoader } from "@opal/loaders";
-import { SvgActivity, SvgChevronDown, SvgTextLines } from "@opal/icons";
+import { SvgActivity, SvgChevronDown } from "@opal/icons";
 import {
   useActivityItems,
   useResolveRunErrors,
@@ -92,13 +92,6 @@ export default function ActivitiesCard({ onOpenHistory }: ActivitiesCardProps) {
             <ActivityCountTags
               failures={failures.total}
               errors={errors.total}
-            />
-            <Button
-              icon={SvgTextLines}
-              prominence="tertiary"
-              tooltip={t("viewLogs")}
-              aria-label={t("viewLogs")}
-              onClick={onOpenHistory}
             />
           </Section>
         </Section>

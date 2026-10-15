@@ -49,7 +49,7 @@ export interface ActivityCountTagsProps {
   failures: number;
   errors: number;
 }
-/** The failed runs and the runs with document errors, as two counts. */
+/** The failed runs and the runs with document errors, as two counts. A zero count shows no tag. */
 export function ActivityCountTags({
   failures,
   errors,
@@ -58,18 +58,22 @@ export function ActivityCountTags({
   const format = useFormatter();
   return (
     <>
-      <Tag
-        icon={SvgXCircle}
-        title={format.number(failures)}
-        tooltip={t("counts.failures", { count: failures })}
-        color="red"
-      />
-      <Tag
-        icon={SvgAlertTriangle}
-        title={format.number(errors)}
-        tooltip={t("counts.errors", { count: errors })}
-        color="amber"
-      />
+      {failures > 0 && (
+        <Tag
+          icon={SvgXCircle}
+          title={format.number(failures)}
+          tooltip={t("counts.failures", { count: failures })}
+          color="red"
+        />
+      )}
+      {errors > 0 && (
+        <Tag
+          icon={SvgAlertTriangle}
+          title={format.number(errors)}
+          tooltip={t("counts.errors", { count: errors })}
+          color="amber"
+        />
+      )}
     </>
   );
 }

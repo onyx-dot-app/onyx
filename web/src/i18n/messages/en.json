@@ -6814,7 +6814,6 @@
       "activities": {
         "title": "Activities",
         "history": "Full Activity History",
-        "viewLogs": "View activity history",
         "panel": {
           "title": "Activity History",
           "close": "Hide activity history"

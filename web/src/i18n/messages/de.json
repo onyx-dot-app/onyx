@@ -6814,7 +6814,6 @@
       "activities": {
         "title": "Aktivitäten",
         "history": "Vollständiger Aktivitätsverlauf",
-        "viewLogs": "Aktivitätsverlauf anzeigen",
         "panel": {
           "title": "Aktivitätsverlauf",
           "close": "Aktivitätsverlauf ausblenden"

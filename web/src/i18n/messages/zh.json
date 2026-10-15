@@ -6814,7 +6814,6 @@
       "activities": {
         "title": "活动",
         "history": "完整活动历史",
-        "viewLogs": "查看活动历史",
         "panel": {
           "title": "活动历史",
           "close": "隐藏活动历史"

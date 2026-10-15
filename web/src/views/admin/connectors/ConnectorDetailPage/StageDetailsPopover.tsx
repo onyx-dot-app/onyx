@@ -13,7 +13,7 @@ import { Section } from "@opal/layouts";
 import type { RichStr } from "@opal/types";
 import { LineLoader } from "@opal/loaders";
 import { formatDurationMs } from "@opal/time";
-import { SvgAlertTriangle, SvgStackLine, SvgX } from "@opal/icons";
+import { SvgInfo, SvgStackLine, SvgX } from "@opal/icons";
 import useIndexAttemptStageMetrics from "@/hooks/useIndexAttemptStageMetrics";
 import type { IndexAttemptStageMetric } from "@/lib/types";
 import {
@@ -198,8 +198,7 @@ function StageRow({ stage, scale }: StageRowProps) {
       >
         {uneven && (
           <IconTooltip
-            icon={SvgAlertTriangle}
-            status="warning"
+            icon={SvgInfo}
             tooltip={t("stageDetails.uneven.tooltip")}
             aria-label={t("stageDetails.uneven.tooltip")}
           />
