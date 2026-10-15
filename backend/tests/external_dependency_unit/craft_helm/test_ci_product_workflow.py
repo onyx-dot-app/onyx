@@ -20,8 +20,9 @@ def _workflow() -> dict[str, Any]:
 
 
 @pytest.mark.parametrize("missing_product_shard", [False, True])
+@pytest.mark.parametrize("product_only", [False, True])
 def test_ci_requires_the_product_acceptance_shard(
-    tmp_path: Path, missing_product_shard: bool
+    tmp_path: Path, missing_product_shard: bool, product_only: bool
 ) -> None:
     steps = _workflow()["jobs"]["discover-test-files"]["steps"]
     discovery = next(step["run"] for step in steps if step.get("id") == "set-matrix")
@@ -35,7 +36,11 @@ def test_ci_requires_the_product_acceptance_shard(
     result = subprocess.run(
         ["bash", "-euo", "pipefail", "-c", discovery],
         cwd=root,
-        env={**os.environ, "GITHUB_OUTPUT": str(output)},
+        env={
+            **os.environ,
+            "GITHUB_OUTPUT": str(output),
+            "PRODUCT_ONLY": str(product_only).lower(),
+        },
         capture_output=True,
         text=True,
         timeout=10,
@@ -52,9 +57,98 @@ def test_ci_requires_the_product_acceptance_shard(
             "test_*.py"
         )
     )
+    if product_only:
+        expected = [
+            path
+            for path in expected
+            if path.endswith("test_session_provisioning_api.py")
+        ]
     assert sorted(entry["path"] for entry in entries) == expected
     assert sum(entry["name"] == "session_provisioning_api" for entry in entries) == 1
     assert all(set(entry) == {"path", "name"} for entry in entries)
+
+
+def test_ci_product_probe_is_opt_in_and_manual_only() -> None:
+    events = yaml.load(_WORKFLOW.read_text(), Loader=yaml.BaseLoader)["on"]
+    product_only = events["workflow_dispatch"]["inputs"]["product_only"]
+    assert product_only["type"] == "boolean"
+    assert product_only["default"] == "false"
+    assert product_only["required"] == "false"
+    discovery = next(
+        step
+        for step in _workflow()["jobs"]["discover-test-files"]["steps"]
+        if step.get("id") == "set-matrix"
+    )
+    assert discovery["env"]["PRODUCT_ONLY"] == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.product_only || false }}"
+    )
+
+
+@pytest.mark.parametrize("changed", ["true", "false", None])
+@pytest.mark.parametrize("key", ["", "nonsecret-ci-credential-sentinel"])
+def test_ci_requires_credentials_only_for_relevant_craft_runs(
+    changed: str | None, key: str
+) -> None:
+    guard = next(
+        step
+        for step in _workflow()["jobs"]["changes"]["steps"]
+        if step.get("name") == "Require Craft integration credentials"
+    )
+    assert guard["env"]["CRAFT_K8S_CHANGED"] == (
+        "${{ steps.filter.outputs.craft_k8s || 'true' }}"
+    )
+    env: dict[str, str] = {**os.environ, "OPENAI_API_KEY": key}
+    env.pop("CRAFT_K8S_CHANGED", None)
+    if changed is not None:
+        env["CRAFT_K8S_CHANGED"] = changed
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", guard["run"]],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    missing_required_key = changed != "false" and not key
+    assert (result.returncode != 0) == missing_required_key
+    if missing_required_key:
+        assert "OPENAI_API_KEY is required" in result.stderr
+    assert "nonsecret-ci-credential-sentinel" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("product_only", [False, True])
+def test_ci_product_probe_cannot_report_full_suite_qualification(
+    product_only: bool,
+) -> None:
+    job = _workflow()["jobs"]["craft-k8s-tests-required"]
+    assert job["name"] == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.product_only "
+        "&& 'craft-k8s-product-probe' || 'craft-k8s-tests-required' }}"
+    )
+    step = next(step for step in job["steps"] if step.get("name") == "Check job status")
+    assert step["env"]["PRODUCT_ONLY"] == (
+        "${{ github.event_name == 'workflow_dispatch' && inputs.product_only || false }}"
+    )
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", step["run"]],
+        env={
+            **os.environ,
+            "CHANGES_RESULT": "success",
+            "RUN_TESTS": "true",
+            "DISCOVER_RESULT": "success",
+            "BUILD_RESULT": "success",
+            "TEST_RESULT": "success",
+            "PRODUCT_ONLY": str(product_only).lower(),
+        },
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    if product_only:
+        assert "full Craft suite before qualification" in result.stdout
+        assert "All Craft tests passed" not in result.stdout
+    else:
+        assert "All Craft tests passed" in result.stdout
 
 
 def test_ci_routes_all_craft_shards_through_the_frontend() -> None:

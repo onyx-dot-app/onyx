@@ -288,6 +288,13 @@ They cover streaming, file preview/download, reload, cancellation, and attachmen
 Generated-app preview, restore, reaping, and network isolation have separate
 integration gates.
 
+Missing real-model credentials fail before paid prerequisite jobs. Manual
+`product_only=true` dispatches run the session/browser setup probe only.
+Its `craft-k8s-product-probe` status does not qualify the migration.
+Run the full suite afterward. Default dispatches and pull requests retain all shards.
+Runtime setup streams the pinned installer into the owned kind node through
+Docker exec stdin. It does not copy an executable into the node's temporary directory.
+
 This workflow is prepared but has not qualified the migration. The RunsOn labels
 request nested virtualization; the deployed runner must expose usable KVM.
 Configuration tests and Playwright collection do not prove a live product flow.

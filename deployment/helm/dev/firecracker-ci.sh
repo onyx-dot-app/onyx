@@ -197,9 +197,7 @@ run_firecracker_pin_helper_in_node() {
     exit 1
   fi
 
-  docker cp "${FIRECRACKER_PIN_HELPER}" "${node}:/tmp/onyx-install-pinned-firecracker.sh"
-  docker exec "${node}" chmod 0755 /tmp/onyx-install-pinned-firecracker.sh
-  docker exec "${node}" /tmp/onyx-install-pinned-firecracker.sh "${command}"
+  docker exec -i "${node}" bash -s -- "${command}" < "${FIRECRACKER_PIN_HELPER}"
 }
 
 install_pinned_firecracker() {

@@ -28,6 +28,12 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      product_only:
+        description: Run only the session/browser setup probe. Full-suite qualification still requires all shards.
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -148,6 +154,16 @@ jobs:
               - '.github/actions/setup-test-license/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
 
+      - name: Require Craft integration credentials
+        env:
+          CRAFT_K8S_CHANGED: ${{ steps.filter.outputs.craft_k8s || 'true' }}
+        run: |
+          set -euo pipefail
+          if [[ "${CRAFT_K8S_CHANGED:-true}" == "true" && -z "${OPENAI_API_KEY:-}" ]]; then
+            echo "::error::OPENAI_API_KEY is required for real Craft integration tests" >&2
+            exit 1
+          fi
+
   discover-test-files:
     # One shard per craft k8s test file (module-scoped pool fixtures keep a file on one shard).
     needs: changes
@@ -164,6 +180,8 @@ jobs:
 
       - name: Discover craft k8s test files
         id: set-matrix
+        env:
+          PRODUCT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.product_only || false }}
         run: |
           set -eo pipefail
           # `name` = log-friendly shard id; `path` = repo-root-relative pytest target.
@@ -175,13 +193,11 @@ jobs:
             shard="${base#test_}"
             if [[ "${shard}" == "session_provisioning_api" ]]; then
               product_shard=true
+            elif [[ "${PRODUCT_ONLY:-false}" == "true" ]]; then
+              continue
             fi
             entries="${entries}{\"path\":\"${f}\",\"name\":\"${shard}\"},"
           done
-          if [ -z "${entries}" ]; then
-            echo "::error::no craft k8s test files discovered"
-            exit 1
-          fi
           if [[ "${product_shard}" != "true" ]]; then
             echo "::error::session_provisioning_api is required for Craft browser acceptance" >&2
             exit 1
@@ -1040,6 +1056,7 @@ jobs:
           docker rm -f "${KIND_REGISTRY_NAME}" 2>/dev/null || true
 
   craft-k8s-tests-required:
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.product_only && 'craft-k8s-product-probe' || 'craft-k8s-tests-required' }}
     # Single required status check for the craft-k8s suite. Always runs so
     # branch protection has a stable target, and passes cleanly when `changes`
     # reports no relevant paths changed (i.e. the test job was legitimately
@@ -1056,6 +1073,7 @@ jobs:
           DISCOVER_RESULT: ${{ needs.discover-test-files.result }}
           BUILD_RESULT: ${{ needs.build-images.result }}
           TEST_RESULT: ${{ needs.craft-k8s-tests.result }}
+          PRODUCT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.product_only || false }}
         run: |
           # Fail closed if `changes` didn't succeed. Otherwise an empty
           # RUN_TESTS (which is what we'd see when `changes` failed/cancelled)
@@ -1077,4 +1095,8 @@ jobs:
             echo "Test result: ${TEST_RESULT}"
             exit 1
           fi
-          echo "All tests passed."
+          if [[ "${PRODUCT_ONLY}" == "true" ]]; then
+            echo "Product setup probe passed. Run the full Craft suite before qualification."
+          else
+            echo "All Craft tests passed."
+          fi
