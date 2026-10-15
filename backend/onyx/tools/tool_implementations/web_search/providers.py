@@ -102,7 +102,7 @@ def build_search_provider_from_config(
         return KeenableClient(
             api_key=api_key,
             num_results=num_results,
-            base_url=config.get("base_url") or config.get("keenable_base_url"),
+            base_url=config.get("base_url"),
         )
 
     # All other providers require an API key

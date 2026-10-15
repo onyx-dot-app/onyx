@@ -2,7 +2,9 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
+import onyx.tools.tool_implementations.web_search.clients.keenable_client as keenable_module
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.clients.keenable_client import (
@@ -19,6 +21,7 @@ from shared_configs.enums import WebSearchProviderType
 
 def _response(results: list[dict[str, Any]]) -> MagicMock:
     response = MagicMock()
+    response.status_code = 200
     response.json.return_value = {"results": results}
     response.raise_for_status.return_value = None
     return response
@@ -179,3 +182,58 @@ def test_test_connection_propagates_unexpected_errors(
 
     with pytest.raises(RuntimeError, match="unexpected parsing bug"):
         client.test_connection()
+
+
+@pytest.mark.parametrize(
+    "private_url",
+    ["http://127.0.0.1:8080", "https://169.254.169.254", "https://10.0.0.5"],
+)
+def test_search_blocks_private_base_url_on_cloud(
+    monkeypatch: pytest.MonkeyPatch, private_url: str
+) -> None:
+    monkeypatch.setattr(keenable_module, "MULTI_TENANT", True)
+    post_calls: list[str] = []
+    monkeypatch.setattr(
+        keenable_module.requests,
+        "post",
+        lambda url, **_kwargs: post_calls.append(url),
+    )
+    client = KeenableClient(api_key="test-key", base_url=private_url)
+
+    with pytest.raises(ValueError, match="base_url is not allowed"):
+        client.search("onyx")
+
+    assert post_calls == []
+
+
+def test_search_rejects_redirect_without_following(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    post_kwargs: list[dict[str, Any]] = []
+
+    def _mock_post(_url: str, **kwargs: Any) -> requests.Response:
+        post_kwargs.append(kwargs)
+        response = requests.Response()
+        response.status_code = 307
+        response.headers["Location"] = "http://169.254.169.254/latest"
+        return response
+
+    monkeypatch.setattr(keenable_module.requests, "post", _mock_post)
+    client = KeenableClient(api_key="test-key")
+
+    with pytest.raises(ValueError, match="returned a redirect"):
+        client.search("onyx")
+
+    assert len(post_kwargs) == 1
+    assert post_kwargs[0]["allow_redirects"] is False
+
+
+def test_build_keenable_provider_reads_base_url() -> None:
+    provider = build_search_provider_from_config(
+        provider_type=WebSearchProviderType.KEENABLE,
+        api_key=None,
+        config={"base_url": "https://keenable.example.com/"},
+    )
+
+    assert isinstance(provider, KeenableClient)
+    assert provider._base_url == "https://keenable.example.com"
