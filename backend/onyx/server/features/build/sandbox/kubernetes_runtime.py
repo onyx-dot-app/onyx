@@ -304,13 +304,67 @@ class KubernetesRuntime(SandboxRuntime):
         timeout: float,
     ) -> ExecResult:
         command = self.guest_command(operation, metadata)
-        pod_name, remaining = self._helper_target(sandbox_id, timeout)
-        return self._exec.run(
-            pod_name,
-            command,
-            stdin=FramedStdin(stdin),
-            timeout=remaining,
+        stage = "metadata_target"
+        stage_budget = timeout
+        stage_started = time.monotonic()
+        logger.info(
+            "Guest helper operation=%s sandbox_id=%s stage=%s outcome=start "
+            "elapsed_seconds=0.000 budget_seconds=%.3f",
+            operation,
+            sandbox_id,
+            stage,
+            stage_budget,
         )
+        try:
+            pod_name, remaining = self._helper_target(sandbox_id, timeout)
+            logger.info(
+                "Guest helper operation=%s sandbox_id=%s stage=%s outcome=success "
+                "elapsed_seconds=%.3f budget_seconds=%.3f",
+                operation,
+                sandbox_id,
+                stage,
+                time.monotonic() - stage_started,
+                stage_budget,
+            )
+            stage = "exec"
+            stage_budget = remaining
+            stage_started = time.monotonic()
+            logger.info(
+                "Guest helper operation=%s sandbox_id=%s stage=%s outcome=start "
+                "elapsed_seconds=0.000 budget_seconds=%.3f",
+                operation,
+                sandbox_id,
+                stage,
+                stage_budget,
+            )
+            result = self._exec.run(
+                pod_name,
+                command,
+                stdin=FramedStdin(stdin),
+                timeout=remaining,
+            )
+        except Exception as error:
+            logger.info(
+                "Guest helper operation=%s sandbox_id=%s stage=%s outcome=failure "
+                "elapsed_seconds=%.3f budget_seconds=%.3f error_type=%s",
+                operation,
+                sandbox_id,
+                stage,
+                time.monotonic() - stage_started,
+                stage_budget,
+                type(error).__name__,
+            )
+            raise
+        logger.info(
+            "Guest helper operation=%s sandbox_id=%s stage=%s outcome=success "
+            "elapsed_seconds=%.3f budget_seconds=%.3f",
+            operation,
+            sandbox_id,
+            stage,
+            time.monotonic() - stage_started,
+            stage_budget,
+        )
+        return result
 
     def helper_stream(
         self,
