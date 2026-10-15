@@ -22,6 +22,7 @@ from onyx.db.llm import (
     fetch_default_chat_naming_model,
     fetch_default_craft_model,
     fetch_default_llm_model,
+    fetch_default_search_selection_model,
     fetch_default_vision_model,
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
@@ -38,9 +39,11 @@ from onyx.db.llm import (
     update_default_chat_naming_provider,
     update_default_craft_provider,
     update_default_provider,
+    update_default_search_selection_provider,
     update_default_vision_provider,
     update_no_default_chat_naming_provider,
     update_no_default_craft_provider,
+    update_no_default_search_selection_provider,
     upsert_llm_provider,
     validate_persona_ids_exist,
 )
@@ -562,6 +565,7 @@ def list_llm_providers(
     default_text_model = fetch_default_llm_model(db_session)
     default_vision_model = fetch_default_vision_model(db_session)
     default_chat_naming_model = fetch_default_chat_naming_model(db_session)
+    default_search_selection_model = fetch_default_search_selection_model(db_session)
     default_craft_model = fetch_default_craft_model(db_session)
     # page_models is opt-in: the admin UI takes one page per provider plus the
     # defaults, callers that omit it still get every model.
@@ -573,6 +577,7 @@ def list_llm_providers(
                 default_text_model,
                 default_vision_model,
                 default_chat_naming_model,
+                default_search_selection_model,
                 default_craft_model,
             ],
         )
@@ -613,6 +618,9 @@ def list_llm_providers(
         default_text=DefaultModel.from_model_config(default_text_model),
         default_vision=DefaultModel.from_model_config(default_vision_model),
         default_chat_naming=DefaultModel.from_model_config(default_chat_naming_model),
+        default_search_selection=DefaultModel.from_model_config(
+            default_search_selection_model
+        ),
         default_craft=DefaultModel.from_model_config(default_craft_model),
     )
 
@@ -891,24 +899,26 @@ def set_provider_as_default_vision(
 @admin_router.post("/default-chat-naming")
 def set_provider_as_default_chat_naming(
     default_model: DefaultModel,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_default_chat_naming_provider(
-        provider_id=default_model.provider_id,
-        chat_naming_model=default_model.model_name,
-        db_session=db_session,
-    )
+    try:
+        update_default_chat_naming_provider(
+            provider_id=default_model.provider_id,
+            chat_naming_model=default_model.model_name,
+            db_session=db_session,
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
     invalidate_provider_listing_cache()
 
 
 @admin_router.delete("/default-chat-naming")
 def clear_default_chat_naming(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Clear the dedicated naming model; auto-naming falls back to the
-    session's model."""
+    """Clear the naming override; use the session model instead."""
     update_no_default_chat_naming_provider(db_session=db_session)
     invalidate_provider_listing_cache()
 
@@ -934,6 +944,32 @@ def clear_default_craft(
 ) -> None:
     """Clear the Craft default; Craft sessions fall back to the chat default."""
     update_no_default_craft_provider(db_session=db_session)
+    invalidate_provider_listing_cache()
+
+
+@admin_router.post("/default-search-selection")
+def set_provider_as_default_search_selection(
+    default_model: DefaultModel,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    try:
+        update_default_search_selection_provider(
+            provider_id=default_model.provider_id,
+            model_name=default_model.model_name,
+            db_session=db_session,
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
+    invalidate_provider_listing_cache()
+
+
+@admin_router.delete("/default-search-selection")
+def clear_default_search_selection(
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_no_default_search_selection_provider(db_session=db_session)
     invalidate_provider_listing_cache()
 
 
@@ -1134,7 +1170,6 @@ def list_llm_provider_basics(
     )
     default_text_model = fetch_default_llm_model(db_session)
     default_vision_model = fetch_default_vision_model(db_session)
-    default_chat_naming_model = fetch_default_chat_naming_model(db_session)
     default_craft_model = fetch_default_craft_model(db_session)
 
     # Use centralized access control logic with persona=None since we're
@@ -1155,7 +1190,6 @@ def list_llm_provider_basics(
         [
             default_text_model,
             default_vision_model,
-            default_chat_naming_model,
             default_craft_model,
         ],
     )
@@ -1172,7 +1206,6 @@ def list_llm_provider_basics(
         providers=accessible_providers,
         default_text=DefaultModel.from_model_config(default_text_model),
         default_vision=DefaultModel.from_model_config(default_vision_model),
-        default_chat_naming=DefaultModel.from_model_config(default_chat_naming_model),
         default_craft=DefaultModel.from_model_config(default_craft_model),
     )
     cache_provider_listing(
