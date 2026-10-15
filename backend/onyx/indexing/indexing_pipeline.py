@@ -767,7 +767,7 @@ def skip_tabular_content(documents: list[Document]) -> list[Document]:
             continue
 
         sections: list[TextSection | ImageSection | TabularSection] = []
-        placeholder_added = False
+        placeholder_added: bool = False
         for section in document.sections:
             if not isinstance(section, TabularSection):
                 sections.append(section)
