@@ -572,6 +572,13 @@ _ANTHROPIC_THINKING_MIN_VERSION = (3, 7)
 # "off" is not a level they can be asked for.
 _ANTHROPIC_ALWAYS_THINKING_TIERS = ("fable", "mythos")
 
+# Opus from 5.5 rejects disabled and between_tools alike.
+_ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION = (5, 5)
+
+# Sonnet from 5.5 also rejects thinking.type=disabled, but it has its own off
+# level: thinking.type=between_tools stops up-front thinking.
+_ANTHROPIC_SONNET_BETWEEN_TOOLS_MIN_VERSION = (5, 5)
+
 
 def _normalize_anthropic_name(model_name: str) -> str | None:
     """A Claude name cut down to the part that carries tier and version.
@@ -646,21 +653,47 @@ def anthropic_supports_thinking(model_name: str) -> bool:
     return _anthropic_meets_version(model_name, _ANTHROPIC_THINKING_MIN_VERSION)
 
 
-def anthropic_identity_is_always_thinking(model_names: Sequence[str]) -> bool:
-    """The deployment alias, listed last by model_identity_names, is what
-    reaches the provider, so it decides whenever it names a Claude version."""
+def _deciding_claude_name(model_names: Sequence[str]) -> str | None:
+    """The Claude name whose capabilities apply. The deployment alias, listed
+    last by model_identity_names, is what reaches the provider, so it wins
+    when it parses as Claude. None when nothing does."""
     claude_names = [
         name for name in model_names if parse_anthropic_model_version(name) is not None
     ]
-    return bool(claude_names) and anthropic_thinking_is_always_on(claude_names[-1])
+    return claude_names[-1] if claude_names else None
+
+
+def anthropic_identity_is_always_thinking(model_names: Sequence[str]) -> bool:
+    name = _deciding_claude_name(model_names)
+    return name is not None and anthropic_thinking_is_always_on(name)
+
+
+def anthropic_identity_turns_thinking_off_between_tools(
+    model_names: Sequence[str],
+) -> bool:
+    name = _deciding_claude_name(model_names)
+    return name is not None and anthropic_turns_thinking_off_between_tools(name)
 
 
 def anthropic_thinking_is_always_on(model_name: str) -> bool:
-    """True for the tiers that reason no matter what. Adaptive thinking is
+    """True for the models that reason no matter what. Adaptive thinking is
     checked first so a tier word elsewhere ("fable-writer-v2") can't match."""
-    return (
-        anthropic_uses_adaptive_thinking(model_name)
-        and _anthropic_tier(model_name) in _ANTHROPIC_ALWAYS_THINKING_TIERS
+    if not anthropic_uses_adaptive_thinking(model_name):
+        return False
+    tier: str | None = _anthropic_tier(model_name)
+    return tier in _ANTHROPIC_ALWAYS_THINKING_TIERS or (
+        tier == "opus"
+        and _anthropic_meets_version(
+            model_name, _ANTHROPIC_OPUS_ALWAYS_THINKING_MIN_VERSION
+        )
+    )
+
+
+def anthropic_turns_thinking_off_between_tools(model_name: str) -> bool:
+    """True where off is spelled thinking.type=between_tools: the model rejects
+    disabled, and between_tools is the lowest setting it accepts."""
+    return _anthropic_tier(model_name) == "sonnet" and _anthropic_meets_version(
+        model_name, _ANTHROPIC_SONNET_BETWEEN_TOOLS_MIN_VERSION
     )
 
 
